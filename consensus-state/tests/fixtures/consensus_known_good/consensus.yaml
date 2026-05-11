@@ -1,0 +1,42 @@
+schema_version: 1
+iteration_id: iteration-test-good
+created_utc: "2026-05-08T00:00:00Z"
+consensus_state: implementation_ready
+production_state: not_ready
+review_consensus: true
+implementation_ready: false
+production_ready: false
+production_allowed: false
+canonical_findings:
+  - canonical_id: finding-001
+    source_findings:
+      - "codex:codex-001"
+    merge_method: exact
+    severity: medium
+    status: accepted
+    required_change: "fix typo in section 13 paragraph 4"
+accepted_changes:
+  - id: accepted-001
+    source_findings:
+      - finding-001
+    edit:
+      file: "docs/architecture/orchestration-spec.md"
+      old_string: "old text"
+      new_string: "new text"
+rejected_changes: []
+deferred_decisions: []
+unresolved_disagreements: []
+implementation_scope:
+  allowed_files: []
+  forbidden_files:
+    - "production outputs"
+  allowed_actions:
+    - "edit docs"
+  forbidden_actions:
+    - "publish release artifact"
+    - "merge to main"
+checks_required:
+  - id: git-diff-check
+    check_id: git.diff_check
+    args:
+      paths: []
