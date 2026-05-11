@@ -1,0 +1,25 @@
+schema_version: 1
+pilot_id: dispatch-codex-smoke
+goal:
+  summary: Tiny smoke goal_packet for testing _dispatch_codex end-to-end
+  desired_end_state: codex returns a well-formed findings YAML block
+  non_goals:
+    - actually change anything in the repo
+allowed_files:
+  - "consensus_mcp/_dispatch_codex.py"
+allowed_sections: []
+forbidden_files: []
+max_iterations: 1
+max_patch_size: 0
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex returns a parseable findings list
+    check: "true"
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers: []
+authorization:
+  authorized_by: operator
+  authorized_at_utc: "2026-05-09T00:00:00Z"
+  scope_signature: "0000000000000000000000000000000000000000000000000000000000000000"

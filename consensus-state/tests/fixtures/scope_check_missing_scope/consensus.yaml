@@ -1,0 +1,4 @@
+schema_version: 1
+iteration_id: scope-check-missing-scope
+# implementation_scope intentionally absent for fixture coverage of
+# IMPLEMENTATION_SCOPE_MISSING_FROM_CONSENSUS finding.
