@@ -40,3 +40,6 @@ consensus-state/state/*.jsonl
 consensus-state/state/*.yaml
 consensus-state/archive/review-passes/*.yaml
 
+# Hook tooling logs
+.remember/
+
