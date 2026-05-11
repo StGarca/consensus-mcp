@@ -4,6 +4,15 @@ date: 2026-05-09
 type: session-summary
 status: active
 note_on_provenance: "Authored inside a prior project before the consensus_mcp package was extracted. Retains references to that project's domain. Preserved as-is for fidelity to the original decision record."
+reader_guidance: |
+  This is a session-summary document from the implementation arc that
+  produced the Phase 1 (G1+G2) tool surface in consensus-mcp. The
+  TECHNICAL CONTENT (T2-T11 tool descriptions, smoke test counts, review-
+  round findings) is what you want if you're tracing how a specific tool
+  came to be. The DOMAIN PROSE (operator-pivot rationale, render-related
+  scope discussions, project-specific milestone framing) references the
+  upstream project; it's preserved for fidelity but isn't required
+  reading to use consensus-mcp.
 post_review_fixes_landed: 2026-05-09  # see Section 9 below + 2026-05-09-v1.9.x-third-party-review-findings.md: 38 review findings recorded across 6 rounds. Round 1+2 CLOSED after operator-supplied reviewer verification reruns; Source-MD + Codex follow-up + MD-set follow-up + Round 6 (self-dispatched on v1.9.2) all self-applied, independent re-review pending. Total counts in this comment update incrementally as review rounds land.
 scope_disclaimer: |
   This summary documents the Phase 1 G1+G2 implementation arc (T2-T7 + iteration-0006 + v1.9.0/v1.9.1).

@@ -5,6 +5,16 @@ type: architecture-spec
 status: draft-v1.10.4-ai-contract
 contract_version: multi-agent-consensus-mcp-v1.10.4
 note_on_provenance: "Authored inside a prior project before the consensus_mcp package was extracted into its own repo. References to that project's domain (render outcomes, the operator's chapters, Pass 2 lessons-learned re-pass on Book 1) are preserved for fidelity to the original decision record. Technical content (G1-G5 gate design, MCP tool surface, supervisor architecture, canonical-006 dry-run mechanism) is domain-neutral."
+reader_guidance: |
+  This document is a multi-month decision journal capturing how the consensus
+  loop was designed, stress-tested, and iterated. The TECHNICAL CONTENT (gate
+  definitions, MCP tool surface, supervisor architecture, canonical dry-run
+  mechanism) is what you want if you're integrating consensus-mcp into your
+  own project. The DECISION-HISTORY prose (revision_history blocks, operator-
+  pivot rationale, phase-N completion notes) references the upstream project
+  where consensus-mcp was developed; you can safely skim or skip those
+  sections — they're preserved for fidelity, not because you need them to
+  use the package.
 v1_9_5_release_stabilization_recorded_at: v1.9.5   # 2026-05-09 iteration-0009-stabilization; addresses Round 9 F1-F8; release gate 9/9 from current tree; pilot/prototype exception added to autonomy contract; _self_drive.py downgraded to PARTIAL helper. CLOSED 2026-05-09 by step-6 external cross-model re-review (sonnet on opus's patch): OVERALL accept; 1 LOW finding S1 applied; release gate 9/9 reverified post-fix.
 v1_9_6_render_outcomes_lock_lifted_at: v1.9.6   # 2026-05-09 operator directive "remove render-outcomes as a barrier"; the canonical-iter0006-005 + codex-iter0006-007 lock-redirect-at-closure preserved across all v1.9.x iterations is hereby LIFTED. Render outcomes remains a valid + recommended next-move, but it is NO LONGER an exclusive lock that blocks other consensus pipeline work (notably Phase 4 v1.1 auto-codex-dispatch). The "do not keep polishing process unless it directly improves render outcomes" rule (feedback_no_process_polishing.md) is UNCHANGED; that rule guards against process-for-process-sake, which is a different constraint than the next-action lock.
 v1_10_0_phase_4_v1_1_landed_at: v1.10.0   # 2026-05-09 Phase 4 v1.1 auto-codex-dispatch landed; CLI helper at consensus_mcp/_dispatch_codex.py replaces operator paste-buffer flow; codex JSON output via --output-schema; reviewer-safe sandbox; rich audit log; smoke 53/53; 19 pytest in test_dispatch_codex.py; 9/9 release gates green.
