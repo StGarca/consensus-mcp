@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "consensus-mcp"
+version = "2.0.0"
+description = "MCP server enforcing G1-G5 consensus gates (sealed-review provenance, canonical-006 dry-run, intra-file scope, production-scope match, mediated ledger updates)"
+authors = [{name = "stgarciaarca"}]
+requires-python = ">=3.10"
+license = {text = "MIT"}
+readme = "README.md"
+dependencies = [
+  "pyyaml>=6.0",
+]
+
+[project.scripts]
+consensus-mcp = "consensus_mcp.server:main"
+consensus-mcp-dispatch-codex = "consensus_mcp._dispatch_codex:main"
+
+[tool.setuptools]
+packages = [
+  "consensus_mcp",
+  "consensus_mcp.tools",
+  "consensus_mcp.validators",
+]
+include-package-data = true
+
+[tool.setuptools.package-data]
+consensus_mcp = [
+  "dispatch_templates/*.md",
+  "dispatch_templates/*.json",
+  "docs/*.md",
+  "tests/fixtures/dispatch_codex/*",
+]

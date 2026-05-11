@@ -1,0 +1,34 @@
+schema_version: 1
+agent: codex
+stance: implementation_realist
+# iteration_id intentionally MISSING -> MISSING_REQUIRED_KEY
+reviewed_packet_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+
+overall_position:
+  implementation_ready: false
+  production_ready: false
+  confidence: maybe   # INVALID_ENUM_VALUE
+
+# Empty blocking_objections + empty rationale text -> NO_BLOCKERS_WITHOUT_RATIONALE
+blocking_objections: []
+
+# corroborated_by appears on a non_blocking_suggestion -> CORROBORATED_BY_FORBIDDEN
+non_blocking_suggestions:
+  - id: codex-sugg-001
+    claim: "Trivial nit"
+    corroborated_by:
+      - claude-rev-001
+
+agreements: []
+disagreements: []
+patch_recommendations: []
+implementation_risks: []
+clarifying_questions: []
+self_resolved_questions: []
+
+# Empty -> EMPTY_ASSUMPTIONS_CHALLENGED
+assumptions_challenged: []
+
+no_objection_rationale:
+  required_when_no_blockers: true
+  text: ""

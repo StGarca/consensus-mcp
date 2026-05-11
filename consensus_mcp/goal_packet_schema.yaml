@@ -1,0 +1,47 @@
+# Canonical goal_packet schema for Phase 4 bounded self-drive.
+# Schema version: 1
+# Authority: docs/architecture/2026-05-09-autonomy-contract.md
+
+schema_version: 1
+pilot_id: example-iteration-NNNN-pilot-N
+goal:
+  summary: "<one-sentence what>"
+  desired_end_state: "<observable / verifiable post-condition>"
+  non_goals:
+    - "<thing this is NOT>"
+allowed_files:
+  - "<repo-relative path>"
+allowed_sections:
+  - "<file_alias>/section_<N>"
+  - "<file_alias>/frontmatter"
+forbidden_files:
+  - "<explicit deny; trumps allowed if conflict>"
+max_iterations: 3
+max_patch_size: 200
+validators_required:
+  - validate_disposition_index
+  - validate_iteration   # if iteration-dir touched
+  - validate_consensus   # if consensus.yaml touched
+  - validate_review      # if review yamls touched
+acceptance_gates:
+  - id: A1
+    description: "<measurable; not 'looks good'>"
+    check: "<command or observable that returns pass/fail>"
+stop_conditions:
+  - max_iteration_count_reached
+  - same_class_finding_repeats_twice
+  - fix_creates_cross_document_drift
+  - validators_disagree_with_reviewer_claims
+  - patch_would_touch_forbidden_files
+  - required_acceptance_gate_missing
+  - claude_codex_disagree_on_goal_satisfied
+  - only_remaining_work_is_goal_meaning
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+  - any_acceptance_gate_returns_undefined
+  - quorum_disagreement_on_scope
+authorization:
+  authorized_by: operator
+  authorized_at_utc: "2026-05-09T00:00:00Z"
+  scope_signature: "<sha256 over (goal + allowed_files + acceptance_gates)>"
