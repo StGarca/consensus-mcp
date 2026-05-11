@@ -1,0 +1,16 @@
+schema_version: 1
+iteration_id: iteration-known-bad
+objective: "Phase 0 fixture: missing karpathy_principle_summary on purpose."
+mode: observational
+gate_state:
+  implementation_ready: false
+  production_ready: false
+  production_state: not_ready
+  production_allowed: false
+decision_ledger_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+claude_md_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+# karpathy_principle_summary intentionally omitted (PACKET_MISSING_REQUIRED_FIELD)
+changed_sections: []
+open_blockers: []
+check_results_if_any: []
+requested_output_schema: review-v9

@@ -1,0 +1,15 @@
+schema_version: 1
+iteration_id: scope-check-known-good
+implementation_scope:
+  allowed_files:
+    - "wiki/**/*.md"
+    - "consensus_mcp/validators/*.py"
+  forbidden_files:
+    - "dist/**/*"
+    - "build/**/*"
+  allowed_actions:
+    - "edit docs"
+    - "run allowlisted checks"
+  forbidden_actions:
+    - "publish release artifact"
+    - "merge to main"

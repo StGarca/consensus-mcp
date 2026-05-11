@@ -1,0 +1,11 @@
+schema_version: 1
+iteration_id: iteration-fixture-good
+objective: "Verify packet builder neutralizes injection patterns in spec excerpt."
+mode: "review-only"
+target_sections: []
+target_files:
+  - "agent-loop/tests/fixtures/prompt_injection_doc.md"
+gate_state:
+  consensus_state: pending
+  production_state: not_ready
+prior_review_refs: []
