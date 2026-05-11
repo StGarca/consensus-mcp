@@ -37,11 +37,23 @@ CLI flags:
 """
 from __future__ import annotations
 import argparse
+import importlib.metadata
 import json
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def _package_version() -> str:
+    """iter-0001 codex-rev-002 fix: derive serverInfo.version from installed
+    package metadata so it stays in sync with pyproject.toml. Falls back to
+    "unknown" if the package isn't installed (e.g., running from a fresh
+    source checkout without `pip install -e .`)."""
+    try:
+        return importlib.metadata.version("consensus-mcp")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
 
 def _resolve_repo_root() -> Path:
     """Resolve REPO_ROOT.
@@ -192,7 +204,7 @@ def _handle_request(req: dict) -> dict | None:
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": "consensus-mcp", "version": "0.1.0-skeleton"},
+                "serverInfo": {"name": "consensus-mcp", "version": _package_version()},
                 "capabilities": {"tools": {}},
             },
         }
