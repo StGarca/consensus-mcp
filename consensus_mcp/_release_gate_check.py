@@ -207,8 +207,12 @@ def gate_install(repo_root: Path, python: str, work: Path) -> tuple[bool, str, P
     would otherwise mis-pick a stale wheel if multiple versions coexist
     (e.g., 1.10.1 sorts BEFORE 1.9.3rc0 lexicographically).
     """
-    pkg_dir = repo_root / "scripts" / "consensus_mcp"
-    dist_dir = pkg_dir / "dist"
+    # iter-0001 codex-rev-001 fix: standalone consensus-mcp is a flat repo;
+    # pyproject.toml lives at repo_root, dist/ is repo_root/dist. The old
+    # nested layout (repo_root/scripts/consensus_mcp/) was inherited from
+    # the pre-extraction state and doesn't exist in this repo.
+    pkg_dir = repo_root
+    dist_dir = repo_root / "dist"
     # Pre-clean dist/ so old wheels can't shadow the new build (F5 fix).
     if dist_dir.exists():
         shutil.rmtree(dist_dir, ignore_errors=True)
@@ -247,7 +251,7 @@ def gate_install(repo_root: Path, python: str, work: Path) -> tuple[bool, str, P
     if build_proc.returncode != 0:
         return False, f"build failed: {(build_proc.stderr or build_proc.stdout)[-400:]}", None, None
 
-    dist = pkg_dir / "dist"
+    dist = dist_dir
     wheels = sorted(dist.glob("consensus_mcp-*.whl"))
     if not wheels:
         return False, "no wheel produced", None, None
