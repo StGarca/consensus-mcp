@@ -1,0 +1,888 @@
+"""Phase 4 v1.14 — shared dispatch infrastructure.
+
+Generic helpers reused by every reviewer adapter (codex today; gemini and
+any future adapter from iter-0011+). Extracted from _dispatch_codex.py per
+iter-0009 verdict Q1: F1b (extract _dispatch_base.py). NO behavior change
+versus the pre-extraction codex path — every helper here was copied verbatim
+from the original _dispatch_codex.py file.
+
+Adapters import what they need:
+
+    from consensus_mcp._dispatch_base import (
+        RepoRootResolutionError, OutsideRepoPathError,
+        _resolve_repo_root, _normalize_relative_to_repo,
+        _load_goal_packet, _load_template,
+        _build_prompt, _terminate_process_tree,
+        _compute_per_patch_base_sha,
+        _sha256_str, _build_sealed_packet, _seal_via_t6, _log_dispatch,
+    )
+
+The reviewer adapter contributes its own:
+  - CLI invocation (e.g. _invoke_codex / _invoke_gemini)
+  - CLI binary resolution / version probe
+  - Output parser specific to the adapter's JSON shape
+  - Error class hierarchy
+  - main() entrypoint
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import yaml
+
+
+# iter-0010: patch_proposal validation constants moved from _dispatch_codex.py
+# so _validate_patch_proposal (also moved here) is fully self-contained at the
+# base layer. Per iter-0009 verdict + iter-0010 codex-rev-001 blocking finding.
+_PATCH_PROPOSAL_REQUIRED = (
+    "patch_id", "applies_to_findings", "base_sha",
+    "unified_diff", "files_touched", "expected_tests",
+)
+_PATCH_PROPOSAL_OPTIONAL = ()
+_PATCH_PROPOSAL_ALLOWED = set(_PATCH_PROPOSAL_REQUIRED) | set(_PATCH_PROPOSAL_OPTIONAL)
+_PATCH_ID_PATTERN = re.compile(r"^codex-rev-\d+-patch$")
+
+# iter-0028 F4 (codex-rev-002): unified-diff body header parser regex.
+_DIFF_FILE_HEADER_RE = re.compile(
+    r"^(?:---\s+a/|\+\+\+\s+b/)(?P<path>\S+)\s*$",
+    re.MULTILINE,
+)
+# iter-0028 F1+F2 (codex-rev-003): tokens that signal codex-cli's proprietary
+# `apply_patch` format. Naming retains the codex-cli reference because that's
+# the originating format; the validator applies the rejection regardless of
+# which adapter calls it (gemini, future adapters).
+_APPLY_PATCH_BEGIN_MARKER = "*** Begin Patch"
+_APPLY_PATCH_UPDATE_MARKER = "*** Update File"
+
+
+# Per v1.10.4 F1 (codex review on 0ae7b80d): repo_root resolution must fail-closed.
+# Repo markers: directories that MUST exist at the resolved root for it to be a valid
+# consensus-mcp / consensus-mcp repo. site-packages doesn't have these; cwd in a
+# random directory doesn't either; the actual repo does.
+_REPO_ROOT_MARKERS = ("consensus-state", "consensus_mcp", "consensus_mcp/validators")
+
+
+class RepoRootResolutionError(RuntimeError):
+    """Raised when repo_root cannot be resolved to a valid repo (no markers found)."""
+
+
+def _has_repo_markers(candidate: Path) -> bool:
+    """Return True iff candidate contains all _REPO_ROOT_MARKERS as subpaths."""
+    return all((candidate / marker).is_dir() for marker in _REPO_ROOT_MARKERS)
+
+
+def _resolve_repo_root() -> Path:
+    """Resolve the repo root, fail-closed if no valid candidate is found.
+
+    Per v1.10.4 F1 hardening: the prior fallback to
+    Path(__file__).resolve().parent.parent was unsafe — when the helper
+    runs as an installed module from python_env/Lib/site-packages, that fallback
+    landed at python_env/Lib (NOT the repo root), causing codex --cd, T6 archive
+    writes, and dispatch-log writes to all target the wrong tree.
+
+    Resolution order (first candidate with all repo markers wins):
+      1. CONSENSUS_MCP_REPO_ROOT env var (must validate)
+      2. Path.cwd() (operator usually invokes from repo root)
+      3. Walk parents of Path(__file__) (only succeeds when running in-tree;
+         the in-tree __file__ is consensus_mcp/_dispatch_codex.py so
+         3-up = repo root with markers)
+
+    If no candidate validates, raise RepoRootResolutionError with a clear
+    operator-facing message naming the env var to set. Never silently fall
+    back to site-packages.
+    """
+    candidates_tried: list[tuple[str, Path]] = []
+
+    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+    if override:
+        candidate = Path(override).resolve()
+        candidates_tried.append(("CONSENSUS_MCP_REPO_ROOT", candidate))
+        if _has_repo_markers(candidate):
+            return candidate
+        # iter-0028 F5 (codex-rev-004): operator-supplied env var is
+        # authoritative. If set but the path fails marker validation, do NOT
+        # silently fall through to cwd / __file__ candidates — the operator's
+        # intent was an explicit override, and silent re-resolution invites
+        # the very confusion the env var was meant to eliminate. Raise with
+        # a clear message naming the env var. Empty-string env (treated as
+        # falsy above) is the "unset" case and DOES fall through.
+        raise RepoRootResolutionError(
+            f"CONSENSUS_MCP_REPO_ROOT={override!r} was set but the path "
+            f"{candidate} does not contain all required repo markers "
+            f"{_REPO_ROOT_MARKERS}. Not falling through to cwd / __file__ "
+            f"discovery — operator-supplied env var is authoritative. "
+            f"Either fix the path (it must contain {_REPO_ROOT_MARKERS} as "
+            f"subdirectories) or unset CONSENSUS_MCP_REPO_ROOT to use "
+            f"automatic discovery."
+        )
+
+    cwd = Path.cwd().resolve()
+    candidates_tried.append(("Path.cwd()", cwd))
+    if _has_repo_markers(cwd):
+        return cwd
+
+    # __file__-parent walk: only finds repo root when source-tree-installed.
+    here = Path(__file__).resolve()
+    for parent in (here.parent, here.parent.parent, here.parent.parent.parent):
+        candidates_tried.append((f"parent of __file__ ({parent.name})", parent))
+        if _has_repo_markers(parent):
+            return parent
+
+    tried_msg = "; ".join(f"{name}={path}" for name, path in candidates_tried)
+    raise RepoRootResolutionError(
+        f"Cannot resolve consensus-mcp repo root. None of the candidates contain "
+        f"all required markers {_REPO_ROOT_MARKERS}. Set CONSENSUS_MCP_REPO_ROOT "
+        f"to the repo root directory (e.g., the directory containing 'consensus-state/' "
+        f"and 'scripts/'). Candidates tried: {tried_msg}"
+    )
+
+
+class OutsideRepoPathError(ValueError):
+    """v1.10.5 containment hardening: operator-supplied path resolves outside repo_root."""
+
+
+def _normalize_for_compare(p) -> str:
+    """iter-0039 xplat-rev-001 fix: canonicalize a path for cross-platform
+    containment comparison.
+
+    On Windows the filesystem is case-insensitive, the canonical separator
+    is backslash but forward slashes also work, and extended-length paths
+    can be prefixed with `\\\\?\\`. The prior lower+replace fallback didn't
+    handle the long-path prefix or 8.3 short-name expansion edge cases.
+
+    This helper:
+      1. Strips the `\\\\?\\` long-path prefix if present.
+      2. Calls os.path.normpath to collapse `.` / `..` segments and
+         normalize separators.
+      3. Calls os.path.normcase to lowercase on Windows (no-op on POSIX).
+
+    The returned string is suitable for startswith-with-separator
+    containment checks.
+    """
+    s = str(p)
+    if sys.platform == "win32" and s.startswith("\\\\?\\"):
+        s = s[4:]
+    return os.path.normcase(os.path.normpath(s))
+
+
+def _normalize_relative_to_repo(path_str: str | None, repo_root: Path) -> Path | None:
+    """Normalize an operator-supplied path against repo_root.
+
+    Per v1.10.4 F5 hardening: operator may supply relative paths to --goal-packet,
+    --review-target, --prompt-template, --schema. The codex subprocess runs with
+    --cd repo_root, so relative paths must be interpreted in the repo_root frame
+    too — NOT against the process cwd (which may differ if a future MCP wrapper
+    or service caller invokes us from elsewhere).
+
+    Per v1.10.5 containment hardening: after resolution the path MUST be inside
+    repo_root. Absolute paths previously passed through unchanged via p.resolve(),
+    which let any caller supply (or have an MCP tool wrapper pass through) an
+    out-of-tree absolute path and have its contents pulled into the codex prompt.
+    That's a real boundary leak — review-target/goal-packet/schema/template are
+    all read with read_text(). Containment fails closed with a clear diagnostic.
+
+    None passes through as None.
+    """
+    if path_str is None:
+        return None
+    p = Path(path_str)
+    resolved = p.resolve() if p.is_absolute() else (repo_root / p).resolve()
+    repo_root_resolved = repo_root.resolve()
+    contained = False
+    try:
+        resolved.relative_to(repo_root_resolved)
+        contained = True
+    except ValueError:
+        # iter-0033 claude-rev-003 + iter-0039 xplat-rev-001 fix:
+        # Path.relative_to is case-sensitive in string compare. Windows
+        # filesystem is case-insensitive AND extended-length paths can
+        # carry a `\\?\` prefix that breaks naive lower+replace. Use the
+        # canonical normalization helper for Windows compare.
+        if sys.platform == "win32":
+            ncs_resolved = _normalize_for_compare(resolved)
+            ncs_root = _normalize_for_compare(repo_root_resolved)
+            if ncs_resolved == ncs_root or ncs_resolved.startswith(ncs_root + os.sep):
+                contained = True
+    if not contained:
+        raise OutsideRepoPathError(
+            f"path {path_str!r} resolves to {resolved} which is outside repo_root "
+            f"{repo_root_resolved}. consensus-mcp dispatch only reads files inside "
+            f"the repo. Move the file into the repo or pass a path relative to it."
+        )
+    return resolved
+
+
+def _load_goal_packet(path: Path) -> dict:
+    """Load + minimally validate a goal_packet.yaml. Returns the parsed dict."""
+    text = Path(path).read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"goal_packet root must be a mapping, got {type(data).__name__}")
+    return data
+
+
+def _load_template(path: Path) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
+# Per iter-0021: language fence map for touched-file embedding. Codex's
+# read-only sandbox cannot reliably read repo files; the helper embeds
+# touched-file contents directly in the prompt as fenced code blocks. The
+# extension -> fence-language mapping is conservative (text fence for
+# unknown extensions); covers the file types this project's iterations
+# actually touch.
+_FENCE_LANG_BY_EXT = {
+    ".py": "python",
+    ".pyi": "python",
+    ".md": "markdown",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".json": "json",
+    ".toml": "toml",
+    ".sh": "bash",
+    ".bash": "bash",
+    ".cmd": "batch",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".html": "html",
+    ".css": "css",
+    ".sql": "sql",
+}
+
+
+def _format_touched_files_contents(contents: dict[str, str]) -> str:
+    """Render touched-file contents as ``## File: <path>`` + fenced code block.
+
+    Per iter-0021 spec: codex receives file contents inline because its
+    sandbox cannot reliably perform filesystem reads. The format is plain
+    markdown so the prompt renders correctly when codex reads the prompt.
+
+    File order is sorted by path for deterministic prompt SHA. Unknown
+    extensions fall back to a ``text`` fence.
+    """
+    if not contents:
+        return "(no touched-file contents embedded)"
+    lines: list[str] = []
+    for path in sorted(contents.keys()):
+        ext = Path(path).suffix.lower()
+        lang = _FENCE_LANG_BY_EXT.get(ext, "text")
+        lines.append(f"## File: {path}")
+        lines.append("")
+        lines.append(f"```{lang}")
+        body = contents[path]
+        # Trim a single trailing newline so the closing fence sits on its own
+        # line without a blank gap; preserve internal newlines verbatim.
+        if body.endswith("\n"):
+            body = body[:-1]
+        lines.append(body)
+        lines.append("```")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _build_prompt(
+    goal_packet: dict,
+    template_text: str,
+    iteration_dir: str | None = None,
+    review_packet_path: str | None = None,
+    review_target_path: str | None = None,
+    review_target_hash: str | None = None,
+    review_packet: dict | None = None,
+) -> str:
+    """Substitute goal_packet fields + review-target fields into the template's {placeholders}.
+
+    Per F6 (codex review 2026-05-09): explicit review-target fields tell codex
+    exactly which input it should review, preventing wrong-scope inference in
+    dirty repositories.
+
+    Per iter-0021: when ``review_packet`` is supplied and contains
+    ``defect_target.touched_files_contents``, those file bodies are embedded
+    inline at the ``{touched_files_contents_block}`` placeholder. Codex's
+    sandbox cannot reliably read repo files; embedded contents replace the
+    filesystem read.
+
+    Missing optional fields render as empty strings or "(not specified)" so the
+    template keeps formatting.
+    """
+    auth = goal_packet.get("authorization", {}) or {}
+    goal = goal_packet.get("goal", {}) or {}
+
+    def _format_list(xs):
+        if not xs:
+            return "(none)"
+        return "\n".join(f"  - {x}" for x in xs)
+
+    def _format_gates(gates):
+        if not gates:
+            return "(none)"
+        lines = []
+        for g in gates:
+            gid = g.get("id", "?")
+            desc = g.get("description", "")
+            check = g.get("check", "")
+            lines.append(f"  - {gid}: {desc}\n      check: {check}")
+        return "\n".join(lines)
+
+    def _or_unspecified(v):
+        return v if v is not None and v != "" else "(not specified)"
+
+    # iter-0021: extract touched-file contents from review_packet if present.
+    touched_contents: dict[str, str] = {}
+    if isinstance(review_packet, dict):
+        defect_target = review_packet.get("defect_target")
+        if isinstance(defect_target, dict):
+            tfc = defect_target.get("touched_files_contents")
+            if isinstance(tfc, dict):
+                # Coerce values to strings; reject non-string entries silently
+                # rather than raising — the helper writer is the type guard.
+                touched_contents = {
+                    k: v for k, v in tfc.items()
+                    if isinstance(k, str) and isinstance(v, str)
+                }
+
+    substitutions = {
+        "{goal_summary}": str(goal.get("summary", "")),
+        "{desired_end_state}": str(goal.get("desired_end_state", "")),
+        "{allowed_files}": _format_list(goal_packet.get("allowed_files", [])),
+        "{acceptance_gates}": _format_gates(goal_packet.get("acceptance_gates", [])),
+        "{scope_signature}": str(auth.get("scope_signature", "")),
+        "{authorized_by}": str(auth.get("authorized_by", "")),
+        "{authorized_at_utc}": str(auth.get("authorized_at_utc", "")),
+        "{iteration_dir}": _or_unspecified(iteration_dir),
+        "{review_packet_path}": _or_unspecified(review_packet_path),
+        "{review_target_path}": _or_unspecified(review_target_path),
+        "{review_target_hash}": _or_unspecified(review_target_hash),
+        "{touched_files_contents_block}": _format_touched_files_contents(touched_contents),
+    }
+    out = template_text
+    for placeholder, value in substitutions.items():
+        out = out.replace(placeholder, value)
+    return out
+
+
+def _terminate_process_tree(proc, grace_seconds: float = 10.0) -> None:
+    """iter-0039 xplat-rev-002 fix: cross-platform process tree termination.
+
+    Per the cross-platform audit, plain proc.terminate() only kills the
+    immediate codex process. codex-cli is a Node binary that spawns child
+    processes; those orphan on abort. The Popen call now creates a new
+    process group (CREATE_NEW_PROCESS_GROUP on Windows, start_new_session
+    on POSIX); this helper sends the appropriate group-wide signal,
+    waits a grace period, then force-kills the whole group.
+
+    On Windows: send CTRL_BREAK_EVENT to the process group (children
+    inherit the group via CREATE_NEW_PROCESS_GROUP). If still alive after
+    grace, shell out to `taskkill /F /T /PID <pid>` (uses CREATE_NO_WINDOW
+    flag per iter-0039 codex-rev-002 to avoid console flash).
+
+    On POSIX: send SIGTERM to the process group via os.killpg, then
+    SIGKILL after grace.
+
+    Always returns; never raises.
+    """
+    if proc.poll() is not None:
+        return
+
+    try:
+        if sys.platform == "win32":
+            # CTRL_BREAK_EVENT propagates to children in the same process group.
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (OSError, ProcessLookupError, ValueError):
+        # Fallback to single-process terminate if the group call failed
+        # (e.g., process already dead, no permission, etc.).
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+
+    try:
+        proc.wait(timeout=grace_seconds)
+        return
+    except subprocess.TimeoutExpired:
+        pass  # fall through to force-kill
+
+    # Grace expired; force-kill the entire tree.
+    try:
+        if sys.platform == "win32":
+            # taskkill /F /T kills the tree. CREATE_NO_WINDOW prevents a
+            # console window flash (iter-0039 codex-rev-002).
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=5,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (OSError, ProcessLookupError, ValueError, subprocess.SubprocessError):
+        # Fallback to direct kill if killpg / taskkill failed.
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        # The process is wedged; we've done what we can. Caller will
+        # surface the failure via the existing return-code check.
+        pass
+
+
+def _compute_per_patch_base_sha(
+    defect_target: dict,
+    patch_files_touched: list,
+    repo_root: Path | None = None,
+) -> str | None:
+    """iter-0024 F2 + iter-0026 F1: compute per-patch bundle_sha matching the
+    on-disk bytes hash that apply.codex_patch produces at drift-check time.
+
+    iter-0026 F1 fix:
+      The prior helper computed bundle_sha by encoding text strings from
+      ``defect_target.touched_files_contents`` (UTF-8). On Windows with CRLF
+      line endings on disk, ``apply.codex_patch`` (which hashes raw disk bytes
+      via ``_closure_invariant.bundle_sha``) saw a DIFFERENT hash, forcing
+      manual per-patch re-anchor for every codex-applied patch. The fix:
+      when ``repo_root`` is supplied, defer entirely to
+      ``_closure_invariant.bundle_sha(repo_root, patch_files_touched)`` so the
+      stamp matches apply-time disk bytes exactly.
+
+      When ``repo_root`` is None (legacy unit-test path), fall back to the
+      iter-0024 text-encoding behaviour. This preserves backward compatibility
+      for tests that don't materialise files on disk.
+
+    Returns None when:
+      - patch_files_touched is empty, OR
+      - (text fallback only) defect_target has no touched_files_contents dict,
+        OR any patch file is missing / non-string content.
+
+    On None return, caller falls back to defect_target.base_sha (iter-0022
+    behaviour) so legacy tests / callers without touched_files_contents still
+    work.
+    """
+    if not patch_files_touched:
+        return None
+
+    # iter-0026 F1: disk-bytes path matches apply.codex_patch exactly.
+    if repo_root is not None:
+        # Validate path types early so we never feed bundle_sha a non-string
+        # entry (it would TypeError on PurePath construction).
+        for raw_path in patch_files_touched:
+            if not isinstance(raw_path, str):
+                return None
+        # Defer import: keeps _closure_invariant a soft dependency at module
+        # load time (mirrors apply_codex_patch's import discipline).
+        from consensus_mcp._closure_invariant import bundle_sha as _bundle_sha
+        try:
+            return _bundle_sha(repo_root, list(patch_files_touched))
+        except ValueError:
+            # Path contained forbidden \0 / \n separator chars; fall through
+            # to None so caller falls back to defect_target.base_sha.
+            return None
+
+    # Legacy text-encoding fallback (no repo_root supplied — typically a
+    # unit-level test that doesn't materialise files on disk).
+    contents = defect_target.get("touched_files_contents")
+    if not isinstance(contents, dict):
+        return None
+
+    # Defer import to avoid circular dependency at module load time.
+    from consensus_mcp._closure_invariant import _normalize_path
+
+    normalised_pairs: list[tuple[str, str]] = []
+    for raw_path in patch_files_touched:
+        if not isinstance(raw_path, str):
+            return None
+        # Look up content via the ORIGINAL path key (review-packet
+        # touched_files_contents keys are the operator-supplied paths). Then
+        # normalise for the canonical bundle form.
+        if raw_path not in contents:
+            return None
+        body = contents[raw_path]
+        if not isinstance(body, str):
+            return None
+        try:
+            norm = _normalize_path(raw_path)
+        except ValueError:
+            return None
+        content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        normalised_pairs.append((norm, content_hash))
+
+    parts = [f"{p}\0{h}" for p, h in sorted(normalised_pairs)]
+    canonical = "\n".join(parts)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _sha256_str(text: str) -> str:
+    """Return hex-digest sha256 of UTF-8 input. Used for provenance hashing."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _build_sealed_packet(
+    extracted: dict,
+    iteration_id: str,
+    reviewer_id: str,
+    pass_id: str,
+    provenance: dict | None = None,
+    attestation_method: str = "auto_codex_dispatch",
+    attestation_input_sources: list[str] | None = None,
+) -> dict:
+    """Wrap a reviewer's findings dict in the T6-required outer structure.
+
+    T6 (review.write_and_seal) requires top-level: iteration_id, reviewer_id, findings.
+    Optional but conventional: pass_id, goal_satisfied, blocking_objections,
+    goal_satisfied_rationale.
+
+    Per F5 (codex review 2026-05-09): an optional `provenance` dict is embedded
+    as the `dispatch_provenance` key. T6 SHA-hashes the whole packet, so
+    provenance becomes part of the seal — the sealed YAML is independently
+    verifiable without consulting dispatch-log.jsonl. Pass None (or omit) to
+    skip the provenance block (e.g., in the unit test for _build_sealed_packet
+    itself which doesn't run the full pipeline).
+
+    iter-0010 adapter-agnostic: attestation_method defaults to "auto_codex_dispatch"
+    and attestation_input_sources defaults to the codex-specific list, preserving
+    pre-extraction behavior for the codex caller. Future adapters (gemini, ...)
+    pass their own values.
+    """
+    if attestation_input_sources is None:
+        attestation_input_sources = [
+            "goal_packet (path passed via --goal-packet)",
+            "prompt_template (substituted by _build_prompt)",
+            "review_target (path passed via --review-target; may be unspecified)",
+        ]
+    packet = {
+        "iteration_id": iteration_id,
+        "reviewer_id": reviewer_id,
+        "pass_id": pass_id,
+        "findings": extracted.get("findings", []),
+        "goal_satisfied": extracted.get("goal_satisfied", False),
+        "goal_satisfied_rationale": extracted.get("goal_satisfied_rationale", ""),
+        "blocking_objections": extracted.get("blocking_objections", []),
+        # Per v1.10.3 Windows real-codex smoke: T6's audit_append_event requires
+        # `independence_attestation` for review_returned_and_sealed events (schema
+        # type: object|null). For auto-codex-dispatch, isolation is guaranteed by
+        # construction (codex is spawned with --sandbox read-only, --cd <repo_root>,
+        # no peer-review state visible; codex only sees the prompt + goal_packet +
+        # review_target). The attestation records this guarantee + references the
+        # dispatch_provenance block (which has the cryptographic hashes proving
+        # what was reviewed).
+        "independence_attestation": {
+            "method": attestation_method,
+            "reviewer_isolated_by_construction": True,
+            "no_peer_review_visible_at_dispatch": True,
+            "input_sources": attestation_input_sources,
+            "see_dispatch_provenance_for_input_hashes": True,
+        },
+    }
+    if provenance is not None:
+        packet["dispatch_provenance"] = provenance
+    return packet
+
+
+def _seal_via_t6(
+    packet: dict,
+    iteration_dir: Path,
+    sealed_filename: str = "codex-review.yaml",
+) -> dict:
+    """Call T6's handle in-process; mirror the sealed YAML to <iteration_dir>/<sealed_filename>.
+
+    T6's actual signature is handle(iteration_id, reviewer_id, pass_id, packet); it
+    writes the sealed YAML to its own deterministic archive path under
+    consensus-state/archive/review-passes/. We additionally COPY the sealed file to
+    <iteration_dir>/<sealed_filename> so the iteration directory has a local copy
+    keyed by its iteration name (the auto-dispatch convention).
+
+    iter-0010 adapter-agnostic: sealed_filename defaults to "codex-review.yaml"
+    preserving pre-extraction behavior. Future adapters pass e.g. "gemini-review.yaml".
+
+    Returns a dict with sealed_path (== iteration_dir/<sealed_filename> — the
+    iteration-local copy), packet_sha256, archive_sealed_path (T6's path),
+    index_updated, audit_event_id.
+    """
+    from consensus_mcp.tools.review_write_and_seal import handle as t6_handle
+
+    result = t6_handle(
+        iteration_id=packet["iteration_id"],
+        reviewer_id=packet["reviewer_id"],
+        pass_id=packet["pass_id"],
+        packet=packet,
+    )
+    if "error" in result:
+        raise RuntimeError(f"T6 seal failed: {result}")
+
+    # Mirror to iteration-local path (auto-dispatch convention).
+    archive_path = Path(result["sealed_path"])
+    local_path = iteration_dir / sealed_filename
+    shutil.copyfile(str(archive_path), str(local_path))
+
+    return {
+        "sealed_path": str(local_path),
+        "archive_sealed_path": str(archive_path),
+        "packet_sha256": result["packet_sha256"],
+        "index_updated": result.get("index_updated"),
+        "audit_event_id": result.get("audit_event_id"),
+    }
+
+
+def _validate_patch_proposal(
+    finding_index: int,
+    finding_id: str,
+    pp: dict,
+    all_finding_ids: set,
+    goal_packet: dict | None,
+    review_packet: dict | None = None,
+    repo_root: Path | None = None,
+    error_class: type = ValueError,
+) -> None:
+    """Validate a single patch_proposal block per Task #24 (iter-0014) binding rules.
+
+    iter-0010: moved from _dispatch_codex.py into the shared base. The
+    ``error_class`` kwarg lets each adapter pass its own parser error class
+    (e.g. codex passes CodexOutputParseError) so adapter-specific exception
+    hierarchies are preserved. Default ValueError is the safe generic fallback
+    for callers that don't care which error type is raised.
+
+    Raises ``error_class`` on any violation. MUTATES the supplied ``pp`` dict
+    by stamping ``unified_diff_sha256`` (helper-computed) so downstream consumers
+    see the canonical diff hash without recomputing.
+
+    Per iter-0022: when ``review_packet`` is supplied AND has a string
+    ``defect_target.base_sha``, the helper OVERWRITES ``pp["base_sha"]`` with
+    that canonical value. Codex's read-only sandbox emits a hallucinated
+    base_sha (iter-0021 empirical finding); the operator-stamped
+    ``defect_target.base_sha`` (computed via ``bundle_sha`` at review-packet
+    author time) is the authoritative repo-state hash. When review_packet is
+    absent or lacks a string defect_target.base_sha, codex's emission is kept
+    (backward compat for unit tests + legacy callers).
+
+    Rules (per codex 2026-05-10 v4 + iter-0020 ergonomics fix + iter-0022 base_sha stamp):
+      - patch_proposal is dict (None already accepted by caller bypass)
+      - keys are EXACTLY the closed set {patch_id, applies_to_findings, base_sha,
+        unified_diff, files_touched, expected_tests}; extras rejected
+      - patch_id matches ^codex-rev-\\d+-patch$
+      - patch_id == f"{finding_id}-patch" (derived from this finding's id;
+        replaces the old content-bound formula codex's sandbox couldn't compute)
+      - applies_to_findings non-empty list of strings, each in all_finding_ids
+      - files_touched non-empty list of strings
+      - unified_diff non-empty string
+      - if goal_packet supplied: every files_touched path must be in
+        goal_packet.allowed_files (matched via _self_drive._path_in_scope), and
+        no path may match goal_packet.forbidden_files
+      - helper computes sha256(unified_diff) and stamps it on pp as
+        `unified_diff_sha256` (not produced by codex; drift-detection field)
+      - iter-0022: helper overwrites pp["base_sha"] from review_packet
+        defect_target.base_sha when present (string-typed)
+    """
+    if not isinstance(pp, dict):
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal must be object, got {type(pp).__name__}"
+        )
+    # Closed-key set; reject extras (anti-self-verification claims like 'verified')
+    unknown = set(pp.keys()) - _PATCH_PROPOSAL_ALLOWED
+    if unknown:
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal has unexpected keys: {sorted(unknown)}"
+        )
+    # Required fields present
+    for required in _PATCH_PROPOSAL_REQUIRED:
+        if required not in pp:
+            raise error_class(
+                f"findings[{finding_index}].patch_proposal missing required field: {required!r}"
+            )
+    # Type checks on string fields
+    for str_field in ("patch_id", "base_sha", "unified_diff"):
+        if not isinstance(pp[str_field], str):
+            raise error_class(
+                f"findings[{finding_index}].patch_proposal.{str_field} must be string, "
+                f"got {type(pp[str_field]).__name__}"
+            )
+    # Type checks on list fields
+    for list_field in ("applies_to_findings", "files_touched"):
+        if not isinstance(pp[list_field], list):
+            raise error_class(
+                f"findings[{finding_index}].patch_proposal.{list_field} must be array, "
+                f"got {type(pp[list_field]).__name__}"
+            )
+    if "expected_tests" in pp and not isinstance(pp["expected_tests"], list):
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal.expected_tests must be array, "
+            f"got {type(pp['expected_tests']).__name__}"
+        )
+
+    # Non-empty constraints
+    if not pp["unified_diff"]:
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal.unified_diff must be non-empty"
+        )
+    if not pp["files_touched"]:
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal.files_touched must be non-empty"
+        )
+
+    # iter-0028 F1+F2 (codex-rev-003): reject codex-cli's proprietary
+    # `apply_patch` format at validate time.
+    diff_text = pp["unified_diff"]
+    if diff_text.lstrip().startswith(_APPLY_PATCH_BEGIN_MARKER) or (
+        _APPLY_PATCH_UPDATE_MARKER in diff_text
+    ):
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal: "
+            f"unified_diff_apply_patch_format_not_supported. The unified_diff "
+            f"field uses codex-cli's proprietary apply_patch format "
+            f"({_APPLY_PATCH_BEGIN_MARKER!r}/{_APPLY_PATCH_UPDATE_MARKER!r}). "
+            f"Use standard unified-diff format with '--- a/<path>' and "
+            f"'+++ b/<path>' headers and '@@ -L,N +L,N @@' hunks instead."
+        )
+
+    # iter-0028 F4 (codex-rev-002): parse `--- a/<path>` and `+++ b/<path>`
+    # headers in the diff body. Every body-referenced path must be in
+    # files_touched (declared) AND (when goal_packet is supplied) in
+    # allowed_files AND NOT in forbidden_files. /dev/null is conventional
+    # create/delete marker and skipped.
+    body_paths: set[str] = set()
+    for match in _DIFF_FILE_HEADER_RE.finditer(diff_text):
+        path = match.group("path").strip()
+        if not path or path == "dev/null":
+            continue
+        body_paths.add(path)
+    declared_files = set(pp["files_touched"])
+    for body_path in sorted(body_paths):
+        if body_path not in declared_files:
+            raise error_class(
+                f"findings[{finding_index}].patch_proposal: "
+                f"unified_diff_body_path_outside_scope: {body_path!r} appears "
+                f"in the diff body (--- a/ or +++ b/ header) but is not in "
+                f"files_touched {sorted(declared_files)}. Every diff-body path "
+                f"must be declared in files_touched so scope-check semantics "
+                f"agree across both surfaces."
+            )
+    if not pp["applies_to_findings"]:
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal.applies_to_findings must be non-empty"
+        )
+
+    # Items in the lists must be strings
+    for j, item in enumerate(pp["applies_to_findings"]):
+        if not isinstance(item, str):
+            raise error_class(
+                f"findings[{finding_index}].patch_proposal.applies_to_findings[{j}] "
+                f"must be string, got {type(item).__name__}"
+            )
+    for j, item in enumerate(pp["files_touched"]):
+        if not isinstance(item, str):
+            raise error_class(
+                f"findings[{finding_index}].patch_proposal.files_touched[{j}] "
+                f"must be string, got {type(item).__name__}"
+            )
+
+    # patch_id regex (iter-0020: codex-producible form, not content-bound)
+    if not _PATCH_ID_PATTERN.match(pp["patch_id"]):
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal.patch_id {pp['patch_id']!r} does not "
+            f"match pattern ^codex-rev-\\d+-patch$"
+        )
+
+    # patch_id finding-id binding (iter-0020): must equal f"{finding_id}-patch"
+    expected_patch_id = f"{finding_id}-patch"
+    if pp["patch_id"] != expected_patch_id:
+        raise error_class(
+            f"findings[{finding_index}].patch_proposal.patch_id {pp['patch_id']!r} must "
+            f"equal {expected_patch_id!r} (derived from this finding's id field)"
+        )
+
+    # applies_to_findings must reference IDs present in this review
+    for ref in pp["applies_to_findings"]:
+        if ref not in all_finding_ids:
+            raise error_class(
+                f"findings[{finding_index}].patch_proposal.applies_to_findings references "
+                f"unknown finding id {ref!r}; known ids: {sorted(all_finding_ids)}"
+            )
+
+    # Goal-packet scope checks (skip when goal_packet is None — backward compat
+    # for unit-level test invocation; the main pipeline always supplies it).
+    if goal_packet is not None:
+        # Reuse the same matcher used by the supervisor stop rules so the
+        # allowed/forbidden semantics agree across enforcement layers.
+        from consensus_mcp._self_drive import _path_in_scope
+        allowed = goal_packet.get("allowed_files") or []
+        forbidden = goal_packet.get("forbidden_files") or []
+        for path in pp["files_touched"]:
+            if not _path_in_scope(path, allowed):
+                raise error_class(
+                    f"findings[{finding_index}].patch_proposal.files_touched path "
+                    f"{path!r} is not in goal_packet.allowed_files {allowed}"
+                )
+            if forbidden and _path_in_scope(path, forbidden):
+                raise error_class(
+                    f"findings[{finding_index}].patch_proposal.files_touched path "
+                    f"{path!r} matches goal_packet.forbidden_files {forbidden}"
+                )
+        for body_path in sorted(body_paths):
+            if not _path_in_scope(body_path, allowed):
+                raise error_class(
+                    f"findings[{finding_index}].patch_proposal: "
+                    f"unified_diff_body_path_outside_scope: {body_path!r} "
+                    f"is in the diff body but not in goal_packet.allowed_files "
+                    f"{allowed}"
+                )
+            if forbidden and _path_in_scope(body_path, forbidden):
+                raise error_class(
+                    f"findings[{finding_index}].patch_proposal: "
+                    f"unified_diff_body_path_outside_scope: {body_path!r} "
+                    f"is in the diff body and matches goal_packet.forbidden_files "
+                    f"{forbidden}"
+                )
+
+    # iter-0020: helper computes the canonical diff hash and stamps it on the
+    # validated patch_proposal output.
+    pp["unified_diff_sha256"] = hashlib.sha256(
+        pp["unified_diff"].encode("utf-8")
+    ).hexdigest()
+
+    # iter-0024 F2 fix + iter-0026 F1: per-patch base_sha stamp against the
+    # patch's OWN files_touched subset, using disk bytes when repo_root supplied.
+    if isinstance(review_packet, dict):
+        defect_target = review_packet.get("defect_target")
+        if isinstance(defect_target, dict):
+            per_patch_sha = _compute_per_patch_base_sha(
+                defect_target,
+                pp.get("files_touched") or [],
+                repo_root=repo_root,
+            )
+            if per_patch_sha is not None:
+                pp["base_sha"] = per_patch_sha
+            else:
+                stamped = defect_target.get("base_sha")
+                if isinstance(stamped, str) and stamped:
+                    pp["base_sha"] = stamped
+
+
+def _log_dispatch(log_path: Path, event: dict) -> None:
+    """Append one JSON line to dispatch-log.jsonl.
+
+    Per codex architecture review #4 (2026-05-09), dispatch_done events MUST include:
+      - codex_version, prompt_sha256, output_sha256, schema_sha256
+      - goal_packet_sha256, scope_signature
+      - reviewer_id, pass_id, timeout_seconds, exit_code, sealed_path
+    Caller is responsible for populating these fields; this writer just appends.
+    Secrets must NEVER be logged. The raw subprocess cmd list is NOT passed to
+    this writer; callers log only codex_bin (string) + schema_path (string) +
+    timeout_seconds. Raw prompt / codex output / goal_packet content are never
+    logged; only their sha256 digests are.
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    event_with_ts = {"timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **event}
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(event_with_ts) + "\n")
