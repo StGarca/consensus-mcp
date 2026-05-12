@@ -2037,7 +2037,7 @@ revision_history:
           this helper as an MCP tool")
     dropped: []
     status: active
-review_archive_index: "consensus-state/archive/review-passes/index.yaml"
+review_archive_index: null  # archive index is project-local state (gitignored); validator 6 cross-check intentionally skipped.
 disposition_ledger: "consensus-state/state/disposition-ledger.yaml"
 ---
 
@@ -3942,7 +3942,7 @@ Status counts (current index):
 ```yaml
 status_counts:
   resolved: 130   # v1.7.9 (iteration-0004): prior 124 + 6 newly resolved (claude-rev-051 + claude-rev-052 + claude-rev-053 + canonical-002 + canonical-005 + canonical-007)
-  archived: 52    # pass-1..pass-23 (production review passes) + 2 v1.10.3 real-codex smoke passes + 1 iter-0009 codex-iter0009-1-pass1 (first FULL ceremony close) + 1 iter-0010 codex-iteration-0010-loop-run-goal-demo-1-pass1 (first loop.run_goal-supervised iteration) + 1 iter-0011 codex-iteration-0011-fault-recovery-demo-1-pass1 (codex-rev-001/002 resolution) + 1 iter-0012 codex-iteration-0012-codex-defect-recovery-1-pass1 (round-1 codex review with addressed F4 substring + F5 phantom block findings); smoke + iter-0009/0010/0011/0012 passes are auto-codex-dispatch helper evidence
+  archived: 0     # iter-0001+ archive yamls live under consensus-state/archive/review-passes/ on the maintainer's dev tree (gitignored); section 24 archive index is populated by _sync_section_24.py as iterations close
   deferred: 49    # prior 45 + 4 deferred-this-iteration (claude-rev-048 phase 1 + claude-rev-049 v1.8 + claude-rev-050 phase 1 + canonical-001 dup deferred-with-claude-rev-048)
   dropped: 1      # canonical-003 (corroborated_by root cause; 0 recurrences across 4 iterations; behaviorally moot)
   pending: 0
@@ -4103,91 +4103,11 @@ resolved:
 Archived (review-pass bodies stored externally):
 
 ```yaml
-archived:
-  - {id: pass-1-structural, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-1-structural.yaml"}
-  - {id: pass-2-architectural, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-2-architectural.yaml"}
-  - {id: pass-3-v1.1-followup, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-3-v1.1-followup.yaml"}
-  - {id: pass-4-v1.2-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-4-v1.2-expert.yaml"}
-  - {id: pass-5-codex-v1.2-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-5-v1.2-expert.yaml"}
-  - {id: pass-6-claude-on-codex-pass-5, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-6-on-codex-pass-5.yaml"}
-  - {id: pass-7-codex-v1.3-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-7-v1.3-expert.yaml"}
-  - {id: pass-8-claude-on-codex-pass-7, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-8-on-codex-pass-7.yaml"}
-  - {id: pass-9-codex-v1.4-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-9-v1.4-expert.yaml"}
-  - {id: pass-10-claude-on-codex-pass-9, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-10-on-codex-pass-9.yaml"}
-  - {id: pass-11-codex-v1.4-plus-pass10-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-11-v1.4-plus-pass10-expert.yaml"}
-  - {id: pass-12-claude-on-codex-pass-11, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-12-on-codex-pass-11.yaml"}
-  - {id: pass-13-codex-v1.4-patched-pass12-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-13-v1.4-patched-pass12-expert.yaml"}
-  - {id: pass-14-claude-on-codex-pass-13, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-14-on-codex-pass-13.yaml"}
-  - {id: pass-15-codex-accomplishments-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-15-accomplishments-review.yaml"}
-  - {id: pass-16-codex-quoroom-reference-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-16-quoroom-reference-review.yaml"}
-  - {id: pass-17-codex-path-x-readiness-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-17-path-x-readiness-review.yaml"}
-  - {id: pass-18-codex-v1-7-readiness-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-18-v1.7-readiness-review.yaml"}
-  - {id: pass-19-claude-v1.7.1-audit, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-19-v1.7.1-audit.yaml"}
-  - {id: pass-20-claude-phase0-validator-suite-build, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml"}
-  - {id: pass-21-iteration-0005-cf-007-readiness-flip, archived_at: "consensus-state/archive/review-passes/2026-05-08-iteration-0005-cf-007-readiness-flip-pass.yaml"}
-  - {id: pass-22-iteration-0006, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-0006-consolidated_codex_plus_claude-pass.yaml"}
-  - {id: pass-23-iteration-0007, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-0007-release-candidate-hardening-consolidated_codex_plus_claude-pass.yaml"}
-  # v1.10.3 real-codex smoke passes (auto-codex-dispatch helper evidence; smoke
-  # passes are NOT production reviews — see ledger v1_10_3_application_log for
-  # full context; section 24 is INDEX-ONLY so no prose fields here).
-  - {id: codex-real-smoke-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-real-codex-smoke-2026-05-09-codex-real-smoke-1-pass.yaml"}
-  - {id: codex-real-smoke-20260509-234829-930-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-real-codex-smoke-2026-05-09-codex-real-smoke-20260509-234829-930-pass.yaml"}
-  # iter-0009 v1.1.x MCP wrapper iteration: first FULL ceremony close (sealed
-  # codex review on consensus pipeline-on-consensus pipeline target). See iteration-outcome.yaml
-  # in consensus-state/active/iteration-0009-mcp-wrapper-v1-1-x/.
-  - {id: codex-iter0009-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0009-mcp-wrapper-v1-1-x-codex-iter0009-1-pass.yaml"}
-  # iter-0010 first loop.run_goal-supervised iteration (dedup _read_yaml_or_empty).
-  - {id: codex-iteration-0010-loop-run-goal-demo-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0010-loop-run-goal-demo-codex-iteration-0010-loop-run-goal-demo-1-pass.yaml"}
-  # iter-0011 codex-rev-001/002 resolution (review_target_path threading + orphan yaml import removal).
-  - {id: codex-iteration-0011-fault-recovery-demo-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0011-fault-recovery-demo-codex-iteration-0011-fault-recovery-demo-1-pass.yaml"}
-  # iter-0012 codex round-1 review (codex-rev-001 medium F4 substring + codex-rev-002 low F5 phantom block — both addressed in round-2; iter-0012 closes blocked_needs_operator pending iter-0013 codex prompt-template fix).
-  - {id: codex-iteration-0012-codex-defect-recovery-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0012-codex-defect-recovery-codex-iteration-0012-codex-defect-recovery-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0019-3-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0019-real-codex-fix-demo-codex-iter0019-3-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0020-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0020-patch-id-ergonomics-codex-iter0020-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0020-3-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0020-patch-id-ergonomics-codex-iter0020-3-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0021-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0021-real-codex-fix-end-to-end-codex-iter0021-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0022-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0022-end-to-end-fix-loop-codex-iter0022-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: claude-iter0022-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0022-end-to-end-fix-loop-claude-iter0022-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0023-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0023-closure-invariant-flavor-b-review-codex-iter0023-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0025-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0025-apply-pipeline-flavor-b-review-codex-iter0025-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0027-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0027-codex-dispatch-flavor-b-review-codex-iter0027-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0029-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0029-supervisor-flavor-b-review-codex-iter0029-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: claude-iter0029-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0029-supervisor-flavor-b-review-claude-iter0029-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0032-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0032-visibility-tui-v1105-flavor-b-review-codex-iter0032-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0033-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0033-fix-iter-0032-findings-codex-iter0033-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0033-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0033-fix-iter-0032-findings-codex-iter0033-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0034-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0034-self-drive-flavor-b-review-codex-iter0034-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0035-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0035-self-drive-fixes-codex-iter0035-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0036-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0036-subagent-watchdog-codex-iter0036-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0037-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0037-bidirectional-dispatch-codex-iter0037-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-security-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-security-codex-audit-security-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-performance-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-performance-codex-audit-performance-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-crossplat-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-cross-platform-codex-audit-crossplat-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-bareexc-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-bare-except-codex-audit-bareexc-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0039-1-pass2, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0039-dispatch-crossplat-fixes-codex-iter0039-1-pass.yaml"}
+# archived review-pass yamls live under consensus-state/archive/review-passes/
+# on the maintainer's tree (gitignored). _sync_section_24.py adds entries here
+# as iter-NNNN passes close. Empty at extraction; populated as the standalone
+# repo's own iterations close (iter-0001..0004 already on disk; sync on next run).
+archived: []
 ```
 
 Deferred (id-only; full rationales in ledger):
