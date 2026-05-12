@@ -2037,7 +2037,7 @@ revision_history:
           this helper as an MCP tool")
     dropped: []
     status: active
-review_archive_index: "consensus-state/archive/review-passes/index.yaml"
+review_archive_index: null  # archive index is project-local state (gitignored); validator 6 (archive-index cross-check) intentionally skipped.
 disposition_ledger: "consensus-state/state/disposition-ledger.yaml"
 ---
 
@@ -3941,15 +3941,12 @@ Status counts (current index):
 
 ```yaml
 status_counts:
-  resolved: 130   # v1.7.9 (iteration-0004): prior 124 + 6 newly resolved (claude-rev-051 + claude-rev-052 + claude-rev-053 + canonical-002 + canonical-005 + canonical-007)
-  archived: 52    # pass-1..pass-23 (production review passes) + 2 v1.10.3 real-codex smoke passes + 1 iter-0009 codex-iter0009-1-pass1 (first FULL ceremony close) + 1 iter-0010 codex-iteration-0010-loop-run-goal-demo-1-pass1 (first loop.run_goal-supervised iteration) + 1 iter-0011 codex-iteration-0011-fault-recovery-demo-1-pass1 (codex-rev-001/002 resolution) + 1 iter-0012 codex-iteration-0012-codex-defect-recovery-1-pass1 (round-1 codex review with addressed F4 substring + F5 phantom block findings); smoke + iter-0009/0010/0011/0012 passes are auto-codex-dispatch helper evidence
-  deferred: 49    # prior 45 + 4 deferred-this-iteration (claude-rev-048 phase 1 + claude-rev-049 v1.8 + claude-rev-050 phase 1 + canonical-001 dup deferred-with-claude-rev-048)
-  dropped: 1      # canonical-003 (corroborated_by root cause; 0 recurrences across 4 iterations; behaviorally moot)
+  resolved: 0
+  archived: 0
+  deferred: 0
+  dropped: 0
   pending: 0
-  pending_operator_decision: 0    # ALL 6 pass-20 deferreds dispositioned in iteration-0004
-  pending_iteration_0001_canonical_findings: 0   # ALL 5 dispositioned in iteration-0004
   open: 0
-  net_change_iteration_0004: "11 items dispositioned (6 resolved + 4 deferred + 1 dropped); pending_operator_decision + pending_iteration_0001_canonical_findings both -> 0"
 ledger:
   path: consensus-state/state/disposition-ledger.yaml
   validator: consensus_mcp/validators/validate_disposition_index.py
@@ -3959,299 +3956,25 @@ ledger:
 Resolved (id-only index; full prose in ledger):
 
 ```yaml
-resolved:
-  - {id: rev-001-active-contract-scope, promoted_to: section_0, landed_in: v1.1}
-  - {id: rev-002-production-ready-circularity, promoted_to: [section_5, section_13, section_17], landed_in: v1.1}
-  - {id: rev-003-final-clearance-unmodeled, promoted_to: section_18, landed_in: v1.1}
-  - {id: rev-004-agent-call-protocol-missing, promoted_to: section_19, landed_in: v1.1}
-  - {id: rev-005-malformed-output-failure-path, promoted_to: section_20, landed_in: v1.4}
-  - {id: rev-006-per-iteration-call-cap-missing, promoted_to: section_20, landed_in: v1.1}
-  - {id: rev-007-rebuttal-asymmetry-undocumented, promoted_to: section_11, landed_in: v1.1}
-  - {id: rev-010-state-files-in-wiki, promoted_to: section_5, landed_in: v1.1}
-  - {id: rev-011-worktree-isolation-missing, promoted_to: section_21, landed_in: v1.2}
-  - {id: rev-012-token-saving-claim-unfalsifiable, promoted_to: section_22, landed_in: v1.2}
-  - {id: rev-014-confidence-bucket-undefined, promoted_to: section_9, landed_in: v1.2}
-  - {id: rev-015-state-update-caller-implicit, promoted_to: section_6, landed_in: v1.2}
-  - {id: rev-016-mcp-feature-creep-mitigation, promoted_to: section_22, landed_in: v1.1}
-  - {id: rev-017-acceptance-8-irrelevant-undefined, promoted_to: section_7, landed_in: v1.2}
-  - {id: rev-019-correlation-problem, promoted_to: [section_4, section_22], landed_in: v1.2}
-  - {id: rev-020-synthesizer-fence-sitting, promoted_to: section_12, landed_in: v1.2}
-  - {id: rev-021-concurrency-undefined, promoted_to: section_5, landed_in: v1.2}
-  - {id: rev-022-liveness-undefined, promoted_to: [section_6, section_20], landed_in: v1.2}
-  - {id: rev-023-adversarial-surface, promoted_to: [section_8, section_17], landed_in: v1.2}
-  - {id: rev-024-phase-0-mvp-incomplete, promoted_to: [section_16, section_23], landed_in: v1.2}
-  - {id: rev-026-outcome-metrics-missing, promoted_to: section_22, landed_in: v1.2}
-  - {id: rev-029-revision-protocol-missing, promoted_to: section_6, landed_in: v1.2}
-  - {id: rev-030-stated-vs-actual-optimization, promoted_to: section_1, landed_in: v1.2}
-  - {id: rev-031-self-resolutions-no-schema, promoted_to: section_10, landed_in: v1.2}
-  - {id: rev-032-peer-ask-path-unmodeled, promoted_to: section_10, landed_in: v1.2}
-  - {id: rev-033-clarifying-question-classification, promoted_to: section_9, landed_in: v1.2}
-  - {id: rev-034-call-budget-arithmetic, promoted_to: section_20, landed_in: v1.2}
-  - {id: rev-035-weak-agreement-undetectable, promoted_to: section_13, landed_in: v1.2}
-  - {id: rev-036-production-allowed-math-implicit, promoted_to: section_17, landed_in: v1.2}
-  - {id: rev-037-claude-md-hash-binding-stated-twice, promoted_to: [section_2, section_19], landed_in: v1.2}
-  - {id: rev-038-state-tree-indentation-misleading, promoted_to: section_5, landed_in: v1.2}
-  - {id: rev-052-budget-conflict, promoted_to: [section_10, section_20], landed_in: v1.3}
-  - {id: rev-054-state-machine-transitions-implicit, promoted_to: section_17, landed_in: v1.3}
-  - {id: rev-066-active-contract-scope-ambiguous, promoted_to: [section_0, section_24], landed_in: v1.3}
-  - {id: rev-067-pass4-must-fixes-not-promoted, promoted_to: [section_10, section_17, section_20], landed_in: v1.3}
-  - {id: rev-068-review-log-drift, promoted_to: [section_0, section_24], landed_in: v1.3}
-  - {id: rev-069-non-ascii-machine-noise, promoted_to: section_0, landed_in: v1.3}
-  - {id: rev-070-finding-id-gap-unexplained, promoted_to: section_24, landed_in: v1.3}
-  - {id: rev-072-peer-question-taint-missing, promoted_to: section_10, landed_in: v1.3}
-  - {id: rev-073-frontmatter-schema-inconsistent, promoted_to: frontmatter, landed_in: v1.3}
-  - {id: codex-rev-001-section-24-behavior-leak, promoted_to: section_13, landed_in: v1.4}
-  - {id: codex-rev-002-invalid-disposition-target, promoted_to: section_20, landed_in: v1.4}
-  - {id: codex-rev-003-pass6-id-lifecycle-hidden, promoted_to: section_24, landed_in: v1.4}
-  - {id: codex-rev-004-mcp-agent-call-boundary-fuzzy, promoted_to: section_3, landed_in: v1.4}
-  - {id: codex-rev-005-production-approval-transition-preconditions-thin, promoted_to: section_17, landed_in: v1.4}
-  - {id: codex-rev-006-runtime-manual-active-but-undefined, promoted_to: section_19, landed_in: v1.4}
-  - {id: codex-rev-007-archive-index-mojibake, promoted_to: archive_index_yaml, landed_in: v1.4}
-  - {id: codex-rev-008-success-definition-still-prose, promoted_to: section_1, landed_in: v1.4}
-  - {id: claude-rev-003-kill-switch-aggregation-rule-missing, promoted_to: section_4, landed_in: v1.4}
-  - {id: claude-rev-004-namespace-allocation-continuity-rule, promoted_to: section_0, landed_in: v1.4}
-  - {id: claude-rev-005-promoted-to-dead-reference-validator, promoted_to: section_23, landed_in: v1.4}
-  - {id: claude-rev-006-pass7-not-yet-in-spec-archived-block, promoted_to: section_24, landed_in: v1.4}
-  - {id: codex-rev-013-pass8-archive-ignored-by-default, promoted_to: dotgitignore, landed_in: v1.4_pass-10}
-  - {id: codex-rev-014-pass8-status-overstates-promotion, promoted_to: archive_index_yaml, landed_in: v1.4_pass-10}
-  - {id: codex-rev-015-invalid-legacy-finding-id-reference, promoted_to: [frontmatter, section_23], landed_in: v1.4_pass-10}
-  - {id: codex-rev-016-em-dash-in-section-24, promoted_to: section_24, landed_in: v1.4_pass-10}
-  - {id: codex-rev-017-active-contract-patched-without-version-bump, promoted_to: frontmatter, landed_in: v1.4_pass-12}
-  - {id: codex-rev-018-phase0-scripts-ignored-by-git, promoted_to: dotgitignore, landed_in: v1.4_pass-12}
-  - {id: codex-rev-019-known-blocking-findings-not-reflected-in-frontmatter, promoted_to: frontmatter, landed_in: v1.4_pass-12}
-  - {id: codex-rev-024-gitignore-comment-nonascii, promoted_to: dotgitignore, landed_in: v1.4_pass-12}
-  - {id: codex-rev-027-frontmatter-known-blockers-omits-load-bearing-validator-gap, promoted_to: frontmatter, landed_in: v1.4_pass-14}
-  - {id: codex-rev-029-archive-index-provisional-rates-incomplete, promoted_to: archive_index_yaml, landed_in: v1.4_pass-14}
-  - {id: codex-rev-032-gitignore-nonascii-comments-remain, promoted_to: dotgitignore, landed_in: v1.4_pass-14}
-  # v1.5 architectural promotions (Tier 1 + Tier 2 + Tier 3 ratifications 2026-05-08)
-  - {id: codex-rev-009-corroboration-signal-owner-conflict, promoted_to: [section_9, section_13], landed_in: v1.5}
-  - {id: codex-rev-010-corroboration-auto-blocks-too-broadly, promoted_to: section_13, landed_in: v1.5}
-  - {id: codex-rev-011-production-approval-hash-type-confusion, promoted_to: section_17, landed_in: v1.5}
-  - {id: codex-rev-012-section-24-still-not-index-only, promoted_to: section_24, landed_in: v1.5}
-  - {id: codex-rev-020-section24-index-only-rule-still-violated-by-pass10, promoted_to: [section_24, agent_loop_state_disposition_ledger_yaml], landed_in: v1.5}
-  - {id: codex-rev-023-active-corroboration-rule-known-unsafe, promoted_to: section_13, landed_in: v1.5}
-  - {id: codex-rev-025-disabled-corroboration-schema-still-active, promoted_to: section_9, landed_in: v1.5}
-  - {id: codex-rev-026-production-gate-known-broken-but-still-live, promoted_to: section_17, landed_in: v1.5}
-  - {id: codex-rev-028-patch-level-not-represented-in-revision-history, promoted_to: frontmatter, landed_in: v1.5}
-  - {id: codex-rev-030-section24-violation-now-explicitly-accepted, promoted_to: [section_24, agent_loop_state_disposition_ledger_yaml], landed_in: v1.5}
-  - {id: codex-rev-031-phase0-script-tree-does-not-exist, promoted_to: section_23, landed_in: v1.5}
-  - {id: claude-rev-001-failure-modes-regression-systemic, promoted_to: [section_20, section_0], landed_in: v1.5}
-  - {id: claude-rev-002-corroboration-needs-schema-not-prose, promoted_to: [section_9, section_13], landed_in: v1.5}
-  - {id: claude-rev-007-premature-done-claim-pattern, promoted_to: section_0, landed_in: v1.5}
-  - {id: claude-rev-008-corroboration-weaponization, promoted_to: section_13, landed_in: v1.5}
-  - {id: claude-rev-010-independent-finding-rate-formula-undefined, promoted_to: section_22, landed_in: v1.5}
-  - {id: claude-rev-013-consensus-mutation-invalidates-approvals, promoted_to: section_17, landed_in: v1.5}
-  - {id: claude-rev-016-corroboration-canonical-key-timing, promoted_to: section_15, landed_in: v1.5}
-  - {id: claude-rev-018-no-rollback-semantics, promoted_to: section_0, landed_in: v1.5}
-  - {id: claude-rev-023-operator-approval-store-path-undefined, promoted_to: section_17, landed_in: v1.5}
-  - {id: claude-rev-024-disable-mechanism-informal, promoted_to: section_0, landed_in: v1.5}
-  - {id: claude-rev-025-known-blocker-broken-code-pattern, promoted_to: section_0, landed_in: v1.5}
-  - {id: claude-rev-026-frontmatter-known-blockers-context-gap, promoted_to: frontmatter, landed_in: v1.5}
-  - {id: claude-rev-027-active-section-known-broken-structural-contradiction, promoted_to: section_0, landed_in: v1.5}
-  - {id: claude-rev-028-claude-self-patching-not-converging-meta, promoted_to: section_0, landed_in: v1.5}
-  - {id: claude-rev-015-validate-disposition-index-still-not-built, promoted_to: scripts_agent_loop_validate_disposition_index_py, landed_in: v1.5}
-  # v1.6 post-Quoroom/pass-16 promotions
-  - {id: codex-rev-033-validator-runtime-dependency-not-pinned, promoted_to: [requirements_txt, pyproject_toml], landed_in: v1.6}
-  - {id: codex-rev-034-implemented-status-overstates-smoke-test-reality, promoted_to: section_23, landed_in: v1.6}
-  - {id: codex-rev-035-validator-report-lacks-run-provenance, promoted_to: scripts_agent_loop_validate_disposition_index_py, landed_in: v1.6}
-  - {id: codex-rev-038-next-work-should-shift-from-spec-review-to-iteration-0000, promoted_to: section_23, landed_in: v1.6}
-  - {id: codex-rev-039-add-agent-wip-artifact-before-runtime, promoted_to: [section_5, section_23], landed_in: v1.6}
-  - {id: codex-rev-040-role-scoped-tool-profiles, promoted_to: section_19, landed_in: v1.6}
-  - {id: codex-rev-047-do-not-import-wallet-cloud-public-room-surface, promoted_to: section_1, landed_in: v1.6}
-  # iteration-0000 canonical_findings (cf-NNN) and pass-17 promotions, all landed in v1.7
-  - {id: cf-001, promoted_to: [section_5, section_13], landed_in: v1.7}
-  - {id: cf-003, promoted_to: [section_13, section_20], landed_in: v1.7}
-  - {id: cf-004, promoted_to: section_23, landed_in: v1.7}
-  - {id: cf-005, promoted_to: [section_17, section_20], landed_in: v1.7}
-  - {id: cf-007, promoted_to: section_0, landed_in: v1.7}
-  - {id: cf-008, promoted_to: section_13, landed_in: v1.7}
-  - {id: pass-17-codex-rev-049-cf-findings-not-archived-in-repo, promoted_to: dotgitignore, landed_in: v1.7}
-  - {id: pass-17-codex-rev-050-path-x-ratification-should-not-bulk-trust-synthesizer, promoted_to: governance_pattern_observed, landed_in: v1.7}
-  - {id: pass-17-codex-rev-051-readiness-hold-is-correct-until-v1-7-gates-land, promoted_to: cf-007, landed_in: v1.7}
-  # v1.7.1 cleanup promotions (codex pass-18)
-  - {id: codex-rev-065-section24-v17-disposition-drift, promoted_to: section_24, landed_in: v1.7.1}
-  - {id: codex-rev-066-pass17-id-collision-remains-visible, promoted_to: [archive_index_yaml, pass_17_archive_yaml], landed_in: v1.7.1}
-  - {id: codex-rev-068-active-spec-nonascii-regression, promoted_to: section_23, landed_in: v1.7.1}
-  - {id: codex-rev-069-v17-revision-history-overstates-actual-iteration-file-set, promoted_to: frontmatter, landed_in: v1.7.1}
-  # v1.7.4 architectural promotions (operator Path B 2026-05-08; ratified iteration-0001 + pass-20 architectural deferred_decisions)
-  - {id: canonical-004-iter0001-claude-rev-043-observational-mode-enum-widening, promoted_to: section_13, landed_in: v1.7.4}
-  - {id: canonical-006-iter0001-claude-004-anti-regression-iteration-extension, promoted_to: section_0, landed_in: v1.7.4}
-  - {id: claude-rev-045-pass20-canonical-audit-event-names, promoted_to: section_13, landed_in: v1.7.4}
-  - {id: claude-rev-046-pass20-canonical-yaml-sha256-convention, promoted_to: section_7, landed_in: v1.7.4}
-  - {id: codex-q-001-iter0001-historical-packet-sha-preserve-not-recompute, promoted_to: section_7, landed_in: v1.7.4}
-  # iteration-0002 mechanical applications (operator Path B + change-09 scope expansion 2026-05-08; iteration-0000 cleaned 14 -> 7 findings)
-  - {id: claude-rev-040-pass20-corroborated-by-on-claude-review, promoted_to: iteration_0000_claude_review_yaml, landed_in: iteration-0002}
-  - {id: claude-rev-041-pass20-partially-cleared-underscore, promoted_to: iteration_0000_claude_review_yaml, landed_in: iteration-0002}
-  - {id: claude-rev-042-pass20-no-blockers-without-rationale, promoted_to: iteration_0000_claude_review_yaml, landed_in: iteration-0002}
-  - {id: claude-rev-043-pass20-consensus-yaml-enum-mechanical-application, promoted_to: iteration_0000_consensus_yaml, landed_in: iteration-0002}
-  - {id: claude-rev-044-pass20-iteration-outcome-yaml-parse-error, promoted_to: iteration_0000_iteration_outcome_yaml, landed_in: iteration-0002}
-  - {id: claude-rev-046-pass20-pre-canonical-pin-marker-mechanical-application, promoted_to: [iteration_0000_codex_review_yaml, iteration_0000_claude_review_yaml], landed_in: iteration-0002}
-  - {id: claude-rev-047-pass20-packet-missing-required-fields, promoted_to: iteration_0000_review_packet_yaml, landed_in: iteration-0002}
-  - {id: codex-q-001-mechanical-application, promoted_to: [iteration_0000_codex_review_yaml, iteration_0000_claude_review_yaml], landed_in: iteration-0002}
-  - {id: canonical-iter0002-007-iteration-0000-section-22-metric-blocks, promoted_to: iteration_0000_iteration_outcome_yaml, landed_in: iteration-0002}
-  # iteration-0003 resolved (Option B local grandfather; unanimous codex+claude 2026-05-08)
-  - {id: canonical-iter0002-005-iteration-0000-audit-event-name-rename, promoted_to: [section_13, scripts_agent_loop_validate_iteration_py, iteration_0000_independence_audit_yaml], landed_in: v1.7.7}
-  # iteration-0004 dispositions (10 of 11 in resolved/dropped; 1 deferred; 4 deferred-list entries)
-  - {id: claude-rev-051-pass20-canonical-yaml-sha256-convention, promoted_to: section_7, landed_in: v1.7.4_plus_v1.7.5, dispositioned_in: iteration-0004}
-  - {id: claude-rev-052-section-7-decision-ledger-hash-null-when-absent, promoted_to: section_7, landed_in: v1.7.9, dispositioned_in: iteration-0004}
-  - {id: claude-rev-053-section-16-phase0-validators-list-extension, promoted_to: section_16, landed_in: v1.7.9, dispositioned_in: iteration-0004}
-  - {id: canonical-002-pass-20-enumeration-error, promoted_to: iteration-0002_change-05, landed_in: iteration-0002, dispositioned_in: iteration-0004}
-  - {id: canonical-005-input-yaml-self-violation, promoted_to: iteration_discipline_in_iter_0002_0003_0004, landed_in: behaviorally_resolved, dispositioned_in: iteration-0004}
-  - {id: canonical-007-active-contract-readiness-lock-pattern, promoted_to: iteration_discipline_in_iter_0002_0003_0004, landed_in: behaviorally_resolved, dispositioned_in: iteration-0004}
+resolved: []
 ```
 
-Archived (review-pass bodies stored externally):
+Archived (review-pass bodies stored externally under
+`consensus-state/archive/review-passes/`; that directory is gitignored, so
+this list is populated locally as iterations close):
 
 ```yaml
-archived:
-  - {id: pass-1-structural, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-1-structural.yaml"}
-  - {id: pass-2-architectural, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-2-architectural.yaml"}
-  - {id: pass-3-v1.1-followup, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-3-v1.1-followup.yaml"}
-  - {id: pass-4-v1.2-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-4-v1.2-expert.yaml"}
-  - {id: pass-5-codex-v1.2-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-5-v1.2-expert.yaml"}
-  - {id: pass-6-claude-on-codex-pass-5, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-6-on-codex-pass-5.yaml"}
-  - {id: pass-7-codex-v1.3-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-7-v1.3-expert.yaml"}
-  - {id: pass-8-claude-on-codex-pass-7, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-8-on-codex-pass-7.yaml"}
-  - {id: pass-9-codex-v1.4-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-9-v1.4-expert.yaml"}
-  - {id: pass-10-claude-on-codex-pass-9, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-10-on-codex-pass-9.yaml"}
-  - {id: pass-11-codex-v1.4-plus-pass10-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-11-v1.4-plus-pass10-expert.yaml"}
-  - {id: pass-12-claude-on-codex-pass-11, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-12-on-codex-pass-11.yaml"}
-  - {id: pass-13-codex-v1.4-patched-pass12-expert, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-13-v1.4-patched-pass12-expert.yaml"}
-  - {id: pass-14-claude-on-codex-pass-13, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-14-on-codex-pass-13.yaml"}
-  - {id: pass-15-codex-accomplishments-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-15-accomplishments-review.yaml"}
-  - {id: pass-16-codex-quoroom-reference-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-16-quoroom-reference-review.yaml"}
-  - {id: pass-17-codex-path-x-readiness-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-17-path-x-readiness-review.yaml"}
-  - {id: pass-18-codex-v1-7-readiness-review, archived_at: "consensus-state/archive/review-passes/2026-05-08-codex-pass-18-v1.7-readiness-review.yaml"}
-  - {id: pass-19-claude-v1.7.1-audit, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-19-v1.7.1-audit.yaml"}
-  - {id: pass-20-claude-phase0-validator-suite-build, archived_at: "consensus-state/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml"}
-  - {id: pass-21-iteration-0005-cf-007-readiness-flip, archived_at: "consensus-state/archive/review-passes/2026-05-08-iteration-0005-cf-007-readiness-flip-pass.yaml"}
-  - {id: pass-22-iteration-0006, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-0006-consolidated_codex_plus_claude-pass.yaml"}
-  - {id: pass-23-iteration-0007, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-0007-release-candidate-hardening-consolidated_codex_plus_claude-pass.yaml"}
-  # v1.10.3 real-codex smoke passes (auto-codex-dispatch helper evidence; smoke
-  # passes are NOT production reviews — see ledger v1_10_3_application_log for
-  # full context; section 24 is INDEX-ONLY so no prose fields here).
-  - {id: codex-real-smoke-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-real-codex-smoke-2026-05-09-codex-real-smoke-1-pass.yaml"}
-  - {id: codex-real-smoke-20260509-234829-930-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-09-iteration-real-codex-smoke-2026-05-09-codex-real-smoke-20260509-234829-930-pass.yaml"}
-  # iter-0009 v1.1.x MCP wrapper iteration: first FULL ceremony close (sealed
-  # codex review on consensus pipeline-on-consensus pipeline target). See iteration-outcome.yaml
-  # in consensus-state/active/iteration-0009-mcp-wrapper-v1-1-x/.
-  - {id: codex-iter0009-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0009-mcp-wrapper-v1-1-x-codex-iter0009-1-pass.yaml"}
-  # iter-0010 first loop.run_goal-supervised iteration (dedup _read_yaml_or_empty).
-  - {id: codex-iteration-0010-loop-run-goal-demo-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0010-loop-run-goal-demo-codex-iteration-0010-loop-run-goal-demo-1-pass.yaml"}
-  # iter-0011 codex-rev-001/002 resolution (review_target_path threading + orphan yaml import removal).
-  - {id: codex-iteration-0011-fault-recovery-demo-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0011-fault-recovery-demo-codex-iteration-0011-fault-recovery-demo-1-pass.yaml"}
-  # iter-0012 codex round-1 review (codex-rev-001 medium F4 substring + codex-rev-002 low F5 phantom block — both addressed in round-2; iter-0012 closes blocked_needs_operator pending iter-0013 codex prompt-template fix).
-  - {id: codex-iteration-0012-codex-defect-recovery-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0012-codex-defect-recovery-codex-iteration-0012-codex-defect-recovery-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0019-3-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0019-real-codex-fix-demo-codex-iter0019-3-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0020-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0020-patch-id-ergonomics-codex-iter0020-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0020-3-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0020-patch-id-ergonomics-codex-iter0020-3-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0021-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0021-real-codex-fix-end-to-end-codex-iter0021-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0022-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0022-end-to-end-fix-loop-codex-iter0022-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: claude-iter0022-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0022-end-to-end-fix-loop-claude-iter0022-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0023-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0023-closure-invariant-flavor-b-review-codex-iter0023-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0025-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0025-apply-pipeline-flavor-b-review-codex-iter0025-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0027-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0027-codex-dispatch-flavor-b-review-codex-iter0027-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0029-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0029-supervisor-flavor-b-review-codex-iter0029-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: claude-iter0029-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-10-iteration-0029-supervisor-flavor-b-review-claude-iter0029-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0032-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0032-visibility-tui-v1105-flavor-b-review-codex-iter0032-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0033-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0033-fix-iter-0032-findings-codex-iter0033-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0033-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0033-fix-iter-0032-findings-codex-iter0033-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0034-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0034-self-drive-flavor-b-review-codex-iter0034-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0035-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0035-self-drive-fixes-codex-iter0035-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0036-2-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0036-subagent-watchdog-codex-iter0036-2-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0037-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0037-bidirectional-dispatch-codex-iter0037-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-security-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-security-codex-audit-security-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-performance-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-performance-codex-audit-performance-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-crossplat-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-cross-platform-codex-audit-crossplat-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-audit-bareexc-1-pass1, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-bare-except-codex-audit-bareexc-1-pass.yaml"}
-  # auto-synced by _sync_section_24.py (added missing pass-id entry)
-  - {id: codex-iter0039-1-pass2, archived_at: "consensus-state/archive/review-passes/2026-05-11-iteration-0039-dispatch-crossplat-fixes-codex-iter0039-1-pass.yaml"}
+archived: []
 ```
 
 Deferred (id-only; full rationales in ledger):
 
 ```yaml
-deferred:
-  - {id: rev-013-replay-determinism-unspecified}
-  - {id: rev-027-prior-art-not-cited}
-  - {id: rev-028-operator-bottleneck}
-  - {id: rev-053-disposition-drift}
-  - {id: rev-055-sanitization-frame-first}
-  - {id: rev-056-agent-stance-instrumentation}
-  - {id: rev-057-time-to-correct-error-formula-missing}
-  - {id: rev-058-peer-question-coupling}
-  - {id: rev-059-assumption-quality-gameable}
-  - {id: rev-060-mcp-orchestration-boundary-fuzzy}
-  - {id: rev-061-runtime-manual-undefined}
-  - {id: rev-062-comparable-iterations-undefined}
-  - {id: rev-063-check-registry-no-operator-extension}
-  - {id: rev-064-success-definition-prose-duplicates-metrics}
-  - {id: rev-065-iteration-0000-no-explicit-reviewer}
-  - {id: rev-071-iteration-0000-reviewer-conflicts-ai-only}
-  - {id: codex-rev-021-archive-trackability-validator-extension}
-  - {id: codex-rev-022-published-rates-undefined-formula}
-  - {id: claude-rev-009-adversarial-pass-budget-undefined}
-  - {id: claude-rev-011-cross-iteration-corroboration-undefined}
-  - {id: claude-rev-012-kill-switch-iteration-definition-fuzzy}
-  - {id: claude-rev-014-do-not-claim-ready-this-pass}
-  - {id: claude-rev-017-pass7-status-aggregation-imprecise}
-  - {id: claude-rev-019-cross-pass-corroboration-now-operational}
-  - {id: claude-rev-020-state-files-tracking-policy-undefined}
-  - {id: claude-rev-021-pass-numbering-mixed-semantics}
-  - {id: claude-rev-029-pass-numbering-versus-iteration-numbering}
-  - {id: claude-rev-030-operator-as-reviewer-implicit}
-  - {id: codex-rev-003-followup}
-  - {id: codex-rev-036-archive-index-still-too-prose-heavy-for-ai-hot-path}
-  - {id: codex-rev-037-phase0-needs-schema-validator-not-only-custom-regex}
-  - {id: codex-rev-041-quorum-objection-window-for-low-risk-only}
-  - {id: codex-rev-042-plan-phase1-sqlite-event-store}
-  - {id: codex-rev-043-skill-registry-for-review-methodology}
-  - {id: codex-rev-044-self-mod-audit-for-consensus-patches}
-  - {id: codex-rev-045-executor-provider-abstraction}
-  - {id: codex-rev-046-read-only-dashboard-later-not-now}
-  - {id: codex-rev-048-host-project-specialist-workers}
-  # iteration-0000 deferred
-  - {id: cf-002}
-  - {id: cf-006}
-  - {id: cf-risk-001}
-  - {id: cf-risk-002}
-  - {id: cf-risk-003}
-  # v1.7.1 deferred (codex pass-18)
-  - {id: codex-rev-067-validator-misses-cross-artifact-disposition-drift, defer_to: v1.8}
-  - {id: pass_17_open_followup_namespace_id_collision_detection_validator, defer_to: v1.8}
-  # canonical-iter0002-005 RESOLVED in iteration-0003 (Option B unanimous 2026-05-08); promoted to resolved block above
-  # iteration-0004 deferred (4 items)
-  - {id: claude-rev-048-pass20-scope-check-intra-file-gap, defer_to: phase_1_mcp, dispositioned_in: iteration-0004}
-  - {id: claude-rev-049-pass20-section-17-production-clearances-shape, defer_to: v1.8, dispositioned_in: iteration-0004}
-  - {id: claude-rev-050-pass20-operator-production-scope-matches-leniency, defer_to: phase_1_mcp, dispositioned_in: iteration-0004}
-  - {id: canonical-001-iter0001-scope-check-intra-file-gap-duplicate, defer_to: phase_1_mcp, dispositioned_in: iteration-0004}
+deferred: []
 ```
 
 Dropped (id-only; full prose in ledger):
 
 ```yaml
-dropped:
-  - {id: canonical-003-iter0001-corroborated-by-root-cause-investigation, dispositioned_in: iteration-0004}
+dropped: []
 ```
