@@ -186,7 +186,7 @@ Workflow #4 has the strongest pre-commit catch rate in the bootstrap deployment.
 
 ## Status
 
-**2.0.0** — initial standalone release (2026-05-11). Extracted from the project that produced and stress-tested it. 420+ regression tests passing. The bootstrap deployment is the test corpus; new users can build on a stable surface.
+**1.12.0** — standalone release (2026-05-11). Extracted from the project that produced and stress-tested it. 420+ regression tests passing. The bootstrap deployment is the test corpus; new users can build on a stable surface.
 
 ## Requirements
 
