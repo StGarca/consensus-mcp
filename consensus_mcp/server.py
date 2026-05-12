@@ -56,14 +56,10 @@ def _package_version() -> str:
         return "unknown"
 
 def _resolve_repo_root() -> Path:
-    """Resolve REPO_ROOT.
+    """Legacy REPO_ROOT resolver. Kept for back-compat.
 
-    Default is the in-tree discovery: consensus_mcp/server.py ->
-    parent.parent == repo root. When the package is installed via
-    pip wheel, the parent walk lands inside site-packages; consumers of
-    the installed binary must set CONSENSUS_MCP_REPO_ROOT to the actual
-    source repo to give the disposition check a real spec md to read.
-    Added in v1.9.3-rc P3 T5 packaging work.
+    v1.13.0: no longer load-bearing for spec/state/project-root. Use
+    _resolve_spec_path / _resolve_state_root / _resolve_project_root instead.
     """
     override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
     if override:
@@ -71,19 +67,59 @@ def _resolve_repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _resolve_spec_path() -> Path:
+    """Spec path: env override > legacy REPO_ROOT > walked-up checkout > packaged template."""
+    override = os.environ.get("CONSENSUS_MCP_SPEC_PATH")
+    if override:
+        return Path(override).resolve()
+    repo_root_env = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+    if repo_root_env:
+        legacy = Path(repo_root_env).resolve() / "docs" / "architecture" / "orchestration-spec.md"
+        if legacy.exists():
+            return legacy
+    walked = Path(__file__).resolve().parent.parent / "docs" / "architecture" / "orchestration-spec.md"
+    if walked.exists():
+        return walked
+    return Path(__file__).resolve().parent / "spec_template.md"
+
+
+def _resolve_state_root() -> Path:
+    """State root: env override > legacy REPO_ROOT > CWD."""
+    override = os.environ.get("CONSENSUS_MCP_STATE_ROOT")
+    if override:
+        return Path(override).resolve()
+    repo_root_env = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+    if repo_root_env:
+        return Path(repo_root_env).resolve() / "consensus-state"
+    return Path.cwd() / "consensus-state"
+
+
+def _resolve_project_root() -> Path:
+    """Project root (reviewable-file root): env override > legacy REPO_ROOT > CWD.
+
+    This is what consumers of goal_packet.allowed_files resolve against.
+    """
+    override = os.environ.get("CONSENSUS_MCP_PROJECT_ROOT")
+    if override:
+        return Path(override).resolve()
+    repo_root_env = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+    if repo_root_env:
+        return Path(repo_root_env).resolve()
+    return Path.cwd()
+
+
 REPO_ROOT = _resolve_repo_root()
-SPEC_PATH = (
-    REPO_ROOT
-    / "docs"
-    / "architecture"
-    / "orchestration-spec.md"
-)
+SPEC_PATH = _resolve_spec_path()
+STATE_ROOT = _resolve_state_root()
+PROJECT_ROOT = _resolve_project_root()
+
+
 def _resolve_audit_log_path() -> Path:
-    """Allow smoke tests to point AUDIT_LOG at a temp sink via env var; default to real state file."""
+    """Allow smoke tests to point AUDIT_LOG at a temp sink via env var; default to state root."""
     override = os.environ.get("CONSENSUS_MCP_AUDIT_LOG")
     if override:
         return Path(override)
-    return REPO_ROOT / "consensus-state" / "state" / "mcp-server-audit.jsonl"
+    return STATE_ROOT / "state" / "mcp-server-audit.jsonl"
 
 
 AUDIT_LOG = _resolve_audit_log_path()
