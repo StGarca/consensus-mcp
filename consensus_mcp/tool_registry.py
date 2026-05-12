@@ -23,11 +23,22 @@ class ToolRegistry:
         self._tools[name] = (schema, handler)
 
     def list_tools(self) -> list[dict]:
-        """Return list of tool descriptors (name + schema) for MCP tools/list."""
-        return [
-            {"name": name, "schema": schema}
-            for name, (schema, _) in self._tools.items()
-        ]
+        """Return tool descriptors in MCP tools/list wire format.
+
+        Each entry is the flat {name, description, inputSchema} shape required
+        by the MCP spec. Internally-registered SCHEMA dicts use snake_case
+        (input_schema, output_schema) for readability; this method translates
+        to camelCase at the wire boundary. output_schema is consensus-mcp
+        internal and intentionally dropped — MCP tools/list does not surface it.
+        """
+        result: list[dict] = []
+        for name, (schema, _) in self._tools.items():
+            result.append({
+                "name": schema.get("name", name),
+                "description": schema.get("description", ""),
+                "inputSchema": schema.get("input_schema", {"type": "object"}),
+            })
+        return result
 
     def get_handler(self, name: str) -> Callable[..., Any]:
         """Return handler callable for name; raises KeyError if not registered."""
