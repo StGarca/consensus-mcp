@@ -1,8 +1,8 @@
 # Changelog
 
-## 2.0.0 - 2026-05-11
+## 1.12.0 - 2026-05-11
 
-Initial standalone release. Extracted from upstream-26.4.16 source
+Standalone release. Extracted from upstream-26.4.16 source
 project. See `docs/architecture/codex-fix-author-roadmap.md` for the work
 history that led here.
 
