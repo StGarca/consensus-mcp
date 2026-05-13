@@ -38,9 +38,16 @@ The end result: changes that pass three independent model families aren't "looks
 # Install via pipx — isolated venv, console scripts on PATH, no
 # polluting individual project venvs:
 pipx install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.0
+
+# (Optional but recommended) install the Claude Code bootstrap pack —
+# a tiny skill + slash command so you can run `consensus init` from
+# inside Claude Code chat in any project:
+consensus-init --install-claude-code
 ```
 
 (If you prefer pip-in-venv: `pip install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.0` — but pipx is the recommended pattern for cross-project use.)
+
+The `--install-claude-code` step is one-time per machine. It copies a small skill (`~/.claude/skills/consensus/SKILL.md`) and a slash command (`~/.claude/commands/consensus-init.md`) into your Claude Code config. Both delegate to the same `consensus-init` shell binary; they just make it discoverable from inside Claude Code. Honors `CLAUDE_HOME` env var for non-default locations. Idempotent on rerun; pass `--force` to overwrite user-edited copies.
 
 **Then bootstrap any project with a single command:**
 
@@ -55,10 +62,20 @@ cd /path/to/your-project
 # 2. Bootstrap the project — interactive prompts for all 9 governance
 #    dimensions, and writes BOTH .consensus/config.yaml AND .mcp.json
 #    so Claude Code auto-connects to consensus-mcp on next launch:
-consensus-init
+consensus-init                                  # from the shell, or
+consensus init                                  # `consensus init` with a space also works
 # Or non-interactive with sensible defaults:
 consensus-init --non-interactive --accept-defaults
 ```
+
+**Or — once `--install-claude-code` has been run — bootstrap from inside Claude Code itself:**
+
+Type one of the following in the Claude Code chat at the project root:
+
+- `consensus init` — the bundled skill recognizes this phrase and runs the shell binary for you
+- `/consensus-init` — the bundled slash command does the same thing more explicitly
+
+Both surface paths invoke `consensus-init --from-claude-code`, which prints Claude-Code-specific restart instructions after the bootstrap completes. The MCP server activates only after Claude Code reloads (Ctrl-C in the project terminal then `claude code` again, or `/mcp` reload if your build supports it).
 
 That's it. `consensus-init` produces three artifacts:
 
@@ -73,6 +90,8 @@ Then open Claude Code at that project. The consensus-mcp tools (`consensus.run_i
 - `--no-mcp-json` — skip the `.mcp.json` write (you'll manage it manually)
 - `--mcp-command STR` — override the command written to `.mcp.json` (e.g., `"py -3.11 -m consensus_mcp.server"` for dev installs)
 - `--mcp-force` — replace existing consensus-mcp entry on divergence (other MCP servers preserved)
+- `--install-claude-code` — copy the bootstrap skill + slash command into `$CLAUDE_HOME` or `~/.claude` (idempotent; pair with `--force` to overwrite user-edited copies)
+- `--from-claude-code` — caller is a Claude Code skill/command; print contextual restart guidance
 - `--reconfigure` — re-prompt with existing config as defaults; show unified diff before writing
 - `--check` — validate existing `.consensus/config.yaml` and exit
 - `--print-defaults` — emit the default config YAML to stdout
