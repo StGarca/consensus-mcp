@@ -1,0 +1,68 @@
+iteration_id: iteration-0023-readme-v1140-refresh
+reviewer_id: codex-iteration-0023-2
+pass_id: codex-iteration-0023-2-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: README still frames convergence as requiring exactly two model families
+    instead of the configured N-contributor rule.
+  citation: README.md:253
+  risk: New users can come away with the old two-AI closure model even though v1.14.0
+    documents an N-contributor pool and configurable strict-majority/unanimous/advisory
+    rules elsewhere.
+  recommendation: Replace the final tiebreaker sentence with wording based on the
+    configured convergence rule and cross-family contributors, not exactly two model
+    families.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-001-patch
+    applies_to_findings:
+    - codex-rev-001
+    base_sha: c54a6b13a23ab8c645418598ffa09af72984b59fcb2678412ca049a8ba25c805
+    unified_diff: "--- a/README.md\n+++ b/README.md\n@@ -250,4 +250,4 @@ MIT \u2014\
+      \ see [LICENSE](LICENSE).\n \n The project is self-hosted: consensus-mcp uses\
+      \ itself for its own review process. Pull requests go through the four-step\
+      \ cycle. If you contribute, expect cross-AI review feedback on your change.\n\
+      \ \n-When in doubt about a finding, the closure invariant is the tiebreaker:\
+      \ did two different model families agree on the same code state? If yes, the\
+      \ change can land. If no, the iteration stays open until they agree.\n+When\
+      \ in doubt about a finding, the closure invariant is the tiebreaker: did the\
+      \ configured convergence rule pass on the same code state with cross-family\
+      \ contributors? If yes, the change can land. If no, the iteration stays open\
+      \ until the configured rule is satisfied.\n"
+    files_touched:
+    - README.md
+    expected_tests:
+    - py -3.11 -c "t=open('README.md',encoding='utf-8').read(); assert 'Two AI agents'
+      not in t; assert '_visibility_tui' not in t; assert '420+ regression tests'
+      not in t; assert '**1.12.0**' not in t; print('ok')"
+    - py -3.11 -c "t=open('README.md',encoding='utf-8').read(); assert 'consensus-init'
+      in t; assert 'consensus.run_iteration' in t; assert 'propose-converge' in t;
+      assert 'gemini' in t.lower(); assert 'snapshot' in t.lower(); assert '1.14.0'
+      in t; print('ok')"
+    unified_diff_sha256: 6a21b8031c4baed165ca517e5b2147d1f01344ee3db1a02fa2a834f61543f2e4
+goal_satisfied: false
+goal_satisfied_rationale: README mostly reflects v1.14.0, but one remaining tiebreaker
+  sentence preserves the old exact-two-family framing instead of the N-contributor
+  configured convergence model.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: a4fadcaf41ae13d2f2327a5d44d366ca59cef63055669e01fb95d85e72559918
+  output_sha256: 18fb97a4ec682bba572665838b6626886fa4487a3f2da908e83dd42f366e4b3f
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: f68e54c31a572e626d0748af207ded40616c1f5072c73cbca7045ea55edb370a
+  scope_signature: 18293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f607
+  review_target_path: consensus-state/active/iteration-0023-readme-v1140-refresh/review-packet.yaml
+  review_target_hash: ece15c7e60f7cda2565a405c33aa4dfab5498f666b971e5f3b4ee19e6a153c32
+sealed_at_utc: '2026-05-13T08:41:57Z'
+packet_sha256: e6ab543055c30f5cf028d42c78007cee662a07db9155c060cdb727f64bc3de82
