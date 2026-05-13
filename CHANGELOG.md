@@ -164,6 +164,49 @@ on first pass.
   5 `setattr` calls (now unsafe against `__getattr__` attributes)
   are gone.
 
+**Claude Code bootstrap pack (iter-0039 design → iter-0040 implementation):**
+
+- iter-0039 ran a workflow #4 consult (claude + codex + gemini, all
+  proposal-mode, strict-majority convergence) on the discoverability
+  gap reported by the operator after iter-0033: in a fresh project,
+  typing "consensus init" into Claude Code chat returned "I don't
+  recognize this command" because the pipx install registers a
+  shell binary (`consensus-init`) not a Claude Code surface. All
+  three contributors converged on shipping a Claude-Code-native entry
+  point that wraps the existing shell binary.
+- iter-0040 implemented the converged plan. New shipped assets:
+  - `consensus_mcp/claude_extensions/skills/consensus/SKILL.md`
+    triggers on "consensus init", "bootstrap consensus", "set up
+    consensus" and runs the shell binary via Bash.
+  - `consensus_mcp/claude_extensions/commands/consensus-init.md`
+    gives explicit `/consensus-init` slash-command discoverability.
+- New `consensus-init --install-claude-code` flag copies both into
+  `$CLAUDE_HOME` (default `~/.claude`) using a managed idempotent
+  pattern: byte-identical = no-op; divergent = skip-with-warning;
+  `--force` overwrites. Honors `CLAUDE_HOME` env override for
+  non-default installs (CI, devcontainers, multi-user systems).
+- New `consensus-init --from-claude-code` flag prints contextual
+  reload guidance after a successful init ("restart Claude Code or
+  run `/mcp` to activate the consensus-mcp server"). Used by both
+  the skill and slash command bodies; deterministic so we don't
+  rely on env-var sniffing (codex's preferred convergence
+  resolution per iter-0039 Q4).
+- Bonus from iter-0039 Q6: added `consensus` console-script alias
+  to pyproject.toml so `consensus init` (with a SPACE) at the
+  shell works alongside the hyphenated `consensus-init`. The
+  `init` subcommand is stripped from argv[0] inside `main()`;
+  everything else flows through the same argparse setup.
+- Side-effect hot-fix landed in the same release: the proposal-mode
+  validation path in `_dispatch_codex.py` / `_dispatch_gemini.py`
+  did `try: import jsonschema; ...; except jsonschema.ValidationError`
+  — when the import failed (because `jsonschema` wasn't a declared
+  dep), the except clause's reference to `jsonschema.ValidationError`
+  surfaced as `UnboundLocalError`, masking the real problem and
+  blocking iter-0039 from running in the pipx venv. Added
+  `jsonschema>=4.0` to deps + split the try/except so `ImportError`
+  surfaces with actionable wording. (workflow #3 hot-patch because
+  it blocked iter-0039 progress.)
+
 **Phase B closed.** All 10 tool migrations landed (iter-0026..0037).
 No tool now holds a cached module-level `REPO_ROOT`/`ACTIVE_DIR`/
 `ARCHIVE_DIR`/`INDEX_PATH`/etc. — every path read is lazy and honors
