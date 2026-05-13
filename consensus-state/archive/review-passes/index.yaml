@@ -317,4 +317,16 @@ passes:
   packet_sha256: 55bc4229637efa35fae288f8b7dfc6a2d4cddad211894a8ab90b210273c167c1
   iteration_id: iteration-0015-consensus-init-wizard-design
   reviewer_id: codex-iteration-0015-consensus-init-wizard-design-convergence-1
-last_updated_utc: '2026-05-13T04:00:54Z'
+- id: codex-iteration-0016a-config-schema-and-validator-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0016a-config-schema-and-validator-codex-iteration-0016a-config-schema-and-validator-1-pass.yaml
+  sealed_at: '2026-05-13T04:08:56Z'
+  packet_sha256: 784867b7ac49f6c7a3d01fe2c773c0888b7a5afe2abf56c7f4cc1cc50e1cb0e2
+  iteration_id: iteration-0016a-config-schema-and-validator
+  reviewer_id: codex-iteration-0016a-config-schema-and-validator-1
+- id: gemini-iteration-0016a-config-schema-and-validator-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0016a-config-schema-and-validator-gemini-iteration-0016a-config-schema-and-validator-1-pass.yaml
+  sealed_at: '2026-05-13T04:08:57Z'
+  packet_sha256: 7f2ec1085a1474f243c04975ddc6631fe767017332418c7700c090eaac141ed1
+  iteration_id: iteration-0016a-config-schema-and-validator
+  reviewer_id: gemini-iteration-0016a-config-schema-and-validator-1
+last_updated_utc: '2026-05-13T04:08:57Z'
