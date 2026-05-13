@@ -1,0 +1,167 @@
+schema_version: 1
+pilot_id: iteration-0039-consensus-init-discoverability-design
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    iter-0039 — workflow #4 consult on consensus-init bootstrap
+    discoverability from inside Claude Code. Operator opened Claude
+    Code in a fresh project, typed "consensus init" in the chat, and
+    got "I don't recognize this command" because: (a) the pipx
+    install registers `consensus-init` (with a hyphen) as a SHELL
+    binary, not a Claude Code skill/command, and (b) there's no
+    consensus-mcp MCP server running in that project yet (chicken-
+    and-egg: the server can't run until `.mcp.json` exists, which is
+    what `consensus-init` writes).
+
+    The current UX requires the user to know the exact shell command
+    AND to run it outside Claude Code (or via `! consensus-init`).
+    That's a discoverability gap for new users — the natural mental
+    model "type consensus init, things happen" doesn't work.
+  question: |
+    How should a user trigger the consensus-mcp project bootstrap
+    from inside Claude Code in a fresh project? Each contributor:
+    pick a stance on Q1-Q5, justify against the alternatives, sketch
+    the smallest deliverable scope.
+
+    Q1 — **Discoverability mechanism.** Pick ONE primary:
+      (a) Ship a Claude Code slash command (`/consensus-init`) that
+          wraps the CLI binary. Discoverable via tab completion in
+          the `/` palette. Lives in `~/.claude/commands/` or a
+          plugin.
+      (b) Improve the error message printed by `consensus-init` (and
+          by the MCP server boot path when no `.mcp.json` exists) so
+          users coming in via the shell or via Claude's "I don't
+          recognize" fallback get pointed to the right next step.
+      (c) Ship a "consensus" SKILL (~/.claude/skills/consensus/
+          SKILL.md) that triggers on the phrase "consensus init" or
+          "bootstrap consensus" and runs the shell command from
+          inside the chat. Discoverable via Claude's intent matcher.
+      (d) Documentation-only (README, CONTRIBUTING) — the user reads
+          the docs before running anything.
+      (Combinations are allowed; pick a primary + name secondaries.)
+
+    Q2 — **Distribution channel.** Whatever ships in Q1 needs to get
+    into the user's `~/.claude/` tree. How?
+      (a) The pipx package's post-install hook copies the
+          slash-command / skill files into `~/.claude/commands/`
+          (or `~/.claude/skills/`).
+      (b) `consensus-init --install-claude-extensions` flag the user
+          opts into once globally.
+      (c) Ship as a Claude Code Plugin (the official plugin manifest
+          format) — user runs `claude code plugin install consensus-mcp`
+          or equivalent.
+      (d) Document the manual copy in README (no automation).
+
+    Q3 — **Scope of the wrapper.** Whichever path Q1 picks, what
+    does the wrapper actually do?
+      (a) Just run `consensus-init` (which already writes
+          `.mcp.json`, `.consensus/config.yaml`, `.gitignore` managed
+          block per iter-0031). Nothing else.
+      (b) Also print a "what is consensus-mcp + what just happened"
+          first-time-user explanation.
+      (c) Add a tiny doctor step: detect existing `.mcp.json` with a
+          divergent consensus-mcp entry; offer to merge/replace.
+      (d) Ship a small "consensus *" command family at the same
+          time — `/consensus-init`, `/consensus-status`,
+          `/consensus-help`.
+
+    Q4 — **Restart / MCP reload UX.** After `consensus-init` writes
+    `.mcp.json` from inside an open Claude Code session, the MCP
+    server isn't yet loaded — Claude Code reads `.mcp.json` only at
+    session start. How do we close that gap?
+      (a) Print a clear "Restart Claude Code in this project to
+          activate consensus-mcp" message and stop.
+      (b) Attempt a programmatic MCP-reload (if there's a documented
+          Claude Code API for it; assume "no" until proven).
+      (c) Document only — assume the user figures it out.
+      (d) Ship instructions tailored to the running shell (Claude
+          Code vs plain shell) by detecting `CLAUDECODE` env var or
+          equivalent.
+
+    Q5 — **Operator-vs-Claude detection.** If we improve the error
+    message in option (b) from Q1, should `consensus-init` detect
+    "I'm running inside Claude Code" and print a different message?
+      (a) Yes — Claude Code session prints "restart Claude Code
+          now"; plain shell prints "run `claude` here to use these
+          tools".
+      (b) No — one message works everywhere; let the user adapt.
+      (c) Use `CLAUDECODE=1` env var detection or check for a parent
+          `claude` process.
+
+    Bonus: Q6 — is there a sixth design question we're missing?
+    Candidates:
+      - VS Code/Cursor extension hooks (vs CLI-only)
+      - Whether the slash command should be a one-shot bootstrap or
+        a persistent reference (e.g., `/consensus-status` keeps
+        working after init)
+      - Whether to publish a separate `consensus-mcp-claude` pip
+        package for the Claude integration vs bundling it with the
+        core
+      - How this interacts with the existing iter-0031 marker-based
+        repo-root detection
+
+    Each contributor: stance on Q1-Q5 (with Q6 if relevant),
+    rationale, smallest deliverable scope. Honest
+    structural_abstention is acceptable if you genuinely lack
+    context on Claude Code's plugin/skill/command surface.
+  desired_end_state: |
+    converged-plan.yaml at iteration_dir root names:
+      (a) primary discoverability mechanism (Q1)
+      (b) distribution channel (Q2)
+      (c) wrapper scope (Q3)
+      (d) restart/reload UX (Q4)
+      (e) operator-vs-Claude detection (Q5)
+      (f) bonus consideration if any (Q6)
+    Plus: smallest-deliverable-scope sketch for iter-0040
+    (implementation).
+
+    Implementation becomes iter-0040 (workflow #3, execution per
+    converged design).
+
+    Strict-majority of 3 contributors → 2 substantive votes required.
+    Codex has proposal-mode templates (iter-0028); gemini may
+    structurally abstain if its context on Claude Code internals is
+    thin (acceptable per fix_author_policy: permissive).
+  non_goals:
+    - implementing the change in this iteration
+    - shipping a new `consensus-mcp-claude` package
+    - changing pipx install instructions in iter-0033 README
+  type: design_consult
+allowed_files: []
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - pyproject.toml
+  - README.md
+  - CHANGELOG.md
+  - .github/
+  - .gitignore
+  - docs/
+  - tests/
+max_iterations: 3
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml at iteration_dir
+    check: 'py -3.11 -c "import os; assert os.path.exists(''consensus-state/active/iteration-0039-consensus-init-discoverability-design/converged-plan.yaml''); print(''ok'')"'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+operator_escalation_triggers:
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T17:30:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'fceaefea5fe4898516dbd2b4ed4b0bd05cad42e6749af6f9473b6b9d578e4506'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: strict-majority
+  finding_disposition: all-or-nothing
