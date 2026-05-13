@@ -1,0 +1,46 @@
+iteration_id: iteration-0025-paths-helper-introduce
+reviewer_id: codex-iteration-0025-1
+pass_id: codex-iteration-0025-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Wheel-layout test description and setup still use consensus_mcp presence
+    as the simulated condition, not repo-marker absence
+  citation: consensus_mcp/tests/test_paths.py:29
+  risk: 'The acceptance gate for gemini-rev-001 can pass while failing to verify the
+    actual desired invariant: repo_root() must ignore a site-packages directory that
+    happens to contain a consensus_mcp package and fall back to cwd because pyproject.toml/.git
+    markers are absent.'
+  recommendation: Update the test name/body comments to assert the repo-marker condition
+    directly, for example by checking the fake parent has no pyproject.toml or .git
+    and that repo_root() returns cwd even though site-packages/consensus_mcp exists.
+  patch_not_proposed_reason: No patch proposed because the embedded file line numbers
+    are sufficient for the reviewer finding, and the implementation already satisfies
+    the runtime behavior; the issue is acceptance-test precision.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The helper implementation appears to meet the functional
+  path-resolution goal, but one acceptance test documents and simulates the obsolete
+  consensus_mcp-presence heuristic rather than the required repo-marker invariant,
+  so the review target does not fully prove A4 as specified.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 0983729dfd2be8c3d665f8f41a32ac3e2272a59a95b3210fe48d822f7f2bf223
+  output_sha256: a9a0cc7ce8cbf781059d212fd5888bbde8c6261df66b14469fd704cf13f8311e
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: a85ffe62ba662f98416a13d3a6d6777bdf30d0500749ace8c71ecf43013dfac9
+  scope_signature: 3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293
+  review_target_path: consensus-state/active/iteration-0025-paths-helper-introduce/review-packet.yaml
+  review_target_hash: c4db60fe411cf2260380aa4d71e32e685e74e3d21ccb833888262536790b50d5
+sealed_at_utc: '2026-05-13T10:01:12Z'
+packet_sha256: ebaccca57e26a53cb5f48c8de5f660a299fca903e372157ab117f680fae9bbfa

@@ -1,0 +1,34 @@
+iteration_id: iteration-0025-paths-helper-introduce
+reviewer_id: gemini-iteration-0025-1
+pass_id: gemini-iteration-0025-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The new `_paths.py` module correctly implements lazy path
+  resolution, reading environment state on each call as required. The accompanying
+  `test_paths.py` provides comprehensive test coverage for all specified requirements,
+  including the key regression tests for call-time environment variable evaluation
+  (iter-0019 gotcha), orthogonal root paths, and correct fallback behavior for installed-wheel
+  layouts. The implementation is purely additive and fully satisfies the goal.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: bfc59374d83ed11083c6da1a6bd9a0f4235c34156cc19c908bd21cf60646d819
+  output_sha256: d1070232871f255a061417dc0c5bc0ad2a0e6ab63a4177e513f441dcd9a4f2e0
+  goal_packet_sha256: a85ffe62ba662f98416a13d3a6d6777bdf30d0500749ace8c71ecf43013dfac9
+  scope_signature: 3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293
+  review_target_path: consensus-state/active/iteration-0025-paths-helper-introduce/review-packet.yaml
+  review_target_hash: c4db60fe411cf2260380aa4d71e32e685e74e3d21ccb833888262536790b50d5
+  adapter: gemini
+sealed_at_utc: '2026-05-13T10:03:46Z'
+packet_sha256: 853fed7cdfd3669eecd3c349843265b95204cff84cf84573a05358e5163d7253

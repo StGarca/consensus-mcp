@@ -1,0 +1,112 @@
+iteration_id: iteration-0024-lazy-repo-root-consult
+workflow_mode: propose-converge
+independence: blind-first-reveal
+convergence_rule_applied: strict-majority
+converged_at_round: 1
+
+participants:
+  - contributor: claude
+    pass_id: claude-iteration-0024-1-blind-proposal
+    proposal_path: claude-proposal.yaml
+    decision: SHIP-PHASED
+    vote: approve
+  - contributor: gemini
+    pass_id: gemini-iteration-0024-4-converge1
+    proposal_path: gemini-review.yaml
+    decision: SHIP-PHASED (approve of claude proposal)
+    vote: approve
+    notes: |
+      Approved with one MEDIUM finding (gemini-rev-001): test_paths.py
+      must explicitly exercise the installed-wheel (site-packages) layout
+      where `__file__`-based root walk-up has different semantics than a
+      source checkout. This was already flagged as a risk in claude's
+      proposal; gemini's finding promotes it from "risk note" to an
+      explicit acceptance gate for iter-0025.
+  - contributor: codex
+    pass_id: codex-iteration-0024-4-converge1
+    proposal_path: codex-review.yaml
+    decision: structural-abstention
+    vote: structural-abstention
+    abstention_reason: |
+      Codex's review template is patch-or-approve and cannot generate
+      design proposals in propose-converge mode. The dispatcher fed claude-
+      proposal.yaml as embedded touched_files but codex's prompt template
+      still searched for "a converged-plan.yaml to review against" and
+      blocked when it found only the inbound peer proposal. Same tooling
+      limitation documented in iter-0021. Independence preserved (codex
+      did not see claude's or gemini's outputs before sealing).
+
+convergence_rationale: |
+  Strict-majority threshold of 2 met. Claude and gemini, blind-first then
+  reveal, converged on SHIP-PHASED. Codex's structural abstention is not
+  a substantive objection; it's the same template-mode mismatch already
+  documented in iter-0021. The two substantive proposals converged.
+
+decision: SHIP-PHASED
+
+next_iteration_id: iteration-0025-paths-helper-introduce
+
+phase_a_design_summary: |
+  Introduce `consensus_mcp/_paths.py` with lazy-resolved path functions:
+    repo_root()        — CONSENSUS_MCP_REPO_ROOT → walked-up __file__ → cwd
+    state_root()       — CONSENSUS_MCP_STATE_ROOT → legacy REPO_ROOT/consensus-state → cwd/consensus-state
+    archive_dir()      — state_root() / 'archive' / 'review-passes'
+    index_path()       — archive_dir() / 'index.yaml'
+    active_dir()       — state_root() / 'active'
+    audit_log_path()   — state_root() / 'state' / 'audit-log.jsonl'
+    dispatch_log_path()— state_root() / 'state' / 'dispatch-log.jsonl'
+
+  Every function reads env state on EVERY call so monkeypatch.setenv()
+  after import works. Backward compatible: this iteration introduces the
+  API ONLY; existing tools continue to use their cached module-level
+  paths. Phase B (iter-0026+) migrates tools one at a time.
+
+deliverable_scope_for_iter_0025:
+  in:
+    - consensus_mcp/_paths.py (new, ~80 lines)
+    - consensus_mcp/tests/test_paths.py (new, ~12-15 tests)
+  out:
+    - any changes to existing tools (deferred to Phase B per-tool migrations)
+    - any caller using the new helpers (deferred)
+    - retiring iter-0019 _isolate_archive_root (deferred to Phase C)
+
+acceptance_gates_for_iter_0025:
+  - A1: full suite >=688 + ~12 new test_paths tests → >=700 green
+  - A2: monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", X) AFTER import
+       changes repo_root() return value (the key gotcha iter-0019 worked
+       around) — REGRESSION TEST
+  - A3: state_root vs repo_root split honored per iter-0007 v1.13.0
+  - A4: gemini-rev-001 from this iteration — installed-wheel (site-packages)
+       layout test exercises walked-up fallback when no .git ancestor exists
+  - A5: no regression in legacy tools (test suite already covers them)
+
+recommended_workflow_for_iter_0025: post-review (workflow #3)
+recommended_workflow_rationale: |
+  Implementation per a converged design is canonical workflow #3.
+
+deferred_to_iter_0026_plus:
+  phase_b_migration_order_suggested:
+    - state_read_decision_ledger.py (lowest impact)
+    - repo_get_section.py
+    - repo_set_section.py
+    - state_update_decision_ledger.py
+    - patch_stage_and_dry_run.py
+    - patch_apply_consensus_patch.py
+    - gate_evaluate_production_with_scope_match.py
+    - review_read_post_seal.py
+    - audit_append_event.py (high impact — audit trail)
+    - review_write_and_seal.py (highest impact — seal pipeline)
+  phase_c_retirement:
+    - retire iter-0019 _isolate_archive_root once Phase B complete; replace
+      with thinner env-var-only fixtures.
+
+risks_inherited:
+  - Walked-up __file__ fallback differs on installed wheels (gemini-rev-001)
+  - Module-level state derived from REPO_ROOT in subtle ways may exist;
+    Phase B per-tool review catches these.
+  - state_root vs repo_root split per iter-0007 must be respected; helper
+    must not collapse them.
+
+sealed_at_utc: '2026-05-13T10:00:00Z'
+authored_by: claude-orchestrator (per claude+gemini substantive convergence;
+  codex structural-abstention noted, same pattern as iter-0021)
