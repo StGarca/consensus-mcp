@@ -329,4 +329,28 @@ passes:
   packet_sha256: 7f2ec1085a1474f243c04975ddc6631fe767017332418c7700c090eaac141ed1
   iteration_id: iteration-0016a-config-schema-and-validator
   reviewer_id: gemini-iteration-0016a-config-schema-and-validator-1
-last_updated_utc: '2026-05-13T04:08:57Z'
+- id: gemini-iteration-0016b-contributors-adapter-layer-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0016b-contributors-adapter-layer-gemini-iteration-0016b-contributors-adapter-layer-1-pass.yaml
+  sealed_at: '2026-05-13T04:14:48Z'
+  packet_sha256: f2875ebb40658190194f26ac612fbe94ed19b000deea9646c64766d1ea9f7ce8
+  iteration_id: iteration-0016b-contributors-adapter-layer
+  reviewer_id: gemini-iteration-0016b-contributors-adapter-layer-1
+- id: codex-iteration-0016b-contributors-adapter-layer-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0016b-contributors-adapter-layer-codex-iteration-0016b-contributors-adapter-layer-1-pass.yaml
+  sealed_at: '2026-05-13T04:18:06Z'
+  packet_sha256: 6bac80ea901b43c5a5883453797d761f0d09f409f1a268f43c2ef46fa82308b1
+  iteration_id: iteration-0016b-contributors-adapter-layer
+  reviewer_id: codex-iteration-0016b-contributors-adapter-layer-1
+- id: gemini-iteration-0016b-contributors-adapter-layer-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0016b-contributors-adapter-layer-gemini-iteration-0016b-contributors-adapter-layer-2-pass.yaml
+  sealed_at: '2026-05-13T04:22:20Z'
+  packet_sha256: 39e1417ed9a0d08ea4218369661c70f0bfd97d91e0625b53c782624f1534e91e
+  iteration_id: iteration-0016b-contributors-adapter-layer
+  reviewer_id: gemini-iteration-0016b-contributors-adapter-layer-2
+- id: codex-iteration-0016b-contributors-adapter-layer-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0016b-contributors-adapter-layer-codex-iteration-0016b-contributors-adapter-layer-2-pass.yaml
+  sealed_at: '2026-05-13T04:26:36Z'
+  packet_sha256: d754dcb3dddbba9c429182433f20e9c14a66738087412cbfdac3f152ef5f7211
+  iteration_id: iteration-0016b-contributors-adapter-layer
+  reviewer_id: codex-iteration-0016b-contributors-adapter-layer-2
+last_updated_utc: '2026-05-13T04:26:36Z'

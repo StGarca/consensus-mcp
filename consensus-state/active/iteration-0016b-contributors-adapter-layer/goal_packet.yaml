@@ -1,0 +1,64 @@
+schema_version: 1
+pilot_id: iteration-0016b-contributors-adapter-layer
+goal:
+  summary: "iter-0016b \u2014 contributors/ adapter layer per iter-0015 converged-plan\
+    \ Section C. Pluggable ContributorAdapter interface; concrete CodexAdapter/GeminiAdapter\
+    \ wrap existing dispatch helpers; ClaudeAdapter uses callback-injection pattern;\
+    \ Fake* adapters for fast unit tests."
+  desired_end_state: consensus_mcp/contributors/{__init__,base,claude,codex,gemini}.py
+    implements the ContributorAdapter ABC + concrete adapters + fakes. Tests cover
+    phase constants, fake adapters, ContributorAdapter convenience methods (propose/review/converge),
+    ClaudeAdapter callback contract, CodexAdapter/GeminiAdapter argv translation +
+    error wrapping. Full suite 603+ green.
+  non_goals:
+  - build workflow engine (iter-0016c)
+  - build consensus init wizard (iter-0016d)
+  - add new prompt templates per phase (deferred; reuse existing review templates
+    per converged plan)
+  - integrate adapter layer into existing code paths (engine integrates in iter-0016c)
+allowed_files:
+- consensus_mcp/contributors/__init__.py
+- consensus_mcp/contributors/base.py
+- consensus_mcp/contributors/claude.py
+- consensus_mcp/contributors/codex.py
+- consensus_mcp/contributors/gemini.py
+- consensus_mcp/tests/test_contributors.py
+allowed_sections: []
+forbidden_files:
+- consensus_mcp/_dispatch_codex.py
+- consensus_mcp/_dispatch_gemini.py
+- consensus_mcp/_dispatch_base.py
+- consensus_mcp/server.py
+- consensus_mcp/tools/
+- consensus_mcp/config.py
+- consensus-state/
+- README.md
+- LICENSE
+- CHANGELOG.md
+- pyproject.toml
+- .github/
+- .gitignore
+- docs/
+max_iterations: 1
+max_patch_size: 1500
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+- id: A1
+  description: full test suite passes (>=603 green)
+  check: py -3.11 -m pytest consensus_mcp/tests -q
+- id: A2
+  description: no blocking objections from codex or gemini
+  check: 'true'
+stop_conditions:
+- max_iteration_count_reached
+- patch_would_touch_forbidden_files
+- patch_size_exceeds_max
+operator_escalation_triggers:
+- touched_forbidden_files
+- max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T04:25:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 4a81e678cb9008781a1ec1947934bee9cf72d7433965691cced3febee4b4845c
