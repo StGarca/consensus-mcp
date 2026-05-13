@@ -30,26 +30,22 @@ from pathlib import Path
 
 import yaml
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
+from consensus_mcp._paths import project_root, archive_dir, index_path
 
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+# iter-0035 (Phase B step 8 per iter-0024 plan): migrated to lazy `_paths`
+# resolvers. ARCHIVE_DIR and INDEX_PATH now resolve per-call; REPO_ROOT
+# semantic is project_root.
 
 
-REPO_ROOT = _resolve_repo_root()
-ARCHIVE_DIR = REPO_ROOT / "consensus-state" / "archive" / "review-passes"
-INDEX_PATH = ARCHIVE_DIR / "index.yaml"
+def __getattr__(name: str):
+    """PEP 562 backward compat for module-level constants."""
+    if name == "REPO_ROOT":
+        return project_root()
+    if name == "ARCHIVE_DIR":
+        return archive_dir()
+    if name == "INDEX_PATH":
+        return index_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # canonical_yaml_sha256 formula (see also: state_read_decision_ledger.py, review_write_and_seal.py, ...)
 # Double round-trip: yaml.safe_dump -> yaml.safe_load -> yaml.safe_dump ensures
@@ -305,7 +301,8 @@ def handle(
                 "error": "unknown_reviewer",
                 "detail": f"reviewer must be 'codex' or 'claude'; got {reviewer!r}",
             }
-        iter_dir = REPO_ROOT / "consensus-state" / "active" / iteration_id
+        from consensus_mcp._paths import active_dir
+        iter_dir = active_dir() / iteration_id
         if not iter_dir.is_dir():
             return {"error": "iteration_dir_not_found", "detail": str(iter_dir)}
         audit_path = iter_dir / "independence-audit.yaml"
@@ -378,10 +375,10 @@ def handle(
 
     if has_pass_id:
         # Index lookup
-        if not INDEX_PATH.exists():
+        if not index_path().exists():
             return {"error": "pass_id_not_in_index", "detail": "index.yaml not found"}
         try:
-            index_raw = INDEX_PATH.read_bytes()
+            index_raw = index_path().read_bytes()
             index_data = yaml.safe_load(index_raw) or {}
         except Exception as exc:
             return {"error": "invalid_yaml", "detail": f"index.yaml: {exc}"}
@@ -406,19 +403,19 @@ def handle(
                 "detail": f"index entry for {pass_id!r} has no 'path' or 'archived_at' field",
             }
         # Resolve relative to REPO_ROOT (T6 stores repo-relative paths).
-        candidate = REPO_ROOT / raw_path_str
+        candidate = project_root() / raw_path_str
         sealed_path = candidate.resolve()
 
         # Safety: index path MUST resolve under ARCHIVE_DIR (defense against a
         # corrupted or tampered index that points elsewhere).
         try:
-            sealed_path.relative_to(ARCHIVE_DIR.resolve())
+            sealed_path.relative_to(archive_dir().resolve())
         except ValueError:
             return {
                 "error": "path_outside_archive",
                 "detail": (
                     f"index entry for {pass_id!r} resolves to {sealed_path}, "
-                    f"which is not under {ARCHIVE_DIR}"
+                    f"which is not under {archive_dir()}"
                 ),
             }
 
@@ -426,16 +423,16 @@ def handle(
         # Direct path -- resolve and safety-check
         raw_path = Path(path)
         if not raw_path.is_absolute():
-            raw_path = REPO_ROOT / raw_path
+            raw_path = project_root() / raw_path
         sealed_path = raw_path.resolve()
 
         # Safety: must be under ARCHIVE_DIR
         try:
-            sealed_path.relative_to(ARCHIVE_DIR.resolve())
+            sealed_path.relative_to(archive_dir().resolve())
         except ValueError:
             return {
                 "error": "path_outside_archive",
-                "detail": f"resolved path {sealed_path} is not under {ARCHIVE_DIR}",
+                "detail": f"resolved path {sealed_path} is not under {archive_dir()}",
             }
 
         # Derive pass_id from filename (best-effort; may be None for unusual names)

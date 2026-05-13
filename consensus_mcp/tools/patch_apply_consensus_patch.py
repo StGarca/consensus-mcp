@@ -36,28 +36,22 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from consensus_mcp._paths import project_root, active_dir
 from consensus_mcp.tools.patch_stage_and_dry_run import handle as stage_handle  # noqa: E402
 from consensus_mcp.tools.audit_append_event import handle as audit_handle  # noqa: E402
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
-
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+# iter-0035 (Phase B step 6 per iter-0024 plan): migrated from module-level
+# REPO_ROOT / ACTIVE_DIR captures to lazy `_paths` resolvers.
 
 
-REPO_ROOT = _resolve_repo_root()
-ACTIVE_DIR = REPO_ROOT / "consensus-state" / "active"
+def __getattr__(name: str):
+    """PEP 562 backward compat for external callers that referenced
+    REPO_ROOT / ACTIVE_DIR as module attributes."""
+    if name == "REPO_ROOT":
+        return project_root()
+    if name == "ACTIVE_DIR":
+        return active_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 _HIGH_SEVERITIES = {"high", "blocking", "critical"}
 
@@ -219,7 +213,7 @@ def handle(
         )
 
     # --- Step 1: iteration existence guard ---
-    iter_dir = ACTIVE_DIR / iteration_id
+    iter_dir = active_dir() / iteration_id
     if not iter_dir.is_dir():
         return {"error": "iteration_not_found"}
 
@@ -245,7 +239,7 @@ def handle(
         else:
             old_text = ""
         # Repo-relative path for stage_and_dry_run.
-        repo_rel = str(target.relative_to(REPO_ROOT))
+        repo_rel = str(target.relative_to(project_root()))
         proposed_patches.append({
             "file": repo_rel,
             "old_string": old_text,
