@@ -47,7 +47,13 @@ consensus-init --install-claude-code
 
 (If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.14.0` — but pipx is the recommended pattern for cross-project use.)
 
-`--install-claude-code` is a **standalone global operation** — it copies a small skill (`~/.claude/skills/consensus/SKILL.md`) and a slash command (`~/.claude/commands/consensus-init.md`) into your Claude Code config and exits. It does NOT run the per-project bootstrap; you run `consensus-init` (without the flag) inside each project for that. Honors `CLAUDE_HOME` env var for non-default locations. Idempotent on rerun; pass `--force` to overwrite user-edited copies. Both shipped files delegate to the same `consensus-init` shell binary; they just make it discoverable from inside Claude Code chat.
+`--install-claude-code` is a **standalone global operation** — it copies three files into your Claude Code config and exits:
+
+- `~/.claude/skills/consensus/SKILL.md` — bootstrap skill (triggers on "consensus init", "bootstrap consensus", etc.)
+- `~/.claude/commands/consensus-init.md` — explicit `/consensus-init` slash command
+- `~/.claude/skills/consensus-workflow/SKILL.md` — operating-procedure reference; triggers on workflow-execution intent ("consensus review", "run a consult", "dispatch codex", "workflow 3", "workflow 4") and primes Claude with the load-bearing rules (workflow #3 vs #4, round-1 parallel dispatch, dispatcher hazards, gemini 429 handling, snapshot/restore safety, peer-citation verification)
+
+It does NOT run the per-project bootstrap; you run `consensus-init` (without the flag) inside each project for that. Honors `CLAUDE_HOME` env var for non-default locations. Idempotent on rerun; pass `--force` to overwrite user-edited copies.
 
 **Then bootstrap any project with a single command:**
 
