@@ -115,6 +115,81 @@ def test_idempotent_sha256_tree(tmp_path):
     assert s1 == s2
 
 
+def test_idempotent_skip_preserves_imported_at_utc_when_clean(tmp_path, monkeypatch):
+    """iter-0014 codex-rev-002: re-import on clean target preserves original timestamp.
+
+    Forces _iso_utc_now to return DIFFERENT values on successive calls so the
+    skip-path is the ONLY way the timestamps could match (eliminates the
+    same-second-resolution false-positive).
+    """
+    parent_root = tmp_path / "parent"
+    parent_root.mkdir()
+    parent_al = _make_fake_parent(parent_root)
+    target = tmp_path / "out"
+    # First import.
+    m1 = iph.import_history(parent_al, target)
+    original_ts = m1["source"]["imported_at_utc"]
+    # Force the clock forward by stubbing _iso_utc_now. If the skip path
+    # fires, the existing manifest (with original_ts) is returned verbatim.
+    # If the skip path DOESN'T fire, the stub returns a different value
+    # and the test fails.
+    monkeypatch.setattr(iph, "_iso_utc_now", lambda: "2099-12-31T23:59:59Z")
+    m2 = iph.import_history(parent_al, target, force=True)
+    assert m2["source"]["imported_at_utc"] == original_ts, (
+        f"skip path didn't fire — got {m2['source']['imported_at_utc']!r}, "
+        f"expected {original_ts!r} (the stubbed clock would only show through "
+        f"if the rewrite path ran)"
+    )
+
+
+def test_idempotent_skip_rewrites_when_target_corrupted(tmp_path):
+    """iter-0014 codex-rev-001 round-1: target drift forces a rewrite (no stale state)."""
+    parent_root = tmp_path / "parent"
+    parent_root.mkdir()
+    parent_al = _make_fake_parent(parent_root)
+    target = tmp_path / "out"
+    iph.import_history(parent_al, target)
+    # Corrupt a target file.
+    (target / "active-iterations" / "iteration-0000" / "goal_packet.yaml").write_text(
+        "CORRUPTED\n", encoding="utf-8"
+    )
+    # Re-import with --force — should detect target drift and rebuild.
+    iph.import_history(parent_al, target, force=True)
+    restored = (target / "active-iterations" / "iteration-0000" / "goal_packet.yaml").read_text(encoding="utf-8")
+    assert "CORRUPTED" not in restored
+    assert "schema_version" in restored, "target drift must trigger full rewrite from source"
+
+
+def test_idempotent_skip_rewrites_when_readme_drifted(tmp_path):
+    """iter-0014 codex-rev-001 round-5: corrupted README forces rewrite."""
+    parent_root = tmp_path / "parent"
+    parent_root.mkdir()
+    parent_al = _make_fake_parent(parent_root)
+    target = tmp_path / "out"
+    iph.import_history(parent_al, target)
+    # Corrupt the README content.
+    (target / "README.md").write_text("HACKED\n", encoding="utf-8")
+    # Re-import: skip path should NOT fire (README drift), rewrite occurs.
+    iph.import_history(parent_al, target, force=True)
+    restored = (target / "README.md").read_text(encoding="utf-8")
+    assert "HACKED" not in restored
+    assert "Imported parent project history" in restored
+
+
+def test_idempotent_skip_rewrites_when_unexpected_files_present(tmp_path):
+    """iter-0014 codex-rev-002 round-2: stray files in target trigger rebuild."""
+    parent_root = tmp_path / "parent"
+    parent_root.mkdir()
+    parent_al = _make_fake_parent(parent_root)
+    target = tmp_path / "out"
+    iph.import_history(parent_al, target)
+    # Add an unexpected file under the target root.
+    (target / "stray.txt").write_text("not from source\n", encoding="utf-8")
+    iph.import_history(parent_al, target, force=True)
+    # Stray file should be gone (full rewrite triggered).
+    assert not (target / "stray.txt").exists(), "unexpected target files must trigger full rewrite"
+
+
 def test_manifest_yaml_loadable(tmp_path):
     parent_root = tmp_path / "parent"
     parent_root.mkdir()
