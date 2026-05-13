@@ -5,9 +5,16 @@ _dispatch_base.py (extracted in iter-0010); supplies gemini-specific code:
 CLI invocation shape, binary resolution, output JSON parsing with
 validator-retry on schemaless parse fail (per iter-0009 verdict Q2: F2b).
 
-Scope (iter-0011): REVIEW-ONLY. Gemini does NOT author patch_proposal blocks
-in v1.14.0; codex remains the only patch-authoring adapter. Patch authoring
-across adapters is deferred to iter-0013 capability metadata.
+Scope (iter-0011): REVIEW-ONLY for patch authoring. Gemini does NOT author
+patch_proposal blocks in v1.14.0; codex remains the only patch-authoring
+adapter. Patch authoring across adapters is deferred to iter-0013 capability
+metadata.
+
+iter-0028 extension: dispatcher gained `--mode {review,proposal}` (default
+'review') per the iter-0027 converged plan. Proposal mode uses
+`gemini_proposal_template.md` + `gemini_proposal_schema.json` and accepts a
+`--schema` flag to override the proposal schema (proposal-mode only;
+ignored in review mode, where validation is template-embedded).
 
 USAGE
 -----
@@ -17,15 +24,21 @@ USAGE
       [--reviewer-id gemini-iterXXXX-N] \\
       [--pass-id gemini-iterXXXX-N-passN] \\
       [--prompt-template <path>] \\
+      [--mode {review,proposal}] \\
+      [--schema <path>]                    # proposal-mode only \\
       [--gemini-bin <path>] \\
       [--model gemini-2.5-pro] \\
       [--timeout-seconds 600] \\
       [--review-target <path>] \\
       [--smoke]
 
-The output schema is embedded in dispatch_templates/gemini_review_template.md
-(under "Schema reference"). There is no separate --schema flag; the template
-is authoritative.
+Review-mode output schema: embedded in
+dispatch_templates/gemini_review_template.md (under "Schema reference"),
+authoritative — review mode has no separate --schema flag.
+
+Proposal-mode output schema: dispatch_templates/gemini_proposal_schema.json
+by default; --schema overrides. The helper validates parsed output against
+the effective schema and records its path + sha256 in dispatch_provenance.
 
 Exit 0 = sealed pass produced; non-zero = failure (gemini error, parse fail,
 seal fail). JSON to stdout on success.
@@ -629,6 +642,83 @@ def _parse_gemini_output(
     return parsed
 
 
+_GEMINI_PROPOSAL_SCHEMA_PATH = (
+    Path(__file__).parent / "dispatch_templates" / "gemini_proposal_schema.json"
+)
+
+
+def _parse_gemini_proposal_output(text: str, schema_path: Path | None = None) -> dict:
+    """Parse + validate gemini proposal-mode output (iter-0028).
+
+    Validates against `schema_path` (operator --schema override) when
+    provided, else against the built-in `gemini_proposal_schema.json`.
+    The override path is required for symmetry with the codex dispatcher
+    and to honor the schema-override contract from the goal_packet
+    (codex pass-3 rev-002).
+
+    Uses `_extract_json_from_text` for JSON extraction (gemini-rev-001
+    pass-2: previously hand-rolled fence stripping was brittle).
+
+    Raises GeminiOutputParseError on shape mismatch.
+    """
+    try:
+        cleaned = _extract_json_from_text(text)
+    except ValueError as exc:
+        raise GeminiOutputParseError(
+            f"gemini proposal output: could not extract JSON: {exc}"
+        ) from exc
+
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise GeminiOutputParseError(
+            f"gemini proposal output is not valid JSON: {exc}"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise GeminiOutputParseError(
+            f"gemini proposal output root must be a JSON object; got {type(parsed).__name__}"
+        )
+
+    effective_schema_path = schema_path or _GEMINI_PROPOSAL_SCHEMA_PATH
+    try:
+        import jsonschema
+        schema = json.loads(Path(effective_schema_path).read_text(encoding="utf-8"))
+        jsonschema.validate(parsed, schema)
+    except jsonschema.ValidationError as exc:
+        raise GeminiOutputParseError(
+            f"gemini proposal output failed schema validation at "
+            f"{'/'.join(str(p) for p in exc.absolute_path) or '<root>'}: {exc.message}"
+        ) from exc
+    except FileNotFoundError as exc:
+        raise GeminiOutputParseError(
+            f"proposal schema not found at {effective_schema_path}: {exc}"
+        ) from exc
+
+    # Parser-level invariants (codex pass-4 rev-002 + pass-6 rev-001):
+    # defense-in-depth against operator-supplied schemas that relax these.
+    if not isinstance(parsed.get("rationale_vs_alternatives"), str) or not parsed["rationale_vs_alternatives"].strip():
+        raise GeminiOutputParseError(
+            "rationale_vs_alternatives must be a non-empty string (parser invariant)"
+        )
+    if "structural_abstention" not in parsed or not isinstance(parsed["structural_abstention"], bool):
+        raise GeminiOutputParseError(
+            "structural_abstention must be present and boolean (parser invariant)"
+        )
+
+    if not parsed["structural_abstention"]:
+        if parsed["selected_target"] is None:
+            raise GeminiOutputParseError(
+                "selected_target is required when structural_abstention is false"
+            )
+        if parsed["deliverable_scope"] is None:
+            raise GeminiOutputParseError(
+                "deliverable_scope is required when structural_abstention is false"
+            )
+
+    return parsed
+
+
 def _invoke_gemini_with_retry(
     prompt: str,
     gemini_bin: str,
@@ -638,6 +728,8 @@ def _invoke_gemini_with_retry(
     goal_packet: dict | None = None,
     log_path=None,
     anchors=None,
+    mode: str = "review",
+    proposal_schema_path: Path | None = None,
 ) -> tuple[str, dict]:
     """Per iter-0009 verdict Q2: F2b — validator-retry on schemaless parse fail.
 
@@ -658,7 +750,10 @@ def _invoke_gemini_with_retry(
         anchors=anchors,
     )
     try:
-        parsed = _parse_gemini_output(raw, goal_packet=goal_packet)
+        if mode == "proposal":
+            parsed = _parse_gemini_proposal_output(raw, schema_path=proposal_schema_path)
+        else:
+            parsed = _parse_gemini_output(raw, goal_packet=goal_packet)
         return raw, parsed
     except GeminiOutputParseError as first_err:
         # Retry once with the parse error in the prompt.
@@ -685,7 +780,10 @@ def _invoke_gemini_with_retry(
             log_path=log_path,
             anchors=anchors,
         )
-        parsed_retry = _parse_gemini_output(raw_retry, goal_packet=goal_packet)
+        if mode == "proposal":
+            parsed_retry = _parse_gemini_proposal_output(raw_retry, schema_path=proposal_schema_path)
+        else:
+            parsed_retry = _parse_gemini_output(raw_retry, goal_packet=goal_packet)
         return raw_retry, parsed_retry
 
 
@@ -699,6 +797,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--reviewer-id", default=None)
     p.add_argument("--pass-id", default=None)
     p.add_argument("--prompt-template", default=None)
+    p.add_argument("--mode", default="review", choices=["review", "proposal"],
+                   help=("Dispatch mode (iter-0028 per iter-0027 converged plan). "
+                         "'review' (default): use gemini_review_template.md for "
+                         "code-review tasks. 'proposal': use gemini_proposal_template.md "
+                         "for design-consult / workflow #4 proposal tasks. "
+                         "--prompt-template override takes precedence over --mode."))
+    p.add_argument("--schema", default=None,
+                   help=("Optional path to a JSON schema for validating PROPOSAL-mode "
+                         "output (iter-0028 codex pass-3 rev-002). Ignored in review "
+                         "mode (review-mode validation is template-embedded per the "
+                         "existing gemini contract). When unset in proposal mode, "
+                         "defaults to dispatch_templates/gemini_proposal_schema.json."))
     p.add_argument("--gemini-bin", default="gemini")
     p.add_argument("--model", default=_DEFAULT_GEMINI_MODEL)
     p.add_argument("--timeout-seconds", type=int, default=600)
@@ -724,11 +834,28 @@ def main(argv: list[str] | None = None) -> int:
         iter_dir.mkdir(parents=True, exist_ok=True)
         iteration_id = iter_dir.name
 
+        # iter-0028: mode selects the default template when no --prompt-template
+        # override is passed. Override still wins, preserving backward compat.
+        _default_template_name = (
+            "gemini_proposal_template.md" if ns.mode == "proposal"
+            else "gemini_review_template.md"
+        )
         template_path = (
             _normalize_relative_to_repo(ns.prompt_template, repo_root)
             if ns.prompt_template
-            else (Path(__file__).parent / "dispatch_templates" / "gemini_review_template.md")
+            else (Path(__file__).parent / "dispatch_templates" / _default_template_name)
         )
+        # iter-0028 codex pass-3 rev-002: in proposal mode, --schema (if
+        # supplied) overrides the built-in gemini_proposal_schema.json. In
+        # review mode the schema is template-embedded (per the historical
+        # codex-rev-003 round-1 decision) so --schema is ignored there.
+        proposal_schema_path = None
+        if ns.mode == "proposal":
+            proposal_schema_path = (
+                _normalize_relative_to_repo(ns.schema, repo_root)
+                if ns.schema
+                else (Path(__file__).parent / "dispatch_templates" / "gemini_proposal_schema.json")
+            )
         # codex-rev-003 round-1 fix: schema is part of the prompt template
         # (embedded under "Schema reference" header), NOT a separate file the
         # helper passes to gemini. The prior `--schema` flag computed
@@ -870,8 +997,26 @@ def main(argv: list[str] | None = None) -> int:
                 "reviewer_id": reviewer_id,
                 "pass_id": pass_id,
             },
+            mode=ns.mode,  # iter-0028
+            proposal_schema_path=proposal_schema_path,  # iter-0028 codex pass-3 rev-002
         )
         output_sha = _sha256_str(raw_output)
+
+        # iter-0028 codex pass-4 rev-001: in proposal mode, include the
+        # effective proposal_schema_path + its sha256 in provenance so the
+        # sealed packet records which schema constrained the output.
+        # Auditors can distinguish built-in vs overridden schema without
+        # consulting external state.
+        proposal_schema_sha = None
+        proposal_schema_path_str = None
+        if ns.mode == "proposal" and proposal_schema_path is not None:
+            proposal_schema_path_str = str(proposal_schema_path)
+            try:
+                proposal_schema_sha = _sha256_str(
+                    Path(proposal_schema_path).read_text(encoding="utf-8")
+                )
+            except FileNotFoundError:
+                proposal_schema_sha = None
 
         provenance = {
             "gemini_version": gemini_version,
@@ -883,6 +1028,9 @@ def main(argv: list[str] | None = None) -> int:
             "review_target_path": review_target_path_str,
             "review_target_hash": review_target_hash,
             "adapter": "gemini",
+            "mode": ns.mode,
+            "proposal_schema_path": proposal_schema_path_str,
+            "proposal_schema_sha256": proposal_schema_sha,
         }
         packet = _build_sealed_packet(
             extracted, iteration_id, reviewer_id, pass_id,
