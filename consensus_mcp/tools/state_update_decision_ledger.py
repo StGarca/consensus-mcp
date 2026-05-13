@@ -68,33 +68,39 @@ from pathlib import Path
 
 import yaml
 
+from consensus_mcp._paths import project_root, state_root, spec_path
 from consensus_mcp.tools.audit_append_event import handle as audit_handle  # noqa: E402
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
+# iter-0035 (Phase B step 4 per iter-0024 plan): migrated from module-level
+# REPO_ROOT / LEDGER_PATH / SPEC_PATH captures to lazy `_paths` resolvers.
+# Each call reads env state. Helpers below resolve per-call.
 
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
+
+def _ledger_path() -> Path:
+    """<state_root>/state/disposition-ledger.yaml — lazy."""
+    return state_root() / "state" / "disposition-ledger.yaml"
+
+
+# Public aliases preserved for tests / external callers that may have used
+# LEDGER_PATH and SPEC_PATH as constants. These are now lazy properties via
+# module __getattr__ below.
+
+
+def __getattr__(name: str):
+    """Lazy attribute access for legacy module-level constants.
+
+    iter-0035 backward compat: prior code referenced `LEDGER_PATH`,
+    `SPEC_PATH`, and `REPO_ROOT` as module constants. After migrating to
+    lazy resolvers, these names resolve to fresh Path objects on each
+    access via this __getattr__ hook (PEP 562).
     """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
-
-
-REPO_ROOT = _resolve_repo_root()
-LEDGER_PATH = REPO_ROOT / "consensus-state" / "state" / "disposition-ledger.yaml"
-SPEC_PATH = (
-    REPO_ROOT
-    / "docs"
-    / "architecture"
-    / "orchestration-spec.md"
-)
+    if name == "LEDGER_PATH":
+        return _ledger_path()
+    if name == "SPEC_PATH":
+        return spec_path()
+    if name == "REPO_ROOT":
+        return project_root()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 SCHEMA = {
     "name": "state.update_decision_ledger",
@@ -245,13 +251,14 @@ def _run_validator_with_findings(staged_ledger_path: Path) -> tuple[int, list]:
     # ledger is reachable via repo-relative path. We deliberately do NOT use
     # LEDGER_PATH.parent because LEDGER_PATH may be monkeypatched in tests to a
     # path outside REPO_ROOT.
-    state_dir = REPO_ROOT / "consensus-state" / "state"
+    state_dir = state_root() / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     sibling_ledger = state_dir / f".staged-ledger-{os.getpid()}.yaml"
-    sibling_spec = SPEC_PATH.parent / f".staged-spec-{os.getpid()}.md"
+    _spec = spec_path()
+    sibling_spec = _spec.parent / f".staged-spec-{os.getpid()}.md"
 
-    spec_text = SPEC_PATH.read_text(encoding="utf-8")
-    staged_relpath = str(sibling_ledger.relative_to(REPO_ROOT)).replace("\\", "/")
+    spec_text = _spec.read_text(encoding="utf-8")
+    staged_relpath = str(sibling_ledger.relative_to(project_root())).replace("\\", "/")
     redirected_spec = _build_redirected_spec(spec_text, staged_relpath)
 
     try:
@@ -307,7 +314,7 @@ def handle(
 
     # ---- Step 1: pre-state findings (real disk) ----
     from consensus_mcp.validators.validate_disposition_index import validate_disposition_index
-    pre_report = validate_disposition_index(SPEC_PATH)
+    pre_report = validate_disposition_index(spec_path())
     pre_findings_count = pre_report["stats"]["total_findings"]
 
     # ---- Step 2: stage + validate against hypothetical post-write state ----
@@ -337,9 +344,10 @@ def handle(
         }
 
     # ---- Step 4: atomic write to real path ----
-    tmp_path = LEDGER_PATH.with_suffix(LEDGER_PATH.suffix + ".tmp")
+    _ledger = _ledger_path()
+    tmp_path = _ledger.with_suffix(_ledger.suffix + ".tmp")
     tmp_path.write_text(proposed_ledger_yaml, encoding="utf-8")
-    os.replace(str(tmp_path), str(LEDGER_PATH))
+    os.replace(str(tmp_path), str(_ledger))
 
     post_canonical_sha = _canonical_sha256_from_text(proposed_ledger_yaml)
 
@@ -375,11 +383,11 @@ def handle(
         audit_event_id = audit_result.get("event_id")
 
     try:
-        ledger_rel = str(LEDGER_PATH.relative_to(REPO_ROOT))
+        ledger_rel = str(_ledger_path().relative_to(project_root()))
     except ValueError:
-        # LEDGER_PATH may be monkeypatched outside REPO_ROOT in tests; fall back
-        # to the absolute string. Production callers always have LEDGER_PATH inside.
-        ledger_rel = str(LEDGER_PATH)
+        # state_root may resolve outside project_root in tests or operator
+        # configuration; fall back to the absolute path string.
+        ledger_rel = str(_ledger_path())
 
     return {
         "written": True,
