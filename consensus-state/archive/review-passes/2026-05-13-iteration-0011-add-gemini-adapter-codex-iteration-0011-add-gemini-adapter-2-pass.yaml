@@ -1,0 +1,66 @@
+iteration_id: iteration-0011-add-gemini-adapter
+reviewer_id: codex-iteration-0011-add-gemini-adapter-2
+pass_id: codex-iteration-0011-add-gemini-adapter-2-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Malformed MCP input can terminate the server through uncaught SystemExit
+  citation: consensus_mcp/tools/reviewer_dispatch_gemini.py:143; consensus_mcp/server.py:208
+  risk: The wrapper invokes argparse-backed _dispatch_gemini.main() in-process and
+    catches Exception only. If a client passes a bad value such as timeout_seconds="bad",
+    argparse raises SystemExit, which also escapes the server's Exception handler
+    and can kill the stdio MCP server instead of returning an ok=false tool result.
+  recommendation: Validate wrapper inputs before building argv, or catch SystemExit
+    around _dispatch_gemini.main() and convert it into a structured ok=false response.
+    Add a regression test for invalid timeout_seconds through reviewer_dispatch_gemini.handle().
+  patch_not_proposed_reason: Review-only pass; patch proposal deferred by goal packet.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Gemini validator accepts empty rationale despite the stated non-empty contract
+  citation: consensus_mcp/_dispatch_gemini.py:534; consensus_mcp/dispatch_templates/gemini_review_schema.json:27
+  risk: A Gemini response with goal_satisfied_rationale="" passes local parsing and
+    would not trigger the validator retry, even though the prompt marks that field
+    as required and non-empty. This weakens the sealed review contract and can produce
+    low-information accepted packets.
+  recommendation: 'Reject blank or whitespace-only goal_satisfied_rationale in _parse_gemini_output
+    and add minLength: 1 to gemini_review_schema.json. Cover the rejection with a
+    parser unit test.'
+  patch_not_proposed_reason: Review-only pass; patch proposal deferred by goal packet.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: low
+  summary: Usage text still advertises the removed --schema flag
+  citation: consensus_mcp/_dispatch_gemini.py:20
+  risk: Operators following the module usage banner can pass --schema even though
+    argparse no longer accepts it, causing an avoidable CLI failure and contradicting
+    the no-schema-flag design.
+  recommendation: Remove the --schema line from the usage docstring and state that
+    the schema reference is embedded in gemini_review_template.md.
+  patch_not_proposed_reason: Review-only pass; patch proposal deferred by goal packet.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The Gemini adapter is mostly present, but the MCP wrapper
+  has an availability bug on malformed input and the local JSON validator is weaker
+  than the stated review contract.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: eed30ecc4341b310782525ad2d8daa3dfa6d53b1e30b30a6dcfb1be5aa3c85a6
+  output_sha256: a0120fbb015c226b1fe0768fe032718085edbe97b3a0e6f46b14c50a130c2b48
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 842a69235724db3f8f84def5f96a0e2cbf329bca50a300d263ab34cf1caf3ad3
+  scope_signature: b06b39180e49e03f3da383ce4ec0046eb6e7e199877929865a367db956a734b3
+  review_target_path: consensus-state/active/iteration-0011-add-gemini-adapter/review-packet.yaml
+  review_target_hash: f6f3c96e3e35b2627d840c6070119588c1498ac8c2670e3bc7bb323ec1941139
+sealed_at_utc: '2026-05-13T03:00:02Z'
+packet_sha256: 7bf4e0ac2dd586904fe66b24fce3f36da081550edfb644ba990117f1dd7f2d68
