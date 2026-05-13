@@ -437,4 +437,16 @@ passes:
   packet_sha256: 64f28e68aed1ac2dfd5263e24c00f5487903ad9db80e9160875394713f7a6e93
   iteration_id: iteration-0016d-init-wizard
   reviewer_id: gemini-iteration-0016d-init-wizard-6
-last_updated_utc: '2026-05-13T05:06:30Z'
+- id: codex-iteration-0017-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0017-package-wiring-codex-iteration-0017-1-pass.yaml
+  sealed_at: '2026-05-13T05:45:18Z'
+  packet_sha256: e7e22e8c328c50401c4f2a2a509a95d5ffd02168747424fe39cf11ee1cd2841d
+  iteration_id: iteration-0017-package-wiring
+  reviewer_id: codex-iteration-0017-1
+- id: gemini-iteration-0017-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0017-package-wiring-gemini-iteration-0017-1-pass.yaml
+  sealed_at: '2026-05-13T05:45:41Z'
+  packet_sha256: 6afd402aeafafcd8041fb04af7e0c8d317ae4253355e0884f8b8cfebcaa2615a
+  iteration_id: iteration-0017-package-wiring
+  reviewer_id: gemini-iteration-0017-1
+last_updated_utc: '2026-05-13T05:45:41Z'
