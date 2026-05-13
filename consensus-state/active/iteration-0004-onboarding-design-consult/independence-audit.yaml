@@ -1,0 +1,16 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T19:49:33Z'
+  event_id: 2026-05-11T19:49:33Z_review_returned_and_sealed_codex-iter0004-1
+  actor: codex-iter0004-1
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0004-onboarding-design-consult-codex-iter0004-1-pass.yaml
+  sha256: 97505dd5371269d49455d50dd94ff57b78878d03eec25611d7d06dce5e5cab3e
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

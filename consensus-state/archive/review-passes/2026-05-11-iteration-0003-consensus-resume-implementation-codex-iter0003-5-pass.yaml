@@ -1,0 +1,52 @@
+iteration_id: iteration-0003-consensus-resume-implementation
+reviewer_id: codex-iter0003-5
+pass_id: codex-iter0003-5-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Fast-path watermark ignores abort-signal state used in the snapshot output.
+  citation: consensus_mcp/_resume.py:412
+  risk: A caller passing prior_snapshot_watermark can receive watermark_unchanged_since_prior=true
+    after an operator creates or removes abort-dispatch-*.signal, so abort_signal_present
+    and the expected wait/abort guidance can be stale.
+  recommendation: Include abort-dispatch signal file presence/mtime in _compute_watermark,
+    or bypass the fast path when in-flight dispatch abort state can affect output.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Fresh iterations with no mutation fall through to operator_decision_required
+    instead of dispatching a reviewer.
+  citation: consensus_mcp/_resume.py:630
+  risk: A newly authorized iteration with a review packet, no reviews, and no in-flight
+    dispatch can stall even though the resume tool is supposed to provide the next
+    orchestration action.
+  recommendation: Add an expected_next_action branch for the no-mutation/no-in-flight/no-actionable-review
+    state that suggests dispatch_cross_family_reviewer when review-packet.yaml is
+    present.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The pass-2 items are mostly implemented, but two resume-path
+  defects remain in the fast-path cache and fresh-iteration next-action logic.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 3d4b05f7594699714e3fa8f7f7c6198b8965702ab97cf83724b296ed55875edf
+  output_sha256: f71d459b406265f8aacbc9a76031eaacd9cbff768dce117e1b5fed9f56b20530
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: bc0c3ab981da72a771c2075bab4752e76cdf4f8fe982d081db23e50116149d2f
+  scope_signature: 7f3d7442de9161a7c9e43c96c2296d27660c59d885b30b6d503263d0e0e6caf3
+  review_target_path: consensus-state/active/iteration-0003-consensus-resume-implementation/review-packet.yaml
+  review_target_hash: 17df322fe7cad8187dabfab9803983b8c4eaa43fa5ce3d7c9b7b836dfb718c6a
+sealed_at_utc: '2026-05-11T20:27:24Z'
+packet_sha256: a25493f43a9cb1696554aad5d1c7089edcadec5ffae765a73ad976a83ea4176f

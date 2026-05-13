@@ -1,0 +1,68 @@
+schema_version: 1
+pilot_id: iteration-0005-main-spec-scrub-design-consult
+goal:
+  summary: Cross-AI consult on whether to scrub the 53 stale parent-project archive
+    references from main's section 24.
+  desired_end_state: "Codex reviews docs/design-consults/main-spec-scrub-stale-archive-refs.md\n\
+    and emits ONE finding that picks a winner among Option A (scrub),\nOption B (env-var\
+    \ escape hatch), or Option C (hybrid).\n\nThe finding's recommendation field carries\
+    \ the winning option (A/B/C);\nrisk field carries the rationale. severity: low\
+    \ (this is a design\nchoice, not a defect).\n\nContext the maintainer wants codex\
+    \ to weigh:\n  - The 53 entries point at files in a DIFFERENT repository\n   \
+    \ (upstream-26.4.16, where agent_loop_mcp was developed).\n    Those files\
+    \ will NEVER exist in this standalone consensus-mcp\n    repo. They are extraction-time\
+    \ leftover.\n  - The boot gate currently rejects this dev tree (54 findings: 52\n\
+    \    ARCHIVED_FILE_MISSING blocking + 2 medium cross-reference findings).\n  -\
+    \ The maintainer's resolved/deferred/dropped lists (180 entries\n    total) are\
+    \ legitimate local audit-trail data referencing THIS\n    spec's own sections\
+    \ \u2014 those must stay regardless of the choice.\n  - The env-var option (B)\
+    \ doesn't suppress the 2 medium\n    cross-reference findings (ARCHIVE_INDEX_HAS_PASSES_NOT_IN_SPEC_24\n\
+    \    and SPEC_24_HAS_PASSES_NOT_IN_ARCHIVE_INDEX); it only handles\n    ARCHIVED_FILE_MISSING.\
+    \ So B alone may not unblock boot.\n\nEmpty findings is NOT acceptable \u2014\
+    \ the maintainer needs a verdict.\n"
+  non_goals:
+  - audit other sections of the spec
+  - propose code changes (this is a design call, not a patch authoring)
+  - touch resolved/deferred/dropped lists
+allowed_files:
+- docs/design-consults/main-spec-scrub-stale-archive-refs.md
+allowed_sections: []
+forbidden_files:
+- consensus_mcp/
+- consensus-state/active/iteration-0001-extraction-review/
+- consensus-state/active/iteration-0002-consensus-resume-spec/
+- consensus-state/active/iteration-0003-consensus-resume-implementation/
+- consensus-state/active/iteration-0004-onboarding-design-consult/
+- consensus-state/archive/
+- consensus-state/state/
+- README.md
+- LICENSE
+- CHANGELOG.md
+- pyproject.toml
+- .github/
+- docs/architecture/
+- docs/workflows/
+- docs/postmortems/
+- docs/specs/
+- docs/templates/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+- id: A1
+  description: codex emits exactly one finding with a recommendation field naming
+    A, B, or C
+  check: 'true'
+stop_conditions:
+- max_iteration_count_reached
+- patch_would_touch_forbidden_files
+- patch_size_exceeds_max
+operator_escalation_triggers:
+- touched_forbidden_files
+- max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T22:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: d3644cbbe27035530106215b08b24a3597999d5d2b9f59ff65a8c22776853f01

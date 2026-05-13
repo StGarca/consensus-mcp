@@ -1,0 +1,73 @@
+schema_version: 1
+pilot_id: iteration-0008-mcp-wire-format-fix
+goal:
+  summary: "Retroactive review of v1.13.1 emergency MCP wire-format hot-patch — confirm tool_registry.list_tools() fix + test coverage"
+  desired_end_state: |
+    Codex reviews the diff (consensus_mcp/tool_registry.py + new test file
+    consensus_mcp/tests/test_tool_registry_mcp_wire_format.py) and emits ONE
+    finding answering three questions:
+
+      Q1 wire-shape correctness: "accept" or "defect: <description>"
+        - Is the new list_tools() output ({name, description, inputSchema} flat,
+          camelCase inputSchema, drops output_schema) MCP-spec-compliant?
+      Q2 test adequacy: "adequate" or "gap: <missing case>"
+        - Do the 5 new tests pin the wire contract sufficiently?
+      Q3 missing edge cases: "none" or "added: <list>"
+        - Any failure modes the test suite should also cover?
+
+    Recommendation field carries:
+      "Q1: <accept|defect: ...>; Q2: <adequate|gap: ...>; Q3: <none|added: ...>"
+    Risk field carries short rationale (~3 sentences).
+
+    Context codex needs to weigh:
+      - This is a RETROACTIVE audit — patch was applied as a bootstrap exception
+        because the bug (silent zero-tools) literally hid consensus-mcp's own
+        tool surface from Claude Code, blocking any forward-review path.
+      - Patch is uncommitted in working tree. Decision to commit or revise
+        follows codex's verdict.
+      - Internal SCHEMA dicts (in consensus_mcp/tools/*.py) still use snake_case
+        input_schema; only the wire-boundary translates to camelCase. This was
+        a deliberate choice to minimize blast radius.
+      - The dotted-name secondary concern is resolved as a red herring: Claude
+        Code's MCP client sanitizes dots when building Claude tool names.
+  non_goals:
+    - propose alternative architectures (registry-vs-server-boundary debate is closed; fix lives at registry)
+    - rename dotted tool names (sanitized by MCP client; non-issue)
+    - fix pre-existing _smoke_test.py 14-vs-15 staleness (separate iteration)
+    - address the missing disposition-ledger.yaml (separate concern; ledger gitignored anyway)
+allowed_files:
+  - consensus_mcp/tool_registry.py
+  - consensus_mcp/tests/test_tool_registry_mcp_wire_format.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/server.py
+  - consensus_mcp/tools/
+  - consensus_mcp/validators/
+  - consensus_mcp/_dispatch_codex.py
+  - consensus-state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - pyproject.toml
+  - .github/
+  - docs/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex emits one finding with recommendation containing Q1/Q2/Q3 verdicts
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-12T22:40:19Z'
+  codex_patch_apply_authorized: false
+  scope_signature: eb9ba0f28430bbd348ccbe8f2a3937c77dc92dc04b44ed68e1d323ad5dacd5f6

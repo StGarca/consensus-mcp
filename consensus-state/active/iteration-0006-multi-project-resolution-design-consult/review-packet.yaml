@@ -1,0 +1,100 @@
+defect_target:
+  files:
+  - docs/design-consults/multi-project-resolution-v1.13.0.md
+  base_sha: 8166099fcf049f0c41eaceca74a0f81920e678b14423453ac46c47e4b2db2099
+  touched_files_contents:
+    docs/design-consults/multi-project-resolution-v1.13.0.md: "# Design consult: multi-project\
+      \ resolution for v1.13.0 (ship spec template + split spec/state roots)\n\n**Context\
+      \ for reviewer:** consensus-mcp v1.12.0 boots cleanly when installed from a\
+      \ local checkout where `REPO_ROOT/docs/architecture/orchestration-spec.md` exists.\
+      \ It does NOT boot when installed as a frozen wheel into an end user's site-packages\
+      \ — the wheel doesn't ship the spec, so `_run_disposition_check` fails with\
+      \ `spec not found`.\n\nThis means: opening Claude Code in a random project (where\
+      \ consensus-mcp is registered as a user-scope MCP server backed by the frozen\
+      \ wheel) results in the server refusing to start. End users cannot use consensus-mcp\
+      \ on arbitrary projects without manual per-project setup (clone consensus-mcp\
+      \ into the project, write a project-scope `.mcp.json` setting `CONSENSUS_MCP_REPO_ROOT`).\n\
+      \nThe operator's stated requirement: consensus-mcp should \"just work\" in any\
+      \ project — open Claude Code anywhere, the MCP server boots clean, state auto-initializes\
+      \ in the project, codex can review the project's files. Dev folder (`C:\\Users\\\
+      <you>\\Downloads\\consensus-mcp`) is the single exception: it overrides via\
+      \ its existing project-scope `.mcp.json`.\n\n## Current resolution logic (v1.12.0\
+      \ `server.py`)\n\n```python\ndef _resolve_repo_root() -> Path:\n    override\
+      \ = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if override:\n        return\
+      \ Path(override).resolve()\n    return Path(__file__).resolve().parent.parent\
+      \  # site-packages parent for frozen wheels\n\nREPO_ROOT = _resolve_repo_root()\n\
+      SPEC_PATH = REPO_ROOT / \"docs\" / \"architecture\" / \"orchestration-spec.md\"\
+      \nAUDIT_LOG = REPO_ROOT / \"consensus-state\" / \"state\" / \"mcp-server-audit.jsonl\"\
+      \n```\n\nREPO_ROOT controls THREE concerns simultaneously: where the spec lives,\
+      \ where state lives, where reviewable files are referenced from. For frozen\
+      \ wheels, REPO_ROOT resolves to site-packages, which has no spec and no state\
+      \ directory.\n\n## Proposed v1.13.0 design\n\n### Two new functions, split out\
+      \ from `_resolve_repo_root`\n\n```python\ndef _resolve_spec_path() -> Path:\n\
+      \    \"\"\"Spec path resolution: env override > legacy REPO_ROOT > packaged\
+      \ template.\"\"\"\n    override = os.environ.get(\"CONSENSUS_MCP_SPEC_PATH\"\
+      )\n    if override:\n        return Path(override).resolve()\n\n    # Legacy:\
+      \ if REPO_ROOT is explicitly set, honor its spec location\n    repo_root_env\
+      \ = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if repo_root_env:\n   \
+      \     legacy = Path(repo_root_env).resolve() / \"docs\" / \"architecture\" /\
+      \ \"orchestration-spec.md\"\n        if legacy.exists():\n            return\
+      \ legacy\n\n    # Implicit: if running from a consensus-mcp checkout, use it\n\
+      \    walked = Path(__file__).resolve().parent.parent / \"docs\" / \"architecture\"\
+      \ / \"orchestration-spec.md\"\n    if walked.exists():\n        return walked\n\
+      \n    # Fallback: shipped spec template inside the package\n    return Path(__file__).resolve().parent\
+      \ / \"spec_template.md\"\n\n\ndef _resolve_state_root() -> Path:\n    \"\"\"\
+      State root resolution: env override > legacy REPO_ROOT > CWD.\"\"\"\n    override\
+      \ = os.environ.get(\"CONSENSUS_MCP_STATE_ROOT\")\n    if override:\n       \
+      \ return Path(override).resolve()\n\n    repo_root_env = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\"\
+      )\n    if repo_root_env:\n        return Path(repo_root_env).resolve() / \"\
+      consensus-state\"\n\n    return Path.cwd() / \"consensus-state\"\n```\n\n`SPEC_PATH\
+      \ = _resolve_spec_path()` and `AUDIT_LOG = _resolve_state_root() / \"state\"\
+      \ / \"mcp-server-audit.jsonl\"`. The legacy `_resolve_repo_root()` stays for\
+      \ back-compat but isn't load-bearing anymore.\n\n### Packaging change\n\n`pyproject.toml`:\n\
+      \n```toml\n[tool.setuptools.package-data]\nconsensus_mcp = [\n  \"dispatch_templates/*.md\"\
+      ,\n  \"dispatch_templates/*.json\",\n  \"docs/*.md\",\n  \"spec_template.md\"\
+      ,          # NEW — shipped scrubbed spec\n  \"tests/fixtures/dispatch_codex/*\"\
+      ,\n]\n```\n\n`consensus_mcp/spec_template.md` is a copy of `docs/architecture/orchestration-spec.md`\
+      \ from the release branch (with section 24 already empty per v1.12.0 scrub).\
+      \ Maintained alongside the canonical spec; either copied at release time or\
+      \ kept synced via a build-time script.\n\n### Behavior matrix after v1.13.0\n\
+      \n| Environment | CONSENSUS_MCP_REPO_ROOT | CONSENSUS_MCP_STATE_ROOT | Spec\
+      \ path | State root |\n|---|---|---|---|---|\n| Dev folder (own .mcp.json) |\
+      \ dev folder | (unset) | dev/docs/architecture/orchestration-spec.md | dev/consensus-state/\
+      \ |\n| ChilipadScreen (frozen wheel, no env) | (unset) | (unset) | site-packages/consensus_mcp/spec_template.md\
+      \ | `D:\\Projects\\ChilipadScreen\\consensus-state\\` |\n| Test folder (clone,\
+      \ run from it) | (unset, walks up) | (unset) | tools/consensus-mcp/docs/architecture/orchestration-spec.md\
+      \ | CWD/consensus-state/ |\n| Shared-state mode (legacy user) | C:/Users/<you>/tools/consensus-mcp\
+      \ | (unset) | tools/consensus-mcp/docs/architecture/orchestration-spec.md |\
+      \ tools/consensus-mcp/consensus-state/ |\n\nEnd user opens Claude Code in any\
+      \ project → frozen wheel boots against the shipped spec template, state directory\
+      \ auto-creates in the project's CWD on first audit-log append, codex sees the\
+      \ project's files. Zero per-project setup.\n\n## Risks / tradeoffs\n\n1. **Spec\
+      \ template drift.** If `consensus_mcp/spec_template.md` falls out of sync with\
+      \ `docs/architecture/orchestration-spec.md`, end users get a stale spec. Mitigation:\
+      \ copy at release time (manual now; automated via `make build` later) and add\
+      \ a CI check that `spec_template.md` matches the latest release-branch spec.\n\
+      \n2. **CWD coupling.** Defaulting state to CWD means starting the server from\
+      \ the wrong directory pollutes that directory with `consensus-state/`. Mitigation:\
+      \ documented in CHANGELOG and the env var lets users pin if they want.\n\n3.\
+      \ **Back-compat.** Existing users with `CONSENSUS_MCP_REPO_ROOT` set (dev folder,\
+      \ shared-state setups) keep working unchanged — the env var still drives both\
+      \ spec and state when set.\n\n4. **Audit log location.** Currently `AUDIT_LOG\
+      \ = REPO_ROOT/consensus-state/state/mcp-server-audit.jsonl`. After this change,\
+      \ it becomes `_resolve_state_root()/state/mcp-server-audit.jsonl`. For dev folder\
+      \ + shared-state users, no change. For ChilipadScreen users, the audit log starts\
+      \ living in ChilipadScreen's tree (correct).\n\n5. **`_release_gate_check.py`\
+      \ and other dev-only tools.** These have hardcoded paths relative to REPO_ROOT.\
+      \ They're for self-hosted release work, not end-user operations. Keep them unchanged;\
+      \ they only matter on the dev folder where REPO_ROOT is correctly pinned.\n\n\
+      ## Question\n\nIs this design correct for v1.13.0?\n\nPick ONE option:\n- **A**:\
+      \ Approve as proposed. Land the change in v1.13.0.\n- **B**: Approve the spirit\
+      \ but the proposed implementation has a defect — explain the defect in `risk`\
+      \ and put the correct approach in `recommendation`.\n- **C**: Reject — the design\
+      \ is wrong; propose a different approach (e.g., DON'T ship the spec, require\
+      \ manual init; OR split REPO_ROOT differently; OR something else).\n\nEmit ONE\
+      \ finding. severity: low (design choice). `recommendation` carries the chosen\
+      \ option (A/B/C). `risk` carries the rationale or the defect description. No\
+      \ `patch_proposal` needed — the operator implements after the verdict.\n\nEmpty\
+      \ findings is NOT acceptable — the operator needs a verdict.\n"
+schema_version: 1
+iteration_id: iteration-0006-multi-project-resolution-design-consult

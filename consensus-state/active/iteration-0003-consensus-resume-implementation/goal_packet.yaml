@@ -1,0 +1,78 @@
+schema_version: 1
+pilot_id: iteration-0003-consensus-resume-implementation
+goal:
+  summary: Implement the consensus_resume MCP tool per docs/specs/consensus-resume-spec.md v2, addressing the 5 pass-2 findings inline.
+  desired_end_state: |
+    Implementation of the consensus_resume MCP tool. Specification:
+    docs/specs/consensus-resume-spec.md (v2, sealed via codex-iter0002-2-pass1).
+
+    Five pass-2 findings (codex-rev-001..005, all MEDIUM, all in pass-2)
+    are addressed in the code rather than in another spec round:
+
+      rev-001 — output JSON includes optional watermark_unchanged_since_prior
+                and snapshot_watermark_drift fields per §8 fast-path
+      rev-002 — recent_activity.kind enum includes bundle-mutation kinds
+                (patch_applied, review_packet_rebundled, operator_force_bundle_rewrite)
+      rev-003 — current bundle sha computed BEFORE review classification
+      rev-004 — when bundle_mutation is null, fall back to
+                review-packet.yaml's defect_target.base_sha
+      rev-005 — recent_activity tiebreaker is dispatch-log line number DESC
+
+    Deliverables:
+      - consensus_mcp/_resume.py             (pure snapshot logic)
+      - consensus_mcp/tools/resume.py        (MCP tool wrapper)
+      - consensus_mcp/server.py              (registry import + register call)
+      - consensus_mcp/tests/test_resume.py   (pytest test suite)
+
+    Closure: codex reviews the diff (cross-family). iter-0003 closes
+    quorum_close_passed when codex emits goal_satisfied=true OR
+    operator dispositions the findings.
+  non_goals:
+    - touch any other module
+    - introduce new dispatch/audit primitives
+    - revise the spec further
+allowed_files:
+  - consensus_mcp/_resume.py
+  - consensus_mcp/tools/resume.py
+  - consensus_mcp/server.py
+  - consensus_mcp/tests/test_resume.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_self_drive.py
+  - consensus_mcp/_closure_invariant.py
+  - consensus_mcp/_author_review_packet.py
+  - consensus_mcp/_visibility_tui.py
+  - consensus_mcp/_visibility_watchdog.py
+  - consensus_mcp/_release_gate_check.py
+  - consensus_mcp/tool_registry.py
+  - consensus_mcp/validators/
+  - consensus_mcp/dispatch_templates/
+  - docs/
+  - README.md
+  - pyproject.toml
+  - .github/
+  - consensus-state/active/iteration-0001-extraction-review/
+  - consensus-state/active/iteration-0002-consensus-resume-spec/
+  - consensus-state/archive/
+  - consensus-state/state/
+max_iterations: 2
+max_patch_size: 1500
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: pytest green
+    check: 'python -m pytest consensus_mcp/tests/test_resume.py -q'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T18:20:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 7f3d7442de9161a7c9e43c96c2296d27660c59d885b30b6d503263d0e0e6caf3

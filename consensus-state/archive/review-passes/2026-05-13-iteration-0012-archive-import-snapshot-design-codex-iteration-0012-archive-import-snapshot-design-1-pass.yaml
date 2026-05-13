@@ -1,0 +1,47 @@
+iteration_id: iteration-0012-archive-import-snapshot-design
+reviewer_id: codex-iteration-0012-archive-import-snapshot-design-1
+pass_id: codex-iteration-0012-archive-import-snapshot-design-1-pass1
+findings:
+- id: codex-rev-001
+  severity: low
+  summary: Design verdict for Q1-Q9 archive import and snapshot scope choices
+  citation: docs/design-consults/iter-0012-archive-import-and-snapshot.md:156
+  risk: Faithful namespacing plus a full manifest preserves provenance without rewriting
+    parent history, and avoids collisions while keeping future audits possible. Tagged
+    full-tree orphan-branch snapshots are operationally simpler than exposing restore
+    correctness to history-walk semantics; git can still deduplicate storage internally.
+    The restore path needs an automatic pre-restore snapshot because this mechanism
+    exists specifically to protect gitignored state from accidental loss. Manual-only
+    triggering is the right first boundary because wiring iteration_closed now would
+    couple unimplemented snapshot semantics to orchestration before the CLI behavior
+    is proven.
+  recommendation: 'Q1: F1a; Q2: namespace-isolation; Q3: F3a; Q4: F4a; Q5: F5a; Q6:
+    F6a; Q7: F7a; Q8: agree; Q9: added: document remote-push/clone restore expectations,
+    retention policy, tag naming sanitization, and restore conflict behavior for dirty
+    in-flight state before iter-0013 implementation.'
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: true
+goal_satisfied_rationale: The review provides the required single low-severity design
+  finding with Q1-Q9 verdicts and no blocking objections.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: cd058a8351891d058ca75d00ecaaca0b4ff128e5602a2e796703c637aa8a42cb
+  output_sha256: 28dba1458c7416d59bdfa008b37687a711cd2b82ba093f12c1839638df61e1dc
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 10a3f3e15a5bb0b875d18bbc4a6299277ee0fad61baa8c514d20156fc6b52629
+  scope_signature: aa69cd4a5a6f7eb66f83790739c5842a1e9debb18e6b0ff009a0d545931fd94c
+  review_target_path: consensus-state/active/iteration-0012-archive-import-snapshot-design/review-packet.yaml
+  review_target_hash: c71d1f12c7ff63a50a0e5347aea6cd80cb717bf95f12908374bcdcb3c551d7ac
+sealed_at_utc: '2026-05-13T01:36:03Z'
+packet_sha256: 963d5a7d2f6fb4f0c614e8af9acfb87e20ccbae724ea1698f34fdb551b7c7201

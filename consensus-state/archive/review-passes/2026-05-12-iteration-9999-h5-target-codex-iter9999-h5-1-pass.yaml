@@ -1,0 +1,33 @@
+iteration_id: iteration-9999-h5-target
+reviewer_id: codex-iter9999-h5-1
+pass_id: codex-iter9999-h5-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Test finding for fixture
+  citation: consensus_mcp/_dispatch_codex.py:42
+  risk: None; this is a test fixture
+  recommendation: No action required
+goal_satisfied: false
+goal_satisfied_rationale: Test fixture; not a real review
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: d1650884cb717e29e795039602724b8ae3498545bab4f22d839c4e2f8c463553
+  output_sha256: 736343293f5d27ffbf1557886f7831b34ca816951e19378978f484a5d3149de1
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 5092ba91151ba52a66f79f34fe9b2d70b38546ce7dc2260ebbd29b2d8bd1d4a6
+  scope_signature: '0000000000000000000000000000000000000000000000000000000000000000'
+  review_target_path: fake.diff
+  review_target_hash: 98739d8f6c40e770167b912ef27938ca15274e09ae534871cda0f83c61a61b38
+sealed_at_utc: '2026-05-12T03:02:55Z'
+packet_sha256: 68721b4951e441e7585a04dd9d0e162b93e978e424d0fe3635306cf2960488f1

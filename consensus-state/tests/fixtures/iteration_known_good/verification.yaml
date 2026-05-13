@@ -1,0 +1,14 @@
+schema_version: 1
+iteration_id: iteration_known_good
+passed: true
+accepted_changes_verified: []
+scope_check:
+  passed: true
+  touched_files: []
+  out_of_scope_files: []
+checks: []
+gate:
+  implementation_ready: false
+  production_ready: false
+  production_state: not_ready
+  production_allowed: false

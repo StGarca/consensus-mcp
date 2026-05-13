@@ -1,0 +1,8 @@
+schema_version: 1
+iteration_id: gate-fixture-not-ready
+passed: false
+scope_check:
+  passed: false
+  touched_files: []
+  out_of_scope_files: ["fixture/unexpected.txt"]
+note: "fixture: verification deliberately failed to drive state=not_ready"
