@@ -24,13 +24,27 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 import yaml
 
 from consensus_mcp import config as cfg
+
+
+# iter-0031 (per iter-0030 converged plan Q3): marker-based project-root
+# detection beats .git-only. Order: git rev-parse > strong-marker walk > cwd.
+_STRONG_MARKERS = (
+    ".git",
+    "pyproject.toml",
+    "package.json",
+    "CLAUDE.md",
+    ".mcp.json",
+    "consensus-state",
+)
 
 
 GITIGNORE_OPEN_MARKER = "# >>> consensus-mcp managed <<<"
@@ -47,12 +61,185 @@ class WizardError(RuntimeError):
 
 
 def _detect_repo_root(start: Path | None = None) -> Path:
-    """Walk upward looking for `.git`. Falls back to start (CWD) if no marker found."""
+    """Resolve project root for the iteration.
+
+    iter-0031 (per iter-0030 converged plan Q3): use marker-based detection
+    instead of .git-only walking. Precedence:
+      1. `git rev-parse --show-toplevel` if git is available and start is
+         inside a git working tree.
+      2. Walk up from start (or cwd) looking for any strong marker
+         (.git, pyproject.toml, package.json, CLAUDE.md, .mcp.json,
+         consensus-state).
+      3. Fall back to start / cwd.
+    """
     cwd = (start or Path.cwd()).resolve()
+
+    # 1. git rev-parse — most authoritative when git is on PATH.
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if result.returncode == 0:
+            top = (result.stdout or "").strip()
+            if top:
+                return Path(top).resolve()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        # git not available / not in a worktree / timeout — fall through.
+        pass
+
+    # 2. Walk up looking for strong markers.
     for candidate in (cwd, *cwd.parents):
-        if (candidate / ".git").exists():
-            return candidate
+        for marker in _STRONG_MARKERS:
+            if (candidate / marker).exists():
+                return candidate
+
+    # 3. Fallback.
     return cwd
+
+
+# --- iter-0031: .mcp.json bootstrap helpers per iter-0030 converged plan ---
+
+
+def _resolve_mcp_command(
+    explicit: str | None = None,
+) -> tuple[str, list[str], bool]:
+    """Resolve the consensus-mcp command to write into `.mcp.json`.
+
+    Precedence (per iter-0030 converged plan Q4):
+      1. Explicit `--mcp-command` override (string; split on whitespace).
+      2. `shutil.which("consensus-mcp")` → use bare name "consensus-mcp"
+         for PATH-portability so committed `.mcp.json` works on other
+         machines that have consensus-mcp installed.
+      3. Fallback: `sys.executable -m consensus_mcp.server` (dev install
+         where the console script wasn't generated).
+
+    Returns (command, args_list, is_portable). `is_portable=True` means the
+    written config does not include absolute paths; the command is a name
+    Claude Code resolves via PATH at spawn time.
+    """
+    if explicit:
+        parts = explicit.split()
+        if not parts:
+            raise ValueError("--mcp-command override is empty")
+        return parts[0], parts[1:], False
+
+    found = shutil.which("consensus-mcp")
+    if found:
+        return "consensus-mcp", [], True
+
+    return sys.executable, ["-m", "consensus_mcp.server"], False
+
+
+def _resolve_mcp_json_path(repo_root: Path) -> Path:
+    return repo_root / ".mcp.json"
+
+
+def _build_consensus_mcp_entry(
+    command: str,
+    args: list[str],
+    state_root: Path,
+    project_root: Path,
+) -> dict:
+    """Construct the mcpServers["consensus-mcp"] entry."""
+    entry: dict = {"command": command}
+    if args:
+        entry["args"] = list(args)
+    entry["env"] = {
+        "CONSENSUS_MCP_STATE_ROOT": str(state_root),
+        "CONSENSUS_MCP_PROJECT_ROOT": str(project_root),
+    }
+    return entry
+
+
+def _load_existing_mcp_json(path: Path) -> tuple[dict | None, str | None]:
+    """Load `.mcp.json` if present.
+
+    Returns (parsed_data, error_message):
+      - (None, None) if file doesn't exist
+      - (dict, None) on successful parse
+      - (None, "parse error: ...") on JSON failure / IO failure
+    """
+    if not path.exists():
+        return None, None
+    try:
+        text = path.read_text(encoding="utf-8")
+        parsed = json.loads(text)
+        return parsed, None
+    except json.JSONDecodeError as exc:
+        return None, f"parse error: {exc}"
+    except OSError as exc:
+        return None, f"read error: {exc}"
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """Pretty-print JSON, write atomically via tmp+rename."""
+    text = json.dumps(data, indent=2, sort_keys=False) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
+
+
+def _write_mcp_json(
+    repo_root: Path,
+    state_root: Path,
+    project_root: Path,
+    command: str,
+    args: list[str],
+    *,
+    force: bool = False,
+) -> tuple[str, Path]:
+    """Read existing `.mcp.json`, merge or write consensus-mcp entry,
+    write back. Returns (status, path) where status is one of:
+
+      - "wrote"             — fresh file created
+      - "merged"            — added consensus-mcp into existing config,
+                              other servers preserved
+      - "already-current"   — entry exists and matches; no write
+      - "blocked-conflict"  — entry exists but differs; not overwritten
+                              (use force=True to replace just this entry)
+      - "parse-error:<msg>" — existing file failed to parse; not modified
+
+    Per iter-0030 converged plan: merge mode is default; conflict mode is
+    skip+warn unless force=True; malformed JSON is skip+warn unconditionally.
+    """
+    path = _resolve_mcp_json_path(repo_root)
+    existing, error = _load_existing_mcp_json(path)
+
+    desired = _build_consensus_mcp_entry(command, args, state_root, project_root)
+
+    if error is not None:
+        return (f"parse-error:{error}", path)
+
+    if existing is None:
+        payload = {"mcpServers": {"consensus-mcp": desired}}
+        _atomic_write_json(path, payload)
+        return ("wrote", path)
+
+    if not isinstance(existing, dict):
+        return ("parse-error:root is not a JSON object", path)
+
+    mcp_servers = existing.get("mcpServers", {})
+    if not isinstance(mcp_servers, dict):
+        return ("parse-error:mcpServers is not a JSON object", path)
+
+    existing_entry = mcp_servers.get("consensus-mcp")
+    if existing_entry == desired:
+        return ("already-current", path)
+
+    if existing_entry is not None and existing_entry != desired and not force:
+        return ("blocked-conflict", path)
+
+    # Add or replace consensus-mcp entry; preserve all other servers.
+    mcp_servers["consensus-mcp"] = desired
+    existing["mcpServers"] = mcp_servers
+    _atomic_write_json(path, existing)
+    return ("merged", path)
 
 
 def _resolve_config_path(args, repo_root: Path) -> Path:
@@ -456,6 +643,11 @@ def cmd_init(args) -> int:
             print(f"would update .gitignore at {repo_root / '.gitignore'} (managed block)")
         else:
             print(".gitignore update skipped (--no-update-gitignore)")
+        if not args.no_mcp_json:
+            mcp_path = _resolve_mcp_json_path(repo_root)
+            print(f"would write .mcp.json at {mcp_path} (consensus-mcp registered)")
+        else:
+            print(".mcp.json write skipped (--no-mcp-json)")
         return 0
 
     write_config(new_config, config_path)
@@ -467,6 +659,48 @@ def cmd_init(args) -> int:
             print(f"updated .gitignore at {repo_root / '.gitignore'}")
         else:
             print(".gitignore already up to date")
+
+    # iter-0031: write .mcp.json by default (per iter-0030 converged plan).
+    if not args.no_mcp_json:
+        try:
+            command, mcp_args, is_portable = _resolve_mcp_command(args.mcp_command)
+        except ValueError as exc:
+            print(f"WARN: --mcp-command invalid: {exc}; skipping .mcp.json", file=sys.stderr)
+            return 0
+        state_root = repo_root / "consensus-state"
+        project_root = repo_root
+        status, mcp_path = _write_mcp_json(
+            repo_root,
+            state_root,
+            project_root,
+            command,
+            mcp_args,
+            force=args.mcp_force,
+        )
+        if status == "wrote":
+            print(f"wrote {mcp_path} (consensus-mcp registered)")
+        elif status == "merged":
+            print(f"merged consensus-mcp into existing {mcp_path}")
+        elif status == "already-current":
+            print(f"consensus-mcp entry in {mcp_path} already current")
+        elif status == "blocked-conflict":
+            print(
+                f"BLOCKED: existing consensus-mcp entry in {mcp_path} differs "
+                f"from desired config. Use --mcp-force to replace, or edit "
+                f"manually.",
+                file=sys.stderr,
+            )
+        elif status.startswith("parse-error:"):
+            err_detail = status[len("parse-error:"):]
+            print(
+                f"WARN: {mcp_path} failed to parse as JSON ({err_detail}); "
+                f"not modifying. Fix the file manually or delete it and re-run.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"WARN: unknown mcp-json status {status!r}", file=sys.stderr)
+    else:
+        print(".mcp.json write skipped (--no-mcp-json)")
     return 0
 
 
@@ -484,6 +718,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true", help="overwrite without prompt")
     parser.add_argument("--no-update-gitignore", action="store_true", help="skip .gitignore marker write")
     parser.add_argument("--config", default=None, help="override config path")
+
+    # iter-0031: .mcp.json bootstrap flags (per iter-0030 converged plan).
+    parser.add_argument("--no-mcp-json", action="store_true",
+                        help="skip writing .mcp.json (default: auto-write)")
+    parser.add_argument("--mcp-command", default=None,
+                        help=("override the command written into .mcp.json. "
+                              "Whitespace-split; first token = command, rest = args. "
+                              "Default: discover via PATH (consensus-mcp), else "
+                              "fall back to sys.executable -m consensus_mcp.server."))
+    parser.add_argument("--mcp-force", action="store_true",
+                        help=("replace existing consensus-mcp entry in .mcp.json "
+                              "even when it differs from the desired config. "
+                              "Does NOT overwrite other servers in mcpServers."))
 
     parser.add_argument("--workflow", default=None,
                         choices=["3", "4", "post-review", "propose-converge", "advisory"],

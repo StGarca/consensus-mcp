@@ -598,3 +598,249 @@ def test_repo_root_walks_up_to_git(tmp_path, monkeypatch):
     # Config landed at repo root, not at sub.
     assert (repo / ".consensus" / "config.yaml").exists()
     assert not (sub / ".consensus" / "config.yaml").exists()
+
+
+# ---------- iter-0031: .mcp.json bootstrap ----------
+
+
+def _read_mcp_json(path: Path) -> dict:
+    import json
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_mcp_command_resolution_no_override(monkeypatch):
+    """Default resolution: shutil.which("consensus-mcp") path returns bare name."""
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: "/some/path/consensus-mcp")
+    cmd, args, portable = wiz._resolve_mcp_command()
+    assert cmd == "consensus-mcp"
+    assert args == []
+    assert portable is True
+
+
+def test_mcp_command_resolution_fallback_when_no_path(monkeypatch):
+    """When consensus-mcp not on PATH, fall back to sys.executable -m form."""
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: None)
+    cmd, args, portable = wiz._resolve_mcp_command()
+    assert cmd == wiz.sys.executable
+    assert args == ["-m", "consensus_mcp.server"]
+    assert portable is False
+
+
+def test_mcp_command_resolution_explicit_override(monkeypatch):
+    """--mcp-command override is split on whitespace; first token is command."""
+    cmd, args, portable = wiz._resolve_mcp_command("py -3.11 -m consensus_mcp.server")
+    assert cmd == "py"
+    assert args == ["-3.11", "-m", "consensus_mcp.server"]
+    assert portable is False
+
+
+def test_mcp_command_empty_override_raises():
+    with pytest.raises(ValueError):
+        wiz._resolve_mcp_command("   ")
+
+
+def test_init_writes_mcp_json_in_fresh_project(tmp_path, monkeypatch):
+    """A2: fresh project, no existing .mcp.json → consensus-init writes one."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0
+    mcp_path = tmp_path / ".mcp.json"
+    assert mcp_path.exists()
+    data = _read_mcp_json(mcp_path)
+    assert "mcpServers" in data
+    assert "consensus-mcp" in data["mcpServers"]
+    entry = data["mcpServers"]["consensus-mcp"]
+    assert entry["command"] == "consensus-mcp"
+    assert entry["env"]["CONSENSUS_MCP_STATE_ROOT"] == str(tmp_path / "consensus-state")
+    assert entry["env"]["CONSENSUS_MCP_PROJECT_ROOT"] == str(tmp_path)
+
+
+def test_init_merges_existing_mcp_json_with_other_servers(tmp_path, monkeypatch):
+    """A3: existing .mcp.json with another server → merge, both servers present."""
+    import json
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
+    # Pre-existing .mcp.json with a different MCP server.
+    existing = {
+        "mcpServers": {
+            "playwright": {
+                "command": "npx",
+                "args": ["@playwright/mcp@latest"],
+            }
+        }
+    }
+    (tmp_path / ".mcp.json").write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0
+    data = _read_mcp_json(tmp_path / ".mcp.json")
+    # Both servers must be present.
+    assert "playwright" in data["mcpServers"]
+    assert "consensus-mcp" in data["mcpServers"]
+    assert data["mcpServers"]["playwright"]["command"] == "npx"
+    assert data["mcpServers"]["consensus-mcp"]["command"] == "consensus-mcp"
+
+
+def test_init_no_mcp_json_flag_skips(tmp_path, monkeypatch, capsys):
+    """A4: --no-mcp-json skips .mcp.json entirely; config.yaml still written."""
+    monkeypatch.chdir(tmp_path)
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+        "--no-mcp-json",
+    ])
+    assert rc == 0
+    assert (tmp_path / ".consensus" / "config.yaml").exists()
+    assert not (tmp_path / ".mcp.json").exists()
+
+
+def test_init_mcp_json_is_idempotent_on_rerun(tmp_path, monkeypatch):
+    """A5: re-running consensus-init produces identical .mcp.json content."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0
+    first = (tmp_path / ".mcp.json").read_text(encoding="utf-8")
+    # Reconfigure should re-write but produce identical .mcp.json since
+    # nothing changed in the discoverable inputs.
+    rc = wiz.main([
+        "--non-interactive", "--reconfigure", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0
+    second = (tmp_path / ".mcp.json").read_text(encoding="utf-8")
+    assert first == second
+
+
+def test_init_blocks_conflict_without_force(tmp_path, monkeypatch, capsys):
+    """A6: existing consensus-mcp entry with different command → skip+warn,
+    file unchanged, no force flag → blocked."""
+    import json
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
+    # Pre-existing consensus-mcp entry with a CUSTOM command.
+    existing = {
+        "mcpServers": {
+            "consensus-mcp": {
+                "command": "/custom/path/consensus-mcp",
+                "env": {
+                    "CONSENSUS_MCP_STATE_ROOT": "/custom/state",
+                    "CONSENSUS_MCP_PROJECT_ROOT": "/custom/proj",
+                },
+            }
+        }
+    }
+    (tmp_path / ".mcp.json").write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0  # Init still succeeds; .mcp.json portion is just skipped.
+    err = capsys.readouterr().err
+    assert "BLOCKED" in err
+    # File contents preserved.
+    data = _read_mcp_json(tmp_path / ".mcp.json")
+    assert data["mcpServers"]["consensus-mcp"]["command"] == "/custom/path/consensus-mcp"
+
+
+def test_init_force_replaces_conflict_preserving_other_servers(tmp_path, monkeypatch):
+    """A7: --mcp-force replaces ONLY the consensus-mcp entry; other servers preserved."""
+    import json
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
+    existing = {
+        "mcpServers": {
+            "playwright": {"command": "npx", "args": ["@playwright/mcp@latest"]},
+            "consensus-mcp": {"command": "/custom/path/consensus-mcp", "env": {}},
+        }
+    }
+    (tmp_path / ".mcp.json").write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+        "--mcp-force",
+    ])
+    assert rc == 0
+    data = _read_mcp_json(tmp_path / ".mcp.json")
+    # Playwright entry preserved.
+    assert data["mcpServers"]["playwright"]["command"] == "npx"
+    # consensus-mcp entry replaced.
+    assert data["mcpServers"]["consensus-mcp"]["command"] == "consensus-mcp"
+
+
+def test_init_malformed_mcp_json_skip_warn(tmp_path, monkeypatch, capsys):
+    """A8: malformed existing .mcp.json → skip+warn, file unchanged."""
+    monkeypatch.chdir(tmp_path)
+    malformed = "{ this is not valid json, trailing comma, }"
+    (tmp_path / ".mcp.json").write_text(malformed, encoding="utf-8")
+
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "failed to parse as JSON" in err
+    # File untouched.
+    assert (tmp_path / ".mcp.json").read_text(encoding="utf-8") == malformed
+
+
+def test_init_mcp_command_override_threads_through(tmp_path, monkeypatch):
+    """A10: --mcp-command override is written into .mcp.json."""
+    monkeypatch.chdir(tmp_path)
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+        "--mcp-command", "py -3.11 -m consensus_mcp.server",
+    ])
+    assert rc == 0
+    data = _read_mcp_json(tmp_path / ".mcp.json")
+    entry = data["mcpServers"]["consensus-mcp"]
+    assert entry["command"] == "py"
+    assert entry["args"] == ["-3.11", "-m", "consensus_mcp.server"]
+
+
+def test_init_dry_run_does_not_write_mcp_json(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    rc = wiz.main([
+        "--dry-run", "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "would write .mcp.json" in out
+    assert not (tmp_path / ".mcp.json").exists()
+
+
+def test_init_nested_cwd_resolves_to_root_via_markers(tmp_path, monkeypatch):
+    """A9: from nested cwd, project-root walks up via strong markers."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    sub = repo / "src" / "deep"
+    sub.mkdir(parents=True)
+    monkeypatch.chdir(sub)
+    monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
+    # Force git rev-parse failure so we exercise the strong-marker walk
+    # (otherwise git might find the consensus-mcp repo above tmp_path).
+    monkeypatch.setattr(wiz.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 1, "stdout": ""})())
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "claude,codex,gemini",
+    ])
+    assert rc == 0
+    # .mcp.json lands at the repo root (where pyproject.toml is), not the sub.
+    assert (repo / ".mcp.json").exists()
+    assert not (sub / ".mcp.json").exists()
