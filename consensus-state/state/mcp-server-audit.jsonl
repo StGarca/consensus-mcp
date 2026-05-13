@@ -43,3 +43,11 @@
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T00:51:51Z", "findings_at_boot": 0}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T01:35:40Z", "findings_at_boot": 0}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T01:36:56Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T01:44:57Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T01:48:04Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T01:51:11Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T01:51:39Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T01:54:54Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T02:02:59Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T02:04:12Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T02:10:03Z", "findings_at_boot": 0}
