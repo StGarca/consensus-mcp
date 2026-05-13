@@ -16,32 +16,22 @@ import sys
 import tempfile
 from pathlib import Path
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
+from consensus_mcp._paths import project_root, active_dir, spec_path
 
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+# iter-0035 (Phase B step 5 per iter-0024 plan): migrated from module-level
+# REPO_ROOT / SPEC_PATH / ACTIVE_DIR captures to lazy `_paths` resolvers.
 
 
-REPO_ROOT = _resolve_repo_root()
-
-SPEC_PATH = (
-    REPO_ROOT
-    / "docs"
-    / "architecture"
-    / "orchestration-spec.md"
-)
-ACTIVE_DIR = REPO_ROOT / "consensus-state" / "active"
+def __getattr__(name: str):
+    """Lazy module-level constants (PEP 562 backward compat for callers
+    that referenced REPO_ROOT / SPEC_PATH / ACTIVE_DIR as module attributes)."""
+    if name == "REPO_ROOT":
+        return project_root()
+    if name == "SPEC_PATH":
+        return spec_path()
+    if name == "ACTIVE_DIR":
+        return active_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 DEFAULT_VALIDATORS = [
     "validate_disposition_index",
@@ -50,12 +40,20 @@ DEFAULT_VALIDATORS = [
     "validate_iteration",
 ]
 
-VALIDATOR_SCRIPTS = {
-    "validate_disposition_index": str(REPO_ROOT / "consensus_mcp" / "validators" / "validate_disposition_index.py"),
-    "validate_review":             str(REPO_ROOT / "consensus_mcp" / "validators" / "validate_review.py"),
-    "validate_consensus":          str(REPO_ROOT / "consensus_mcp" / "validators" / "validate_consensus.py"),
-    "validate_iteration":          str(REPO_ROOT / "consensus_mcp" / "validators" / "validate_iteration.py"),
-}
+def _validator_scripts() -> dict:
+    """Resolve validator script paths under the current project root.
+
+    iter-0035: lazy resolution per-call so monkeypatch.setenv() works.
+    The validators dir lives under project_root (source-tree-relative),
+    not state_root.
+    """
+    base = project_root() / "consensus_mcp" / "validators"
+    return {
+        "validate_disposition_index": str(base / "validate_disposition_index.py"),
+        "validate_review":             str(base / "validate_review.py"),
+        "validate_consensus":          str(base / "validate_consensus.py"),
+        "validate_iteration":          str(base / "validate_iteration.py"),
+    }
 
 SCHEMA = {
     "name": "patch.stage_and_dry_run",
@@ -145,7 +143,7 @@ def _read_report_findings(report_path: Path) -> list[dict]:
 
 def _run_validator(name: str, extra_args: list[str], out_path: Path) -> tuple[list[dict], str | None]:
     """Run one validator subprocess; return (findings, error_or_None)."""
-    script = VALIDATOR_SCRIPTS.get(name)
+    script = _validator_scripts().get(name)
     if script is None:
         return [], f"unknown validator: {name}"
     cmd = [sys.executable, script] + extra_args + ["--out", str(out_path)]
@@ -154,7 +152,7 @@ def _run_validator(name: str, extra_args: list[str], out_path: Path) -> tuple[li
             cmd,
             capture_output=True,
             text=True,
-            cwd=str(REPO_ROOT),
+            cwd=str(project_root()),
             timeout=60,
         )
     except subprocess.TimeoutExpired:
@@ -208,19 +206,19 @@ def handle(
             "error": (
                 "validators_to_run is empty; canonical-006 requires at least one "
                 "validator. Pass None to use DEFAULT_VALIDATORS, or name specific "
-                "validators from VALIDATOR_SCRIPTS."
+                "validators from _validator_scripts()."
             )
         }
 
     # Validate requested validator names early.
-    unknown = [v for v in validators_to_run if v not in VALIDATOR_SCRIPTS]
+    unknown = [v for v in validators_to_run if v not in _validator_scripts()]
     if unknown:
         return {"error": f"unknown validator(s): {', '.join(unknown)}"}
 
     # Determine which iteration dir to stage (may be None).
     iter_dir: Path | None = None
     if iteration_id is not None:
-        iter_dir = ACTIVE_DIR / iteration_id
+        iter_dir = active_dir() / iteration_id
         if not iter_dir.exists():
             return {"error": f"iteration dir not found: {iter_dir}"}
 
@@ -230,7 +228,7 @@ def handle(
         file_rel = patch.get("file", "")
         old_str = patch.get("old_string", "")
         new_str = patch.get("new_string", "")
-        real_path = REPO_ROOT / file_rel
+        real_path = project_root() / file_rel
         if real_path in patched:
             current_text = patched[real_path]
         else:
@@ -258,13 +256,14 @@ def handle(
         # Stage patched files.
         for real_path, text in patched.items():
             # Mirror directory structure under staging_path.
-            rel = real_path.relative_to(REPO_ROOT)
+            rel = real_path.relative_to(project_root())
             dest = staging_path / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text, encoding="utf-8")
 
         # Determine staged spec path: use staged copy if it was patched, else real.
-        staged_spec = staging_path / SPEC_PATH.relative_to(REPO_ROOT) if SPEC_PATH in patched else SPEC_PATH
+        _spec = spec_path()
+        staged_spec = staging_path / _spec.relative_to(project_root()) if _spec in patched else _spec
 
         # Determine staged iteration dir: copy real dir if iteration_id given, then overlay patches.
         staged_iter_dir: Path | None = None

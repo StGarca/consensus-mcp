@@ -85,24 +85,17 @@ from pathlib import Path
 
 import yaml
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
+from consensus_mcp._paths import project_root
 
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+# iter-0035 (Phase B step 7 per iter-0024 plan): migrated to lazy
+# `_paths.project_root()` resolution.
 
 
-REPO_ROOT = _resolve_repo_root()
+def __getattr__(name: str):
+    """PEP 562 backward compat for `REPO_ROOT` callers."""
+    if name == "REPO_ROOT":
+        return project_root()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 VALID_SCOPE_TYPES = {"render", "merge", "deploy", "data-mutation"}
 VALID_SCOPE_MATCH_MODES = {"exact", "prefix"}
@@ -259,7 +252,7 @@ def _resolve_path(p: str) -> Path:
     raw = Path(p)
     if raw.is_absolute():
         return raw
-    return REPO_ROOT / raw
+    return project_root() / raw
 
 
 def handle(
