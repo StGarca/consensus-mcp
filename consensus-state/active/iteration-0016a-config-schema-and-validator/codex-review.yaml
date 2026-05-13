@@ -1,0 +1,67 @@
+iteration_id: iteration-0016a-config-schema-and-validator
+reviewer_id: codex-iteration-0016a-config-schema-and-validator-1
+pass_id: codex-iteration-0016a-config-schema-and-validator-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Malformed YAML is not converted to ConfigValidationError despite the loader
+    contract
+  citation: consensus_mcp/config.py:385
+  risk: Callers expecting a single config-validation exception path will receive raw
+    PyYAML parser/scanner exceptions for syntactically invalid config files, violating
+    the module contract and leaving malformed YAML behavior unpinned by tests.
+  recommendation: Catch yaml.YAMLError in load(), wrap it in ConfigValidationError,
+    and add a focused test for malformed YAML.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-001-patch
+    applies_to_findings:
+    - codex-rev-001
+    base_sha: c623a62610faf20e0c50d8abe2f2bbc29c6add9ffdb8968b43d3e3136a99273b
+    unified_diff: "--- a/consensus_mcp/config.py\n+++ b/consensus_mcp/config.py\n\
+      @@ -382,7 +382,10 @@ def load(path: Path) -> dict:\n         illegal combination.\n\
+      \       OSError on file-read failure (caller decides legacy-mode fallback).\n\
+      \     \"\"\"\n     text = Path(path).read_text(encoding=\"utf-8\")\n-    raw\
+      \ = yaml.safe_load(text)\n+    try:\n+        raw = yaml.safe_load(text)\n+\
+      \    except yaml.YAMLError as exc:\n+        raise ConfigValidationError(f\"\
+      malformed YAML in {path}: {exc}\") from exc\n     normalized = normalize(raw)\n\
+      \     validate(normalized)\n     return normalized\n--- a/consensus_mcp/tests/test_config.py\n\
+      +++ b/consensus_mcp/tests/test_config.py\n@@ -388,6 +388,13 @@ def test_load_invalid_raises(tmp_path):\n\
+      \     p.write_text(\"schema_version: 1\\nworkflow:\\n  mode: wrong\\n\", encoding=\"\
+      utf-8\")\n     with pytest.raises(cfg.ConfigValidationError):\n         cfg.load(p)\n\
+      +\n+\n+def test_load_malformed_yaml_raises_config_validation_error(tmp_path):\n\
+      +    p = tmp_path / \"config.yaml\"\n+    p.write_text(\"schema_version: [\\\
+      n\", encoding=\"utf-8\")\n+    with pytest.raises(cfg.ConfigValidationError,\
+      \ match=\"malformed YAML\"):\n+        cfg.load(p)\n \n \n # ---------- effective_config_sha256\
+      \ ----------\n"
+    files_touched:
+    - consensus_mcp/config.py
+    - consensus_mcp/tests/test_config.py
+    expected_tests:
+    - py -3.11 -m pytest consensus_mcp/tests/test_config.py -q
+    unified_diff_sha256: 2a0ce9c1c482f7adddf0ccfafc0c4f80b1e7ebb513d271bd255eaf4a210dc0b7
+goal_satisfied: false
+goal_satisfied_rationale: The implementation covers the requested schema, normalization,
+  validation, hashing, and legacy helpers, but load() misses the stated malformed-YAML
+  error contract.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 1ecb8193a5931dda39e86701f9c61060b9a858b5fb762ae67eab653094d9298b
+  output_sha256: a2181681d0d084bf422472fb2fba486fcafd2ef887d4dddb5eec4482e8e02235
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 2907f5cc6c94bed630eff5895cfe6d781bad9b0ea7ef303b6c19c636d475ca46
+  scope_signature: 9f4d9bc2e631d93150e0dae3409bfae09076943fc59ff132bc2f2e565c6cc8e2
+  review_target_path: consensus-state/active/iteration-0016a-config-schema-and-validator/review-packet.yaml
+  review_target_hash: dcbb1b2e6b8e614a006343add71be799d79f15468d669ec6e2961ac226626871
+sealed_at_utc: '2026-05-13T04:08:56Z'
+packet_sha256: 784867b7ac49f6c7a3d01fe2c773c0888b7a5afe2abf56c7f4cc1cc50e1cb0e2
