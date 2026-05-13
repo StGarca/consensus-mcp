@@ -1,0 +1,31 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:08:12Z'
+  event_id: 2026-05-13T03:08:12Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-1
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-1-pass.yaml
+  sha256: 828c573199fd005734a8d5742f235648e33e3ea21aea4c3d781845921a526a11
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:14:33Z'
+  event_id: 2026-05-13T03:14:33Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-2
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-2
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-2-pass.yaml
+  sha256: 4329d19a6b5ef1e2997f90d93074c30ebf0bb6b20279f8e6a546266332543787
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

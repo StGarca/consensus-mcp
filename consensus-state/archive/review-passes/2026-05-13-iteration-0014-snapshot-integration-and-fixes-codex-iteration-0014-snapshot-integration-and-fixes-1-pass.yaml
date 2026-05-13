@@ -1,0 +1,45 @@
+iteration_id: iteration-0014-snapshot-integration-and-fixes
+reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-1
+pass_id: codex-iteration-0014-snapshot-integration-and-fixes-1-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: import idempotency skips rewrite based only on source entry hashes, leaving
+    stale README/manifest when existing target content has drifted
+  citation: consensus_mcp/_import_parent_history.py:140
+  risk: A forced re-import can report success and return the old manifest without
+    repairing a modified or corrupted target tree, so the documented byte-for-byte
+    idempotency is not guaranteed and stale README/source-manifest content can persist.
+  recommendation: Before skipping, verify the existing target subtree and README/source-manifest
+    bytes match the expected output, or rebuild the target when any target content
+    differs.
+  patch_not_proposed_reason: A correct patch needs the expected README/manifest byte
+    rendering factored before the skip path; with only embedded file contents and
+    no executable verification, I am not proposing a risky hand-written diff.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The snapshot/restore tests and dry-run restore behavior
+  are largely present, but the import idempotency fix can skip necessary repairs and
+  does not satisfy the byte-for-byte target-tree intent.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 1fe228b58d83470feb6912fc592a8726300ebb22da3a3099c735ecebc3f409cb
+  output_sha256: 3bb7243e541299474d7d37193683cda4536c25e616b875a8326f6496a32e9952
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: b8eb1319a0cebd5b51ef3fe8ca5bb897b24774ad666c9154c129950ab464a0ee
+  scope_signature: c35e1581f8bfbb38f464e9adfb839fc78b9dee5be28db34f45a3cdd70ba32e94
+  review_target_path: consensus-state/active/iteration-0014-snapshot-integration-and-fixes/review-packet.yaml
+  review_target_hash: 9326195af7cc492d699a7804731c78009333c6eac7434197ee0189c80273826c
+sealed_at_utc: '2026-05-13T03:08:12Z'
+packet_sha256: 828c573199fd005734a8d5742f235648e33e3ea21aea4c3d781845921a526a11

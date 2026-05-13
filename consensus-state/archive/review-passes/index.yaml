@@ -221,4 +221,28 @@ passes:
   packet_sha256: f2fcec37a109c167aab869d1c3affd0a66b7e81a56fc1b2c45215813743ad2d2
   iteration_id: iteration-0011-add-gemini-adapter
   reviewer_id: codex-iteration-0011-add-gemini-adapter-3
-last_updated_utc: '2026-05-13T03:05:33Z'
+- id: codex-iteration-0014-snapshot-integration-and-fixes-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-1-pass.yaml
+  sealed_at: '2026-05-13T03:08:12Z'
+  packet_sha256: 828c573199fd005734a8d5742f235648e33e3ea21aea4c3d781845921a526a11
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-1
+- id: codex-iteration-0011-add-gemini-adapter-4-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0011-add-gemini-adapter-codex-iteration-0011-add-gemini-adapter-4-pass.yaml
+  sealed_at: '2026-05-13T03:12:04Z'
+  packet_sha256: f06b6c59785730426493fbebea824566702740747a324f154f41cb47d86bde67
+  iteration_id: iteration-0011-add-gemini-adapter
+  reviewer_id: codex-iteration-0011-add-gemini-adapter-4
+- id: codex-iteration-0014-snapshot-integration-and-fixes-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-2-pass.yaml
+  sealed_at: '2026-05-13T03:14:33Z'
+  packet_sha256: 4329d19a6b5ef1e2997f90d93074c30ebf0bb6b20279f8e6a546266332543787
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-2
+- id: codex-iteration-0011-add-gemini-adapter-5-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0011-add-gemini-adapter-codex-iteration-0011-add-gemini-adapter-5-pass.yaml
+  sealed_at: '2026-05-13T03:16:30Z'
+  packet_sha256: a4ca1f432a78509af69a8fb44f6ab00b0aabf40699bab750e96bc0e4fc76f7e2
+  iteration_id: iteration-0011-add-gemini-adapter
+  reviewer_id: codex-iteration-0011-add-gemini-adapter-5
+last_updated_utc: '2026-05-13T03:16:30Z'
