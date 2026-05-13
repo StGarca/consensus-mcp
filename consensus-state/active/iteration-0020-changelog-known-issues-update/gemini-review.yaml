@@ -1,0 +1,32 @@
+iteration_id: iteration-0020-changelog-known-issues-update
+reviewer_id: gemini-iteration-0020-2
+pass_id: gemini-iteration-0020-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The updated CHANGELOG.md accurately reflects the test fixes
+  from iter-0019, removes the outdated known-issue assertion, and correctly documents
+  the deferred architectural changes and fixture cleanup. The change meets all acceptance
+  criteria.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 67fabe4ee2b4394d9f0b7a8a6e52e1ba53c1d99045f4cd7bf615306e6f0e2248
+  output_sha256: 814d7375a21885bea992105e366cc9c6b0a7d6462a185e53c18d87e655f8f998
+  goal_packet_sha256: f897df781dc1482840bc0121ae49a1cb5c6a757606344eb72a4329f9607a72e5
+  scope_signature: e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4
+  review_target_path: consensus-state/active/iteration-0020-changelog-known-issues-update/review-packet.yaml
+  review_target_hash: 70a31eaa4d59792c4c9bafb013149f7dcec57a6e7c294348513b236b22b6711b
+  adapter: gemini
+sealed_at_utc: '2026-05-13T07:35:50Z'
+packet_sha256: 60981bcdd5ea61a521bb1b71aee86c59e9aecb2845b8c3c3266487bfec93b9ca
