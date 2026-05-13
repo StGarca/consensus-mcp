@@ -1,0 +1,30 @@
+iteration_id: iteration-0016d-init-wizard
+reviewer_id: codex-iteration-0016d-init-wizard-6
+pass_id: codex-iteration-0016d-init-wizard-6-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Embedded review surface meets the requested init wizard
+  behavior: all nine dimensions are exposed, guarded modes return the expected exit
+  codes, config writes are atomic, and .gitignore handling is idempotent with malformed-marker
+  preservation covered by tests.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: e662a4a4b5958f8e57f2d41e593ebbd589a1d1b97694642b5eda6e55813e30e1
+  output_sha256: 60025d2dfb858de4af03af4ff95b02fd26ddce4479e98a86196282534dbddad0
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 17e216ba7d891603a1b6dece32e79a104c80cacdfd4b16452e510bad3833d79c
+  scope_signature: a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90
+  review_target_path: consensus-state/active/iteration-0016d-init-wizard/review-packet.yaml
+  review_target_hash: 78b5233a0c6f53d673cc672536374882b539b9c84f70911b2fc25a881c529970
+sealed_at_utc: '2026-05-13T05:05:55Z'
+packet_sha256: 537a6072d001f521cb4974b9218b4c250bbc34a37ab92bf200bda28938f73fca
