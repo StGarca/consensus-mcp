@@ -797,4 +797,58 @@ passes:
   packet_sha256: 65a6ea091e86490f77cfba2e92b414935cac6e82168ba4ed5ee3fb56a461a40d
   iteration_id: iteration-0031-consensus-init-mcp-bootstrap-impl
   reviewer_id: codex-iteration-0031-1
-last_updated_utc: '2026-05-13T15:36:43Z'
+- id: codex-iteration-0032-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0032-changelog-sync-0027-0031-codex-iteration-0032-1-pass.yaml
+  sealed_at: '2026-05-13T15:59:56Z'
+  packet_sha256: 8297c29603a72db9d5811dd90bb7cfc484df09a961cd2b2e722d5965584339ce
+  iteration_id: iteration-0032-changelog-sync-0027-0031
+  reviewer_id: codex-iteration-0032-1
+- id: codex-iteration-0033-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0033-readme-pipx-bootstrap-codex-iteration-0033-1-pass.yaml
+  sealed_at: '2026-05-13T16:06:26Z'
+  packet_sha256: 389a01ed3f4fc1afbfda8d24632c816e938bb9eff284123d2eb5fb40f6b6ad79
+  iteration_id: iteration-0033-readme-pipx-bootstrap
+  reviewer_id: codex-iteration-0033-1
+- id: gemini-iteration-0033-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0033-readme-pipx-bootstrap-gemini-iteration-0033-1-pass.yaml
+  sealed_at: '2026-05-13T16:06:55Z'
+  packet_sha256: d86d72c1d2f8ddd1e4c254ff51e6b26c295ac44f359499aa8340d920b644b551
+  iteration_id: iteration-0033-readme-pipx-bootstrap
+  reviewer_id: gemini-iteration-0033-1
+- id: gemini-iteration-0034-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0034-migrate-repo-get-section-gemini-iteration-0034-1-pass.yaml
+  sealed_at: '2026-05-13T16:12:49Z'
+  packet_sha256: 398ee9699e835253102aa5a2be6d519a7afa591b3cc0bba48531b6737ccc9242
+  iteration_id: iteration-0034-migrate-repo-get-section
+  reviewer_id: gemini-iteration-0034-1
+- id: codex-iteration-0034-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0034-migrate-repo-get-section-codex-iteration-0034-1-pass.yaml
+  sealed_at: '2026-05-13T16:12:54Z'
+  packet_sha256: 01f563db9470bcec22a0c3fcd62d931d2b3f2d6612300d9b420f664671f2cdfb
+  iteration_id: iteration-0034-migrate-repo-get-section
+  reviewer_id: codex-iteration-0034-1
+- id: gemini-iteration-0035-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0035-phase-b-batch-low-impact-gemini-iteration-0035-1-pass.yaml
+  sealed_at: '2026-05-13T16:36:47Z'
+  packet_sha256: 2c156e648ddd2cd8bc1535f5942bea3dfe82315d717535bc745102ee15100677
+  iteration_id: iteration-0035-phase-b-batch-low-impact
+  reviewer_id: gemini-iteration-0035-1
+- id: codex-iteration-0035-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0035-phase-b-batch-low-impact-codex-iteration-0035-1-pass.yaml
+  sealed_at: '2026-05-13T16:37:57Z'
+  packet_sha256: 8fa446a747f3e3fff6a05280444ddc3fecb2f5754350cbd2d9a28b4fd20c80cf
+  iteration_id: iteration-0035-phase-b-batch-low-impact
+  reviewer_id: codex-iteration-0035-1
+- id: gemini-iteration-0035-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0035-phase-b-batch-low-impact-gemini-iteration-0035-2-pass.yaml
+  sealed_at: '2026-05-13T16:44:11Z'
+  packet_sha256: a5563d4431ac135dc9bc563a9f3373fcfd3282ccc97e7425aa1b36a35cc56812
+  iteration_id: iteration-0035-phase-b-batch-low-impact
+  reviewer_id: gemini-iteration-0035-2
+- id: codex-iteration-0035-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0035-phase-b-batch-low-impact-codex-iteration-0035-2-pass.yaml
+  sealed_at: '2026-05-13T16:46:02Z'
+  packet_sha256: 0961177484613221efe372d42e36856471c26fc2fd5857d4bfeb7fff6a7bd025
+  iteration_id: iteration-0035-phase-b-batch-low-impact
+  reviewer_id: codex-iteration-0035-2
+last_updated_utc: '2026-05-13T16:46:02Z'

@@ -118,3 +118,8 @@
 {"event": "mcp_server_stopped", "timestamp_utc": "2026-05-13T14:56:38Z", "reason": "boot-and-exit"}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T15:14:04Z", "findings_at_boot": 0}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T15:35:39Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T15:59:38Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T16:06:09Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T16:12:25Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T16:33:55Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T16:43:09Z", "findings_at_boot": 0}

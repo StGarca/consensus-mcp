@@ -1,0 +1,51 @@
+iteration_id: iteration-0033-readme-pipx-bootstrap
+reviewer_id: gemini-iteration-0033-1
+pass_id: gemini-iteration-0033-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: blocking
+  summary: The `pipx install` command in the Quick Start section points to an incorrect
+    and non-functional Git reference.
+  citation: README.md:67
+  risk: Users following the Quick Start guide will encounter a fatal error when trying
+    to install the package, as the Git reference `@docs\roadmap\v1.14.0-deferred.md`
+    is invalid. This prevents installation and breaks the primary onboarding path.
+  recommendation: Update the git reference in the `pipx install` command to the correct
+    version tag, `@v1.14.0`, as specified in the goal's desired end state. The command
+    should be `pipx install git+https://github.com/stgarca/consensus-mcp.git
+    @v1.14.0`.
+  patch_proposal: null
+  patch_not_proposed_reason: Gemini reviewer is in read-only mode for this version.
+goal_satisfied: false
+goal_satisfied_rationale: The primary installation command in the Quick Start guide
+  is incorrect due to an invalid Git reference, which will cause installation to fail.
+  Although the other documentation updates (test counts, bootstrap flags, requirements)
+  are correctly implemented, this blocking issue prevents the goal from being satisfied
+  as it breaks the user's initial setup.
+blocking_objections:
+- gemini-rev-001
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 2f03497342b32233e90fc2f4128bb4e7a56e78088e9e58285dba396db9995fa7
+  output_sha256: cc2c439c80e2d652bfc638c47b87c41b26e57217b1fe56bd08f0e6298977ecff
+  goal_packet_sha256: b61c20c7da4babe93328365f558cbf203d6e3b1456918cfeab5b49e9fc361704
+  scope_signature: 90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f
+  review_target_path: consensus-state/active/iteration-0033-readme-pipx-bootstrap/review-packet.yaml
+  review_target_hash: 2c2dba124707fdb9088e031dbe198ac82d2d1417d0aba6525892eb4b8b352749
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-13T16:06:55Z'
+packet_sha256: d86d72c1d2f8ddd1e4c254ff51e6b26c295ac44f359499aa8340d920b644b551
