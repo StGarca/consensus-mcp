@@ -1,0 +1,45 @@
+iteration_id: iteration-0016b-contributors-adapter-layer
+reviewer_id: codex-iteration-0016b-contributors-adapter-layer-2
+pass_id: codex-iteration-0016b-contributors-adapter-layer-2-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: ClaudeAdapter trusts T6's archive path without ensuring the file is inside
+    the requested iteration, so an injected or misconfigured seal result can make
+    the adapter copy arbitrary files into the iteration artifact.
+  citation: consensus_mcp/contributors/claude.py:84
+  risk: The contributor adapter layer is supposed to normalize sealed artifacts for
+    the current iteration, but this path trust can leak or substitute unrelated files
+    and still return a successful SealedArtifact.
+  recommendation: After T6 returns, resolve the sealed path and require it to be a
+    file under the expected consensus-state archive location for the same iteration/reviewer/pass,
+    or at minimum under the current iteration/archive root, before copying it locally.
+  patch_not_proposed_reason: The embedded allowed files do not include consensus_mcp/tools/review_write_and_seal.py
+    or the archive path contract needed to author an exact confinement patch safely.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The adapter layer is mostly present, but ClaudeAdapter's
+  sealing handoff trusts an unvalidated returned path before copying it into the iteration
+  output, which is a blocking artifact-integrity issue.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 51f3d7f2ed3b73dc68b0be859d279aa5258fc47185ef180c1d5c541fd1a01617
+  output_sha256: 4e6a151b84ed9497d0ca4d7e15ae64c9157b7e56998386055acdae743328bcf3
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 9c22a7dbc5e6898c37587e2732113d690c7ebf44784b7692e14c6a8bc8c0d061
+  scope_signature: 4a81e678cb9008781a1ec1947934bee9cf72d7433965691cced3febee4b4845c
+  review_target_path: consensus-state/active/iteration-0016b-contributors-adapter-layer/review-packet.yaml
+  review_target_hash: ca87f8ee786c1b84c2e10a927b595df6517740ab3d6a337cfe61e16489656f68
+sealed_at_utc: '2026-05-13T04:26:36Z'
+packet_sha256: d754dcb3dddbba9c429182433f20e9c14a66738087412cbfdac3f152ef5f7211
