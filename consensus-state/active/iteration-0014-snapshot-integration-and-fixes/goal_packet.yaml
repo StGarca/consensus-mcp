@@ -34,6 +34,7 @@ allowed_files:
   - consensus_mcp/_snapshot_state.py
   - consensus_mcp/_import_parent_history.py
   - consensus_mcp/tests/test_snapshot_state_integration.py
+  - consensus_mcp/tests/test_import_parent_history.py
 allowed_sections: []
 forbidden_files:
   - consensus_mcp/_dispatch_codex.py
@@ -74,4 +75,4 @@ authorization:
   authorized_by: operator
   authorized_at_utc: '2026-05-13T03:10:00Z'
   codex_patch_apply_authorized: false
-  scope_signature: c35e1581f8bfbb38f464e9adfb839fc78b9dee5be28db34f45a3cdd70ba32e94
+  scope_signature: 17f678d7741405fa0be3ce60e853059bf169ad6a32701d30f826e9d85c89afed

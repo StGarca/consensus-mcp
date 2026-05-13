@@ -1,0 +1,56 @@
+iteration_id: iteration-0014-snapshot-integration-and-fixes
+reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-2
+pass_id: codex-iteration-0014-snapshot-integration-and-fixes-2-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: Touched-file set includes an out-of-scope test file
+  citation: consensus_mcp/tests/test_import_parent_history.py:1
+  risk: The packet modifies or carries review-surface changes outside the authorized
+    allowed_files list, so the scope_signature cannot safely authorize the proposed
+    change set.
+  recommendation: Remove changes to consensus_mcp/tests/test_import_parent_history.py
+    from this packet, or reissue the goal packet with that path explicitly added to
+    allowed_files and a new scope signature.
+  patch_not_proposed_reason: Authorization/scope issue; fix requires changing the
+    review packet or allowed_files, not patching an in-scope source file.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Import idempotency gate can skip despite non-byte-identical target metadata
+  citation: consensus_mcp/_import_parent_history.py:184
+  risk: A forced re-import can report a clean idempotent no-op while leaving a corrupted
+    README, malformed-but-loadable manifest metadata, or unexpected unmanifested target
+    files in place, violating the documented byte-for-byte idempotency intent.
+  recommendation: Before returning the existing manifest, verify the complete target
+    file inventory plus expected README/source-manifest content, or fall through to
+    a full rewrite whenever any target metadata or unexpected file drift is detected.
+  patch_not_proposed_reason: A proper fix needs corresponding import-idempotency regression
+    tests, but the relevant test file is outside this packet's allowed_files.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'Goal not satisfied: the review surface includes an unauthorized
+  file, and the import idempotency implementation still has a drift path inconsistent
+  with the documented byte-for-byte target-tree intent.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: cf252977ffd6c4624652a2c12d9ef01ba4b3117b3b06f157986416d84c84469d
+  output_sha256: d4255d63898089aa182d91efb9ba223fc97db6cea7457f4c29408f602d382d97
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: b8eb1319a0cebd5b51ef3fe8ca5bb897b24774ad666c9154c129950ab464a0ee
+  scope_signature: c35e1581f8bfbb38f464e9adfb839fc78b9dee5be28db34f45a3cdd70ba32e94
+  review_target_path: consensus-state/active/iteration-0014-snapshot-integration-and-fixes/review-packet.yaml
+  review_target_hash: 03da5168f44b749cbcb560b73e50c9bdf37b9cccdd9e7e7ce5265a547f33408f
+sealed_at_utc: '2026-05-13T03:14:33Z'
+packet_sha256: 4329d19a6b5ef1e2997f90d93074c30ebf0bb6b20279f8e6a546266332543787
