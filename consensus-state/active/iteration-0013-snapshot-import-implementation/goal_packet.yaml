@@ -1,0 +1,83 @@
+schema_version: 1
+pilot_id: iteration-0013-snapshot-import-implementation
+goal:
+  summary: "Implement iter-0012-approved design: _snapshot_state.py (orphan-branch snapshot/restore CLI) + _import_parent_history.py (one-time parent history import). 18 new tests. 503 total green."
+  desired_end_state: |
+    Two new modules in consensus_mcp/:
+      - _snapshot_state.py: subcommands snapshot / list / restore / diff.
+        Orphan branch consensus-state-snapshots. Label regex
+        ^[A-Za-z0-9_-]{1,64}$ (F9c). ISO timestamp YYYY-MM-DDTHHMMSSZ.
+        Auto-pre-snapshot before restore by default (F6a); --force and
+        --abort-on-dirty overrides (F9d). git worktree used so main tree
+        is never touched.
+      - _import_parent_history.py: mirror parent agent-loop into
+        consensus-state/archive/imported-from-parent/active-iterations/
+        and archive-review-passes/. Writes source-manifest.yaml with
+        per-entry sha256_tree (F3a) and README.md.
+
+    Tests in consensus_mcp/tests/test_snapshot_state.py and
+    test_import_parent_history.py (18 tests; pin label sanitization, ISO
+    format, branch constants, import layout, manifest shape, idempotency).
+
+    One-time import already executed: 41 iter dirs + 53 archive passes
+    mirrored. Initial baseline snapshot tag
+    snapshot-2026-05-13T014402Z-initial-baseline-post-import created on the
+    orphan branch.
+
+    Full test suite: 503 passing, 1 skipped (baseline 452 + 33 iter-0011
+    gemini + 18 iter-0013 = 503). Zero regressions.
+  non_goals:
+    - auto-snapshot on iteration_closed (deferred per iter-0012 Q7: F7a)
+    - snapshot retention/pruning automation (deferred per F9b)
+    - modify _dispatch_codex.py / _dispatch_gemini.py / _dispatch_base.py
+    - add patch_proposal support to gemini (deferred to iter-0013+ capability metadata)
+    - land iter-0011 commit (separate task; happens after iter-0013)
+allowed_files:
+  - consensus_mcp/_snapshot_state.py
+  - consensus_mcp/_import_parent_history.py
+  - consensus_mcp/tests/test_snapshot_state.py
+  - consensus_mcp/tests/test_import_parent_history.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/_dispatch_base.py
+  - consensus_mcp/server.py
+  - consensus_mcp/tools/
+  - consensus-state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - pyproject.toml
+  - .github/
+  - .gitignore
+  - docs/
+max_iterations: 1
+max_patch_size: 2000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: full test suite passes (>=503 green, 0 fail)
+    check: "py -3.11 -m pytest consensus_mcp/tests -q"
+  - id: A2
+    description: parent history imported (41 iter dirs + 53 archive passes)
+    check: "test -d consensus-state/archive/imported-from-parent/active-iterations"
+  - id: A3
+    description: initial baseline snapshot tag exists
+    check: "git tag -l 'snapshot-*initial-baseline-post-import*'"
+  - id: A4
+    description: codex review of diff returns goal_satisfied=true with no blocking_objections
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T01:45:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 4904672bca3de6d503e78bf16538f38e9bdba2d0e7bdb0fbcb5ac3c540b23738
