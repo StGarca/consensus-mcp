@@ -1,0 +1,31 @@
+iteration_id: iteration-0032-changelog-sync-0027-0031
+reviewer_id: codex-iteration-0032-1
+pass_id: codex-iteration-0032-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'The embedded CHANGELOG.md v1.14.0 section covers iter-0025
+  through iter-0031, documents the workflow #4 default policy correction, records
+  operator memories and deferred follow-ups, and leaves the v1.13.0/v1.12.0 sections
+  present.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: a93cc582ffc80fb063fa4bd0b9259c55edca82db2b5b23ed15284aa1586d8195
+  output_sha256: d53cdd75968cbd1cbbc287342e15a4bae2cd66d586d8c8b88c02ff02635265fd
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 3d8158fc36e35df44beba9ebea357becedead6dbb518821bac1d89e7e4d70a7e
+  scope_signature: 8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e
+  review_target_path: consensus-state/active/iteration-0032-changelog-sync-0027-0031/review-packet.yaml
+  review_target_hash: 6484241fb5868f9c3ad91511a7c36901c5fa2a8e74d27d1d80ea994e45580bea
+  mode: review
+sealed_at_utc: '2026-05-13T15:59:56Z'
+packet_sha256: 8297c29603a72db9d5811dd90bb7cfc484df09a961cd2b2e722d5965584339ce

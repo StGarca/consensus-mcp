@@ -1,0 +1,16 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T15:59:56Z'
+  event_id: 2026-05-13T15:59:56Z_review_returned_and_sealed_codex-iteration-0032-1
+  actor: codex-iteration-0032-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0032-changelog-sync-0027-0031-codex-iteration-0032-1-pass.yaml
+  sha256: 8297c29603a72db9d5811dd90bb7cfc484df09a961cd2b2e722d5965584339ce
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
