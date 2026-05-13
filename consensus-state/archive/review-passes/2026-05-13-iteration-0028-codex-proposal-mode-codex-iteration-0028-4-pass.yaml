@@ -1,0 +1,61 @@
+iteration_id: iteration-0028-codex-proposal-mode
+reviewer_id: codex-iteration-0028-4
+pass_id: codex-iteration-0028-4-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Gemini proposal mode lacks template/schema provenance in dispatch logs
+    and sealed packets
+  citation: consensus_mcp/_dispatch_gemini.py:653
+  risk: Proposal-mode Gemini dispatches can be sealed without any audit record of
+    which proposal schema constrained the output. That weakens the new proposal/review
+    split because a later verifier cannot distinguish the built-in proposal schema
+    from an overridden schema, despite --schema now being an operator-facing input
+    in proposal mode.
+  recommendation: When ns.mode == "proposal", compute proposal_schema_sha256 from
+    the effective proposal_schema_path and include proposal_schema_path/proposal_schema_sha256
+    in dispatch_start, dispatch_failed provenance, sealed dispatch_provenance, and
+    dispatch_done.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Proposal parsers accept empty rationale when structural_abstention is false
+    if a custom schema relaxes minLength
+  citation: consensus_mcp/_dispatch_codex.py:575
+  risk: The built-in schemas require rationale_vs_alternatives to be non-empty, but
+    the parser delegates that requirement entirely to the operator-supplied schema.
+    A relaxed override can seal a non-abstaining proposal with an empty rationale,
+    violating the desired end state that rationale_vs_alternatives is required and
+    undermining convergence quality.
+  recommendation: 'After schema validation, enforce parser-level semantic checks shared
+    by built-in and override schemas: rationale_vs_alternatives must be a non-empty
+    string in all cases, and non-abstaining proposals must have non-null selected_target
+    and deliverable_scope.'
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The core mode switch and new proposal template/schema pairs
+  are present, but proposal-mode provenance and parser-level invariant enforcement
+  are incomplete enough to keep the implementation short of the sealed review goal.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: ae5bbb3f319441e0145bd6dd2369669cd001ca7fd72306e5ff0f3084219b7ddf
+  output_sha256: 2b753406184b7178b975316df763161cddfaee553d7e65e9de782c854af4b358
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: fff079d61f9699cdb3f7b7b42e9db795547f4b8ad9fe56d632b6fb7279520ddc
+  scope_signature: 6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6
+  review_target_path: consensus-state/active/iteration-0028-codex-proposal-mode/review-packet.yaml
+  review_target_hash: d70bebad7fb8b70a0b14d7e21f16962c690eef411eca9bb7282fb3deff9ff28a
+sealed_at_utc: '2026-05-13T13:42:37Z'
+packet_sha256: a51b35da098fc503d24a314fe965e01de05f56171f465df5b980c1b8be73bd17

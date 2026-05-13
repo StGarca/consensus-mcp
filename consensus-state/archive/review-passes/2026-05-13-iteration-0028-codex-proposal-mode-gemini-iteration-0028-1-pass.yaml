@@ -1,0 +1,80 @@
+iteration_id: iteration-0028-codex-proposal-mode
+reviewer_id: gemini-iteration-0028-1
+pass_id: gemini-iteration-0028-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: blocking
+  summary: Codex dispatcher will fail in proposal mode due to incorrect output parser.
+  citation: consensus_mcp/_dispatch_codex.py:1379
+  risk: The new '--mode proposal' feature for the codex dispatcher is non-functional.
+    Any attempt to use it will result in a fatal `CodexOutputParseError` because the
+    script calls `_parse_codex_output`, which is hardcoded to validate review-shaped
+    JSON output and will fail on proposal-shaped JSON.
+  recommendation: Implement a new parsing function (e.g., `_parse_codex_proposal_output`)
+    that validates against the `codex_proposal_schema.json` structure. In the `main`
+    function, conditionally call either `_parse_codex_output` or the new proposal
+    parser based on the value of `ns.mode`. The sealed packet structure may also need
+    to be adapted for proposal outputs.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+- id: gemini-rev-002
+  severity: blocking
+  summary: Gemini dispatcher will fail in proposal mode due to incorrect output parser.
+  citation: consensus_mcp/_dispatch_gemini.py:917
+  risk: The new '--mode proposal' feature for the gemini dispatcher is non-functional.
+    Any attempt to use it will result in a fatal `GeminiOutputParseError` because
+    the script calls `_invoke_gemini_with_retry`, which in turn calls `_parse_gemini_output`.
+    This parser is hardcoded for review-shaped JSON and will fail on proposal-shaped
+    JSON.
+  recommendation: Implement a new parsing function (e.g., `_parse_gemini_proposal_output`)
+    that validates against the `gemini_proposal_schema.json` structure. In the `main`
+    function, create conditional logic that calls the appropriate parser (`_parse_gemini_output`
+    or the new proposal parser) based on `ns.mode`.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+- id: gemini-rev-003
+  severity: medium
+  summary: Test for Gemini proposal schema provides incomplete validation of required
+    fields.
+  citation: consensus_mcp/tests/test_dispatch_gemini_proposal_mode.py:32
+  risk: The test `test_gemini_proposal_schema_is_valid_json` only verifies a subset
+    of the required fields, missing `risks` and `estimated_complexity`. This reduces
+    test coverage and could allow future schema regressions to go unnoticed, potentially
+    causing validation failures at runtime if the schema is inadvertently changed.
+  recommendation: Update the assertion in `test_gemini_proposal_schema_is_valid_json`
+    to check for the full set of required fields from `gemini_proposal_schema.json`,
+    mirroring the more complete check in the corresponding codex test.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+goal_satisfied: false
+goal_satisfied_rationale: The goal is not satisfied. While the new templates, schemas,
+  and tests are present, the core implementation in both the codex and gemini dispatchers
+  is critically flawed. The dispatchers do not use a separate parser for the new proposal
+  mode, causing them to unconditionally use the review-mode parsers, which will fail
+  every time `mode='proposal'` is used. This makes the primary feature of this change
+  non-functional.
+blocking_objections:
+- gemini-rev-001
+- gemini-rev-002
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 6e21cd23f9f00d0919284ef297673fae851e6a8bda2de3494d077c63fad2b238
+  output_sha256: ad21bc058f74ce2c9a00f71b45ae2801cd5dc09651f9d224a475394779072ed9
+  goal_packet_sha256: cfeef4f66deb2c062df6e1f2bb6b68452cdc4a35f737e9d01d7f46a59ae77988
+  scope_signature: 6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6
+  review_target_path: consensus-state/active/iteration-0028-codex-proposal-mode/review-packet.yaml
+  review_target_hash: 5cd6fb3a43e32eb1c849211994a92e3e8edfb653b6093d292ed75174178a9c68
+  adapter: gemini
+sealed_at_utc: '2026-05-13T13:16:25Z'
+packet_sha256: fd1fd0ed8d5ff084c5f7f2d1a966e0e82640b3be5bbf91fe306107cfc59521b9
