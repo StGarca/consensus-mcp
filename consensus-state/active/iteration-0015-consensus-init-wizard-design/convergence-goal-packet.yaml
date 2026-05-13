@@ -1,0 +1,81 @@
+schema_version: 1
+pilot_id: iteration-0015-consensus-init-wizard-design
+goal:
+  summary: "CONVERGENCE PHASE round 1 — all three blind proposals are now revealed. Propose the converged plan: pick one proposal as best, or synthesize across the three highlighting which elements come from where."
+  desired_end_state: |
+    Emit ONE finding with severity:low. The recommendation field must contain
+    a complete convergence proposal structured as:
+
+    **Part 1 — Consensus points**: list dimensions/decisions where all THREE
+    blind proposals (claude, codex, gemini — embedded in the review-packet)
+    agree. These are settled; no further deliberation needed.
+
+    **Part 2 — Divergence points**: for each dimension where the three
+    proposals differ, summarize the alternatives (which contributor proposed
+    what) and propose the resolution you favor for the converged plan, with
+    rationale. Don't just enumerate — pick.
+
+    **Part 3 — Final converged design**: write out the complete plan as a
+    coherent design doc covering Sections A-E from the original challenge.
+    Don't make the orchestrator reconstruct it from references — incorporate
+    your selected resolutions into a single readable design. Use Markdown
+    formatting inside the JSON string.
+
+    `patch_proposal` must be null — iter-0016+ implements after convergence.
+
+    PROTOCOL: you have full visibility into all three blind proposals now
+    (claude-proposal.yaml + codex-review.yaml + gemini-review.yaml in the
+    review-packet). You may incorporate elements from any of them. You are
+    not voting for a "winner" — you're picking the best resolution for each
+    decision and writing the unified plan that incorporates the strengths.
+
+    If you find a divergence point you genuinely cannot decide on your own,
+    flag it in Part 2 with `STILL_OPEN:` prefix and recommend it be surfaced
+    to the human operator. Convergence does NOT require eliminating all
+    disagreement — it requires settling enough to proceed.
+
+    Use a `<prefix>-rev-001` finding ID matching your adapter
+    (codex → codex-rev-001; gemini → gemini-rev-001).
+  non_goals:
+    - implement code (iter-0016+ after convergence)
+    - score / rank the contributors (the goal is convergence, not competition)
+    - introduce wholly new design elements not in any blind proposal (stay grounded in what was proposed; STILL_OPEN flagging is the right channel for new concerns)
+    - propose patches (patch_proposal must be null)
+allowed_files:
+  - docs/design-consults/iter-0015-consensus-init-design-challenge.md
+  - consensus-state/active/iteration-0015-consensus-init-wizard-design/claude-proposal.yaml
+  - consensus-state/active/iteration-0015-consensus-init-wizard-design/codex-review.yaml
+  - consensus-state/active/iteration-0015-consensus-init-wizard-design/gemini-review.yaml
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - consensus-state/state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - pyproject.toml
+  - .github/
+  - .gitignore
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: contributor emits one low-severity convergence finding
+    check: 'true'
+  - id: A2
+    description: no patch_proposal (design phase)
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T04:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 421f28a754549b851b1694f0124d4d706435f9831b223a9bac684adb4f209d74
