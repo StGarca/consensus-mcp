@@ -59,3 +59,18 @@ audit_log:
     - prompt_template (substituted by _build_prompt)
     - review_target (path passed via --review-target; may be unspecified)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T02:20:22Z'
+  event_id: 2026-05-13T02:20:22Z_review_returned_and_sealed_codex-iteration-0013-snapshot-import-implementation-8
+  actor: codex-iteration-0013-snapshot-import-implementation-8
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0013-snapshot-import-implementation-codex-iteration-0013-snapshot-import-implementation-8-pass.yaml
+  sha256: 092436722963b4a9980366da12d49165ddc37d8a97667d50f17842b1956465c6
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
