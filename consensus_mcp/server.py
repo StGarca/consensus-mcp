@@ -163,6 +163,9 @@ gate_evaluate_production_with_scope_match.register(registry)
 from consensus_mcp.tools import reviewer_dispatch_codex  # noqa: E402
 reviewer_dispatch_codex.register(registry)
 
+from consensus_mcp.tools import reviewer_dispatch_gemini  # noqa: E402
+reviewer_dispatch_gemini.register(registry)
+
 from consensus_mcp.tools import loop_run_goal  # noqa: E402
 loop_run_goal.register(registry)
 
