@@ -7,6 +7,12 @@ Cache invalidation: cache stores (ledger_sha256, yaml_text, mtime_ns). On read,
 check stat(disposition-ledger.yaml).st_mtime_ns; if changed since cached,
 re-read. Else serve from cache.
 
+iter-0026 (Phase B step 1 per iter-0024 converged plan): migrated from
+module-level REPO_ROOT capture to lazy `_paths.state_root()` resolution.
+Path resolution now reads env state on every call, so test fixtures using
+`monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(tmp_path))` work without
+needing iter-0019's `_isolate_archive_root` monkeypatch for this tool.
+
 Per design spec:
 - callable_by: any (read-only)
 - inputs: {} (no parameters)
@@ -20,25 +26,16 @@ from pathlib import Path
 
 import yaml
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
+from consensus_mcp._paths import state_root
 
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
+
+def _ledger_path() -> Path:
+    """Resolve <state_root>/state/disposition-ledger.yaml lazily.
+
+    Honors CONSENSUS_MCP_STATE_ROOT / CONSENSUS_MCP_REPO_ROOT at call time.
     """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+    return state_root() / "state" / "disposition-ledger.yaml"
 
-
-REPO_ROOT = _resolve_repo_root()
-LEDGER_PATH = REPO_ROOT / "consensus-state" / "state" / "disposition-ledger.yaml"
 
 SCHEMA = {
     "name": "state.read_decision_ledger",
@@ -78,15 +75,16 @@ def handle() -> dict:
 
     Called via handler(**{}) from server dispatch, or directly as handle().
     """
+    ledger_path = _ledger_path()
     try:
-        current_mtime_ns = LEDGER_PATH.stat().st_mtime_ns
+        current_mtime_ns = ledger_path.stat().st_mtime_ns
     except FileNotFoundError:
-        return {"error": f"ledger not found: {LEDGER_PATH}"}
+        return {"error": f"ledger not found: {ledger_path}"}
 
     if _CACHE["mtime_ns"] == current_mtime_ns and _CACHE["sha256"] is not None:
         return {"ledger_yaml": _CACHE["yaml_text"], "ledger_sha256": _CACHE["sha256"]}
 
-    yaml_text, sha = _canonical_sha256(LEDGER_PATH)
+    yaml_text, sha = _canonical_sha256(ledger_path)
     _CACHE["mtime_ns"] = current_mtime_ns
     _CACHE["yaml_text"] = yaml_text
     _CACHE["sha256"] = sha
