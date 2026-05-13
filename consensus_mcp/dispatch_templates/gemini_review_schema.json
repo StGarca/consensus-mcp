@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gemini review packet (auto-dispatch, v1.14.0 review-only)",
+  "type": "object",
+  "required": ["findings", "goal_satisfied", "goal_satisfied_rationale", "blocking_objections"],
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "summary", "citation", "risk", "recommendation"],
+        "additionalProperties": false,
+        "properties": {
+          "id":             {"type": "string", "pattern": "^gemini-rev-\\d+$"},
+          "severity":       {"type": "string", "enum": ["low", "medium", "high", "blocking", "critical"]},
+          "summary":        {"type": "string", "minLength": 1},
+          "citation":       {"type": "string"},
+          "risk":           {"type": "string"},
+          "recommendation": {"type": "string"},
+          "patch_proposal": {"type": "null", "description": "MUST be null in v1.14.0 (review-only); patch authoring deferred"},
+          "patch_not_proposed_reason": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "goal_satisfied":            {"type": "boolean"},
+    "goal_satisfied_rationale":  {"type": "string", "minLength": 1},
+    "blocking_objections":       {"type": "array", "items": {"type": "string", "pattern": "^gemini-rev-\\d+$"}}
+  }
+}
