@@ -952,8 +952,12 @@ def main(argv: list[str] | None = None) -> int:
         return ev
 
     try:
+        # iter-0010 codex-rev-001 (medium): route goal_packet parsing through
+        # the shared _load_goal_packet helper so root-type validation is the
+        # single source of truth across all adapters. text is read separately
+        # because provenance needs the raw bytes for goal_packet_sha256.
         goal_packet_text = goal_packet_path.read_text(encoding="utf-8")
-        goal_packet = yaml.safe_load(goal_packet_text)
+        goal_packet = _load_goal_packet(goal_packet_path)
         template_text = _load_template(template_path)
 
         # review_target_hash is pre-initialized to None outside the try block
