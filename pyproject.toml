@@ -12,6 +12,7 @@ license = {text = "MIT"}
 readme = "README.md"
 dependencies = [
   "pyyaml>=6.0",
+  "jsonschema>=4.0",
 ]
 
 [project.scripts]
