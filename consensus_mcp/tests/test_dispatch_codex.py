@@ -215,6 +215,34 @@ def _scaffold_repo_markers(tmp_path):
     return tmp_path
 
 
+def _isolate_archive_root(tmp_path, monkeypatch):
+    """Redirect module-level paths in review_write_and_seal and audit_append_event
+    to tmp_path so this test does NOT pollute the real
+    consensus-state/archive/review-passes/index.yaml or independence-audit logs.
+
+    Both modules cache REPO_ROOT / ARCHIVE_DIR / INDEX_PATH / ACTIVE_DIR at
+    import time, so setting CONSENSUS_MCP_REPO_ROOT after import has no effect.
+    We monkeypatch the cached module attributes directly.
+
+    Must be called AFTER _scaffold_repo_markers(tmp_path).
+    """
+    from consensus_mcp.tools import review_write_and_seal as rws
+    from consensus_mcp.tools import audit_append_event as aae
+
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+
+    isolated_archive = tmp_path / "consensus-state" / "archive" / "review-passes"
+    isolated_archive.mkdir(parents=True, exist_ok=True)
+    isolated_active = tmp_path / "consensus-state" / "active"
+    isolated_active.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(rws, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(rws, "ARCHIVE_DIR", isolated_archive)
+    monkeypatch.setattr(rws, "INDEX_PATH", isolated_archive / "index.yaml")
+    monkeypatch.setattr(aae, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(aae, "ACTIVE_DIR", isolated_active)
+
+
 def _stage_smoke_goal_packet(tmp_path):
     """v1.10.5: containment refuses any path outside repo_root. Tests that
     use the real-repo SMOKE_GOAL_PACKET fixture but synthesize repo_root in
@@ -526,7 +554,7 @@ def test_main_smoke_with_mocked_codex(monkeypatch, tmp_path):
     iter_dir.mkdir()
 
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     (tmp_path / "consensus-state" / "state").mkdir(parents=True)
 
     rc = _dispatch_codex.main([
@@ -661,7 +689,7 @@ def test_main_smoke_flag_without_env_refuses(monkeypatch, tmp_path):
     iter_dir = tmp_path / "iteration-9999-smoke-refused"
     iter_dir.mkdir()
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     (tmp_path / "consensus-state" / "state").mkdir(parents=True)
 
     rc = _dispatch_codex.main([
@@ -716,7 +744,7 @@ def test_main_smoke_flag_with_env_proceeds(monkeypatch, tmp_path):
     iter_dir = tmp_path / "iteration-9999-smoke-allowed"
     iter_dir.mkdir()
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     (tmp_path / "consensus-state" / "state").mkdir(parents=True)
 
     rc = _dispatch_codex.main([
@@ -763,7 +791,7 @@ def test_main_sealed_packet_embeds_dispatch_provenance(monkeypatch, tmp_path):
     iter_dir = tmp_path / "iteration-9999-h4-provenance"
     iter_dir.mkdir()
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     (tmp_path / "consensus-state" / "state").mkdir(parents=True)
 
     rc = _dispatch_codex.main([
@@ -877,7 +905,7 @@ def test_main_review_target_arg_threaded_through(monkeypatch, tmp_path):
     iter_dir = tmp_path / "iteration-9999-h5-target"
     iter_dir.mkdir()
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     (tmp_path / "consensus-state" / "state").mkdir(parents=True)
 
     rc = _dispatch_codex.main([
@@ -1049,7 +1077,7 @@ def test_parse_codex_output_blocking_invariant_satisfied_passes():
 def test_resolve_repo_root_env_with_markers_returns_path(monkeypatch, tmp_path):
     """F1: env var pointing at a directory WITH markers resolves successfully."""
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     resolved = _dispatch_codex._resolve_repo_root()
     assert resolved == tmp_path.resolve()
@@ -1112,7 +1140,7 @@ def test_dispatch_done_includes_archive_path_and_audit_id(monkeypatch, tmp_path)
 
     monkeypatch.setattr(_dispatch_codex.subprocess, "run", fake_run)
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     iter_dir = tmp_path / "iteration-9999-h2-archive-path"
     iter_dir.mkdir()
@@ -1162,7 +1190,7 @@ def test_dispatch_failed_includes_computed_provenance_when_codex_fails(monkeypat
         ),
     )
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     iter_dir = tmp_path / "iteration-9999-h3-failpath"
     iter_dir.mkdir()
@@ -1782,7 +1810,7 @@ def test_resolve_repo_root_env_set_and_invalid_raises(monkeypatch, tmp_path):
 def test_resolve_repo_root_env_set_and_valid_uses_env(monkeypatch, tmp_path):
     """F5: env var set + valid path -> uses env (unchanged behaviour)."""
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     # Don't chdir; ensure resolution happens via env, not cwd.
     resolved = _dispatch_codex._resolve_repo_root()
     assert resolved == tmp_path.resolve()
@@ -1930,7 +1958,7 @@ def test_dispatch_failed_carries_review_target_fields_when_target_was_read(monke
         ),
     )
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     iter_dir = tmp_path / "iteration-9999-v1105-failwithtarget"
     iter_dir.mkdir()
@@ -1971,7 +1999,7 @@ def test_outside_repo_review_target_via_main_emits_structured_failure(monkeypatc
     dispatch_failed event in dispatch-log, NOT a raw Python traceback.
     """
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     iter_dir = tmp_path / "iteration-9999-v1033-outside"
     iter_dir.mkdir()
@@ -2011,7 +2039,7 @@ def test_mkdir_oserror_during_preflight_emits_structured_failure(monkeypatch, tm
     event. Previously only OutsideRepoPathError was caught.
     """
     _scaffold_repo_markers(tmp_path)
-    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    _isolate_archive_root(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     (tmp_path / "consensus-state" / "state").mkdir(parents=True, exist_ok=True)
 
