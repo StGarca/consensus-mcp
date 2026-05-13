@@ -1,0 +1,49 @@
+iteration_id: iteration-0040-consensus-init-claude-bootstrap-impl
+reviewer_id: gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1
+pass_id: gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: blocking
+  summary: Review cannot be performed because the review target is inaccessible.
+  citation: goal_packet.yaml
+  risk: The goal of the iteration cannot be verified. The changes are un-reviewed,
+    and could contain any number of defects, security vulnerabilities, or regressions.
+    The agent was instructed to use `review-target.diff` as the canonical source,
+    but file access to it is blocked by configuration, and the content was not embedded
+    in the goal packet as a fallback.
+  recommendation: Ensure the agent's file access policies allow reading the `review-target.diff`
+    file from the `consensus-state` directory, or alternatively, embed the diff content
+    directly within the goal packet for review.
+  patch_proposal: null
+  patch_not_proposed_reason: Configuration or process issue, not a code change.
+goal_satisfied: false
+goal_satisfied_rationale: The review could not be conducted because the `review-target.diff`
+  file, which is the authoritative source for the review, was inaccessible due to
+  file access restrictions. The content was also not embedded in the goal packet.
+blocking_objections:
+- gemini-rev-001
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 3078059116eabd906393b32c134dfb0dd3fc24ebf65c35894f78c87ea26a5f9f
+  output_sha256: ee9232f620d7fcf213a5bd11cfe94c1db06b63b3b372a003a6b08e49a6d764c4
+  goal_packet_sha256: eeed65020f55d3c167e79df03810e8f1a12ff887ce41b485e1c3cc333b8a3151
+  scope_signature: 4e1a266843749bbd9b67a8121a4e34c18f4bec3dae7534fe9be0e8a3a4a8f611
+  review_target_path: consensus-state/active/iteration-0040-consensus-init-claude-bootstrap-impl/review-target.diff
+  review_target_hash: 3eed8d0feaaef76d09729369550789445578ca32e5a98c096fa671f6e5395174
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-13T18:29:10Z'
+packet_sha256: e653de524da8958a6a3ba8debee914b02c97769f3909ed100c0787d188c377c5

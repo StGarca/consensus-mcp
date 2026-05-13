@@ -851,4 +851,46 @@ passes:
   packet_sha256: 0961177484613221efe372d42e36856471c26fc2fd5857d4bfeb7fff6a7bd025
   iteration_id: iteration-0035-phase-b-batch-low-impact
   reviewer_id: codex-iteration-0035-2
-last_updated_utc: '2026-05-13T16:46:02Z'
+- id: codex-iteration-0039-consensus-init-discoverability-design-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0039-consensus-init-discoverability-design-codex-iteration-0039-consensus-init-discoverability-design-1-pass.yaml
+  sealed_at: '2026-05-13T18:04:11Z'
+  packet_sha256: 5e9c31590fc1fee5fe8cd58da02f3cbdeaf25dd3bc5b411ef98e1baa4b69534f
+  iteration_id: iteration-0039-consensus-init-discoverability-design
+  reviewer_id: codex-iteration-0039-consensus-init-discoverability-design-1
+- id: gemini-iteration-0039-consensus-init-discoverability-design-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0039-consensus-init-discoverability-design-gemini-iteration-0039-consensus-init-discoverability-design-1-pass.yaml
+  sealed_at: '2026-05-13T18:09:07Z'
+  packet_sha256: 2b0d0a2888985b234f7209936f9cfd9dbfd128c13d694eedf6664dc97d77f111
+  iteration_id: iteration-0039-consensus-init-discoverability-design
+  reviewer_id: gemini-iteration-0039-consensus-init-discoverability-design-1
+- id: codex-iteration-0039-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0039-consensus-init-discoverability-design-codex-iteration-0039-2-pass.yaml
+  sealed_at: '2026-05-13T18:11:13Z'
+  packet_sha256: b4ccf18f37be2cbea814a3f53195ed03c6304f8724eba92b13546989eccefee7
+  iteration_id: iteration-0039-consensus-init-discoverability-design
+  reviewer_id: codex-iteration-0039-2
+- id: codex-iteration-0040-consensus-init-claude-bootstrap-impl-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-codex-iteration-0040-consensus-init-claude-bootstrap-impl-1-pass.yaml
+  sealed_at: '2026-05-13T18:22:48Z'
+  packet_sha256: c41b51a47ba50959e5377f85f28b8a57eecee347dc3ce2138720f016d06bb2c5
+  iteration_id: iteration-0040-consensus-init-claude-bootstrap-impl
+  reviewer_id: codex-iteration-0040-consensus-init-claude-bootstrap-impl-1
+- id: gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1-pass.yaml
+  sealed_at: '2026-05-13T18:29:10Z'
+  packet_sha256: e653de524da8958a6a3ba8debee914b02c97769f3909ed100c0787d188c377c5
+  iteration_id: iteration-0040-consensus-init-claude-bootstrap-impl
+  reviewer_id: gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1
+- id: codex-iteration-0040-3-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-codex-iteration-0040-3-pass.yaml
+  sealed_at: '2026-05-13T18:30:48Z'
+  packet_sha256: 3fb52ebe1f5035d3cb268070fc635fd47213086fb60b0957ec334759d0c81a91
+  iteration_id: iteration-0040-consensus-init-claude-bootstrap-impl
+  reviewer_id: codex-iteration-0040-3
+- id: gemini-iteration-0040-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-gemini-iteration-0040-2-pass.yaml
+  sealed_at: '2026-05-13T18:31:03Z'
+  packet_sha256: 84443e15d864dd7d9704a5fe18c49ac8d8a83e000e4c1851d02511187f74eb7f
+  iteration_id: iteration-0040-consensus-init-claude-bootstrap-impl
+  reviewer_id: gemini-iteration-0040-2
+last_updated_utc: '2026-05-13T18:31:03Z'

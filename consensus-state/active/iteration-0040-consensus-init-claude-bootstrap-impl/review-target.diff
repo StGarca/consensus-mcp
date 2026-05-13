@@ -1,0 +1,603 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 9fe5b0c..cadd5ca 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -164,6 +164,49 @@ on first pass.
+   5 `setattr` calls (now unsafe against `__getattr__` attributes)
+   are gone.
+ 
++**Claude Code bootstrap pack (iter-0039 design → iter-0040 implementation):**
++
++- iter-0039 ran a workflow #4 consult (claude + codex + gemini, all
++  proposal-mode, strict-majority convergence) on the discoverability
++  gap reported by the operator after iter-0033: in a fresh project,
++  typing "consensus init" into Claude Code chat returned "I don't
++  recognize this command" because the pipx install registers a
++  shell binary (`consensus-init`) not a Claude Code surface. All
++  three contributors converged on shipping a Claude-Code-native entry
++  point that wraps the existing shell binary.
++- iter-0040 implemented the converged plan. New shipped assets:
++  - `consensus_mcp/claude_extensions/skills/consensus/SKILL.md`
++    triggers on "consensus init", "bootstrap consensus", "set up
++    consensus" and runs the shell binary via Bash.
++  - `consensus_mcp/claude_extensions/commands/consensus-init.md`
++    gives explicit `/consensus-init` slash-command discoverability.
++- New `consensus-init --install-claude-code` flag copies both into
++  `$CLAUDE_HOME` (default `~/.claude`) using a managed idempotent
++  pattern: byte-identical = no-op; divergent = skip-with-warning;
++  `--force` overwrites. Honors `CLAUDE_HOME` env override for
++  non-default installs (CI, devcontainers, multi-user systems).
++- New `consensus-init --from-claude-code` flag prints contextual
++  reload guidance after a successful init ("restart Claude Code or
++  run `/mcp` to activate the consensus-mcp server"). Used by both
++  the skill and slash command bodies; deterministic so we don't
++  rely on env-var sniffing (codex's preferred convergence
++  resolution per iter-0039 Q4).
++- Bonus from iter-0039 Q6: added `consensus` console-script alias
++  to pyproject.toml so `consensus init` (with a SPACE) at the
++  shell works alongside the hyphenated `consensus-init`. The
++  `init` subcommand is stripped from argv[0] inside `main()`;
++  everything else flows through the same argparse setup.
++- Side-effect hot-fix landed in the same release: the proposal-mode
++  validation path in `_dispatch_codex.py` / `_dispatch_gemini.py`
++  did `try: import jsonschema; ...; except jsonschema.ValidationError`
++  — when the import failed (because `jsonschema` wasn't a declared
++  dep), the except clause's reference to `jsonschema.ValidationError`
++  surfaced as `UnboundLocalError`, masking the real problem and
++  blocking iter-0039 from running in the pipx venv. Added
++  `jsonschema>=4.0` to deps + split the try/except so `ImportError`
++  surfaces with actionable wording. (workflow #3 hot-patch because
++  it blocked iter-0039 progress.)
++
+ **Phase B closed.** All 10 tool migrations landed (iter-0026..0037).
+ No tool now holds a cached module-level `REPO_ROOT`/`ACTIVE_DIR`/
+ `ARCHIVE_DIR`/`INDEX_PATH`/etc. — every path read is lazy and honors
+diff --git a/README.md b/README.md
+index 1bdbd19..8978e26 100644
+--- a/README.md
++++ b/README.md
+@@ -38,10 +38,17 @@ The end result: changes that pass three independent model families aren't "looks
+ # Install via pipx — isolated venv, console scripts on PATH, no
+ # polluting individual project venvs:
+ pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.14.0
++
++# (Optional but recommended) install the Claude Code bootstrap pack —
++# a tiny skill + slash command so you can run `consensus init` from
++# inside Claude Code chat in any project:
++consensus-init --install-claude-code
+ ```
+ 
+ (If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.14.0` — but pipx is the recommended pattern for cross-project use.)
+ 
++The `--install-claude-code` step is one-time per machine. It copies a small skill (`~/.claude/skills/consensus/SKILL.md`) and a slash command (`~/.claude/commands/consensus-init.md`) into your Claude Code config. Both delegate to the same `consensus-init` shell binary; they just make it discoverable from inside Claude Code. Honors `CLAUDE_HOME` env var for non-default locations. Idempotent on rerun; pass `--force` to overwrite user-edited copies.
++
+ **Then bootstrap any project with a single command:**
+ 
+ ```bash
+@@ -55,11 +62,21 @@ cd /path/to/your-project
+ # 2. Bootstrap the project — interactive prompts for all 9 governance
+ #    dimensions, and writes BOTH .consensus/config.yaml AND .mcp.json
+ #    so Claude Code auto-connects to consensus-mcp on next launch:
+-consensus-init
++consensus-init                                  # from the shell, or
++consensus init                                  # `consensus init` with a space also works
+ # Or non-interactive with sensible defaults:
+ consensus-init --non-interactive --accept-defaults
+ ```
+ 
++**Or — once `--install-claude-code` has been run — bootstrap from inside Claude Code itself:**
++
++Type one of the following in the Claude Code chat at the project root:
++
++- `consensus init` — the bundled skill recognizes this phrase and runs the shell binary for you
++- `/consensus-init` — the bundled slash command does the same thing more explicitly
++
++Both surface paths invoke `consensus-init --from-claude-code`, which prints Claude-Code-specific restart instructions after the bootstrap completes. The MCP server activates only after Claude Code reloads (Ctrl-C in the project terminal then `claude code` again, or `/mcp` reload if your build supports it).
++
+ That's it. `consensus-init` produces three artifacts:
+ 
+ - `.consensus/config.yaml` — governance choices (workflow, contributor pool, convergence rule, etc.)
+@@ -73,6 +90,8 @@ Then open Claude Code at that project. The consensus-mcp tools (`consensus.run_i
+ - `--no-mcp-json` — skip the `.mcp.json` write (you'll manage it manually)
+ - `--mcp-command STR` — override the command written to `.mcp.json` (e.g., `"py -3.11 -m consensus_mcp.server"` for dev installs)
+ - `--mcp-force` — replace existing consensus-mcp entry on divergence (other MCP servers preserved)
++- `--install-claude-code` — copy the bootstrap skill + slash command into `$CLAUDE_HOME` or `~/.claude` (idempotent; pair with `--force` to overwrite user-edited copies)
++- `--from-claude-code` — caller is a Claude Code skill/command; print contextual restart guidance
+ - `--reconfigure` — re-prompt with existing config as defaults; show unified diff before writing
+ - `--check` — validate existing `.consensus/config.yaml` and exit
+ - `--print-defaults` — emit the default config YAML to stdout
+diff --git a/consensus_mcp/_init_wizard.py b/consensus_mcp/_init_wizard.py
+index b7807c5..1c11fc6 100644
+--- a/consensus_mcp/_init_wizard.py
++++ b/consensus_mcp/_init_wizard.py
+@@ -102,6 +102,79 @@ def _detect_repo_root(start: Path | None = None) -> Path:
+     return cwd
+ 
+ 
++# --- iter-0040: claude-code bootstrap pack helpers per iter-0039 converged plan ---
++
++
++def _resolve_claude_home() -> Path:
++    """Resolve ~/.claude (or override) for installing the bootstrap skill+command.
++
++    Precedence (per iter-0039 converged plan Q2):
++      1. `CLAUDE_HOME` env var (operator override; supports non-standard installs).
++      2. `~/.claude` resolved via Path.home() (POSIX + Windows USERPROFILE/HOME).
++    """
++    import os as _os
++    override = _os.environ.get("CLAUDE_HOME")
++    if override:
++        return Path(override)
++    return Path.home() / ".claude"
++
++
++def _claude_extensions_source_root() -> Path:
++    """Return the in-package source directory for claude_extensions assets."""
++    return Path(__file__).resolve().parent / "claude_extensions"
++
++
++_CLAUDE_EXTENSION_FILES = (
++    ("skills/consensus/SKILL.md", "skills/consensus/SKILL.md"),
++    ("commands/consensus-init.md", "commands/consensus-init.md"),
++)
++
++
++def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
++    """Copy the shipped skill + command files into the user's CLAUDE_HOME.
++
++    Idempotency contract (per iter-0039 converged plan Q2):
++      - If the destination file is byte-identical to the source, no-op.
++      - If the destination file diverges from the source AND force=False,
++        skip with a warning printed to stderr (user-edited content preserved).
++      - If force=True, overwrite divergent destinations.
++      - Missing destination → write fresh.
++
++    Returns a list of human-readable status lines (also printed by the caller).
++    """
++    source_root = _claude_extensions_source_root()
++    if not source_root.is_dir():
++        return [f"WARN: claude_extensions source missing at {source_root}; "
++                f"reinstall consensus-mcp to repair"]
++
++    statuses: list[str] = []
++    for rel_src, rel_dst in _CLAUDE_EXTENSION_FILES:
++        src = source_root / rel_src
++        dst = claude_home / rel_dst
++        if not src.exists():
++            statuses.append(f"WARN: source asset {src} missing; skipped")
++            continue
++
++        src_text = src.read_text(encoding="utf-8")
++        if dst.exists():
++            existing_text = dst.read_text(encoding="utf-8")
++            if existing_text == src_text:
++                statuses.append(f"unchanged: {dst}")
++                continue
++            if not force:
++                statuses.append(
++                    f"SKIP: {dst} diverges from shipped content; pass --force to overwrite"
++                )
++                continue
++            # force=True: fall through to write.
++
++        dst.parent.mkdir(parents=True, exist_ok=True)
++        dst.write_text(src_text, encoding="utf-8")
++        statuses.append(f"wrote: {dst}")
++
++    return statuses
++
++
+ # --- iter-0031: .mcp.json bootstrap helpers per iter-0030 converged plan ---
+ 
+ 
+@@ -701,10 +774,42 @@ def cmd_init(args) -> int:
+             print(f"WARN: unknown mcp-json status {status!r}", file=sys.stderr)
+     else:
+         print(".mcp.json write skipped (--no-mcp-json)")
++
++    # iter-0040: optional install of Claude Code skill + slash command pack.
++    if getattr(args, "install_claude_code", False):
++        claude_home = _resolve_claude_home()
++        for line in _install_claude_extensions(claude_home, force=args.force):
++            print(line)
++
++    # iter-0040: when invoked from inside a Claude Code session, print
++    # contextual restart guidance so the user knows what to do next.
++    if getattr(args, "from_claude_code", False):
++        print()
++        print(
++            "Detected --from-claude-code: Claude Code must reload to "
++            "activate the consensus-mcp server. Either restart Claude "
++            "Code in this project (Ctrl-C, then `claude code`), or run "
++            "`/mcp` to reload MCP servers if your build supports it."
++        )
++
+     return 0
+ 
+ 
+ def main(argv: list[str] | None = None) -> int:
++    # iter-0040 (per iter-0039 converged plan Q6 bonus): the package also ships
++    # a `consensus` console-script alias. When invoked as `consensus init ...`,
++    # argv[0] is the literal subcommand "init". Strip it so argparse sees the
++    # same arguments as `consensus-init ...`. Any other leading token is left
++    # in place (treated as an unrecognized argument by argparse, which
++    # produces the expected usage error).
++    if argv is None:
++        raw = sys.argv[1:]
++    else:
++        raw = list(argv)
++    if raw and raw[0] == "init":
++        raw = raw[1:]
++    argv = raw
++
+     parser = argparse.ArgumentParser(
+         prog="consensus init",
+         description="Initialize .consensus/config.yaml for cross-AI workflow",
+@@ -732,6 +837,17 @@ def main(argv: list[str] | None = None) -> int:
+                               "even when it differs from the desired config. "
+                               "Does NOT overwrite other servers in mcpServers."))
+ 
++    # iter-0040: Claude Code bootstrap pack flags (per iter-0039 converged plan).
++    parser.add_argument("--install-claude-code", action="store_true",
++                        help=("copy shipped skill + slash-command into "
++                              "$CLAUDE_HOME or ~/.claude so Claude Code can "
++                              "trigger consensus-init from chat. Idempotent; "
++                              "use --force to overwrite user-edited content."))
++    parser.add_argument("--from-claude-code", action="store_true",
++                        help=("the caller is a Claude Code skill / slash "
++                              "command; print contextual restart guidance "
++                              "after init."))
++
+     parser.add_argument("--workflow", default=None,
+                         choices=["3", "4", "post-review", "propose-converge", "advisory"],
+                         help="workflow mode")
+diff --git a/consensus_mcp/claude_extensions/commands/consensus-init.md b/consensus_mcp/claude_extensions/commands/consensus-init.md
+new file mode 100644
+index 0000000..7ef429e
+--- /dev/null
++++ b/consensus_mcp/claude_extensions/commands/consensus-init.md
+@@ -0,0 +1,18 @@
++---
++description: Bootstrap consensus-mcp in this project (writes .mcp.json + .consensus/config.yaml via the consensus-init shell binary)
++---
++
++Run `consensus-init --from-claude-code` via Bash from the current working
++directory. Surface the binary's stdout/stderr verbatim — it already prints
++the correct next-step guidance, including the restart instructions for
++Claude Code.
++
++If the binary is not on PATH, tell the user to run
++`pipx install consensus-mcp` once globally and retry. If the bootstrap
++succeeds, confirm the binary's restart message to the user and stop —
++the consensus-mcp MCP tools will not be available until Claude Code
++reloads.
++
++Do not reimplement any of `consensus-init`'s logic. The binary handles
++`.mcp.json` writing, `.consensus/config.yaml` creation, `.gitignore`
++managed block, and Claude-Code-specific restart messaging.
+diff --git a/consensus_mcp/claude_extensions/skills/consensus/SKILL.md b/consensus_mcp/claude_extensions/skills/consensus/SKILL.md
+new file mode 100644
+index 0000000..8723437
+--- /dev/null
++++ b/consensus_mcp/claude_extensions/skills/consensus/SKILL.md
+@@ -0,0 +1,59 @@
++---
++name: consensus
++description: Bootstrap or check consensus-mcp in this project. Trigger when the user says "consensus init", "bootstrap consensus", "set up consensus", "initialize consensus-mcp", or asks to install/enable the cross-AI consensus workflow in their current project.
++---
++
++# Consensus-mcp project bootstrap
++
++This skill is the entry point for setting up the **consensus-mcp** cross-AI
++consensus workflow in a project. It is invoked when the user expresses intent
++to initialize consensus-mcp — typically by typing phrases like
++"consensus init", "set up consensus", or "bootstrap consensus" without a
++leading slash.
++
++## What it does
++
++1. Run the shell binary `consensus-init --from-claude-code` (installed by
++   `pipx install consensus-mcp`).
++2. Surface the binary's stdout/stderr verbatim — `consensus-init` already
++   prints the right next-step guidance, so don't paraphrase or summarize.
++3. If `consensus-init` fails because the binary is not on PATH, tell the
++   user to run `pipx install consensus-mcp` once globally.
++4. After a successful bootstrap, point the user at the restart step
++   (Claude Code must reload to pick up the new MCP server). The CLI output
++   already says this; just confirm.
++
++## How to invoke
++
++Use Bash to run `consensus-init --from-claude-code` from the current
++working directory. The binary detects the project root automatically
++(git rev-parse → strong markers → cwd, per iter-0031).
++
++## What NOT to do
++
++- Don't reimplement any of `consensus-init`'s logic. It writes
++  `.consensus/config.yaml`, `.mcp.json`, and a `.gitignore` managed
++  block — let the binary handle all of that.
++- Don't paraphrase the binary's output. Operators rely on the exact
++  next-step text from the CLI.
++- Don't run if the user is asking a conceptual question
++  ("what is consensus-mcp?", "how does consensus work?") — that is
++  not a bootstrap intent.
++
++## Expected output flow
++
++```text
++$ consensus-init --from-claude-code
++.mcp.json written: <project-root>/.mcp.json
++.consensus/config.yaml written: <project-root>/.consensus/config.yaml
++.gitignore managed block added.
++
++Detected --from-claude-code: Claude Code must reload to activate the
++consensus-mcp server. Either restart Claude Code in this project
++(Ctrl-C, then `claude code`), or run `/mcp` to reload MCP servers
++if your build supports it.
++```
++
++After running, confirm the message to the user and stop. Do not
++attempt to invoke any consensus-mcp MCP tool in the same session —
++they won't be available until Claude Code reloads.
+diff --git a/consensus_mcp/tests/test_init_wizard_install_claude_code.py b/consensus_mcp/tests/test_init_wizard_install_claude_code.py
+new file mode 100644
+index 0000000..5191ca8
+--- /dev/null
++++ b/consensus_mcp/tests/test_init_wizard_install_claude_code.py
+@@ -0,0 +1,232 @@
++"""iter-0040 — tests for consensus-init --install-claude-code + --from-claude-code.
++
++Per iter-0039 converged-plan.yaml acceptance gates A1-A7.
++
++A1: package ships consensus_mcp/claude_extensions/{skills,commands}/
++A2: --install-claude-code copies into HOME idempotently
++A3: CLAUDE_HOME env override redirects install destination
++A4: --from-claude-code prints Claude-Code-specific restart message
++A5: `consensus init` (space form) routes to the same entry point
++A6: skill/command content avoids consensus-mcp-internal jargon
++A7: README/CHANGELOG covered by separate manual review
++"""
++from __future__ import annotations
++
++import os
++import sys
++from pathlib import Path
++
++import pytest
++
++from consensus_mcp import _init_wizard as wiz
++
++
++# ---------- A1: package-data presence ----------
++
++def test_claude_extensions_skill_md_ships_in_package():
++    """A1: SKILL.md must exist next to the module so package_data picks it up."""
++    pkg_root = Path(wiz.__file__).resolve().parent
++    skill = pkg_root / "claude_extensions" / "skills" / "consensus" / "SKILL.md"
++    assert skill.exists(), f"missing packaged SKILL.md at {skill}"
++    text = skill.read_text(encoding="utf-8")
++    assert text.startswith("---"), "SKILL.md must start with YAML frontmatter"
++    assert "name: consensus" in text
++    assert "description:" in text
++
++
++def test_claude_extensions_command_md_ships_in_package():
++    """A1: consensus-init.md command file must ship with the package."""
++    pkg_root = Path(wiz.__file__).resolve().parent
++    cmd = pkg_root / "claude_extensions" / "commands" / "consensus-init.md"
++    assert cmd.exists(), f"missing packaged command at {cmd}"
++    text = cmd.read_text(encoding="utf-8")
++    assert text.startswith("---"), "command must start with YAML frontmatter"
++    assert "description:" in text
++
++
++# ---------- A2: --install-claude-code copies idempotently ----------
++
++def test_install_claude_code_copies_skill_and_command(tmp_path, monkeypatch):
++    """A2: --install-claude-code copies SKILL.md + command MD into CLAUDE_HOME."""
++    fake_home = tmp_path / ".claude"
++    monkeypatch.setenv("CLAUDE_HOME", str(fake_home))
++    monkeypatch.chdir(tmp_path)
++
++    rc = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++        "--install-claude-code",
++        "--no-mcp-json",  # skip .mcp.json so test focuses on extensions
++    ])
++    assert rc == 0
++    assert (fake_home / "skills" / "consensus" / "SKILL.md").exists()
++    assert (fake_home / "commands" / "consensus-init.md").exists()
++
++
++def test_install_claude_code_idempotent_on_rerun(tmp_path, monkeypatch):
++    """A2: running --install-claude-code twice is a no-op the second time."""
++    fake_home = tmp_path / ".claude"
++    monkeypatch.setenv("CLAUDE_HOME", str(fake_home))
++    monkeypatch.chdir(tmp_path)
++
++    first = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++        "--install-claude-code", "--no-mcp-json",
++    ])
++    assert first == 0
++    skill = fake_home / "skills" / "consensus" / "SKILL.md"
++    first_mtime = skill.stat().st_mtime
++    first_text = skill.read_text(encoding="utf-8")
++
++    # Rerun. config.yaml exists from first run, so use --reconfigure.
++    # Skill content is byte-identical → no rewrite.
++    second = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++        "--install-claude-code", "--no-mcp-json", "--reconfigure",
++    ])
++    assert second == 0
++    assert skill.read_text(encoding="utf-8") == first_text
++
++
++def test_install_claude_code_refuses_overwrite_on_divergent_existing(
++    tmp_path, monkeypatch, capsys
++):
++    """A2: if user-edited skill diverges, refuse without --force."""
++    fake_home = tmp_path / ".claude"
++    monkeypatch.setenv("CLAUDE_HOME", str(fake_home))
++    monkeypatch.chdir(tmp_path)
++    skill_dir = fake_home / "skills" / "consensus"
++    skill_dir.mkdir(parents=True)
++    skill = skill_dir / "SKILL.md"
++    skill.write_text("# user-edited skill content do not clobber\n", encoding="utf-8")
++
++    rc = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++        "--install-claude-code", "--no-mcp-json",
++    ])
++    # Refusal is rc=0 (skipped, not failed); a warning is printed.
++    assert rc == 0
++    out = capsys.readouterr().out + capsys.readouterr().err
++    # Verify user content preserved.
++    assert "user-edited skill content" in skill.read_text(encoding="utf-8")
++
++
++def test_install_claude_code_force_replaces_divergent_existing(
++    tmp_path, monkeypatch
++):
++    """A2: --force replaces a divergent SKILL.md."""
++    fake_home = tmp_path / ".claude"
++    monkeypatch.setenv("CLAUDE_HOME", str(fake_home))
++    monkeypatch.chdir(tmp_path)
++    skill_dir = fake_home / "skills" / "consensus"
++    skill_dir.mkdir(parents=True)
++    skill = skill_dir / "SKILL.md"
++    skill.write_text("# stale content\n", encoding="utf-8")
++
++    rc = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++        "--install-claude-code", "--force", "--no-mcp-json",
++    ])
++    assert rc == 0
++    new = skill.read_text(encoding="utf-8")
++    assert "# stale content" not in new
++    assert "name: consensus" in new
++
++
++# ---------- A3: CLAUDE_HOME env override ----------
++
++def test_install_claude_code_honors_claude_home_env(tmp_path, monkeypatch):
++    """A3: CLAUDE_HOME env redirects install to a non-default location."""
++    custom = tmp_path / "weird_location" / "my_claude"
++    monkeypatch.setenv("CLAUDE_HOME", str(custom))
++    monkeypatch.chdir(tmp_path)
++
++    rc = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++        "--install-claude-code", "--no-mcp-json",
++    ])
++    assert rc == 0
++    assert (custom / "skills" / "consensus" / "SKILL.md").exists()
++    assert (custom / "commands" / "consensus-init.md").exists()
++
++
++def test_resolve_claude_home_defaults_to_dot_claude(monkeypatch, tmp_path):
++    """A3: when CLAUDE_HOME unset, _resolve_claude_home() returns ~/.claude."""
++    monkeypatch.delenv("CLAUDE_HOME", raising=False)
++    monkeypatch.setenv("HOME", str(tmp_path))     # POSIX
++    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
++    resolved = wiz._resolve_claude_home()
++    assert resolved == tmp_path / ".claude"
++
++
++# ---------- A4: --from-claude-code prints contextual restart message ----------
++
++def test_from_claude_code_prints_reload_message(tmp_path, monkeypatch, capsys):
++    """A4: --from-claude-code prints the Claude-Code-specific restart text."""
++    monkeypatch.chdir(tmp_path)
++    monkeypatch.setattr(wiz.shutil, "which",
++                        lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
++    rc = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++        "--from-claude-code",
++    ])
++    assert rc == 0
++    out = capsys.readouterr().out
++    # Must mention reload/restart explicitly.
++    assert ("reload" in out.lower()) or ("restart" in out.lower())
++    # Should mention Claude Code or `/mcp` so the user knows what to do.
++    assert ("claude code" in out.lower()) or ("/mcp" in out.lower())
++
++
++def test_default_does_not_print_claude_code_specific_message(
++    tmp_path, monkeypatch, capsys
++):
++    """A4 negative: without --from-claude-code, the Claude-specific text is NOT printed."""
++    monkeypatch.chdir(tmp_path)
++    monkeypatch.setattr(wiz.shutil, "which",
++                        lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
++    rc = wiz.main([
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++    ])
++    assert rc == 0
++    out = capsys.readouterr().out
++    # The Claude-Code-specific sentinel should not appear in default output.
++    assert "Detected --from-claude-code" not in out
++
++
++# ---------- A5: `consensus init` (space form) routes to same entry point ----------
++
++def test_consensus_space_init_routes_to_init_wizard(tmp_path, monkeypatch):
++    """A5: argv[0] == "init" is stripped and the wizard runs normally."""
++    monkeypatch.chdir(tmp_path)
++    monkeypatch.setattr(wiz.shutil, "which",
++                        lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
++    # Simulate `consensus init --non-interactive --accept-defaults ...`
++    rc = wiz.main([
++        "init",  # the subcommand
++        "--non-interactive", "--accept-defaults",
++        "--contributors", "claude,codex,gemini",
++    ])
++    assert rc == 0
++    # Config and .mcp.json should be written exactly as if --init was absent.
++    assert (tmp_path / ".consensus" / "config.yaml").exists()
++    assert (tmp_path / ".mcp.json").exists()
++
++
++def test_consensus_space_no_args_runs_init(tmp_path, monkeypatch):
++    """A5: bare `consensus init` with no extra args still works (interactive
++    would prompt; non-interactive accept-defaults explicit here)."""
++    monkeypatch.chdir(tmp_path)
++    monkeypatch.setattr(wiz.shutil, "which",
++                        lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
++    # Subcommand by itself + the defaults flags.
++    rc = wiz.main(["init", "--non-interactive", "--accept-defaults",
++                   "--contributors", "claude,codex,gemini"])
++    assert rc == 0
+diff --git a/pyproject.toml b/pyproject.toml
+index c45bebd..ad96779 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -20,6 +20,9 @@ consensus-mcp = "consensus_mcp.server:main"
+ consensus-mcp-dispatch-codex = "consensus_mcp._dispatch_codex:main"
+ consensus-mcp-dispatch-gemini = "consensus_mcp._dispatch_gemini:main"
+ consensus-init = "consensus_mcp._init_wizard:main"
++# iter-0040 bonus per iter-0039 converged plan Q6: alias so `consensus init`
++# (with a SPACE) also works at the shell, matching the natural mental model.
++consensus = "consensus_mcp._init_wizard:main"
+ 
+ [tool.setuptools]
+ packages = [
+@@ -37,4 +40,8 @@ consensus_mcp = [
+   "docs/*.md",
+   "spec_template.md",
+   "tests/fixtures/dispatch_codex/*",
++  # iter-0040: Claude Code bootstrap pack (skill + slash command), copied
++  # into ~/.claude by `consensus-init --install-claude-code`.
++  "claude_extensions/skills/consensus/SKILL.md",
++  "claude_extensions/commands/consensus-init.md",
+ ]

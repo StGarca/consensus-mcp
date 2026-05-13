@@ -1,0 +1,47 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T18:04:11Z'
+  event_id: 2026-05-13T18:04:11Z_review_returned_and_sealed_codex-iteration-0039-consensus-init-discoverability-design-1
+  actor: codex-iteration-0039-consensus-init-discoverability-design-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0039-consensus-init-discoverability-design-codex-iteration-0039-consensus-init-discoverability-design-1-pass.yaml
+  sha256: 5e9c31590fc1fee5fe8cd58da02f3cbdeaf25dd3bc5b411ef98e1baa4b69534f
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T18:09:07Z'
+  event_id: 2026-05-13T18:09:07Z_review_returned_and_sealed_gemini-iteration-0039-consensus-init-discoverability-design-1
+  actor: gemini-iteration-0039-consensus-init-discoverability-design-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0039-consensus-init-discoverability-design-gemini-iteration-0039-consensus-init-discoverability-design-1-pass.yaml
+  sha256: 2b0d0a2888985b234f7209936f9cfd9dbfd128c13d694eedf6664dc97d77f111
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T18:11:13Z'
+  event_id: 2026-05-13T18:11:13Z_review_returned_and_sealed_codex-iteration-0039-2
+  actor: codex-iteration-0039-2
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0039-consensus-init-discoverability-design-codex-iteration-0039-2-pass.yaml
+  sha256: b4ccf18f37be2cbea814a3f53195ed03c6304f8724eba92b13546989eccefee7
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

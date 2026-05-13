@@ -1,0 +1,63 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T18:22:48Z'
+  event_id: 2026-05-13T18:22:48Z_review_returned_and_sealed_codex-iteration-0040-consensus-init-claude-bootstrap-impl-1
+  actor: codex-iteration-0040-consensus-init-claude-bootstrap-impl-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-codex-iteration-0040-consensus-init-claude-bootstrap-impl-1-pass.yaml
+  sha256: c41b51a47ba50959e5377f85f28b8a57eecee347dc3ce2138720f016d06bb2c5
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T18:29:10Z'
+  event_id: 2026-05-13T18:29:10Z_review_returned_and_sealed_gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1
+  actor: gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-gemini-iteration-0040-consensus-init-claude-bootstrap-impl-1-pass.yaml
+  sha256: e653de524da8958a6a3ba8debee914b02c97769f3909ed100c0787d188c377c5
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T18:30:48Z'
+  event_id: 2026-05-13T18:30:48Z_review_returned_and_sealed_codex-iteration-0040-3
+  actor: codex-iteration-0040-3
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-codex-iteration-0040-3-pass.yaml
+  sha256: 3fb52ebe1f5035d3cb268070fc635fd47213086fb60b0957ec334759d0c81a91
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T18:31:03Z'
+  event_id: 2026-05-13T18:31:03Z_review_returned_and_sealed_gemini-iteration-0040-2
+  actor: gemini-iteration-0040-2
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0040-consensus-init-claude-bootstrap-impl-gemini-iteration-0040-2-pass.yaml
+  sha256: 84443e15d864dd7d9704a5fe18c49ac8d8a83e000e4c1851d02511187f74eb7f
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
