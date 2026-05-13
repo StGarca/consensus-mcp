@@ -893,4 +893,16 @@ passes:
   packet_sha256: 84443e15d864dd7d9704a5fe18c49ac8d8a83e000e4c1851d02511187f74eb7f
   iteration_id: iteration-0040-consensus-init-claude-bootstrap-impl
   reviewer_id: gemini-iteration-0040-2
-last_updated_utc: '2026-05-13T18:31:03Z'
+- id: gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0042-codex-plugin-vs-cli-dispatch-gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1-pass.yaml
+  sealed_at: '2026-05-13T21:39:59Z'
+  packet_sha256: 8804d14cdfdff5751f7270d422b466b770fef858abbcf4172b3ef7f572cb84e4
+  iteration_id: iteration-0042-codex-plugin-vs-cli-dispatch
+  reviewer_id: gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1
+- id: codex-iteration-0042-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0042-codex-plugin-vs-cli-dispatch-codex-iteration-0042-1-pass.yaml
+  sealed_at: '2026-05-13T21:40:01Z'
+  packet_sha256: 08f2c9d7d88a4cf69515be431e105e4902958f7139333e914654160a8b03e951
+  iteration_id: iteration-0042-codex-plugin-vs-cli-dispatch
+  reviewer_id: codex-iteration-0042-1
+last_updated_utc: '2026-05-13T21:40:01Z'

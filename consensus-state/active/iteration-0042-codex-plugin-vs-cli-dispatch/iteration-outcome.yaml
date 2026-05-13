@@ -1,0 +1,47 @@
+iteration_id: iteration-0042-codex-plugin-vs-cli-dispatch
+workflow_mode: propose-converge
+outcome: CONVERGED_DO_NOT_MIGRATE
+closed_at_utc: '2026-05-13T21:42:30Z'
+convergence:
+  rule: strict-majority
+  contributors_required: 2
+  contributors_substantive: 3
+  result: APPROVED
+  vote_summary: 3/3 contributors converged in 1 round on
+    "do not migrate"; all three named the same three blocking
+    concerns (provenance loss, independence unverifiable,
+    architectural mismatch) and the same three revisit conditions.
+
+review_passes_sealed:
+  - actor: claude-iteration-0042-1
+    pass_id: claude-iteration-0042-1-pass1
+    sealed_path: claude-proposal.yaml
+  - actor: codex-iteration-0042-1
+    pass_id: codex-iteration-0042-1-pass1
+    sealed_at_utc: '2026-05-13T21:40:01Z'
+    packet_sha256: 08f2c9d7d88a4cf69515be431e105e4902958f7139333e914654160a8b03e951
+    archive_path: consensus-state/archive/review-passes/2026-05-13-iteration-0042-codex-plugin-vs-cli-dispatch-codex-iteration-0042-1-pass.yaml
+  - actor: gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1
+    pass_id: gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1-pass1
+    sealed_at_utc: '2026-05-13T21:39:59Z'
+    packet_sha256: 8804d14cdfdff5751f7270d422b466b770fef858abbcf4172b3ef7f572cb84e4
+    archive_path: consensus-state/archive/review-passes/2026-05-13-iteration-0042-codex-plugin-vs-cli-dispatch-gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1-pass.yaml
+
+decision:
+  short: KEEP SUBPROCESS-BASED CODEX DISPATCHER; DO NOT MIGRATE TO PLUGIN
+  long: See converged-plan.yaml for full rationale and revisit conditions.
+
+side_effects_noted:
+  - parallel-dispatch pattern (from iter-0041 memory) worked as designed
+    — codex + gemini ran in background while I authored my proposal;
+    saved roughly the duration of my authoring time (~3 minutes).
+  - all three proposals were schema-valid and substantive on first
+    dispatch — no jsonschema bugs, no sandbox blocks, no stalls. Both
+    the iter-0039 jsonschema hot-fix and the iter-0040 review-packet
+    pattern paid off here.
+
+next_action: |
+  Close iter-0042. Save operator memory: "codex plugin vs CLI
+  dispatch — decided not to migrate; revisit only if [3 conditions]
+  hold." Snapshot consensus-state. No code changes from this
+  iteration.

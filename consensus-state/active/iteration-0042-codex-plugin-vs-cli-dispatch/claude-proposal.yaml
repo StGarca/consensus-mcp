@@ -1,0 +1,145 @@
+actor:
+  id: claude-iteration-0042-1
+  model_family: claude
+  role: design_proposer
+  pass_id: claude-iteration-0042-1-pass1
+iteration_id: iteration-0042-codex-plugin-vs-cli-dispatch
+created_at_utc: '2026-05-13T18:52:00Z'
+mode: proposal
+structural_abstention: false
+proposal:
+  selected_target: |
+    REJECT MIGRATION. Keep the subprocess-based codex dispatcher
+    (`_dispatch_codex.py`) as the canonical sealed-workflow path.
+    The codex@openai-codex Claude Code plugin is a complementary
+    human-in-chat interface, not a peer-pipeline component.
+
+    If the operator wants to *learn from* the plugin's reliability
+    fixes (auth refresh, Windows path handling, etc.), port those
+    behaviors into our subprocess dispatcher — don't replace the
+    dispatcher with the plugin.
+
+  rationale_vs_alternatives: |
+    The proposal stands or falls on Q1 (feasibility). My answer to
+    Q1 is (b): MCP-from-MCP is not a documented pattern in the MCP
+    spec as of 2026-05. Concretely:
+
+    - MCP defines a host (Claude Code) and a server (our Python
+      process). Communication is host → server, request/response.
+      The codex plugin's MCP server is a SIBLING of consensus-mcp's
+      MCP server in the host's process tree. Neither sibling has
+      access to the other's tool registry through the host.
+    - The "obvious" alternative — spin up our own MCP client inside
+      consensus-mcp that connects directly to the codex plugin's
+      stdio transport — works in theory but in practice means: we
+      have to spawn (or find) the plugin's server process, speak
+      MCP protocol over its stdio, manage its lifecycle, AND
+      duplicate Claude Code's auth context. Net: we've reinvented
+      our current subprocess pattern but worse (MCP-protocol
+      overhead, no direct stdin control, lifecycle conflicts with
+      Claude Code's own plugin manager).
+    - The (c) broker pattern (consensus-mcp returns a "please call
+      codex.foo" directive, Claude Code forwards, response comes
+      back via a second consensus-mcp call) is technically feasible
+      but adds 2 round-trips per dispatch, requires the orchestrator
+      to be Claude Code (kills CI/headless deployment), and breaks
+      the independence attestation because the directive's "please
+      call codex with this prompt" passes through Claude Code's
+      session context.
+
+    Q2 (provenance): moot if Q1=b. Even if we found a way, the
+    plugin owns prompt composition (it wraps our intent into its
+    own prompt template), so `prompt_sha256` would no longer
+    represent what codex actually saw. We'd hash our INPUT to the
+    plugin, not codex's actual prompt. The seal pipeline's
+    machine-verifiable audit trail degrades to "trust the plugin."
+
+    Q3 (independence attestation): plugin runtime may inject
+    Claude Code session context (system prompts, prior chat turn
+    awareness, tool-use history) invisible to us. We could not
+    honestly attest `reviewer_isolated_by_construction: true`
+    without inspecting the codex@openai-codex manifest claim-by-
+    claim. Today subprocess dispatch IS isolated-by-construction
+    because we control env, cwd, stdin entirely.
+
+    Q4: (d) reject migration. The subprocess pattern is the right
+    pattern. (a) replace = unsafe per Q2/Q3. (b) two dispatchers
+    in parallel = double the surface area, no clear default
+    rationale. (c) plugin for ad-hoc only = doesn't need
+    consensus-mcp involvement at all — operator just installs
+    the plugin and uses it directly, no change to consensus-mcp.
+
+    Q5: (d) don't do this. The CLI is the right dispatcher. The
+    plugin solves a different problem (human-in-chat codex
+    queries) for a different audience (the operator working in
+    Claude Code on a non-consensus task).
+
+    The one thing the codex plugin probably DOES do well that we
+    could learn from: auth handling. If `pipx install consensus-mcp
+    && codex login` is replaced by `/plugin install codex@openai-
+    codex` (handles auth as part of install), that's smoother. But
+    THAT's an argument for documenting "install the codex plugin
+    for your auth, then point consensus-mcp at the same codex
+    binary" — not for migrating our dispatcher.
+
+  deliverable_scope:
+    next_iteration_id: none-required
+    files_in_scope: []
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py    # do NOT touch
+    - consensus_mcp/_dispatch_gemini.py   # do NOT touch
+    - any new MCP-client code             # do NOT add
+    key_design_decisions:
+    - 'Q1: MCP-from-MCP is not feasible without significant new
+      infrastructure (MCP client lib in Python, lifecycle
+      management for spawned plugin processes, auth context
+      sharing).'
+    - 'Q2: even if feasible, provenance degrades from
+      machine-verifiable hashes to "trust the plugin"; this is
+      a meaningful loss for sealed-workflow audit trails.'
+    - 'Q3: independence attestation becomes unverifiable until
+      we can inspect the plugin manifest for context-isolation
+      guarantees.'
+    - 'Q4: chosen pattern = keep subprocess dispatcher as the
+      single canonical path. Plugin remains a separate operator
+      tool, not a consensus-mcp internal.'
+    - 'Q5: revisit IF (a) MCP spec adds server-to-server
+      protocol, AND (b) codex plugin manifest declares stateless
+      tool calls with raw-output access, AND (c) plugin provides
+      better stall handling than our 180s subprocess wrapper.
+      Until all three hold: do not migrate.'
+    - 'Q6: deployment surface — subprocess dispatch works in
+      headless CI, GitHub Actions, devcontainers without Claude
+      Code. Plugin dispatch would require Claude Code running,
+      shrinking consensus-mcp''s deployment surface significantly.'
+    acceptance_gates:
+    - No new code shipped from this iteration.
+    - converged-plan.yaml records the "decision: do not pursue"
+      verdict + the conditions under which to revisit.
+    - Operator memory updated to note the conditions for revisit.
+
+  risks: |
+    - **Spec evolution risk**: The MCP protocol is young (2024-2025).
+      If Anthropic ships server-to-server MCP in 2026-2027, this
+      conclusion changes. Mitigation: monitor MCP spec releases;
+      revisit annually.
+    - **Sunk-cost reasoning**: We've invested ~600 LOC in subprocess
+      dispatcher. Defending the status quo could be motivated. The
+      provenance + isolation arguments stand on their own merits;
+      not invoking sunk cost.
+    - **Operator friction with two install paths**: Today users do
+      `pipx install consensus-mcp` + install codex CLI. With this
+      decision, they continue to do that. The plugin's "one-click
+      install" UX advantage doesn't help consensus-mcp users.
+      Mitigation: document the `/plugin install codex@openai-codex`
+      path in the README as the recommended codex install for
+      humans-in-chat, while consensus-mcp uses the CLI under the
+      hood. (One install satisfies both.)
+    - **Codex CLI deprecation risk**: If Anthropic ever sunsets the
+      `codex` shell CLI in favor of plugin-only distribution, our
+      subprocess pattern breaks. Mitigation: low probability in
+      v1.x; revisit if/when announced.
+
+  estimated_complexity: zero
+findings: []
+goal_satisfied: true

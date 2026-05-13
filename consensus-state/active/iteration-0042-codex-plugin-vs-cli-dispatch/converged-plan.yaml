@@ -1,0 +1,176 @@
+iteration_id: iteration-0042-codex-plugin-vs-cli-dispatch
+converged_at_utc: '2026-05-13T21:42:00Z'
+convergence:
+  rule: strict-majority
+  contributors_required: 2
+  contributors_substantive: 3   # claude, codex, gemini all sealed proposals; none abstained
+  result: CONVERGED_DO_NOT_MIGRATE
+  vote_summary: |
+    All three contributors independently reached the same verdict:
+    keep the subprocess-based codex dispatcher; do NOT migrate to
+    the codex@openai-codex Claude Code plugin.
+
+    Each contributor weighed the same three load-bearing concerns
+    and reached the same conclusion:
+
+    - **Provenance preservation (Q2)**: the seal pipeline depends
+      on machine-verifiable sha256 hashes of prompt, output, schema,
+      and goal_packet. A plugin-mediated call would degrade output
+      to "trust the plugin," breaking the audit chain. (Cited by
+      all 3.)
+    - **Independence attestation (Q3)**: subprocess dispatch is
+      isolated-by-construction because consensus-mcp owns env, cwd,
+      and stdin. Plugin runtime may inject Claude Code session
+      context invisible to us, making
+      `reviewer_isolated_by_construction: true` unverifiable.
+      (Cited by all 3.)
+    - **Architectural mismatch**: the codex plugin is designed for
+      interactive chat use, not for backend pipeline use by another
+      MCP server. (Cited by all 3.)
+
+    Distinct contributions:
+    - claude flagged **deployment surface** (CI/headless/devcontainer)
+      shrinkage if the dispatcher requires Claude Code to be running.
+    - codex flagged **marketplace supply-chain trust** + plugin auth
+      state surfaces as a Q6 bonus dimension.
+    - gemini flagged **latency** + **debugging observability** as
+      concrete operational concerns beyond the audit/independence
+      ones.
+
+contributor_proposals:
+- actor: claude-iteration-0042-1
+  stance_summary: REJECT MIGRATION. MCP-from-MCP not feasible cleanly;
+    even if it were, provenance + independence degrade. Plugin is
+    complementary to consensus-mcp, not a replacement layer.
+  sealed_path: claude-proposal.yaml
+- actor: codex-iteration-0042-1
+  stance_summary: DO NOT PURSUE plugin-as-internal-dispatcher; keep
+    codex CLI subprocess as sealed workflow path. Subprocess controls
+    prompt bytes, output capture, stall detection, raw archival,
+    schema validation, provenance hashes, T6 sealing inputs. Plugin
+    weakens Q2 + Q3. Revisit only if plugin publishes stable headless
+    API with hashable request/response envelopes.
+  sealed_path: consensus-state/archive/review-passes/2026-05-13-iteration-0042-codex-plugin-vs-cli-dispatch-codex-iteration-0042-1-pass.yaml
+- actor: gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1
+  stance_summary: DO NOT PURSUE. Plugin is designed for interactive
+    chat, not programmatic backend use. Migration would lose raw
+    byte-for-byte output capture (breaking output_sha256), add
+    latency, reduce observability for debugging, and create brittle
+    coupling to Claude Code's plugin architecture. Speculative
+    benefits don't outweigh concrete risks.
+  sealed_path: consensus-state/archive/review-passes/2026-05-13-iteration-0042-codex-plugin-vs-cli-dispatch-gemini-iteration-0042-codex-plugin-vs-cli-dispatch-1-pass.yaml
+
+decisions:
+  Q1_feasibility:
+    verdict: NOT FEASIBLE WITHOUT NEW INFRASTRUCTURE
+    detail: |
+      MCP communication is one-way (host → server). Our Python MCP
+      server has no documented path to invoke tools on another MCP
+      server registered in the same Claude Code session. The
+      alternatives — spinning up our own MCP client inside
+      consensus-mcp, or returning a broker directive to be forwarded
+      by the orchestrator — either reinvent the subprocess pattern
+      worse OR add round-trips that kill non-Claude-Code deployment
+      paths. Gate failure: everything else is moot.
+
+  Q2_provenance:
+    verdict: WOULD DEGRADE BEYOND THE SEAL PIPELINE'S CONTRACT
+    detail: |
+      Plugin owns prompt composition (wraps our intent into its own
+      template), so prompt_sha256 no longer represents what codex
+      actually saw. Schema validation moves out of our control.
+      Output capture goes through a chat-style intermediate layer
+      that may strip or reformat raw model output, breaking
+      output_sha256 byte-for-byte guarantees. Net: machine-verifiable
+      audit trail downgrades to "trust the plugin" — a meaningful
+      loss for sealed-workflow consumers.
+
+  Q3_independence_attestation:
+    verdict: UNVERIFIABLE WITHOUT PLUGIN MANIFEST INSPECTION
+    detail: |
+      Today subprocess dispatch IS
+      `reviewer_isolated_by_construction: true` because consensus-mcp
+      controls env, cwd, stdin entirely. Plugin runtime may inject
+      Claude Code session context (system prompt additions, prior
+      chat-turn awareness, tool-use history) invisible to us. Without
+      a manifest declaration of "stateless tool calls, no implicit
+      context injection," we cannot honestly attest isolation.
+
+  Q4_architectural_pattern:
+    chosen: |
+      (d) REJECT MIGRATION. Subprocess dispatcher remains the single
+      canonical sealed-workflow path. The codex Claude Code plugin
+      remains a separate operator-facing tool (ad-hoc chat queries,
+      auth onboarding) — orthogonal to consensus-mcp's pipeline.
+    rejected_alternatives:
+      - (a) Replace dispatcher entirely → unsafe per Q2 + Q3
+      - (b) Two parallel dispatchers (--codex-mode cli|plugin) →
+        doubles surface area without clear default rationale
+      - (c) Plugin for ad-hoc only → doesn't need consensus-mcp
+        involvement at all; operator just installs the plugin directly
+
+  Q5_cost_risk_threshold:
+    verdict: DO NOT DO THIS NOW; CONDITIONS FOR REVISIT BELOW
+    detail: |
+      All three contributors named the SAME revisit conditions
+      (independently — strong convergence signal):
+
+      Revisit if AND ONLY IF all three hold:
+        1. MCP spec (or the codex plugin specifically) adds a
+           documented server-to-server invocation protocol with
+           replayable, hashable request/response envelopes.
+        2. Codex plugin manifest declares stateless tool calls with
+           no implicit context injection from the Claude Code
+           session.
+        3. Plugin provides demonstrably better stall handling /
+           reliability than our 180s subprocess wrapper on the
+           known pain points (cold-start latency, AuthRequired
+           hangs, Windows path edge cases).
+
+      Until all three are publicly demonstrable: keep subprocess.
+
+  Q6_missed_dimensions_synthesized:
+    - **Deployment surface** (claude): subprocess works in CI,
+      headless servers, devcontainers, offline. Plugin path requires
+      Claude Code running, removing those targets.
+    - **Marketplace supply-chain trust** (codex): plugin install
+      upgrades silently, auth state lives in plugin runtime, tool
+      policy controlled by marketplace — moves trust boundary out
+      of consensus-mcp's pyproject.toml + lockfile.
+    - **Latency + observability** (gemini): each plugin call adds
+      chat-intermediate overhead; failures in opaque plugin layer
+      are harder to debug than subprocess stderr capture.
+
+implementation_packet:
+  next_iteration_id: NONE_REQUIRED
+  files_changed: []
+  documentation_followup:
+    - Add a paragraph to README explaining that consensus-mcp uses
+      the codex CLI directly (subprocess) for sealed-workflow
+      dispatch, and the codex@openai-codex plugin (if the operator
+      installs it) is for their ad-hoc human-in-chat use only.
+      Both can coexist; neither replaces the other.
+    - Document the revisit conditions in
+      consensus-mcp/docs/architecture/dispatcher-design.md so
+      future maintainers (and future LLMs) know what would change
+      the calculus.
+  operator_memory_update:
+    - Save the revisit conditions as a memory so the verdict
+      doesn't get re-litigated every time someone asks about the
+      codex plugin.
+
+risks_to_track:
+  - **Codex CLI sunset** (low probability in v1.x): if Anthropic
+    ever deprecates the shell binary in favor of plugin-only
+    distribution, this decision auto-flips. Monitor codex-cli
+    release notes annually.
+  - **MCP spec evolution**: if server-to-server MCP ships, the
+    feasibility gate (Q1) changes; revisit then.
+  - **Operator confusion**: users may expect "if codex plugin is
+    installed, consensus-mcp uses it." Mitigate via README clarity.
+
+stop_conditions_evaluated:
+  max_iteration_count_reached: false
+  non_convergence_after_3_rounds: false   # converged in 1 round
+
+operator_decision_required: false
