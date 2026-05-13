@@ -167,6 +167,17 @@ def handle(
     with contextlib.redirect_stdout(buf):
         try:
             rc = _dispatch_codex.main(argv) or 0
+        except SystemExit as exc:
+            # iter-0011 codex-rev-001 cross-fix: argparse raises SystemExit
+            # (BaseException, not Exception) on bad input. Without an explicit
+            # catch, malformed input from an MCP caller could kill the stdio
+            # MCP server. Convert to a structured failure response. (Same fix
+            # applied to reviewer_dispatch_gemini.py simultaneously.)
+            return {
+                "ok": False,
+                "error_type": "ArgparseSystemExit",
+                "error": f"argparse rejected input: {exc.code!r}",
+            }
         except Exception as exc:
             return {
                 "ok": False,
