@@ -1,0 +1,44 @@
+iteration_id: iteration-0022-mcp-wire-workflow-engine
+reviewer_id: codex-iteration-0022-2
+pass_id: codex-iteration-0022-2-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: get_iteration_outcome resolves relative iteration_dir against process cwd
+    instead of repo root
+  citation: consensus_mcp/tools/consensus_get_iteration_outcome.py:72
+  risk: Operators using the installed MCP server with repo-relative iteration paths,
+    as the schema advertises, can read the wrong directory or get a false missing-directory
+    error whenever the server cwd is not the project root.
+  recommendation: Resolve relative iteration_dir paths against the configured project/repo
+    root, consistent with consensus.run_iteration path handling, or remove the repo-relative
+    contract from the schema.
+  patch_not_proposed_reason: Patch not proposed because the embedded scope does not
+    include existing server/project-root conventions or tests for get_iteration_outcome
+    repo-relative path resolution, so a precise fix could drift from local patterns.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The run tool and engine factory largely satisfy the goal,
+  but the outcome inspector advertises repo-relative paths while resolving them against
+  process cwd, leaving part of the MCP UX gap open.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 6d0eab55cf1c15b31bf13b8d0bdc5cb7077bddaf2ba57b4c7bcedb8806cf8f88
+  output_sha256: 48eaaf53e30adab1823af76e93d5adcbcd41be222d400d2e52c631b654e94dec
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 8d96511639ddc73c2755cded50272ae155f3d9e10d7ff6b6febc225d316b8aa0
+  scope_signature: 0718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6
+  review_target_path: consensus-state/active/iteration-0022-mcp-wire-workflow-engine/review-packet.yaml
+  review_target_hash: 993951b6bb50f21ad035dc268a0c06a2cd3537b19425bd474bd9a96266af2348
+sealed_at_utc: '2026-05-13T08:04:09Z'
+packet_sha256: 93e08900aeb2158ad4d65bb485d9e28465234273ff2200f5ef6ca56290ebb112

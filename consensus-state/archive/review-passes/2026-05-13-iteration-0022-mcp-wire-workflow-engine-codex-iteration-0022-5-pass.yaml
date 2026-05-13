@@ -1,0 +1,29 @@
+iteration_id: iteration-0022-mcp-wire-workflow-engine
+reviewer_id: codex-iteration-0022-5
+pass_id: codex-iteration-0022-5-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: Embedded allowed-file contents meet the requested MCP tool
+  wiring, engine factory reuse, registration, repo-root path handling, and Claude
+  proposal validation requirements; no defects found in the reviewed surface.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: ff3820d6deabea3e6e0b68a4925afac7cf15e595a345868b11097e1c5013e739
+  output_sha256: cfb1ca3b8b512ad8e34423998bd58d5610f4997af2feaa02541bdcdcb3e9ead9
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 8d96511639ddc73c2755cded50272ae155f3d9e10d7ff6b6febc225d316b8aa0
+  scope_signature: 0718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6
+  review_target_path: consensus-state/active/iteration-0022-mcp-wire-workflow-engine/review-packet.yaml
+  review_target_hash: 3c596c928eedc55edc4b5f6bad7fcfd2df8a1ff7773ea207abb6d3af595202f9
+sealed_at_utc: '2026-05-13T08:25:09Z'
+packet_sha256: 83e6a81bc208748281612283c28abb23e27613c6ac758a05279c56a1f59d190b
