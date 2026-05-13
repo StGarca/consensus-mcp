@@ -31,26 +31,31 @@ from pathlib import Path
 
 import yaml
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
+from consensus_mcp._paths import project_root, archive_dir, index_path, active_dir
 
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+# iter-0037 (Phase B step 10 per iter-0024 plan, HIGHEST-impact seal-pipeline
+# tool): migrated from cached REPO_ROOT/ARCHIVE_DIR/INDEX_PATH module-level
+# constants to lazy `_paths` resolvers. Tests redirect paths via
+# `monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", ...)` /
+# `CONSENSUS_MCP_REPO_ROOT`, NOT `monkeypatch.setattr` on this module —
+# the latter is unsafe against __getattr__-only attributes (pytest captures
+# the lazy-synthesized value at setattr time and restores it into __dict__
+# at teardown, permanently shadowing the resolver for subsequent tests).
+# PEP 562 `__getattr__` retained for external `module.REPO_ROOT` etc.
+# reads.
 
 
-REPO_ROOT = _resolve_repo_root()
-ARCHIVE_DIR = REPO_ROOT / "consensus-state" / "archive" / "review-passes"
-INDEX_PATH = ARCHIVE_DIR / "index.yaml"
+def __getattr__(name: str):
+    """PEP 562 backward compat for external `module.REPO_ROOT` /
+    `module.ARCHIVE_DIR` / `module.INDEX_PATH` reads. Internal code should
+    call the `_paths` resolvers directly."""
+    if name == "REPO_ROOT":
+        return project_root()
+    if name == "ARCHIVE_DIR":
+        return archive_dir()
+    if name == "INDEX_PATH":
+        return index_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # canonical_yaml_sha256 formula (see also: state_read_decision_ledger.py, audit_append_event.py)
 # Double round-trip: yaml.safe_dump -> yaml.safe_load -> yaml.safe_dump ensures
@@ -237,16 +242,18 @@ def handle(
     # --- Step 5: deterministic path ---
     date_str = _now_utc_date()
     filename = f"{date_str}-{iteration_id}-{reviewer_id}-pass.yaml"
-    sealed_path = ARCHIVE_DIR / filename
+    _archive = archive_dir()
+    _index = index_path()
+    sealed_path = _archive / filename
 
     # --- Step 6: path collision guard ---
     if sealed_path.exists():
         return {"error": "packet_path_collision", "detail": str(sealed_path)}
 
     # --- Step 7: index collision check (read now; write after packet lands) ---
-    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    if INDEX_PATH.exists():
-        index_raw = INDEX_PATH.read_bytes()
+    _archive.mkdir(parents=True, exist_ok=True)
+    if _index.exists():
+        index_raw = _index.read_bytes()
         index_data = yaml.safe_load(index_raw) or {}
     else:
         index_data = {}
@@ -273,9 +280,10 @@ def handle(
 
     # --- Step 9: atomic update of index.yaml ---
     sealed_at = _now_utc()
+    _repo = project_root()
     new_entry = {
         "id": pass_id,
-        "path": str(sealed_path.relative_to(REPO_ROOT)).replace("\\", "/"),
+        "path": str(sealed_path.relative_to(_repo)).replace("\\", "/"),
         "sealed_at": sealed_at,
         "packet_sha256": packet_sha256,
         "iteration_id": iteration_id,
@@ -286,25 +294,24 @@ def handle(
     index_data["last_updated_utc"] = sealed_at
 
     index_yaml = yaml.safe_dump(index_data, sort_keys=False)
-    tmp_index = INDEX_PATH.with_suffix(".yaml.tmp")
+    tmp_index = _index.with_suffix(".yaml.tmp")
     tmp_index.write_text(index_yaml, encoding="utf-8")
-    os.replace(str(tmp_index), str(INDEX_PATH))
+    os.replace(str(tmp_index), str(_index))
 
     # --- Step 10: audit event ---
     # Use review_returned_and_sealed (closest semantic match in CANONICAL_EVENT_TYPES).
     # Required fields for that type: actor, artifact, sha256, independence_attestation.
     from consensus_mcp.tools.audit_append_event import handle as audit_handle
-    from consensus_mcp.tools.audit_append_event import ACTIVE_DIR
 
     # Only write audit event if the iteration dir exists; otherwise skip silently
     # (review packets may be sealed for iterations whose active dir was cleaned up).
-    iteration_dir = ACTIVE_DIR / iteration_id
+    iteration_dir = active_dir() / iteration_id
     if iteration_dir.is_dir():
         audit_result = audit_handle(
             iteration_id=iteration_id,
             event_type="review_returned_and_sealed",
             actor=reviewer_id,
-            artifact=str(sealed_path.relative_to(REPO_ROOT)).replace("\\", "/"),
+            artifact=str(sealed_path.relative_to(_repo)).replace("\\", "/"),
             sha256=packet_sha256,
             independence_attestation=packet.get("independence_attestation"),
         )
