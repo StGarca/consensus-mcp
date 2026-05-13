@@ -120,17 +120,106 @@ on first pass.
   every dispatch test now seals into a tmp_path-isolated archive. Full
   suite: 658 pass + 1 skipped + 0 fail under any ordering.
 
+**Lazy path resolution (iter-0024 design consult → iter-0025 Phase A
+→ iter-0026 first per-tool migration):**
+
+- iter-0024 ran the workflow #4 consult on whether to refactor the
+  module-level `REPO_ROOT` caches into lazy resolvers. Converged on
+  SHIP-PHASED: introduce `_paths.py` first (Phase A), then migrate
+  tools one at a time (Phase B).
+- iter-0025 (Phase A): introduced `consensus_mcp/_paths.py` with 9
+  lazy-resolver functions (`repo_root`, `state_root`, `project_root`,
+  `spec_path`, `archive_dir`, `index_path`, `active_dir`,
+  `audit_log_path`, `dispatch_log_path`). Each reads env state on
+  every call. Backward compatible — no existing tool touched.
+- iter-0026 (Phase B step 1): migrated `state_read_decision_ledger`
+  to use `_paths.state_root()`. First test coverage for that tool
+  (5 new tests including the lazy-resolution regression demo). Phase
+  B migrations continue in iter-0034+ for remaining 9 tools.
+
+**Codex proposal mode (iter-0027 → iter-0028):**
+
+- iter-0021 and iter-0024 design consults discovered that codex
+  structurally-abstained on every workflow #4 dispatch because the
+  codex review template is hard-coded for code-review tasks: codex
+  kept returning "missing review target" errors instead of engaging
+  with design questions. Documented as "structural-abstention" in
+  prior converged plans.
+- iter-0027 ran the workflow #4 consult on what to do about it.
+  Claude and gemini independently picked "fix codex template friction"
+  as the highest-leverage move. Codex itself structurally-abstained
+  on this very consult (proving the problem).
+- iter-0028 shipped `--mode {review,proposal}` on both codex and
+  gemini dispatchers. New `codex_proposal_template.md` and
+  `codex_proposal_schema.json` (plus gemini equivalents) frame the
+  task as proposal generation, not code review. Proposal schema
+  enforces `selected_target`, `rationale_vs_alternatives`,
+  `deliverable_scope`, `risks`, `estimated_complexity`,
+  `structural_abstention`. The seal pipeline detects proposal-shape
+  payloads and embeds them under a top-level `proposal` block in the
+  sealed YAML while keeping outer review-shape fields valid (empty
+  findings, computed goal_satisfied) for audit-event compatibility.
+- iter-0029: smoke test of proposal mode on a synthetic design
+  question — codex returned a proper proposal-shape sealed YAML.
+- iter-0030: **first real workflow #4 consult where codex engaged
+  substantively as a peer.** The meta-arc iter-0021 → iter-0024 →
+  iter-0027 → iter-0028 → iter-0030 closed: the project that proves
+  cross-AI consensus works now genuinely produces three-AI consensus
+  on its own design questions (gemini env-abstaining due to upstream
+  capacity issues notwithstanding).
+
+**`consensus-init` auto-bootstraps `.mcp.json` (iter-0030 design →
+iter-0031 implementation):**
+
+- iter-0030 converged on extending `consensus-init` to write
+  `.mcp.json` automatically. Two substantive votes (claude + codex)
+  agreed on merge-mode for existing files + opt-out flag +
+  marker-based project-root detection + PATH-portable command
+  discovery + byte-for-byte idempotency.
+- iter-0031 implemented the converged design. New flags: `--no-mcp-json`
+  (opt out), `--mcp-command STR` (override), `--mcp-force` (replace
+  existing consensus-mcp entry on divergence). Merge mode preserves
+  other MCP servers; conflict detection skip+warns instead of
+  clobbering; malformed JSON skip+warns instead of mutating.
+- `_detect_repo_root` extended from `.git`-only to marker-based:
+  `git rev-parse --show-toplevel` → strong markers (.git,
+  pyproject.toml, package.json, CLAUDE.md, .mcp.json, consensus-state)
+  → cwd fallback.
+- Operator UX is now one command: `pipx install consensus-mcp`, then
+  `cd <any-project>; consensus-init`. The wizard writes
+  `.consensus/config.yaml` + `.gitignore` managed block + `.mcp.json`
+  (with correct PATH-portable command + per-project env vars).
+
+**Defaulting to workflow #4 for design questions** (operator policy
+correction mid-v1.14.0):
+
+The original heuristic "workflow #3 for execution; workflow #4 for
+explicit design questions" was systematically biased toward #3
+because of cost asymmetry. Corrected mid-cycle: default to workflow
+#4 for any decision with real design surface; require an explicit
+reason to fall back to #3. iter-0027 onward applies this rule. Saved
+to operator memory as
+[[feedback-default-workflow-4-for-design]].
+
+**Operator memories saved during v1.14.0 cycle:**
+
+- `feedback_no_phantom_proceed.md` — never end a turn with "proceeding
+  with X" unless the tool call is in the same turn
+- `feedback_gemini_429_skip.md` — priority-tiered handling of upstream
+  Gemini 429 errors: low-priority iterations skip gemini on first
+  failure; high-priority iterations allow one retry
+
 **Deferred to a follow-up iteration:**
 
-- Lazy / per-call resolution of `REPO_ROOT` (and derivatives) inside
-  `review_write_and_seal.py`, `audit_append_event.py`, and the other
-  tool modules that share the same module-load caching pattern. The
-  test workaround unblocks CI; the deeper architectural change still
-  needs peer-reviewed design.
+- Remaining 9 Phase B tool migrations (per iter-0024 plan):
+  `repo_get_section`, `repo_set_section`, `state_update_decision_ledger`,
+  `patch_stage_and_dry_run`, `patch_apply_consensus_patch`,
+  `gate_evaluate_production_with_scope_match`, `review_read_post_seal`,
+  `audit_append_event`, `review_write_and_seal`. Each migrates from
+  cached `REPO_ROOT` to `_paths.state_root()` composition.
 - 20 stale `iter-9999-*` fixture entries remain in
-  `consensus-state/archive/review-passes/index.yaml` from pre-iter-0019
-  test runs. They no longer cause failures (tests now isolate) but are
-  noise in the audit trail. Separate cleanup iteration if desired.
+  `consensus-state/archive/review-passes/index.yaml`. Cosmetic only;
+  separate cleanup iteration if desired.
 
 ## 1.13.0 - 2026-05-12
 
