@@ -1,0 +1,58 @@
+schema_version: 1
+pilot_id: iteration-0029-proposal-mode-smoke
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    iter-0028 shipped a `--mode proposal` switch to the codex and gemini
+    dispatchers so design-consult work no longer falls back to two
+    substantive votes. This is the smoke test: does codex actually
+    produce a structured proposal now?
+  question: |
+    Of the remaining outstanding work on consensus-mcp v1.14.0, which is
+    the single most valuable next iteration? Pick ONE and justify against
+    the alternatives. Candidates:
+
+    (a) Continue Phase B migrations (9 remaining tools migrating from
+        cached REPO_ROOT to lazy _paths). Mechanical, low-risk.
+
+    (b) MCP-wire the consensus-init wizard so operators can call it from
+        the MCP server, not just the CLI.
+
+    (c) Drive a real iteration on an external project (upstream
+        or similar) to prove consensus-mcp works outside self-hosted.
+
+    (d) Audit-trail cleanup — scrub 20 stale iter-9999-* entries from
+        the real archive index. Cosmetic.
+
+    (e) Propose something else entirely if (a)-(d) miss the actual
+        highest-leverage move.
+
+    Each contributor should pick ONE, justify against alternatives, and
+    sketch a bounded next-iteration scope.
+  desired_end_state: |
+    Codex returns a proposal-shape sealed YAML (selected_target,
+    rationale_vs_alternatives, deliverable_scope, risks,
+    estimated_complexity, structural_abstention) — NOT a review-shape
+    YAML (findings, goal_satisfied, blocking_objections). The whole
+    point of iter-0028 is that this dispatch should succeed without
+    codex falling back to "missing review target" errors.
+allowed_files: []
+allowed_sections: []
+forbidden_files: []
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex returns proposal-shape (not review-shape)
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers: []
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T14:30:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'smoke-test-iter-0028-proposal-mode-no-real-scope-needed'

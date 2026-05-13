@@ -111,3 +111,10 @@
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T13:52:17Z", "findings_at_boot": 0}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T13:59:40Z", "findings_at_boot": 0}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-13T14:07:14Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T14:30:08Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T14:56:29Z", "findings_at_boot": 0}
+{"event": "mcp_server_stopped", "timestamp_utc": "2026-05-13T14:56:29Z", "reason": "boot-and-exit"}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T14:56:38Z", "findings_at_boot": 0}
+{"event": "mcp_server_stopped", "timestamp_utc": "2026-05-13T14:56:38Z", "reason": "boot-and-exit"}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T15:14:04Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-13T15:35:39Z", "findings_at_boot": 0}

@@ -773,4 +773,28 @@ passes:
   packet_sha256: d88cf6f32e8ce1778fed54064cea7f8ece6374f0a559a695c26d8ba0dda23665
   iteration_id: iteration-0028-codex-proposal-mode
   reviewer_id: codex-iteration-0028-7
-last_updated_utc: '2026-05-13T14:10:10Z'
+- id: codex-iteration-0029-smoke-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0029-proposal-mode-smoke-codex-iteration-0029-smoke-1-pass.yaml
+  sealed_at: '2026-05-13T14:31:11Z'
+  packet_sha256: e14d8f985b24969cecb2b625b8a763902f268a628cb8f888ec3f55ebad1a5b96
+  iteration_id: iteration-0029-proposal-mode-smoke
+  reviewer_id: codex-iteration-0029-smoke-1
+- id: codex-iteration-0030-1-blind-proposal
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0030-consensus-init-mcp-bootstrap-codex-iteration-0030-1-pass.yaml
+  sealed_at: '2026-05-13T15:16:12Z'
+  packet_sha256: 4806ae8117745d8eaa162f4f16a81c756f9639a64b6139260a98dacc4b7cd6d4
+  iteration_id: iteration-0030-consensus-init-mcp-bootstrap
+  reviewer_id: codex-iteration-0030-1
+- id: gemini-iteration-0031-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0031-consensus-init-mcp-bootstrap-impl-gemini-iteration-0031-1-pass.yaml
+  sealed_at: '2026-05-13T15:36:24Z'
+  packet_sha256: 99ad44c00dce0a2ae35b52fd13107ebb213eb8614c8c8dabbb479c56de50ed2b
+  iteration_id: iteration-0031-consensus-init-mcp-bootstrap-impl
+  reviewer_id: gemini-iteration-0031-1
+- id: codex-iteration-0031-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0031-consensus-init-mcp-bootstrap-impl-codex-iteration-0031-1-pass.yaml
+  sealed_at: '2026-05-13T15:36:43Z'
+  packet_sha256: 65a6ea091e86490f77cfba2e92b414935cac6e82168ba4ed5ee3fb56a461a40d
+  iteration_id: iteration-0031-consensus-init-mcp-bootstrap-impl
+  reviewer_id: codex-iteration-0031-1
+last_updated_utc: '2026-05-13T15:36:43Z'
