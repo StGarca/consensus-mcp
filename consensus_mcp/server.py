@@ -178,6 +178,12 @@ apply_codex_patch.register(registry)
 from consensus_mcp.tools import resume  # noqa: E402
 resume.register(registry)
 
+from consensus_mcp.tools import consensus_run_iteration  # noqa: E402
+consensus_run_iteration.register(registry)
+
+from consensus_mcp.tools import consensus_get_iteration_outcome  # noqa: E402
+consensus_get_iteration_outcome.register(registry)
+
 
 # ---------------------------------------------------------------------------
 # Boot-time disposition check
