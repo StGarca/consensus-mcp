@@ -1,0 +1,157 @@
+iteration_id: iteration-0021-next-direction-consult
+workflow_mode: propose-converge
+independence: blind-first-reveal
+convergence_rule_applied: strict-majority
+converged_at_round: 1
+
+participants:
+  - contributor: claude
+    pass_id: claude-iteration-0021-1-blind-proposal
+    proposal_path: claude-proposal.yaml
+    selected_target: "(a) MCP wiring of workflow_engine + contributors"
+    vote: approve
+  - contributor: gemini
+    pass_id: gemini-iteration-0021-2-blind-proposal
+    proposal_path: gemini-review.yaml
+    selected_target: "(a) MCP wiring of workflow_engine + contributors"
+    vote: approve
+  - contributor: codex
+    pass_id: codex-iteration-0021-3-blind-proposal
+    proposal_path: codex-review.yaml
+    selected_target: null
+    vote: structural-abstention
+    abstention_reason: |
+      Codex's review schema is patch-or-approve and rejects design-consult
+      packets that lack touched_files to patch / acceptance evidence to
+      verify. It returned blocking findings on packet structure rather
+      than substantively responding to the question. This is a known
+      tooling limitation of the codex dispatcher in propose-converge mode
+      (separate follow-up: a generative-proposal prompt template).
+      Codex was NOT given visibility to claude's or gemini's proposals
+      before sealing; blind-first-reveal independence preserved.
+
+convergence_rationale: |
+  Strict-majority threshold of 2 met. Claude and gemini, dispatched blind
+  and independent, both selected target (a) "MCP wiring of workflow_engine
+  + contributors" as the highest-value next iteration. Their scope sketches
+  agree on:
+    - Two new MCP tools: consensus_run_iteration (orchestrator) +
+      consensus_get_iteration_outcome (read-only inspector)
+    - Adapters built from .consensus/config.yaml contributors.enabled
+    - WorkflowEngine.run_iteration() drives the work; new code only wires
+    - Integration test via Fake adapters in test_workflow_engine_wiring or
+      test_consensus_run_iteration
+
+  Both proposals agree the alternatives are lower-priority:
+    - (b) lazy REPO_ROOT — debt but iter-0019 removed the symptom
+    - (c) audit-trail scrub — cosmetic
+    - (d) README — better authored AFTER (a) ships so it can document the
+      unified surface
+
+  Codex's structural abstention is not a substantive objection; it's a
+  tooling-mode mismatch. The two substantive proposals concur.
+
+selected_target_full: |
+  (a) MCP wiring of workflow_engine + contributors
+
+next_iteration_id: iteration-0022-mcp-wire-workflow-engine
+
+deliverable_scope:
+  primary_tool:
+    name: consensus_run_iteration
+    inputs:
+      - iteration_dir (path)
+      - goal_packet_path (path)
+      - target_path (path; problem-statement for workflow #4, patch for #3)
+      - config_path (optional; defaults to .consensus/config.yaml)
+      - claude_proposal_yaml (optional string; for workflow #4 where claude
+        the orchestrator must supply its own proposal content for the
+        in-process ClaudeAdapter)
+    outputs:
+      - workflow_mode
+      - converged (bool)
+      - convergence_rule
+      - contributors_responsive (list of keys)
+      - contributors_timed_out (list)
+      - approve_votes (list)
+      - block_votes (list)
+      - blocking_objection_ids (list)
+      - final_artifact_path
+      - rationale
+      - error (optional)
+  secondary_tool:
+    name: consensus_get_iteration_outcome
+    purpose: |
+      Read-only inspector. Returns the parsed converged-plan.yaml (workflow
+      #4) or the sealed contributor artifacts (workflow #3) for an
+      iteration_dir.
+  helper:
+    name: consensus_mcp/_engine_factory.py
+    purpose: |
+      Single source of truth for "given a config dict + iteration_dir,
+      build a {key: ContributorAdapter} dict". Reusable from Python and
+      from the MCP tool wrapper.
+
+scope_boundaries:
+  in:
+    - consensus_mcp/tools/consensus_run_iteration.py (new)
+    - consensus_mcp/tools/consensus_get_iteration_outcome.py (new)
+    - consensus_mcp/_engine_factory.py (new)
+    - consensus_mcp/tool_registry.py (register two new tools, MCP wire format)
+    - consensus_mcp/tests/test_consensus_run_iteration.py (new)
+    - consensus_mcp/tests/test_consensus_get_iteration_outcome.py (new)
+    - consensus_mcp/tests/test_engine_factory.py (new)
+  out:
+    - any changes to WorkflowEngine, contributors/, config.py, _init_wizard
+    - lazy REPO_ROOT refactor (separate follow-up)
+    - README / CHANGELOG updates (separate follow-up after iter-0022 ships)
+    - resume/pause/cancel semantics (separate follow-up)
+
+key_design_decisions:
+  - The new tool is orthogonal to legacy reviewer_dispatch_codex/gemini;
+    those become low-level primitives, consensus_run_iteration becomes the
+    recommended orchestrator entry.
+  - claude-as-orchestrator inside an MCP tool context: the tool accepts
+    `claude_proposal_yaml` as a parameter, the tool wrapper writes that
+    via T6 inside the engine's ClaudeAdapter artifact_callback. This avoids
+    the deadlock of claude-the-tool-caller waiting for claude-the-adapter
+    to produce content. For workflow #3 (where claude doesn't participate),
+    the parameter is unused.
+  - Effective-config loads via cfg.load() so legacy-mode repos without
+    .consensus/config.yaml still work via synthesize_legacy_config().
+  - All sealing already flows through T6; no new audit surface needed.
+  - Tool registered with flat camelCase {name, description, inputSchema}
+    shape per iter-0008.
+  - argparse-free wrapper; uses the same `handle(...)` pattern as other
+    MCP tools.
+
+acceptance_gates_for_iter_0022:
+  - A1: full suite >=662 green
+        (current 658 + 4 new tool tests minimum)
+  - A2: integration smoke (tmp_path-isolated archive per iter-0019 pattern):
+        run consensus_run_iteration end-to-end with Fake adapters from
+        consensus_mcp.contributors.base, assert converged-plan.yaml lands
+        at expected path and outcome dict has expected keys
+  - A3: MCP wire format test recognizes both new tools with
+        {name, description, inputSchema} flat camelCase shape
+  - A4: no regression in legacy reviewer_dispatch_* tools (test suite
+        already covers them)
+
+recommended_workflow_for_iter_0022: post-review (workflow #3)
+recommended_workflow_rationale: |
+  Implementation of a converged design is canonical workflow #3 per
+  project_workflows.md. The design questions are resolved here in iter-0021;
+  iter-0022 is execution.
+
+deferred_follow_ups:
+  - iter-0023+ (one of):
+      (b) lazy REPO_ROOT — needs its own workflow #4 design consult,
+          touches all consensus_mcp/tools/*.py at module-load time
+      (c) audit-trail iter-9999 scrub — needs sign-off on immutable-seal
+          semantics; arguably "delete + audit-event for the scrub"
+      (d) README.md v1.14.0 refresh — best authored AFTER (a) ships so
+          quickstart can show the unified consensus_run_iteration surface
+
+sealed_at_utc: '2026-05-13T07:50:00Z'
+authored_by: claude-orchestrator (per blind+gemini concurrence; codex
+  structural-abstention noted)

@@ -1,0 +1,56 @@
+iteration_id: iteration-0021-next-direction-consult
+reviewer_id: codex-iteration-0021-3
+pass_id: codex-iteration-0021-3-blind-proposal
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: No in-scope file content or allowed file path is provided to create or
+    verify converged-plan.yaml
+  citation: goal_packet.yaml:1
+  risk: Acceptance gate A1 cannot be satisfied because the required converged-plan.yaml
+    content is absent and allowed_files is empty, so any patch would be out of scope.
+  recommendation: Provide converged-plan.yaml in the touched-file contents and include
+    its relative path in allowed_files, or regenerate the packet after the workflow
+    writes the plan.
+  patch_not_proposed_reason: No touched-file contents are embedded and allowed_files
+    is empty, so there is no authorized file I can patch.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: blocking
+  summary: Final-round approvals and convergence rationale are not present in the
+    review surface
+  citation: goal_packet.yaml:1
+  risk: Acceptance gate A2 and the desired engine-output rationale cannot be verified,
+    so the sealed goal cannot be marked satisfied.
+  recommendation: Include the final round contributor approval records and convergence
+    rationale in the sealed review target or its authorized touched-file contents.
+  patch_not_proposed_reason: The approval/rationale files or embedded contents are
+    missing from the packet, and no allowed files are in scope for a fix.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The packet provides no embedded touched-file contents and
+  no allowed files, so neither the required converged-plan.yaml nor the final approval/rationale
+  evidence can be verified or patched.
+blocking_objections:
+- codex-rev-001
+- codex-rev-002
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: f01fd3871935c961efb240e0074a08bb263be0a9baeca855bc9934ccf4c489b5
+  output_sha256: 40b0ffab8abbb0d11a2b5c194b4b2edf6bcc3e361dd3e9915eb7e37268f38f06
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 1ca63e2a0b9b4f0aa2d7e5fef4f1c2c2f98f1d410a9ff749fccb80cabfeac2b6
+  scope_signature: f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5
+  review_target_path: consensus-state/active/iteration-0021-next-direction-consult/goal_packet.yaml
+  review_target_hash: 1ca63e2a0b9b4f0aa2d7e5fef4f1c2c2f98f1d410a9ff749fccb80cabfeac2b6
+sealed_at_utc: '2026-05-13T07:46:17Z'
+packet_sha256: ee47615e3f9e21cd948441d46de72c5639a28bc5a80c482591b48cfb157ffd87
