@@ -1,3 +1,6 @@
+# Local plugin state (context-mode KV store)
+data/
+
 # Python
 __pycache__/
 *.py[cod]
