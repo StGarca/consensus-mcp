@@ -47,7 +47,7 @@ consensus-init --install-claude-code
 
 (If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.14.0` — but pipx is the recommended pattern for cross-project use.)
 
-The `--install-claude-code` step is one-time per machine. It copies a small skill (`~/.claude/skills/consensus/SKILL.md`) and a slash command (`~/.claude/commands/consensus-init.md`) into your Claude Code config. Both delegate to the same `consensus-init` shell binary; they just make it discoverable from inside Claude Code. Honors `CLAUDE_HOME` env var for non-default locations. Idempotent on rerun; pass `--force` to overwrite user-edited copies.
+`--install-claude-code` is a **standalone global operation** — it copies a small skill (`~/.claude/skills/consensus/SKILL.md`) and a slash command (`~/.claude/commands/consensus-init.md`) into your Claude Code config and exits. It does NOT run the per-project bootstrap; you run `consensus-init` (without the flag) inside each project for that. Honors `CLAUDE_HOME` env var for non-default locations. Idempotent on rerun; pass `--force` to overwrite user-edited copies. Both shipped files delegate to the same `consensus-init` shell binary; they just make it discoverable from inside Claude Code chat.
 
 **Then bootstrap any project with a single command:**
 

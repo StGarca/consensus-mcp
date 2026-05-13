@@ -47,20 +47,24 @@ def test_claude_extensions_command_md_ships_in_package():
 # ---------- A2: --install-claude-code copies idempotently ----------
 
 def test_install_claude_code_copies_skill_and_command(tmp_path, monkeypatch):
-    """A2: --install-claude-code copies SKILL.md + command MD into CLAUDE_HOME."""
+    """A2: --install-claude-code copies SKILL.md + command MD into CLAUDE_HOME.
+
+    iter-0040 hot-fix: --install-claude-code is a STANDALONE global install
+    action — it does NOT trigger per-project bootstrap (config.yaml, .mcp.json).
+    Test runs in a fresh tmp_path with no prior config; expects only the
+    extension files to land.
+    """
     fake_home = tmp_path / ".claude"
     monkeypatch.setenv("CLAUDE_HOME", str(fake_home))
     monkeypatch.chdir(tmp_path)
 
-    rc = wiz.main([
-        "--non-interactive", "--accept-defaults",
-        "--contributors", "claude,codex,gemini",
-        "--install-claude-code",
-        "--no-mcp-json",  # skip .mcp.json so test focuses on extensions
-    ])
+    rc = wiz.main(["--install-claude-code"])
     assert rc == 0
     assert (fake_home / "skills" / "consensus" / "SKILL.md").exists()
     assert (fake_home / "commands" / "consensus-init.md").exists()
+    # Per-project artifacts must NOT be written by the global install.
+    assert not (tmp_path / ".consensus" / "config.yaml").exists()
+    assert not (tmp_path / ".mcp.json").exists()
 
 
 def test_install_claude_code_idempotent_on_rerun(tmp_path, monkeypatch):
@@ -69,23 +73,13 @@ def test_install_claude_code_idempotent_on_rerun(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_HOME", str(fake_home))
     monkeypatch.chdir(tmp_path)
 
-    first = wiz.main([
-        "--non-interactive", "--accept-defaults",
-        "--contributors", "claude,codex,gemini",
-        "--install-claude-code", "--no-mcp-json",
-    ])
+    first = wiz.main(["--install-claude-code"])
     assert first == 0
     skill = fake_home / "skills" / "consensus" / "SKILL.md"
-    first_mtime = skill.stat().st_mtime
     first_text = skill.read_text(encoding="utf-8")
 
-    # Rerun. config.yaml exists from first run, so use --reconfigure.
-    # Skill content is byte-identical → no rewrite.
-    second = wiz.main([
-        "--non-interactive", "--accept-defaults",
-        "--contributors", "claude,codex,gemini",
-        "--install-claude-code", "--no-mcp-json", "--reconfigure",
-    ])
+    # Rerun. Skill content is byte-identical → no rewrite.
+    second = wiz.main(["--install-claude-code"])
     assert second == 0
     assert skill.read_text(encoding="utf-8") == first_text
 
@@ -102,11 +96,7 @@ def test_install_claude_code_refuses_overwrite_on_divergent_existing(
     skill = skill_dir / "SKILL.md"
     skill.write_text("# user-edited skill content do not clobber\n", encoding="utf-8")
 
-    rc = wiz.main([
-        "--non-interactive", "--accept-defaults",
-        "--contributors", "claude,codex,gemini",
-        "--install-claude-code", "--no-mcp-json",
-    ])
+    rc = wiz.main(["--install-claude-code"])
     # Refusal is rc=0 (skipped, not failed); a warning is printed.
     assert rc == 0
     out = capsys.readouterr().out + capsys.readouterr().err
@@ -126,11 +116,7 @@ def test_install_claude_code_force_replaces_divergent_existing(
     skill = skill_dir / "SKILL.md"
     skill.write_text("# stale content\n", encoding="utf-8")
 
-    rc = wiz.main([
-        "--non-interactive", "--accept-defaults",
-        "--contributors", "claude,codex,gemini",
-        "--install-claude-code", "--force", "--no-mcp-json",
-    ])
+    rc = wiz.main(["--install-claude-code", "--force"])
     assert rc == 0
     new = skill.read_text(encoding="utf-8")
     assert "# stale content" not in new
@@ -145,11 +131,7 @@ def test_install_claude_code_honors_claude_home_env(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_HOME", str(custom))
     monkeypatch.chdir(tmp_path)
 
-    rc = wiz.main([
-        "--non-interactive", "--accept-defaults",
-        "--contributors", "claude,codex,gemini",
-        "--install-claude-code", "--no-mcp-json",
-    ])
+    rc = wiz.main(["--install-claude-code"])
     assert rc == 0
     assert (custom / "skills" / "consensus" / "SKILL.md").exists()
     assert (custom / "commands" / "consensus-init.md").exists()
