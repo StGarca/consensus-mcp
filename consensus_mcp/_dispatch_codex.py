@@ -323,6 +323,17 @@ def _invoke_codex(
         popen_factory = subprocess.Popen
     can_log = log_path is not None and anchors is not None
 
+    # iter-0007 F4 (deferred infra): allow env-var override of the stall-
+    # silence threshold so operators with large prompts / slow models can
+    # extend without code change. Codex cold-start on 50KB+ prompts often
+    # exceeds the 180s default.
+    env_silence = os.environ.get("CONSENSUS_MCP_STALL_SILENCE_SECONDS")
+    if env_silence:
+        try:
+            stall_silence_seconds = float(env_silence)
+        except ValueError:
+            pass  # keep default
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
         out_file = tmp.name
     try:
