@@ -1,0 +1,90 @@
+"""Unit tests for consensus_mcp._engine_factory."""
+from __future__ import annotations
+
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+
+from consensus_mcp import _engine_factory as factory
+from consensus_mcp import config as cfg
+from consensus_mcp.contributors.claude import ClaudeAdapter
+from consensus_mcp.contributors.codex import CodexAdapter
+from consensus_mcp.contributors.gemini import GeminiAdapter
+
+
+def _three_contributor_config():
+    c = deepcopy(cfg.default_config())
+    c["contributors"]["enabled"] = ["claude", "codex", "gemini"]
+    cfg.validate(c)
+    return c
+
+
+def test_build_adapters_returns_one_per_enabled_contributor(tmp_path):
+    config = _three_contributor_config()
+    def _cb(packet):
+        return {"findings": [], "goal_satisfied": True, "blocking_objections": []}
+    adapters = factory.build_adapters(config, claude_artifact_callback=_cb)
+    assert set(adapters.keys()) == {"claude", "codex", "gemini"}
+    assert isinstance(adapters["claude"], ClaudeAdapter)
+    assert isinstance(adapters["codex"], CodexAdapter)
+    assert isinstance(adapters["gemini"], GeminiAdapter)
+
+
+def test_build_adapters_solo_claude(tmp_path):
+    config = deepcopy(cfg.default_config())
+    config["contributors"]["enabled"] = ["claude"]
+    config["workflow"]["mode"] = cfg.WORKFLOW_POST_REVIEW
+    config["workflow"]["independence"] = cfg.INDEPENDENCE_VISIBLE
+    config["convergence"]["rule"] = cfg.CONVERGE_UNANIMOUS
+    cfg.validate(config)
+    adapters = factory.build_adapters(config)
+    assert list(adapters.keys()) == ["claude"]
+    assert isinstance(adapters["claude"], ClaudeAdapter)
+
+
+def test_build_adapters_unknown_key_raises(tmp_path):
+    config = _three_contributor_config()
+    config["contributors"]["enabled"] = ["claude", "fictional-ai"]
+    # validate() rejects this — so bypass for the factory test.
+    with pytest.raises(factory.EngineFactoryError, match="unknown contributor key"):
+        factory.build_adapters(config)
+
+
+def test_build_adapters_empty_enabled_raises(tmp_path):
+    config = deepcopy(cfg.default_config())
+    config["contributors"]["enabled"] = []
+    with pytest.raises(factory.EngineFactoryError, match="empty"):
+        factory.build_adapters(config)
+
+
+def test_build_engine_validates_config(tmp_path):
+    """build_engine() should validate the config before constructing adapters."""
+    config = deepcopy(cfg.default_config())
+    config["workflow"]["mode"] = "not-a-real-mode"
+    with pytest.raises(cfg.ConfigValidationError):
+        factory.build_engine(config, repo_root=tmp_path)
+
+
+def test_build_engine_returns_workflow_engine(tmp_path):
+    config = _three_contributor_config()
+    def _cb(packet):
+        return {"findings": [], "goal_satisfied": True, "blocking_objections": []}
+    engine = factory.build_engine(
+        config, repo_root=tmp_path, claude_artifact_callback=_cb,
+    )
+    from consensus_mcp.workflow_engine import WorkflowEngine
+    assert isinstance(engine, WorkflowEngine)
+    assert engine.repo_root == tmp_path
+    assert set(engine.adapters.keys()) == {"claude", "codex", "gemini"}
+
+
+def test_build_engine_claude_callback_threaded(tmp_path):
+    """The claude_artifact_callback must reach ClaudeAdapter.artifact_callback."""
+    config = _three_contributor_config()
+    def _cb(packet):
+        return {"findings": [], "goal_satisfied": True, "blocking_objections": []}
+    engine = factory.build_engine(
+        config, repo_root=tmp_path, claude_artifact_callback=_cb,
+    )
+    assert engine.adapters["claude"].artifact_callback is _cb
