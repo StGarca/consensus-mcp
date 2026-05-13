@@ -32,50 +32,69 @@ The end result: changes that pass three independent model families aren't "looks
 
 ## Quick start
 
+**Install once per machine, use in any project:**
+
 ```bash
-pip install consensus-mcp
+# Install via pipx — isolated venv, console scripts on PATH, no
+# polluting individual project venvs:
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.14.0
 ```
 
-Then in your repo:
+(If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.14.0` — but pipx is the recommended pattern for cross-project use.)
+
+**Then bootstrap any project with a single command:**
 
 ```bash
-# 1. Install the contributor CLIs you want in your pool.
+cd /path/to/your-project
+
+# 1. (Optional) Install the contributor CLIs you want in the pool.
 #    Codex (https://github.com/openai/codex-cli) and Gemini
 #    (https://github.com/google-gemini/gemini-cli) are auto-detected.
 #    Claude is always present as the in-process orchestrator.
 
-# 2. Initialize the project — interactive prompts for all 9 governance dimensions:
+# 2. Bootstrap the project — interactive prompts for all 9 governance
+#    dimensions, and writes BOTH .consensus/config.yaml AND .mcp.json
+#    so Claude Code auto-connects to consensus-mcp on next launch:
 consensus-init
 # Or non-interactive with sensible defaults:
 consensus-init --non-interactive --accept-defaults
+```
 
-# 3. Author a goal packet describing what you want done
-#    (per-iteration goal_packet.yaml under consensus-state/active/<iter>/)
+That's it. `consensus-init` produces three artifacts:
 
-# 4. Run an iteration end-to-end via the `consensus.run_iteration` MCP tool,
-#    or call its handler directly:
-python -c "
+- `.consensus/config.yaml` — governance choices (workflow, contributor pool, convergence rule, etc.)
+- `.gitignore` managed block — three paths (`.consensus/tmp/`, `.consensus/cache/`, `.consensus/logs/`)
+- `.mcp.json` — Claude Code MCP server registration with correct per-project env vars; merge mode if a `.mcp.json` already exists, so existing MCP servers (playwright, github, etc.) are preserved
+
+Then open Claude Code at that project. The consensus-mcp tools (`consensus.run_iteration`, `reviewer.dispatch_codex`, `reviewer.dispatch_gemini`, plus 15+ others) become available. Ask Claude in natural language ("get consensus review on this change") or use the `consensus` trigger word — both work.
+
+### Bootstrap flags
+
+- `--no-mcp-json` — skip the `.mcp.json` write (you'll manage it manually)
+- `--mcp-command STR` — override the command written to `.mcp.json` (e.g., `"py -3.11 -m consensus_mcp.server"` for dev installs)
+- `--mcp-force` — replace existing consensus-mcp entry on divergence (other MCP servers preserved)
+- `--reconfigure` — re-prompt with existing config as defaults; show unified diff before writing
+- `--check` — validate existing `.consensus/config.yaml` and exit
+- `--print-defaults` — emit the default config YAML to stdout
+
+### Programmatic / escape-hatch entry points
+
+The single-reviewer dispatchers are still available as console scripts (handy for CI bootstrap or one-off reviews):
+
+```bash
+consensus-mcp-dispatch-codex --goal-packet ...
+consensus-mcp-dispatch-gemini --goal-packet ...
+```
+
+Or the full engine via Python:
+
+```python
 from consensus_mcp.tools.consensus_run_iteration import handle
 result = handle(
     iteration_dir='consensus-state/active/iteration-xxxx',
     goal_packet_path='consensus-state/active/iteration-xxxx/goal_packet.yaml',
     target_path='path/to/problem-or-patch.yaml',
 )
-print(result)
-"
-
-# 5. Inspect the outcome:
-python -c "
-from consensus_mcp.tools.consensus_get_iteration_outcome import handle
-print(handle(iteration_dir='consensus-state/active/iteration-xxxx'))
-"
-```
-
-The single-reviewer dispatchers are still available as escape hatches:
-
-```bash
-python -m consensus_mcp._dispatch_codex --goal-packet ...
-python -m consensus_mcp._dispatch_gemini --goal-packet ...
 ```
 
 For real-time stall detection: every codex/gemini dispatch streams output and emits 30-second heartbeats. If the model stalls past `CONSENSUS_MCP_STALL_SILENCE_SECONDS` (default 180), the wrapper kills the process group and records `dispatch_aborted`. The operator can also write `consensus-state/abort-dispatch-<pass_id>.signal` to force an abort within 500ms.
@@ -200,7 +219,7 @@ consensus_mcp/
 │   └── ...                                # 17+ tools total
 ├── dispatch_templates/         # Codex + Gemini review templates + JSON schemas
 ├── validators/                 # Disposition index + scope check + validator runner
-└── tests/                      # 688+ regression tests (1 skipped)
+└── tests/                      # 773+ regression tests (1 skipped)
 
 consensus-state/                # Runtime state (gitignored; recoverable via snapshot branch)
 ├── active/                     # Per-iteration working dirs
@@ -234,16 +253,17 @@ Earlier workflow taxonomy (#1 codex-fix-author, #2 Flavor B subsystem review) is
 
 ## Status
 
-**1.14.0** — multi-AI contributor pool, blind-first-reveal workflow #4, configurable governance, snapshot/restore. Extracted from the project that produced and stress-tested it; restarted at iter-0001 as a standalone. 688+ regression tests passing (1 skipped, 0 failing under any ordering). The bootstrap deployment is the test corpus; new users can build on a stable surface.
+**1.14.0** — multi-AI contributor pool, blind-first-reveal workflow #4, configurable governance, snapshot/restore, proposal-mode codex/gemini dispatchers, `consensus-init` auto-bootstraps `.mcp.json`. Extracted from the project that produced and stress-tested it; restarted at iter-0001 as a standalone. 773+ regression tests passing (1 skipped, 0 failing under any ordering). The bootstrap deployment is the test corpus; new users can build on a stable surface.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the v1.14.0 feature train (iter-0009 through iter-0022).
 
 ## Requirements
 
 - Python 3.10+
+- [`pipx`](https://pipx.pypa.io/) (recommended) for isolated cross-project install
 - For multi-contributor pools: [`codex-cli`](https://github.com/openai/codex-cli) and/or [`gemini-cli`](https://github.com/google-gemini/gemini-cli) on PATH (auto-detected by `consensus-init`)
 - Claude is always present as the in-process orchestrator
-- PyYAML
+- PyYAML, jsonschema (pulled in by pipx)
 
 ## License
 
