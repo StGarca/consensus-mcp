@@ -1,0 +1,32 @@
+iteration_id: iteration-0026-migrate-ledger-tool
+reviewer_id: gemini-iteration-0026-1
+pass_id: gemini-iteration-0026-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The change successfully migrates the tool to lazy path resolution,
+  removing the module-level path capture as required. The newly added tests are comprehensive,
+  covering error conditions, caching, and critically, the lazy-resolution win that
+  was the core goal of the iteration. The code is clean and meets all acceptance criteria.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: f7ad9af2a417f0db1d047c51011d7b38910a13949c06a8f62d322284f6d009d3
+  output_sha256: d75cac802e5ae10c84e2d2a29ba9afc5875e00d1594247ee579e6b701806befc
+  goal_packet_sha256: c3e6823bdf3c1897c5872051cee0f5162655ae07cd3187976473e27bcc074a1e
+  scope_signature: 4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4
+  review_target_path: consensus-state/active/iteration-0026-migrate-ledger-tool/review-packet.yaml
+  review_target_hash: 187592d8fc9b3e0fbe496e0386ea2801aa04f8aa2d67f69330f4e34acb6e6941
+  adapter: gemini
+sealed_at_utc: '2026-05-13T11:15:23Z'
+packet_sha256: 362b302fb8dfc76aea59b8dd869b60152f71c41db5099ed7a4c9b716bd122cab
