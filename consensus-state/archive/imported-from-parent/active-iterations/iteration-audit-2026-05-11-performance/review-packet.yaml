@@ -1,0 +1,245 @@
+defect_target:
+  files:
+  - agent-loop/active/iteration-audit-2026-05-11-performance/review-target.md
+  base_sha: edaaa400751883c97bc572d4e2b957f8be41aca2a696865bd12f7f233531a441
+  touched_files_contents:
+    agent-loop/active/iteration-audit-2026-05-11-performance/review-target.md: "#\
+      \ Performance audit — agent-loop stop-rule + dispatch hot paths\n\nAudit dimension:\
+      \ **performance** (subprocess overhead, repeated yaml parse, n² stop-rule patterns,\
+      \ dispatch-log scan cost, redundant audit-log re-parse).\n\n## Audit question\
+      \ for codex\n\nReview the following code excerpts for performance defects. Specific\
+      \ concerns (non-exclusive):\n\n1. **subprocess.run / Popen overhead**: `_self_drive.cmd_check_stop_rules`\
+      \ shells out to git 4× minimum per invocation (`diff --cached`, `diff`, `ls-files`,\
+      \ `diff --numstat HEAD`), each with a 30s timeout and process-creation cost.\
+      \ `_evaluate_one_gate` further shells out to a user-supplied check via `shell=True`\
+      \ per gate per invocation. Is there a way to batch git calls, cache by repo\
+      \ state, or detect \"no changes\" cheaply before forking?\n2. **Repeated `yaml.safe_load`\
+      \ on hot paths**: `cmd_check_stop_rules` parses the same goal_packet once and\
+      \ then calls `_read_yaml_or_empty(claude_path)` / `_read_yaml_or_empty(codex_path)`\
+      \ repeatedly across stop-rule branches (claude_path read 3+ times across lines\
+      \ 445/584/728/812; codex similar). Same review-packet.yaml re-parsed across\
+      \ drift-finding branches. Each `_read_yaml_or_empty` re-opens, re-reads, and\
+      \ re-parses the file. Cost matters when stop-rules are evaluated in a tight\
+      \ orchestrator poll loop.\n3. **n² patterns in stop-rule evaluation**: `patch_would_touch_forbidden_files`\
+      \ does `for forbidden in forbidden_list: for c in changed_files:` (O(F × C)).\
+      \ For a goal_packet with 50 forbidden patterns and a 500-file changeset, that's\
+      \ 25k `fnmatch.fnmatch` calls per check_stop_rules invocation. The drift-finding\
+      \ loop scans `iteration_artifacts` then `claude_reviewed_sha` then `consensus.reviewed_artifacts`,\
+      \ each re-computing `_canonical_sha256_of_yaml_file` (which itself re-parses\
+      \ + re-dumps yaml) on every referenced file.\n4. **Large dispatch-log.jsonl\
+      \ scan cost as log grows**: `_visibility_watchdog._read_jsonl` does `path.read_text()`\
+      \ then `splitlines()` then `json.loads` per line, building the full event list\
+      \ in memory. With a months-old append-only log this is unbounded. `find_stalled`\
+      \ then builds a dict over ALL events. No time-window cutoff, no streaming parse,\
+      \ no index.\n5. **Redundant re-parse of audit-log in multiple stop-rule branches**:\
+      \ `audit_path` (independence-audit.yaml) is read at line 403 (iter_count), and\
+      \ again at line 812 (closure_invariant). `yaml.safe_load(audit_path.read_bytes())`\
+      \ on a large audit yaml runs twice. Same applies to repeated `_read_yaml_or_empty(claude_path)`\
+      \ calls across the validator-disagreement and closure-invariant branches.\n\
+      6. **Prompt build cost in `_dispatch_codex._build_prompt`**: Linear `str.replace`\
+      \ loop over the substitutions dict for every dispatch; for very large `{touched_files_contents_block}`\
+      \ (multi-file review-packets), `_format_touched_files_contents` likely traverses\
+      \ the dict and concatenates strings. Quadratic risk if the formatter does `result\
+      \ += chunk` instead of `\"\".join(...)`.\n\n## Files in scope (excerpts below)\n\
+      \n- `scripts/agent_loop_mcp/_self_drive.py` (cmd_check_stop_rules + helpers)\n\
+      - `scripts/agent_loop_mcp/_dispatch_codex.py` (subprocess invocation, prompt\
+      \ build)\n- `scripts/agent_loop_mcp/_visibility_watchdog.py` (dispatch-log scan)\n\
+      \n---\n\n## Excerpt 1: `_self_drive.py:175-218` — `_collect_changed_files` runs\
+      \ 3 git subprocesses serially\n\n```python\ndef _collect_changed_files(repo_root:\
+      \ Path) -> list[str]:\n    \"\"\"Return the de-duplicated union of git's three\
+      \ change-views.\n    ... covers all three:\n      1. `git diff --cached --name-only`\
+      \           (staged)\n      2. `git diff --name-only`                    (unstaged\
+      \ tracked)\n      3. `git ls-files --others --exclude-standard` (untracked,\
+      \ gitignore-honoring)\n    \"\"\"\n    seen: set[str] = set()\n    invocations\
+      \ = [\n        [\"git\", \"diff\", \"--cached\", \"--name-only\"],\n       \
+      \ [\"git\", \"diff\", \"--name-only\"],\n        [\"git\", \"ls-files\", \"\
+      --others\", \"--exclude-standard\"],\n    ]\n    for cmd in invocations:\n \
+      \       try:\n            r = subprocess.run(\n                cmd,\n      \
+      \          cwd=str(repo_root),\n                capture_output=True,\n     \
+      \           text=True,\n                check=False,\n                timeout=30,\n\
+      \            )\n            for ln in r.stdout.splitlines():\n             \
+      \   p = ln.strip()\n                if p:\n                    seen.add(p)\n\
+      \        except Exception:\n            continue\n    return sorted(seen)\n\
+      ```\n\nThree subprocess.run calls back-to-back. Each git invocation pays its\
+      \ own fork+exec + libgit index-load. Used by `patch_would_touch_forbidden_files`,\
+      \ `cmd_verify_scope` — invoked once per `cmd_check_stop_rules`, which runs frequently\
+      \ in the orchestrator poll loop.\n\n## Excerpt 2: `_self_drive.py:262-286` —\
+      \ `_evaluate_one_gate` shells out per gate with shell=True\n\n```python\ndef\
+      \ _evaluate_one_gate(gate: dict, repo_root: Path) -> dict:\n    gate_id = gate.get(\"\
+      id\", \"?\")\n    check = gate.get(\"check\", \"\")\n    if not check:\n   \
+      \     return {\"id\": gate_id, \"passed\": False, \"error\": \"no_check_command\"\
+      }\n    try:\n        r = subprocess.run(check, shell=True, cwd=str(repo_root),\
+      \ capture_output=True, text=True, timeout=120)\n        return {\n         \
+      \   \"id\": gate_id,\n            \"passed\": r.returncode == 0,\n         \
+      \   \"exit_code\": r.returncode,\n            \"stdout_tail\": r.stdout.splitlines()[-1]\
+      \ if r.stdout else \"\",\n        }\n    except Exception as exc:\n        return\
+      \ {\"id\": gate_id, \"passed\": False, \"exception\": str(exc)}\n```\n\nCalled\
+      \ inside the `any_acceptance_gate_returns_undefined` loop in `cmd_check_stop_rules:548-553`\
+      \ (one subprocess per gate per stop-rule check) AND inside `cmd_evaluate_gates:876`\
+      \ (one subprocess per gate per evaluate-gates call). A 10-gate goal_packet eats\
+      \ 10 forks per check_stop_rules invocation. shell=True adds an extra shell process\
+      \ layer.\n\n## Excerpt 3: `_self_drive.py:289-297` — `_read_yaml_or_empty` re-reads\
+      \ + re-parses on every call\n\n```python\ndef _read_yaml_or_empty(path: Path)\
+      \ -> dict:\n    \"\"\"Best-effort yaml load; returns {} on missing/parse failure\
+      \ rather than raising.\"\"\"\n    try:\n        if not path.exists():\n    \
+      \        return {}\n        loaded = yaml.safe_load(path.read_text(encoding=\"\
+      utf-8\"))\n        return loaded if isinstance(loaded, dict) else {}\n    except\
+      \ Exception:\n        return {}\n```\n\nCall sites inside ONE invocation of\
+      \ `cmd_check_stop_rules` (line numbers from `_self_drive.py`):\n- 445/446: claude_review\
+      \ + codex_review (disagreement check)\n- 583/584/585/586: claude_prior + claude_curr\
+      \ + codex_prior + codex_curr (recurring-finding check)\n- 650: review_packet\
+      \ (drift check)\n- 661: claude_review_for_drift (drift check — re-reads claude_path)\n\
+      - 669: consensus (drift check)\n- 722: verification.yaml fallback\n- 728/729:\
+      \ claude_v + codex_v (validator-disagreement check) — re-reads claude_path AND\
+      \ codex_path\n- 822: review (closure-invariant check) — re-reads claude_path/codex_path\n\
+      \nclaude-review.yaml is re-parsed up to 4× per single `cmd_check_stop_rules`\
+      \ invocation. codex-review.yaml similar. No memoization.\n\n## Excerpt 4: `_self_drive.py:339-348`\
+      \ — canonical-sha helper re-parses + re-dumps yaml\n\n```python\ndef _canonical_sha256_of_yaml_file(p:\
+      \ Path) -> str:\n    \"\"\"Canonical-full sha256: hashlib.sha256(yaml.safe_dump(yaml.safe_load(...),\
+      \ sort_keys=True)).\n    \"\"\"\n    loaded = yaml.safe_load(p.read_text(encoding=\"\
+      utf-8\"))\n    canonical = yaml.safe_dump(loaded, sort_keys=True)\n    return\
+      \ hashlib.sha256(canonical.encode(\"utf-8\")).hexdigest()\n```\n\nCalled by\
+      \ `_check_drift` for every claimed-sha in `review-packet.iteration_artifacts[]`,\
+      \ `claude-review.reviewed_packet_sha256`, and `consensus.reviewed_artifacts[]`.\
+      \ If the same referenced_path appears in two claims (common — review_packet\
+      \ AND consensus both anchor the same artifact), the file is re-loaded, re-dumped,\
+      \ re-hashed each time. No path-level cache.\n\n## Excerpt 5: `_self_drive.py:407-409`\
+      \ + `:811-815` — audit_path read twice per stop-rule invocation\n\n```python\n\
+      audit_path = iter_dir / \"independence-audit.yaml\"\niter_count = 0\nif audit_path.exists():\n\
+      \    audit = yaml.safe_load(audit_path.read_bytes()) or {}\n    log = audit.get(\"\
+      audit_log\", []) or []\n    iter_count = sum(1 for e in log if e.get(\"event\"\
+      ) == \"patch_applied\")\n# ... 400+ lines later ...\nif _check_inv is not None\
+      \ and audit_path.exists():\n    audit = yaml.safe_load(audit_path.read_bytes())\
+      \ or {}\n    log = audit.get(\"audit_log\", []) or []\n    last_mutation = _lm_from_audit(log)\n\
+      ```\n\nThe same `independence-audit.yaml` is read and parsed twice in two separate\
+      \ stop-rule branches. For a long-running iteration with a large audit log, this\
+      \ is a noticeable double-cost.\n\n## Excerpt 6: `_self_drive.py:410-421` — n²\
+      \ fnmatch loop over forbidden_files × changed\n\n```python\nforbidden = packet.get(\"\
+      forbidden_files\", [])\nrepo_root = _resolve_repo_root()\ntry:\n    changed\
+      \ = _collect_changed_files(repo_root)\n    for forbidden_path in forbidden:\n\
+      \        for c in changed:\n            if _path_matches_pattern(c, forbidden_path):\n\
+      \                stop_rules_fired.append({\"rule\": \"patch_would_touch_forbidden_files\"\
+      , \"forbidden\": forbidden_path, \"changed\": c})\nexcept Exception as exc:\n\
+      \    stop_rules_fired.append({\"rule\": \"git_check_failed\", \"exception\"\
+      : str(exc)})\n```\n\n`_path_matches_pattern` calls `fnmatch.fnmatch` when wildcards\
+      \ are present. With F forbidden patterns and C changed files, this is O(F ×\
+      \ C) regex compilations per call. fnmatch does NOT cache compiled patterns;\
+      \ it recompiles each invocation.\n\n## Excerpt 7: `_self_drive.py:467-542` —\
+      \ patch_size_exceeds_max walks all untracked files synchronously\n\n```python\n\
+      max_patch_size = packet.get(\"max_patch_size\")\nif max_patch_size:\n    try:\n\
+      \        total = 0\n        ns = subprocess.run(\n            [\"git\", \"diff\"\
+      , \"--numstat\", \"HEAD\"],\n            cwd=str(repo_root), capture_output=True,\
+      \ text=True, check=False, timeout=30,\n        )\n        for line in ns.stdout.splitlines():\n\
+      \            # ... parse numstat\n            total += added + deleted\n\n \
+      \       untracked = subprocess.run(\n            [\"git\", \"ls-files\", \"\
+      --others\", \"--exclude-standard\"],\n            cwd=str(repo_root), capture_output=True,\
+      \ text=True, check=False, timeout=30,\n        )\n        for line in untracked.stdout.splitlines():\n\
+      \            rel = line.strip()\n            if not rel:\n                continue\n\
+      \            f = repo_root / rel\n            try:\n                if f.is_symlink():\n\
+      \                    total += 1\n                    continue\n            \
+      \    with f.open(\"rb\") as fh:\n                    content = fh.read()\n \
+      \               try:\n                    text = content.decode(\"utf-8\")\n\
+      \                except UnicodeDecodeError:\n                    continue\n\
+      \                lines = text.count(\"\\n\")\n                if text and not\
+      \ text.endswith(\"\\n\"):\n                    lines += 1\n                total\
+      \ += lines\n            except OSError:\n                continue\n        #\
+      \ ...\n    except Exception:\n        pass\n```\n\nThis adds 2 more git subprocesses\
+      \ to the stop-rule check (on top of `_collect_changed_files`'s 3), AND reads\
+      \ every untracked file's full content from disk to count lines. For a session\
+      \ with 100+ untracked files (run/ artifacts, pytest tmp, etc.), this is meaningful\
+      \ I/O per stop-rule poll.\n\n## Excerpt 8: `_self_drive.py:544-561` — `any_acceptance_gate_returns_undefined`\
+      \ re-runs every gate\n\n```python\nundefined_gates = []\nfor gate in packet.get(\"\
+      acceptance_gates\", []) or []:\n    result = _evaluate_one_gate(gate, repo_root)\n\
+      \    if \"exception\" in result:\n        undefined_gates.append({\"id\": result[\"\
+      id\"], \"kind\": \"exception\", \"detail\": result[\"exception\"]})\n    elif\
+      \ result.get(\"error\") == \"no_check_command\":\n        undefined_gates.append({\"\
+      id\": result[\"id\"], \"kind\": \"no_check_command\"})\n```\n\n`cmd_check_stop_rules`\
+      \ runs ALL acceptance_gates via subprocess for the side-effect of checking \"\
+      is any gate undefined\". This is N subprocesses (typically 5-15 in real goal_packets).\
+      \ `cmd_evaluate_gates` ALSO runs all gates separately (line 876). If the orchestrator\
+      \ calls both, every gate gets shelled out twice.\n\n## Excerpt 9: `_self_drive.py:568-606`\
+      \ — recurring-finding rule walks all sibling iter dirs\n\n```python\nparent_dir\
+      \ = iter_dir.parent\nif parent_dir.exists():\n    try:\n        siblings = sorted(\n\
+      \            d.name for d in parent_dir.iterdir()\n            if d.is_dir()\
+      \ and d.name.startswith(\"iteration-\")\n        )\n    except OSError:\n  \
+      \      siblings = []\n    if iter_dir.name in siblings:\n        idx = siblings.index(iter_dir.name)\n\
+      \        if idx > 0:\n            prior_name = siblings[idx - 1]\n         \
+      \   prior_dir = parent_dir / prior_name\n            claude_prior = _read_yaml_or_empty(prior_dir\
+      \ / \"claude-review.yaml\")\n            claude_curr = _read_yaml_or_empty(claude_path)\n\
+      \            codex_prior = _read_yaml_or_empty(prior_dir / \"codex-review.yaml\"\
+      )\n            codex_curr = _read_yaml_or_empty(codex_path)\n            # ...\
+      \ 4 yaml parses\n```\n\n`parent_dir.iterdir()` lists every sibling iteration\
+      \ directory (could be hundreds in agent-loop/archive equivalents) plus stat\
+      \ per entry to test `is_dir()`. Then 4 more yaml-parse calls. claude_path is\
+      \ re-parsed here even though it was already parsed at line 445.\n\n## Excerpt\
+      \ 10: `_dispatch_codex.py:431-517` — `_invoke_codex` fork+exec cost per dispatch\n\
+      \n```python\ndef _invoke_codex(prompt, codex_bin, timeout_seconds, repo_root,\
+      \ schema_path) -> str:\n    with tempfile.NamedTemporaryFile(mode=\"w\", suffix=\"\
+      .json\", delete=False, encoding=\"utf-8\") as tmp:\n        out_file = tmp.name\n\
+      \    try:\n        cmd = [\n            _resolve_codex_bin(codex_bin),\n   \
+      \         \"exec\",\n            \"--skip-git-repo-check\",\n            \"\
+      --cd\", str(repo_root),\n            \"--sandbox\", \"read-only\",\n       \
+      \     \"--output-schema\", str(schema_path),\n            \"-o\", out_file,\n\
+      \            \"-\",\n        ]\n        result = subprocess.run(\n         \
+      \   cmd,\n            input=prompt.encode(\"utf-8\"),\n            capture_output=True,\n\
+      \            timeout=timeout_seconds,\n        )\n        # ... + earlier `_get_codex_version`\
+      \ shells out separately to `<codex> --version`\n```\n\nPer dispatch: at least\
+      \ 2 subprocess invocations (`<codex> --version` for audit metadata + `<codex>\
+      \ exec ...`). Both pay node.js startup cost (codex CLI is js). Could the version\
+      \ be cached across calls in the same Python process? `_resolve_codex_bin` also\
+      \ does `shutil.which` lookups multiple times across helper invocations.\n\n\
+      ## Excerpt 11: `_dispatch_codex.py:285-362` — `_build_prompt` linear replace\
+      \ loop\n\n```python\ndef _build_prompt(goal_packet, template_text, iteration_dir=None,\
+      \ review_packet_path=None,\n                  review_target_path=None, review_target_hash=None,\
+      \ review_packet=None) -> str:\n    # ...\n    substitutions = {\n        \"\
+      {goal_summary}\": str(goal.get(\"summary\", \"\")),\n        \"{desired_end_state}\"\
+      : str(goal.get(\"desired_end_state\", \"\")),\n        \"{allowed_files}\":\
+      \ _format_list(goal_packet.get(\"allowed_files\", [])),\n        \"{acceptance_gates}\"\
+      : _format_gates(goal_packet.get(\"acceptance_gates\", [])),\n        \"{scope_signature}\"\
+      : str(auth.get(\"scope_signature\", \"\")),\n        # ... ~10 keys total\n\
+      \        \"{touched_files_contents_block}\": _format_touched_files_contents(touched_contents),\n\
+      \    }\n    out = template_text\n    for placeholder, value in substitutions.items():\n\
+      \        out = out.replace(placeholder, value)\n    return out\n```\n\nFor each\
+      \ substitution, a full pass over `template_text` (and the growing `out` after\
+      \ each replace). For a template + touched_files_contents_block that runs to\
+      \ 50k+ chars, that's ~10 full-string scans per dispatch. Probably not hot, but\
+      \ worth checking the `_format_touched_files_contents` implementation for quadratic\
+      \ string concat.\n\n## Excerpt 12: `_visibility_watchdog.py:83-140` — full dispatch-log\
+      \ read on every watchdog run\n\n```python\ndef _read_jsonl(path: Path) -> list[dict]:\n\
+      \    \"\"\"Read JSONL; tolerate missing file + malformed lines (mirrors TUI).\"\
+      \"\"\n    if not path.exists():\n        return []\n    events: list[dict] =\
+      \ []\n    try:\n        text = path.read_text(encoding=\"utf-8\")\n    except\
+      \ OSError:\n        return []\n    for line in text.splitlines():\n        line\
+      \ = line.strip()\n        if not line:\n            continue\n        try:\n\
+      \            events.append(json.loads(line))\n        except json.JSONDecodeError:\n\
+      \            continue\n    return events\n\n\ndef find_stalled(events, stall_threshold_seconds:\
+      \ float, now: datetime) -> list[dict]:\n    \"\"\"Return orphan dispatch_start\
+      \ events older than stall_threshold_seconds.\n    \"\"\"\n    by_key: dict[tuple,\
+      \ dict] = {}\n    for ev in events:\n        pass_id = ev.get(\"pass_id\") or\
+      \ ev.get(\"reviewer_id\")\n        if not pass_id:\n            continue\n \
+      \       iter_id = ev.get(\"iteration_id\")\n        key = (iter_id, pass_id)\n\
+      \        entry = by_key.setdefault(key, {\"start\": None, \"end\": None})\n\
+      \        kind = ev.get(\"event\")\n        if kind == \"dispatch_start\":\n\
+      \            entry[\"start\"] = ev\n        elif kind in _TERMINAL_EVENTS:\n\
+      \            entry[\"end\"] = ev\n    # ... iterates by_key\n```\n\nFull file\
+      \ slurp into memory, full event-list build, then full-dict scan. As dispatch-log.jsonl\
+      \ grows monotonically (append-only across all iterations), every watchdog run\
+      \ pays the cost of the entire history. No tail-only mode, no offset/cursor,\
+      \ no time-window prefilter.\n\n## What I expect codex to flag\n\nFindings I'd\
+      \ consider valid:\n- A memoize-once pattern that would eliminate 3-4 of the\
+      \ 5+ yaml.safe_load calls on claude-review.yaml within one `cmd_check_stop_rules`\
+      \ invocation\n- The double-read of `independence-audit.yaml` at lines 403 and\
+      \ 812 collapsed into one parse\n- A way to short-circuit `_collect_changed_files`\
+      \ when `git status --porcelain` reports clean\n- An obvious win in batching\
+      \ `_evaluate_one_gate` calls or caching results within a single check_stop_rules\n\
+      - Tail-only or cursor-based read for `_visibility_watchdog._read_jsonl` that\
+      \ doesn't slurp the whole file each invocation\n- fnmatch pattern compilation\
+      \ cache (or hoisted regex) for `_path_matches_pattern`\n- An n² hot path I missed\
+      \ (e.g., per-iteration sibling enumeration scaling badly)\n- Whether `_canonical_sha256_of_yaml_file`\
+      \ can be memoized by `(path, mtime)`\n\n## Out of scope for this audit\n\n-\
+      \ **Security** (separate audit running in parallel)\n- **Cross-platform / Windows\
+      \ correctness** (separate audit running in parallel)\n- **Bare-except patterns**\
+      \ (separate audit running in parallel)\n- Style / naming / docstrings\n- Test\
+      \ coverage gaps\n"
+schema_version: 1
+iteration_id: iteration-audit-2026-05-11-performance

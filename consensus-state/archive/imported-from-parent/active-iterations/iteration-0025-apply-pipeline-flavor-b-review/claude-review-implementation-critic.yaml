@@ -1,0 +1,204 @@
+schema_version: 1
+iteration_id: iteration-0025-apply-pipeline-flavor-b-review
+reviewer_id: claude-iter0025-1
+pass_id: claude-iter0025-1-pass1
+agent: claude
+stance: implementation_critic_pre_codex
+actor:
+  id: claude-iter0025-1
+  model_family: claude
+  role: implementation_critic
+  pass_id: claude-iter0025-1-pass1
+created_at_utc: '2026-05-10T21:05:00Z'
+goal_satisfied: false
+goal_satisfied_rationale: |
+  Pre-codex implementation_critic pass over the apply pipeline subsystem.
+  Eight findings emitted. None of these are blocking apply pipeline
+  function in current production use (capstone test passes 296/296), but
+  several are integrity-relevant defense-in-depth gaps and unhandled edge
+  cases. Codex pass to follow against the same review-packet; cross-family
+  intersection diagnostic will compare.
+findings:
+  - id: claude-iter0025-001
+    severity: high
+    target: scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    citation: apply_codex_patch.py:127-139 (_validate_actor)
+    summary: |
+      _validate_actor checks actor.model_family in {"codex","claude"} and
+      role in {"fix_author","correction_author"}, but does NOT enforce that
+      `id` and `pass_id` are non-empty strings. An actor dict with id="" or
+      id=None passes _validate_actor and lands in last_mutation.actor.id;
+      the downstream closure invariant cross_family check requires
+      closer.actor.id != lm.actor.id BOTH non-None. An empty-string id
+      satisfies that ("a" != "" passes), so the safety property is
+      preserved by accident, but an empty-string actor.id is still a real
+      data-integrity defect (audit log entries with no actual actor
+      identification).
+    recommendation: |
+      Add type+truthiness check for id and pass_id: each must be a
+      non-empty string.
+    risk: medium  # data-integrity, not cross_family bypass
+  - id: claude-iter0025-002
+    severity: medium
+    target: scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    citation: apply_codex_patch.py:309-323 (Step 6 apply loop + rollback branch)
+    summary: |
+      The apply step has a try/except that catches `Exception` and reports
+      partial_apply_failed with applied + failed file lists, but does NOT
+      roll back already-applied files. If a 2-file patch lands file A
+      successfully then fails on file B, file A is left mutated on disk
+      but the audit event is not emitted (audit happens AFTER the loop).
+      Operator sees ok=False applied=False but the working tree has the
+      partial A change.
+    recommendation: |
+      Either (a) capture per-file old_text BEFORE the loop and roll back
+      already-applied files on any per-file failure, or (b) clearly
+      document that partial_apply_failed leaves the working tree in an
+      intermediate state requiring manual reconciliation. Currently
+      `applied=False` is incorrect-by-construction in this branch (some
+      files WERE applied); change to `applied=True` with `partial=True`
+      to make it actionable.
+    risk: medium
+  - id: claude-iter0025-003
+    severity: medium
+    target: scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    citation: apply_codex_patch.py:389-447 (_apply_unified_diff)
+    summary: |
+      The minimal unified-diff applier has multiple silently-tolerant
+      branches that can produce incorrect output on adversarial diffs:
+        (a) Hunk minus line "drift": no linear-search recovery. If a `-`
+            line doesn't match orig_lines[orig_idx], raises clean error.
+            Asymmetric vs `+/space` handling — context lines DO get
+            linear-search recovery; `-` lines don't. Inconsistent.
+        (b) The context-drift linear search (lines 484-499) silently emits
+            all "skipped" original lines into the output BEFORE finding
+            the match. On a pathological diff this could resurrect lines
+            that the patch intended to delete. Should fail closed; the
+            current "skip ahead and emit" behavior is a silent corruption
+            risk.
+        (c) "Blank or other line; ignore (intra-hunk blank)" at line 502 —
+            real unified diffs use a leading space for blank context
+            lines, NOT a bare blank. Accepting bare blanks could let
+            invalid hunks through.
+    recommendation: |
+      Either (a) replace the minimal applier with stdlib
+      `difflib.unified_diff`-compatible application (or third-party
+      patch lib), or (b) tighten the context-drift recovery to fail
+      closed when a `-` line follows a context drift, and reject bare
+      blanks. Per CLAUDE.md "fail closed on undeterminable" — the
+      current code prefers progress over correctness.
+    risk: high  # silent diff corruption is exactly the failure mode the
+                # apply pipeline must prevent
+  - id: claude-iter0025-004
+    severity: medium
+    target: scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    citation: apply_codex_patch.py:413-436 (_apply_unified_diff header parsing)
+    summary: |
+      The +++ header parsing treats `+++ b/<path>` and `+++ <path>`
+      identically (b/ prefix stripped only if present). But `+++ /dev/null`
+      (file-delete signal) is NOT detected — the literal string
+      "/dev/null" becomes the segment key, then files_touched lookup
+      fails. Test 5 documents this as a clean refusal, which is good.
+      However, the parsing also lacks a `--- /dev/null` (file-add signal)
+      check: `---` lines reset state but don't actually distinguish add
+      vs replace. Test 4 (file-add) works only because the segment is
+      parsed correctly when `--- /dev/null` precedes `+++ b/<new>`.
+      What's missing: explicit recognition that `--- /dev/null` means
+      "treat original as empty string" — currently this works by
+      coincidence because target.exists() returns False for the
+      not-yet-created file.
+    recommendation: |
+      Add explicit `/dev/null` recognition on both `---` (add) and `+++`
+      (delete) sides. For `+++ /dev/null`, mark the file as a deletion
+      and route to os.unlink in handle() (not currently supported but
+      this is the right hook).
+    risk: low  # current behavior happens to work for adds; deletes
+               # already fail clean
+  - id: claude-iter0025-005
+    severity: low
+    target: scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    citation: apply_codex_patch.py:299-307 (stage_handle invocation)
+    summary: |
+      stage_handle is imported lazily inside handle() at every call. The
+      pattern is documented (consistent with audit_append_event lazy
+      import), but the late import re-resolves the module on every call.
+      Negligible perf impact, but combined with `import re` inside
+      record_verdict in loop_verify_codex_patch.py:296 it suggests a
+      stylistic drift. apply_codex_patch.py also has a module-level
+      `import re` AND module-level _PATCH_ID_PATTERN.
+    recommendation: |
+      Either (a) move all imports to module-level for consistency, or
+      (b) document why specific imports are deferred (e.g., circular-import
+      avoidance for patch_stage_and_dry_run via tools/__init__.py).
+      record_verdict's `import re` is clearly stylistically wrong since
+      the same module has a module-level _PATCH_ID_PATTERN at use sites
+      elsewhere.
+    risk: very_low  # cosmetic
+  - id: claude-iter0025-006
+    severity: medium
+    target: scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+    citation: loop_verify_codex_patch.py:277-306 (_record_verdict_handler validation)
+    summary: |
+      record_verdict validates verdict in {approved,corrected_resubmit}
+      but the SCHEMA enum includes "blocked" (output_schema). The
+      validator REJECTS verdict=blocked at record time:
+        if verdict not in {"approved", "corrected_resubmit"}:
+            return blocked-with-error.
+      So passing verdict=blocked silently turns into verdict=blocked with
+      error="verdict must be one of {approved, corrected_resubmit}".
+      The schema says blocked is allowed; the implementation says no.
+      Discrepancy: either tighten the schema (drop "blocked" from the
+      enum on record paths) or accept verdict=blocked.
+    recommendation: |
+      Tighten the input enum at schema level for record_verdict mode to
+      {"approved", "corrected_resubmit"} only. The "blocked" verdict is
+      a build_inputs-internal placeholder; it should not be a valid
+      record_verdict input.
+    risk: medium  # schema-implementation mismatch is a known integrity
+                  # smell; could mask bugs
+  - id: claude-iter0025-007
+    severity: medium
+    target: scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+    citation: test_apply_codex_patch.py (file, 487 lines, 13 tests)
+    summary: |
+      Test coverage gaps:
+        (a) No test for empty/missing base_sha refusal
+            (apply_codex_patch.py:221-225). The base_sha_missing branch
+            is dead code from a test perspective.
+        (b) No test for partial_apply_failed (the os.replace exception
+            branch at line 319-323). Hard to trigger via fixture but a
+            monkeypatched os.replace would do it.
+        (c) No test for diff_apply_failed propagation in the single-file
+            no-side-channel path (covered in test_apply_codex_patch_multifile.py
+            for multi-file but not in this file).
+        (d) No test that codex_review_missing surfaces correctly (the
+            iter_dir lacks codex-review.yaml entirely).
+    recommendation: |
+      Add 4 tests covering the above branches. Each is small (5-15 lines)
+      and catches real refuse-path regressions.
+    risk: low
+  - id: claude-iter0025-008
+    severity: low
+    target: scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py
+    citation: test_capstone_full_fix_loop.py:371-385 (post-apply event hoist bridge)
+    summary: |
+      The capstone happy-path test bridges a "known shape gap" between
+      iter-0016 audit emitter and iter-0028 invariant check by
+      explicitly hoisting nested last_mutation fields onto the
+      apply_step_landed event top-level. Per iter-0024 F1 (merge-direction
+      inversion in last_mutation_from_audit), this hoist should now be
+      handled by the production reader code itself — the test bridge is
+      potentially obsolete.
+    recommendation: |
+      Investigate whether removing the in-test hoist (lines 378-385)
+      still passes the capstone. If yes, remove the bridge and add a
+      comment that iter-0024 F1 made it unnecessary. If no, the
+      iter-0024 F1 fix may not cover the audit-emitter's particular
+      shape — flag for further investigation.
+    risk: low  # test-hygiene only; not a production defect
+non_blocking_suggestions: []
+blocking_objections: []
+scope_check:
+  files_in_scope: true
+  forbidden_files_touched: false
+sealed_at_utc: '2026-05-10T21:05:00Z'

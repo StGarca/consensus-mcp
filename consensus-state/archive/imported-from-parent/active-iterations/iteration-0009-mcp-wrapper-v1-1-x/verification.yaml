@@ -1,0 +1,94 @@
+schema_version: 1
+iteration_id: iteration-0009-mcp-wrapper-v1-1-x
+created_utc: '2026-05-10T02:10:14Z'
+
+verification_checks:
+  goal_packet_validated:
+    status: pass
+    invocation: 'python_env\python.exe -m agent_loop_mcp._self_drive validate <goal_packet>'
+    valid: true
+    scope_signature_match: true
+    scope_signature: bf0febb01c9f6a995342688658ce514b29a336268222959742e16ea4db0ab3eb
+
+  acceptance_gates_evaluated:
+    status: pass
+    invocation: 'AGENT_LOOP_MCP_REPO_ROOT=<repo> python_env\python.exe -m agent_loop_mcp._self_drive evaluate_gates <goal_packet>'
+    all_passed: true
+    gates:
+      A1: {description: tools/reviewer_dispatch_codex.py exists, passed: true, exit_code: 0}
+      A2: {description: server.py registers the tool, passed: true, exit_code: 0}
+      A3: {description: pytest test_reviewer_dispatch_codex.py passes, passed: true, exit_code: 0, output_tail: '17 passed in 0.04s'}
+      A4: {description: pytest test_dispatch_codex.py passes (no regression), passed: true, exit_code: 0, output_tail: '52 passed in 0.30s'}
+      A5: {description: server tools/list returns reviewer.dispatch_codex, passed: true, exit_code: 0}
+
+  scope_held:
+    status: pass
+    invocation: 'python_env\python.exe -m agent_loop_mcp._self_drive verify_scope <goal_packet>'
+    in_scope: true
+    out_of_scope: []
+    forbidden_files_touched: false
+    note: |
+      verify_scope reads `git diff --cached --name-only`. At iteration-close
+      time, changes are not yet staged; in_scope=true reflects an empty
+      changeset under git index. Files added in the iteration:
+        - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+        - scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+        - scripts/agent_loop_mcp/server.py (registration line +2)
+        - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/* (iteration ceremony)
+      All match goal_packet allowed_files. forbidden_files
+      (scripts/agent_loop_mcp/_dispatch_codex.py, _self_drive.py,
+      dispatch_templates/, scripts/agent_loop/, run/, wiki/) untouched.
+
+  pytest_full_suite:
+    status: pass
+    invocation: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+    result_line: '69 passed in 0.31s'
+    pre_iteration_count: 52
+    iteration_added: 17
+    post_iteration_total: 69
+    regressions: 0
+
+  reviews_sealed:
+    status: pass
+    claude_review_canonical_sha256: 78c68ac5e57d25c1fd177d75d16bf857c10a87bb67970d5d251e5b51a81aeb4e
+    codex_review_canonical_sha256: 4c321c7679fddf6ec9cbf1d2b2d2dece8c3c391677b80a294610e64a4aab3167
+    codex_review_immutable_archive: agent-loop/archive/review-passes/2026-05-10-iteration-0009-mcp-wrapper-v1-1-x-codex-iter0009-1-pass.yaml
+    codex_packet_sha256: 565ce44bb9277021fe3f7be206a6e182326e358e49311c6c46291a7b524a5ae0
+    codex_audit_event_id: 2026-05-10T02:08:39Z_review_returned_and_sealed_codex-iter0009-1
+
+  consensus_synthesized:
+    status: pass
+    consensus_canonical_sha256: 61b744c3250277204cfa1b086e8315f5b2d4490ca30a881908068da5b35e002a
+    consensus_state: implementation_ready
+    unanimous_goal_satisfied: true
+    unanimous_zero_blocking: true
+
+  t6_archive:
+    status: pass
+    independence_audit_events_count: 6
+    events:
+      - review_returned_and_sealed (codex; written by helper's _seal_via_t6)
+      - review_packet_built (orchestrator)
+      - reviewer_invoked (claude; subagent_dispatch)
+      - review_returned_and_sealed (claude)
+      - both_reviews_sealed (orchestrator)
+      - consensus_built (orchestrator; consensus_state=implementation_ready)
+
+independence_attestation:
+  reviewers_received_only_sealed_review_packet_plus_source_paths: true
+  no_orchestrator_verdict_passed_to_either_reviewer: true
+  claude_review_did_not_see_codex_review: true
+  codex_review_dispatched_via_helper_with_attestation_block_in_sealed_packet: true
+
+real_world_test_summary:
+  scenario: self_host_agent_loop_on_agent_loop
+  target: v1.1.x_mcp_wrapper_for_dispatch_codex
+  full_quorum_loop_artifacts_produced:
+    - goal_packet (sealed, scope_signature validated)
+    - review_packet (deliverable summary)
+    - claude_review (subagent dispatch, opus model)
+    - codex_review (helper-dispatched, sealed via T6, immutable archive)
+    - consensus (synthesized, unanimous)
+    - independence_audit (6 events, T6 archive)
+    - verification (this file)
+  closure_form: full_ceremony  # contrast: iter-0008 closed by gate evidence only

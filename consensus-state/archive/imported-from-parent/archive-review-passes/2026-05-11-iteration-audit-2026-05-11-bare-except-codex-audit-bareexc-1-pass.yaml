@@ -1,0 +1,141 @@
+iteration_id: iteration-audit-2026-05-11-bare-except
+reviewer_id: codex-audit-bareexc-1
+pass_id: codex-audit-bareexc-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Hot-path YAML fallback swallows all exceptions as empty configuration
+  citation: scripts/agent_loop_mcp/_self_drive.py:296
+  risk: Programming defects in YAML loading or path handling are converted into `{}`,
+    so stop-rule logic can continue with missing policy data and no diagnostic signal.
+  recommendation: Narrow the handler to expected read/parse failures such as `OSError`,
+    `UnicodeDecodeError`, and `yaml.YAMLError`; let unexpected exceptions propagate.
+  patch_not_proposed_reason: Cannot safely author a unified diff because the full
+    authoritative contents of scripts/agent_loop_mcp/_self_drive.py were not embedded,
+    only excerpts in review-target.md.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: Patch-size check hides every failure with bare pass
+  citation: scripts/agent_loop_mcp/_self_drive.py:539
+  risk: A broken git command, bad path, or implementation bug can make the patch-size
+    guard silently disappear, allowing oversized patches without a breadcrumb.
+  recommendation: Catch only expected git/process failures and append a `patch_size_check_failed`
+    stop-rule with exception type/message instead of `pass`.
+  patch_not_proposed_reason: Cannot safely author a unified diff because the full
+    authoritative contents of scripts/agent_loop_mcp/_self_drive.py were not embedded,
+    only excerpts in review-target.md.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: Closure invariant review/audit YAML reads convert all exceptions into sentinel
+    results
+  citation: scripts/agent_loop_mcp/_validate_closure_invariant.py:77
+  risk: Unexpected defects become `None` or `n/a (no audit)`, making invariant diagnostics
+    indistinguishable from absent or malformed input.
+  recommendation: Narrow both YAML read handlers to `OSError`, `UnicodeDecodeError`,
+    and `yaml.YAMLError`, and preserve distinct diagnostics for unreadable versus
+    malformed audit data.
+  patch_not_proposed_reason: Cannot safely author a unified diff because scripts/agent_loop_mcp/_validate_closure_invariant.py
+    is not in the embedded touched-file contents or allowed-file list.
+  patch_proposal: null
+- id: codex-rev-004
+  severity: medium
+  summary: Release gate subprocess handlers report any implementation bug as a normal
+    gate failure
+  citation: scripts/agent_loop_mcp/_release_gate_check.py:85
+  risk: 'Type errors or stale internal API usage around `subprocess.run` are flattened
+    into `False, exception: ...`, delaying discovery of harness defects.'
+  recommendation: Across the release gate subprocess callsites, catch only expected
+    process failures such as `subprocess.TimeoutExpired`, `OSError`, and `subprocess.SubprocessError`.
+  patch_not_proposed_reason: Cannot safely author a unified diff because scripts/agent_loop_mcp/_release_gate_check.py
+    is not in the embedded touched-file contents or allowed-file list.
+  patch_proposal: null
+- id: codex-rev-005
+  severity: medium
+  summary: Single-gate evaluator catches all exceptions and drops traceback context
+  citation: scripts/agent_loop_mcp/_self_drive.py:285
+  risk: Implementation errors in gate normalization or subprocess invocation are recorded
+    as ordinary gate failures with only `str(exc)`, hiding defects from the harness
+    maintainer.
+  recommendation: Catch only expected subprocess failures and include exception type
+    in the returned gate result; allow unrelated programming errors to raise.
+  patch_not_proposed_reason: Cannot safely author a unified diff because the full
+    authoritative contents of scripts/agent_loop_mcp/_self_drive.py were not embedded,
+    only excerpts in review-target.md.
+  patch_proposal: null
+- id: codex-rev-006
+  severity: medium
+  summary: Review YAML parse check mislabels all read failures as parse failures
+  citation: scripts/agent_loop_mcp/_self_drive.py:438
+  risk: Filesystem and encoding errors are reported as `review_yaml_parse_failed`,
+    while unrelated implementation defects are also swallowed into stop-rule output.
+  recommendation: Separate read failures from `yaml.YAMLError`, and avoid catching
+    unrelated exceptions in this parse-specific branch.
+  patch_not_proposed_reason: Cannot safely author a unified diff because the full
+    authoritative contents of scripts/agent_loop_mcp/_self_drive.py were not embedded,
+    only excerpts in review-target.md.
+  patch_proposal: null
+- id: codex-rev-007
+  severity: medium
+  summary: Frontmatter gate catches broad exceptions for both file reads and YAML
+    parsing
+  citation: scripts/agent_loop_mcp/_release_gate_check.py:128
+  risk: Unexpected implementation defects are attributed to markdown read or YAML
+    parse errors, weakening the gate's diagnostic value.
+  recommendation: Catch `(OSError, UnicodeDecodeError)` for file reads and `yaml.YAMLError`
+    for frontmatter parsing, keeping those failure modes separate.
+  patch_not_proposed_reason: Cannot safely author a unified diff because scripts/agent_loop_mcp/_release_gate_check.py
+    is not in the embedded touched-file contents or allowed-file list.
+  patch_proposal: null
+- id: codex-rev-008
+  severity: low
+  summary: Drift SHA computation catches all exceptions instead of expected read/parse
+    failures
+  citation: scripts/agent_loop_mcp/_self_drive.py:633
+  risk: A bug in canonicalization code is downgraded to a drift finding, so reviewers
+    may chase bad input instead of fixing the checker.
+  recommendation: Narrow the handler to expected file/YAML failures, for example `OSError`,
+    `UnicodeDecodeError`, and `yaml.YAMLError`.
+  patch_not_proposed_reason: Cannot safely author a unified diff because the full
+    authoritative contents of scripts/agent_loop_mcp/_self_drive.py were not embedded,
+    only excerpts in review-target.md.
+  patch_proposal: null
+- id: codex-rev-009
+  severity: low
+  summary: Changed-file collection silently skips every subprocess exception per git
+    view
+  citation: scripts/agent_loop_mcp/_self_drive.py:213
+  risk: Git timeouts or invocation failures can erase one or more change views without
+    evidence, reducing confidence in forbidden-file scope checks.
+  recommendation: Catch only expected git invocation failures and either aggregate
+    a diagnostic for callers or return enough status for callers to emit a breadcrumb.
+  patch_not_proposed_reason: Cannot safely author a unified diff because the full
+    authoritative contents of scripts/agent_loop_mcp/_self_drive.py were not embedded,
+    only excerpts in review-target.md.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The embedded review target exposes multiple broad-except
+  and silent-fallback defects in in-scope agent-loop exception handling, so the bare-except
+  policy sweep is not clean.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 7f4890d1e125497d982fd258c47b9460a957a90dc5a63318a3f5a3c4b3ab857d
+  output_sha256: e25d07a8525370d67219cf6bc905bed5165277f9dd72a9fe0c736a8d99ca50f3
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: dd15e1c39e3ea254d77fb2de6849c899ca97f2293c795da895a92a861e7810df
+  scope_signature: 2c953e7b20372045374f9a10a4ed05c49ad520b9cd4f8c5dcd147b92c2548659
+  review_target_path: agent-loop/active/iteration-audit-2026-05-11-bare-except/review-packet.yaml
+  review_target_hash: 4466825f24eb0c428aa8b3eaf8fe83b31b5a25070d3c99a9ac606356070c9b83
+sealed_at_utc: '2026-05-11T04:19:34Z'
+packet_sha256: 502db1578a8bc6aeea3ff4aff55eba2cced253f1dd8652447e01cbbc9aad6c71

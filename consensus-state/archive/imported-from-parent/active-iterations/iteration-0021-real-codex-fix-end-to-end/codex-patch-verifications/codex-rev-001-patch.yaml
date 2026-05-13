@@ -1,0 +1,13 @@
+approved_patch_id: codex-rev-001-patch
+codex_finding_id: codex-rev-001
+rationale: "Diff content is correct: handle signature matches real source (iter-0021\
+  \ PROOF). Actor validation block + regression test are surgical (32 lines) and match\
+  \ spec. Test uses real fixtures (_make_actor, _write_codex_review, etc.) from test_apply_codex_patch.py.\
+  \ Files in allowed_files; patch size within limit; logic uses existing _refuse helper.\
+  \ KNOWN CAVEAT: codex emitted base_sha=f612e7d4... but actual current bundle_sha=0c9507...\
+  \ \u2014 apply will refuse on base_sha_drift gate. This is a SEPARATE blocker from\
+  \ iter-0021 scope (codex content-blindness) and is documented as a follow-up."
+review_scope_hash: 8af3c0999bfb3120315ff514ec056c37e0a18e69d1c1be53d8965e4af3cf74c0
+schema_version: 1
+verdict: approved
+verifier: claude

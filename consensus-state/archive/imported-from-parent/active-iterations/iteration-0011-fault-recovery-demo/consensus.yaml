@@ -1,0 +1,101 @@
+schema_version: 1
+iteration_id: iteration-0011-fault-recovery-demo
+created_utc: '2026-05-10T05:10:00Z'
+
+consensus_state: implementation_ready
+production_state: not_ready
+review_consensus: true
+implementation_ready: true
+production_ready: false
+production_allowed: false
+observational_mode: false
+
+reviewed_artifacts:
+  goal_packet:
+    path: agent-loop/active/iteration-0011-fault-recovery-demo/goal_packet.yaml
+    canonical_sha256: f6b66c0147c3ff0420de4d119604bfcdda78eff30901c72cace357ecb1f0c46f
+  review_packet:
+    path: agent-loop/active/iteration-0011-fault-recovery-demo/review-packet.yaml
+    canonical_sha256: 68162d3742c1ce341a8284dd1ed26c0186e229aaaa2327db8ec2a2d8fc6dbed7
+  claude_review:
+    path: agent-loop/active/iteration-0011-fault-recovery-demo/claude-review.yaml
+    canonical_sha256: d6adb8d70a14801718c53a13a58afa9f06f9f426deff2812d3498bf253568003
+  codex_review:
+    path: agent-loop/active/iteration-0011-fault-recovery-demo/codex-review.yaml
+    canonical_sha256: 7999c356c23be74a52c15df7a6cd5741372e3e7ac037839e70891242b440119b
+
+reviewer_alignment:
+  goal_satisfied:
+    claude: true
+    codex: true
+    unanimous: true
+  blocking_objections:
+    claude: []
+    codex: []
+    unanimous_zero_blocking: true
+  finding_counts:
+    claude_non_blocking: 0
+    codex_findings_total: 0
+  rationale_alignment: |
+    Both reviewers clean. Codex specifically noted: "Canonical review target is
+    specified and in scope. Proposed change threads review_target_path... into
+    reviewer_dispatch_codex.handle(), removes the orphan bare import yaml, and
+    reports added coverage with pytest green at 140 passed."
+    No findings from either reviewer.
+
+converged_recommendations:
+  - "iter-0011 implementation_ready; codex-rev-001 + codex-rev-002 from iter-0010 cleanly addressed."
+  - "review_target_path threading empirically validated: WITH explicit binding, codex consumed the proper review context (vs iter-0010 fallback-scope review)."
+  - "Orphan import removal verified by both reviewers — no callsites broken."
+
+divergent_recommendations: []
+
+fault_recovery_demo_status:
+  attempted: true
+  demonstrated: false
+  reason: |
+    Both reviewers found the iter-0011 implementation clean on first dispatch.
+    Codex emitted zero findings — no blocker to recover from. This validates
+    fix quality but does NOT exercise the fault-recovery branch (find blocker
+    -> fix -> re-dispatch -> close) that codex's 2026-05-10 expert verdict
+    requested.
+  observation: |
+    iter-0010 produced 2 non-blocking codex findings BECAUSE codex was operating
+    in fallback-scope review (review_target_path missing). iter-0011 fixes that;
+    codex now operates in canonical-scope review and found nothing. Pattern
+    inverted: the very fix iter-0011 made eliminates the conditions that
+    produced findings in iter-0010.
+  next_steps:
+    - |
+      For the explicit fault-recovery demo, iter-0012 should target a more
+      substantive change (e.g., implement loop.synthesize_consensus mechanically)
+      where codex is more likely to find a substantive issue. Manufacturing
+      a deliberate defect is artificial and not recommended; choose larger
+      scope and let codex catch a real issue.
+    - |
+      ALTERNATIVELY: accept that across iter-0009 + iter-0010 + iter-0011 the
+      ceremony is empirically exercised; the recovery branch is exercised in
+      principle by iter-0010 call 3 (codex output rejected by helper validator;
+      loop.run_goal contained the failure; re-dispatch succeeded on call 4) —
+      that is recovery from an INTRA-DISPATCH failure, even if not from a
+      sealed-blocking-finding case.
+
+independence_attestation:
+  claude_did_not_co_author_codex_review: true
+  codex_did_not_co_author_claude_review: true
+  reviewers_received_only_sealed_review_packet: true
+  no_orchestrator_verdict_was_passed_to_either_reviewer: true
+
+closure_decision:
+  unanimous_goal_satisfied: true
+  unanimous_zero_blocking: true
+  scope_held: true
+  acceptance_gates_passed: 3
+  acceptance_gates_total: 3
+  consensus_state_post_review: implementation_ready
+  notes: |
+    Both reviewers emit goal_satisfied=true; zero blocking; zero findings on
+    either side. All 3 acceptance gates pass. Scope held. iter-0011 closes
+    cleanly with full unanimous quorum agreement. The "fault-recovery" demo
+    target was attempted but not triggered: clean implementation produced
+    clean reviews. See fault_recovery_demo_status above.

@@ -1,0 +1,517 @@
+schema_version: 1
+agent: codex
+stance: implementation_realist
+iteration_id: iteration-0002
+reviewed_packet_sha256: "315381730d7753b75ae40af0851947ade28584780c6ef37201ff488055f1ae15"
+
+overall_position:
+  implementation_ready: true
+  production_ready: false
+  confidence: medium
+
+# Single substantive blocking objection: change-03 is mis-classified as "add field"; the
+# existing claude-review.yaml has no_objection_rationale as a SCALAR block-string, but
+# validate_review.py (line 268) requires a DICT with .text key. The plan as written
+# would not clear NO_BLOCKERS_WITHOUT_RATIONALE.
+
+blocking_objections:
+  - id: codex-001
+    severity: blocking
+    claim_class: correctness
+    claim: |
+      change-03 in input.yaml is misdescribed as add_field. The existing
+      iteration-0000/claude-review.yaml line 248 has:
+
+        no_objection_rationale: |
+          This review issues no blocking objections...
+
+      That is a YAML scalar (block string), not a mapping. validate_review.py
+      Rule "no_objection_rationale required when no blockers" (review.py:265-275)
+      does:
+
+        nor = review.get("no_objection_rationale") or {}
+        text = nor.get("text") if isinstance(nor, dict) else None
+        if not isinstance(text, str) or not text.strip(): emit NO_BLOCKERS_WITHOUT_RATIONALE
+
+      A scalar string fails isinstance(nor, dict). Therefore change-03 must
+      RESTRUCTURE the field, not just add text. Required shape:
+
+        no_objection_rationale:
+          required_when_no_blockers: true
+          text: |
+            <rationale text here>
+
+      This is a mechanical edit, not an operator-supplied content question.
+      The existing rationale text is already present; only the YAML structure
+      needs lifting from scalar to mapping.
+    file: agent-loop/active/iteration-0000/claude-review.yaml
+    section: line_248_through_256
+    evidence: |
+      Read of claude-review.yaml line 248:
+        "no_objection_rationale: |\n  This review issues no blocking objections..."
+      Read of validate_review.py line 268:
+        "text = nor.get(\"text\") if isinstance(nor, dict) else None"
+    required_change: |
+      change-03 must be reclassified as restructure_field (not add_field) and
+      operator_to_supply_text_during_apply set false (text already exists in
+      file). Patch shape: replace the scalar-string form with a mapping that
+      preserves the existing rationale prose under a .text key plus the
+      required_when_no_blockers: true sibling. Concrete patch in
+      patch_recommendations.patch-001 below.
+
+non_blocking_suggestions:
+  - id: codex-002
+    severity: medium
+    claim_class: scope
+    claim: |
+      change-01 in input.yaml says "all blocking_objections + non_blocking_suggestions
+      entries that have corroborated_by". Empirical: claude-review.yaml has
+      ZERO corroborated_by inside list entries; only ONE top-level field
+      (line 258: "corroborated_by: []   # synthesizer populates per section 13").
+      The fix is a single-line strip, not a multi-entry sweep.
+    file: agent-loop/active/iteration-0000/claude-review.yaml
+    section: line_258
+    evidence: |
+      grep "corroborated_by" iteration-0000/claude-review.yaml -> 1 hit (line 258).
+      grep "corroborated_by" iteration-0000/codex-review.yaml -> 0 hits.
+      validate_review.py uses recursive _contains_corroborated_by; the single
+      top-level occurrence is enough to trip the finding.
+    suggested_resolution: |
+      Refine change-01 description in apply step: "strip the single top-level
+      corroborated_by field from claude-review.yaml line 258". One edit point.
+      Concrete patch in patch-002.
+
+  - id: codex-003
+    severity: medium
+    claim_class: methodology
+    claim: |
+      Phase 0 dry-run staging mechanism is under-specified. input.yaml
+      apply_order_rule says "stage proposed edits to /tmp/iteration-0002-staging/".
+      validate_iteration.py only accepts --iteration-dir <path>; there is no
+      in-memory file-map override (verified: --help output shows only
+      --iteration-dir, --out, --json, --self-test). So:
+        a) Staging dir must contain a FULL mirror of iteration-0000/ (all 7
+           artifact files) with the 8 edits applied. Just dropping edited
+           files in isolation will fail validate_iteration's cross-artifact
+           checks (e.g. PACKET_SHA verification, audit_log presence).
+        b) /tmp/ does not exist on Windows. The repo working dir is
+           Windows-native (PowerShell + bash both available). Use
+           %TEMP%\iteration-0002-staging\ or a repo-local
+           agent-loop/.staging/iteration-0002/ tmp dir.
+        c) The validator paths inside the staging tree must match the same
+           relative layout (agent-loop/active/iteration-0000/*.yaml). Pass
+           the staging root via --iteration-dir
+           <staging_root>/agent-loop/active/iteration-0000.
+    file: agent-loop/active/iteration-0002/input.yaml
+    section: apply_order_rule.enforcement
+    evidence: |
+      validate_iteration.py --help output: only --iteration-dir is accepted
+      (no in-memory override).
+      Spec section 0 phase_0_mechanism mentions both options; only (a)
+      temp-file dry-run mode is implementation-realistic given current
+      validator CLI.
+    suggested_resolution: |
+      Operator/synthesizer chooses one of:
+        - copy iteration-0000/ to %TEMP%\\iteration-0002-staging\\agent-loop\\active\\iteration-0000\\
+          (Windows-native), apply edits there, run all 4 validators with
+          --iteration-dir pointed at the staged copy
+        - or extend validate_iteration.py to accept --staged-files JSON
+          mapping (deferred work; not blocking this iteration)
+      Document the chosen path in iteration-0002/iteration-outcome.yaml so
+      future iterations can replay.
+
+  - id: codex-004
+    severity: low
+    claim_class: scope
+    claim: |
+      Apply order matters: change-01 (strip top-level corroborated_by) +
+      change-08 (add hash_convention + do_not_recompute) both edit
+      claude-review.yaml. They commute (different fields), but as a single
+      file-rewrite the sequence is: load yaml, apply both mutations, dump.
+      No risk if applied in one rewrite. Risk only if applied as two
+      sequential textual Edit tool calls and the second target string
+      becomes ambiguous after the first edit. Recommend ordering:
+        1. change-04 (iteration-outcome.yaml YAML parse fix; unblocks reads)
+        2. change-05 (review-packet.yaml +5 fields; isolates packet sha drift)
+        3. change-06 (consensus.yaml observational_mode true)
+        4. change-07 (codex-review.yaml +marker fields)
+        5. change-08 + change-01 + change-02 + change-03 (claude-review.yaml
+           combined rewrite touching 4 distinct locations)
+      Post-edit canonical sha of review-packet.yaml will differ from the sha
+      recorded as reviewed_packet_sha256 in both review yamls; markers
+      (change-07/08) downgrade resulting PACKET_SHA_MISMATCH to
+      PACKET_SHA_HISTORICAL (low). Verified via validate_iteration.py:507-516
+      branch.
+    file: agent-loop/active/iteration-0002/input.yaml
+    section: planned_mechanical_changes
+    evidence: |
+      Read of validate_iteration.py:507-528: PACKET_SHA_HISTORICAL emitted
+      iff hash_convention == "pre-canonical-pin" AND do_not_recompute is True.
+      Both change-07 and change-08 satisfy this; cascade is contained.
+    suggested_resolution: |
+      Apply order rule above. Single coherent rewrite per file, not multiple
+      text-level edits per file.
+
+  - id: codex-005
+    severity: medium
+    claim_class: methodology
+    claim: |
+      change-05 hash semantics: spec section 7 canonical_yaml_sha256 formula
+      applies to "any yaml file sha256 reference". CLAUDE.md is markdown,
+      not YAML, so claude_md_hash should be raw-bytes hashlib.sha256 of file
+      contents (NOT canonical_yaml_sha256). decision_ledger_hash IS YAML
+      (agent-loop/state/disposition-ledger.yaml), so canonical_yaml_sha256
+      formula applies.
+      However: iteration-0000 was created PRE v1.7.4 (predates the
+      canonical_yaml_sha256 ratification). Honest reconstruction therefore
+      preserves the raw-bytes sha values that existed in iteration-0000's
+      project_governance.claude_md_sha256 and active_ledgers.disposition_ledger_sha256
+      blocks. Both options are defensible:
+        Option A (current-convention): apply v1.7.4 hash formulas to today.
+        Option B (historical-faithful): copy the existing raw values.
+      Recommend Option B for iteration-0000 reconstruction; Option A for
+      iteration-0001+ packets going forward.
+    file: agent-loop/active/iteration-0000/review-packet.yaml
+    section: change-05_field_values
+    evidence: |
+      Computed today (Option A canonical convention):
+        claude_md_hash (raw sha256): f8fc306383048356f10a97e977ac4c51342c1c0cf4b315d79b6e732b8ec7013d
+        decision_ledger_hash (canonical YAML sha256): 2fe82ea92d52c5fe061ebaf4fe6a8b50bd3c33db9bb0b7cbbfa62719c3f5a876
+      Existing in iteration-0000 packet (Option B historical):
+        claude_md_sha256 = f8fc306383048356f10a97e977ac4c51342c1c0cf4b315d79b6e732b8ec7013d (matches; CLAUDE.md byte-stable)
+        disposition_ledger_sha256 = bcfecf0f91f73cfcbfde40aeb1e08abae8af77faa62b4c8811614836a5d0cb7e (raw, pre-canonical era)
+    suggested_resolution: |
+      For change-05, propose:
+        decision_ledger_hash: "bcfecf0f91f73cfcbfde40aeb1e08abae8af77faa62b4c8811614836a5d0cb7e"
+          # Historical raw-bytes sha at iteration-0000 build time; preserved
+          # under pre-canonical-pin convention (v1.7.4 canonical formula
+          # post-dates iteration-0000).
+        claude_md_hash: "f8fc306383048356f10a97e977ac4c51342c1c0cf4b315d79b6e732b8ec7013d"
+          # Raw sha256 of CLAUDE.md (markdown; canonical_yaml_sha256 N/A).
+        karpathy_principle_summary: |
+          Think Before Coding: state assumptions, ask when uncertain, surface
+          tradeoffs. Simplicity First: minimum design that solves the
+          problem, no speculative abstraction. Surgical Changes: touch only
+          what the objective requires, preserve unrelated work. Goal-Driven
+          Execution: define success criteria and verification before
+          implementation. See CLAUDE.md GLOBAL PRIME DIRECTIVE for full text.
+        changed_sections: []
+          # iteration-0000 was observational-only; no spec changes applied.
+          # Empty array is the honest reconstruction.
+        check_results_if_any: []
+          # iteration-0000 ran no automated checks; the packet pre-dated the
+          # checks_required schema. Empty array is the honest reconstruction.
+
+  - id: codex-006
+    severity: low
+    claim_class: scope
+    claim: |
+      Residual findings (HASH_CHAIN_BROKEN x2 + AUDIT_EVENT_NAME_NON_CANONICAL x3)
+      out-of-scope rationale is acceptable. Of the 4 proposed resolution
+      paths, recommendation:
+        - Option (b) mechanical rename in iteration-0000/independence-audit.yaml
+          is the most defensible. It localizes the fix to ONE file, preserves
+          audit semantics, and clears both finding classes simultaneously.
+        - Option (a) extend grandfather is bookkeeping debt accumulation;
+          spec validators get harder to reason about with each special case.
+        - Option (c) duplicate audit log is data-redundancy smell.
+        - Option (d) marker on audit_log is consistent with the
+          pre-canonical-pin pattern but adds a new validator branch for a
+          one-off historical artifact; cost > benefit.
+      Recommendation for iteration-0003: apply (b) mechanical rename as the
+      first change of that iteration's plan. Cheaper than a v1.7.5 spec patch.
+    file: agent-loop/active/iteration-0002/input.yaml
+    section: known_residual_post_iteration_0002
+    evidence: |
+      input.yaml lists 4 options. Mechanical rename matches the rest of
+      iteration-0002's pattern (mechanical-only fixes; no spec edits).
+    suggested_resolution: "operator preference; recommend (b) for iteration-0003."
+
+  - id: codex-007
+    severity: low
+    claim_class: methodology
+    claim: |
+      success_criteria_per_G5 lists "validate_consensus on iteration-0000/consensus.yaml -> 0 findings".
+      Verified that adding observational_mode: true to consensus.yaml will
+      activate the relaxed enum set in validate_consensus.py:188 (obs_mode = bool(...)).
+      The iteration-0000 consensus.yaml currently uses non-spec enum values
+      that pass-20 claude-rev-043 caught (14 INVALID_ENUM_VALUE findings).
+      Adding the flag should drop those findings. Confirmed mechanism is in
+      place; G5 criterion is reachable.
+    file: agent-loop/active/iteration-0000/consensus.yaml
+    section: change-06_dropdown
+    evidence: |
+      validate_consensus.py:85-90 shows the OBSERVATIONAL_STATUS_VALUES list
+      includes deferred_to_v1_X, deferred_to_v1_X_per_observational_mode,
+      deferred_to_v1_7, etc. Matches the legacy literals in iteration-0000.
+    suggested_resolution: "no change required; flag observability confirmed."
+
+  - id: codex-008
+    severity: low
+    claim_class: process
+    claim: |
+      change-04 fix proposal in input.yaml says "wrap the value in single
+      quotes OR replace inner colon with non-breaking alternative". Recommend
+      the single-quote option, not colon replacement. Replacing the colon
+      changes semantic content of the recorded finding (cf-008 talks about
+      a dangling reference between section_15_step and section_20_step;
+      altering the punctuation muddles archival integrity). Single-quoting
+      preserves the original prose verbatim and is the minimal-impact YAML
+      fix.
+    file: agent-loop/active/iteration-0000/iteration-outcome.yaml
+    section: line_71
+    evidence: |
+      Verified line 71 col 44 parse failure (mapping values not allowed
+      here; second colon inside unquoted string). Single-quoting the entire
+      value after "- " preserves bytes.
+    suggested_resolution: "use single-quote form in apply step; concrete patch patch-003 below."
+
+agreements:
+  - id: agree-001
+    with: input.yaml.planned_mechanical_changes.change-04
+    claim: "line 71 parse error is real; verified independently via python yaml.safe_load."
+  - id: agree-002
+    with: input.yaml.planned_mechanical_changes.change-05.fields_to_add
+    claim: "all 5 named fields are genuinely missing top-level from iteration-0000/review-packet.yaml; authoritative list matches validate_iteration.py REQUIRED_PACKET_FIELDS lines 70-81."
+  - id: agree-003
+    with: input.yaml.planned_mechanical_changes.change-06
+    claim: "observational_mode: true is the correct mechanical application; validate_consensus.py:188 reads the flag and relaxes enum constraints."
+  - id: agree-004
+    with: input.yaml.planned_mechanical_changes.change-07_and_change-08
+    claim: "marker fields downgrade PACKET_SHA_MISMATCH to PACKET_SHA_HISTORICAL per validate_iteration.py:507-528; both fields required together (verified)."
+  - id: agree-005
+    with: input.yaml.apply_order_rule
+    claim: "validators-first dry-run is the correct order; apply-then-validate is the failure mode caught as canonical-006 in iteration-0001."
+  - id: agree-006
+    with: input.yaml.active_contract_readiness_lock
+    claim: "lock is correct; iteration-0002 is mechanical-only and must not flip frontmatter."
+
+disagreements:
+  - id: disagree-001
+    with: input.yaml.planned_mechanical_changes.change-03
+    claim: "change-03 classification (add_field + operator_to_supply_text_during_apply: true) is wrong. See blocking codex-001."
+
+patch_recommendations:
+  - id: patch-001
+    edit:
+      file: agent-loop/active/iteration-0000/claude-review.yaml
+      old_string: |
+        no_objection_rationale: |
+          This review issues no blocking objections to iteration-0000 itself.
+          The 4 non-blocking suggestions (claude-rev-031..034) are methodology gaps
+          for v1.7 design; they do not block the observational run.
+          The 2 implementation_risks (claude-rev-035, -036) flag edge cases that
+          may or may not surface in iteration-0000.
+          Per section 13 substantive_pushback rule: assumptions_challenged is
+          non-empty (3 entries with evidence) and at least 3 non_blocking_suggestions
+          present, so the no-blocking-objections position is supported by evidence.
+      new_string: |
+        no_objection_rationale:
+          required_when_no_blockers: true
+          text: |
+            This review issues no blocking objections to iteration-0000 itself.
+            The 4 non-blocking suggestions (claude-rev-031..034) are methodology gaps
+            for v1.7 design; they do not block the observational run.
+            The 2 implementation_risks (claude-rev-035, -036) flag edge cases that
+            may or may not surface in iteration-0000.
+            Per section 13 substantive_pushback rule: assumptions_challenged is
+            non-empty (3 entries with evidence) and at least 3 non_blocking_suggestions
+            present, so the no-blocking-objections position is supported by evidence.
+
+  - id: patch-002
+    edit:
+      file: agent-loop/active/iteration-0000/claude-review.yaml
+      old_string: "corroborated_by: []   # synthesizer populates per section 13"
+      new_string: "# corroborated_by removed per codex-rev-009 / claude-rev-040; synthesizer-only field, not reviewer-emitted"
+
+  - id: patch-003
+    edit:
+      file: agent-loop/active/iteration-0000/iteration-outcome.yaml
+      old_string: '    - cf-008: section 13 dangling reference: "section_15_step" -> "section_20_step".'
+      new_string: '    - ''cf-008: section 13 dangling reference: "section_15_step" -> "section_20_step".'''
+
+  - id: patch-004
+    edit:
+      file: agent-loop/active/iteration-0000/claude-review.yaml
+      old_string: "    challenge_result: partially_cleared"
+      new_string: "    challenge_result: partially-cleared"
+
+  - id: patch-005
+    edit:
+      file: agent-loop/active/iteration-0000/codex-review.yaml
+      old_string: "iteration_id: iteration-0000"
+      new_string: |
+        iteration_id: iteration-0000
+        hash_convention: pre-canonical-pin
+        do_not_recompute: true
+
+  - id: patch-006
+    edit:
+      file: agent-loop/active/iteration-0000/claude-review.yaml
+      old_string: "iteration_id: iteration-0000"
+      new_string: |
+        iteration_id: iteration-0000
+        hash_convention: pre-canonical-pin
+        do_not_recompute: true
+
+implementation_risks:
+  - id: risk-001
+    severity: medium
+    claim_class: correctness
+    claim: |
+      Patches patch-005 + patch-006 use "iteration_id: iteration-0000" as an
+      anchor for adding marker fields. If either review yaml has multiple
+      occurrences of that line, the textual edit is ambiguous and Edit tool
+      will fail. Verified via grep: each review yaml has exactly one
+      occurrence at the schema header (line 5). Safe.
+    suggested_action: "if Edit fails, fall back to YAML round-trip (load, mutate, dump) preserving key order via ruamel.yaml."
+  - id: risk-002
+    severity: medium
+    claim_class: methodology
+    claim: |
+      The iteration-0000 review-packet.yaml will not have the proposed
+      hash_convention/do_not_recompute markers (change-05 only adds the 5
+      missing required fields). Validator code path (lines 507-516) checks
+      markers on REVIEW_FILES only, not on review-packet.yaml. So packet's
+      OWN canonical sha changing is silent, but the recorded sha in review
+      yamls becomes mismatched against the new computed canonical sha,
+      precisely the case PACKET_SHA_HISTORICAL handles. Safe iff change-07
+      and change-08 both land BEFORE the next validate_iteration run.
+    suggested_action: "ensure apply order: change-07 + change-08 land in the same staging round as change-05; do not split across rounds."
+  - id: risk-003
+    severity: low
+    claim_class: process
+    claim: |
+      success_criteria_per_G5 lists "smoke harness: 21/21 (must hold)". This
+      is a regression check, not a positive-state check. Run the smoke
+      harness BEFORE applying any edits to capture baseline 21/21, then
+      AGAIN after apply to confirm no regression.
+    suggested_action: "operator runs python_env\\python.exe scripts\\agent_loop\\run_validator_tests.py both pre-apply and post-apply."
+
+clarifying_questions: []
+
+self_resolved_questions:
+  - id: q-001
+    question: "Does validate_iteration.py support an in-memory file-map override for canonical-006 dry-run, or is temp-file the only mechanism?"
+    resolution_method: read_repo
+    resolution: |
+      Reading validate_iteration.py --help output shows ONLY --iteration-dir
+      <path>; no --staged-files or --files-json or memory-override flag.
+      Therefore Phase 0 dry-run mechanism is constrained to copy-to-staging-dir.
+      Implication for change-codex-003 above.
+  - id: q-002
+    question: "Is corroborated_by removal scope correctly stated as 'all blocking_objections + non_blocking_suggestions entries'?"
+    resolution_method: read_repo
+    resolution: |
+      grep "corroborated_by" iteration-0000/claude-review.yaml yields exactly
+      one hit at line 258 (top-level, not inside list entries). Input.yaml's
+      strip_locations description is over-broad; reality is one top-level
+      field. Single edit point. Implication for codex-002.
+  - id: q-003
+    question: "Where does line 71 of iteration-outcome.yaml fail to parse?"
+    resolution_method: bounded_test
+    resolution: |
+      python yaml.safe_load() reports parse error at line 71 col 44. Verified
+      column 44 is the second colon ('reference:'). Two unquoted colons in
+      one mapping value. Single-quoting the entire value clears the parse.
+
+assumptions_challenged:
+  - id: a-001
+    assumption: "input.yaml's claim that change-04 target line is 71 is correct."
+    challenge_result: cleared
+    evidence: |
+      Direct read of iteration-0000/iteration-outcome.yaml shows line 71:
+      "    - cf-008: section 13 dangling reference: \"section_15_step\" -> \"section_20_step\"."
+      yaml.safe_load() reports parse error at exactly line 71 column 44
+      (the second colon, after 'reference'). input.yaml line number is
+      accurate.
+
+  - id: a-002
+    assumption: "input.yaml's claim that change-01 covers 'all blocking_objections + non_blocking_suggestions entries with corroborated_by' is correct."
+    challenge_result: failed
+    evidence: |
+      grep "corroborated_by" iteration-0000/claude-review.yaml -> only line 258,
+      which is the TOP-LEVEL field, NOT inside any list entry. Input.yaml's
+      description over-states scope. Reality: 1 top-level field strip.
+      See codex-002 above.
+
+  - id: a-003
+    assumption: "change-03 in input.yaml accurately describes the existing claude-review.yaml state."
+    challenge_result: failed
+    evidence: |
+      Direct read of claude-review.yaml line 248 shows the field IS present
+      as a YAML scalar block-string. input.yaml says 'add_field' (implying
+      absent); reality is 'restructure_field' (present but wrong shape).
+      validate_review.py:268 confirms the dict-with-text-key requirement.
+      See blocking codex-001.
+
+  - id: a-004
+    assumption: "All 5 fields in change-05.fields_to_add are genuinely missing from iteration-0000/review-packet.yaml top-level."
+    challenge_result: cleared
+    evidence: |
+      Direct read of iteration-0000/review-packet.yaml: present top-level
+      keys are objective, mode, gate_state, open_blockers, requested_output_schema,
+      and several non-required fields (input_sanitization, active_ledgers,
+      project_governance, changed_files, diff_summary, validator_state,
+      finding_id_namespace_allocation, independence_proof_protocol,
+      self_resolution_budget, call_budget). Missing top-level required
+      keys: decision_ledger_hash, claude_md_hash, karpathy_principle_summary,
+      changed_sections, check_results_if_any. Authoritative list verified
+      against validate_iteration.py:70-81.
+
+  - id: a-005
+    assumption: "Adding marker fields (change-07/08) downgrades PACKET_SHA_MISMATCH cleanly without cascading."
+    challenge_result: partially-cleared
+    evidence: |
+      validate_iteration.py:507-528 shows the marker pair (hash_convention=pre-canonical-pin
+      AND do_not_recompute=true) downgrades PACKET_SHA_MISMATCH to
+      PACKET_SHA_HISTORICAL severity=low. Confirmed.
+      Cascading: review yamls' OWN canonical sha changes after marker addition,
+      but no other validator references review-yaml canonical sha (verified by
+      grep on validate_*.py). audit_log entries store sha values for the
+      review yamls; iteration-0000 audit_log stored sha values; if those are
+      validator-checked, they would now mismatch. Need to verify audit_log
+      sha-check exists. Quick scan of validate_iteration.py shows audit_log
+      checks event-name canonicality + hash chain, but did not confirm whether
+      review-yaml-sha is checked. Marking as partially-cleared pending operator
+      or apply-time empirical verification (cheap: just run validate_iteration
+      after apply).
+
+  - id: a-006
+    assumption: "change-06 (observational_mode: true on iteration-0000/consensus.yaml) cleanly drops the 14 INVALID_ENUM_VALUE findings."
+    challenge_result: cleared
+    evidence: |
+      validate_consensus.py:188 shows: obs_mode = bool(consensus.get("observational_mode", False)).
+      Lines 85-90 show OBSERVATIONAL_STATUS_VALUES extends the canonical
+      enum with deferred_to_v1_X, deferred_to_v1_X_per_observational_mode,
+      deferred_to_v1_7, etc. - matching the legacy literals iteration-0000
+      synthesizer emitted. Flag flip clears the findings.
+
+  - id: a-007
+    assumption: "Spec section 0 phase_0_mechanism allows in-memory file-map override per its (b) bullet."
+    challenge_result: failed
+    evidence: |
+      Spec lists (a) temp-file dry-run mode and (b) in-memory file map
+      override. validate_iteration.py --help output shows ONLY --iteration-dir
+      (a path). No (b) implementation exists today. Spec promises a
+      mechanism the validator does not deliver. Implementation-realist
+      consequence: option (a) is the only path forward in iteration-0002.
+      See codex-003.
+
+no_objection_rationale:
+  required_when_no_blockers: true
+  text: ""
+
+independence_attestation:
+  fresh_context: false
+  rationale: "G4 forced post-exposure; reviewer briefed on iteration-0000 + iteration-0001 + pass-20 + v1.7.4 spec per input.yaml prior_review_refs."
+  prior_review_exposure:
+    - artifact: agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+      role: "input"
+    - artifact: agent-loop/active/iteration-0001/
+      role: "methodology context (iteration-0001 closed blocked)"
+    - artifact: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+      role: "spec v1.7.4 contract"
+    - artifact: agent-loop/active/iteration-0000/
+      role: "target of mechanical edits proposed in input.yaml"
+  peer_reviewer_artifacts_read: []

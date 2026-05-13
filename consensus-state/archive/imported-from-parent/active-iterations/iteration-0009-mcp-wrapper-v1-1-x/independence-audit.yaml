@@ -1,0 +1,63 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-10T02:08:39Z'
+  event_id: 2026-05-10T02:08:39Z_review_returned_and_sealed_codex-iter0009-1
+  actor: codex-iter0009-1
+  artifact: agent-loop/archive/review-passes/2026-05-10-iteration-0009-mcp-wrapper-v1-1-x-codex-iter0009-1-pass.yaml
+  sha256: 565ce44bb9277021fe3f7be206a6e182326e358e49311c6c46291a7b524a5ae0
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_packet_built
+  timestamp_utc: '2026-05-10T02:10:14Z'
+  event_id: 2026-05-10T02:10:14Z_review_packet_built_orchestrator
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/review-packet.yaml
+  sha256: 46553826460ffd9f5adb60cb16262d99aaa39d6f716ae025b181d4e5e153fcef
+- event: reviewer_invoked
+  timestamp_utc: '2026-05-10T02:10:14Z'
+  event_id: 2026-05-10T02:10:14Z_reviewer_invoked_claude-iter0009-1
+  actor: claude-iter0009-1
+  artifact: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/review-packet.yaml
+  independence_attestation:
+    method: subagent_dispatch
+    model: opus
+    reviewer_received_only_sealed_review_packet_plus_source_paths: true
+    no_orchestrator_verdict_passed_to_reviewer: true
+    no_codex_review_visible_at_dispatch: true
+  invocation_protocol: Task tool subagent_type=general-purpose model=opus
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-10T02:10:14Z'
+  event_id: 2026-05-10T02:10:14Z_review_returned_and_sealed_claude-iter0009-1
+  actor: claude-iter0009-1
+  artifact: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/claude-review.yaml
+  sha256: 78c68ac5e57d25c1fd177d75d16bf857c10a87bb67970d5d251e5b51a81aeb4e
+  independence_attestation:
+    method: subagent_dispatch
+    reviewer_isolated_by_dispatch: true
+    co_authoring_with_codex: false
+  validator_status: goal_satisfied=true; blocking=0; non_blocking_low=4
+- event: both_reviews_sealed
+  timestamp_utc: '2026-05-10T02:10:14Z'
+  event_id: 2026-05-10T02:10:14Z_both_reviews_sealed_orchestrator
+  actor: orchestrator
+  note: claude + codex both emit goal_satisfied=true, blocking=0
+- event: consensus_built
+  timestamp_utc: '2026-05-10T02:10:14Z'
+  event_id: 2026-05-10T02:10:14Z_consensus_built_orchestrator
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/consensus.yaml
+  sha256: 61b744c3250277204cfa1b086e8315f5b2d4490ca30a881908068da5b35e002a
+  consensus_state: implementation_ready
+- event: iteration_closed
+  timestamp_utc: '2026-05-10T02:12:22Z'
+  event_id: 2026-05-10T02:12:22Z_iteration_closed_orchestrator
+  actor: orchestrator
+  closing_state: quorum_close_passed
+  governance_milestone_closed: phase_4_v1_1_x_mcp_wrapper

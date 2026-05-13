@@ -1,0 +1,112 @@
+iteration_id: iteration-0025-apply-pipeline-flavor-b-review
+reviewer_id: codex-iter0025-1
+pass_id: codex-iter0025-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Unified diff application ignores hunk line numbers and can mutate the wrong
+    occurrence
+  citation: scripts/agent_loop_mcp/tools/apply_codex_patch.py:459
+  risk: A claude-approved patch can be applied to a different matching block than
+    the one reviewed. With repeated context lines, base_sha can still match while
+    the intended line remains unchanged and an earlier duplicate is mutated, so the
+    audit post_sha records a real mutation that is not the reviewed fix.
+  recommendation: Parse unified-diff hunk headers and require each hunk to apply at
+    the declared original line offset with matching context/removal lines, refusing
+    on mismatch instead of searching forward globally.
+  patch_not_proposed_reason: A safe fix needs changes to the diff parser and new regression
+    tests spanning repeated-context hunks; the embedded test suite is not enough to
+    author and validate the full patch confidently without running it.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Apply audit event omits last_mutation fields expected by closure invariant
+    consumers
+  citation: scripts/agent_loop_mcp/tools/apply_codex_patch.py:339
+  risk: The capstone test manually hoists actor, post_sha, base_sha, patch_id, and
+    timestamp from last_mutation onto the apply_step_landed event before closure.
+    In production that bridge is absent, so closure invariant code that reads top-level
+    apply_step_landed fields can fail or close against incomplete mutation provenance.
+  recommendation: Emit canonical mutation fields at the top level of apply_step_landed
+    as well as preserving the nested last_mutation object, then remove the test-only
+    hoisting in capstone coverage.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-002-patch
+    applies_to_findings:
+    - codex-rev-002
+    base_sha: a583d60ffdb083c679374f3931957ddaba0c1a497c658469ff6d55af9d57ea95
+    unified_diff: "--- a/scripts/agent_loop_mcp/tools/apply_codex_patch.py\n+++ b/scripts/agent_loop_mcp/tools/apply_codex_patch.py\n\
+      @@ -335,10 +335,15 @@ def handle(\n     audit_result = audit_handle(\n     \
+      \    iteration_id=iter_dir.name,\n         event_type=\"apply_step_landed\"\
+      ,\n         actor=actor.get(\"id\"),\n         effect=\"codex_patch_applied\"\
+      ,\n         files_modified=applied_files,\n         extra_fields={\n+      \
+      \      \"mutation_actor\": last_mutation[\"actor\"],\n+            \"patch_id\"\
+      : patch_id,\n+            \"base_sha\": base_sha,\n+            \"post_sha\"\
+      : post_sha,\n+            \"timestamp\": timestamp,\n             \"last_mutation\"\
+      : last_mutation,\n             \"codex_finding_id\": finding_id,\n         },\n\
+      \     )\n"
+    files_touched:
+    - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    expected_tests:
+    - python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+      scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py -q
+    unified_diff_sha256: f6d95260bee17bb36c0a43a89cb5a26fabbee5b71b0d405efb8aa1d7db3e6394
+- id: codex-rev-003
+  severity: medium
+  summary: record_verdict does not bind the approved patch id to the requested codex
+    finding
+  citation: scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py:260
+  risk: A caller can record an approved verification for codex-rev-002-patch while
+    passing codex_finding_id=codex-rev-001. apply.codex_patch only checks that the
+    verification file for the patch id says approved, so a stale or mismatched approval
+    can authorize the wrong patch.
+  recommendation: In record_verdict, require approved_patch_id == f"{codex_finding_id}-patch"
+    and persist only matching records; add a regression test for mismatched finding/patch
+    ids.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-003-patch
+    applies_to_findings:
+    - codex-rev-003
+    base_sha: 92effbbf0cc74ac3abba4528501f03984854bcd146ececc7413b6d8db8707253
+    unified_diff: "--- a/scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py\n\
+      +++ b/scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py\n@@ -258,6 +258,13\
+      \ @@ def _record_verdict_handler(\n             \"error\": (\n             \
+      \    f\"approved_patch_id must match ^codex-rev-\\\\d+-patch$; \"\n        \
+      \         f\"got {approved_patch_id!r}\"\n             ),\n         }\n+   \
+      \ expected_patch_id = f\"{codex_finding_id}-patch\"\n+    if approved_patch_id\
+      \ != expected_patch_id:\n+        return {\n+            \"verdict\": \"blocked\"\
+      ,\n+            \"rationale\": \"approved_patch_id does not match codex_finding_id\"\
+      ,\n+            \"error\": f\"approved_patch_id must equal {expected_patch_id!r};\
+      \ got {approved_patch_id!r}\",\n+        }\n     if verdict == \"corrected_resubmit\"\
+      \ and not corrections:\n         return {\n             \"verdict\": \"blocked\"\
+      ,\n             \"rationale\": \"corrected_resubmit requires corrections\",\n"
+    files_touched:
+    - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+    expected_tests:
+    - python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/test_loop_verify_codex_patch.py
+      -q
+    unified_diff_sha256: e5a800e5c9c7c06320169c903ffc54a03ede42c88ddad25b84bb927404b53b96
+goal_satisfied: false
+goal_satisfied_rationale: Apply pipeline still has high-risk diff-application ambiguity
+  plus verification/audit binding gaps, so subsystem-wide review cannot close cleanly.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: c39813b43f5e4cc4f6ac6d2ec6e969e92a81ad1c88422ac745ec9cc4ca41996d
+  output_sha256: 19db8ea3a42b87e5def863ef0a236767deef166e485b64ced89c9dbf37a92f8d
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: b31f2200869b9ae2f90d20811c503834ffe7ba2739cf761f6405bb0e0b0eee4c
+  scope_signature: 0e9bd6de1711584c6f4222e2095582ca5c43a63e899e60a13c210c2f33e29099
+sealed_at_utc: '2026-05-10T20:55:15Z'
+packet_sha256: f2abe0481b378052f4c8979e8edff673449ed061c66bec923a13071d4bbe400a

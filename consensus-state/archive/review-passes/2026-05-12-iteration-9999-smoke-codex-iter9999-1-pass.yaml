@@ -1,0 +1,40 @@
+iteration_id: iteration-9999-smoke
+reviewer_id: codex-iter9999-1
+pass_id: codex-iter9999-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: review target not provided
+  citation: consensus_mcp/tests/fixtures/dispatch_codex/goal_packet_smoke.yaml:review_target_path
+  risk: Without a canonical review_target_path, the review cannot verify the actual
+    proposed change and must fall back to allowed_files without embedded content.
+  recommendation: Provide review_target_path and embedded authoritative contents for
+    consensus_mcp/_dispatch_codex.py before treating the review as verified.
+  patch_not_proposed_reason: No patch proposed because review_target_path is not specified
+    and no touched-file contents for consensus_mcp/_dispatch_codex.py were embedded;
+    hunks cannot be authored without authoritative file content.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The output is parseable, but the canonical review target
+  is missing, so the review surface is not fully verifiable.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: 0e72036db1a7ba7b4147a8f4131650328bb3d51c8243970e682f361a38d2fb21
+  output_sha256: 29da8a6336d1b62b06d820129f36d75a5960c655465ed7875a5c8bd5a49846ba
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 5092ba91151ba52a66f79f34fe9b2d70b38546ce7dc2260ebbd29b2d8bd1d4a6
+  scope_signature: '0000000000000000000000000000000000000000000000000000000000000000'
+  review_target_path: null
+  review_target_hash: null
+sealed_at_utc: '2026-05-12T03:02:15Z'
+packet_sha256: e2e7f681b3c30acc9e78d180e0b26366e8016752cbbc2757117dac5a4e170586

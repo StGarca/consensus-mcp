@@ -1,0 +1,56 @@
+schema_version: 1
+iteration_id: iteration-0004-onboarding-design-consult
+created_utc: '2026-05-11T20:00:00Z'
+closing_state: quorum_close_passed
+ceremony_flavor: design_consult_single_pass
+parent_iteration: null
+subsystem: onboarding_cli_design
+closing_reason: |
+  iter-0004 was a SINGLE-PASS DESIGN CONSULT. Two design questions
+  about the upcoming onboarding-CLI spec needed cross-AI input:
+    Q1: binary path resolution (windows_suffixes array vs. resolution
+        strategy enum)
+    Q2: v1 output contracts (just two contracts vs. adding unified_diff_only)
+
+  CHAIN:
+    1. claude (orchestrator) authored
+       docs/design-consults/onboarding-binary-resolution-and-output-contracts.md
+       framing both questions with options + soft leans.
+    2. Codex (codex-iter0004-1, sealed 2026-05-11T19:46:?Z — see
+       codex-review.yaml for exact stamp) emitted 2 findings, both
+       severity=low (design verdicts, not defects). goal_satisfied=true.
+    3. Verdicts:
+         Q1: Option A (windows_suffixes array) wins. Codex rationale:
+           "Option B hides platform behavior in registry code; first-
+           time plugin authors pick the wrong strategy and get
+           confusing discovery failures."
+         Q2: Option B (add unified_diff_only) wins. Codex rationale:
+           "Option A forces diff-native CLIs into wrappers; B's
+           loosened invariant is acceptable because init-probe + git
+           apply validation catch the banner-leak failure mode."
+
+  Both verdicts ratified claude's soft leans with independent rationale
+  (codex explained why the LOSER loses, not just generic concurrence).
+
+  Both decisions are now embedded in docs/specs/consensus-onboarding-cli-spec.md
+  §8 and §13.
+
+  This is the FIRST design-only consult in consensus-mcp. The pattern
+  (small review-target doc + two findings carrying the verdict in
+  recommendation + rationale in risk) is reusable for future
+  architecture decisions.
+
+next_action: |
+  - Onboarding spec (docs/specs/consensus-onboarding-cli-spec.md) is
+    authored and incorporates both ratified decisions.
+  - Next iteration: iter-0005-onboarding-cli-implementation
+    (per writing-plans handoff from the brainstorming skill).
+
+artifacts:
+  goal_packet: consensus-state/active/iteration-0004-onboarding-design-consult/goal_packet.yaml
+  review_packet: consensus-state/active/iteration-0004-onboarding-design-consult/review-packet.yaml
+  codex_review: consensus-state/active/iteration-0004-onboarding-design-consult/codex-review.yaml
+  design_consult_doc: docs/design-consults/onboarding-binary-resolution-and-output-contracts.md
+  onboarding_spec: docs/specs/consensus-onboarding-cli-spec.md
+  archive:
+    codex: consensus-state/archive/review-passes/2026-05-11-iteration-0004-onboarding-design-consult-codex-iter0004-1-pass.yaml

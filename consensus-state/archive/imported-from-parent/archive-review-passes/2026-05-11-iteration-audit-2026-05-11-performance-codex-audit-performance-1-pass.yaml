@@ -1,0 +1,120 @@
+iteration_id: iteration-audit-2026-05-11-performance
+reviewer_id: codex-audit-performance-1
+pass_id: codex-audit-performance-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Stop-rule polling repeatedly forks git and shell commands even when repo
+    state and gate inputs have not changed
+  citation: scripts/agent_loop_mcp/_self_drive.py:175
+  risk: A tight orchestrator poll loop pays 3-5 git startups plus N gate subprocesses
+    per check, and can re-run the same expensive gate commands again in evaluate-gates,
+    making idle monitoring scale with process startup and user check cost instead
+    of actual changes.
+  recommendation: 'Add a per-invocation/per-repo-state cache: cheap clean-state probe
+    first, reuse collected changed files and numstat/untracked lists, and avoid executing
+    acceptance gates in check_stop_rules when only command presence/undefined status
+    is needed or when recent gate results are still valid.'
+  patch_not_proposed_reason: Only excerpts were embedded, not the full _self_drive.py
+    file; a safe unified diff cannot be authored without exact surrounding code and
+    imports.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: cmd_check_stop_rules re-opens and re-parses the same YAML files across
+    multiple branches
+  citation: scripts/agent_loop_mcp/_self_drive.py:289
+  risk: Repeated yaml.safe_load calls on claude-review.yaml, codex-review.yaml, review-packet.yaml,
+    consensus, verification, and independence-audit.yaml multiply disk I/O and YAML
+    parse cost every poll, with audit-log parsing duplicated for large iteration logs.
+  recommendation: Create a small read_yaml memo inside cmd_check_stop_rules keyed
+    by resolved Path plus mtime/size, parse independence-audit.yaml once, and share
+    cached claude/codex/review/consensus data across stop-rule branches.
+  patch_not_proposed_reason: Only excerpts were embedded, not the full cmd_check_stop_rules
+    body; a safe patch would need exact local control flow and variable names around
+    all call sites.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: Forbidden-file matching performs O(forbidden_patterns * changed_files)
+    fnmatch checks on every stop-rule pass
+  citation: scripts/agent_loop_mcp/_self_drive.py:410
+  risk: Large goal packets and large changesets can turn a routine poll into tens
+    of thousands of repeated wildcard matches, with pattern work repeated on every
+    invocation.
+  recommendation: Partition exact forbidden paths into a set for O(1) checks, precompile
+    wildcard patterns once per packet, and iterate changed files once against the
+    compiled matcher set.
+  patch_not_proposed_reason: The helper implementations for _path_matches_pattern
+    and imports were not embedded in full, so a correct diff cannot be guaranteed
+    from the excerpts alone.
+  patch_proposal: null
+- id: codex-rev-004
+  severity: medium
+  summary: Drift checking canonicalizes the same YAML artifacts repeatedly without
+    a path-level hash cache
+  citation: scripts/agent_loop_mcp/_self_drive.py:339
+  risk: Each claimed artifact can trigger a full YAML parse, dump, and sha256 even
+    when the same referenced_path appears in iteration_artifacts, reviewer metadata,
+    and consensus, causing redundant CPU and disk work as artifact counts grow.
+  recommendation: Memoize canonical hashes by resolved path plus stat metadata for
+    the duration of one stop-rule evaluation, and pass the cache into every drift-check
+    branch.
+  patch_not_proposed_reason: The _check_drift call sites and full helper body were
+    not embedded, so a safe unified diff cannot be produced.
+  patch_proposal: null
+- id: codex-rev-005
+  severity: high
+  summary: Visibility watchdog slurps the entire append-only dispatch log and builds
+    all historical events every run
+  citation: scripts/agent_loop_mcp/_visibility_watchdog.py:83
+  risk: As dispatch-log.jsonl grows past months of history, every watchdog invocation
+    has unbounded memory use and O(total history) JSON parsing, even though stalled-dispatch
+    detection only needs recent unmatched starts.
+  recommendation: Replace full read_text/splitlines with streaming JSONL iteration
+    and add a tail, cursor, or time-window cutoff that preserves only active dispatch_start
+    entries and terminal events needed for stall detection.
+  patch_not_proposed_reason: Only the watchdog excerpt was embedded, not the full
+    module and its callers; a patch needs exact public API expectations for _read_jsonl
+    and find_stalled.
+  patch_proposal: null
+- id: codex-rev-006
+  severity: low
+  summary: Prompt construction performs repeated full-string replacement passes per
+    dispatch
+  citation: scripts/agent_loop_mcp/_dispatch_codex.py:285
+  risk: Large review packets with big touched_files_contents_block cause roughly one
+    full prompt scan per placeholder, adding avoidable CPU and allocation churn before
+    every Codex subprocess launch.
+  recommendation: Use a single-pass templating strategy or Template.safe_substitute,
+    and ensure _format_touched_files_contents builds chunks with list append plus
+    join.
+  patch_not_proposed_reason: The full _dispatch_codex.py file and _format_touched_files_contents
+    implementation were not embedded, so the quadratic risk cannot be patched safely
+    from the excerpt alone.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The embedded review target exposes multiple performance
+  defects in stop-rule polling, YAML parsing, drift hashing, and dispatch-log scanning;
+  no blocking finding is required, but the performance audit goal is not clean.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: fcaae55269d9de639bff0a6a3848ebd09a861cae56b5f5e5aecf1cd557402029
+  output_sha256: c8bfa7adbd74f82fc62408e5491265cb4e9d89d84f8e975dcfacc10e1041b3c3
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: afd4d85807296fa04267c15d53e091924da661bea4a7d6ac89ded6c83902ae34
+  scope_signature: 0c91bb9131bd5ebbdb222963e50424c32f1e12452e40969acb21169f7ad389b0
+  review_target_path: agent-loop/active/iteration-audit-2026-05-11-performance/review-packet.yaml
+  review_target_hash: 47edd8f1313ad0c958f5d0fb9320476d0b44ddec23fb15fe9f1c891584272134
+sealed_at_utc: '2026-05-11T04:17:46Z'
+packet_sha256: 8aa3da37fce92019da89645736dac46fcd288a8f72ed789d24f1041ff140e8d1

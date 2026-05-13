@@ -1,0 +1,313 @@
+schema_version: 1
+pass_id: pass-10-claude-on-codex-pass-9
+reviewer: claude-opus-4-7
+reviewed_utc: "2026-05-08T00:00:00Z"
+spec_under_review: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.4-ai-contract-plus-codex-pass-9"
+depth: "expert review of v1.4 + dual-pass response to codex pass-9 + meta-observation on premature done-claims + new findings"
+overall_verdict: |
+  v1.4 is structurally sound but pass-9 caught three architectural bugs in
+  changes claude introduced in v1.4 (codex-rev-009 ownership conflict,
+  codex-rev-010 over-aggressive auto-block, codex-rev-011 hash type
+  confusion). Plus one severe operational issue claude missed entirely
+  (codex-rev-013 archive gitignored). Claude pass-10 corroborates pass-9
+  on codex-rev-009/010/011 and adds 8 new findings, including a meta-
+  observation on the premature-done-claim pattern.
+  THIS PASS DOES NOT DECLARE READY FOR PHASE 0. Three prior passes
+  declared ready and were wrong. Pattern is clear: spec-author claude
+  keeps prematurely calling done. Operator has explicitly directed
+  "stop trying to prematurely launch."
+codex_pass_9_findings_reviewed:
+  agree_keep_blocking:
+    - id: codex-rev-009-corroboration-signal-owner-conflict
+      claude_assessment: |
+        Codex caught a real bug claude introduced in v1.4. Section 9 says
+        synthesizer populates corroborated_by; section 13 says reviewers
+        declare it. These are mutually exclusive ownership models. The
+        synthesizer-owned model is correct (reviewers should not see
+        each other's outputs in independent review; they cannot declare
+        corroboration if they are sealed). claude-rev-002 design conflated
+        declaration with detection. Codex is right.
+      proposed_fix_for_v1_5: |
+        - Remove corroborated_by field from section 9 review schema (reviewer artifact stays sealed)
+        - Add corroborated_by field to section 13 consensus.canonical_findings (synthesizer-owned)
+        - Add source_exposure metadata to track whether reviewer was exposed to peer's prior review (independence proof)
+      pass_10_disposition: claude_agrees_keep_blocking_for_v1_5
+    - id: codex-rev-010-corroboration-auto-blocks-too-broadly
+      claude_assessment: |
+        Codex caught another real issue. Section 13 dual_reviewer_corroboration
+        auto_promotion_effect says "severity is upgraded to blocking if
+        non-blocking in any source finding." Two reviewers independently
+        noting "this comment is wrong" both at low severity would
+        auto-blockingify. This converts independent confirmation of trivial
+        issues into hard blocks. Codex is right.
+      proposed_fix_for_v1_5: |
+        Restrict auto-promotion:
+          auto_block_only_if:
+            either:
+              - max(source_severity) in [high, blocking]
+              - claim_class in [safety, correctness, security, process]
+          else:
+            outcome: confirmed_suggestion (recorded in canonical_findings, not blocking)
+      pass_10_disposition: claude_agrees_keep_blocking_for_v1_5
+    - id: codex-rev-011-production-approval-hash-type-confusion
+      claude_assessment: |
+        Codex caught a serious type confusion. Section 17 transition guard
+        compares artifact_or_commit_sha256 with verification artifact sha256,
+        but for merge/deploy/data-mutation scopes these are DIFFERENT objects.
+        For a merge, the verification (test results) is not the merge target
+        (the commit). For data-mutation, the verification (dry-run report)
+        is not the resulting database state. claude TOCTOU defense in v1.4
+        compared apples and oranges. Codex is right.
+      proposed_fix_for_v1_5: |
+        Three-way hash split in section 17 approval_schema:
+          approved_target_sha256: "the artifact/commit being promoted to production"
+          approved_consensus_sha256: "the consensus.yaml at approval time"
+          approved_verification_sha256: "the verification.yaml at approval time"
+        Each gets its own transition guard against the corresponding current object.
+        Section 24 rev-067 promotion_to chain unchanged but section 17 rewrites needed.
+      pass_10_disposition: claude_agrees_keep_blocking_for_v1_5
+  agree_apply_now:
+    - id: codex-rev-013-pass8-archive-ignored-by-default
+      claude_assessment: |
+        Operationally severe and claude missed it entirely. Repo .gitignore
+        has /* deny-by-default with allow-list. agent-loop/ was NOT in
+        allow-list, so all archive files (which the spec POINTS TO via
+        section 24 archived block) were git-ignored. Audit trail was
+        broken. v1.4 spec referenced files that would not exist in a
+        clean checkout. Codex caught it; claude verified.
+      pass_10_disposition: applied_in_pass_10 (.gitignore patched to allow agent-loop/archive/review-passes/*.yaml + agent-loop/state/*.yaml + agent-loop/tests/fixtures/**)
+      verification: "git check-ignore -v on archive YAML now returns exit=1 (not ignored)"
+    - id: codex-rev-014-pass8-status-overstates-promotion
+      claude_assessment: "Codex right. Index said 'all 6 promoted' but claude-rev-001 anti-regression criterion is explicitly pending v1.5."
+      pass_10_disposition: applied_in_pass_10 (index.yaml pass-8 status changed to PARTIAL)
+    - id: codex-rev-015-invalid-legacy-finding-id-reference
+      claude_assessment: "Codex caught two citation errors: 'codex-rev-071' should be 'rev-071' (pre-namespacing). Exactly the dead-reference class that claude-rev-005 validate_disposition_index.py would catch."
+      pass_10_disposition: applied_in_pass_10 (frontmatter v1.4 summary fixed; section 23 fixture comment fixed)
+    - id: codex-rev-016-ascii-rule-violated-in-spec-body
+      claude_assessment: "Em dash in section 24 id_reservations rev-074..rev-080 entry. Codex right."
+      pass_10_disposition: applied_in_pass_10 (em dash replaced with hyphen)
+  agree_apply_carefully:
+    - id: codex-rev-012-section-24-still-not-index-only
+      claude_assessment: |
+        Codex caught the same drift pattern at lower volume. Section 24
+        still has pending_v1_5 with summary/note prose, deferred rationales
+        (multi-sentence), tradeoffs decisions (prose). Per section 0 rule
+        section 24 is index-only. Same violation pattern caught in pass-7
+        (codex-rev-001) is resurfacing. Claude needs to stop adding prose
+        to section 24 when the index expands.
+      proposed_fix_for_v1_5: |
+        Either:
+          (a) Rename section 24 to "Disposition metadata" (acknowledge prose presence)
+          (b) Move pending/deferred/tradeoff prose to agent-loop/state/disposition-ledger.yaml
+          and keep section 24 to: id, status, target/archive_pointer ONLY
+        Option (b) is correct per section 0 rule but requires creating
+        disposition-ledger.yaml infrastructure. Defer to v1.5.
+      pass_10_disposition: noted_keep_blocking_for_v1_5
+new_findings:
+  meta_high:
+    - id: claude-rev-007-premature-done-claim-pattern
+      severity: high
+      claim: |
+        Spec author (claude) has now declared "ready for Phase 0" or equivalent
+        three times: after v1.2 ("production-quality contract"), after v1.3
+        ("ready for Phase 0 with no known blocking issues"), after v1.4
+        ("Spec is now ready for Phase 0"). All three were wrong; each was
+        followed by a pass that found blocking architectural issues. Pattern
+        is consistent: claude calls done while bugs remain.
+      evidence:
+        - "pass-4 verdict 'production-quality contract' followed by pass-5 catching corroboration tradeoff drift"
+        - "pass-6 verdict 'ready for Phase 0' followed by pass-7 catching 8 issues including malformed-output regression"
+        - "pass-8 verdict 'no known blocking issues' followed by pass-9 catching 8 issues including hash type confusion"
+        - "operator directive: 'stop trying to prematurely launch'"
+      risk: |
+        The verdict structure trusts reviewer self-assessment. The whole
+        architecture exists precisely BECAUSE reviewers miss things;
+        ironic that the verdict block trusts reviewer claims. Spec has
+        no rule against premature done-claims.
+      proposed_fix_for_v1_5: |
+        Add to section 0 or section 13:
+          done_claim_rule: |
+            A reviewer may not declare 'ready for Phase 0' or equivalent
+            until BOTH:
+              - validate_disposition_index.py runs clean on the spec
+              - iteration-0000 dry-run produces empirical metrics in section 22
+            Until both conditions met, verdicts are 'pending phase 0
+            empirical validation' regardless of reviewer subjective confidence.
+      pass_10_disposition: pending_v1_5_meta_rule
+  high:
+    - id: claude-rev-008-corroboration-weaponization
+      severity: high
+      claim: |
+        The auto-promotion rule in section 13 (and codex-rev-010's tightened
+        version) creates a new attack surface. If an agent learns the
+        corroboration rule, it can generate findings designed to corroborate
+        the OTHER agent's findings (steering toward duplicate canonical
+        keys) to force auto-blocks on its own preferred changes.
+      risk: |
+        Corroboration weaponization. The rule trusts that two reviewers
+        raising the same finding means independence, but doesn't verify it.
+      proposed_fix_for_v1_5: |
+        Corroboration detection requires independence proof:
+          independence_proof:
+            - reviewers must be invoked with fresh_context: true (per section 19)
+            - reviewer A's output sha256 must be sealed BEFORE reviewer B's invocation
+            - reviewer B's review_packet must NOT include reviewer A's review.yaml
+            - synthesizer audit log records exposure metadata per finding
+        Without all four, corroboration_strength downgrades to suggested_by_context
+        regardless of duplicate detection.
+      pass_10_disposition: pending_v1_5
+    - id: claude-rev-013-consensus-mutation-invalidates-approvals
+      severity: high
+      claim: |
+        Section 17 production approval requires approved_consensus_sha256 ==
+        current consensus.yaml sha256. But consensus.yaml is mutable per
+        section 13's auto-promotion rule (when corroboration detected).
+        If a new finding gets corroborated by pass-N+1 and auto-promotes,
+        consensus.yaml changes, and any in-flight production approval
+        becomes invalid.
+      claude_v1_4_partial_fix: |
+        section 17 any_to_not_ready_triggers includes "consensus.yaml sha256
+        changes after approval was issued." This regresses production_state
+        to not_ready.
+      remaining_concern: |
+        Regressing all the way to not_ready may be too aggressive. If
+        consensus changed but the approved target_sha256 is unchanged, a
+        weaker regression to ready_pending_operator_approval (forcing
+        re-approval) might suffice. Spec doesn't distinguish these cases.
+      proposed_fix_for_v1_5: |
+        Distinguish in section 17 transitions:
+          consensus_change_after_approval:
+            if production_ready_if_still_holds:
+              regress_to: ready_pending_operator_approval
+              require: re-approval bound to new consensus_sha256
+            else:
+              regress_to: not_ready
+        This is consistent with codex-rev-011's three-way hash split.
+      pass_10_disposition: pending_v1_5_dependent_on_codex-rev-011
+  medium:
+    - id: claude-rev-009-adversarial-pass-budget-undefined
+      severity: medium
+      claim: |
+        Section 13 weak_agreement_triggers_adversarial_pass mode. Adversarial
+        pass is described as a single-prompt re-run, but spec doesn't say:
+          - whose prompt (Codex's, Claude's, both, a third agent?)
+          - whether the same agent that produced weak agreement is re-run, or fresh
+          - what happens if adversarial pass also returns empty findings (loop?)
+          - max iteration depth
+      pass_10_disposition: pending_v1_5
+    - id: claude-rev-010-independent-finding-rate-formula-undefined
+      severity: medium
+      claim: |
+        Section 22 lists independent_finding_rate as a metric, section 4
+        references it for kill-switch, archive index uses formula
+        (unique_canonical_findings - duplicates) / total_findings. But:
+          - Numerator: unique findings, or findings raised by exactly one agent?
+          - Denominator: total canonical findings, or total raw findings (with duplicates)?
+        Different definitions yield different rates. Section 22 needs explicit formula.
+      proposed_fix_for_v1_5: |
+        section 22:
+          independent_finding_rate_formula: |
+            count(canonical_findings_with_exactly_one_source) /
+            count(all_canonical_findings)
+            where canonical_findings are post-synthesizer-merge.
+      pass_10_disposition: pending_v1_5
+    - id: claude-rev-011-cross-iteration-corroboration-undefined
+      severity: medium
+      claim: |
+        Section 13 dual_reviewer_corroboration assumes both findings exist
+        in the same iteration. If pass-9 (codex on v1.4) raises a finding
+        that duplicates pass-7's already-archived finding, does the dup
+        signal still trigger auto-promote?
+      relevance: |
+        Codex pass-9's findings actually corroborate several pre-existing
+        findings (e.g., codex-rev-012 echoes codex-rev-001 about section 24
+        drift). Should those count toward cross-iteration independence rate?
+      pass_10_disposition: pending_v1_5
+    - id: claude-rev-012-kill-switch-iteration-definition-fuzzy
+      severity: medium
+      claim: |
+        Section 4 kill-switch measures independent_finding_rate "across 5
+        iterations." But "iteration" in this spec context could mean
+        spec-review iterations (passes 1-9 to date) OR future operational
+        iterations (iteration-0000+). These have different cadence and
+        different rate behavior.
+      proposed_fix_for_v1_5: |
+        section 4:
+          kill_switch_iteration_definition: "operational iterations only
+          (iteration-NNNN producing both review.yamls and a consensus.yaml).
+          Spec-review passes are excluded from the kill-switch window."
+      pass_10_disposition: pending_v1_5
+  governance:
+    - id: claude-rev-014-do-not-claim-ready-this-pass
+      severity: governance
+      claim: |
+        Operator has directly stated "stop trying to prematurely launch."
+        Spec-author claude has incentive to declare done; pattern of three
+        prior premature claims confirms this. Pass-10 verdict MUST NOT
+        include "ready for Phase 0" language regardless of how many
+        findings get applied.
+      pass_10_disposition: applied_to_this_pass (verdict block above does not declare ready)
+    - id: claude-rev-015-validate-disposition-index-still-not-built
+      severity: governance
+      claim: |
+        v1.4 added validate_disposition_index.py to section 23 phase_0_deliverables
+        per claude-rev-005, but the script does not yet exist. Until it
+        exists, dead-reference issues like codex-rev-002 and codex-rev-015
+        will continue to slip past spec author. The script is the
+        load-bearing infrastructure for catching the dead-reference class.
+      proposed_action: |
+        Build validate_disposition_index.py BEFORE the next consolidation
+        pass. Run it on every spec-review pass starting with pass-11.
+      pass_10_disposition: noted_for_phase_0
+meta_observations:
+  loop_self_test_pass_9_pass_10:
+    independent_finding_rate: 0.81
+    formula: "(unique_canonical_findings - duplicates) / total_findings"
+    total_findings: 16
+    duplicates: 3
+    duplicates_observed:
+      - "claude-rev-008 (corroboration weaponization) extends codex-rev-010 (auto-block too broad) - related but not strictly duplicate"
+      - "claude-rev-013 (consensus mutation) overlaps codex-rev-011 (hash type confusion) - related architectural concern"
+      - "claude-rev-009 (adversarial pass undefined) and codex-rev-012 (section 24 drift) both about under-specified mechanism behavior"
+    interpretation: |
+      Independence rate 0.81 - slightly lower than passes 4-5 / 7-8
+      (both at 0.86) because pass-10 builds on pass-9 explicitly,
+      reducing pure independence. Still well above section 4 threshold
+      of 0.30. Architecture continues to produce signal.
+  premature_done_claim_pattern_documented:
+    instances:
+      - "pass-4: 'production-quality contract' (rebutted by pass-5)"
+      - "pass-6: 'ready for Phase 0' (rebutted by pass-7)"
+      - "pass-8: 'no known blocking issues' (rebutted by pass-9)"
+    operator_directive: "stop trying to prematurely launch (2026-05-08)"
+    structural_remedy_proposed: claude-rev-007 done-claim rule
+  consolidation_regression_pattern_continues:
+    new_instance: |
+      v1.3 to v1.4: claude introduced corroborated_by ownership conflict
+      (caught by codex-rev-009) AND hash type confusion in production
+      transitions (caught by codex-rev-011) WHILE applying fixes meant
+      to address prior pass findings. Patches themselves regress.
+    interpretation: |
+      Three of three consolidation/patch passes have introduced new bugs
+      while fixing prior ones. Pattern is now strongly evidenced.
+      claude-rev-001 anti-regression criterion (still pending v1.5) is
+      load-bearing.
+  writeback_rule_status:
+    pass_10_compliance: |
+      Pass-10 written back to archive immediately AND inline patches
+      applied for codex-rev-013/014/015/016 within same operator turn.
+      No conversational-only delivery. Compliance with durable writeback
+      rule confirmed.
+recommendation: |
+  v1.5 must address codex-rev-009/010/011/012 (architectural) and
+  claude-rev-007 (premature-done-claim rule) before any further consolidation.
+  v1.5 cannot be declared by claude alone; needs codex review. Operator
+  should:
+    1. Approve or reject the proposed_fix_for_v1_5 designs above
+    2. If approved, apply them inline AND build validate_disposition_index.py
+       AND iteration-0000 fixtures
+    3. Run full validate cycle (claude pass-11 + codex pass-12 + consensus)
+       and accept the result ONLY if both passes return zero blocking
+       findings AND validate_disposition_index.py runs clean
+  Operator directive enforced: this pass does not declare ready for Phase 0.

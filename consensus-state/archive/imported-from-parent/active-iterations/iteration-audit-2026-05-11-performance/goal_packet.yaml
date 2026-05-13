@@ -1,0 +1,64 @@
+schema_version: 1
+pilot_id: iteration-audit-2026-05-11-performance
+goal:
+  summary: "Audit dispatch — performance engineer profiling python orchestration code reviews agent-loop code for performance defects."
+  desired_end_state: |
+    iter-audit-2026-05-11-performance is one of 4 parallel codex audit dispatches
+    on the agent-loop code (other dimensions: security, cross-platform, bare-except). Each audit gets a
+    specialized codex persona via the review-target.md framing. Findings
+    are aggregated, claude evaluates each (cross-AI consensus loop per
+    operator-locked process), consensus findings get dispatched as parallel
+    workflow #4 fix cycles.
+
+    THIS DISPATCH: codex acts as a performance engineer profiling python orchestration code and produces findings on
+    performance defects in the embedded code excerpts.
+
+    Concerns (non-exclusive): subprocess.run/Popen overhead per dispatch; repeated yaml.safe_load on hot paths; n^2 patterns in stop-rule evaluation; large dispatch-log.jsonl scan cost as log grows past 10MB; redundant re-parse of audit-log across stop-rule branches.
+
+    OUT OF SCOPE for this audit: the other 3 dimensions (each has its own
+    parallel audit dispatch). Do NOT emit findings on those.
+
+    Findings format: per the standard codex_review_schema.json. Each
+    finding gets id (codex-rev-NNN), severity, summary, citation
+    (file:line), risk, recommendation, patch_proposal (preferred) OR
+    patch_not_proposed_reason (only if a patch isn't safely authorable
+    from the embedded content).
+
+    SUCCESS = sealed codex-review.yaml at
+    agent-loop/active/iteration-audit-2026-05-11-performance/codex-review.yaml
+    with findings and goal_satisfied/goal_satisfied_rationale set.
+  non_goals:
+    - emit findings on dimensions OUTSIDE this audit's framing (security/perf/cross-platform/bare-except are split across parallel dispatches)
+    - propose architectural rewrites (focus on targeted defects)
+    - modify any code (this is review-only)
+allowed_files:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/_author_review_packet.py
+  - scripts/agent_loop_mcp/_visibility_watchdog.py
+  - scripts/agent_loop_mcp/_visibility_tui.py
+  - agent-loop/active/iteration-audit-2026-05-11-performance/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/server.py
+  - scripts/agent_loop_mcp/tool_registry.py
+  - scripts/agent_loop_mcp/tools/
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - scripts/agent_loop_mcp/tests/
+  - run/
+  - wiki/
+  - pyproject.toml
+  - requirements.txt
+max_iterations: 1
+max_patch_size: 300
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates: []
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers: []
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T03:45:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 0c91bb9131bd5ebbdb222963e50424c32f1e12452e40969acb21169f7ad389b0

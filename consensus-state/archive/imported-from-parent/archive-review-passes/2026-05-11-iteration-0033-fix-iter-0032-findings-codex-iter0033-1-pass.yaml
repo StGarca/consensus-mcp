@@ -1,0 +1,42 @@
+iteration_id: iteration-0033-fix-iter-0032-findings
+reviewer_id: codex-iter0033-1
+pass_id: codex-iter0033-1-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: Review target content was not available in the sealed packet, so the proposed
+    patches cannot be evaluated.
+  citation: agent-loop/active/iteration-0033-fix-iter-0032-findings/proposed-patches.md:1
+  risk: Proceeding would require approving patches I could not inspect, defeating
+    the pre-implementation review gate.
+  recommendation: Provide the contents of proposed-patches.md in the sealed packet
+    or make the canonical review target readable, then rerun the review.
+  patch_not_proposed_reason: No fix authored because the proposed patch contents and
+    touched-file base contents were not available to review; authoring a diff would
+    require hallucinating file content.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The review goal is not satisfied because the canonical proposed-patches.md
+  content could not be inspected.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 6019848c42cd33a19f74da79d6ffe027937be78e16ab9a55dccd5f1cf5b79b12
+  output_sha256: 8d156277cf9ce9fc59a0d8d79338364e072ef0e68c460c60eda70e0ddc7e16df
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: fa810e4d61ee9b1cfcda41f9c64a184825cb488fc0ecc89a836b9e6557bea6ed
+  scope_signature: 7702ac7284abb2737c0a96d04128e1c48b9a341c146d76f65f43726162e27042
+  review_target_path: agent-loop/active/iteration-0033-fix-iter-0032-findings/proposed-patches.md
+  review_target_hash: edfc2f078bd32568de0076cf9791283586c76c4872ea9a5403099cf28e24f3f6
+sealed_at_utc: '2026-05-11T00:52:59Z'
+packet_sha256: f7ab1f5747b387f50b9286c1601988040b8a7b0a315b563deb879a9816ef5261

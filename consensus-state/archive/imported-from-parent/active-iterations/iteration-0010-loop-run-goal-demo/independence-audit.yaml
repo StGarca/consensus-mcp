@@ -1,0 +1,61 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-10T04:21:45Z'
+  event_id: 2026-05-10T04:21:45Z_review_returned_and_sealed_codex-iteration-0010-loop-run-goal-demo-1
+  actor: codex-iteration-0010-loop-run-goal-demo-1
+  artifact: agent-loop/archive/review-passes/2026-05-10-iteration-0010-loop-run-goal-demo-codex-iteration-0010-loop-run-goal-demo-1-pass.yaml
+  sha256: 27427cb13189bb9b66584965dee58808b16498af48f8ee29bd5f187108a8d7fd
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_packet_built
+  timestamp_utc: '2026-05-10T04:23:42Z'
+  event_id: 2026-05-10T04:23:42Z_review_packet_built_orchestrator
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0010-loop-run-goal-demo/review-packet.yaml
+  sha256: c08f685bcfe831ad0d67142c93d964a3277d0dcdab1ca248b4b1ae3759cee4fa
+- event: reviewer_invoked
+  timestamp_utc: '2026-05-10T04:23:42Z'
+  event_id: 2026-05-10T04:23:42Z_reviewer_invoked_claude-iter0010-1
+  actor: claude-iter0010-1
+  artifact: agent-loop/active/iteration-0010-loop-run-goal-demo/review-packet.yaml
+  independence_attestation:
+    method: subagent_dispatch
+    model: opus
+    reviewer_received_only_sealed_packet: true
+  invocation_protocol: Task tool subagent_type=general-purpose model=opus
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-10T04:23:42Z'
+  event_id: 2026-05-10T04:23:42Z_review_returned_and_sealed_claude-iter0010-1
+  actor: claude-iter0010-1
+  artifact: agent-loop/active/iteration-0010-loop-run-goal-demo/claude-review.yaml
+  sha256: 416023917cebab6ca52f4632d6292ae13c08e712191a7c3c09c0aab8676186d7
+  independence_attestation:
+    method: subagent_dispatch
+    co_authoring_with_codex: false
+  validator_status: goal_satisfied=true; blocking=0; non_blocking=0
+- event: both_reviews_sealed
+  timestamp_utc: '2026-05-10T04:23:42Z'
+  event_id: 2026-05-10T04:23:42Z_both_reviews_sealed_orchestrator
+  actor: orchestrator
+  note: claude + codex both goal_satisfied=true; codex via loop.run_goal auto-dispatch
+    (2nd attempt; 1st rejected by helper validator)
+- event: consensus_built
+  timestamp_utc: '2026-05-10T04:23:42Z'
+  event_id: 2026-05-10T04:23:42Z_consensus_built_orchestrator
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0010-loop-run-goal-demo/consensus.yaml
+  sha256: 27908627db82294a203a4e579e4065145fd790ee266c9b76df019125ac6ac10a
+  consensus_state: implementation_ready
+- event: iteration_closed
+  timestamp_utc: '2026-05-10T04:23:42Z'
+  event_id: 2026-05-10T04:23:42Z_iteration_closed_orchestrator
+  actor: orchestrator
+  closing_state: quorum_close_passed
+  governance_milestone_closed: iter_0010_first_loop_run_goal_supervised_iteration

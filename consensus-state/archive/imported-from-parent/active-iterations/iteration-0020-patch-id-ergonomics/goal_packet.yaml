@@ -1,0 +1,79 @@
+schema_version: 1
+pilot_id: iteration-0020-patch-id-ergonomics
+goal:
+  summary: iter-0020 empirical proof — codex emits valid patch_proposal with iter-0020 ergonomics fix landed
+  desired_end_state: |
+    iter-0019 surfaced that codex's read-only sandbox could NOT produce a
+    content-bound patch_id (formula required sha256(unified_diff) computation).
+    iter-0020 landed the ergonomics fix: patch_id is now finding-id-derived
+    (`<finding_id>-patch`), regex `^codex-rev-\d+-patch$`, and the helper
+    computes/stamps `unified_diff_sha256` separately.
+
+    With that landed, codex SHOULD now be able to emit a valid
+    `patch_proposal` block. This iteration is the empirical proof: re-run
+    the iter-0019 setup, dispatch codex, observe whether codex produces a
+    valid patch_proposal.
+
+    Defect target (same as iter-0019): `apply.codex_patch.handle()`
+    (scripts/agent_loop_mcp/tools/apply_codex_patch.py) does not re-validate
+    `actor`'s structural shape when called directly via Python import.
+    Defense-in-depth should ensure actor has the 4 required keys
+    (id, model_family, role, pass_id).
+
+    Codex's patch should add this re-validation as a surgical 5-15 line
+    addition + a regression test asserting refusal on missing
+    actor.model_family.
+  non_goals:
+    - modify _closure_invariant.py
+    - modify _self_drive.py
+    - modify _dispatch_codex.py
+    - introduce new MCP tools
+    - modify codex_review_schema.json
+    - bump pyproject.toml version
+allowed_files:
+  - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+  - agent-loop/active/iteration-0020-patch-id-ergonomics/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_closure_invariant.py
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - scripts/agent_loop_mcp/tools/loop_run_goal.py
+  - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+  - scripts/agent_loop_mcp/tools/audit_append_event.py
+  - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/server.py
+  - run/
+  - wiki/
+max_iterations: 2
+max_patch_size: 80
+fix_author_policy: strict
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: apply.codex_patch.handle has actor structural re-validation (defense-in-depth check)
+    check: 'grep -q "actor" scripts/agent_loop_mcp/tools/apply_codex_patch.py && grep -E "model_family|required actor key" scripts/agent_loop_mcp/tools/apply_codex_patch.py'
+  - id: A2
+    description: regression test asserts apply refuses on missing actor.model_family
+    check: 'grep -q "model_family" scripts/agent_loop_mcp/tests/test_apply_codex_patch.py'
+  - id: A3
+    description: pytest still green
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+  - claude_codex_disagree_on_goal_satisfied
+  - closure_cross_verification_failed
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-10T20:00:00Z'
+  codex_patch_apply_authorized: true
+  scope_signature: 9d0e1a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f

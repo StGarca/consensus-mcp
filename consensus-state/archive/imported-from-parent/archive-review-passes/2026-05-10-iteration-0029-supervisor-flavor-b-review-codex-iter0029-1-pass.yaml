@@ -1,0 +1,43 @@
+iteration_id: iteration-0029-supervisor-flavor-b-review
+reviewer_id: codex-iter0029-1
+pass_id: codex-iter0029-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: closure invariant failures can return a state not declared in the output
+    schema enum coverage tests
+  citation: scripts/agent_loop_mcp/tools/loop_run_goal.py:245
+  risk: The state machine can emit blocked_closure_invariant_failed, but the tests
+    never exercise the closure-invariant branch or assert the schema/expected states
+    include it. A regression in this safety gate could silently skip the post-mutation
+    closure invariant and still leave the supervisor tests green.
+  recommendation: Add focused tests that create a post-mutation audit event plus stale/mismatched
+    review metadata and assert blocked_closure_invariant_failed, then add the happy
+    path proving ready_to_close still returns only when the invariant passes.
+  patch_not_proposed_reason: A correct patch requires the expected _closure_invariant
+    audit/review record shapes, which are not embedded in this sealed two-file packet;
+    patching from guessed helper contracts would risk invalid tests.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The supervisor includes a closure-invariant state, but this
+  Flavor B packet leaves that safety transition untested, so the subsystem review
+  target is not fully covered.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: e590656c80c4e4b239d0d6f958a4618c3d48f9d987b53a9df5720f95cd7bc83e
+  output_sha256: d9c441d0ad2a7fabe67f5747c3f2f6f1d55e5042318b8641ac9a09b7c96a1572
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 66f71f62b14c3595d1c32f2b72a95349cc8c0602f34668a4ad76d8714b6b469f
+  scope_signature: c84f9207c0822291fca5d667797ecef85d3d373b098e1875729bab2aab26990f
+sealed_at_utc: '2026-05-10T22:02:20Z'
+packet_sha256: 67297404afedeb599aa43df35fcb594349cccda5f3a8b14851a6b8168e8207aa

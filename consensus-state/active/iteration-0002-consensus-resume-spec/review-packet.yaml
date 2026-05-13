@@ -1,0 +1,288 @@
+defect_target:
+  files:
+  - docs/specs/consensus-resume-spec.md
+  base_sha: ed51f12d74e056d5c4c5467c2ad7c5c56388c3b29a2da1ea3f715284d61a34b3
+  touched_files_contents:
+    docs/specs/consensus-resume-spec.md: "# consensus_resume — MCP tool spec (v2)\n\
+      \n**Status:** v2 (post-codex-iter0002-1) — addresses codex-rev-001..007\n**Author:**\
+      \ claude (orchestrator) 2026-05-11\n**Reviewer:** codex (dispatched via consensus_mcp._dispatch_codex)\n\
+      **Iteration:** iter-0002-consensus-resume-spec, pass 2\n**Motivation:** parity-with-guild\
+      \ bootstrap ergonomics — one MCP call returns the full operating-context snapshot\
+      \ of a consensus-mcp run so an orchestrator that just `/clear`-ed, compacted,\
+      \ or restarted can pick up exactly where it left off.\n\n## Changes from v1\n\
+      \n| Finding | Severity | Resolution location |\n|---|---|---|\n| codex-rev-001\
+      \ | HIGH | §4 — `wait_for_dispatch` added to action enum with payload |\n| codex-rev-002\
+      \ | HIGH | §3 — single sort rule with deterministic tiebreaker; ambiguity always\
+      \ surfaced |\n| codex-rev-003 | MEDIUM | §7 — every disk read in §5 has an explicit\
+      \ error policy |\n| codex-rev-004 | MEDIUM | §4, §5 — `open_reviews[]` entries\
+      \ carry `classification` + closure source named |\n| codex-rev-005 | MEDIUM\
+      \ | §4 — `bundle_mutation` (closure-relevant) split from `recent_activity` (audit)\
+      \ |\n| codex-rev-006 | MEDIUM | §4, §8 — `snapshot_watermark` + revalidation\
+      \ rule replaces \"tolerate transient inconsistency\" |\n| codex-rev-007 | LOW\
+      \ | §9 — all seven open questions answered |\n\n---\n\n## 1. Purpose\n\nWhen\
+      \ an orchestrator (claude, codex, or any MCP client) attaches to a consensus-mcp\
+      \ instance, it currently has to inspect the filesystem under `consensus-state/`\
+      \ to figure out:\n\n- Is there an iteration in flight?\n- Has a dispatch been\
+      \ started? Is it still running?\n- Are there sealed reviews waiting on the cross-family\
+      \ closure invariant?\n- Is there a stuck dispatch the operator already aborted\
+      \ but didn't clean up?\n- What did the last actor do, and what is the implicitly-expected\
+      \ next action?\n\nThis is N tool calls today (read goal_packet → list iteration\
+      \ dir → grep dispatch-log → read latest review-packet → check heartbeat freshness\
+      \ → …). It's also error-prone: an orchestrator that misreads the state can re-dispatch\
+      \ a still-running pass, or try to close an iteration whose mutation hasn't been\
+      \ hashed yet.\n\n`consensus_resume` collapses all of that into one call. It\
+      \ returns a **read-only snapshot** of the world that the next actor needs to\
+      \ make a correct decision about what to do next.\n\nThe pattern is borrowed\
+      \ from `mathomhaus/guild`'s single-call session-bootstrap idiom (\"one tool\
+      \ call returns project oath + parting scroll + highest-priority quest\") — but\
+      \ adapted to consensus-mcp's verification-first semantics. Where guild returns\
+      \ \"what to do,\" consensus_resume returns \"what state the verification gate\
+      \ is in and what the invariants say must happen next.\"\n\n## 2. Non-goals\n\
+      \n- **Not a mutation tool.** `consensus_resume` is strictly read-only. It must\
+      \ never write to `consensus-state/`, never send signals, never start a dispatch.\n\
+      - **Not a planner.** It reports what the closure invariant *requires* next based\
+      \ on the current sealed state. It does not pick which workflow (#1/#2/#3/#4)\
+      \ to use, doesn't author goal packets, doesn't propose patches.\n- **Not a watchdog\
+      \ substitute.** `_visibility_watchdog.py` handles orphan cleanup; `consensus_resume`\
+      \ only *reports* whether an orphan-dispatch condition exists.\n- **No cross-iteration\
+      \ history.** Returns the current iteration plus an optional immediate-predecessor\
+      \ pointer when an archived `closure-certificate.yaml` exists.\n- **No new persistence.**\
+      \ Reads existing on-disk files (`goal_packet.yaml`, `dispatch-log.jsonl`, `*-review.yaml`,\
+      \ `iteration-outcome.yaml`, `closure-certificate.yaml`); does not introduce\
+      \ a new DB or cache layer.\n\n## 3. Input\n\n```jsonc\n{\n  \"iteration_id\"\
+      : \"iter-0002-consensus-resume-spec\",   // optional; auto-detect if absent\n\
+      \  \"include_streamed_lines\": false,                      // optional; default\
+      \ false\n  \"max_streamed_lines\": 50,                             // optional;\
+      \ only used if above is true\n  \"prior_snapshot_watermark\": \"sha256...\"\
+      \               // optional; see §8\n}\n```\n\n**Auto-detection rule when `iteration_id`\
+      \ is absent (codex-rev-002 resolution):**\n\n1. List directories under `consensus-state/active/`\
+      \ whose `goal_packet.yaml` exists and parses.\n2. **Primary sort:** `authorization.authorized_at_utc`\
+      \ descending. Iterations with missing or unparseable `authorized_at_utc` sort\
+      \ last.\n3. **Tiebreaker:** directory name lexicographic descending (POSIX byte\
+      \ order, not locale-aware).\n4. `selected_iteration_id` is the first element\
+      \ of the sorted list (or `null` if the list is empty).\n5. `multiple_active_iterations[]`\
+      \ is populated **whenever** the sorted list has length > 1, regardless of whether\
+      \ the operator passed `iteration_id` explicitly. (Surfacing ambiguity is always\
+      \ cheap; suppressing it can be misleading.)\n\nLex-greatest naming is NOT used\
+      \ as a primary key under any condition. Iteration directory names are operator-authored\
+      \ and not guaranteed numerically prefixed.\n\n## 4. Output (schema)\n\n```jsonc\n\
+      {\n  \"schema_version\": 2,\n  \"snapshot_taken_at_utc\": \"2026-05-11T17:42:11Z\"\
+      ,\n  \"snapshot_watermark\": \"sha256...\",                   // §8 — content-bound\
+      \ stale-snapshot detector\n  \"selected_iteration_id\": \"iter-0002-consensus-resume-spec\"\
+      ,\n  \"iteration_state\": \"open\" | \"closed_passed\" | \"closed_failed\" |\
+      \ \"blocked_operator\" | \"unknown\",\n\n  \"goal\": {\n    \"summary\": \"\
+      ...\",\n    \"scope_signature\": \"sha256...\",\n    \"scope_signature_valid\"\
+      : true,                     // recomputed and compared\n    \"authorized_by\"\
+      : \"operator\",\n    \"authorized_at_utc\": \"...\",\n    \"max_iterations\"\
+      : 1,\n    \"iterations_used\": 0\n  } | null,                              \
+      \              // null when goal_packet.yaml missing/malformed\n\n  // codex-rev-005\
+      \ resolution: bundle_mutation = closure-relevant only.\n  // Only events that\
+      \ change review_target_hash (= bundle_sha of touched files)\n  // are eligible\
+      \ to populate this field. Other audit events go to recent_activity.\n  \"bundle_mutation\"\
+      : {\n    \"actor\": {\"id\": \"claude-author-1\", \"model_family\": \"claude\"\
+      },\n    \"kind\": \"patch_applied\" | \"review_packet_rebundled\" | \"operator_force_bundle_rewrite\"\
+      ,\n    \"timestamp_utc\": \"...\",\n    \"bundle_sha256\": \"...\"         \
+      \                    // canonical review_target_hash after this event\n  } |\
+      \ null,\n\n  // codex-rev-005 resolution: separate field for non-closure audit\
+      \ context.\n  // Bounded — most recent N=10 events, newest-first, deterministic\
+      \ order.\n  \"recent_activity\": [\n    {\n      \"event_id\": \"...\",\n  \
+      \    \"kind\": \"dispatch_started\" | \"dispatch_heartbeat\" | \"dispatch_streamed_line\"\
+      \n            | \"dispatch_completed\" | \"dispatch_aborted\"\n            |\
+      \ \"review_packet_authored\" | \"review_sealed\"\n            | \"goal_packet_authored\"\
+      \ | \"operator_abort_signaled\",\n      \"actor_id\": \"...\",\n      \"timestamp_utc\"\
+      : \"...\"\n    }\n  ],\n\n  // codex-rev-004 resolution: each entry classified;\
+      \ closure source named.\n  \"open_reviews\": [\n    {\n      \"pass_id\": \"\
+      codex-iter0002-1-pass1\",\n      \"reviewer_id\": \"codex-iter0002-1\",\n  \
+      \    \"model_family\": \"codex\",\n      \"sealed_at_utc\": \"...\",\n     \
+      \ \"blocking_objections\": [\"codex-rev-001\"],\n      \"goal_satisfied\": false,\n\
+      \      \"review_target_hash\": \"...\",\n\n      // Classification source (§5\
+      \ step 4):\n      //   \"open\"        — sealed; review_target_hash matches\
+      \ current bundle; not referenced by any closure cert\n      //   \"closing\"\
+      \     — referenced by an existing closure-certificate.yaml as a closer\n   \
+      \   //   \"consumed\"    — referenced by closure cert; iteration is closed_passed/closed_failed\n\
+      \      //   \"superseded\"  — review_target_hash != current bundle (bundle_mutation\
+      \ occurred after seal)\n      //   \"invalid\"     — parses but fails closure-invariant\
+      \ freshness/hash-match self-check\n      \"classification\": \"open\",\n   \
+      \   \"superseded_by_pass_id\": null,\n      \"closure_source\": null       \
+      \                    // path to closure-certificate.yaml when classification\
+      \ ∈ {closing, consumed}\n    }\n  ],\n\n  \"in_flight_dispatches\": [\n    {\n\
+      \      \"pass_id\": \"codex-iter0002-1-pass1\",\n      \"reviewer_id\": \"codex-iter0002-1\"\
+      ,\n      \"started_at_utc\": \"...\",\n      \"last_heartbeat_utc\": \"...\"\
+      ,\n      \"seconds_since_last_line\": 12,\n      \"stall_silence_threshold_seconds\"\
+      : 45,           // imported from _dispatch_codex (codex-rev-007 Q1)\n      \"\
+      abort_signal_path\": \"consensus-state/abort-dispatch-codex-iter0002-1-pass1.signal\"\
+      ,\n      \"abort_signal_present\": false,\n      \"looks_stuck\": false\n  \
+      \  }\n  ],\n\n  \"closure_invariant_status\": {\n    \"satisfiable_now\": false,\n\
+      \    \"blockers\": [\"needs_cross_family_reviewer\"],\n    \"last_bundle_mutation_family\"\
+      : \"claude\",\n    \"valid_closer_families\": [\"codex\"],\n    \"valid_closer_review_target_hash\"\
+      : \"...\"\n  },\n\n  // codex-rev-001 resolution: full enum with payload per\
+      \ kind.\n  \"expected_next_action\": {\n    \"kind\":\n        \"dispatch_cross_family_reviewer\"\
+      \n      | \"wait_for_dispatch\"                           // ADDED v2 — pass_id\
+      \ + freshness payload\n      | \"apply_proposed_patch\"\n      | \"close_iteration\"\
+      \n      | \"operator_decision_required\",\n    \"rationale\": \"human-readable\
+      \ string\",\n    \"suggested_command\": \"python -m consensus_mcp._dispatch_codex\
+      \ ...\" | null,\n    // Per-kind payload (only the field for the selected kind\
+      \ is populated):\n    \"wait_for_dispatch_payload\": {\n      \"pass_id\": \"\
+      codex-iter0002-1-pass1\",\n      \"seconds_since_last_line\": 12,\n      \"\
+      stall_silence_threshold_seconds\": 45,\n      \"looks_stuck\": false\n    }\
+      \ | null,\n    \"apply_proposed_patch_payload\": {\n      \"finding_id\": \"\
+      codex-rev-001\",\n      \"patch_id\": \"codex-rev-001-patch\"\n    } | null,\n\
+      \    \"close_iteration_payload\": {\n      \"closing_review_pass_id\": \"codex-iter0002-1-pass1\"\
+      \n    } | null\n  },\n\n  // codex-rev-007 Q4: optional, only populated when\
+      \ prior iteration's\n  // closure-certificate.yaml exists in consensus-state/archive/.\n\
+      \  \"previous_iteration_summary\": {\n    \"iteration_id\": \"iter-0001-extraction-review\"\
+      ,\n    \"iteration_state\": \"closed_passed\",\n    \"closed_at_utc\": \"...\"\
+      ,\n    \"closure_certificate_path\": \"consensus-state/archive/.../closure-certificate.yaml\"\
+      \n  } | null,\n\n  \"warnings\": [],                                      //\
+      \ soft signals; not blocking\n  \"multiple_active_iterations\": []         \
+      \           // populated when len > 1\n}\n```\n\nAll timestamps are RFC 3339\
+      \ UTC with `Z` suffix. All hashes are sha256 hex (64 chars).\nAll array fields\
+      \ use deterministic ordering: `recent_activity` newest-first by `timestamp_utc`;\
+      \ `open_reviews` ascending by `pass_id`; `in_flight_dispatches` ascending by\
+      \ `pass_id`; `warnings` ascending by string content; `multiple_active_iterations`\
+      \ per §3 sort order.\n\n## 5. Behavior\n\n1. **Resolve iteration** per §3.\n\
+      2. **Load `goal_packet.yaml`.** Recompute `scope_signature` via `_self_drive._scope_signature`\
+      \ and compare to recorded value. Surface `scope_signature_valid: false` as a\
+      \ flag if mismatch (do NOT raise — per codex-rev-007 Q3, downstream apply will\
+      \ block tampered packets; consensus_resume is a *reporter*).\n3. **Walk `consensus-state/state/dispatch-log.jsonl`**\
+      \ (filter by iteration_id). Build `recent_activity[]` (newest 10) and per-pass\
+      \ `in_flight_dispatches[]` (entries with `dispatch_started` but no `dispatch_completed`\
+      \ / `dispatch_aborted`).\n4. **Glob `<iter_dir>/*-review.yaml`.** For each:\n\
+      \   - Parse `payload.findings`, `payload.goal_satisfied`, `payload.blocking_objections`,\
+      \ `dispatch_provenance.review_target_hash`, `actor.model_family`, `pass_id`,\
+      \ `sealed_at_utc`.\n   - Classify per §4:\n     - If `<iter_dir>/closure-certificate.yaml`\
+      \ exists AND references this `pass_id` as a closer: classification = `closing`\
+      \ (if `iteration_state` is still `open`) or `consumed` (if closed).\n     -\
+      \ Else if `dispatch_provenance.review_target_hash` ≠ current bundle sha (= `bundle_mutation.bundle_sha256`):\
+      \ classification = `superseded`; populate `superseded_by_pass_id` with the newest\
+      \ review whose hash *does* match.\n     - Else if closure-invariant freshness/hash\
+      \ self-check fails: classification = `invalid`.\n     - Else: classification\
+      \ = `open`.\n5. **Determine `bundle_mutation`.** Read `<iter_dir>/iteration-outcome.yaml`\
+      \ and `<iter_dir>/review-packet.yaml`. The latest event of kind `patch_applied`,\
+      \ `review_packet_rebundled`, or `operator_force_bundle_rewrite` (per dispatch-log)\
+      \ wins. If none exists, `bundle_mutation: null`.\n6. **Compute `iteration_state`.**\n\
+      \   - `closed_passed` ⇔ `<iter_dir>/closure-certificate.yaml` exists AND its\
+      \ `verdict` is `quorum_close_passed`.\n   - `closed_failed` ⇔ closure-certificate\
+      \ exists AND verdict is `quorum_close_failed`.\n   - `blocked_operator` ⇔ `<iter_dir>/iteration-outcome.yaml`\
+      \ exists AND its `state` is `blocked_needs_operator`. (codex-rev-007 Q6: derive\
+      \ from existing files; no new on-disk marker introduced.)\n   - `unknown` ⇔\
+      \ `goal_packet.yaml` missing or unparseable.\n   - `open` ⇔ none of the above.\n\
+      7. **Compute `closure_invariant_status`** via `_closure_invariant.py` semantics\
+      \ against `bundle_mutation` + classified reviews.\n8. **Determine `expected_next_action`.**\
+      \ Exhaustive decision tree (codex-rev-001 resolution):\n\n   ```\n   if iteration_state\
+      \ == \"closed_passed\" or \"closed_failed\":\n     → operator_decision_required\
+      \ (\"iteration already closed; start a new iteration\")\n   elif iteration_state\
+      \ == \"blocked_operator\":\n     → operator_decision_required (\"iteration is\
+      \ blocked; consult iteration-outcome.yaml\")\n   elif iteration_state == \"\
+      unknown\":\n     → operator_decision_required (\"goal_packet missing or unparseable\"\
+      )\n   elif closure_invariant_status.satisfiable_now:\n     → close_iteration\
+      \ (closing_review_pass_id from the satisfying open review)\n   elif any open_review.classification\
+      \ == \"open\" has a patch_proposal that hasn't been applied:\n     → apply_proposed_patch\
+      \ (finding_id + patch_id from that review)\n   elif any in_flight_dispatch.looks_stuck\
+      \ == False:\n     → wait_for_dispatch (oldest healthy in-flight pass_id)\n \
+      \  elif any in_flight_dispatch.looks_stuck == True:\n     → operator_decision_required\
+      \ (\"dispatch <id> stalled; let watchdog auto-abort or write abort signal\"\
+      )\n   else:\n     → dispatch_cross_family_reviewer (suggested_command populated)\n\
+      \   ```\n\n   Every branch returns; no fall-through `else: null`. This is acceptance-criterion-2\
+      \ in §10.\n\n9. **Compute `snapshot_watermark`** per §8.\n10. **Populate `previous_iteration_summary`\
+      \ (optional).** If `consensus-state/archive/` contains a `closure-certificate.yaml`\
+      \ for an iteration with `authorized_at_utc < current.authorized_at_utc`, surface\
+      \ the most recent one. Otherwise `null`.\n\n## 6. Where the implementation lives\n\
+      \n- **New file:** `consensus_mcp/_resume.py` — pure read-only helper that imports\
+      \ from `_self_drive`, `_closure_invariant`, `_dispatch_codex` (for the `stall_silence_seconds`\
+      \ constant, per codex-rev-007 Q1), and a small log-walker.\n- **New MCP tool\
+      \ registration:** `consensus_mcp/tools/resume.py` — wraps `_resume.snapshot()`\
+      \ as MCP tool `consensus_resume`.\n- **No changes** to `_dispatch_codex.py`,\
+      \ `_visibility_tui.py`, `_visibility_watchdog.py`, `_closure_invariant.py`,\
+      \ `_self_drive.py`. Those are read by `_resume.py` only as imports.\n\nThe `stall_silence_seconds`\
+      \ constant is imported **directly** from `_dispatch_codex` (not duplicated).\
+      \ Drift between dispatcher and reporter is impossible by construction. (codex-rev-007\
+      \ Q1 resolution.)\n\n## 7. Error handling (codex-rev-003 resolution — every\
+      \ read in §5 covered)\n\n| §5 step | Disk read | Failure mode | Policy |\n|---|---|---|---|\n\
+      | 1 | `consensus-state/active/` listing | Directory missing | Return `iteration_state:\
+      \ \"unknown\"`, `selected_iteration_id: null`, warning `\"consensus-state/active/\
+      \ does not exist\"`. Do not raise. |\n| 1 | `iteration_id` passed but dir absent\
+      \ | Bad operator input | Raise `ValueError(\"iteration_id not found\")`. Programming\
+      \ error, not a state condition. |\n| 2 | `goal_packet.yaml` | Missing | `goal:\
+      \ null`, `iteration_state: \"unknown\"`, warning. |\n| 2 | `goal_packet.yaml`\
+      \ | Malformed YAML | `goal: null`, `iteration_state: \"unknown\"`, warning with\
+      \ parse-error excerpt. |\n| 2 | `scope_signature` | Mismatch | Flag `scope_signature_valid:\
+      \ false`, do not raise. |\n| 3 | `dispatch-log.jsonl` | Missing | `recent_activity:\
+      \ []`, `in_flight_dispatches: []`, warning `\"dispatch-log.jsonl not found\"\
+      `. |\n| 3 | `dispatch-log.jsonl` line | Malformed JSON | Skip line, append to\
+      \ warnings (line number only, no content). |\n| 4 | `*-review.yaml` glob | No\
+      \ matches | `open_reviews: []`, no warning (legitimate state for a freshly-authored\
+      \ iteration). |\n| 4 | A specific review YAML | Malformed | Skip review, warning\
+      \ `\"review file <name> failed to parse\"`. Do NOT include in `open_reviews[]`.\
+      \ |\n| 5 | `review-packet.yaml` | Missing | `bundle_mutation: null`, warning.\
+      \ |\n| 5 | `iteration-outcome.yaml` | Missing | Treated as \"no outcome recorded\
+      \ yet\" — `iteration_state` falls through to other rules. No warning. |\n| 5\
+      \ | `iteration-outcome.yaml` | Malformed | Warning; `iteration_state` falls\
+      \ through. Do not raise. |\n| 6 | `closure-certificate.yaml` | Missing | Treated\
+      \ as \"not yet closed\" — `iteration_state ∈ {open, blocked_operator, unknown}`\
+      \ per other rules. No warning. |\n| 6 | `closure-certificate.yaml` | Malformed\
+      \ | Warning; classify all reviews as `open` or `superseded`; `iteration_state:\
+      \ open`. |\n| 10 | `consensus-state/archive/` | Missing | `previous_iteration_summary:\
+      \ null`. No warning. |\n\nEvery disk read in §5 has a row above. (Acceptance-criterion-5.)\n\
+      \n## 8. Concurrency and snapshot consistency (codex-rev-006 resolution)\n\n\
+      `consensus_resume` is read-only and lock-free **for individual file reads**,\
+      \ but emits a `snapshot_watermark` that lets clients detect torn reads and retry.\n\
+      \n**Watermark computation.** At snapshot time, compute:\n\n```\nsnapshot_watermark\
+      \ = sha256(\n    str(iteration_dir.stat().st_mtime_ns) + \"|\" +\n    str(dispatch_log_path.stat().st_mtime_ns)\
+      \ + \"|\" +\n    \"|\".join(sorted(f\"{p.name}:{p.stat().st_mtime_ns}\"\n  \
+      \                  for p in iteration_dir.glob(\"*.yaml\")))\n)\n```\n\n**Watermark\
+      \ check (when `prior_snapshot_watermark` is passed).** Re-compute watermark\
+      \ BEFORE doing any disk read. If it equals `prior_snapshot_watermark`, return\
+      \ a cheap response:\n\n```jsonc\n{\n  \"schema_version\": 2,\n  \"snapshot_watermark\"\
+      : \"...\",\n  \"watermark_unchanged_since_prior\": true,\n  \"snapshot_taken_at_utc\"\
+      : \"...\",\n  // all other fields omitted\n}\n```\n\nThe orchestrator MUST treat\
+      \ `watermark_unchanged_since_prior: true` as a successful no-op refresh — the\
+      \ prior snapshot it cached is still valid.\n\n**Torn-read protection.** After\
+      \ computing the snapshot, re-compute the watermark. If it changed during the\
+      \ snapshot construction, set `warnings += [\"watermark_drifted_during_snapshot;\
+      \ recommend retry\"]` and include both the start and end watermarks in the response\
+      \ under `snapshot_watermark_drift: {start: ..., end: ...}`. The client SHOULD\
+      \ retry. The response is still well-formed and safe to consume — just possibly\
+      \ stale on one or more sub-objects.\n\nThis replaces v1's \"tolerate transient\
+      \ inconsistency\" claim with a content-bound stale-snapshot detector that requires\
+      \ no lock contention.\n\n## 9. Open design questions — resolutions (codex-rev-007)\n\
+      \n| # | Question | v2 answer | Rationale |\n|---|---|---|---|\n| 1 | `looks_stuck`\
+      \ threshold sourcing | Import from `_dispatch_codex` directly. | Single source\
+      \ of truth. Drift impossible by construction. |\n| 2 | `closure_invariant_status`\
+      \ vs. `expected_next_action` redundancy | Keep split. | Machine-checkable invariant\
+      \ status and human-readable next action serve different consumer surfaces. A\
+      \ linter wants the former; an orchestrator wants the latter. |\n| 3 | `scope_signature_valid:\
+      \ false` policy | Report only; do not refuse. | The downstream `apply.codex_patch`\
+      \ tool already validates scope-signature integrity. consensus_resume is a *reporter*;\
+      \ refusing to report on a tampered packet would hide a real adversarial signal.\
+      \ |\n| 4 | Cross-iteration handoff | Surface `previous_iteration_summary` only\
+      \ when archive's `closure-certificate.yaml` exists. | Cheap, passive, no new\
+      \ disk writes. Bias toward \"explicit reference in next iteration's goal_packet\"\
+      \ remains correct for hard dependencies; this is a soft hint only. |\n| 5 |\
+      \ Auto-detection ambiguity | Resolved in §3. | `authorized_at_utc` primary,\
+      \ dir-name lex tiebreaker, ambiguity always surfaced. |\n| 6 | `blocked_needs_operator`\
+      \ derivation vs. explicit marker | Derive from `iteration-outcome.yaml.state`\
+      \ per §5 step 6. | An explicit marker file would be a new on-disk artifact and\
+      \ contradict §2 \"no new persistence.\" The orchestrator that *creates* a blocked\
+      \ state already writes iteration-outcome.yaml; consensus_resume reads it. |\n\
+      | 7 | Output stability across reads | All arrays use deterministic ordering\
+      \ (§4). Dict serialization uses `sort_keys=True` on any JSON path that gets\
+      \ hashed. | Byte-identical snapshots are required for the watermark to be meaningful\
+      \ and for testing. |\n\n## 10. Acceptance criteria\n\nThe spec is *implementable*\
+      \ if a reviewer can answer \"yes\" to each:\n\n- [ ] Every field in the §4 output\
+      \ schema has an unambiguous source (file or computation) named in §5.\n- [ ]\
+      \ The `expected_next_action` decision tree (§5 step 8) is exhaustive — every\
+      \ branch returns; no `else: null`. (codex-rev-001)\n- [ ] No mutation to `consensus-state/`\
+      \ is described anywhere in §5.\n- [ ] All seven open questions in §9 have explicit\
+      \ answers with rationale. (codex-rev-007)\n- [ ] Error paths in §7 cover every\
+      \ disk read in §5 — verifiable by row-count vs. read-count audit. (codex-rev-003)\n\
+      - [ ] `expected_next_action.kind` enum (§4) is a superset of every branch's\
+      \ return value in §5 step 8. (codex-rev-001)\n- [ ] `open_reviews[].classification`\
+      \ enum is exhaustive over the cases in §5 step 4. (codex-rev-004)\n- [ ] `bundle_mutation.kind`\
+      \ is restricted to events that change `review_target_hash`; `recent_activity.kind`\
+      \ covers everything else. (codex-rev-005)\n- [ ] `snapshot_watermark` is content-bound\
+      \ (sha256 over deterministic inputs) and the §8 watermark-check fast path is\
+      \ specified. (codex-rev-006)\n- [ ] All output arrays have a defined sort key.\
+      \ (codex-rev-007 Q7)\n"
+schema_version: 1
+iteration_id: iteration-0002-consensus-resume-spec

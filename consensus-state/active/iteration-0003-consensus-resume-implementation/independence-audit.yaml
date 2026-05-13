@@ -1,0 +1,106 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T19:15:56Z'
+  event_id: 2026-05-11T19:15:56Z_review_returned_and_sealed_codex-iter0003-1
+  actor: codex-iter0003-1
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-1-pass.yaml
+  sha256: df1885630dcbf2d799061bd18ff64c74f40b1bf0afbd50efe449d463bfd97159
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T20:06:37Z'
+  event_id: 2026-05-11T20:06:37Z_review_returned_and_sealed_codex-iter0003-2
+  actor: codex-iter0003-2
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-2-pass.yaml
+  sha256: 3b6f3011e3d7b0079992e565b62f560ab83225f3250db872ba2bc61072332abd
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T20:10:38Z'
+  event_id: 2026-05-11T20:10:38Z_review_returned_and_sealed_codex-iter0003-3
+  actor: codex-iter0003-3
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-3-pass.yaml
+  sha256: 238efb5d02c0b48ff9d4364ea8fd33fc4ff3ec81e4e49f9edd2d92ef1c904009
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T20:16:54Z'
+  event_id: 2026-05-11T20:16:54Z_review_returned_and_sealed_codex-iter0003-4
+  actor: codex-iter0003-4
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-4-pass.yaml
+  sha256: e4031d595862fe1ce9b23c13ffc392aae71697d35d3691ee23629326a84248f0
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T20:27:24Z'
+  event_id: 2026-05-11T20:27:24Z_review_returned_and_sealed_codex-iter0003-5
+  actor: codex-iter0003-5
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-5-pass.yaml
+  sha256: a25493f43a9cb1696554aad5d1c7089edcadec5ffae765a73ad976a83ea4176f
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T20:32:29Z'
+  event_id: 2026-05-11T20:32:29Z_review_returned_and_sealed_codex-iter0003-6
+  actor: codex-iter0003-6
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-6-pass.yaml
+  sha256: 4ae4a938876d9a4895b5ab37a4e1a900321a2932e1e538dbd12f51d65ea05bca
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T20:41:58Z'
+  event_id: 2026-05-11T20:41:58Z_review_returned_and_sealed_codex-iter0003-7
+  actor: codex-iter0003-7
+  artifact: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-7-pass.yaml
+  sha256: 233c277ea3751ffd0a39bb26956f15c9e0114b44f8127e1154e1d18349e3c7d4
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

@@ -1,0 +1,10 @@
+schema_version: 1
+description: "Patterns the build pass MUST detect and redact in prompt_injection_doc.md."
+patterns:
+  - "[META:"
+  - "[INSTRUCTION:"
+  - "[SYSTEM:"
+  - "<|"
+  - "|>"
+  - "ignore previous"
+  - "mark production_ready=true"

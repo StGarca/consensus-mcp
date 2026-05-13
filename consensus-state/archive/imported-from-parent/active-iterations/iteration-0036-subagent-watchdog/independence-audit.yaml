@@ -1,0 +1,16 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-11T03:11:03Z'
+  event_id: 2026-05-11T03:11:03Z_review_returned_and_sealed_codex-iter0036-2
+  actor: codex-iter0036-2
+  artifact: agent-loop/archive/review-passes/2026-05-11-iteration-0036-subagent-watchdog-codex-iter0036-2-pass.yaml
+  sha256: 5a4ab96feee64e5416306801b039f814565d8af5ff7acc9dc5d04bed0635bbb7
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

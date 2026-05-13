@@ -1,0 +1,50 @@
+schema_version: 1
+iteration_id: iteration-0029-supervisor-flavor-b-review
+last_mutation: null
+closing_verdict:
+  actor:
+    id: claude-iter0029-3
+    model_family: claude
+    role: closer
+    pass_id: claude-iter0029-3-pass1
+  review_target_hash: null
+  created_at_utc: '2026-05-10T22:10:00Z'
+  review_scope_hash: null
+invariant_checks:
+  cross_family: PASS
+  hash_match: PASS
+  freshness: PASS
+overall: PASS
+generated_utc: '2026-05-10T22:10:00Z'
+notes: |
+  No apply.codex_patch mutation landed in iter-0029. Per check_closure_invariant
+  (_closure_invariant.py:246), when last_mutation is None the invariant
+  trivially passes — close paths that don't involve mutation aren't gated by
+  the cross_family / hash_match / freshness rule. This mirrors the iter-0027
+  closure-certificate model.
+
+  Findings summary:
+    codex-rev-001 high   no-patch (no patch_proposal; reason given)
+                         — blocked_closure_invariant_failed test gap
+    claude-rev-001 high  PATCH_PROPOSAL provided (output_schema
+                         additionalProperties:false + matching test).
+                         Deferred to iter-0030: not a codex patch, so the
+                         cross-AI apply.codex_patch pipeline doesn't apply.
+                         Will be landed as a Flavor A surgical fix in iter-0030.
+    claude-rev-002 med   no-patch (no patch_proposal; reason given)
+                         — _check_stop_rules silent failure asymmetry
+    claude-rev-003 med   no-patch (no patch_proposal; reason given)
+                         — overlaps codex-rev-001 (same closure-invariant
+                         test gap); fixture needs cross-module imports
+    claude-rev-004 med   no-patch (no patch_proposal; reason given)
+                         — closing_state vs corrected_resubmit precedence
+                         requires operator policy decision
+
+  Cross-AI overlap: 1 of 5 (codex-rev-001 ≈ claude-rev-003 both on the
+  blocked_closure_invariant_failed test gap, codex flagged HIGH and claude
+  MEDIUM). Independence rate (4 unique among 5 total) = 0.80, well above
+  the kill-switch threshold of 0.30.
+
+  All 5 findings deferred to iter-0030 followup scope. iter-0030 is a Flavor A
+  surgical-implementation iteration (mirror iter-0028 / iter-0026 / iter-0024
+  template).

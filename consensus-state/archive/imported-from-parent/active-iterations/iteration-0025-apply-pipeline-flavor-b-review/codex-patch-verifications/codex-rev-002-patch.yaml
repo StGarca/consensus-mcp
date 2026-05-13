@@ -1,0 +1,16 @@
+approved_patch_id: codex-rev-002-patch
+codex_finding_id: codex-rev-002
+rationale: 'Approved per CLAUDE.md. Patch adds top-level canonical mutation fields
+  (mutation_actor, patch_id, base_sha, post_sha, timestamp) to the apply_step_landed
+  audit event. audit_append_event flattens extra_fields to event top-level; the new
+  fields make canonical mutation provenance available to closure invariant readers
+  without the test-only hoist bridge that currently papers over this gap in test_capstone_full_codex_fix_loop_end_to_end.
+  Surgical (5 lines added). No behavioral change to existing tests. Cross-references
+  claude-iter0025-008 but inverts the diagnosis: claude said the bridge was obsolete-after-iter-0024-F1;
+  codex is correct that the bridge papers over a real production gap. iter-0024 F1
+  fixed the READER side (last_mutation_from_audit merge direction); codex-rev-002
+  fixes the EMITTER side. Both needed.'
+review_scope_hash: claude-iter0025-1-codex-rev-002-patch
+schema_version: 1
+verdict: approved
+verifier: claude

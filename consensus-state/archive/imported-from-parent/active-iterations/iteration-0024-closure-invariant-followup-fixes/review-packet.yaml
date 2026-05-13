@@ -1,0 +1,155 @@
+schema_version: 1
+iteration_id: iteration-0024-closure-invariant-followup-fixes
+ceremony_flavor: A_inline_fix_followup
+created_at_utc: '2026-05-10T20:30:00Z'
+
+# This is a follow-up FIX iteration (not a Flavor B review). Findings F1/F2/F3
+# below are pre-identified defects from iter-0023's claude-iter0023-1 review
+# pass that codex did NOT patch within its own 3-finding scope. iter-0024
+# implements them inline (operator/claude as fix author).
+
+defect_target:
+  files:
+    - scripts/agent_loop_mcp/_closure_invariant.py
+    - scripts/agent_loop_mcp/_validate_closure_invariant.py
+    - scripts/agent_loop_mcp/_dispatch_codex.py
+    - scripts/agent_loop_mcp/tests/test_closure_invariant.py
+    - scripts/agent_loop_mcp/tests/test_validate_closure_invariant.py
+    - scripts/agent_loop_mcp/tests/test_iter_0024_per_patch_base_sha.py
+
+findings:
+  - id: iter0024-F1
+    severity: high
+    summary: Merge-direction bug — top-level legacy actor string overwrites nested structured actor dict
+    source_pass: claude-iter0023-1-pass1 finding 001 (codex missed in 3-finding emission)
+    target: scripts/agent_loop_mcp/_closure_invariant.py:last_mutation_from_audit
+    citation: |
+      Original code:
+        merged = {**nested, **{k: v for k, v in most_recent.items() if k != "last_mutation"}}
+      Dict-spread overwrites nested values with top-level. audit_append_event
+      flattens extra_fields and writes top-level `actor: "<id>"` (string)
+      alongside nested `extra_fields.last_mutation.actor: {dict}`. The merge
+      picked the legacy string, causing _actor_model_family to return None,
+      which made cross_family fail closed on every production close attempt.
+    risk: Integrity gate non-functional in production audit shape; blocks valid
+      cross-family closures (fail-closed, conservative but BLOCKS rather than
+      ENABLES valid closures).
+    fix: Inverted merge — top-level seeds, nested overlays:
+        top_level = {k: v for k, v in most_recent.items() if k != "last_mutation"}
+        merged = {**top_level, **nested}
+      Nested structured form wins; top-level keys not shadowed by nested
+      (event, timestamp_utc, event_id) survive intact.
+    tests_added:
+      - test_last_mutation_nested_actor_dict_beats_legacy_top_level_string
+      - test_last_mutation_top_level_only_event_unchanged
+      - test_last_mutation_nested_only_event_hoisted_cleanly
+      - test_last_mutation_both_present_identical_idempotent
+
+  - id: iter0024-F2
+    severity: medium
+    summary: Per-patch base_sha helper-stamp — was stamping full multi-file defect_target bundle on each patch
+    source_pass: iter-0023 operational_caveat per_patch_base_sha_reanchor_required
+    target: scripts/agent_loop_mcp/_dispatch_codex.py:_validate_patch_proposal
+    citation: |
+      iter-0022 helper stamped pp["base_sha"] = defect_target.base_sha (full
+      multi-file bundle). apply.codex_patch computes bundle_sha against the
+      patch's OWN files_touched subset and refuses base_sha_drift when they
+      differ. iter-0023 worked around this via manual re-anchor per patch.
+    risk: Patches touching subset of defect_target.files are refused at apply
+      time; multi-patch Flavor B reviews require manual re-anchor.
+    fix: Helper computes per-patch base_sha against
+      defect_target.touched_files_contents (subset matching patch
+      files_touched). Backward compat: falls back to defect_target.base_sha
+      when touched_files_contents absent.
+    tests_added:
+      - test_per_patch_base_sha_uses_patch_subset_not_full_defect_target
+      - test_per_patch_base_sha_full_overlap_equals_defect_target_sha
+      - test_per_patch_base_sha_multiple_patches_each_anchored_to_own_subset
+      - test_no_touched_files_contents_falls_back_to_defect_target_base_sha
+      - test_patch_file_missing_from_touched_files_contents_falls_back
+
+  - id: iter0024-F3-003
+    severity: medium
+    summary: last_mutation_from_audit trusted list order; now sorts by timestamp_utc
+    source_pass: claude-iter0023-1-pass1 finding 003
+    target: scripts/agent_loop_mcp/_closure_invariant.py:last_mutation_from_audit
+    fix: Events sorted by _parse_utc_timestamp(timestamp_utc); events without
+      parseable timestamp sort to floor (oldest). Stable sort preserves list
+      order when all timestamps missing.
+    tests_added:
+      - test_last_mutation_sorted_by_timestamp_not_list_order
+      - test_last_mutation_no_timestamps_falls_back_to_list_order
+
+  - id: iter0024-F3-004
+    severity: medium
+    summary: bundle_sha didn't normalise path separators; Windows backslash and POSIX forward-slash hashed differently
+    source_pass: claude-iter0023-1-pass1 finding 004
+    target: scripts/agent_loop_mcp/_closure_invariant.py:bundle_sha
+    fix: New _normalize_path helper converts \\ to / and runs through
+      PurePosixPath; \\0 and \\n in paths raise ValueError (they collide with
+      canonical field/record separators).
+    tests_added:
+      - test_bundle_sha_path_separator_normalised
+      - test_bundle_sha_rejects_path_with_null_byte
+      - test_bundle_sha_rejects_path_with_newline
+
+  - id: iter0024-F3-005
+    severity: medium
+    summary: reviewer_id prefix heuristic lacked dash boundary; "codexica-bot" silently routed to codex family
+    source_pass: claude-iter0023-1-pass1 finding 005
+    target: scripts/agent_loop_mcp/_validate_closure_invariant.py:_load_review_yaml
+    fix: Tightened startswith("codex") to startswith("codex-") and same for
+      claude. Real reviewer_ids always have dash; unrecognised IDs leave
+      family=None (fails cross_family closed = correct fail-closed behaviour).
+    tests_added:
+      - test_reviewer_id_codexica_does_not_match_codex_family
+      - test_reviewer_id_unrecognised_prefix_yields_no_family
+      - test_reviewer_id_canonical_codex_prefix_matches
+
+  - id: iter0024-F3-006
+    severity: medium
+    summary: Missing tests for hash_match boundary and legacy string actor on last_mutation
+    source_pass: claude-iter0023-1-pass1 finding 006
+    target: scripts/agent_loop_mcp/tests/test_closure_invariant.py
+    fix: Tests added — no source change required.
+    tests_added:
+      - test_hash_match_none_equals_none_fails_closed
+      - test_legacy_string_actor_on_last_mutation_fails_cross_family
+
+  - id: iter0024-F3-007
+    severity: low
+    summary: Missing tests for both-reviews-present (newer wins) and unrecognised reviewer_id
+    source_pass: claude-iter0023-1-pass1 finding 007
+    target: scripts/agent_loop_mcp/tests/test_validate_closure_invariant.py
+    fix: Tests added — no source change required.
+    tests_added:
+      - test_most_recent_verdict_picks_newer_when_both_present
+
+  - id: iter0024-F3-008
+    severity: low
+    summary: bundle_sha silently masks OSError as empty content
+    source_pass: claude-iter0023-1-pass1 finding 008
+    target: scripts/agent_loop_mcp/_closure_invariant.py:bundle_sha
+    disposition: documented_no_functional_change
+    rationale: |
+      Adding a side-channel log or raising on OSError would change call-site
+      semantics across multiple consumers (_author_review_packet, apply layer
+      drift check, supervisor invariant). claude-iter0023-008 noted this is
+      defensible behaviour; the iter-0024 surgical scope adds a docstring
+      callout naming the masking behaviour rather than altering it. Operator
+      can lift this finding to a future iteration for the side-channel work.
+
+acceptance_summary:
+  pytest_baseline: 276
+  pytest_post_fixes: 296
+  new_tests_added: 20
+  files_modified:
+    - scripts/agent_loop_mcp/_closure_invariant.py
+    - scripts/agent_loop_mcp/_validate_closure_invariant.py
+    - scripts/agent_loop_mcp/_dispatch_codex.py
+    - scripts/agent_loop_mcp/tests/test_closure_invariant.py
+    - scripts/agent_loop_mcp/tests/test_validate_closure_invariant.py
+  files_added:
+    - scripts/agent_loop_mcp/tests/test_iter_0024_per_patch_base_sha.py
+
+sealed_at_utc: '2026-05-10T20:30:00Z'

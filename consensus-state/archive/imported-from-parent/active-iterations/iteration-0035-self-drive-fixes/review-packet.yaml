@@ -1,0 +1,700 @@
+defect_target:
+  files:
+  - agent-loop/active/iteration-0035-self-drive-fixes/proposed-patches.md
+  - scripts/agent_loop_mcp/_self_drive.py
+  base_sha: 8bbff925931ee9bb217cae246decf93b0ba969f3e7a8aa9721aa610fa962cb76
+  touched_files_contents:
+    agent-loop/active/iteration-0035-self-drive-fixes/proposed-patches.md: "# iter-0035\
+      \ proposed patches — pre-implementation review target\n\nClaude-authored fix\
+      \ patches for the 4 iter-0034 findings against\n`_self_drive.py`. Codex declined\
+      \ patch authorship on all 4 in iter-0034\nciting context limitations; per operator-locked\
+      \ workflow #4, claude\nproposes here and codex pre-reviews the diffs BEFORE\
+      \ implementation.\n\nReviewer task: assess each patch for correctness, regression\
+      \ risk,\nscope, and test coverage. NO code on disk reflects these patches yet.\n\
+      \n---\n\n## Patch 1 — codex-rev-001 + claude-rev-001 (HIGH)\n\n**Defect**: `patch_size_exceeds_max`\
+      \ counts only staged diff (if any\nstaged exists) OR HEAD diff (if no staged);\
+      \ never counts untracked.\nOperator can stage 5 lines, leave 5000 unstaged →\
+      \ check passes. New\nuntracked files (any size) never count.\n\n**Approach**:\
+      \ count the union of (a) tracked changes since HEAD via\n`git diff --numstat\
+      \ HEAD` (covers staged + unstaged in one view) plus\n(b) untracked file line\
+      \ counts (each untracked file contributes its\ntotal line count as \"added\"\
+      ). This mirrors what `git add -A && git\ncommit` would commit.\n\n```diff\n\
+      --- a/scripts/agent_loop_mcp/_self_drive.py\n+++ b/scripts/agent_loop_mcp/_self_drive.py\n\
+      @@ -443,42 +443,72 @@ def cmd_check_stop_rules(args) -> int:\n     # Rule: patch_size_exceeds_max\n\
+      -    # Sum added+deleted across `git diff --cached --numstat` (or `--numstat\
+      \ HEAD`\n-    # if nothing staged). Fire iff total > max_patch_size. None/0\
+      \ cap = no fire.\n+    # iter-0035 codex-rev-001 fix: count the union of staged\
+      \ + unstaged\n+    # tracked changes (via `git diff --numstat HEAD`) PLUS untracked\
+      \ file\n+    # line counts. Previously the code branched between staged-only\
+      \ and\n+    # HEAD-only, missing unstaged-when-staged-present and missing\n\
+      +    # untracked files entirely.\n     max_patch_size = packet.get(\"max_patch_size\"\
+      )\n     if max_patch_size:\n         try:\n+            total = 0\n+       \
+      \     # Tracked: staged + unstaged in one view via `git diff --numstat HEAD`\n\
+      \             ns = subprocess.run(\n-                [\"git\", \"diff\", \"\
+      --cached\", \"--numstat\"],\n+                [\"git\", \"diff\", \"--numstat\"\
+      , \"HEAD\"],\n                 cwd=str(repo_root),\n                 capture_output=True,\n\
+      \                 text=True,\n                 check=False,\n              \
+      \   timeout=30,\n             )\n             numstat_text = ns.stdout\n-  \
+      \          if not numstat_text.strip():\n-                ns = subprocess.run(\n\
+      -                    [\"git\", \"diff\", \"--numstat\", \"HEAD\"],\n-      \
+      \              cwd=str(repo_root),\n-                    capture_output=True,\n\
+      -                    text=True,\n-                    check=False,\n-      \
+      \              timeout=30,\n-                )\n-                numstat_text\
+      \ = ns.stdout\n-            total = 0\n             for line in numstat_text.splitlines():\n\
+      \                 parts = line.split(\"\\t\")\n                 if len(parts)\
+      \ < 2:\n                     continue\n                 # Binary files report\
+      \ \"-\\t-\"; treat as 0\n                 try:\n                     added =\
+      \ int(parts[0]) if parts[0] != \"-\" else 0\n                     deleted =\
+      \ int(parts[1]) if parts[1] != \"-\" else 0\n                 except ValueError:\n\
+      \                     continue\n                 total += added + deleted\n\
+      +\n+            # Untracked: each new file contributes its full line count.\n\
+      +            # `git ls-files --others --exclude-standard` honors .gitignore.\n\
+      +            untracked = subprocess.run(\n+                [\"git\", \"ls-files\"\
+      , \"--others\", \"--exclude-standard\"],\n+                cwd=str(repo_root),\n\
+      +                capture_output=True,\n+                text=True,\n+      \
+      \          check=False,\n+                timeout=30,\n+            )\n+   \
+      \         for line in untracked.stdout.splitlines():\n+                rel =\
+      \ line.strip()\n+                if not rel:\n+                    continue\n\
+      +                f = repo_root / rel\n+                try:\n+             \
+      \       # Count lines; treat binary as 0 (no decode).\n+                   \
+      \ with f.open(\"rb\") as fh:\n+                        content = fh.read()\n\
+      +                    # If decode fails, treat as binary (0 lines).\n+      \
+      \              try:\n+                        text = content.decode(\"utf-8\"\
+      )\n+                    except UnicodeDecodeError:\n+                      \
+      \  continue\n+                    total += text.count(\"\\n\")\n+          \
+      \      except OSError:\n+                    continue\n+\n             if total\
+      \ > max_patch_size:\n                 stop_rules_fired.append({\n          \
+      \           \"rule\": \"patch_size_exceeds_max\",\n                     \"patch_size\"\
+      : total,\n                     \"max\": max_patch_size,\n                  \
+      \   \"reason\": f\"patch_size={total}, max={max_patch_size}\",\n           \
+      \      })\n         except Exception:\n```\n\n**Test coverage**: 3 new regression\
+      \ tests:\n1. `test_patch_size_counts_unstaged_when_staged_present` — stage 5\
+      \ lines, leave 5000 unstaged → fires.\n2. `test_patch_size_counts_untracked_files`\
+      \ — no staged or unstaged changes, but a 5000-line untracked file → fires.\n\
+      3. `test_patch_size_treats_untracked_binary_as_zero` — untracked binary file\
+      \ (e.g., random bytes) doesn't crash or inflate count.\n\n---\n\n## Patch 2\
+      \ — codex-rev-002 + claude-rev-002 (HIGH)\n\n**Defect**: `_reviewer_clean` returns\
+      \ None when `goal_satisfied` missing\nBEFORE checking `blocking_objections`.\
+      \ Caller's `if claude_clean is False`\nfails identity check on None, so blocker\
+      \ is silently ignored when\nvalidator_status=\"pass\".\n\n**Approach**: check\
+      \ blockers FIRST; if blockers non-empty, return False\nregardless of goal_satisfied\
+      \ presence. Only fall back to the None\n\"in-flight\" semantic when there's\
+      \ no signal at all (no blockers AND no\ngoal_satisfied).\n\n```diff\n--- a/scripts/agent_loop_mcp/_self_drive.py\n\
+      +++ b/scripts/agent_loop_mcp/_self_drive.py\n@@ -679,9 +679,16 @@ def cmd_check_stop_rules(args)\
+      \ -> int:\n         def _reviewer_clean(r):\n             \"\"\"Reviewer says\
+      \ 'goal satisfied AND no blockers'.\"\"\"\n             if not isinstance(r,\
+      \ dict):\n                 return None\n+            # iter-0035 codex-rev-002\
+      \ fix: check blocking_objections BEFORE\n+            # the goal_satisfied early-return.\
+      \ A reviewer that emits\n+            # blockers but forgets goal_satisfied:\
+      \ false would previously\n+            # have its blocker silently ignored (return\
+      \ None -> caller's\n+            # identity check `clean is False` failed ->\
+      \ not in disagreers).\n+            blockers = r.get(\"blocking_objections\"\
+      ) or []\n+            if blockers:\n+                return False\n        \
+      \     gs = _extract_goal_satisfied(r)\n-            blockers = r.get(\"blocking_objections\"\
+      ) or []\n             if gs is None:\n                 return None\n       \
+      \      return gs is True and not blockers\n```\n\n**Test coverage**: 2 new regression\
+      \ tests:\n1. `test_reviewer_with_blockers_but_missing_goal_satisfied_is_not_clean`\
+      \ —\n   author a synthetic claude-review.yaml with `blocking_objections: [x]`\n\
+      \   and no `goal_satisfied` field; assert `validator_reviewer_disagreement`\n\
+      \   fires under validator pass.\n2. `test_reviewer_with_no_signal_returns_in_flight`\
+      \ — author a review\n   with neither blockers nor goal_satisfied; assert it's\
+      \ treated as\n   in-flight (no disagreement fired).\n\n---\n\n## Patch 3 — codex-rev-003\
+      \ + claude-rev-003 (MEDIUM)\n\n**Defect**: `from agent_loop_mcp._closure_invariant\
+      \ import ...` inside\nbare `try: ... except Exception:` silently sets `_check_inv\
+      \ = None` on\nANY exception. Static 9/9 coverage; runtime can be 8/9 with no\
+      \ operator\nsignal.\n\n**Approach**: emit a `closure_invariant_module_unavailable`\
+      \ stop_rule\nentry when the import fails. Narrow the except to\n`(ImportError,\
+      \ ModuleNotFoundError)` so unrelated exceptions (e.g., a\nNameError during module\
+      \ load) propagate as a hard failure rather than\nsilent skip.\n\n```diff\n---\
+      \ a/scripts/agent_loop_mcp/_self_drive.py\n+++ b/scripts/agent_loop_mcp/_self_drive.py\n\
+      @@ -726,11 +726,23 @@ def cmd_check_stop_rules(args) -> int:\n     #     last_mutation.timestamp,\
+      \ AND\n     #   - the verdict fails any of the three invariant checks.\n   \
+      \  # If no last_mutation: no fire (close paths without mutation aren't gated).\n\
+      \     # If no close-attempt review came after last_mutation: no fire (loop in\
+      \ flight).\n+    # iter-0035 codex-rev-003 fix: emit a stop_rule entry when\
+      \ the\n+    # _closure_invariant module fails to import. Previously a bare\n\
+      +    # `except Exception` silently set _check_inv=None, dropping\n+    # runtime\
+      \ coverage from 9/9 to 8/9 with no operator signal. Now we\n+    # narrow the\
+      \ except to (ImportError, ModuleNotFoundError) and emit\n+    # closure_invariant_module_unavailable\
+      \ so the failure is visible.\n+    _check_inv_import_error: Exception | None\
+      \ = None\n     try:\n         from agent_loop_mcp._closure_invariant import\
+      \ (\n             check_closure_invariant as _check_inv,\n             last_mutation_from_audit\
+      \ as _lm_from_audit,\n         )\n-    except Exception:\n+    except (ImportError,\
+      \ ModuleNotFoundError) as exc:\n         _check_inv = None\n         _lm_from_audit\
+      \ = None\n+        _check_inv_import_error = exc\n+        stop_rules_fired.append({\n\
+      +            \"rule\": \"closure_invariant_module_unavailable\",\n+        \
+      \    \"exception\": f\"{type(exc).__name__}: {exc}\",\n+        })\n\n     if\
+      \ _check_inv is not None and audit_path.exists():\n```\n\n**Test coverage**:\
+      \ 1 new regression test:\n1. `test_closure_invariant_import_failure_emits_stop_rule`\
+      \ — monkeypatch\n   `sys.modules['agent_loop_mcp._closure_invariant']` to None\
+      \ (forces\n   ImportError on re-import), invoke `cmd_check_stop_rules`, assert\n\
+      \   `closure_invariant_module_unavailable` appears in stop_rules_fired.\n\n\
+      ---\n\n## Patch 4 — codex-rev-004 + claude-rev-004 (MEDIUM)\n\n**Defect**: `_resolve_referenced_path`\
+      \ basename fallback. When\n`repo_root / ref_path` doesn't exist, returns `iter_dir\
+      \ / basename(ref_path)`.\nA same-name collision can satisfy drift hash check\
+      \ from the wrong file.\n\n**Approach**: Drop the basename fallback for paths\
+      \ with directory\ncomponents. Iter-dir-local fallback applies only to bare basenames\n\
+      (semantically \"this is iter-relative, no directory components implied\").\n\
+      \n```diff\n--- a/scripts/agent_loop_mcp/_self_drive.py\n+++ b/scripts/agent_loop_mcp/_self_drive.py\n\
+      @@ -350,16 +350,28 @@ def _canonical_sha256_of_yaml_file(p: Path) -> str:\n\
+      \ def _resolve_referenced_path(ref_path: str, iter_dir: Path) -> Path:\n   \
+      \  \"\"\"Resolve a reference path string (typically repo-relative) into a Path.\n\
+      \n     Heuristics:\n       1. If absolute, return as-is.\n       2. Try repo_root\
+      \ / ref_path (the canonical case for iteration_artifacts).\n-      3. Fall back\
+      \ to iter_dir / basename(ref_path).\n+      3. If ref_path has NO directory\
+      \ components (bare basename), fall back\n+         to iter_dir / Path(ref_path).name\
+      \ (semantically iter-relative).\n+      4. Otherwise return the (non-existent)\
+      \ repo_root / ref_path so the\n+         caller sees the missing-file state\
+      \ instead of silently resolving\n+         to a same-named file elsewhere.\n\
+      \     Returned path may not exist; callers must check.\n+\n+    iter-0035 codex-rev-004\
+      \ fix: previously step 3 applied to ANY missing\n+    ref_path, allowing a same-named\
+      \ file in iter_dir to satisfy a drift\n+    hash check intended for a wholly\
+      \ different repo-root location.\n     \"\"\"\n     p = Path(ref_path)\n    \
+      \ if p.is_absolute():\n         return p\n     repo_root = _resolve_repo_root()\n\
+      \     candidate = repo_root / ref_path\n     if candidate.exists():\n      \
+      \   return candidate\n-    # Iteration-dir-local fallback (e.g., test fixtures,\
+      \ or runtime where ref is iter-relative)\n-    return iter_dir / Path(ref_path).name\n\
+      +    # iter-0035 codex-rev-004: restrict iter-dir-local fallback to bare\n+\
+      \    # basenames (no directory components in ref_path). Paths with \"/\" or\n\
+      +    # \"\\\\\" are expected to resolve under repo_root; return the missing\n\
+      +    # candidate so the caller sees it as missing rather than collapsing\n+\
+      \    # to a same-name file in iter_dir.\n+    if \"/\" not in ref_path and \"\
+      \\\\\" not in ref_path:\n+        return iter_dir / Path(ref_path).name\n+ \
+      \   return candidate\n```\n\n**Test coverage**: 2 new regression tests:\n1.\
+      \ `test_resolve_referenced_path_basename_only_falls_back_to_iter_dir` —\n  \
+      \ bare basename \"foo.yaml\" + missing repo-root file → iter_dir/foo.yaml.\n\
+      2. `test_resolve_referenced_path_with_dirs_does_not_fall_back_to_iter_dir` —\n\
+      \   \"wiki/notes/foo.md\" + missing repo-root file → returns the (missing)\n\
+      \   repo_root/wiki/notes/foo.md candidate, NOT iter_dir/foo.md.\n\n---\n\n##\
+      \ Cross-cutting verification (acceptance)\n\nAfter landing all 4 patches:\n\
+      - pytest: +8 new tests (3+2+1+2). Local baseline 363 → 371 (or 363 if\n  Windows-only\
+      \ test skipped on Linux, etc.).\n- smoke: 60/60 unchanged\n- gates: 11/11 unchanged\
+      \ after staging + commit\n- `G_pytest_dispatch_codex` baseline unchanged (no\
+      \ test_dispatch_codex\n  changes in iter-0035)\n\n## Out of scope\n\n- Bare-except\
+      \ policy doc (claude-rev-005 LOW): observational only, no\n  code patch proposed.\n\
+      - Test for `test_outside_repo_review_target_via_main_emits_structured_failure`\n\
+      \  semantics — already landed in iter-0033.\n\n## Reviewer questions\n\nFocused\
+      \ asks for codex (non-exclusive):\n\n1. **Patch 1 untracked counting**: should\
+      \ symlinks (untracked) be counted\n   by target file or as zero? Currently they'd\
+      \ open as the target file\n   (Path.open follows symlinks). Acceptable, or do\
+      \ we need explicit\n   `is_symlink()` exclusion?\n2. **Patch 1 UnicodeDecodeError\
+      \ continue**: silent-skip on binary is the\n   right policy, but should there\
+      \ be a breadcrumb entry (similar to\n   git_check_failed) when MANY binaries\
+      \ are skipped?\n3. **Patch 2 blocker-shape validation**: should `blocking_objections`\n\
+      \   require list items to have `id` field, or is \"any non-empty list\"\n  \
+      \ sufficient? Current patch treats non-empty as not-clean regardless of\n  \
+      \ item shape — intentional or too permissive?\n4. **Patch 3 narrowed except**:\
+      \ `(ImportError, ModuleNotFoundError)` —\n   should we also catch `SyntaxError`\
+      \ if a downstream tool patches the\n   file mid-flight? Or treat that as a hard\
+      \ failure to surface?\n5. **Patch 4 cross-platform path separator**: `\"/\"\
+      \ not in ref_path and\n   \"\\\\\" not in ref_path` — robust against Path.PurePosixPath-style\
+      \ refs\n   on Windows? Should we normalize via `os.sep` or os.path.split?\n"
+    scripts/agent_loop_mcp/_self_drive.py: "\"\"\"Phase 4 bounded self-drive PARTIAL\
+      \ helper. NOT an autonomous API executor.\n\nPer autonomy contract (wiki/audiobook-project/agent-loop/2026-05-09-autonomy-contract.md\n\
+      Section 8): Phase 4 v1.0 implements Level 2 via the supervised-quorum-orchestrator\n\
+      pattern. The orchestrator-LLM (caller) follows the autonomy contract on a sealed\n\
+      goal_packet; this script provides PARTIAL enforcement via:\n\n  - goal_packet\
+      \ schema validation (load + check required fields)\n  - scope-signature computation\
+      \ + verification over the safety-critical field set\n    (goal, allowed_files,\
+      \ allowed_sections, forbidden_files, max_iterations,\n    max_patch_size, validators_required,\
+      \ acceptance_gates, stop_conditions,\n    operator_escalation_triggers, authorization.authorized_by)\n\
+      \  - state-machine transitions recorded as canonical event types\n  - acceptance-gate\
+      \ evaluation (running each `check` command + recording result)\n  - changed-files-in-scope\
+      \ verification using exact-file, dir-prefix (trailing /),\n    and fnmatch glob\
+      \ matchers\n  - stop-rule checks for ALL 9 contract rules (full coverage):\n\
+      \      max_iteration_count_reached, patch_would_touch_forbidden_files,\n   \
+      \   claude_codex_goal_satisfaction_disagreement, patch_size_exceeds_max,\n \
+      \     any_acceptance_gate_returns_undefined, repeated_finding_class_unresolved,\n\
+      \      cross_document_drift_detected, validator_reviewer_disagreement,\n   \
+      \   closure_cross_verification_failed.\n\nThe script does NOT call Anthropic\
+      \ API or dispatch reviewers; that remains the\norchestrator's job. This script\
+      \ is an enforcement helper for stop-rule + scope\n+ acceptance-gate enforcement.\
+      \ Reviewer dispatch + consensus synthesis remain\nout-of-band orchestrator responsibilities.\n\
+      \nUSAGE\n-----\n  # 1. Validate goal_packet\n  python -m agent_loop_mcp._self_drive\
+      \ validate <goal_packet.yaml>\n\n  # 2. Record state transition\n  python -m\
+      \ agent_loop_mcp._self_drive transition <goal_packet.yaml> <new_state> [--note\
+      \ \"<text>\"]\n\n  # 3. Check stop rules\n  python -m agent_loop_mcp._self_drive\
+      \ check_stop_rules <goal_packet.yaml> <iteration_dir>\n\n  # 4. Evaluate acceptance\
+      \ gates\n  python -m agent_loop_mcp._self_drive evaluate_gates <goal_packet.yaml>\n\
+      \n  # 5. Verify scope (changed files match allowed_files)\n  python -m agent_loop_mcp._self_drive\
+      \ verify_scope <goal_packet.yaml>\n\n  # 6. Close (combined check; pass iff\
+      \ all gates green + all stop rules clear + scope clean)\n  python -m agent_loop_mcp._self_drive\
+      \ close <goal_packet.yaml> <iteration_dir>\n\nOUTPUT\n------\nJSON to stdout.\
+      \ Exit 0 = pass; non-zero = fail (stop rule fired or gate not met).\n\"\"\"\n\
+      from __future__ import annotations\n\nimport argparse\nimport fnmatch\nimport\
+      \ hashlib\nimport json\nimport os\nimport subprocess\nimport sys\nfrom pathlib\
+      \ import Path\n\nimport yaml\n\n\nSTOP_RULES_REQUIRED_BY_CONTRACT = (\n    \"\
+      max_iteration_count_reached\",\n    \"patch_would_touch_forbidden_files\",\n\
+      \    \"patch_size_exceeds_max\",\n    \"any_acceptance_gate_returns_undefined\"\
+      ,\n    \"repeated_finding_class_unresolved\",\n    \"cross_document_drift_detected\"\
+      ,\n    \"validator_reviewer_disagreement\",\n    \"claude_codex_goal_satisfaction_disagreement\"\
+      ,\n    \"closure_cross_verification_failed\",\n)\nSTOP_RULES_IMPLEMENTED = (\n\
+      \    \"max_iteration_count_reached\",\n    \"patch_would_touch_forbidden_files\"\
+      ,\n    \"claude_codex_goal_satisfaction_disagreement\",\n    \"patch_size_exceeds_max\"\
+      ,\n    \"any_acceptance_gate_returns_undefined\",\n    \"repeated_finding_class_unresolved\"\
+      ,\n    \"cross_document_drift_detected\",\n    \"validator_reviewer_disagreement\"\
+      ,\n    \"closure_cross_verification_failed\",\n)\n\nVALID_STATES = {\n    \"\
+      goal_received\",\n    \"packet_built\",\n    \"reviews_dispatched\",\n    \"\
+      reviews_sealed\",\n    \"consensus_ready\",\n    \"patch_planned\",\n    \"\
+      validator_dry_run_passed\",\n    \"patch_applied\",\n    \"verification_passed\"\
+      ,\n    \"quorum_close_passed\",\n    \"blocked_needs_operator\",\n}\n\nTERMINAL_STATES\
+      \ = {\"quorum_close_passed\", \"blocked_needs_operator\"}\n\nREQUIRED_GOAL_PACKET_FIELDS\
+      \ = {\n    \"schema_version\",\n    \"pilot_id\",\n    \"goal\",\n    \"allowed_files\"\
+      ,\n    \"max_iterations\",\n    \"validators_required\",\n    \"acceptance_gates\"\
+      ,\n    \"stop_conditions\",\n    \"authorization\",\n}\n\n\ndef _resolve_repo_root()\
+      \ -> Path:\n    override = os.environ.get(\"AGENT_LOOP_MCP_REPO_ROOT\")\n  \
+      \  if override:\n        return Path(override)\n    return Path(__file__).resolve().parent.parent.parent\n\
+      \n\ndef _scope_signature(goal_packet: dict) -> str:\n    \"\"\"Canonical sha256\
+      \ over the safety-critical field set per Round 9 F4.\n\n    Covers every field\
+      \ that constrains safety, scope, validation, or closure. Excludes\n    only\
+      \ authorization.scope_signature (self-reference) and authorization.authorized_at_utc\n\
+      \    (timestamp metadata). authorization.authorized_by IS signed.\n    \"\"\"\
+      \n    auth = goal_packet.get(\"authorization\", {}) or {}\n    payload = {\n\
+      \        \"goal\": goal_packet.get(\"goal\", {}),\n        \"allowed_files\"\
+      : goal_packet.get(\"allowed_files\", []),\n        \"allowed_sections\": goal_packet.get(\"\
+      allowed_sections\", []),\n        \"forbidden_files\": goal_packet.get(\"forbidden_files\"\
+      , []),\n        \"max_iterations\": goal_packet.get(\"max_iterations\"),\n \
+      \       \"max_patch_size\": goal_packet.get(\"max_patch_size\"),\n        \"\
+      validators_required\": goal_packet.get(\"validators_required\", []),\n     \
+      \   \"acceptance_gates\": goal_packet.get(\"acceptance_gates\", []),\n     \
+      \   \"stop_conditions\": goal_packet.get(\"stop_conditions\", []),\n       \
+      \ \"operator_escalation_triggers\": goal_packet.get(\"operator_escalation_triggers\"\
+      , []),\n        \"authorized_by\": auth.get(\"authorized_by\"),\n    }\n   \
+      \ canonical = yaml.safe_dump(yaml.safe_load(yaml.safe_dump(payload)), sort_keys=True)\n\
+      \    return hashlib.sha256(canonical.encode(\"utf-8\")).hexdigest()\n\n\ndef\
+      \ _path_matches_pattern(path: str, pattern: str) -> bool:\n    \"\"\"Match a\
+      \ single repo-relative path against one allowed_files / forbidden_files pattern.\n\
+      \n    Semantics per Round 9 F6:\n      - exact file:        \"scripts/agent_loop_mcp/_self_drive.py\"\
+      \ matches that path only\n      - directory prefix:  pattern with trailing \"\
+      /\" matches any path inside that directory\n      - glob pattern:      pattern\
+      \ containing *, ?, or [ goes through fnmatch.fnmatch\n      - no overmatch:\
+      \      bare names like \"scripts\" do NOT match \"scripts_old/foo.py\"\n   \
+      \ \"\"\"\n    if not pattern:\n        return False\n    if path == pattern:\n\
+      \        return True\n    if pattern.endswith(\"/\") and path.startswith(pattern):\n\
+      \        return True\n    if any(ch in pattern for ch in (\"*\", \"?\", \"[\"\
+      )):\n        return fnmatch.fnmatch(path, pattern)\n    return False\n\n\ndef\
+      \ _path_in_scope(path: str, patterns) -> bool:\n    return any(_path_matches_pattern(path,\
+      \ p) for p in (patterns or []))\n\n\ndef _collect_changed_files(repo_root: Path)\
+      \ -> list[str]:\n    \"\"\"Return the de-duplicated union of git's three change-views.\n\
+      \n    Per iter-0012 F2 (codex 2026-05-10 expert verdict): the prior implementation\n\
+      \    used only `git diff --cached --name-only`, which silently misses unstaged\n\
+      \    edits and untracked files. An agent could edit a forbidden file without\n\
+      \    staging it and bypass `patch_would_touch_forbidden_files` / scope checks.\n\
+      \n    This helper covers all three:\n      1. `git diff --cached --name-only`\
+      \           (staged)\n      2. `git diff --name-only`                    (unstaged\
+      \ tracked)\n      3. `git ls-files --others --exclude-standard` (untracked,\
+      \ gitignore-honoring)\n\n    Subprocess failures on any individual view are\
+      \ absorbed (same graceful\n    behavior as the prior cached-only path); whatever\
+      \ could be collected is\n    returned. Returns sorted unique repo-relative paths.\
+      \ Empty list if all\n    three fail or there are no changes.\n    \"\"\"\n \
+      \   seen: set[str] = set()\n    invocations = [\n        [\"git\", \"diff\"\
+      , \"--cached\", \"--name-only\"],\n        [\"git\", \"diff\", \"--name-only\"\
+      ],\n        [\"git\", \"ls-files\", \"--others\", \"--exclude-standard\"],\n\
+      \    ]\n    for cmd in invocations:\n        try:\n            r = subprocess.run(\n\
+      \                cmd,\n                cwd=str(repo_root),\n               \
+      \ capture_output=True,\n                text=True,\n                check=False,\n\
+      \                timeout=30,\n            )\n            for ln in r.stdout.splitlines():\n\
+      \                p = ln.strip()\n                if p:\n                   \
+      \ seen.add(p)\n        except Exception:\n            # Best-effort: silently\
+      \ skip this view, like the prior cached-only\n            # path did via the\
+      \ outer try/except in callers. Callers may surface\n            # the failure\
+      \ as a 'git_check_failed' breadcrumb separately.\n            continue\n   \
+      \ return sorted(seen)\n\n\ndef cmd_validate(args) -> int:\n    \"\"\"Validate\
+      \ goal_packet schema; recompute scope_signature; verify match.\"\"\"\n    packet\
+      \ = yaml.safe_load(Path(args.goal_packet).read_text(encoding=\"utf-8\"))\n \
+      \   missing = REQUIRED_GOAL_PACKET_FIELDS - set(packet.keys())\n    if missing:\n\
+      \        print(json.dumps({\"valid\": False, \"error\": \"missing_required_fields\"\
+      , \"missing\": sorted(missing)}))\n        return 1\n    auth = packet.get(\"\
+      authorization\", {})\n    if \"authorized_by\" not in auth or auth.get(\"authorized_by\"\
+      ) != \"operator\":\n        print(json.dumps({\"valid\": False, \"error\": \"\
+      authorization_missing_or_not_operator\"}))\n        return 1\n    expected_sig\
+      \ = _scope_signature(packet)\n    recorded_sig = auth.get(\"scope_signature\"\
+      )\n    sig_match = recorded_sig == expected_sig\n    print(json.dumps({\n  \
+      \      \"valid\": True,\n        \"pilot_id\": packet[\"pilot_id\"],\n     \
+      \   \"scope_signature_match\": sig_match,\n        \"scope_signature_expected\"\
+      : expected_sig,\n        \"scope_signature_recorded\": recorded_sig,\n     \
+      \   \"allowed_files_count\": len(packet[\"allowed_files\"]),\n        \"acceptance_gates_count\"\
+      : len(packet[\"acceptance_gates\"]),\n        \"max_iterations\": packet[\"\
+      max_iterations\"],\n    }))\n    return 0 if sig_match else 2\n\n\ndef cmd_transition(args)\
+      \ -> int:\n    \"\"\"Record state transition. State must be in VALID_STATES.\"\
+      \"\"\n    if args.new_state not in VALID_STATES:\n        print(json.dumps({\"\
+      ok\": False, \"error\": \"invalid_state\", \"valid_states\": sorted(VALID_STATES)}))\n\
+      \        return 1\n    print(json.dumps({\n        \"ok\": True,\n        \"\
+      state\": args.new_state,\n        \"terminal\": args.new_state in TERMINAL_STATES,\n\
+      \        \"note\": args.note,\n    }))\n    return 0\n\n\ndef _evaluate_one_gate(gate:\
+      \ dict, repo_root: Path) -> dict:\n    \"\"\"Evaluate a single acceptance gate.\
+      \ Returns the per-gate result dict.\n\n    Result-dict keys (per cmd_evaluate_gates\
+      \ contract):\n      - id: gate id\n      - passed: bool\n      - One of:\n \
+      \         exit_code + stdout_tail (clean run)\n          error: \"no_check_command\"\
+      \  (empty/missing check field)\n          exception: <str>           (subprocess\
+      \ raised)\n    \"\"\"\n    gate_id = gate.get(\"id\", \"?\")\n    check = gate.get(\"\
+      check\", \"\")\n    if not check:\n        return {\"id\": gate_id, \"passed\"\
+      : False, \"error\": \"no_check_command\"}\n    try:\n        r = subprocess.run(check,\
+      \ shell=True, cwd=str(repo_root), capture_output=True, text=True, timeout=120)\n\
+      \        return {\n            \"id\": gate_id,\n            \"passed\": r.returncode\
+      \ == 0,\n            \"exit_code\": r.returncode,\n            \"stdout_tail\"\
+      : r.stdout.splitlines()[-1] if r.stdout else \"\",\n        }\n    except Exception\
+      \ as exc:\n        return {\"id\": gate_id, \"passed\": False, \"exception\"\
+      : str(exc)}\n\n\ndef _read_yaml_or_empty(path: Path) -> dict:\n    \"\"\"Best-effort\
+      \ yaml load; returns {} on missing/parse failure rather than raising.\"\"\"\n\
+      \    try:\n        if not path.exists():\n            return {}\n        loaded\
+      \ = yaml.safe_load(path.read_text(encoding=\"utf-8\"))\n        return loaded\
+      \ if isinstance(loaded, dict) else {}\n    except Exception:\n        return\
+      \ {}\n\n\ndef _extract_goal_satisfied(review: dict):\n    \"\"\"Pull goal_satisfied\
+      \ from a review yaml. Try top-level first, then overall_position.\n\n    Returns\
+      \ the value (typically bool) or None if not present.\n    \"\"\"\n    if \"\
+      goal_satisfied\" in review:\n        return review.get(\"goal_satisfied\")\n\
+      \    op = review.get(\"overall_position\") or {}\n    if isinstance(op, dict)\
+      \ and \"goal_satisfied\" in op:\n        return op.get(\"goal_satisfied\")\n\
+      \    return None\n\n\ndef _extract_finding_ids(review: dict, *, kind: str) ->\
+      \ set:\n    \"\"\"Pull finding ids from a review yaml. Tolerates either claude\
+      \ or codex shape.\n\n    kind=\"claude\" -> non_blocking_suggestions[].id (also\
+      \ blocking_objections[].id)\n    kind=\"codex\"  -> findings[].id (also blocking_objections[].id)\n\
+      \    \"\"\"\n    ids = set()\n    if not isinstance(review, dict):\n       \
+      \ return ids\n    if kind == \"claude\":\n        for entry in (review.get(\"\
+      non_blocking_suggestions\") or []):\n            if isinstance(entry, dict)\
+      \ and entry.get(\"id\"):\n                ids.add(entry[\"id\"])\n        for\
+      \ entry in (review.get(\"blocking_objections\") or []):\n            if isinstance(entry,\
+      \ dict) and entry.get(\"id\"):\n                ids.add(entry[\"id\"])\n   \
+      \ elif kind == \"codex\":\n        for entry in (review.get(\"findings\") or\
+      \ []):\n            if isinstance(entry, dict) and entry.get(\"id\"):\n    \
+      \            ids.add(entry[\"id\"])\n        for entry in (review.get(\"blocking_objections\"\
+      ) or []):\n            if isinstance(entry, dict) and entry.get(\"id\"):\n \
+      \               ids.add(entry[\"id\"])\n    return ids\n\n\ndef _canonical_sha256_of_yaml_file(p:\
+      \ Path) -> str:\n    \"\"\"Canonical-full sha256: hashlib.sha256(yaml.safe_dump(yaml.safe_load(...),\
+      \ sort_keys=True)).\n\n    Matches the canonical-full form used everywhere else\
+      \ in this package\n    (audit_append_event._canonical_sha256, review_write_and_seal,\
+      \ etc.).\n    \"\"\"\n    loaded = yaml.safe_load(p.read_text(encoding=\"utf-8\"\
+      ))\n    canonical = yaml.safe_dump(loaded, sort_keys=True)\n    return hashlib.sha256(canonical.encode(\"\
+      utf-8\")).hexdigest()\n\n\ndef _resolve_referenced_path(ref_path: str, iter_dir:\
+      \ Path) -> Path:\n    \"\"\"Resolve a reference path string (typically repo-relative)\
+      \ into a Path.\n\n    Heuristics:\n      1. If absolute, return as-is.\n   \
+      \   2. Try repo_root / ref_path (the canonical case for iteration_artifacts).\n\
+      \      3. Fall back to iter_dir / basename(ref_path).\n    Returned path may\
+      \ not exist; callers must check.\n    \"\"\"\n    p = Path(ref_path)\n    if\
+      \ p.is_absolute():\n        return p\n    repo_root = _resolve_repo_root()\n\
+      \    candidate = repo_root / ref_path\n    if candidate.exists():\n        return\
+      \ candidate\n    # Iteration-dir-local fallback (e.g., test fixtures, or runtime\
+      \ where ref is iter-relative)\n    return iter_dir / Path(ref_path).name\n\n\
+      \ndef cmd_check_stop_rules(args) -> int:\n    \"\"\"Check the implemented stop\
+      \ rules against current state. Return non-zero if any fire.\n\n    NOTE (post-task\
+      \ #28): full 9/9 contract coverage (closure_cross_verification_failed\n    added).\
+      \ Runtime is O(gate_count x\n    per_gate_runtime) because 'any_acceptance_gate_returns_undefined'\
+      \ re-evaluates\n    each gate, plus O(referenced_files) canonical-sha recomputation\
+      \ for\n    'cross_document_drift_detected'. For goal_packets with expensive\
+      \ gates this\n    function can take minutes. Callers that need fast metadata-only\
+      \ checks should\n    structure their loop to avoid repeated invocations.\n \
+      \   \"\"\"\n    packet = yaml.safe_load(Path(args.goal_packet).read_text(encoding=\"\
+      utf-8\"))\n    iter_dir = Path(args.iteration_dir)\n\n    stop_rules_fired =\
+      \ []\n\n    audit_path = iter_dir / \"independence-audit.yaml\"\n    iter_count\
+      \ = 0\n    if audit_path.exists():\n        audit = yaml.safe_load(audit_path.read_bytes())\
+      \ or {}\n        log = audit.get(\"audit_log\", []) or []\n        iter_count\
+      \ = sum(1 for e in log if e.get(\"event\") == \"patch_applied\")\n\n    if iter_count\
+      \ >= packet.get(\"max_iterations\", 0):\n        stop_rules_fired.append({\"\
+      rule\": \"max_iteration_count_reached\", \"count\": iter_count, \"max\": packet.get(\"\
+      max_iterations\", 0)})\n\n    forbidden = packet.get(\"forbidden_files\", [])\n\
+      \    repo_root = _resolve_repo_root()\n    try:\n        # iter-0012 F2: union\
+      \ of staged + unstaged + untracked, not just staged.\n        # See _collect_changed_files\
+      \ docstring for the safety-gap rationale.\n        changed = _collect_changed_files(repo_root)\n\
+      \        for forbidden_path in forbidden:\n            for c in changed:\n \
+      \               if _path_matches_pattern(c, forbidden_path):\n             \
+      \       stop_rules_fired.append({\"rule\": \"patch_would_touch_forbidden_files\"\
+      , \"forbidden\": forbidden_path, \"changed\": c})\n    except Exception as exc:\n\
+      \        stop_rules_fired.append({\"rule\": \"git_check_failed\", \"exception\"\
+      : str(exc)})\n\n    # Rule: claude_codex_goal_satisfaction_disagreement\n  \
+      \  # Fires iff BOTH claude-review.yaml and codex-review.yaml exist AND their\n\
+      \    # goal_satisfied values differ. If either review is missing the loop is\
+      \ in\n    # flight; not yet a disagreement.\n    #\n    # If a review file EXISTS\
+      \ but fails YAML parse, record a\n    # 'review_yaml_parse_failed' breadcrumb\
+      \ (parallel to existing\n    # git_check_failed precedent below) so the operator\
+      \ gets a signal\n    # rather than a silent no-fire.\n    claude_path = iter_dir\
+      \ / \"claude-review.yaml\"\n    codex_path = iter_dir / \"codex-review.yaml\"\
+      \n    for review_path in (claude_path, codex_path):\n        if review_path.exists():\n\
+      \            try:\n                yaml.safe_load(review_path.read_text(encoding=\"\
+      utf-8\"))\n            except Exception as exc:\n                stop_rules_fired.append({\n\
+      \                    \"rule\": \"review_yaml_parse_failed\",\n             \
+      \       \"path\": str(review_path),\n                    \"exception\": str(exc),\n\
+      \                })\n    if claude_path.exists() and codex_path.exists():\n\
+      \        claude_review = _read_yaml_or_empty(claude_path)\n        codex_review\
+      \ = _read_yaml_or_empty(codex_path)\n        claude_gs = _extract_goal_satisfied(claude_review)\n\
+      \        codex_gs = _extract_goal_satisfied(codex_review)\n        if claude_gs\
+      \ is not None and codex_gs is not None and claude_gs != codex_gs:\n        \
+      \    stop_rules_fired.append({\n                \"rule\": \"claude_codex_goal_satisfaction_disagreement\"\
+      ,\n                \"claude_goal_satisfied\": claude_gs,\n                \"\
+      codex_goal_satisfied\": codex_gs,\n                \"reason\": f\"claude.goal_satisfied={claude_gs},\
+      \ codex.goal_satisfied={codex_gs}, disagree\",\n            })\n\n    # Rule:\
+      \ patch_size_exceeds_max\n    # Sum added+deleted across `git diff --cached\
+      \ --numstat` (or `--numstat HEAD`\n    # if nothing staged). Fire iff total\
+      \ > max_patch_size. None/0 cap = no fire.\n    max_patch_size = packet.get(\"\
+      max_patch_size\")\n    if max_patch_size:\n        try:\n            ns = subprocess.run(\n\
+      \                [\"git\", \"diff\", \"--cached\", \"--numstat\"],\n       \
+      \         cwd=str(repo_root),\n                capture_output=True,\n      \
+      \          text=True,\n                check=False,\n                timeout=30,\n\
+      \            )\n            numstat_text = ns.stdout\n            if not numstat_text.strip():\n\
+      \                ns = subprocess.run(\n                    [\"git\", \"diff\"\
+      , \"--numstat\", \"HEAD\"],\n                    cwd=str(repo_root),\n     \
+      \               capture_output=True,\n                    text=True,\n     \
+      \               check=False,\n                    timeout=30,\n            \
+      \    )\n                numstat_text = ns.stdout\n            total = 0\n  \
+      \          for line in numstat_text.splitlines():\n                parts = line.split(\"\
+      \\t\")\n                if len(parts) < 2:\n                    continue\n \
+      \               # Binary files report \"-\\t-\"; treat as 0\n              \
+      \  try:\n                    added = int(parts[0]) if parts[0] != \"-\" else\
+      \ 0\n                    deleted = int(parts[1]) if parts[1] != \"-\" else 0\n\
+      \                except ValueError:\n                    continue\n        \
+      \        total += added + deleted\n            if total > max_patch_size:\n\
+      \                stop_rules_fired.append({\n                    \"rule\": \"\
+      patch_size_exceeds_max\",\n                    \"patch_size\": total,\n    \
+      \                \"max\": max_patch_size,\n                    \"reason\": f\"\
+      patch_size={total}, max={max_patch_size}\",\n                })\n        except\
+      \ Exception:\n            # Treat git failure as missing-data; do not fire (matches\
+      \ existing\n            # git_check_failed precedent for the forbidden-files\
+      \ branch).\n            pass\n\n    # Rule: any_acceptance_gate_returns_undefined\n\
+      \    # In-process re-evaluation of every acceptance_gate. A gate is \"undefined\"\
+      \n    # iff its result dict has key `exception` or key `error == 'no_check_command'`.\n\
+      \    undefined_gates = []\n    for gate in packet.get(\"acceptance_gates\",\
+      \ []) or []:\n        result = _evaluate_one_gate(gate, repo_root)\n       \
+      \ if \"exception\" in result:\n            undefined_gates.append({\"id\": result[\"\
+      id\"], \"kind\": \"exception\", \"detail\": result[\"exception\"]})\n      \
+      \  elif result.get(\"error\") == \"no_check_command\":\n            undefined_gates.append({\"\
+      id\": result[\"id\"], \"kind\": \"no_check_command\"})\n    if undefined_gates:\n\
+      \        stop_rules_fired.append({\n            \"rule\": \"any_acceptance_gate_returns_undefined\"\
+      ,\n            \"undefined_gates\": undefined_gates,\n            \"reason\"\
+      : f\"{len(undefined_gates)} gate(s) undefined: \" + \", \".join(\n         \
+      \       f\"{g['id']}({g['kind']})\" for g in undefined_gates\n            ),\n\
+      \        })\n\n    # Rule: repeated_finding_class_unresolved\n    # A non-blocking\
+      \ finding with the same id appears in BOTH current iteration's\n    # review\
+      \ yamls AND the immediately-prior iteration's review yamls. Per-reviewer\n \
+      \   # intersection (claude-current ∩ claude-prior; codex-current ∩ codex-prior;\
+      \ OR'd).\n    # Cross-reviewer matches do NOT fire (different id spaces).\n\
+      \    parent_dir = iter_dir.parent\n    if parent_dir.exists():\n        try:\n\
+      \            siblings = sorted(\n                d.name for d in parent_dir.iterdir()\n\
+      \                if d.is_dir() and d.name.startswith(\"iteration-\")\n     \
+      \       )\n        except OSError:\n            siblings = []\n        if iter_dir.name\
+      \ in siblings:\n            idx = siblings.index(iter_dir.name)\n          \
+      \  if idx > 0:\n                prior_name = siblings[idx - 1]\n           \
+      \     prior_dir = parent_dir / prior_name\n\n                claude_prior =\
+      \ _read_yaml_or_empty(prior_dir / \"claude-review.yaml\")\n                claude_curr\
+      \ = _read_yaml_or_empty(claude_path)\n                codex_prior = _read_yaml_or_empty(prior_dir\
+      \ / \"codex-review.yaml\")\n                codex_curr = _read_yaml_or_empty(codex_path)\n\
+      \n                claude_overlap = (\n                    _extract_finding_ids(claude_curr,\
+      \ kind=\"claude\")\n                    & _extract_finding_ids(claude_prior,\
+      \ kind=\"claude\")\n                )\n                codex_overlap = (\n \
+      \                   _extract_finding_ids(codex_curr, kind=\"codex\")\n     \
+      \               & _extract_finding_ids(codex_prior, kind=\"codex\")\n      \
+      \          )\n                recurring = sorted(claude_overlap | codex_overlap)\n\
+      \                if recurring:\n                    stop_rules_fired.append({\n\
+      \                        \"rule\": \"repeated_finding_class_unresolved\",\n\
+      \                        \"prior_iteration\": prior_name,\n                \
+      \        \"recurring_ids\": recurring,\n                        \"reason\":\
+      \ (\n                            f\"{len(recurring)} finding(s) reappeared from\
+      \ \"\n                            f\"{prior_name}: {', '.join(recurring)}\"\n\
+      \                        ),\n                    })\n\n    # Rule: cross_document_drift_detected\n\
+      \    # Validate explicit, named sha256 fields against actual canonical-full\
+      \ sha\n    # of the referenced files. Anti-false-positive: only check explicit\
+      \ fields\n    # named below, NOT recursive scan for any *sha256* key.\n    #\
+      \ NOTE: Codex `dispatch_provenance` shas are sealed inside the T6 archive\n\
+      \    # and use a different sha algorithm (raw-bytes sha256 via _sha256_str on\n\
+      \    # the goal_packet text, not canonical-full yaml.safe_dump sha). The drift\n\
+      \    # rule does not second-guess them.\n    drift_findings = []\n\n    def\
+      \ _check_drift(claim_label: str, ref_path: str, claimed_sha: str):\n       \
+      \ \"\"\"Append a drift finding if the claimed_sha doesn't match the actual file.\"\
+      \"\"\n        if not claimed_sha or not ref_path:\n            return\n    \
+      \    target = _resolve_referenced_path(ref_path, iter_dir)\n        if not target.exists():\n\
+      \            drift_findings.append({\n                \"claim\": claim_label,\n\
+      \                \"referenced_path\": ref_path,\n                \"claimed_sha\"\
+      : claimed_sha,\n                \"reason\": \"referenced_file_missing\",\n \
+      \           })\n            return\n        try:\n            actual = _canonical_sha256_of_yaml_file(target)\n\
+      \        except Exception as exc:\n            drift_findings.append({\n   \
+      \             \"claim\": claim_label,\n                \"referenced_path\":\
+      \ ref_path,\n                \"claimed_sha\": claimed_sha,\n               \
+      \ \"reason\": f\"canonical_sha_compute_failed: {exc}\",\n            })\n  \
+      \          return\n        if actual != claimed_sha:\n            drift_findings.append({\n\
+      \                \"claim\": claim_label,\n                \"referenced_path\"\
+      : ref_path,\n                \"claimed_sha\": claimed_sha,\n               \
+      \ \"actual_sha\": actual,\n            })\n\n    review_packet_path = iter_dir\
+      \ / \"review-packet.yaml\"\n    review_packet = _read_yaml_or_empty(review_packet_path)\n\
+      \    for art in (review_packet.get(\"iteration_artifacts\") or []):\n      \
+      \  if isinstance(art, dict):\n            sha = art.get(\"canonical_sha256\"\
+      )\n            ref = art.get(\"path\")\n            if sha and ref:\n      \
+      \          _check_drift(\n                    f\"review-packet.yaml.iteration_artifacts.{Path(ref).name}.canonical_sha256\"\
+      ,\n                    ref, sha,\n                )\n\n    claude_review_for_drift\
+      \ = _read_yaml_or_empty(claude_path)\n    claude_reviewed_sha = claude_review_for_drift.get(\"\
+      reviewed_packet_sha256\")\n    if claude_reviewed_sha and review_packet_path.exists():\n\
+      \        _check_drift(\n            \"claude-review.yaml.reviewed_packet_sha256\"\
+      ,\n            str(review_packet_path), claude_reviewed_sha,\n        )\n\n\
+      \    consensus = _read_yaml_or_empty(iter_dir / \"consensus.yaml\")\n    reviewed_artifacts\
+      \ = consensus.get(\"reviewed_artifacts\") or {}\n    if isinstance(reviewed_artifacts,\
+      \ dict):\n        for art_name, art_block in reviewed_artifacts.items():\n \
+      \           if isinstance(art_block, dict):\n                sha = art_block.get(\"\
+      canonical_sha256\")\n                ref = art_block.get(\"path\")\n       \
+      \         if sha and ref:\n                    _check_drift(\n             \
+      \           f\"consensus.yaml.reviewed_artifacts.{art_name}.canonical_sha256\"\
+      ,\n                        ref, sha,\n                    )\n\n    for finding\
+      \ in drift_findings:\n        entry = {\"rule\": \"cross_document_drift_detected\"\
+      }\n        entry.update(finding)\n        stop_rules_fired.append(entry)\n\n\
+      \    # Rule: validator_reviewer_disagreement\n    # Validator status read from\
+      \ any of these paths (first match wins):\n    #   1. review-packet.yaml -> verification_checks.acceptance_gates_evaluated\n\
+      \    #      .{all_passed|status} (original synthetic path)\n    #   2. review-packet.yaml\
+      \ -> verification_results.acceptance_gates\n    #      .{all_passed|status}\
+      \ (real-world iter-0009 path)\n    #   3. iter_dir/verification.yaml -> verification_checks.acceptance_gates_evaluated\n\
+      \    #      .{all_passed|status} (separate verification.yaml fallback)\n   \
+      \ # Reviewer position: goal_satisfied (top-level or overall_position) +\n  \
+      \  # blocking_objections (list).\n    # Disagreement cases:\n    #   - validator\
+      \ PASS but a reviewer says goal_satisfied=False or has blockers -> fire\n  \
+      \  #   - validator FAIL but BOTH reviewers say goal_satisfied=True with empty\
+      \ blockers -> fire\n    def _coerce_validator_status(node):\n        \"\"\"\
+      Read all_passed (bool) then status (str) off a dict; return 'pass'|'fail'|None.\"\
+      \"\"\n        if not isinstance(node, dict):\n            return None\n    \
+      \    if isinstance(node.get(\"all_passed\"), bool):\n            return \"pass\"\
+      \ if node[\"all_passed\"] else \"fail\"\n        s = node.get(\"status\")\n\
+      \        if isinstance(s, str) and s.lower() in (\"pass\", \"fail\"):\n    \
+      \        return s.lower()\n        return None\n\n    validator_status = None\
+      \  # None | \"pass\" | \"fail\"\n    # Path 1 + 2: from review-packet.yaml\n\
+      \    vc = review_packet.get(\"verification_checks\") if isinstance(review_packet,\
+      \ dict) else None\n    age_synth = vc.get(\"acceptance_gates_evaluated\") if\
+      \ isinstance(vc, dict) else None\n    validator_status = _coerce_validator_status(age_synth)\n\
+      \    if validator_status is None:\n        vr = review_packet.get(\"verification_results\"\
+      ) if isinstance(review_packet, dict) else None\n        age_real = vr.get(\"\
+      acceptance_gates\") if isinstance(vr, dict) else None\n        validator_status\
+      \ = _coerce_validator_status(age_real)\n    # Path 3: tertiary fallback - separate\
+      \ verification.yaml file in iter_dir\n    if validator_status is None:\n   \
+      \     verification_yaml = _read_yaml_or_empty(iter_dir / \"verification.yaml\"\
+      )\n        v_vc = verification_yaml.get(\"verification_checks\") if isinstance(verification_yaml,\
+      \ dict) else None\n        v_age = v_vc.get(\"acceptance_gates_evaluated\")\
+      \ if isinstance(v_vc, dict) else None\n        validator_status = _coerce_validator_status(v_age)\n\
+      \n    if validator_status is not None:\n        claude_v = _read_yaml_or_empty(claude_path)\
+      \ if claude_path.exists() else None\n        codex_v = _read_yaml_or_empty(codex_path)\
+      \ if codex_path.exists() else None\n\n        def _reviewer_clean(r):\n    \
+      \        \"\"\"Reviewer says 'goal satisfied AND no blockers'.\"\"\"\n     \
+      \       if not isinstance(r, dict):\n                return None\n         \
+      \   gs = _extract_goal_satisfied(r)\n            blockers = r.get(\"blocking_objections\"\
+      ) or []\n            if gs is None:\n                return None\n         \
+      \   return gs is True and not blockers\n\n        claude_clean = _reviewer_clean(claude_v)\
+      \ if claude_v is not None else None\n        codex_clean = _reviewer_clean(codex_v)\
+      \ if codex_v is not None else None\n\n        if validator_status == \"pass\"\
+      :\n            disagreers = []\n            if claude_clean is False:\n    \
+      \            disagreers.append(\"claude\")\n            if codex_clean is False:\n\
+      \                disagreers.append(\"codex\")\n            if disagreers:\n\
+      \                stop_rules_fired.append({\n                    \"rule\": \"\
+      validator_reviewer_disagreement\",\n                    \"validator_status\"\
+      : \"pass\",\n                    \"disagreeing_reviewers\": disagreers,\n  \
+      \                  \"reason\": (\n                        f\"validator=pass\
+      \ but {','.join(disagreers)} reviewer(s) \"\n                        f\"flagged\
+      \ goal_satisfied=False or non-empty blocking_objections\"\n                \
+      \    ),\n                })\n        elif validator_status == \"fail\":\n  \
+      \          # Fire iff BOTH reviewers say clean (ignoring failed gates).\n  \
+      \          if claude_clean is True and codex_clean is True:\n              \
+      \  stop_rules_fired.append({\n                    \"rule\": \"validator_reviewer_disagreement\"\
+      ,\n                    \"validator_status\": \"fail\",\n                   \
+      \ \"disagreeing_reviewers\": [\"claude\", \"codex\"],\n                    \"\
+      reason\": (\n                        \"validator=fail but both reviewers say\
+      \ \"\n                        \"goal_satisfied=True with empty blocking_objections\"\
+      \n                    ),\n                })\n\n    # Rule: closure_cross_verification_failed\
+      \ (Task #28; refined v5 Finding 1)\n    # Three-part gate: cross_family + hash_match\
+      \ + freshness. Fires when:\n    #   - last_mutation event exists (apply_step_landed\
+      \ in audit log), AND\n    #   - a closing-verdict review (claude or codex) exists\
+      \ that came AFTER\n    #     last_mutation.timestamp, AND\n    #   - the verdict\
+      \ fails any of the three invariant checks.\n    # If no last_mutation: no fire\
+      \ (close paths without mutation aren't gated).\n    # If no close-attempt review\
+      \ came after last_mutation: no fire (loop in flight).\n    try:\n        from\
+      \ agent_loop_mcp._closure_invariant import (\n            check_closure_invariant\
+      \ as _check_inv,\n            last_mutation_from_audit as _lm_from_audit,\n\
+      \        )\n    except Exception:\n        _check_inv = None\n        _lm_from_audit\
+      \ = None\n\n    if _check_inv is not None and audit_path.exists():\n       \
+      \ audit = yaml.safe_load(audit_path.read_bytes()) or {}\n        log = audit.get(\"\
+      audit_log\", []) or []\n        last_mutation = _lm_from_audit(log)\n      \
+      \  if last_mutation is not None:\n            lm_ts = last_mutation.get(\"timestamp\"\
+      ) or last_mutation.get(\"timestamp_utc\") or \"\"\n            # Find the most\
+      \ recent of {claude-review.yaml, codex-review.yaml}\n            # whose created_at_utc\
+      \ came AFTER last_mutation.timestamp.\n            candidates = []\n       \
+      \     for review_path in (claude_path, codex_path):\n                if review_path.exists():\n\
+      \                    review = _read_yaml_or_empty(review_path)\n           \
+      \         closer_ts = review.get(\"created_at_utc\")\n                    if\
+      \ closer_ts and closer_ts > lm_ts:\n                        candidates.append((closer_ts,\
+      \ review_path, review))\n            # Asymmetric with T6 by design (per Task\
+      \ #28 v4 spec): this stop\n            # rule does NOT fire on \"mutation +\
+      \ no fresh review\" — that state is\n            # operational normal during\
+      \ in-flight iterations. The fail-closed\n            # gate is at T6 (audit_append_event\
+      \ for iteration_closed events).\n            # Real loop.run_goal-driven close\
+      \ requires both reviews; this rule\n            # only adds extra safety when\
+      \ reviews ARE present and stale/self.\n            if candidates:\n        \
+      \        candidates.sort(key=lambda x: x[0], reverse=True)\n               \
+      \ _, closer_path, closer_verdict = candidates[0]\n                inv_result\
+      \ = _check_inv(last_mutation, closer_verdict)\n                if not inv_result[\"\
+      ok\"]:\n                    closer_actor = closer_verdict.get(\"actor\")\n \
+      \                   lm_actor = last_mutation.get(\"actor\")\n              \
+      \      closer_actor_id = (\n                        closer_actor.get(\"id\"\
+      ) if isinstance(closer_actor, dict) else closer_actor\n                    )\n\
+      \                    lm_actor_id = (\n                        lm_actor.get(\"\
+      id\") if isinstance(lm_actor, dict) else lm_actor\n                    )\n \
+      \                   stop_rules_fired.append({\n                        \"rule\"\
+      : \"closure_cross_verification_failed\",\n                        \"checks\"\
+      : inv_result[\"checks\"],\n                        \"reason\": inv_result[\"\
+      reason\"],\n                        \"last_mutation_actor\": lm_actor_id,\n\
+      \                        \"closer_actor\": closer_actor_id,\n              \
+      \          \"closer_path\": str(closer_path),\n                    })\n\n  \
+      \  unimplemented = [r for r in STOP_RULES_REQUIRED_BY_CONTRACT if r not in STOP_RULES_IMPLEMENTED]\n\
+      \    print(json.dumps({\n        \"stop_rules_fired\": stop_rules_fired,\n \
+      \       \"ok\": len(stop_rules_fired) == 0,\n        \"coverage\": {\n     \
+      \       \"implemented\": list(STOP_RULES_IMPLEMENTED),\n            \"required_by_contract\"\
+      : list(STOP_RULES_REQUIRED_BY_CONTRACT),\n            \"unimplemented\": unimplemented,\n\
+      \            \"warning\": (\n                \"PARTIAL helper. Orchestrator\
+      \ must check unimplemented rules out-of-band.\"\n                if unimplemented\
+      \ else\n                \"FULL contract coverage (9/9 stop rules codified including\
+      \ closure_cross_verification_failed).\"\n            ),\n        },\n    }))\n\
+      \    return 0 if not stop_rules_fired else 1\n\n\ndef cmd_evaluate_gates(args)\
+      \ -> int:\n    \"\"\"Evaluate each acceptance_gate's check command. Pass iff\
+      \ all return exit 0.\"\"\"\n    packet = yaml.safe_load(Path(args.goal_packet).read_text(encoding=\"\
+      utf-8\"))\n    repo_root = _resolve_repo_root()\n    results = [_evaluate_one_gate(g,\
+      \ repo_root) for g in packet.get(\"acceptance_gates\", [])]\n    all_passed\
+      \ = all(g[\"passed\"] for g in results)\n    print(json.dumps({\"all_passed\"\
+      : all_passed, \"gates\": results}))\n    return 0 if all_passed else 1\n\n\n\
+      def cmd_verify_scope(args) -> int:\n    \"\"\"Verify changed files (git index\
+      \ + working tree + untracked) are within allowed_files scope.\n\n    iter-0012\
+      \ F2: scope check uses _collect_changed_files (staged + unstaged +\n    untracked\
+      \ union), not `git diff --cached` alone. Prior cached-only behavior\n    silently\
+      \ passed if forbidden/out-of-scope edits were left unstaged.\n    \"\"\"\n \
+      \   packet = yaml.safe_load(Path(args.goal_packet).read_text(encoding=\"utf-8\"\
+      ))\n    allowed = list(packet.get(\"allowed_files\", []))\n    repo_root = _resolve_repo_root()\n\
+      \    try:\n        changed = _collect_changed_files(repo_root)\n    except Exception\
+      \ as exc:\n        print(json.dumps({\"in_scope\": False, \"error\": str(exc)}))\n\
+      \        return 1\n\n    out_of_scope = [c for c in changed if not _path_in_scope(c,\
+      \ allowed)]\n    has_allowed_sections = bool(packet.get(\"allowed_sections\"\
+      ))\n    print(json.dumps({\n        \"in_scope\": len(out_of_scope) == 0,\n\
+      \        \"changed_count\": len(changed),\n        \"out_of_scope\": out_of_scope,\n\
+      \        \"allowed_sections_evaluated\": False,\n        \"allowed_sections_note\"\
+      : (\n            \"allowed_sections present in goal_packet but section-level\
+      \ scope is NOT evaluated by this helper \"\n            \"(per Round 9 F6: section-level\
+      \ scope requires T9/T10 integration; not in iter-0009 stabilization scope).\
+      \ \"\n            \"Orchestrator must verify allowed_sections out-of-band.\"\
+      \n            if has_allowed_sections else \"no allowed_sections specified in\
+      \ goal_packet\"\n        ),\n    }))\n    return 0 if not out_of_scope else\
+      \ 1\n\n\ndef cmd_close(args) -> int:\n    \"\"\"Combined: validate + check_stop_rules\
+      \ + evaluate_gates + verify_scope. Pass iff all pass.\"\"\"\n    overall = {\"\
+      validate\": None, \"stop_rules\": None, \"gates\": None, \"scope\": None}\n\
+      \    rc_validate = cmd_validate(argparse.Namespace(goal_packet=args.goal_packet))\n\
+      \    overall[\"validate\"] = rc_validate == 0\n    rc_stop = cmd_check_stop_rules(argparse.Namespace(goal_packet=args.goal_packet,\
+      \ iteration_dir=args.iteration_dir))\n    overall[\"stop_rules\"] = rc_stop\
+      \ == 0\n    rc_gates = cmd_evaluate_gates(argparse.Namespace(goal_packet=args.goal_packet))\n\
+      \    overall[\"gates\"] = rc_gates == 0\n    rc_scope = cmd_verify_scope(argparse.Namespace(goal_packet=args.goal_packet))\n\
+      \    overall[\"scope\"] = rc_scope == 0\n    can_close = all(overall.values())\n\
+      \    print(json.dumps({\"can_close\": can_close, \"components\": overall}, default=str))\n\
+      \    return 0 if can_close else 1\n\n\ndef main(argv: list[str] | None = None)\
+      \ -> int:\n    p = argparse.ArgumentParser(description=\"Phase 4 bounded self-drive\
+      \ enforcement harness.\")\n    sub = p.add_subparsers(dest=\"cmd\", required=True)\n\
+      \n    sp = sub.add_parser(\"validate\")\n    sp.add_argument(\"goal_packet\"\
+      )\n    sp.set_defaults(func=cmd_validate)\n\n    sp = sub.add_parser(\"transition\"\
+      )\n    sp.add_argument(\"goal_packet\")\n    sp.add_argument(\"new_state\")\n\
+      \    sp.add_argument(\"--note\", default=\"\")\n    sp.set_defaults(func=cmd_transition)\n\
+      \n    sp = sub.add_parser(\"check_stop_rules\")\n    sp.add_argument(\"goal_packet\"\
+      )\n    sp.add_argument(\"iteration_dir\")\n    sp.set_defaults(func=cmd_check_stop_rules)\n\
+      \n    sp = sub.add_parser(\"evaluate_gates\")\n    sp.add_argument(\"goal_packet\"\
+      )\n    sp.set_defaults(func=cmd_evaluate_gates)\n\n    sp = sub.add_parser(\"\
+      verify_scope\")\n    sp.add_argument(\"goal_packet\")\n    sp.set_defaults(func=cmd_verify_scope)\n\
+      \n    sp = sub.add_parser(\"close\")\n    sp.add_argument(\"goal_packet\")\n\
+      \    sp.add_argument(\"iteration_dir\")\n    sp.set_defaults(func=cmd_close)\n\
+      \n    ns = p.parse_args(argv)\n    return ns.func(ns)\n\n\nif __name__ == \"\
+      __main__\":\n    sys.exit(main())\n"
+schema_version: 1
+iteration_id: iteration-0035-self-drive-fixes

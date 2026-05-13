@@ -1,0 +1,86 @@
+iteration_id: iteration-0036-subagent-watchdog
+reviewer_id: codex-iter0036-2
+pass_id: codex-iter0036-2-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Watchdog terminal-event set omits dispatch_refused, so refused dispatches
+    can be misclassified as stale orphans.
+  citation: agent-loop/active/iteration-0036-subagent-watchdog/design-plan.md:172
+  risk: The desired watchdog must pair starts with dispatch_done, dispatch_failed,
+    dispatch_refused, or dispatch_stalled. Leaving out dispatch_refused can cause
+    the watchdog to append a false dispatch_stalled event for a dispatch that already
+    ended as refused, corrupting audit/TUI state.
+  recommendation: Update the watchdog design and implementation target to include
+    dispatch_refused as a terminal event with the same pairing semantics as dispatch_failed
+    and dispatch_stalled.
+  patch_not_proposed_reason: Only design-plan.md was embedded; the in-scope implementation
+    files needed for an exact unified diff were not provided.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: The stale marker reason drifts from the required stall_reason value.
+  citation: agent-loop/active/iteration-0036-subagent-watchdog/design-plan.md:61
+  risk: The desired end state requires mark mode to append dispatch_stalled with stall_reason="watchdog_timeout".
+    The design instead specifies watchdog_orphan_detected, which can break downstream
+    consumers and tests that key on the required reason.
+  recommendation: Use stall_reason="watchdog_timeout" for synthetic dispatch_stalled
+    events, and reserve any more detailed explanation for a separate field if needed.
+  patch_not_proposed_reason: Only design-plan.md was embedded; the in-scope implementation
+    files needed for an exact unified diff were not provided.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: The design shifts primary scope to live Popen streaming and auto-abort
+    rather than the requested watchdog action half.
+  citation: agent-loop/active/iteration-0036-subagent-watchdog/design-plan.md:5
+  risk: The desired end state scopes this iteration to a watchdog that marks stale
+    orphaned dispatches, a TUI terminal-event update, tests, and release gate adjustment.
+    Centering the plan on rewriting _dispatch_codex with streaming, heartbeats, and
+    abort control risks scope creep and leaves the actual requested watchdog behavior
+    under-specified.
+  recommendation: Re-center iter-0036 on _visibility_watchdog.py, _visibility_tui.py
+    terminal recognition, and tests. Move live dispatch streaming/heartbeat/abort
+    work to a later iteration or clearly mark it out of scope for this goal.
+  patch_not_proposed_reason: This is a design/scope correction and the implementation
+    files were not embedded, so an exact applicable patch cannot be authored.
+  patch_proposal: null
+- id: codex-rev-004
+  severity: medium
+  summary: External-process fallback policy is missing from the touched content.
+  citation: agent-loop/active/iteration-0036-subagent-watchdog/design-plan.md:200
+  risk: The desired end state requires documenting that any codex re-dispatch after
+    a stalled in-process subagent dispatch must use the external codex-cli pattern.
+    Without that policy, operators may repeat the iter-0031 failure mode.
+  recommendation: Add the external-process fallback policy to the allowed durable
+    documentation for this iteration, including the python -m agent_loop_mcp._dispatch_codex
+    pattern and the in-process re-dispatch prohibition.
+  patch_not_proposed_reason: The requested policy target is CLAUDE.md or memory, but
+    neither is in the allowed-files list or embedded contents; no in-scope exact patch
+    can be proposed.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'The embedded plan does not fully meet the requested watchdog
+  workflow: it omits dispatch_refused pairing, uses the wrong stalled reason, over-scopes
+  into live dispatch rewriting, and lacks the required fallback policy documentation.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 48f8ac4d2ac6f909d7f554db46018c5fd921bbc214d8346ca732c427f76eab5b
+  output_sha256: 33eb051d3c9e5edcda48cfa381145f4868cbd1e7fa6735dd4b42aa1b762ebf09
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: a41b5e764d74035351240ba53c6447a8f5b927ffc3dfa48bc84560087ae18a10
+  scope_signature: 48065cf203b98831450d91a28061fb27fb3bac7e06394f47a8779650af0a7852
+  review_target_path: agent-loop/active/iteration-0036-subagent-watchdog/review-packet.yaml
+  review_target_hash: 5c73ae3e9745ab40ac3f8ce63b4dda374b862ca0492aed4a037685f3e1d2b1c1
+sealed_at_utc: '2026-05-11T03:11:03Z'
+packet_sha256: 5a4ab96feee64e5416306801b039f814565d8af5ff7acc9dc5d04bed0635bbb7

@@ -1,0 +1,146 @@
+schema_version: 1
+pilot_id: iteration-0037-bidirectional-dispatch
+goal:
+  summary: Workflow #4 fix cycle landing the deferred half of Task #43 — Popen streaming + heartbeats + abort-signal-file in _dispatch_codex.
+  desired_end_state: |
+    iter-0037 closes Task #43 (subagent dispatch watchdog + external-process
+    fallback). iter-0036 landed the post-hoc watchdog half (read-only orphan
+    detection + audit hygiene). iter-0037 lands the LIVE half: bidirectional
+    monitoring of in-progress codex dispatches.
+
+    The design was reviewed and approved by codex in iter-0036 design-plan.md
+    (codex-iter0036-2 had 4 findings, all addressed; no architecture-level
+    blocking objections). Operator preferences locked in:
+      - 200-char truncated streamed lines
+      - 30-second heartbeat interval
+      - Auto-abort ONLY on heartbeat-silence (90s threshold; not wall-time)
+      - Popen + readline thread for stdout capture
+
+    Files in scope:
+      - scripts/agent_loop_mcp/_dispatch_codex.py
+        (replace subprocess.run + capture_output with Popen + reader thread +
+         heartbeat loop + abort-signal-file polling + SIGTERM on silence)
+      - scripts/agent_loop_mcp/_visibility_tui.py
+        (show last streamed line preview + heartbeat freshness during active
+         dispatches)
+      - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+        (migrate ~10 subprocess.run mocks to Popen mocks)
+      - scripts/agent_loop_mcp/tests/test_dispatch_codex_streaming.py (NEW)
+        (new streaming + heartbeat + abort behavior tests)
+      - scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py
+        (migrate ~2 subprocess.run mocks)
+      - scripts/agent_loop_mcp/tests/test_iter_0022_base_sha_stamp.py
+        (migrate ~1 subprocess.run mock)
+      - scripts/agent_loop_mcp/tests/test_iter_0024_per_patch_base_sha.py
+        (migrate ~1 subprocess.run mock if present)
+      - scripts/agent_loop_mcp/tests/test_iter_0026_crlf_base_sha.py
+        (migrate ~1 subprocess.run mock if present)
+      - scripts/agent_loop_mcp/tests/test_visibility_tui.py
+        (regression test for last-streamed-line / heartbeat display)
+      - scripts/agent_loop_mcp/_release_gate_check.py
+        (bump G_pytest_dispatch_codex baseline)
+
+    New event shapes (per iter-0036 design + codex pre-review):
+      - dispatch_streamed_line: pass_id, iteration_id, reviewer_id, stream
+        ("stdout"|"stderr"), line_truncated (≤200 chars), line_full_length,
+        truncated (bool), seq (int), timestamp_utc
+      - dispatch_heartbeat: pass_id, iteration_id, reviewer_id, age_seconds,
+        last_streamed_line_age_seconds, last_streamed_line_seq, timestamp_utc
+      - dispatch_aborted: pass_id, iteration_id, reviewer_id, abort_source
+        ("operator_signal_file"|"watchdog_silence"), abort_reason, age_seconds,
+        last_streamed_line_age_seconds, timestamp_utc
+
+    Abort-signal-file mechanic:
+      Operator writes agent-loop/state/abort-dispatch-<pass_id>.signal with
+      optional reason text. Wrapper polls every 500ms in the main loop. On
+      detection: SIGTERM codex via proc.terminate(); wait 10s for clean exit;
+      proc.kill() if still alive; emit dispatch_aborted; delete signal file;
+      raise CodexInvocationError.
+
+    Watchdog-silence auto-abort:
+      If last_streamed_line_age_seconds >= STALL_SILENCE_SECONDS (default 90s)
+      during a heartbeat tick, treat as stuck. Same SIGTERM sequence.
+      abort_source="watchdog_silence" in the audit event.
+
+    Wall-time timeout preserved as hard ceiling (still respected; raises
+    CodexInvocationError if exceeded).
+
+    iter-0037 SUCCESS = workflow #4 closes:
+      1. proposed-patches.md authored with concise diffs + test-migration
+         strategy (prose-heavy, ≤500 lines to avoid iter-0036 stall)
+      2. review-packet embeds proposed-patches.md content via
+         _author_review_packet (mandatory per iter-0033 gotcha)
+      3. Codex pre-review dispatched
+      4. Claude integrates any codex feedback BEFORE implementation
+      5. Test migration done by parallel agents (one per test file)
+      6. Implementation done in main thread (single source of truth for
+         _dispatch_codex.py rewrite)
+      7. New regression tests added (≥ 6 new tests for streaming + heartbeat
+         + abort)
+      8. pytest still green; smoke 60/60; gates 11/11
+      9. Empirical validation: dispatch a real codex call with the new code
+         and verify dispatch_streamed_line + dispatch_heartbeat events
+         appear in dispatch-log.jsonl
+      10. iteration-outcome.yaml closes quorum_close_passed
+  non_goals:
+    - modify _self_drive.py
+    - modify _closure_invariant.py / _validate_closure_invariant.py
+    - modify _author_review_packet.py
+    - modify _visibility_watchdog.py (iter-0036 final)
+    - modify apply pipeline / supervisor / wrapper code
+    - introduce new MCP tools
+    - bump pyproject.toml version
+    - implement Level-3 abort (operator-signal-file) WITHOUT also doing
+      Level-1/2 (streaming + heartbeats) — must be one cohesive change
+allowed_files:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_visibility_tui.py
+  - scripts/agent_loop_mcp/_release_gate_check.py
+  - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_dispatch_codex_streaming.py
+  - scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py
+  - scripts/agent_loop_mcp/tests/test_iter_0022_base_sha_stamp.py
+  - scripts/agent_loop_mcp/tests/test_iter_0024_per_patch_base_sha.py
+  - scripts/agent_loop_mcp/tests/test_iter_0026_crlf_base_sha.py
+  - scripts/agent_loop_mcp/tests/test_visibility_tui.py
+  - agent-loop/active/iteration-0037-bidirectional-dispatch/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/_closure_invariant.py
+  - scripts/agent_loop_mcp/_validate_closure_invariant.py
+  - scripts/agent_loop_mcp/_author_review_packet.py
+  - scripts/agent_loop_mcp/_visibility_watchdog.py
+  - scripts/agent_loop_mcp/server.py
+  - scripts/agent_loop_mcp/tool_registry.py
+  - scripts/agent_loop_mcp/tools/
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - run/
+  - wiki/
+  - pyproject.toml
+  - requirements.txt
+max_iterations: 3
+max_patch_size: 800
+fix_author_policy: permissive
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: pytest still green
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+  - id: A2
+    description: empirical streaming events appear in dispatch-log for a real dispatch
+    check: 'python -c "import json,pathlib; lines=pathlib.Path(\"agent-loop/state/dispatch-log.jsonl\").read_text(encoding=\"utf-8\").splitlines()[-100:]; assert any(\"dispatch_streamed_line\" in l for l in lines), \"no streamed events\"; assert any(\"dispatch_heartbeat\" in l for l in lines), \"no heartbeat events\""'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T03:40:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: c973ac7815c8871ff9767e393406e9e857925391134821abacbc35d75cefd358

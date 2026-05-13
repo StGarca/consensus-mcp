@@ -1,0 +1,160 @@
+iteration_id: iteration-0002-consensus-resume-spec
+reviewer_id: codex-iter0002-2
+pass_id: codex-iter0002-2-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: "The fast-path response omits whether the watermark is unchanged from prior\
+    \ input in the schema, so \xA78 returns a field not defined by \xA74."
+  citation: docs/specs/consensus-resume-spec.md:249
+  risk: Implementers following the schema can omit or reject `watermark_unchanged_since_prior`,
+    breaking the specified cheap-refresh contract.
+  recommendation: "Add `watermark_unchanged_since_prior` and `snapshot_watermark_drift`\
+    \ to the \xA74 output schema as optional fields, or remove them from \xA78."
+  patch_not_proposed_reason: Review-only sealed pass; no patch requested and exact
+    line-numbered diff generation is not required for verdict output.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: "`recent_activity.kind` excludes bundle mutation events that \xA75 step\
+    \ 5 says are read from dispatch-log."
+  citation: docs/specs/consensus-resume-spec.md:83
+  risk: A dispatch-log event such as `patch_applied`, `review_packet_rebundled`, or
+    `operator_force_bundle_rewrite` has no legal place in the audit stream even though
+    the spec later requires reading those events.
+  recommendation: Either include bundle mutation kinds in `recent_activity.kind` or
+    explicitly state they are excluded from `recent_activity` while still considered
+    for `bundle_mutation`.
+  patch_not_proposed_reason: Review-only sealed pass; no patch requested and exact
+    line-numbered diff generation is not required for verdict output.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: "`bundle_mutation` uses the latest dispatch-log bundle event, but \xA7\
+    5 step 4 classifies reviews before \xA75 step 5 determines `bundle_mutation`."
+  citation: docs/specs/consensus-resume-spec.md:157
+  risk: An implementation that follows the numbered behavior literally cannot know
+    the current bundle sha while classifying reviews, causing incorrect `open` versus
+    `superseded` results.
+  recommendation: Move bundle-mutation/current-bundle computation before review classification,
+    or make step 4 explicitly depend on a precomputed current bundle sha.
+  patch_not_proposed_reason: Review-only sealed pass; no patch requested and exact
+    line-numbered diff generation is not required for verdict output.
+  patch_proposal: null
+- id: codex-rev-004
+  severity: medium
+  summary: "If there is no bundle mutation, \xA75 step 4 compares review hashes against\
+    \ `bundle_mutation.bundle_sha256` even though `bundle_mutation` is null."
+  citation: docs/specs/consensus-resume-spec.md:162
+  risk: Fresh reviews in an initial bundle can be misclassified as superseded or force
+    implementers to invent an unstated fallback for the current review target hash.
+  recommendation: Define the current bundle sha source when `bundle_mutation` is null,
+    likely `review-packet.yaml`'s canonical bundle/review_target_hash.
+  patch_not_proposed_reason: Review-only sealed pass; no patch requested and exact
+    line-numbered diff generation is not required for verdict output.
+  patch_proposal: null
+- id: codex-rev-005
+  severity: medium
+  summary: '`recent_activity` ordering is under-specified for equal timestamps despite
+    the deterministic-ordering requirement.'
+  citation: docs/specs/consensus-resume-spec.md:137
+  risk: Two log events with the same timestamp can produce non-byte-stable snapshots
+    across implementations, weakening tests and the output-stability claim.
+  recommendation: Add a deterministic tiebreaker for `recent_activity`, such as dispatch-log
+    line number descending or `(timestamp_utc, event_id)` descending.
+  patch_not_proposed_reason: Review-only sealed pass; no patch requested and exact
+    line-numbered diff generation is not required for verdict output.
+  patch_proposal: null
+- id: codex-rev-006
+  severity: low
+  summary: 'Pass-1 codex-rev-001 verdict: resolved; `wait_for_dispatch` is in the
+    enum and the decision tree returns it with payload.'
+  citation: docs/specs/consensus-resume-spec.md:119
+  risk: No residual risk for this pass-1 item.
+  recommendation: No change for pass-1 codex-rev-001.
+  patch_not_proposed_reason: Resolved verdict entry; no patch needed.
+  patch_proposal: null
+- id: codex-rev-007
+  severity: low
+  summary: 'Pass-1 codex-rev-002 verdict: resolved; auto-detection now sorts by authorized
+    time with lexicographic directory-name tiebreaker and always surfaces ambiguity.'
+  citation: docs/specs/consensus-resume-spec.md:42
+  risk: No residual risk for this pass-1 item.
+  recommendation: No change for pass-1 codex-rev-002.
+  patch_not_proposed_reason: Resolved verdict entry; no patch needed.
+  patch_proposal: null
+- id: codex-rev-008
+  severity: low
+  summary: "Pass-1 codex-rev-003 verdict: resolved; \xA77 gives a policy row for each\
+    \ disk read described in \xA75."
+  citation: docs/specs/consensus-resume-spec.md:204
+  risk: No residual risk for this pass-1 item.
+  recommendation: No change for pass-1 codex-rev-003.
+  patch_not_proposed_reason: Resolved verdict entry; no patch needed.
+  patch_proposal: null
+- id: codex-rev-009
+  severity: low
+  summary: 'Pass-1 codex-rev-004 verdict: resolved; review entries now carry `classification`
+    and closure certificate source.'
+  citation: docs/specs/consensus-resume-spec.md:104
+  risk: No residual risk for this pass-1 item.
+  recommendation: No change for pass-1 codex-rev-004.
+  patch_not_proposed_reason: Resolved verdict entry; no patch needed.
+  patch_proposal: null
+- id: codex-rev-010
+  severity: low
+  summary: 'Pass-1 codex-rev-005 verdict: partially resolved; `bundle_mutation` is
+    separated, but mutation event kinds are absent from `recent_activity.kind`.'
+  citation: docs/specs/consensus-resume-spec.md:83
+  risk: Audit consumers cannot represent bundle-changing events in the bounded activity
+    stream unless they rely on an unstated exception.
+  recommendation: Apply the codex-rev-002 recommendation to close the remaining schema
+    drift.
+  patch_not_proposed_reason: Covered by new-defect finding codex-rev-002; no separate
+    patch needed.
+  patch_proposal: null
+- id: codex-rev-011
+  severity: low
+  summary: "Pass-1 codex-rev-006 verdict: partially resolved; watermarking is specified,\
+    \ but \xA78 introduces fields missing from the schema."
+  citation: docs/specs/consensus-resume-spec.md:253
+  risk: Implementers can disagree on the fast-path and drift response shapes.
+  recommendation: Apply the codex-rev-001 recommendation to close the remaining schema
+    drift.
+  patch_not_proposed_reason: Covered by new-defect finding codex-rev-001; no separate
+    patch needed.
+  patch_proposal: null
+- id: codex-rev-012
+  severity: low
+  summary: 'Pass-1 codex-rev-007 verdict: resolved; all seven open questions have
+    explicit v2 answers and rationales.'
+  citation: docs/specs/consensus-resume-spec.md:267
+  risk: No residual risk for this pass-1 item.
+  recommendation: No change for pass-1 codex-rev-007.
+  patch_not_proposed_reason: Resolved verdict entry; no patch needed.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'Not implementation-ready: v2 resolves most pass-1 issues,
+  but schema drift, bundle-current-hash ordering, null-bundle handling, and timestamp
+  tie stability need minimal spec edits before implementation.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: efcaa0c1018d1e810287469876e4b514c01438c9359e37770b775db70ec67fb9
+  output_sha256: 0b845b6b4350d7e4a242989ac544f18e51243e5b72245f91b5b8b1ec7992fc14
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: d249c534c5384ca800c04b5eded6be0e58f73c5f7a17862541c59800cb342140
+  scope_signature: af2b54cfcf814a59d556de7ea0598d795ef13eede25e5927a3a1770c0df9f1fb
+  review_target_path: consensus-state/active/iteration-0002-consensus-resume-spec/review-packet.yaml
+  review_target_hash: 6c8d350b1cb6b2d1ff123a1d5c926c99607d95b656f2fb16224e78243493b5e9
+sealed_at_utc: '2026-05-11T18:04:34Z'
+packet_sha256: 4309d05ae7a555b41cbcbf025542f4aa6cd19abed9e6cb684dfc69bd3e759b0e

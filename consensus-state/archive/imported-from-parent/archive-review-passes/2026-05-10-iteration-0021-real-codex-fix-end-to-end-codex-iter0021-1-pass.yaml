@@ -1,0 +1,79 @@
+iteration_id: iteration-0021-real-codex-fix-end-to-end
+reviewer_id: codex-iter0021-1
+pass_id: codex-iter0021-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: apply.codex_patch.handle() does not re-validate actor shape when called
+    directly
+  citation: scripts/agent_loop_mcp/tools/apply_codex_patch.py:127
+  risk: Direct Python imports can bypass the MCP schema and reach audit emission with
+    a malformed actor, weakening defense-in-depth provenance for apply-step mutations.
+  recommendation: Add an early required-key check for actor.id, actor.model_family,
+    actor.role, and actor.pass_id, and cover missing actor.model_family with a regression
+    test.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-001-patch
+    applies_to_findings:
+    - codex-rev-001
+    base_sha: f612e7d465f2a027cf470fd69251265b0f6d2f15de766bd203235fd50c6db3d9
+    unified_diff: "--- a/scripts/agent_loop_mcp/tools/apply_codex_patch.py\n+++ b/scripts/agent_loop_mcp/tools/apply_codex_patch.py\n\
+      @@ -133,6 +133,19 @@ def handle(\n     iter_dir = Path(iteration_dir)\n    \
+      \ repo_root = _resolve_repo_root()\n \n+    required_actor_keys = (\"id\", \"\
+      model_family\", \"role\", \"pass_id\")\n+    if not isinstance(actor, dict):\n\
+      +        return _refuse(\n+            \"invalid_actor: actor must be an object\
+      \ with required actor keys: \"\n+            + \", \".join(required_actor_keys)\n\
+      +        )\n+    missing_actor_keys = [key for key in required_actor_keys if\
+      \ key not in actor]\n+    if missing_actor_keys:\n+        return _refuse(\n\
+      +            \"invalid_actor: missing required actor key(s): \"\n+         \
+      \   + \", \".join(missing_actor_keys)\n+        )\n+\n     # Defense-in-depth:\
+      \ validate patch_id format. The MCP layer enforces this\n     # via the input_schema\
+      \ pattern; record_verdict validates likewise. We\n     # re-check here so a\
+      \ misuse via direct python import can't slip past.\n--- a/scripts/agent_loop_mcp/tests/test_apply_codex_patch.py\n\
+      +++ b/scripts/agent_loop_mcp/tests/test_apply_codex_patch.py\n@@ -296,6 +296,29\
+      \ @@ def test_refuses_with_authorization_missing_codex_patch_apply_field(repo_root_env\n\
+      \     assert result[\"ok\"] is False\n     assert result[\"applied\"] is False\n\
+      \     assert \"operator_authorization_missing\" in (result.get(\"error\") or\
+      \ \"\")\n \n \n+def test_refuses_when_actor_missing_model_family(repo_root_env,\
+      \ monkeypatch):\n+    \"\"\"Direct handle() imports bypass MCP schema validation;\
+      \ fail closed.\"\"\"\n+    monkeypatch.setenv(\"AGENT_LOOP_MCP_CODEX_PATCH_APPLY\"\
+      , \"1\")\n+    iter_dir = _make_active_iter(repo_root_env)\n+    _write_goal_packet(iter_dir,\
+      \ codex_patch_apply_authorized=True)\n+    _write_target_file(repo_root_env,\
+      \ \"scripts/foo.py\", \"hello\\n\")\n+    pp = _build_patch_proposal(repo_root_env)\n\
+      +    _write_codex_review(iter_dir, pp)\n+    _write_claude_verification(iter_dir,\
+      \ pp[\"patch_id\"], \"approved\")\n+    actor = _make_actor()\n+    del actor[\"\
+      model_family\"]\n+\n+    result = apply_codex_patch.handle(\n+        iteration_dir=str(iter_dir),\n\
+      +        patch_id=pp[\"patch_id\"],\n+        actor=actor,\n+    )\n+    assert\
+      \ result[\"ok\"] is False\n+    assert result[\"applied\"] is False\n+    assert\
+      \ \"missing required actor key\" in (result.get(\"error\") or \"\")\n+    assert\
+      \ \"model_family\" in (result.get(\"error\") or \"\")\n+\n+\n # ---- claude\
+      \ verification gate ---------------------------------------------\n \n \n"
+    files_touched:
+    - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    - scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+    expected_tests:
+    - python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q
+    unified_diff_sha256: d5832768e2cf4ecb7a86b99f8d58b88b5837be7b49064938cad51db1762a1964
+goal_satisfied: false
+goal_satisfied_rationale: Embedded implementation lacks the required direct-call actor
+  structural validation; the proposed patch supplies the guard and regression coverage.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: aac812d89aee0f6b17967263b044b20b698ee5e30ce919c00b66ad045dd87f3a
+  output_sha256: cc2b38ad3ab1776f8930ef059c70ff36dadb085616e5035f2ac1e7ed53ae0645
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: fadacf9e566a150b865fa1c0a92b944e1cb92c394d7765b8a6654293140e154c
+  scope_signature: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+sealed_at_utc: '2026-05-10T18:30:54Z'
+packet_sha256: 67b9ad5488caefd98f6f7d20ceef3e5c5d2d62aff059c07e28bfba2bd64fc76f

@@ -1,0 +1,130 @@
+schema_version: 1
+iteration_id: iteration-0008-pilot
+created_utc: "2026-05-09T00:00:00Z"
+operator_directive_received: "2026-05-09"
+operator_directive_quote: |
+  "Plan: Bounded Quorum Self-Driving Loop ... Practical Next Step: Create a pilot
+  mode: iteration-0007-bounded-quorum-self-drive-pilot. Use a small real goal, not
+  another architecture expansion ... It is reasonable to aim for Level 2 now."
+
+iteration_class: phase_4_bounded_quorum_self_drive_pilot
+not_a_routine_iteration_because: |
+  Phase 4 v1.0 launch. Tests the autonomy contract via 3 sequential pilots in
+  increasing complexity. iteration-0008 wraps the Phase 4 launch; each inner pilot
+  has its own sealed goal_packet executed under the contract. iteration-0008 closes
+  iff all 3 pilots cleanly close OR cleanly stop per the contract's stop rules.
+
+objective: |
+  Demonstrate Level 2 bounded self-drive on 3 small real goals:
+    Pilot 1 (smallest): memory promotion of claude-iter0006-006 (deferred
+      operator action) -> 2-file write
+    Pilot 2 (mid): codex sha-form drift recurrence fix (canonical-iter0006-008 +
+      canonical-iter0007-006) encoded as memory entry -> 2-file write
+    Pilot 3 (largest): consolidated review-findings MD backfill -> spec section
+      edits via T9/T10
+  Each pilot has its own goal_packet validated via _self_drive.py validate; each
+  pilot's apply is gated by _self_drive.py check_stop_rules + evaluate_gates +
+  verify_scope. The autonomy contract holds throughout.
+
+mode: phase_4_v1_0_supervised_quorum_orchestrator_pattern
+
+# ---- Operator guardrails (carried lean) ----
+
+operator_guardrails:
+  - {id: G1, rule: "Target only unresolved real defects."}
+  - {id: G2, rule: "Input packet must include defect list + current validator results."}
+  - {id: G3, rule: "Iteration may apply fixes only if Phase 0 mutating gates are satisfied."}
+  - {id: G4, rule: "Independence audit must mark prior exposure."}
+  - {id: G5, rule: "Success metric: defects resolved, validators clean, no new drift."}
+
+# ---- Phase 4 anti-scope (carried from Phase 3 + reinforced) ----
+
+what_phase_4_v1_0_does_NOT_do:
+  - "no new MCP tools (G6+ blocked)"
+  - "no new validators"
+  - "no new architecture phases beyond bounded self-drive"
+  - "no autonomous Anthropic API execution (Level 3 deferred)"
+  - "no goal expansion within or across pilots"
+  - "no scope drift beyond each pilot's allowed_files"
+
+what_phase_4_v1_0_DOES_do:
+  - "build autonomy contract spec + goal_packet schema + _self_drive.py harness (DONE; P4 T1)"
+  - "run 3 pilots (P4 T3-T5) demonstrating Level 2 supervised-quorum-orchestrator pattern"
+  - "record v1.9.4 spec entry + ledger v1_9_4_application_log post-pilots"
+
+# ---- The 3 pilots ----
+
+pilots:
+  pilot_1:
+    goal_packet_path: agent-loop/active/iteration-0008-pilot/goal_packet_pilot_1.yaml
+    summary: "Memory promotion of claude-iter0006-006 (deferred operator action) -> feedback_no_process_polishing.md + MEMORY.md index update"
+    expected_close_state: quorum_close_passed
+
+  pilot_2:
+    goal_packet_path: agent-loop/active/iteration-0008-pilot/goal_packet_pilot_2.yaml
+    summary: "Codex sha-form drift fix (canonical-iter0006-008 + canonical-iter0007-006) -> feedback_codex_dispatch_use_canonical_full.md + MEMORY.md index update"
+    expected_close_state: quorum_close_passed
+
+  pilot_3:
+    goal_packet_path: agent-loop/active/iteration-0008-pilot/goal_packet_pilot_3.yaml
+    summary: "Consolidated review-findings MD backfill: frontmatter + cross-ref table + count model post-v1.9.3-rc agreement"
+    expected_close_state: quorum_close_passed
+
+# ---- Gate state ----
+
+gate_state:
+  consensus_state: implementation_ready
+  observational_mode: false
+  production_state: not_ready
+  production_ready: false
+  production_allowed: false
+
+# ---- Reviewer task (iteration-level quorum on the post-pilots state) ----
+
+reviewer_decision_required:
+  question: "Did all 3 pilots cleanly close per autonomy contract; were stop rules respected; was scope held?"
+  must_consider:
+    - "For each pilot: did the goal_packet hold (no scope drift)?"
+    - "For each pilot: did acceptance_gates pass without manual override?"
+    - "For each pilot: did the patch stay within allowed_files?"
+    - "For each pilot: were validators_required actually run and clean?"
+    - "Did any pilot trigger a stop rule? If so, was escalation correct?"
+    - "Did the Phase 4 v1.0 infrastructure (autonomy contract + _self_drive.py + goal_packet schema) hold up under real use?"
+  reviewers_must_emit:
+    - phase_4_pilot_run_approved: bool
+    - blocker_pilot_id_if_any: string|null
+    - rationale: string
+
+# ---- Implementation scope ----
+
+implementation_scope:
+  allowed_files:
+    - agent-loop/active/iteration-0008-pilot/**
+    - "C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/feedback_no_process_polishing.md"   # Pilot 1
+    - "C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/feedback_codex_dispatch_use_canonical_full.md"   # Pilot 2
+    - "C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/MEMORY.md"   # Pilot 1 + 2 index
+    - wiki/audiobook-project/agent-loop/2026-05-09-v1.9.x-third-party-review-findings.md   # Pilot 3
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md   # v1.9.4 entry
+    - agent-loop/state/disposition-ledger.yaml   # v1_9_4_application_log
+  allowed_sections:
+    - "spec_md/frontmatter"   # potentially v1.9.4 record
+  forbidden_files:
+    - "scripts/agent_loop_mcp/tools/**"   # frozen
+    - "scripts/agent_loop_mcp/_smoke_test.py"   # frozen at 51/51
+    - "scripts/agent_loop/**"   # frozen validators
+    - "production audio outputs"
+    - "spec sections 1-23 architectural changes"
+
+production_scope:
+  type: deploy
+  target: "agent-loop-mcp-bounded-self-drive-pilot-v1.9.4"
+  scope_match_mode: exact
+
+# ---- Closure ----
+
+closure_artifact: agent-loop/active/iteration-0008-pilot/iteration-outcome.yaml
+success_criteria_per_G5:
+  - "All 3 pilots EITHER quorum_close_passed OR cleanly stopped (blocked_needs_operator) with documented stop-rule fire"
+  - "Iteration-level dual reviewers ratify pilot outcomes (phase_4_pilot_run_approved=true)"
+  - "All 9 release gates remain green (Phase 3 RC integrity preserved)"
+  - "v1.9.4 spec entry + ledger v1_9_4_application_log record Phase 4 launch + pilot results"

@@ -1,0 +1,47 @@
+schema_version: 1
+pilot_id: iteration-0008-pilot-2-codex-shaform-drift-fix
+goal:
+  summary: Encode the codex cross-artifact reviewed_packet_sha256 canonical-full convention
+    as durable memory so future orchestrator-dispatch prompts get it right first try
+  desired_end_state: feedback_codex_dispatch_use_canonical_full.md exists with reproducible
+    canonical-full snippet + the failure mode it prevents; MEMORY.md index has a 1-line
+    entry
+  non_goals:
+  - modify orchestrator-dispatch prompts in any tool source
+  - modify any MCP tool
+  - alter the canonical-iter0006-008 / canonical-iter0007-006 entries in disposition-ledger.yaml
+  - introduce new architecture
+allowed_files:
+- C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/feedback_codex_dispatch_use_canonical_full.md
+- C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/MEMORY.md
+allowed_sections: []
+forbidden_files:
+- scripts/
+- wiki/
+- agent-loop/state/disposition-ledger.yaml
+max_iterations: 1
+max_patch_size: 80
+validators_required: []
+acceptance_gates:
+- id: A1
+  description: feedback_codex_dispatch_use_canonical_full.md exists in operator memory
+    dir
+  check: test -f "$HOME/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/feedback_codex_dispatch_use_canonical_full.md"
+- id: A2
+  description: Memory file contains the canonical-full formula
+  check: grep -q "yaml.safe_dump.*sort_keys=True" "$HOME/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/feedback_codex_dispatch_use_canonical_full.md"
+- id: A3
+  description: MEMORY.md index has a line referencing the new memory file
+  check: grep -q "feedback_codex_dispatch_use_canonical_full.md" "$HOME/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/MEMORY.md"
+stop_conditions:
+- max_iteration_count_reached
+- patch_would_touch_forbidden_files
+- any_acceptance_gate_returns_undefined
+- patch_size_exceeds_max
+operator_escalation_triggers:
+- touched_forbidden_files
+- max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-09T00:00:00Z'
+  scope_signature: 65b70e6663b74751ead21af9957759a2a0e3f47c829556649e3b673178d2a41f

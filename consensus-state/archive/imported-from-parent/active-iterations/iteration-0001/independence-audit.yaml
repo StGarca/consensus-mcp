@@ -1,0 +1,208 @@
+schema_version: 1
+iteration_id: iteration-0001
+audit_purpose: "section 13 independence_proof_required; documents reviewer exposure metadata. iteration-0001 forces post-exposure framing per operator guardrail G4."
+
+# Canonical event names per spec section 13 audit_log schema and pass-20 claude-rev-045 lesson.
+# DO NOT use per-agent prefixes like codex_reviewer_invoked or claude_review_returned_and_sealed.
+
+global_independence_attestation:
+  achievable: false
+  reason: |
+    Operator guardrail G4: "Independence audit must mark prior exposure to iteration-0000 artifacts."
+    Both reviewers are explicitly briefed on iteration-0000 artifacts as the review target.
+    The pass-20 archive yaml (defect bodies) is part of the input packet.
+    section 13 independence_proof_required cannot hold; corroboration_strength for any
+    iteration-0001 finding derived from iteration-0000 or pass-20 exposure is
+    suggested_by_context, NOT independent. Severity gate cannot auto-promote.
+
+audit_log:
+  - utc: "2026-05-08T00:00:00Z"
+    event: review_packet_built
+    actor: orchestrator
+    artifact: agent-loop/active/iteration-0001/review-packet.yaml
+    sha256: 00a1a3047f83b3d13b67ac23ffcda97cd5eaeca2e5a7bc8d915cf1fe5e543f1f
+    note: "Phase 0 file-based; build_review_packet.py invoked manually by orchestrator-stand-in."
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: sealed_inputs_recorded
+    actor: orchestrator
+    sealed_inputs:
+      - artifact: agent-loop/active/iteration-0001/input.yaml
+        sha256: 651f1889724362e07336fd3ded06587901fc3b7407f03d4a7b340d839f486314
+      - artifact: agent-loop/active/iteration-0001/review-packet.yaml
+        sha256: 00a1a3047f83b3d13b67ac23ffcda97cd5eaeca2e5a7bc8d915cf1fe5e543f1f
+      - artifact: agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+        sha256: 6d59608c4c06b4d834a2c7abb9e7f03f15732d19ef99865d93ff5768a8df9416
+    note: "These artifacts are stable inputs throughout iteration-0001. Reviewers receive their hashes; mismatches at validate step indicate tampering."
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: reviewer_invoked
+    actor: codex
+    artifact: agent-loop/active/iteration-0001/codex-review.yaml   # to be written
+    independence_attestation:
+      seal_order_position: 1
+      other_review_existed_at_invocation: false
+      reviewer_could_have_seen_other_review: false
+    invocation_protocol:
+      runtime: subagent_dispatch
+      fresh_context: false
+      fresh_context_false_reason: "subagent fresh per harness, but iteration-0000 artifacts and pass-20 archive are explicitly in the brief"
+      reviewer_brief_excluded:
+        - "claude reviewer's brief"
+        - "claude reviewer's review.yaml (sealed before either reviewer publishes)"
+      reviewer_brief_included:
+        - agent-loop/active/iteration-0001/input.yaml
+        - agent-loop/active/iteration-0001/review-packet.yaml
+        - agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+        - "agent-loop/active/iteration-0000/* (8 artifacts)"
+        - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: reviewer_invoked
+    actor: claude
+    artifact: agent-loop/active/iteration-0001/claude-review.yaml  # to be written
+    independence_attestation:
+      seal_order_position: 1   # both invoked simultaneously; neither's seal preceded the other's invocation
+      other_review_existed_at_invocation: false
+      reviewer_could_have_seen_other_review: false
+    invocation_protocol:
+      runtime: subagent_dispatch
+      fresh_context: false
+      fresh_context_false_reason: "subagent fresh per harness, but iteration-0000 artifacts and pass-20 archive are explicitly in the brief"
+      reviewer_brief_excluded:
+        - "codex reviewer's brief"
+        - "codex reviewer's review.yaml (sealed before either reviewer publishes)"
+      reviewer_brief_included:
+        - agent-loop/active/iteration-0001/input.yaml
+        - agent-loop/active/iteration-0001/review-packet.yaml
+        - agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+        - "agent-loop/active/iteration-0000/* (8 artifacts)"
+        - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: review_returned_and_sealed
+    actor: codex
+    artifact: agent-loop/active/iteration-0001/codex-review.yaml
+    sha256: a549c1d0978103d1f30425aa3aed18b2d57e95ee149e4c2f37a26405367c476b
+    validator_status: "validate_review.py 0 findings"
+    independence_attestation:
+      seal_order_position: 1
+      other_review_existed_at_invocation: false
+      reviewer_could_have_seen_other_review: false
+      forced_post_exposure: true
+      post_exposure_reason: "iteration-0000 + pass-20 archive in brief; G4 forces this framing"
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: review_returned_and_sealed
+    actor: claude
+    artifact: agent-loop/active/iteration-0001/claude-review.yaml
+    sha256: 24d2a9f422a1eb43f4105536054e7bc29d3584d90ef35c6dfa3019292aa08fe5
+    validator_status: "validate_review.py 0 findings"
+    independence_attestation:
+      seal_order_position: 2
+      other_review_existed_at_invocation: true
+      other_review_sealed_sha256: a549c1d0978103d1f30425aa3aed18b2d57e95ee149e4c2f37a26405367c476b
+      reviewer_could_have_seen_other_review: false
+      reason_could_not_see: "subagent isolation; claude reviewer subagent did not have access to codex-review.yaml during its run because both were dispatched in parallel and the subagent harness does not share state across concurrent dispatches"
+      forced_post_exposure: true
+      post_exposure_reason: "iteration-0000 + pass-20 archive in brief; G4 forces this framing"
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: both_reviews_sealed
+    actor: orchestrator
+    note: "Section 20 step seal_both_reviews complete. Synthesizer step compute_canonical_findings_after_both_reviews_seal may now run."
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: consensus_built
+    actor: orchestrator
+    artifact: agent-loop/active/iteration-0001/consensus.yaml
+    sha256: 416443c8d370581ede2f9d894848a5fe7113a71debe9ee56c3cb51e0b8c6c256
+    sha256_initial: 416443c8d370581ede2f9d894848a5fe7113a71debe9ee56c3cb51e0b8c6c256
+    sha256_current: 11ff3ddecdcd16f88a8d51b41fb4b9210782d99bed637f1fecc54ecc23f88126
+    sha256_drift_reason: "post-iteration-0001 operator audit (2026-05-08) added codex_q001 deferred_decision and fixed canonical-005 line ref 67->86; consensus content edits, no canonical_findings count change"
+    validator_status: "validate_consensus.py 0 findings (current state)"
+    consensus_state: blocked
+    note: "Synthesizer step complete. 7 canonical_findings; 1 blocking-severity at source; reviewer disagreement resolved by section 13 one-blocker-blocks rule. sha256 field name preserved for audit-log schema continuity; sha256_initial + sha256_current document the operator-audit drift."
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: orchestrator_halted_at_stop_if_not_implementation_ready
+    actor: orchestrator
+    note: "Section 20 stop_if_not_implementation_ready triggered. apply_patch_plan + run_allowlisted_checks + run_scope_check skipped. Verification + iteration-outcome written manually documenting the halt."
+
+  - utc: "2026-05-08T00:00:00Z"
+    event: iteration_closed
+    actor: orchestrator
+    closing_state: blocked
+    artifacts_finalized:
+      - agent-loop/active/iteration-0001/input.yaml
+      - agent-loop/active/iteration-0001/review-packet.yaml
+      - agent-loop/active/iteration-0001/codex-review.yaml
+      - agent-loop/active/iteration-0001/claude-review.yaml
+      - agent-loop/active/iteration-0001/independence-audit.yaml   # this file
+      - agent-loop/active/iteration-0001/consensus.yaml
+      - agent-loop/active/iteration-0001/verification.yaml
+      - agent-loop/active/iteration-0001/iteration-outcome.yaml
+
+forced_post_exposure_finding_classification:
+  rule: |
+    Per cf-001 enforcement notes (Phase 0 honor-system) and operator guardrail G4:
+    every finding emitted by either reviewer in iteration-0001 carries
+    corroboration_strength: suggested_by_context.
+  rationale: |
+    Reviewers cannot achieve fresh_context: true because their review target IS
+    iteration-0000 + pass-20 archive. Both inputs are pre-existing artifacts the
+    reviewers must read to do the work. independence_proof_required condition #1
+    (reviewers invoked with fresh_context: true) categorically fails.
+    Honest framing: do not claim independence we don't have.
+  severity_gate_implication: |
+    Per section 13 severity_gate + independence_proof_required:
+    if any independence_proof_required condition fails, corroboration_strength is
+    suggested_by_context and auto-promotion to blocking is BLOCKED regardless of
+    severity. Source severity holds; auto-blocking via cross-reviewer corroboration
+    does not.
+
+# ---- Reviewer invocation protocol ----
+
+reviewer_invocation_protocol:
+  - reviewer: codex
+    runtime: subagent_dispatch
+    role_persona: codex (implementation_realist per section 4 stance)
+    fresh_context: false   # subagent fresh, but will see iteration-0000 artifacts in brief
+    reviewer_brief_excluded:
+      - "claude reviewer's brief"
+      - "claude reviewer's review.yaml (when written)"
+      - "any in-progress orchestrator notes"
+    reviewer_brief_included:
+      - "agent-loop/active/iteration-0001/input.yaml"
+      - "agent-loop/active/iteration-0001/review-packet.yaml"
+      - "agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml"
+      - "agent-loop/active/iteration-0000/* (all 8 artifacts)"
+      - "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md (current spec at v1.7.2)"
+
+  - reviewer: claude
+    runtime: subagent_dispatch
+    role_persona: claude (methodology_critic per section 4 stance)
+    fresh_context: false   # same reasoning as codex
+    reviewer_brief_excluded:
+      - "codex reviewer's brief"
+      - "codex reviewer's review.yaml (when written; sealed before claude is invoked)"
+    reviewer_brief_included:
+      - "agent-loop/active/iteration-0001/input.yaml"
+      - "agent-loop/active/iteration-0001/review-packet.yaml"
+      - "agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml"
+      - "agent-loop/active/iteration-0000/* (all 8 artifacts)"
+      - "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md (current spec at v1.7.2)"
+
+dispatch_protocol:
+  parallel_with_seal_barrier: |
+    Reviewers are dispatched as parallel subagents. Each writes their review.yaml to:
+      agent-loop/active/iteration-0001/codex-review.yaml
+      agent-loop/active/iteration-0001/claude-review.yaml
+    Neither reviewer reads the other's review during invocation (subagent isolation).
+    review_returned_and_sealed event records the canonical sha256 of each file at
+    write completion. Synthesizer step compute_canonical_findings runs only AFTER
+    both seals have been recorded.
+  honor_system: |
+    Phase 0: subagent isolation is the technical mechanism preventing reviewers from
+    reading peer review during invocation; reviewers are also instructed not to.
+    No technical block on reading peer review post-invocation; honor-system + audit log.

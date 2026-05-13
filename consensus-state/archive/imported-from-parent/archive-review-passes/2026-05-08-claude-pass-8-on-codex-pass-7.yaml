@@ -1,0 +1,145 @@
+schema_version: 1
+pass_id: pass-8-claude-on-codex-pass-7
+reviewer: claude-opus-4-7
+reviewed_utc: "2026-05-08T00:00:00Z"
+spec_under_review: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.3-ai-contract-plus-codex-pass-7"
+depth: "expert review of v1.3 + dual-pass response to codex pass-7 + new findings"
+overall_verdict: |
+  v1.3 is materially stronger than v1.2 but pass-7 caught two regressions/violations
+  in changes claude made: corroboration-rule placement (codex-rev-001) and the
+  disposition-target dead reference that turned out to be a behavioral regression
+  (codex-rev-002). Both were genuine bugs. Pass-8 corroborates codex-rev-002 and
+  adds 6 new findings on dual-reviewer infrastructure.
+codex_findings_reviewed:
+  agree_raise_to_blocking:
+    - id: codex-rev-001-section-24-behavior-leak
+      claude_assessment: |
+        Codex caught me. I added dual_reviewer_corroboration as a tradeoff in
+        section 24 with behavioral content ('auto-promotes duplicate canonical
+        findings'). Per the section 0 rule I just promoted, section 24 is
+        index-only -- no behavioral contract. I violated my own freshly-promoted
+        rule in the same edit that promoted it. Meta-issue: shows the rule is
+        hard to apply without enforcement (rev-080 surfacing again). Promote to
+        section 13 immediately.
+      v1_4_disposition: applied (promoted to section 13 with structured corroborated_by signal)
+    - id: codex-rev-002-invalid-disposition-target
+      claude_assessment: |
+        Codex called this a 'dead reference' issue. Verified deeper: rev-005's
+        malformed-output retry rule is ACTUALLY MISSING from sections 1-23,
+        not just mislinked. v1.1/v1.2 had a section 22 failure-modes table; v1.2
+        consolidation deleted it. The section 24 entry promoted_to:
+        section_22_failure_modes is a phantom citation. The behavioral
+        protection is gone, not just the link broken.
+        Pattern: this is the SECOND time consolidation has silently dropped
+        behavior. First was caught by claude pass-3 surfacing rev-031..rev-038
+        from v1.1 patches. Two-pass regression pattern indicates a missing
+        acceptance criterion for consolidations.
+      v1_4_disposition: applied (rule restored to section 20 agent_output_error_policy; anti-regression criterion deferred to v1.5 as claude-rev-001-anti-regression-criterion)
+  agree_with_nuance:
+    - id: codex-rev-003-pass6-id-lifecycle-hidden
+      claude_assessment: "Codex right; pass-6 findings rev-074..rev-080 issued AFTER v1.3 namespacing rule landed in section 0 mid-pass-6. Rule applied to future passes; pass-6's own ids caught in transition. Recorded as pre-namespacing transitional in section 24 id_reservations."
+      v1_4_disposition: applied
+    - id: codex-rev-004-mcp-agent-call-boundary-fuzzy
+      claude_assessment: "Codex re-raised what was rev-060. Claude deferred rev-060 in section 24 but Codex correctly pushes back. The deferral was wrong because section 3 topology VISUALLY DEPICTS MCP with 'later agent.call adapter' directly underneath. A reader scanning the topology diagram will see 'MCP owns agent.call' before they reach the section 1 non-goal that contradicts it. Diagrams over-anchor; fix is in the diagram, not just prose."
+      v1_4_disposition: applied (TRANSPORT ONLY label added to section 3 topology; mcp_owns block clarifies orchestrator is sole invoker)
+    - id: codex-rev-005-production-approval-transition-preconditions-thin
+      claude_assessment: |
+        Genuine subtle bug claude missed. The transition guard
+        ready_pending_operator_approval -> approved required only operator
+        approval validity/scope. It did NOT require:
+        - current_state == ready_pending_operator_approval (could approve from
+          stale not_ready if approval landed before readiness)
+        - production_ready_if conditions still hold AT transition time (could
+          approve after a blocking objection landed but before state propagated)
+        - verification artifact hash AT approval == verification artifact hash
+          AT transition (TOCTOU window)
+        A simplistic implementation would approve a stale state.
+      v1_4_disposition: applied (TOCTOU defenses added: current_state guards, sha256 binding to consensus and verification artifact, anti-replay rule on approved -> not_ready -> approved)
+    - id: codex-rev-006-runtime-manual-active-but-undefined
+      claude_assessment: "Claude deferred rev-061 (runtime: manual undefined) as cosmetic. Codex correctly pushes back: it's not cosmetic if it's in the active enum."
+      v1_4_disposition: applied (manual removed from runtime enum; reintroduce only with documented human-in-the-loop semantics)
+  agree_correct:
+    - id: codex-rev-007-archive-index-mojibake
+      v1_4_disposition: applied (archive/review-passes/index.yaml ASCII-normalized)
+    - id: codex-rev-008-success-definition-still-prose
+      v1_4_disposition: applied (section 1 success block marked NON-NORMATIVE; authoritative measurements live in section 22)
+new_findings:
+  high:
+    - id: claude-rev-001-failure-modes-regression-systemic
+      severity: high
+      claim: "Two consolidation passes (v1.0->v1.2 and v1.2->v1.3) have silently dropped behavior that was protected in earlier versions. The pattern indicates a missing acceptance criterion for consolidation passes: 'consolidation must not delete behavioral rules without explicit dropped: annotation in revision_history.'"
+      evidence:
+        - "v1.0 had rev-005 malformed-output retry rule; v1.2 consolidation removed it; v1.3 section 24 still cited it; codex-rev-002 caught the regression"
+        - "v1.1 introduced 8 patches (rev-031..rev-038); claude pass-3 surfaced them after the fact, indicating they were not tracked at consolidation time"
+      corroborated_by:
+        - reviewer: codex
+          finding_id: codex-rev-002
+          corroboration_strength: independent
+      auto_promotion_eligible: true
+      v1_4_disposition: rule restored; anti-regression criterion deferred to v1.5
+  medium:
+    - id: claude-rev-002-corroboration-needs-schema-not-prose
+      severity: medium
+      claim: "The dual_reviewer_corroboration rule needs a structured input field. Currently corroboration is documented in archive notes ('duplicate_of_codex'). For an automated synthesizer to apply the rule, findings need a corroborated_by field on the canonical finding."
+      v1_4_disposition: applied (corroborated_by field added to section 9; section 13 dual_reviewer_corroboration consumes it)
+    - id: claude-rev-003-kill-switch-aggregation-rule-missing
+      severity: medium
+      claim: "Section 4 says 'if independent_finding_rate < 0.30 across 5 iterations' but doesn't define aggregation. Different interpretations (mean, all-of, most-of, consecutive) produce different kill-switch behavior."
+      v1_4_disposition: applied (aggregation = mean(last 5); do_not_fire_when conditions specified)
+    - id: claude-rev-005-promoted-to-dead-reference-validator
+      severity: medium
+      claim: "rev-080's enforcement gap surfacing concretely. codex-rev-002 caught a dead reference; a validate_disposition_index.py script that audits section 24 promoted_to/archived_at references against actual content would catch this class automatically."
+      v1_4_disposition: applied (added to Phase 0 deliverables in section 23)
+  low:
+    - id: claude-rev-004-namespace-allocation-continuity-rule
+      severity: low
+      claim: "Section 0 says 'Within a namespace, ids are monotonic' but doesn't say whether monotonicity is per-pass or across-passes. Codex pass-7 used codex-rev-001..008. If codex runs pass-9, does it start at codex-rev-001 or codex-rev-009?"
+      v1_4_disposition: applied (section 0 rule extended: 'monotonic AND continuous across passes within namespace')
+    - id: claude-rev-006-pass7-not-yet-in-spec-archived-block
+      severity: low
+      claim: "Index.yaml correctly registers pass-7. Archive file exists. But section 24 archived block in the spec hasn't been updated to include pass-7."
+      v1_4_disposition: applied (pass-7 added to section 24 archived block; pass-8 also added in this edit)
+meta_observations:
+  loop_self_test_pass_7_pass_8:
+    independent_finding_rate: 0.86
+    formula: "(unique_canonical_findings - duplicates) / total_findings"
+    duplicates_observed:
+      - "claude-rev-001 (claude pass-8) <-> codex-rev-002 (codex pass-7): both flagged failure-modes regression; auto-promote eligible"
+      - "claude implicit (in pass-8 review) <-> codex-rev-005: both noticed TOCTOU on production transition (claude credited codex)"
+    interpretation: |
+      Pass-7 and pass-8 produced 14 total findings (8 codex + 6 claude),
+      2 corroborated, 12 unique. Independence rate 0.86 again, consistent
+      with pass-4/pass-5 measurement. The architecture is justifying
+      itself across multiple iterations now, not just once.
+  consolidation_regression_pattern:
+    observation: "Two of two consolidation passes have silently dropped at least one behavioral rule that was protected in the prior version."
+    instances:
+      - v1_to_v1_2: "rev-031..rev-038 patches surfaced post-hoc (caught by claude pass-3)"
+      - v1_2_to_v1_3: "rev-005 malformed-output rule deleted (caught by codex pass-7 + claude pass-8 corroboration)"
+    risk: "Future consolidations may drop more rules silently. claude-rev-001 anti-regression criterion is the structural fix."
+    interim_mitigation: "claude-rev-005 validate_disposition_index.py will catch dead references that surface this pattern."
+  writeback_rule_self_violation:
+    observation: |
+      Pass-8 was initially delivered conversationally without writing back
+      to MD or archive. Operator caught the violation with 'did you update
+      the md?' and reinforced with 'always fully update with all findings,
+      questions, thoughts, concerns etc'. Same failure mode as pass-4
+      (which codex-rev-068 caught). The writeback rule needs enforcement
+      (rev-080) AND habituation; section 0 rule is necessary but not
+      sufficient.
+    durable_rule_for_claude_going_forward: |
+      After every review pass, immediately write back ALL findings,
+      questions, observations, and meta-notes. Never deliver review
+      content conversationally only. The archive file is the canonical
+      record; chat is ephemeral.
+recommendation: |
+  v1.4 applies all 8 codex pass-7 findings inline plus all 6 claude pass-8
+  findings. Spec is now ready for Phase 0 with no known blocking issues.
+  The remaining v1.5 items (anti-regression criterion, optional pass-6 id
+  migration) are non-blocking and should land alongside iteration-0000
+  empirical findings.
+  Strongest single observation from this dual-pass cycle: the consolidation
+  regression pattern is real (two of two consolidations dropped behavior).
+  Phase 0 must include validate_disposition_index.py before any further
+  spec consolidation occurs.

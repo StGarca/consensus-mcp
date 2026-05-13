@@ -1,0 +1,1046 @@
+defect_target:
+  files:
+  - scripts/agent_loop_mcp/_closure_invariant.py
+  - scripts/agent_loop_mcp/_validate_closure_invariant.py
+  - scripts/agent_loop_mcp/tests/test_closure_invariant.py
+  - scripts/agent_loop_mcp/tests/test_iter_0018_cross_ai_invariant.py
+  - scripts/agent_loop_mcp/tests/test_validate_closure_invariant.py
+  base_sha: b6382e9281b3377c9c2641747a3aa57ff8fda2c54b7bf41e716a38963e784e1c
+  touched_files_contents:
+    scripts/agent_loop_mcp/_closure_invariant.py: "\"\"\"Closure-cross-verification-and-freshness\
+      \ invariant helpers (Task #28).\n\nImplements the supervisor-enforced invariant\
+      \ from codex 2026-05-10 v3+v4+v5\ndirective:\n\n    closer.actor.model_family\
+      \ != last_mutation.actor.model_family  # PRIMARY: cross-FAMILY\n    closer.review_target_hash\
+      \ == last_mutation.post_sha            # PRIMARY: hash binding\n    closer.created_at_utc\
+      \ > last_mutation.timestamp                # SECONDARY: freshness\n\nAll three\
+      \ must pass for the closer to be permitted to record a quorum_close.\n\nPer\
+      \ codex 2026-05-10 v5 Finding 1: the cross-AI check operates on\n`actor.model_family`,\
+      \ NOT `actor.id`. Codex-A -> Codex-B with different\nactor.ids is same-family-different-actor,\
+      \ NOT cross-AI. Real cross-AI\nrequires the families differ. If either model_family\
+      \ is missing, the check\nFAILS (treat undeterminable as failed).\n\nHash binding\
+      \ is PRIMARY because clocks and generated timestamps can drift;\nhashes can't.\
+      \ Freshness is SECONDARY defense-in-depth against re-played stale\nverdicts\
+      \ on the right post-mutation hash.\n\nPure helpers — no side effects. Filesystem\
+      \ reads are confined to bundle_sha.\nThree independent enforcement layers (T6\
+      \ audit_append_event, _self_drive\nstop rule, loop.run_goal transition guard)\
+      \ call check_closure_invariant\nagainst the same logic; defense-in-depth requires\
+      \ defeating all three to bypass.\n\"\"\"\nfrom __future__ import annotations\n\
+      \nimport hashlib\nfrom pathlib import Path\nfrom typing import Optional\n\n\n\
+      def bundle_sha(repo_root: Path, files_touched: list[str]) -> str:\n    \"\"\"\
+      Patch target file bundle hash.\n\n    Canonical hash for last_mutation.{base_sha,\
+      \ post_sha}. sha256 of sorted\n    (path, sha256-of-file-content) pairs. Reproducible\
+      \ without commits;\n    bound to exactly the touched files; doesn't drift with\
+      \ unrelated commits.\n    Missing files contribute b\"\" content hash (allowed\
+      \ for delete patches).\n\n    NOT git HEAD (no-auto-commit conflict) and NOT\
+      \ the review-packet sha\n    (covers metadata not patched files).\n    \"\"\"\
+      \n    repo_root = Path(repo_root)\n    parts: list[str] = []\n    for p in sorted(files_touched):\n\
+      \        full = repo_root / p\n        try:\n            content = full.read_bytes()\
+      \ if full.exists() else b\"\"\n        except OSError:\n            content\
+      \ = b\"\"\n        content_hash = hashlib.sha256(content).hexdigest()\n    \
+      \    parts.append(f\"{p}\\0{content_hash}\")\n    canonical = \"\\n\".join(parts)\n\
+      \    return hashlib.sha256(canonical.encode(\"utf-8\")).hexdigest()\n\n\ndef\
+      \ last_mutation_from_audit(audit_log: list[dict]) -> Optional[dict]:\n    \"\
+      \"\"Derive last_mutation from apply_step_landed audit events.\n\n    Returns\
+      \ the MOST RECENT apply_step_landed event (event-derived from the\n    audit\
+      \ log, not mutable state text). Cannot drift from reality.\n\n    Returns None\
+      \ if no apply_step_landed events found (no mutation has\n    occurred yet —\
+      \ close paths without mutation aren't gated by this rule).\n\n    Backward-compat:\
+      \ pre-#28 audit logs may have apply_step_landed events\n    without the structured\
+      \ actor/patch_id fields. Returns the legacy event\n    as-is; the downstream\
+      \ invariant check fails on the missing required\n    fields rather than crash.\n\
+      \    \"\"\"\n    if not audit_log:\n        return None\n    apply_events =\
+      \ [e for e in audit_log if isinstance(e, dict) and e.get(\"event\") == \"apply_step_landed\"\
+      ]\n    if not apply_events:\n        return None\n    # Most-recent by list\
+      \ order (audit_log appends in chronological order).\n    # We tolerate missing\
+      \ timestamp_utc by falling back to list order.\n    most_recent = apply_events[-1]\n\
+      \n    # Per iter-0017 capstone finding: apply_codex_patch (Task #26) emits its\n\
+      \    # structured per-mutation fields nested under `last_mutation` (because\
+      \ T6's\n    # apply_step_landed canonical event type doesn't have actor/post_sha\
+      \ as\n    # named top-level fields — they go in extra_fields). This reader must\n\
+      \    # accept BOTH shapes:\n    #   - top-level (legacy / unit-test shape):\
+      \ {actor, post_sha, ...}\n    #   - nested (real apply_codex_patch shape): {extra_fields:\
+      \ {last_mutation: {actor, post_sha, ...}}}\n    # Without this hoisting, the\
+      \ closure invariant would always fail\n    # hash_match against a real apply_codex_patch\
+      \ event because the top-level\n    # post_sha is absent.\n    nested = most_recent.get(\"\
+      last_mutation\")\n    if isinstance(nested, dict):\n        # Hoist nested fields\
+      \ to top level for downstream consumers, preserving\n        # any explicit\
+      \ top-level values (top-level wins over nested).\n        merged = {**nested,\
+      \ **{k: v for k, v in most_recent.items() if k != \"last_mutation\"}}\n    \
+      \    most_recent = merged\n\n    # Surface a `timestamp` alias for downstream\
+      \ invariant code (which\n    # expects either `timestamp` or `timestamp_utc`).\n\
+      \    if \"timestamp\" not in most_recent and \"timestamp_utc\" in most_recent:\n\
+      \        return {**most_recent, \"timestamp\": most_recent[\"timestamp_utc\"\
+      ]}\n    return most_recent\n\n\ndef _actor_id(actor) -> Optional[str]:\n   \
+      \ \"\"\"Extract actor id from either the structured dict form or a legacy string.\"\
+      \"\"\n    if isinstance(actor, dict):\n        return actor.get(\"id\")\n  \
+      \  if isinstance(actor, str):\n        return actor\n    return None\n\n\ndef\
+      \ _actor_model_family(actor) -> Optional[str]:\n    \"\"\"Extract actor model_family\
+      \ from the structured dict form.\n\n    Legacy string actors have no model_family\
+      \ — return None (which causes the\n    cross-family check to FAIL as undeterminable,\
+      \ per v5 Finding 1).\n    \"\"\"\n    if isinstance(actor, dict):\n        return\
+      \ actor.get(\"model_family\")\n    return None\n\n\ndef check_closure_invariant(\n\
+      \    last_mutation: Optional[dict],\n    closing_verdict: dict,\n) -> dict:\n\
+      \    \"\"\"Three-part gate: cross_family + hash_match + freshness.\n\n    Returns:\n\
+      \      {\n        \"ok\": bool,\n        \"checks\": {\n          \"cross_family\"\
+      : bool,\n          \"hash_match\": bool,\n          \"freshness\": bool,\n \
+      \       },\n        \"reason\": str,  # human-readable failure description;\
+      \ empty when ok\n      }\n\n    Hash binding PRIMARY, timestamp SECONDARY (per\
+      \ codex 2026-05-10 v4: clocks\n    can drift, hashes can't). All three must\
+      \ pass for ok=True.\n\n    Per v5 Finding 1, the family check (cross_family)\
+      \ replaces the old\n    cross_actor check that compared only actor.id. Codex-A\
+      \ -> Codex-B with\n    different actor.ids passes cross_actor but is NOT cross-AI;\
+      \ the family\n    check catches that. If either side's model_family is missing,\
+      \ the check\n    FAILS (treat undeterminable as failed) — operators MUST author\
+      \ actor\n    objects with model_family.\n\n    closing_verdict shape:\n    \
+      \  {\n        actor: {id, model_family, pass_id},  # or string for legacy\n\
+      \        review_target_hash: str,\n        created_at_utc: str (ISO 8601),\n\
+      \        review_scope_hash: str,  # optional\n      }\n\n    If last_mutation\
+      \ is None (no mutation yet), invariant trivially passes.\n    Close paths that\
+      \ don't involve mutation aren't gated by this rule.\n    \"\"\"\n    if last_mutation\
+      \ is None:\n        return {\n            \"ok\": True,\n            \"checks\"\
+      : {\n                \"cross_family\": True,\n                \"hash_match\"\
+      : True,\n                \"freshness\": True,\n            },\n            \"\
+      reason\": \"\",\n        }\n\n    closer_actor_id = _actor_id(closing_verdict.get(\"\
+      actor\"))\n    lm_actor_id = _actor_id(last_mutation.get(\"actor\"))\n    closer_family\
+      \ = _actor_model_family(closing_verdict.get(\"actor\"))\n    lm_family = _actor_model_family(last_mutation.get(\"\
+      actor\"))\n\n    # v5 Finding 1: cross-family check (BOTH families must be present\
+      \ AND\n    # different). actor.id difference is necessary (a node cannot close\
+      \ its\n    # own work) but not sufficient — same-family-different-actor doesn't\n\
+      \    # buy independence.\n    cross_family = (\n        closer_family is not\
+      \ None\n        and lm_family is not None\n        and closer_family != lm_family\n\
+      \        and closer_actor_id is not None\n        and lm_actor_id is not None\n\
+      \        and closer_actor_id != lm_actor_id\n    )\n\n    closer_target = closing_verdict.get(\"\
+      review_target_hash\")\n    lm_post = last_mutation.get(\"post_sha\")\n    hash_match\
+      \ = (\n        closer_target is not None\n        and lm_post is not None\n\
+      \        and closer_target == lm_post\n    )\n\n    closer_ts = closing_verdict.get(\"\
+      created_at_utc\")\n    lm_ts = last_mutation.get(\"timestamp\") or last_mutation.get(\"\
+      timestamp_utc\")\n    # String comparison works for ISO 8601 / RFC 3339 with\
+      \ Z suffix.\n    freshness = (\n        closer_ts is not None\n        and lm_ts\
+      \ is not None\n        and closer_ts > lm_ts\n    )\n\n    ok = cross_family\
+      \ and hash_match and freshness\n    reasons: list[str] = []\n    if not cross_family:\n\
+      \        reasons.append(\n            f\"cross_family: closer.actor.model_family={closer_family!r}/\"\
+      \n            f\"id={closer_actor_id!r} vs last_mutation.actor.model_family={lm_family!r}/\"\
+      \n            f\"id={lm_actor_id!r}\"\n        )\n    if not hash_match:\n \
+      \       reasons.append(\n            f\"hash_match: closer.review_target_hash={closer_target!r}\
+      \ != last_mutation.post_sha={lm_post!r}\"\n        )\n    if not freshness:\n\
+      \        reasons.append(\n            f\"freshness: closer.created_at_utc={closer_ts!r}\
+      \ <= last_mutation.timestamp={lm_ts!r}\"\n        )\n    return {\n        \"\
+      ok\": ok,\n        \"checks\": {\n            \"cross_family\": cross_family,\n\
+      \            \"hash_match\": hash_match,\n            \"freshness\": freshness,\n\
+      \        },\n        \"reason\": \"; \".join(reasons),\n    }\n"
+    scripts/agent_loop_mcp/_validate_closure_invariant.py: "\"\"\"Standalone CLI:\
+      \ scan iterations for closure-cross-verification-and-freshness invariant compliance.\n\
+      \nUsage\n-----\n  # Scan all iterations under agent-loop/active/\n  python -m\
+      \ agent_loop_mcp._validate_closure_invariant\n\n  # Scan a specific iteration\n\
+      \  python -m agent_loop_mcp._validate_closure_invariant --iteration iteration-0009-mcp-wrapper-v1-1-x\n\
+      \n  # Scan a custom active dir (used by tests)\n  python -m agent_loop_mcp._validate_closure_invariant\
+      \ --active-dir /some/path\n\nOutput\n------\nJSON to stdout. Exit 0 if no non_compliant;\
+      \ 1 if any non_compliant.\n\"\"\"\nfrom __future__ import annotations\n\nimport\
+      \ argparse\nimport json\nimport sys\nfrom pathlib import Path\nfrom typing import\
+      \ Optional\n\nimport yaml\n\ndef _resolve_repo_root() -> Path:\n    \"\"\"Resolve\
+      \ repo root via AGENT_LOOP_MCP_REPO_ROOT env override (installed-wheel\n   \
+      \ case where __file__ lands inside python_env/Lib/site-packages) → fallback\
+      \ to\n    in-tree __file__ walk (source-tree case).\n    \"\"\"\n    import\
+      \ os\n    override = os.environ.get(\"AGENT_LOOP_MCP_REPO_ROOT\")\n    if override:\n\
+      \        return Path(override).resolve()\n    return Path(__file__).resolve().parent.parent.parent\n\
+      \n\n_REPO_ROOT = _resolve_repo_root()\n_DEFAULT_ACTIVE_DIR = _REPO_ROOT / \"\
+      agent-loop\" / \"active\"\n\n# Import from sibling module (no relative import\
+      \ so CLI -m works).\nfrom agent_loop_mcp._closure_invariant import (  # noqa:\
+      \ E402\n    check_closure_invariant,\n    last_mutation_from_audit,\n)\n\n\n\
+      # ---------------------------------------------------------------------------\n\
+      # Review file parsing — maps on-disk yaml to closing_verdict shape.\n# ---------------------------------------------------------------------------\n\
+      \ndef _load_review_yaml(path: Path) -> Optional[dict]:\n    \"\"\"Parse a claude-review.yaml\
+      \ or codex-review.yaml into closing_verdict shape.\n\n    On-disk fields:\n\
+      \      reviewer_id       → actor.id\n      sealed_at_utc     → created_at_utc\n\
+      \      packet_sha256     → review_target_hash\n      actor.model_family (when\
+      \ structured actor present) → actor.model_family\n      otherwise: derive from\
+      \ reviewer_id prefix or filename (claude-* / codex-*)\n\n    Returns None if\
+      \ file missing or unreadable.\n\n    Per v5 Finding 1, model_family is now part\
+      \ of the cross-family check; for\n    historical reviews that don't carry a\
+      \ structured actor object, derive\n    model_family from reviewer_id prefix\
+      \ or the review filename so the\n    historical validator can still produce\
+      \ a verdict.\n    \"\"\"\n    if not path.exists():\n        return None\n \
+      \   try:\n        data = yaml.safe_load(path.read_text(encoding=\"utf-8\"))\
+      \ or {}\n    except Exception:\n        return None\n    reviewer_id = data.get(\"\
+      reviewer_id\") or data.get(\"agent\")\n    sealed_at = data.get(\"sealed_at_utc\"\
+      ) or data.get(\"created_at_utc\")\n    target_hash = data.get(\"packet_sha256\"\
+      ) or data.get(\"review_target_hash\")\n    if not (reviewer_id and sealed_at):\n\
+      \        return None\n\n    # Prefer the structured actor object when present\
+      \ (post-iter-0018 reviews).\n    structured_actor = data.get(\"actor\") if isinstance(data.get(\"\
+      actor\"), dict) else None\n\n    family: Optional[str] = None\n    if structured_actor\
+      \ is not None:\n        family = structured_actor.get(\"model_family\")\n  \
+      \  if not family:\n        # Heuristic: reviewer_id prefix.\n        rid = str(reviewer_id).lower()\n\
+      \        if rid.startswith(\"codex\"):\n            family = \"codex\"\n   \
+      \     elif rid.startswith(\"claude\"):\n            family = \"claude\"\n  \
+      \      else:\n            # Fallback: file naming convention.\n            fname\
+      \ = path.name.lower()\n            if fname.startswith(\"codex\"):\n       \
+      \         family = \"codex\"\n            elif fname.startswith(\"claude\"):\n\
+      \                family = \"claude\"\n\n    actor: dict = {\"id\": reviewer_id}\n\
+      \    if family:\n        actor[\"model_family\"] = family\n\n    return {\n\
+      \        \"actor\": actor,\n        \"review_target_hash\": target_hash,\n \
+      \       \"created_at_utc\": sealed_at,\n    }\n\n\ndef _most_recent_closing_verdict(\n\
+      \    iteration_dir: Path,\n    last_mutation: Optional[dict],\n) -> tuple[Optional[dict],\
+      \ bool]:\n    \"\"\"Find the most recent review (claude or codex) with created_at_utc\
+      \ > last_mutation.timestamp.\n\n    Returns (verdict_dict | None, closing_verdict_present:\
+      \ bool).\n    present=True means a fresh-enough review exists. present=False\
+      \ means\n    reviews exist but are all stale (or absent).\n    \"\"\"\n    mut_ts:\
+      \ Optional[str] = None\n    if last_mutation is not None:\n        mut_ts =\
+      \ last_mutation.get(\"timestamp\") or last_mutation.get(\"timestamp_utc\")\n\
+      \n    candidates = []\n    for fname in (\"claude-review.yaml\", \"codex-review.yaml\"\
+      ):\n        v = _load_review_yaml(iteration_dir / fname)\n        if v is None:\n\
+      \            continue\n        v_ts = v.get(\"created_at_utc\", \"\")\n    \
+      \    if mut_ts is None or v_ts > mut_ts:\n            candidates.append(v)\n\
+      \n    if not candidates:\n        return None, False\n    # Pick most recent\
+      \ by timestamp string (ISO 8601 sorts lexicographically).\n    best = max(candidates,\
+      \ key=lambda v: v.get(\"created_at_utc\", \"\"))\n    return best, True\n\n\n\
+      # ---------------------------------------------------------------------------\n\
+      # Per-iteration scan\n# ---------------------------------------------------------------------------\n\
+      \ndef scan_iteration(iteration_dir: Path) -> dict:\n    \"\"\"Return a result\
+      \ dict for a single iteration directory.\"\"\"\n    iteration_id = iteration_dir.name\n\
+      \    audit_path = iteration_dir / \"independence-audit.yaml\"\n\n    if not\
+      \ audit_path.exists():\n        return {\n            \"iteration_id\": iteration_id,\n\
+      \            \"has_apply_step_landed\": False,\n            \"last_mutation\"\
+      : None,\n            \"closing_verdict_present\": False,\n            \"invariant_check\"\
+      : None,\n            \"verdict\": \"n/a (no audit)\",\n        }\n\n    try:\n\
+      \        audit_data = yaml.safe_load(audit_path.read_text(encoding=\"utf-8\"\
+      )) or {}\n    except Exception:\n        return {\n            \"iteration_id\"\
+      : iteration_id,\n            \"has_apply_step_landed\": False,\n           \
+      \ \"last_mutation\": None,\n            \"closing_verdict_present\": False,\n\
+      \            \"invariant_check\": None,\n            \"verdict\": \"n/a (no\
+      \ audit)\",\n        }\n\n    audit_log = audit_data.get(\"audit_log\") or []\n\
+      \    last_mutation = last_mutation_from_audit(audit_log)\n\n    if last_mutation\
+      \ is None:\n        return {\n            \"iteration_id\": iteration_id,\n\
+      \            \"has_apply_step_landed\": False,\n            \"last_mutation\"\
+      : None,\n            \"closing_verdict_present\": False,\n            \"invariant_check\"\
+      : None,\n            \"verdict\": \"n/a (no mutation)\",\n        }\n\n    closing_verdict,\
+      \ cv_present = _most_recent_closing_verdict(iteration_dir, last_mutation)\n\n\
+      \    if not cv_present:\n        return {\n            \"iteration_id\": iteration_id,\n\
+      \            \"has_apply_step_landed\": True,\n            \"last_mutation\"\
+      : last_mutation,\n            \"closing_verdict_present\": False,\n        \
+      \    \"invariant_check\": None,\n            \"verdict\": \"in_flight\",\n \
+      \       }\n\n    inv = check_closure_invariant(last_mutation, closing_verdict)\n\
+      \    verdict = \"compliant\" if inv[\"ok\"] else \"non_compliant\"\n\n    return\
+      \ {\n        \"iteration_id\": iteration_id,\n        \"has_apply_step_landed\"\
+      : True,\n        \"last_mutation\": last_mutation,\n        \"closing_verdict_present\"\
+      : True,\n        \"invariant_check\": inv,\n        \"verdict\": verdict,\n\
+      \    }\n\n\n# ---------------------------------------------------------------------------\n\
+      # Multi-iteration scan\n# ---------------------------------------------------------------------------\n\
+      \ndef scan_all(iteration_dirs: list[Path]) -> dict:\n    \"\"\"Scan a list of\
+      \ iteration dirs and return output dict with summary.\"\"\"\n    results = [scan_iteration(d)\
+      \ for d in sorted(iteration_dirs, key=lambda p: p.name)]\n\n    counts = {\"\
+      compliant\": 0, \"non_compliant\": 0, \"n/a\": 0, \"in_flight\": 0}\n    for\
+      \ r in results:\n        v = r[\"verdict\"]\n        if v.startswith(\"n/a\"\
+      ):\n            counts[\"n/a\"] += 1\n        elif v in counts:\n          \
+      \  counts[v] += 1\n\n    return {\n        \"iterations_scanned\": results,\n\
+      \        \"summary\": {\n            \"total\": len(results),\n            **counts,\n\
+      \        },\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+      # CLI\n# ---------------------------------------------------------------------------\n\
+      \ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"\
+      Scan iterations for closure-invariant compliance.\"\n    )\n    parser.add_argument(\n\
+      \        \"--iteration\",\n        metavar=\"ITERATION_ID\",\n        help=\"\
+      Scan a single iteration by name (relative to --active-dir).\",\n    )\n    parser.add_argument(\n\
+      \        \"--active-dir\",\n        metavar=\"PATH\",\n        default=str(_DEFAULT_ACTIVE_DIR),\n\
+      \        help=\"Directory containing iteration-* subdirs (default: agent-loop/active/).\"\
+      ,\n    )\n    args = parser.parse_args()\n\n    active_dir = Path(args.active_dir)\n\
+      \n    if args.iteration:\n        dirs = [active_dir / args.iteration]\n   \
+      \ else:\n        dirs = sorted(active_dir.glob(\"iteration-*\"))\n\n    output\
+      \ = scan_all(dirs)\n    print(json.dumps(output, indent=2, default=str))\n\n\
+      \    has_non_compliant = output[\"summary\"][\"non_compliant\"] > 0\n    sys.exit(1\
+      \ if has_non_compliant else 0)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+    scripts/agent_loop_mcp/tests/test_closure_invariant.py: "\"\"\"Unit tests for\
+      \ the closure-cross-verification-and-freshness invariant\n(Task #28, codex 2026-05-10\
+      \ v3+v4 directive).\n\nThree independent enforcement layers are tested here:\n\
+      \  1. _closure_invariant module helpers (bundle_sha, last_mutation_from_audit,\n\
+      \     check_closure_invariant)\n  2. _self_drive.cmd_check_stop_rules new `closure_cross_verification_failed`\n\
+      \     stop rule\n  3. tools/loop_run_goal._detect_state_from_files transition\
+      \ guard\n     (`blocked_closure_invariant_failed` state)\n  4. tools/audit_append_event\
+      \ refusal to record `iteration_closed` when the\n     invariant fails, and authoring\
+      \ of `closure-certificate.yaml` when it\n     passes.\n\nThe 9 acceptance tests\
+      \ from the directive memory are the contract; the\nhelper-level unit tests catch\
+      \ lower-level bugs.\n\nTests use tmp_path for filesystem isolation and monkeypatch\
+      \ where needed.\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\n\
+      import contextlib\nimport io\nimport json\nimport sys\nimport unittest.mock\
+      \ as _mock\nfrom datetime import datetime, timedelta, timezone\nfrom pathlib\
+      \ import Path\n\nimport pytest\nimport yaml\n\nREPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent\n\
+      sys.path.insert(0, str(REPO_ROOT / \"scripts\"))\n\nfrom agent_loop_mcp import\
+      \ _closure_invariant  # noqa: E402\nfrom agent_loop_mcp import _self_drive \
+      \ # noqa: E402\nfrom agent_loop_mcp.tools import audit_append_event  # noqa:\
+      \ E402\nfrom agent_loop_mcp.tools import loop_run_goal  # noqa: E402\n\n\n#\
+      \ ---------------------------------------------------------------------------\n\
+      # Fixture helpers\n# ---------------------------------------------------------------------------\n\
+      \n\ndef _now_iso(offset_seconds: int = 0) -> str:\n    t = datetime.now(timezone.utc)\
+      \ + timedelta(seconds=offset_seconds)\n    return t.replace(microsecond=0).isoformat().replace(\"\
+      +00:00\", \"Z\")\n\n\ndef _write_file(p: Path, content: str = \"\") -> None:\n\
+      \    p.parent.mkdir(parents=True, exist_ok=True)\n    p.write_text(content,\
+      \ encoding=\"utf-8\")\n\n\ndef _make_apply_step_event(\n    *,\n    actor_id:\
+      \ str,\n    model_family: str,\n    role: str,\n    pass_id: str,\n    patch_id:\
+      \ str,\n    files_touched: list[str],\n    base_sha: str,\n    post_sha: str,\n\
+      \    unified_diff_sha256: str,\n    timestamp: str | None = None,\n) -> dict:\n\
+      \    \"\"\"Build a structured apply_step_landed event in the post-#28 shape.\"\
+      \"\"\n    return {\n        \"event\": \"apply_step_landed\",\n        \"timestamp_utc\"\
+      : timestamp or _now_iso(),\n        \"event_id\": f\"{timestamp or _now_iso()}_apply_step_landed_{actor_id}\"\
+      ,\n        \"effect\": f\"applied patch {patch_id}\",\n        \"actor\": {\n\
+      \            \"id\": actor_id,\n            \"model_family\": model_family,\n\
+      \            \"role\": role,\n            \"pass_id\": pass_id,\n        },\n\
+      \        \"patch_id\": patch_id,\n        \"files_touched\": files_touched,\n\
+      \        \"base_sha\": base_sha,\n        \"post_sha\": post_sha,\n        \"\
+      unified_diff_sha256\": unified_diff_sha256,\n        \"files_modified\": files_touched,\n\
+      \    }\n\n\ndef _make_legacy_apply_step_event(timestamp: str | None = None)\
+      \ -> dict:\n    \"\"\"Pre-#28 shape: only `effect` + optional `files_modified`.\"\
+      \"\"\n    ts = timestamp or _now_iso()\n    return {\n        \"event\": \"\
+      apply_step_landed\",\n        \"timestamp_utc\": ts,\n        \"event_id\":\
+      \ f\"{ts}_apply_step_landed_anon\",\n        \"effect\": \"legacy effect text\"\
+      ,\n        \"files_modified\": [\"foo.py\"],\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+      # Helper unit tests: bundle_sha\n# ---------------------------------------------------------------------------\n\
+      \n\ndef test_bundle_sha_deterministic(tmp_path):\n    \"\"\"Same files, same\
+      \ content -> same hash.\"\"\"\n    a = tmp_path / \"a.py\"\n    b = tmp_path\
+      \ / \"b.py\"\n    a.write_text(\"alpha\\n\", encoding=\"utf-8\")\n    b.write_text(\"\
+      bravo\\n\", encoding=\"utf-8\")\n    h1 = _closure_invariant.bundle_sha(tmp_path,\
+      \ [\"a.py\", \"b.py\"])\n    h2 = _closure_invariant.bundle_sha(tmp_path, [\"\
+      a.py\", \"b.py\"])\n    assert h1 == h2\n    # Order-insensitivity: helper must\
+      \ sort internally.\n    h3 = _closure_invariant.bundle_sha(tmp_path, [\"b.py\"\
+      , \"a.py\"])\n    assert h1 == h3\n\n\ndef test_bundle_sha_path_sensitive(tmp_path):\n\
+      \    \"\"\"Different files (different paths) -> different hashes.\"\"\"\n  \
+      \  a = tmp_path / \"a.py\"\n    b = tmp_path / \"b.py\"\n    a.write_text(\"\
+      same\\n\", encoding=\"utf-8\")\n    b.write_text(\"same\\n\", encoding=\"utf-8\"\
+      )\n    h_a = _closure_invariant.bundle_sha(tmp_path, [\"a.py\"])\n    h_b =\
+      \ _closure_invariant.bundle_sha(tmp_path, [\"b.py\"])\n    # Same content but\
+      \ different path -> different bundle hash because\n    # the canonical form\
+      \ prefixes the path before hashing.\n    assert h_a != h_b\n\n\ndef test_bundle_sha_missing_file_treated_as_empty(tmp_path):\n\
+      \    \"\"\"Missing files contribute b'' content hash (allowed for delete patches).\"\
+      \"\"\n    h_missing = _closure_invariant.bundle_sha(tmp_path, [\"does_not_exist.py\"\
+      ])\n    # Compute expected: sha256 of \"does_not_exist.py\\0\" + sha256(b\"\"\
+      )\n    import hashlib\n    empty_content_hash = hashlib.sha256(b\"\").hexdigest()\n\
+      \    canonical = f\"does_not_exist.py\\0{empty_content_hash}\"\n    expected\
+      \ = hashlib.sha256(canonical.encode()).hexdigest()\n    assert h_missing ==\
+      \ expected\n\n\n# ---------------------------------------------------------------------------\n\
+      # Helper unit tests: last_mutation_from_audit\n# ---------------------------------------------------------------------------\n\
+      \n\ndef test_last_mutation_from_audit_returns_most_recent():\n    \"\"\"When\
+      \ multiple apply_step_landed events exist, the most recent wins.\"\"\"\n   \
+      \ older = _make_apply_step_event(\n        actor_id=\"codex-iter0017-1\",\n\
+      \        model_family=\"codex\",\n        role=\"fix_author\",\n        pass_id=\"\
+      codex-iter0017-1-pass1\",\n        patch_id=\"patch-aaaaaaaaaaaa-bbbbbbbbbbbb\"\
+      ,\n        files_touched=[\"foo.py\"],\n        base_sha=\"base1\",\n      \
+      \  post_sha=\"post1\",\n        unified_diff_sha256=\"diff1\",\n        timestamp=_now_iso(-1000),\n\
+      \    )\n    newer = _make_apply_step_event(\n        actor_id=\"claude-iter0017-2\"\
+      ,\n        model_family=\"claude\",\n        role=\"correction_author\",\n \
+      \       pass_id=\"claude-iter0017-2-pass1\",\n        patch_id=\"patch-cccccccccccc-dddddddddddd\"\
+      ,\n        files_touched=[\"bar.py\"],\n        base_sha=\"base2\",\n      \
+      \  post_sha=\"post2\",\n        unified_diff_sha256=\"diff2\",\n        timestamp=_now_iso(),\n\
+      \    )\n    audit_log = [older, newer]\n    lm = _closure_invariant.last_mutation_from_audit(audit_log)\n\
+      \    assert lm is not None\n    assert lm[\"actor\"][\"id\"] == \"claude-iter0017-2\"\
+      \n    assert lm[\"post_sha\"] == \"post2\"\n    assert lm[\"patch_id\"] == \"\
+      patch-cccccccccccc-dddddddddddd\"\n\n\ndef test_last_mutation_from_audit_none_when_no_apply_step_landed():\n\
+      \    \"\"\"No apply_step_landed events -> None (close paths without mutation\
+      \ aren't gated).\"\"\"\n    audit_log = [\n        {\"event\": \"review_packet_built\"\
+      , \"timestamp_utc\": _now_iso()},\n        {\"event\": \"consensus_built\",\
+      \ \"timestamp_utc\": _now_iso()},\n    ]\n    assert _closure_invariant.last_mutation_from_audit(audit_log)\
+      \ is None\n    assert _closure_invariant.last_mutation_from_audit([]) is None\n\
+      \n\ndef test_last_mutation_from_audit_handles_legacy_events():\n    \"\"\"Pre-#28\
+      \ apply_step_landed events without structured fields don't crash.\"\"\"\n  \
+      \  legacy = _make_legacy_apply_step_event(_now_iso())\n    lm = _closure_invariant.last_mutation_from_audit([legacy])\n\
+      \    # Returns SOMETHING (best-effort) — invariant check downstream will fail\n\
+      \    # when the missing required fields are accessed, but the helper itself\n\
+      \    # doesn't crash.\n    assert lm is not None\n    assert lm.get(\"event\"\
+      ) == \"apply_step_landed\" or lm.get(\"timestamp\") is not None\n\n\n# ---------------------------------------------------------------------------\n\
+      # 9 acceptance tests — helper-level invariant check\n# (driven through check_closure_invariant\
+      \ directly; no filesystem dependency)\n# ---------------------------------------------------------------------------\n\
+      \n\ndef _make_lm(*, actor_id, model_family, post_sha, ts_offset=0):\n    \"\"\
+      \"Build a last_mutation event-object.\"\"\"\n    return {\n        \"event\"\
+      : \"apply_step_landed\",\n        \"timestamp_utc\": _now_iso(ts_offset),\n\
+      \        \"actor\": {\n            \"id\": actor_id,\n            \"model_family\"\
+      : model_family,\n            \"role\": \"fix_author\",\n            \"pass_id\"\
+      : f\"{actor_id}-pass1\",\n        },\n        \"patch_id\": \"patch-xxxxxxxxxxxx-yyyyyyyyyyyy\"\
+      ,\n        \"files_touched\": [\"foo.py\"],\n        \"base_sha\": \"base-xxxxxxxxxxxx\"\
+      ,\n        \"post_sha\": post_sha,\n        \"unified_diff_sha256\": \"diff-yyyyyyyyyyyy\"\
+      ,\n        \"timestamp\": _now_iso(ts_offset),\n    }\n\n\ndef _make_verdict(*,\
+      \ actor_id, model_family, target_hash, ts_offset=0):\n    return {\n       \
+      \ \"actor\": {\n            \"id\": actor_id,\n            \"model_family\"\
+      : model_family,\n            \"pass_id\": f\"{actor_id}-pass1\",\n        },\n\
+      \        \"review_target_hash\": target_hash,\n        \"created_at_utc\": _now_iso(ts_offset),\n\
+      \    }\n\n\ndef test_codex_patch_then_codex_close_blocked():\n    \"\"\"#1 Same-actor\
+      \ close — invariant fires cross_family (same id, same family).\"\"\"\n    lm\
+      \ = _make_lm(actor_id=\"codex-iter0017-1\", model_family=\"codex\", post_sha=\"\
+      POST\", ts_offset=-100)\n    v = _make_verdict(actor_id=\"codex-iter0017-1\"\
+      , model_family=\"codex\",\n                      target_hash=\"POST\", ts_offset=0)\n\
+      \    res = _closure_invariant.check_closure_invariant(lm, v)\n    assert res[\"\
+      ok\"] is False\n    assert res[\"checks\"][\"cross_family\"] is False\n    assert\
+      \ \"cross_family\" in res[\"reason\"]\n\n\ndef test_codex_patch_then_claude_approve_allowed():\n\
+      \    \"\"\"#2 Happy path: codex authors, claude closes. All three pass.\"\"\"\
+      \n    lm = _make_lm(actor_id=\"codex-iter0017-1\", model_family=\"codex\", post_sha=\"\
+      POST\", ts_offset=-100)\n    v = _make_verdict(actor_id=\"claude-iter0017-2\"\
+      , model_family=\"claude\",\n                      target_hash=\"POST\", ts_offset=0)\n\
+      \    res = _closure_invariant.check_closure_invariant(lm, v)\n    assert res[\"\
+      ok\"] is True\n    assert res[\"checks\"] == {\"cross_family\": True, \"hash_match\"\
+      : True, \"freshness\": True}\n\n\ndef test_codex_patch_claude_correction_claude_close_blocked():\n\
+      \    \"\"\"#3 claude is last_mutation; claude tries to close -> cross_family\
+      \ fail (same family).\"\"\"\n    lm = _make_lm(actor_id=\"claude-iter0017-2\"\
+      , model_family=\"claude\", post_sha=\"POST\", ts_offset=-100)\n    v = _make_verdict(actor_id=\"\
+      claude-iter0017-2\", model_family=\"claude\",\n                      target_hash=\"\
+      POST\", ts_offset=0)\n    res = _closure_invariant.check_closure_invariant(lm,\
+      \ v)\n    assert res[\"ok\"] is False\n    assert res[\"checks\"][\"cross_family\"\
+      ] is False\n\n\ndef test_codex_patch_claude_correction_codex_post_correction_review_allowed():\n\
+      \    \"\"\"#4 After claude correction, codex reviews POST hash with newer ts\
+      \ -> allowed.\"\"\"\n    lm = _make_lm(actor_id=\"claude-iter0017-2\", model_family=\"\
+      claude\", post_sha=\"POST\", ts_offset=-100)\n    v = _make_verdict(actor_id=\"\
+      codex-iter0017-3\", model_family=\"codex\",\n                      target_hash=\"\
+      POST\", ts_offset=0)\n    res = _closure_invariant.check_closure_invariant(lm,\
+      \ v)\n    assert res[\"ok\"] is True\n\n\ndef test_codex_refix_then_codex_rereview_blocked():\n\
+      \    \"\"\"#5 Codex re-fix then codex re-review -> cross_family fail (same model_family).\"\
+      \"\"\n    lm = _make_lm(actor_id=\"codex-iter0017-3\", model_family=\"codex\"\
+      , post_sha=\"POST\", ts_offset=-100)\n    v = _make_verdict(actor_id=\"codex-iter0017-3\"\
+      , model_family=\"codex\",\n                      target_hash=\"POST\", ts_offset=0)\n\
+      \    res = _closure_invariant.check_closure_invariant(lm, v)\n    assert res[\"\
+      ok\"] is False\n    assert res[\"checks\"][\"cross_family\"] is False\n\n\n\
+      def test_stale_claude_review_before_codex_refix_blocked():\n    \"\"\"#6 Claude\
+      \ review timestamp BEFORE last_mutation timestamp -> freshness fail.\"\"\"\n\
+      \    # last_mutation is \"now\"; claude verdict is from 1 hour ago.\n    lm\
+      \ = _make_lm(actor_id=\"codex-iter0017-1\", model_family=\"codex\", post_sha=\"\
+      POST\", ts_offset=0)\n    v = _make_verdict(actor_id=\"claude-iter0017-2\",\
+      \ model_family=\"claude\",\n                      target_hash=\"POST\", ts_offset=-3600)\n\
+      \    res = _closure_invariant.check_closure_invariant(lm, v)\n    assert res[\"\
+      ok\"] is False\n    assert res[\"checks\"][\"freshness\"] is False\n\n\ndef\
+      \ test_review_target_hash_mismatch_blocked():\n    \"\"\"#7 closer's review_target_hash\
+      \ != last_mutation.post_sha -> hash_match fail.\"\"\"\n    lm = _make_lm(actor_id=\"\
+      codex-iter0017-1\", model_family=\"codex\", post_sha=\"POST_REAL\", ts_offset=-100)\n\
+      \    v = _make_verdict(actor_id=\"claude-iter0017-2\", model_family=\"claude\"\
+      ,\n                      target_hash=\"POST_FAKE\", ts_offset=0)\n    res =\
+      \ _closure_invariant.check_closure_invariant(lm, v)\n    assert res[\"ok\"]\
+      \ is False\n    assert res[\"checks\"][\"hash_match\"] is False\n\n\ndef test_no_mutation_yet_close_not_gated():\n\
+      \    \"\"\"#8 last_mutation is None -> invariant trivially passes.\"\"\"\n \
+      \   v = _make_verdict(actor_id=\"claude-iter0017-1\", model_family=\"claude\"\
+      ,\n                      target_hash=\"ANY\", ts_offset=0)\n    res = _closure_invariant.check_closure_invariant(None,\
+      \ v)\n    assert res[\"ok\"] is True\n\n\ndef test_closure_certificate_authored_on_pass(tmp_path,\
+      \ monkeypatch):\n    \"\"\"#9 When invariant passes and iteration_closed is\
+      \ recorded, closure-certificate.yaml is authored.\n\n    Drive through the audit_append_event\
+      \ T6 layer. We monkeypatch ACTIVE_DIR\n    to tmp_path so the test doesn't touch\
+      \ the real agent-loop tree.\n    \"\"\"\n    monkeypatch.setattr(audit_append_event,\
+      \ \"ACTIVE_DIR\", tmp_path)\n\n    iter_id = \"iteration-test-cert\"\n    iter_dir\
+      \ = tmp_path / iter_id\n    iter_dir.mkdir()\n\n    # Pre-populate an audit\
+      \ log with a structured apply_step_landed event.\n    apply_event = _make_apply_step_event(\n\
+      \        actor_id=\"codex-iter0017-1\",\n        model_family=\"codex\",\n \
+      \       role=\"fix_author\",\n        pass_id=\"codex-iter0017-1-pass1\",\n\
+      \        patch_id=\"patch-aaaaaaaaaaaa-bbbbbbbbbbbb\",\n        files_touched=[\"\
+      foo.py\"],\n        base_sha=\"base-aaaaaaaaaaaa\",\n        post_sha=\"POST_HASH\"\
+      ,\n        unified_diff_sha256=\"diff-bbbbbbbbbbbb\",\n        timestamp=_now_iso(-1000),\n\
+      \    )\n    audit_path = iter_dir / \"independence-audit.yaml\"\n    audit_path.write_text(\n\
+      \        yaml.safe_dump({\"audit_log\": [apply_event]}, sort_keys=False),\n\
+      \        encoding=\"utf-8\",\n    )\n\n    # Author a fresh claude-review.yaml\
+      \ that satisfies the invariant.\n    claude_review = {\n        \"actor\": {\n\
+      \            \"id\": \"claude-iter0017-2\",\n            \"model_family\": \"\
+      claude\",\n            \"pass_id\": \"claude-iter0017-2-pass1\",\n        },\n\
+      \        \"review_target_hash\": \"POST_HASH\",\n        \"created_at_utc\"\
+      : _now_iso(),\n        \"goal_satisfied\": True,\n    }\n    (iter_dir / \"\
+      claude-review.yaml\").write_text(\n        yaml.safe_dump(claude_review, sort_keys=False),\n\
+      \        encoding=\"utf-8\",\n    )\n\n    result = audit_append_event.handle(\n\
+      \        iteration_id=iter_id,\n        event_type=\"iteration_closed\",\n \
+      \       actor=\"claude-iter0017-2\",\n        closing_state=\"quorum_close_passed\"\
+      ,\n    )\n\n    # Refuse-on-fail OR pass: this case should pass; certificate\
+      \ must exist.\n    assert \"error\" not in result, f\"unexpected error: {result.get('error')}\"\
+      \n    cert_path = iter_dir / \"closure-certificate.yaml\"\n    assert cert_path.exists(),\
+      \ \"closure-certificate.yaml not authored on PASS\"\n    cert = yaml.safe_load(cert_path.read_text(encoding=\"\
+      utf-8\"))\n    assert cert[\"overall\"] == \"PASS\"\n    assert cert[\"invariant_checks\"\
+      ][\"cross_family\"] == \"PASS\"\n    assert cert[\"invariant_checks\"][\"hash_match\"\
+      ] == \"PASS\"\n    assert cert[\"invariant_checks\"][\"freshness\"] == \"PASS\"\
+      \n\n\n# ---------------------------------------------------------------------------\n\
+      # T6 audit_append_event refusal tests\n# ---------------------------------------------------------------------------\n\
+      \n\ndef test_t6_refuses_iteration_closed_when_invariant_fails(tmp_path, monkeypatch):\n\
+      \    \"\"\"T6 refuses to write iteration_closed when invariant fails.\n\n  \
+      \  Set up: codex authored last mutation; codex tries to close (cross_family\
+      \ fail).\n    \"\"\"\n    monkeypatch.setattr(audit_append_event, \"ACTIVE_DIR\"\
+      , tmp_path)\n    iter_id = \"iteration-test-refuse\"\n    iter_dir = tmp_path\
+      \ / iter_id\n    iter_dir.mkdir()\n\n    apply_event = _make_apply_step_event(\n\
+      \        actor_id=\"codex-iter0017-1\",\n        model_family=\"codex\",\n \
+      \       role=\"fix_author\",\n        pass_id=\"codex-iter0017-1-pass1\",\n\
+      \        patch_id=\"patch-aaaaaaaaaaaa-bbbbbbbbbbbb\",\n        files_touched=[\"\
+      foo.py\"],\n        base_sha=\"base-x\",\n        post_sha=\"POST\",\n     \
+      \   unified_diff_sha256=\"diff-y\",\n        timestamp=_now_iso(-1000),\n  \
+      \  )\n    audit_path = iter_dir / \"independence-audit.yaml\"\n    audit_path.write_text(\n\
+      \        yaml.safe_dump({\"audit_log\": [apply_event]}, sort_keys=False),\n\
+      \        encoding=\"utf-8\",\n    )\n\n    # Codex tries to close: same actor\
+      \ as last_mutation -> blocked.\n    codex_review = {\n        \"actor\": {\n\
+      \            \"id\": \"codex-iter0017-1\",\n            \"model_family\": \"\
+      codex\",\n            \"pass_id\": \"codex-iter0017-1-pass2\",\n        },\n\
+      \        \"review_target_hash\": \"POST\",\n        \"created_at_utc\": _now_iso(),\n\
+      \        \"goal_satisfied\": True,\n    }\n    (iter_dir / \"codex-review.yaml\"\
+      ).write_text(\n        yaml.safe_dump(codex_review, sort_keys=False),\n    \
+      \    encoding=\"utf-8\",\n    )\n\n    result = audit_append_event.handle(\n\
+      \        iteration_id=iter_id,\n        event_type=\"iteration_closed\",\n \
+      \       actor=\"codex-iter0017-1\",\n        closing_state=\"quorum_close_passed\"\
+      ,\n    )\n    assert \"error\" in result\n    assert \"closure_cross_verification_failed\"\
+      \ in result[\"error\"]\n    # No certificate authored on refusal.\n    assert\
+      \ not (iter_dir / \"closure-certificate.yaml\").exists()\n\n\ndef test_t6_no_mutation_yet_iteration_closed_allowed(tmp_path,\
+      \ monkeypatch):\n    \"\"\"When no apply_step_landed events exist, T6 does NOT\
+      \ block iteration_closed.\"\"\"\n    monkeypatch.setattr(audit_append_event,\
+      \ \"ACTIVE_DIR\", tmp_path)\n    iter_id = \"iteration-test-no-mutation\"\n\
+      \    iter_dir = tmp_path / iter_id\n    iter_dir.mkdir()\n    audit_path = iter_dir\
+      \ / \"independence-audit.yaml\"\n    audit_path.write_text(\n        yaml.safe_dump({\"\
+      audit_log\": []}, sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\
+      \    result = audit_append_event.handle(\n        iteration_id=iter_id,\n  \
+      \      event_type=\"iteration_closed\",\n        actor=\"orchestrator\",\n \
+      \       closing_state=\"blocked_needs_operator\",\n    )\n    assert \"error\"\
+      \ not in result, f\"unexpected error: {result.get('error')}\"\n\n\n# ---------------------------------------------------------------------------\n\
+      # _self_drive stop-rule tests\n# ---------------------------------------------------------------------------\n\
+      \n\ndef _write_goal_packet_for_self_drive(tmp_path: Path) -> Path:\n    \"\"\
+      \"Minimal goal_packet for cmd_check_stop_rules invocation.\"\"\"\n    packet\
+      \ = {\n        \"schema_version\": 1,\n        \"pilot_id\": \"test-pilot\"\
+      ,\n        \"goal\": {\"summary\": \"x\"},\n        \"allowed_files\": [\"scripts/foo.py\"\
+      ],\n        \"forbidden_files\": [],\n        \"max_iterations\": 10,\n    \
+      \    \"max_patch_size\": None,\n        \"validators_required\": [],\n     \
+      \   \"acceptance_gates\": [],\n        \"stop_conditions\": [],\n        \"\
+      authorization\": {\"authorized_by\": \"operator\"},\n    }\n    p = tmp_path\
+      \ / \"goal_packet.yaml\"\n    p.write_text(yaml.safe_dump(packet), encoding=\"\
+      utf-8\")\n    return p\n\n\ndef _run_check_stop_rules(packet_path: Path, iter_dir:\
+      \ Path):\n    buf = io.StringIO()\n    with contextlib.redirect_stdout(buf):\n\
+      \        rc = _self_drive.cmd_check_stop_rules(\n            argparse.Namespace(goal_packet=str(packet_path),\
+      \ iteration_dir=str(iter_dir))\n        )\n    out = buf.getvalue()\n    return\
+      \ rc, json.loads(out)\n\n\ndef test_self_drive_stop_rule_no_mutation_no_fire(tmp_path):\n\
+      \    \"\"\"No apply_step_landed events -> stop rule does NOT fire.\"\"\"\n \
+      \   iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    audit_path = iter_dir\
+      \ / \"independence-audit.yaml\"\n    audit_path.write_text(yaml.safe_dump({\"\
+      audit_log\": []}), encoding=\"utf-8\")\n\n    packet = _write_goal_packet_for_self_drive(tmp_path)\n\
+      \    rc, parsed = _run_check_stop_rules(packet, iter_dir)\n    fired = [r[\"\
+      rule\"] for r in parsed[\"stop_rules_fired\"]]\n    assert \"closure_cross_verification_failed\"\
+      \ not in fired\n\n\ndef test_self_drive_stop_rule_fires_on_self_close(tmp_path):\n\
+      \    \"\"\"Codex authored last mutation; codex review is the closer -> rule\
+      \ fires.\"\"\"\n    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n\n\
+      \    apply_event = _make_apply_step_event(\n        actor_id=\"codex-iter0017-1\"\
+      ,\n        model_family=\"codex\",\n        role=\"fix_author\",\n        pass_id=\"\
+      codex-iter0017-1-pass1\",\n        patch_id=\"patch-x-y\",\n        files_touched=[\"\
+      foo.py\"],\n        base_sha=\"base\",\n        post_sha=\"POST\",\n       \
+      \ unified_diff_sha256=\"diff\",\n        timestamp=_now_iso(-100),\n    )\n\
+      \    audit_path = iter_dir / \"independence-audit.yaml\"\n    audit_path.write_text(\n\
+      \        yaml.safe_dump({\"audit_log\": [apply_event]}, sort_keys=False),\n\
+      \        encoding=\"utf-8\",\n    )\n\n    codex_review = {\n        \"actor\"\
+      : {\"id\": \"codex-iter0017-1\", \"model_family\": \"codex\",\n            \
+      \      \"pass_id\": \"codex-iter0017-1-pass2\"},\n        \"review_target_hash\"\
+      : \"POST\",\n        \"created_at_utc\": _now_iso(),\n        \"goal_satisfied\"\
+      : True,\n    }\n    (iter_dir / \"codex-review.yaml\").write_text(\n       \
+      \ yaml.safe_dump(codex_review), encoding=\"utf-8\"\n    )\n\n    packet = _write_goal_packet_for_self_drive(tmp_path)\n\
+      \    rc, parsed = _run_check_stop_rules(packet, iter_dir)\n    fired = [r[\"\
+      rule\"] for r in parsed[\"stop_rules_fired\"]]\n    assert \"closure_cross_verification_failed\"\
+      \ in fired\n\n\ndef test_self_drive_stop_rules_required_includes_new_rule():\n\
+      \    \"\"\"Contract enumeration includes the new rule (9 of 9).\"\"\"\n    assert\
+      \ \"closure_cross_verification_failed\" in _self_drive.STOP_RULES_REQUIRED_BY_CONTRACT\n\
+      \    assert \"closure_cross_verification_failed\" in _self_drive.STOP_RULES_IMPLEMENTED\n\
+      \n\n# ---------------------------------------------------------------------------\n\
+      # loop.run_goal transition guard\n# ---------------------------------------------------------------------------\n\
+      \n\ndef _write_loop_goal_packet(tmp_path: Path) -> Path:\n    packet = {\n \
+      \       \"schema_version\": 1,\n        \"pilot_id\": \"test-supervisor-cert\"\
+      ,\n        \"goal\": {\"summary\": \"x\"},\n        \"allowed_files\": [\"scripts/foo.py\"\
+      ],\n        \"allowed_sections\": [],\n        \"forbidden_files\": [],\n  \
+      \      \"max_iterations\": 10,\n        \"max_patch_size\": None,\n        \"\
+      validators_required\": [],\n        \"acceptance_gates\": [],\n        \"stop_conditions\"\
+      : [],\n        \"operator_escalation_triggers\": [],\n        \"authorization\"\
+      : {\"authorized_by\": \"operator\"},\n    }\n    sig = _self_drive._scope_signature(packet)\n\
+      \    packet[\"authorization\"][\"scope_signature\"] = sig\n    p = tmp_path\
+      \ / \"goal_packet.yaml\"\n    p.write_text(yaml.safe_dump(packet), encoding=\"\
+      utf-8\")\n    return p\n\n\ndef test_loop_run_goal_blocks_close_on_invariant_failure(tmp_path):\n\
+      \    \"\"\"When invariant fails on a 'would be ready_to_close' iteration, returns\
+      \ blocked_closure_invariant_failed.\"\"\"\n    iter_dir = tmp_path / \"iteration-0001\"\
+      \n    iter_dir.mkdir()\n\n    # Set up files that would otherwise trigger ready_to_close.\n\
+      \    (iter_dir / \"review-packet.yaml\").write_text(\n        yaml.safe_dump({\"\
+      iteration_artifacts\": []}), encoding=\"utf-8\"\n    )\n\n    apply_event =\
+      \ _make_apply_step_event(\n        actor_id=\"codex-iter0017-1\",\n        model_family=\"\
+      codex\",\n        role=\"fix_author\",\n        pass_id=\"codex-iter0017-1-pass1\"\
+      ,\n        patch_id=\"patch-x-y\",\n        files_touched=[\"foo.py\"],\n  \
+      \      base_sha=\"base\",\n        post_sha=\"POST\",\n        unified_diff_sha256=\"\
+      diff\",\n        timestamp=_now_iso(-100),\n    )\n    (iter_dir / \"independence-audit.yaml\"\
+      ).write_text(\n        yaml.safe_dump({\"audit_log\": [apply_event]}, sort_keys=False),\n\
+      \        encoding=\"utf-8\",\n    )\n\n    # Both reviews say goal_satisfied=True\
+      \ with same actor (codex) -> consensus-shape OK,\n    # but codex is BOTH last_mutation\
+      \ actor and the most-recent close-target review.\n    codex_close_review = {\n\
+      \        \"actor\": {\"id\": \"codex-iter0017-1\", \"model_family\": \"codex\"\
+      ,\n                  \"pass_id\": \"codex-iter0017-1-pass2\"},\n        \"review_target_hash\"\
+      : \"POST\",\n        \"created_at_utc\": _now_iso(),\n        \"goal_satisfied\"\
+      : True,\n    }\n    claude_pre_review = {\n        \"actor\": {\"id\": \"claude-iter0017-pre\"\
+      , \"model_family\": \"claude\",\n                  \"pass_id\": \"claude-iter0017-pre\"\
+      },\n        \"review_target_hash\": \"PRE\",\n        # claude review BEFORE\
+      \ last_mutation timestamp -> stale\n        \"created_at_utc\": _now_iso(-200),\n\
+      \        \"goal_satisfied\": True,\n    }\n    (iter_dir / \"claude-review.yaml\"\
+      ).write_text(\n        yaml.safe_dump(claude_pre_review), encoding=\"utf-8\"\
+      \n    )\n    (iter_dir / \"codex-review.yaml\").write_text(\n        yaml.safe_dump(codex_close_review),\
+      \ encoding=\"utf-8\"\n    )\n    (iter_dir / \"consensus.yaml\").write_text(yaml.safe_dump({\"\
+      state\": \"ok\"}), encoding=\"utf-8\")\n\n    packet = _write_loop_goal_packet(tmp_path)\n\
+      \n    result = loop_run_goal.handle(\n        goal_packet_path=str(packet),\n\
+      \        iteration_dir=str(iter_dir),\n        auto_dispatch_codex=False,\n\
+      \    )\n    # Should be flagged as blocked, either via stop_rule or new state.\n\
+      \    assert result[\"state\"] in (\n        \"blocked_closure_invariant_failed\"\
+      ,\n        \"blocked_stop_rule_fired\",\n    )\n"
+    scripts/agent_loop_mcp/tests/test_iter_0018_cross_ai_invariant.py: "\"\"\"iter-0018\
+      \ cross-AI invariant hardening tests (codex 2026-05-10 v5).\n\nTests the 5 findings\
+      \ from the v5 architectural review:\n\n  Finding 1 (HIGH):   model_family-level\
+      \ cross-AI check (not just actor.id)\n  Finding 2 (HIGH):   capstone happy-path\
+      \ is codex->apply->claude->close\n  Finding 3 (MEDIUM): mutation-completeness\
+      \ check at close-attempt time\n  Finding 4 (MEDIUM): strict patch_proposal mode\
+      \ in goal_packet\n  Finding 5 (LOW/M):  T6 fails closed when invariant evaluator\
+      \ returns None\n\nEach finding gets at least one dedicated test, with additional\
+      \ negative cases\nwhere appropriate. RED -> GREEN.\n\"\"\"\nfrom __future__\
+      \ import annotations\n\nimport argparse\nimport contextlib\nimport importlib\n\
+      import io\nimport json\nimport sys\nfrom datetime import datetime, timedelta,\
+      \ timezone\nfrom pathlib import Path\n\nimport pytest\nimport yaml\n\nREPO_ROOT\
+      \ = Path(__file__).resolve().parent.parent.parent.parent\nsys.path.insert(0,\
+      \ str(REPO_ROOT / \"scripts\"))\n\nfrom agent_loop_mcp import _closure_invariant\
+      \  # noqa: E402\nfrom agent_loop_mcp import _dispatch_codex  # noqa: E402\n\
+      from agent_loop_mcp import _self_drive  # noqa: E402\nfrom agent_loop_mcp.tools\
+      \ import audit_append_event  # noqa: E402\n\n\n# ---------------------------------------------------------------------------\n\
+      # Shared fixture helpers (small re-use of existing test idioms; intentionally\n\
+      # duplicated rather than imported to keep this test file self-contained per\
+      \ the\n# Surgical Changes principle — touching the existing test_closure_invariant\n\
+      # fixtures would couple modules that should evolve independently).\n# ---------------------------------------------------------------------------\n\
+      \n\ndef _now_iso(offset_seconds: int = 0) -> str:\n    t = datetime.now(timezone.utc)\
+      \ + timedelta(seconds=offset_seconds)\n    return t.replace(microsecond=0).isoformat().replace(\"\
+      +00:00\", \"Z\")\n\n\ndef _make_lm(*, actor_id, model_family, post_sha, ts_offset=0,\
+      \ files_touched=None):\n    if files_touched is None:\n        files_touched\
+      \ = [\"foo.py\"]\n    return {\n        \"event\": \"apply_step_landed\",\n\
+      \        \"timestamp_utc\": _now_iso(ts_offset),\n        \"actor\": {\n   \
+      \         \"id\": actor_id,\n            \"model_family\": model_family,\n \
+      \           \"role\": \"fix_author\",\n            \"pass_id\": f\"{actor_id}-pass1\"\
+      ,\n        },\n        \"patch_id\": \"patch-xxxxxxxxxxxx-yyyyyyyyyyyy\",\n\
+      \        \"files_touched\": list(files_touched),\n        \"base_sha\": \"base-xxxxxxxxxxxx\"\
+      ,\n        \"post_sha\": post_sha,\n        \"unified_diff_sha256\": \"diff-yyyyyyyyyyyy\"\
+      ,\n        \"timestamp\": _now_iso(ts_offset),\n    }\n\n\ndef _make_verdict(*,\
+      \ actor_id, model_family, target_hash, ts_offset=0):\n    return {\n       \
+      \ \"actor\": {\n            \"id\": actor_id,\n            \"model_family\"\
+      : model_family,\n            \"pass_id\": f\"{actor_id}-pass1\",\n        },\n\
+      \        \"review_target_hash\": target_hash,\n        \"created_at_utc\": _now_iso(ts_offset),\n\
+      \    }\n\n\n# ===========================================================================\n\
+      # Finding 1 (HIGH): closer.actor.model_family must differ from\n#          \
+      \         last_mutation.actor.model_family\n# ===========================================================================\n\
+      \n\ndef test_same_model_family_different_actor_ids_fails():\n    \"\"\"Codex-A\
+      \ authors patch; codex-B (different id, SAME family=codex) closes.\n\n    Pre-iter-0018:\
+      \ passes because actor.id differs.\n    Post-iter-0018: FAILS because model_family\
+      \ is the same — that's same-family\n    different-actor, NOT cross-AI.\n   \
+      \ \"\"\"\n    lm = _make_lm(\n        actor_id=\"codex-iter0018-1\", model_family=\"\
+      codex\",\n        post_sha=\"POST\", ts_offset=-100,\n    )\n    v = _make_verdict(\n\
+      \        actor_id=\"codex-iter0018-2\", model_family=\"codex\",\n        target_hash=\"\
+      POST\", ts_offset=0,\n    )\n    res = _closure_invariant.check_closure_invariant(lm,\
+      \ v)\n    assert res[\"ok\"] is False\n    # The check is now named cross_family\
+      \ (renamed from cross_actor) and must\n    # fail in this case.\n    assert\
+      \ res[\"checks\"][\"cross_family\"] is False\n    assert \"cross_family\" in\
+      \ res[\"reason\"]\n\n\ndef test_different_model_family_passes():\n    \"\"\"\
+      Codex authors, claude closes -> different model_family, passes.\"\"\"\n    lm\
+      \ = _make_lm(\n        actor_id=\"codex-iter0018-1\", model_family=\"codex\"\
+      ,\n        post_sha=\"POST\", ts_offset=-100,\n    )\n    v = _make_verdict(\n\
+      \        actor_id=\"claude-iter0018-2\", model_family=\"claude\",\n        target_hash=\"\
+      POST\", ts_offset=0,\n    )\n    res = _closure_invariant.check_closure_invariant(lm,\
+      \ v)\n    assert res[\"ok\"] is True\n    assert res[\"checks\"][\"cross_family\"\
+      ] is True\n\n\ndef test_missing_model_family_on_closer_fails():\n    \"\"\"\
+      Closer actor missing model_family -> undeterminable cross-family -> FAIL.\"\"\
+      \"\n    lm = _make_lm(\n        actor_id=\"codex-iter0018-1\", model_family=\"\
+      codex\",\n        post_sha=\"POST\", ts_offset=-100,\n    )\n    v = {\n   \
+      \     \"actor\": {\n            \"id\": \"claude-iter0018-2\",\n           \
+      \ # model_family intentionally absent\n            \"pass_id\": \"claude-iter0018-2-pass1\"\
+      ,\n        },\n        \"review_target_hash\": \"POST\",\n        \"created_at_utc\"\
+      : _now_iso(0),\n    }\n    res = _closure_invariant.check_closure_invariant(lm,\
+      \ v)\n    assert res[\"ok\"] is False\n    assert res[\"checks\"][\"cross_family\"\
+      ] is False\n\n\ndef test_missing_model_family_on_last_mutation_fails():\n  \
+      \  \"\"\"last_mutation actor missing model_family -> undeterminable -> FAIL.\"\
+      \"\"\n    lm = _make_lm(\n        actor_id=\"codex-iter0018-1\", model_family=\"\
+      codex\",\n        post_sha=\"POST\", ts_offset=-100,\n    )\n    # Strip model_family\
+      \ from the actor dict.\n    lm[\"actor\"] = {k: v for k, v in lm[\"actor\"].items()\
+      \ if k != \"model_family\"}\n    v = _make_verdict(\n        actor_id=\"claude-iter0018-2\"\
+      , model_family=\"claude\",\n        target_hash=\"POST\", ts_offset=0,\n   \
+      \ )\n    res = _closure_invariant.check_closure_invariant(lm, v)\n    assert\
+      \ res[\"ok\"] is False\n    assert res[\"checks\"][\"cross_family\"] is False\n\
+      \n\n# ===========================================================================\n\
+      # Finding 2 (HIGH): capstone happy-path codex->apply->claude->close\n# ===========================================================================\n\
+      # The capstone test itself is rewritten in test_capstone_full_fix_loop.py.\n\
+      # Here we add unit-level coverage of the negative case: codex apply + codex\n\
+      # post-mutation review = blocked at the invariant level.\n\n\ndef test_codex_apply_then_codex_post_mutation_review_blocked():\n\
+      \    \"\"\"The closer must be the OPPOSITE family from the LAST MUTATOR.\n\n\
+      \    codex applies -> codex (different actor.id) post-correction reviews and\n\
+      \    closes -> BLOCKED (same model_family).\n    \"\"\"\n    lm = _make_lm(\n\
+      \        actor_id=\"codex-iter0018-A\", model_family=\"codex\",\n        post_sha=\"\
+      POST\", ts_offset=-100,\n    )\n    v = _make_verdict(\n        actor_id=\"\
+      codex-iter0018-B\", model_family=\"codex\",\n        target_hash=\"POST\", ts_offset=0,\n\
+      \    )\n    res = _closure_invariant.check_closure_invariant(lm, v)\n    assert\
+      \ res[\"ok\"] is False\n    assert res[\"checks\"][\"cross_family\"] is False\n\
+      \n\n# ===========================================================================\n\
+      # Finding 3 (MEDIUM): mutation-completeness check at close-attempt\n# ===========================================================================\n\
+      \n\ndef test_unaudited_working_tree_changes_block_close(tmp_path, monkeypatch):\n\
+      \    \"\"\"If working-tree files changed outside apply.codex_patch (manual edit),\n\
+      \    refuse close with unaudited_mutation_detected.\n\n    Setup: create a fake\
+      \ repo at tmp_path with an iteration dir + an\n    apply_step_landed event covering\
+      \ ONE file. Drop a SECOND file with content\n    that would show as unaudited\
+      \ mutation. T6 must refuse.\n    \"\"\"\n    # Point repo_root + ACTIVE_DIR\
+      \ at tmp_path.\n    monkeypatch.setenv(\"AGENT_LOOP_MCP_REPO_ROOT\", str(tmp_path))\n\
+      \    importlib.reload(audit_append_event)\n\n    iter_id = \"iteration-test-unaudited\"\
+      \n    iter_dir = tmp_path / \"agent-loop\" / \"active\" / iter_id\n    iter_dir.mkdir(parents=True)\n\
+      \n    # Audited file (covered by apply_step_landed).\n    audited_rel = \"audited_file.py\"\
+      \n    (tmp_path / audited_rel).write_text(\"audited content\\n\", encoding=\"\
+      utf-8\")\n    # UN-audited file: present in iteration_dir but never declared\
+      \ in any\n    # apply_step_landed event. This is the smoking gun for unaudited\
+      \ mutation.\n    unaudited_rel = \"unaudited_file.py\"\n    (tmp_path / unaudited_rel).write_text(\"\
+      manual edit\\n\", encoding=\"utf-8\")\n\n    apply_event = {\n        \"event\"\
+      : \"apply_step_landed\",\n        \"timestamp_utc\": _now_iso(-100),\n     \
+      \   \"event_id\": f\"{_now_iso(-100)}_apply_step_landed_codex\",\n        \"\
+      effect\": \"applied patch\",\n        \"actor\": {\n            \"id\": \"codex-iter0018-1\"\
+      ,\n            \"model_family\": \"codex\",\n            \"role\": \"fix_author\"\
+      ,\n            \"pass_id\": \"codex-iter0018-1-pass1\",\n        },\n      \
+      \  \"patch_id\": \"codex-rev-001-patch\",\n        \"files_touched\": [audited_rel],\n\
+      \        \"base_sha\": \"base\",\n        \"post_sha\": \"POST\",\n        \"\
+      unified_diff_sha256\": \"diff\",\n        \"timestamp\": _now_iso(-100),\n \
+      \       \"files_modified\": [audited_rel],\n    }\n    audit_path = iter_dir\
+      \ / \"independence-audit.yaml\"\n    audit_path.write_text(\n        yaml.safe_dump({\"\
+      audit_log\": [apply_event]}), encoding=\"utf-8\"\n    )\n\n    # Cross-family\
+      \ closer review so the closer-invariant itself would PASS;\n    # the new check\
+      \ should still block on unaudited mutation.\n    closer = {\n        \"actor\"\
+      : {\n            \"id\": \"claude-iter0018-2\",\n            \"model_family\"\
+      : \"claude\",\n            \"pass_id\": \"claude-iter0018-2-pass1\",\n     \
+      \   },\n        \"review_target_hash\": \"POST\",\n        \"created_at_utc\"\
+      : _now_iso(0),\n        \"goal_satisfied\": True,\n    }\n    (iter_dir / \"\
+      claude-review.yaml\").write_text(\n        yaml.safe_dump(closer), encoding=\"\
+      utf-8\"\n    )\n\n    # Monkeypatch the unaudited-detection helper to report\
+      \ the unaudited file\n    # as a working-tree change. The real implementation\
+      \ uses git; tests can't\n    # rely on a git repo. The hardening adds a hook\
+      \ that the tool calls.\n    from agent_loop_mcp.tools import audit_append_event\
+      \ as aae\n    monkeypatch.setattr(\n        aae,\n        \"_detect_working_tree_changes\"\
+      ,\n        lambda repo_root: [audited_rel, unaudited_rel],\n    )\n\n    result\
+      \ = aae.handle(\n        iteration_id=iter_id,\n        event_type=\"iteration_closed\"\
+      ,\n        actor=\"claude-iter0018-2\",\n        closing_state=\"quorum_close_passed\"\
+      ,\n    )\n    assert \"error\" in result\n    assert \"unaudited_mutation_detected\"\
+      \ in result[\"error\"]\n    # Both unaudited paths should be surfaced.\n   \
+      \ assert unaudited_rel in result[\"error\"]\n\n\ndef test_audited_working_tree_changes_allowed_to_close(tmp_path,\
+      \ monkeypatch):\n    \"\"\"When all working-tree changes are accounted for in\
+      \ apply_step_landed,\n    no unaudited_mutation_detected refusal.\"\"\"\n  \
+      \  monkeypatch.setenv(\"AGENT_LOOP_MCP_REPO_ROOT\", str(tmp_path))\n    importlib.reload(audit_append_event)\n\
+      \n    iter_id = \"iteration-test-audited\"\n    iter_dir = tmp_path / \"agent-loop\"\
+      \ / \"active\" / iter_id\n    iter_dir.mkdir(parents=True)\n\n    audited_rel\
+      \ = \"audited_file.py\"\n    (tmp_path / audited_rel).write_text(\"audited content\\\
+      n\", encoding=\"utf-8\")\n\n    apply_event = {\n        \"event\": \"apply_step_landed\"\
+      ,\n        \"timestamp_utc\": _now_iso(-100),\n        \"event_id\": f\"{_now_iso(-100)}_apply_step_landed_codex\"\
+      ,\n        \"effect\": \"applied patch\",\n        \"actor\": {\n          \
+      \  \"id\": \"codex-iter0018-1\",\n            \"model_family\": \"codex\",\n\
+      \            \"role\": \"fix_author\",\n            \"pass_id\": \"codex-iter0018-1-pass1\"\
+      ,\n        },\n        \"patch_id\": \"codex-rev-001-patch\",\n        \"files_touched\"\
+      : [audited_rel],\n        \"base_sha\": \"base\",\n        \"post_sha\": \"\
+      POST\",\n        \"unified_diff_sha256\": \"diff\",\n        \"timestamp\":\
+      \ _now_iso(-100),\n        \"files_modified\": [audited_rel],\n    }\n    audit_path\
+      \ = iter_dir / \"independence-audit.yaml\"\n    audit_path.write_text(\n   \
+      \     yaml.safe_dump({\"audit_log\": [apply_event]}), encoding=\"utf-8\"\n \
+      \   )\n\n    closer = {\n        \"actor\": {\n            \"id\": \"claude-iter0018-2\"\
+      ,\n            \"model_family\": \"claude\",\n            \"pass_id\": \"claude-iter0018-2-pass1\"\
+      ,\n        },\n        \"review_target_hash\": \"POST\",\n        \"created_at_utc\"\
+      : _now_iso(0),\n        \"goal_satisfied\": True,\n    }\n    (iter_dir / \"\
+      claude-review.yaml\").write_text(\n        yaml.safe_dump(closer), encoding=\"\
+      utf-8\"\n    )\n\n    from agent_loop_mcp.tools import audit_append_event as\
+      \ aae\n    monkeypatch.setattr(\n        aae,\n        \"_detect_working_tree_changes\"\
+      ,\n        lambda repo_root: [audited_rel],  # ALL paths are audited\n    )\n\
+      \n    result = aae.handle(\n        iteration_id=iter_id,\n        event_type=\"\
+      iteration_closed\",\n        actor=\"claude-iter0018-2\",\n        closing_state=\"\
+      quorum_close_passed\",\n    )\n    assert \"error\" not in result, f\"unexpected\
+      \ error: {result.get('error')}\"\n\n\n# ===========================================================================\n\
+      # Finding 4 (MEDIUM): strict patch_proposal mode\n# ===========================================================================\n\
+      \n\ndef _strict_codex_output(findings: list[dict]) -> str:\n    \"\"\"Build\
+      \ a complete codex output JSON with the supplied findings list.\"\"\"\n    blocking\
+      \ = [f[\"id\"] for f in findings if f[\"severity\"] in (\"blocking\", \"critical\"\
+      )]\n    return json.dumps({\n        \"findings\": findings,\n        \"goal_satisfied\"\
+      : False if findings else True,\n        \"blocking_objections\": blocking,\n\
+      \        \"goal_satisfied_rationale\": \"test\",\n    })\n\n\ndef _make_finding(\n\
+      \    *,\n    fid: str = \"codex-rev-001\",\n    severity: str = \"medium\",\n\
+      \    patch_proposal: dict | None = None,\n    patch_not_proposed_reason: str\
+      \ | None = None,\n):\n    f = {\n        \"id\": fid,\n        \"severity\"\
+      : severity,\n        \"summary\": \"test summary\",\n        \"citation\": \"\
+      scripts/foo.py:1\",\n        \"risk\": \"test risk\",\n        \"recommendation\"\
+      : \"test recommendation\",\n    }\n    if patch_proposal is not None:\n    \
+      \    f[\"patch_proposal\"] = patch_proposal\n    if patch_not_proposed_reason\
+      \ is not None:\n        f[\"patch_not_proposed_reason\"] = patch_not_proposed_reason\n\
+      \    return f\n\n\ndef _good_patch_proposal(finding_id: str = \"codex-rev-001\"\
+      ) -> dict:\n    \"\"\"A schema-valid patch_proposal with iter-0020 finding-id-derived\
+      \ patch_id.\"\"\"\n    base_sha = \"0\" * 64\n    diff = \"--- a/foo\\n+++ b/foo\\\
+      n@@ -1 +1 @@\\n-x\\n+y\\n\"\n    patch_id = f\"{finding_id}-patch\"\n    return\
+      \ {\n        \"patch_id\": patch_id,\n        \"applies_to_findings\": [finding_id],\n\
+      \        \"base_sha\": base_sha,\n        \"unified_diff\": diff,\n        \"\
+      files_touched\": [\"scripts/foo.py\"],\n    }\n\n\ndef _goal_packet_with_policy(policy:\
+      \ str | None) -> dict:\n    gp: dict = {\n        \"schema_version\": 1,\n \
+      \       \"pilot_id\": \"test\",\n        \"goal\": {\"summary\": \"x\"},\n \
+      \       \"allowed_files\": [\"scripts/foo.py\"],\n        \"forbidden_files\"\
+      : [],\n        \"max_iterations\": 5,\n        \"validators_required\": [],\n\
+      \        \"acceptance_gates\": [],\n        \"stop_conditions\": [],\n     \
+      \   \"authorization\": {\"authorized_by\": \"operator\"},\n    }\n    if policy\
+      \ is not None:\n        gp[\"fix_author_policy\"] = policy\n    return gp\n\n\
+      \ndef test_strict_mode_finding_with_patch_passes():\n    \"\"\"Strict mode:\
+      \ every finding has a patch_proposal -> accepted.\"\"\"\n    finding = _make_finding(patch_proposal=_good_patch_proposal())\n\
+      \    text = _strict_codex_output([finding])\n    gp = _goal_packet_with_policy(\"\
+      strict\")\n    parsed = _dispatch_codex._parse_codex_output(text, goal_packet=gp)\n\
+      \    assert parsed[\"findings\"][0][\"patch_proposal\"][\"patch_id\"]\n\n\n\
+      def test_strict_mode_finding_with_reason_passes():\n    \"\"\"Strict mode: finding\
+      \ has patch_not_proposed_reason instead -> accepted.\"\"\"\n    finding = _make_finding(\n\
+      \        patch_not_proposed_reason=\"cannot author patch from sandbox without\
+      \ applying tools\",\n    )\n    text = _strict_codex_output([finding])\n   \
+      \ gp = _goal_packet_with_policy(\"strict\")\n    parsed = _dispatch_codex._parse_codex_output(text,\
+      \ goal_packet=gp)\n    # The patch_not_proposed_reason field must be preserved\
+      \ in the output.\n    assert parsed[\"findings\"][0][\"patch_not_proposed_reason\"\
+      ]\n\n\ndef test_strict_mode_finding_missing_both_rejected():\n    \"\"\"Strict\
+      \ mode: finding has neither patch_proposal nor patch_not_proposed_reason ->\
+      \ REJECT entire output.\"\"\"\n    finding = _make_finding()  # plain finding,\
+      \ no patch, no reason\n    text = _strict_codex_output([finding])\n    gp =\
+      \ _goal_packet_with_policy(\"strict\")\n    with pytest.raises(_dispatch_codex.CodexOutputParseError)\
+      \ as exc_info:\n        _dispatch_codex._parse_codex_output(text, goal_packet=gp)\n\
+      \    err = str(exc_info.value)\n    assert \"fix_author_policy\" in err or \"\
+      patch_not_proposed_reason\" in err or \"strict\" in err\n\n\ndef test_strict_mode_finding_with_both_rejected():\n\
+      \    \"\"\"Strict mode: mutually exclusive — finding can't have BOTH patch_proposal\
+      \ and patch_not_proposed_reason.\"\"\"\n    finding = _make_finding(\n     \
+      \   patch_proposal=_good_patch_proposal(),\n        patch_not_proposed_reason=\"\
+      contradiction\",\n    )\n    text = _strict_codex_output([finding])\n    gp\
+      \ = _goal_packet_with_policy(\"strict\")\n    with pytest.raises(_dispatch_codex.CodexOutputParseError)\
+      \ as exc_info:\n        _dispatch_codex._parse_codex_output(text, goal_packet=gp)\n\
+      \    err = str(exc_info.value)\n    assert \"mutually exclusive\" in err or\
+      \ \"both\" in err.lower() or \"patch_not_proposed_reason\" in err\n\n\ndef test_permissive_default_finding_without_patch_passes():\n\
+      \    \"\"\"Permissive (default) mode: finding without patch_proposal -> accepted\
+      \ (current behavior).\"\"\"\n    finding = _make_finding()\n    text = _strict_codex_output([finding])\n\
+      \    # No fix_author_policy in goal_packet -> defaults to permissive.\n    gp\
+      \ = _goal_packet_with_policy(None)\n    parsed = _dispatch_codex._parse_codex_output(text,\
+      \ goal_packet=gp)\n    assert parsed[\"findings\"][0][\"id\"] == \"codex-rev-001\"\
+      \n\n\ndef test_permissive_explicit_finding_without_patch_passes():\n    \"\"\
+      \"Explicit permissive mode behaves same as default.\"\"\"\n    finding = _make_finding()\n\
+      \    text = _strict_codex_output([finding])\n    gp = _goal_packet_with_policy(\"\
+      permissive\")\n    parsed = _dispatch_codex._parse_codex_output(text, goal_packet=gp)\n\
+      \    assert parsed[\"findings\"][0][\"id\"] == \"codex-rev-001\"\n\n\ndef test_strict_mode_only_reason_field_validates_as_string():\n\
+      \    \"\"\"patch_not_proposed_reason must be a non-empty string when present.\"\
+      \"\"\n    finding = _make_finding(patch_not_proposed_reason=\"\")  # empty string\n\
+      \    text = _strict_codex_output([finding])\n    gp = _goal_packet_with_policy(\"\
+      strict\")\n    with pytest.raises(_dispatch_codex.CodexOutputParseError):\n\
+      \        _dispatch_codex._parse_codex_output(text, goal_packet=gp)\n\n\n# ===========================================================================\n\
+      # Finding 5 (LOW/MEDIUM): T6 fails closed when invariant evaluator returns\n\
+      #                          None or raises\n# ===========================================================================\n\
+      \n\ndef test_t6_fails_closed_when_invariant_evaluator_raises(tmp_path, monkeypatch):\n\
+      \    \"\"\"If _evaluate_closure_invariant raises and apply_step_landed events\
+      \ exist,\n    T6 must REFUSE iteration_closed with closure_invariant_evaluation_failed.\"\
+      \"\"\n    monkeypatch.setenv(\"AGENT_LOOP_MCP_REPO_ROOT\", str(tmp_path))\n\
+      \    importlib.reload(audit_append_event)\n\n    iter_id = \"iteration-test-eval-fail\"\
+      \n    iter_dir = tmp_path / \"agent-loop\" / \"active\" / iter_id\n    iter_dir.mkdir(parents=True)\n\
+      \n    apply_event = {\n        \"event\": \"apply_step_landed\",\n        \"\
+      timestamp_utc\": _now_iso(-100),\n        \"event_id\": f\"{_now_iso(-100)}_apply_step_landed_codex\"\
+      ,\n        \"effect\": \"applied patch\",\n        \"actor\": {\n          \
+      \  \"id\": \"codex-iter0018-1\",\n            \"model_family\": \"codex\",\n\
+      \            \"role\": \"fix_author\",\n            \"pass_id\": \"codex-iter0018-1-pass1\"\
+      ,\n        },\n        \"patch_id\": \"codex-rev-001-patch\",\n        \"files_touched\"\
+      : [\"foo.py\"],\n        \"base_sha\": \"base\",\n        \"post_sha\": \"POST\"\
+      ,\n        \"unified_diff_sha256\": \"diff\",\n        \"timestamp\": _now_iso(-100),\n\
+      \        \"files_modified\": [\"foo.py\"],\n    }\n    audit_path = iter_dir\
+      \ / \"independence-audit.yaml\"\n    audit_path.write_text(\n        yaml.safe_dump({\"\
+      audit_log\": [apply_event]}), encoding=\"utf-8\"\n    )\n\n    from agent_loop_mcp.tools\
+      \ import audit_append_event as aae\n\n    def _raises(*args, **kwargs):\n  \
+      \      raise RuntimeError(\"simulated evaluator failure\")\n\n    monkeypatch.setattr(aae,\
+      \ \"_evaluate_closure_invariant\", _raises)\n    # Also stub the unaudited-mutation\
+      \ check so it doesn't interfere.\n    monkeypatch.setattr(\n        aae,\n \
+      \       \"_detect_working_tree_changes\",\n        lambda repo_root: [\"foo.py\"\
+      ],\n    )\n\n    result = aae.handle(\n        iteration_id=iter_id,\n     \
+      \   event_type=\"iteration_closed\",\n        actor=\"claude-iter0018-2\",\n\
+      \        closing_state=\"quorum_close_passed\",\n    )\n    assert \"error\"\
+      \ in result\n    assert \"closure_invariant_evaluation_failed\" in result[\"\
+      error\"]\n\n\ndef test_t6_fails_closed_when_invariant_evaluator_returns_none(tmp_path,\
+      \ monkeypatch):\n    \"\"\"If _evaluate_closure_invariant returns None and apply_step_landed\
+      \ events\n    exist, T6 must REFUSE with closure_invariant_evaluation_failed.\"\
+      \"\"\n    monkeypatch.setenv(\"AGENT_LOOP_MCP_REPO_ROOT\", str(tmp_path))\n\
+      \    importlib.reload(audit_append_event)\n\n    iter_id = \"iteration-test-eval-none\"\
+      \n    iter_dir = tmp_path / \"agent-loop\" / \"active\" / iter_id\n    iter_dir.mkdir(parents=True)\n\
+      \n    apply_event = {\n        \"event\": \"apply_step_landed\",\n        \"\
+      timestamp_utc\": _now_iso(-100),\n        \"event_id\": f\"{_now_iso(-100)}_apply_step_landed_codex\"\
+      ,\n        \"effect\": \"applied patch\",\n        \"actor\": {\n          \
+      \  \"id\": \"codex-iter0018-1\",\n            \"model_family\": \"codex\",\n\
+      \            \"role\": \"fix_author\",\n            \"pass_id\": \"codex-iter0018-1-pass1\"\
+      ,\n        },\n        \"patch_id\": \"codex-rev-001-patch\",\n        \"files_touched\"\
+      : [\"foo.py\"],\n        \"base_sha\": \"base\",\n        \"post_sha\": \"POST\"\
+      ,\n        \"unified_diff_sha256\": \"diff\",\n        \"timestamp\": _now_iso(-100),\n\
+      \        \"files_modified\": [\"foo.py\"],\n    }\n    audit_path = iter_dir\
+      \ / \"independence-audit.yaml\"\n    audit_path.write_text(\n        yaml.safe_dump({\"\
+      audit_log\": [apply_event]}), encoding=\"utf-8\"\n    )\n\n    from agent_loop_mcp.tools\
+      \ import audit_append_event as aae\n    monkeypatch.setattr(\n        aae, \"\
+      _evaluate_closure_invariant\", lambda *a, **kw: None,\n    )\n    monkeypatch.setattr(\n\
+      \        aae, \"_detect_working_tree_changes\", lambda repo_root: [\"foo.py\"\
+      ],\n    )\n\n    result = aae.handle(\n        iteration_id=iter_id,\n     \
+      \   event_type=\"iteration_closed\",\n        actor=\"claude-iter0018-2\",\n\
+      \        closing_state=\"quorum_close_passed\",\n    )\n    assert \"error\"\
+      \ in result\n    assert \"closure_invariant_evaluation_failed\" in result[\"\
+      error\"]\n\n\ndef test_t6_no_mutation_evaluator_none_still_allowed(tmp_path,\
+      \ monkeypatch):\n    \"\"\"When NO apply_step_landed events exist, evaluator\
+      \ returning None is\n    fine (no mutation = no gate). Refusal only fires when\
+      \ the audit log has\n    apply_step_landed events but the evaluator can't give\
+      \ a verdict.\"\"\"\n    monkeypatch.setenv(\"AGENT_LOOP_MCP_REPO_ROOT\", str(tmp_path))\n\
+      \    importlib.reload(audit_append_event)\n\n    iter_id = \"iteration-test-no-mutation-eval\"\
+      \n    iter_dir = tmp_path / \"agent-loop\" / \"active\" / iter_id\n    iter_dir.mkdir(parents=True)\n\
+      \n    audit_path = iter_dir / \"independence-audit.yaml\"\n    audit_path.write_text(\n\
+      \        yaml.safe_dump({\"audit_log\": []}), encoding=\"utf-8\"\n    )\n\n\
+      \    from agent_loop_mcp.tools import audit_append_event as aae\n    # Even\
+      \ if the evaluator returns None, with no apply_step_landed events the\n    #\
+      \ close should be allowed.\n    monkeypatch.setattr(\n        aae, \"_evaluate_closure_invariant\"\
+      , lambda *a, **kw: None,\n    )\n\n    result = aae.handle(\n        iteration_id=iter_id,\n\
+      \        event_type=\"iteration_closed\",\n        actor=\"orchestrator\",\n\
+      \        closing_state=\"blocked_needs_operator\",\n    )\n    assert \"error\"\
+      \ not in result, f\"unexpected error: {result.get('error')}\"\n"
+    scripts/agent_loop_mcp/tests/test_validate_closure_invariant.py: "\"\"\"Tests\
+      \ for _validate_closure_invariant — Phase 5 of Task #28.\n\nEight tests covering\
+      \ all verdict states and CLI exit codes.\nUses tmp_path for filesystem isolation;\
+      \ no real iteration dirs touched.\n\"\"\"\nfrom __future__ import annotations\n\
+      \nimport json\nimport sys\nfrom pathlib import Path\nfrom datetime import datetime,\
+      \ timezone, timedelta\n\nimport pytest\nimport yaml\n\nREPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent\n\
+      sys.path.insert(0, str(REPO_ROOT / \"scripts\"))\n\nfrom agent_loop_mcp import\
+      \ _validate_closure_invariant as vcl  # noqa: E402\n\n\n# ---------------------------------------------------------------------------\n\
+      # Helpers\n# ---------------------------------------------------------------------------\n\
+      \ndef _ts(offset_seconds: int = 0) -> str:\n    t = datetime.now(timezone.utc)\
+      \ + timedelta(seconds=offset_seconds)\n    return t.replace(microsecond=0).isoformat().replace(\"\
+      +00:00\", \"Z\")\n\n\ndef _write_audit(iteration_dir: Path, audit_log: list)\
+      \ -> None:\n    p = iteration_dir / \"independence-audit.yaml\"\n    p.write_text(\n\
+      \        yaml.safe_dump({\"schema_version\": 1, \"audit_log\": audit_log}),\n\
+      \        encoding=\"utf-8\",\n    )\n\n\ndef _write_review(\n    iteration_dir:\
+      \ Path,\n    filename: str,\n    *,\n    reviewer_id: str,\n    packet_sha256:\
+      \ str,\n    sealed_at_utc: str,\n) -> None:\n    p = iteration_dir / filename\n\
+      \    p.write_text(\n        yaml.safe_dump({\n            \"reviewer_id\": reviewer_id,\n\
+      \            \"packet_sha256\": packet_sha256,\n            \"sealed_at_utc\"\
+      : sealed_at_utc,\n            \"goal_satisfied\": True,\n        }),\n     \
+      \   encoding=\"utf-8\",\n    )\n\n\ndef _make_apply_event(\n    *,\n    actor_id:\
+      \ str,\n    model_family: str,\n    post_sha: str,\n    ts: str,\n) -> dict:\n\
+      \    return {\n        \"event\": \"apply_step_landed\",\n        \"timestamp_utc\"\
+      : ts,\n        \"event_id\": f\"{ts}_apply_step_landed_{actor_id}\",\n     \
+      \   \"actor\": {\n            \"id\": actor_id,\n            \"model_family\"\
+      : model_family,\n            \"role\": \"fix_author\",\n            \"pass_id\"\
+      : f\"{actor_id}-pass1\",\n        },\n        \"post_sha\": post_sha,\n    \
+      \    \"base_sha\": \"base-aaa\",\n    }\n\n\ndef _make_iteration(tmp_path: Path,\
+      \ name: str = \"iteration-test\") -> Path:\n    d = tmp_path / name\n    d.mkdir()\n\
+      \    return d\n\n\n# ---------------------------------------------------------------------------\n\
+      # Tests\n# ---------------------------------------------------------------------------\n\
+      \ndef test_n_a_no_audit(tmp_path):\n    \"\"\"Iteration with no independence-audit.yaml\
+      \ → n/a (no audit).\"\"\"\n    d = _make_iteration(tmp_path)\n    # No audit\
+      \ file written.\n    result = vcl.scan_iteration(d)\n    assert result[\"verdict\"\
+      ] == \"n/a (no audit)\"\n    assert result[\"last_mutation\"] is None\n    assert\
+      \ result[\"closing_verdict_present\"] is False\n\n\ndef test_n_a_no_mutation(tmp_path):\n\
+      \    \"\"\"Audit exists but has no apply_step_landed events → n/a (no mutation).\"\
+      \"\"\n    d = _make_iteration(tmp_path)\n    _write_audit(d, audit_log=[\n \
+      \       {\"event\": \"review_returned_and_sealed\", \"timestamp_utc\": _ts(),\
+      \ \"actor\": \"codex-x-1\"},\n    ])\n    result = vcl.scan_iteration(d)\n \
+      \   assert result[\"verdict\"] == \"n/a (no mutation)\"\n    assert result[\"\
+      last_mutation\"] is None\n\n\ndef test_in_flight(tmp_path):\n    \"\"\"last_mutation\
+      \ present but no closing review with ts > mutation → in_flight.\"\"\"\n    d\
+      \ = _make_iteration(tmp_path)\n    mut_ts = _ts(-200)\n    _write_audit(d, audit_log=[\n\
+      \        _make_apply_event(actor_id=\"codex-x-1\", model_family=\"codex\",\n\
+      \                          post_sha=\"POST-AAA\", ts=mut_ts),\n    ])\n    #\
+      \ Write a review that is OLDER than the mutation (stale).\n    _write_review(d,\
+      \ \"codex-review.yaml\",\n                  reviewer_id=\"codex-x-1\",\n   \
+      \               packet_sha256=\"POST-AAA\",\n                  sealed_at_utc=_ts(-300))\n\
+      \    result = vcl.scan_iteration(d)\n    assert result[\"verdict\"] == \"in_flight\"\
+      \n    assert result[\"last_mutation\"] is not None\n    assert result[\"closing_verdict_present\"\
+      ] is False\n\n\ndef test_compliant(tmp_path):\n    \"\"\"last_mutation by codex\
+      \ + fresh claude review of same post_sha → compliant.\"\"\"\n    d = _make_iteration(tmp_path)\n\
+      \    mut_ts = _ts(-100)\n    _write_audit(d, audit_log=[\n        _make_apply_event(actor_id=\"\
+      codex-x-1\", model_family=\"codex\",\n                          post_sha=\"\
+      POST-BBB\", ts=mut_ts),\n    ])\n    # Claude review is newer than mutation\
+      \ and covers the right sha.\n    _write_review(d, \"claude-review.yaml\",\n\
+      \                  reviewer_id=\"claude-x-2\",\n                  packet_sha256=\"\
+      POST-BBB\",\n                  sealed_at_utc=_ts(0))\n    result = vcl.scan_iteration(d)\n\
+      \    assert result[\"verdict\"] == \"compliant\"\n    assert result[\"invariant_check\"\
+      ][\"ok\"] is True\n\n\ndef test_non_compliant_self_close(tmp_path):\n    \"\"\
+      \"last_mutation by codex + closing review also by codex → non_compliant (cross_family).\"\
+      \"\"\n    d = _make_iteration(tmp_path)\n    mut_ts = _ts(-100)\n    _write_audit(d,\
+      \ audit_log=[\n        _make_apply_event(actor_id=\"codex-x-1\", model_family=\"\
+      codex\",\n                          post_sha=\"POST-CCC\", ts=mut_ts),\n   \
+      \ ])\n    # Same actor codex closes — violates cross_family.\n    _write_review(d,\
+      \ \"codex-review.yaml\",\n                  reviewer_id=\"codex-x-1\",\n   \
+      \               packet_sha256=\"POST-CCC\",\n                  sealed_at_utc=_ts(0))\n\
+      \    result = vcl.scan_iteration(d)\n    assert result[\"verdict\"] == \"non_compliant\"\
+      \n    assert result[\"invariant_check\"][\"ok\"] is False\n    assert result[\"\
+      invariant_check\"][\"checks\"][\"cross_family\"] is False\n\n\ndef test_summary_counts(tmp_path):\n\
+      \    \"\"\"Multi-iteration scan returns correct summary tallies.\"\"\"\n   \
+      \ # iter-a: no audit → n/a\n    a = _make_iteration(tmp_path, \"iteration-a\"\
+      )\n\n    # iter-b: no mutation → n/a\n    b = _make_iteration(tmp_path, \"iteration-b\"\
+      )\n    _write_audit(b, audit_log=[])\n\n    # iter-c: in_flight (mutation, no\
+      \ fresh review)\n    c = _make_iteration(tmp_path, \"iteration-c\")\n    mut_ts\
+      \ = _ts(-200)\n    _write_audit(c, audit_log=[\n        _make_apply_event(actor_id=\"\
+      codex-c-1\", model_family=\"codex\",\n                          post_sha=\"\
+      POST-C\", ts=mut_ts),\n    ])\n\n    # iter-d: compliant\n    d = _make_iteration(tmp_path,\
+      \ \"iteration-d\")\n    _write_audit(d, audit_log=[\n        _make_apply_event(actor_id=\"\
+      codex-d-1\", model_family=\"codex\",\n                          post_sha=\"\
+      POST-D\", ts=_ts(-100)),\n    ])\n    _write_review(d, \"claude-review.yaml\"\
+      ,\n                  reviewer_id=\"claude-d-2\",\n                  packet_sha256=\"\
+      POST-D\",\n                  sealed_at_utc=_ts(0))\n\n    # iter-e: non_compliant\n\
+      \    e = _make_iteration(tmp_path, \"iteration-e\")\n    _write_audit(e, audit_log=[\n\
+      \        _make_apply_event(actor_id=\"codex-e-1\", model_family=\"codex\",\n\
+      \                          post_sha=\"POST-E\", ts=_ts(-100)),\n    ])\n   \
+      \ _write_review(e, \"codex-review.yaml\",\n                  reviewer_id=\"\
+      codex-e-1\",\n                  packet_sha256=\"POST-E\",\n                \
+      \  sealed_at_utc=_ts(0))\n\n    output = vcl.scan_all([a, b, c, d, e])\n   \
+      \ s = output[\"summary\"]\n    assert s[\"total\"] == 5\n    assert s[\"compliant\"\
+      ] == 1\n    assert s[\"non_compliant\"] == 1\n    assert s[\"n/a\"] == 2\n \
+      \   assert s[\"in_flight\"] == 1\n\n\ndef test_exit_code_zero_when_all_compliant(tmp_path,\
+      \ monkeypatch):\n    \"\"\"CLI exits 0 when no non_compliant iterations found.\"\
+      \"\"\n    d = _make_iteration(tmp_path, \"iteration-ok\")\n    _write_audit(d,\
+      \ audit_log=[\n        _make_apply_event(actor_id=\"codex-ok-1\", model_family=\"\
+      codex\",\n                          post_sha=\"POST-OK\", ts=_ts(-100)),\n \
+      \   ])\n    _write_review(d, \"claude-review.yaml\",\n                  reviewer_id=\"\
+      claude-ok-2\",\n                  packet_sha256=\"POST-OK\",\n             \
+      \     sealed_at_utc=_ts(0))\n\n    monkeypatch.setattr(sys, \"argv\", [\"_validate_closure_invariant\"\
+      ,\n                                      \"--active-dir\", str(tmp_path)])\n\
+      \    with pytest.raises(SystemExit) as exc:\n        vcl.main()\n    assert\
+      \ exc.value.code == 0\n\n\ndef test_exit_code_one_on_any_non_compliant(tmp_path,\
+      \ monkeypatch):\n    \"\"\"CLI exits 1 when any non_compliant iteration found.\"\
+      \"\"\n    e = _make_iteration(tmp_path, \"iteration-bad\")\n    _write_audit(e,\
+      \ audit_log=[\n        _make_apply_event(actor_id=\"codex-bad-1\", model_family=\"\
+      codex\",\n                          post_sha=\"POST-BAD\", ts=_ts(-100)),\n\
+      \    ])\n    _write_review(e, \"codex-review.yaml\",\n                  reviewer_id=\"\
+      codex-bad-1\",\n                  packet_sha256=\"POST-BAD\",\n            \
+      \      sealed_at_utc=_ts(0))\n\n    monkeypatch.setattr(sys, \"argv\", [\"_validate_closure_invariant\"\
+      ,\n                                      \"--active-dir\", str(tmp_path)])\n\
+      \    with pytest.raises(SystemExit) as exc:\n        vcl.main()\n    assert\
+      \ exc.value.code == 1\n"
+schema_version: 1
+iteration_id: iteration-0023-closure-invariant-flavor-b-review
+review_target: |
+  Thorough Flavor B review of the closure invariant subsystem. Look for:
+    - Edge cases in bundle_sha (empty files, binary content, symlinks, large files,
+      paths containing newlines or null bytes — note canonical form uses \0 + \n).
+    - last_mutation_from_audit drift between legacy top-level and nested
+      extra_fields.last_mutation shapes (the iter-0017 hoist bug). Top-level wins
+      over nested when both present — is that always correct?
+    - check_closure_invariant correctness on the 3-part gate. Cross-family
+      requires model_family present AND different AND actor.id different.
+      Verify no logical hole when both families are equal but one is None.
+    - Cross-family logic edge cases (missing model_family, malformed actor,
+      actor as list/None, model_family with whitespace or casing mismatch).
+    - Defense-in-depth gaps across the T6 / _self_drive / loop.run_goal call sites.
+      The 3 layers must agree; any drift creates a bypass.
+    - Historical validator interpretation: post-close mutations vs closure-certificate
+      sealing. Does scan_iteration correctly classify in_flight vs compliant when
+      reviews exist with timestamp == mutation timestamp (boundary)?
+    - Type-system edge cases (legacy string actors, dict actors, None actors).
+      _actor_id accepts string + dict; _actor_model_family only dict.
+    - Concurrent-write race conditions in audit log reads (best-effort yaml read,
+      no locking).
+    - Test quality: do tests verify behavior or just structure? Are there missing
+      negative cases (e.g., bundle_sha collision resistance, path traversal,
+      reviewer_id-derived family heuristic edge cases — what if reviewer_id starts
+      with "claude-bot" but actor.model_family is set to "codex"?)
+    - Reproducibility-boundedness: bundle_sha includes file paths and content
+      hashes. Does it handle Windows path separators? Trailing whitespace in paths?
+    - Freshness timestamp comparison: ISO 8601 string compare. Mixed Z suffix vs
+      +00:00 suffix sorts correctly? Microseconds vs no microseconds?
+    - The historical validator's reviewer_id-prefix family heuristic is permissive
+      (codex-* OR claude-* OR file naming). Could a malicious actor name "codexica"
+      pass? "codex-x" -> "codex" by startswith("codex"). What about "code-x"?
+    - last_mutation_from_audit returns the LAST list item; trusts chronological
+      list order. Is timestamp_utc ever used to re-sort? What if events arrive
+      out-of-order?
+
+reviewer_question: |
+  Identify ALL defects, design gaps, edge cases unhandled, and improvements in:
+    - scripts/agent_loop_mcp/_closure_invariant.py
+    - scripts/agent_loop_mcp/_validate_closure_invariant.py
+    - scripts/agent_loop_mcp/tests/test_closure_invariant.py
+    - scripts/agent_loop_mcp/tests/test_iter_0018_cross_ai_invariant.py
+    - scripts/agent_loop_mcp/tests/test_validate_closure_invariant.py
+
+  Emit findings with canonical IDs (codex-rev-NNN). For each, either emit a
+  patch_proposal block (preferred — strict mode requires this OR a
+  patch_not_proposed_reason) or document why a patch can't be authored.
+  Mark goal_satisfied=true ONLY if no defects warrant a fix.
+
+  IMPORTANT NOTES on patch_proposal authoring:
+    - patch_id: derive from finding id, e.g. "codex-rev-001-patch"
+    - base_sha: emit any string; the helper OVERWRITES with defect_target.base_sha
+    - unified_diff: emit a content-correct unified_diff against the embedded
+      touched_files_contents
+    - files_touched: list the file paths you modified
+    - applies_to_findings: list the finding id(s) this patch addresses
+    - The helper computes unified_diff_sha256 and stamps it post-parse.
+

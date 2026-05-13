@@ -1,0 +1,1225 @@
+defect_target:
+  files:
+  - agent-loop/active/iteration-0033-fix-iter-0032-findings/proposed-patches.md
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_visibility_tui.py
+  base_sha: a510ea5e0b455e26d7c4843f47a2ee8fe39bdc5906e587cebfdd554acec5434e
+  touched_files_contents:
+    agent-loop/active/iteration-0033-fix-iter-0032-findings/proposed-patches.md: "#\
+      \ iter-0033 proposed patches — pre-implementation review target\n\nThese are\
+      \ claude-authored proposed fixes for the 4 iter-0032 findings (2 codex\nHIGH/MEDIUM\
+      \ + 2 claude MEDIUM/LOW). They are presented here for **codex\npre-implementation\
+      \ review** BEFORE landing — workflow #3 hardening: claude as\nfix-author, codex\
+      \ as code reviewer before commit.\n\nReviewer task: assess each proposed patch\
+      \ for (a) correctness against the\nfinding, (b) regression risk on adjacent\
+      \ code, (c) scope compliance, (d) test\ncoverage adequacy. NO existing code\
+      \ on disk reflects these patches yet.\n\n---\n\n## Patch 1 — codex-rev-001 +\
+      \ claude-rev-001 (HIGH)\n\n**Defect**: `_normalize_relative_to_repo` raises\
+      \ `OutsideRepoPathError` for\noperator-supplied outside-repo paths to `--iteration-dir`,\
+      \ `--goal-packet`,\n`--prompt-template`, `--schema`, or `--review-target`. The\
+      \ 5 calls live BEFORE\nthe main try/except (lines 1225-1240 of `_dispatch_codex.py`),\
+      \ so a\ncontainment rejection escapes as an unhandled exception. Operator sees\
+      \ a raw\nPython traceback; no `dispatch_failed` event lands; the visibility\
+      \ TUI cannot\nsee containment-rejected dispatches.\n\n**Approach**:\n1. Compute\
+      \ `log_path` immediately after `repo_root` is resolved (currently at\n   line\
+      \ 1258, move to right after the existing try/except for `_resolve_repo_root`).\n\
+      2. Derive a best-effort `reviewer_id` / `pass_id` BEFORE the normalize calls\n\
+      \   so the error event has anchors (fall back to \"unknown-pre-normalize\" when\n\
+      \   args weren't supplied).\n3. Wrap the 5 `_normalize_relative_to_repo` calls\
+      \ in a try/except that catches\n   `OutsideRepoPathError`, emits a structured\
+      \ `dispatch_failed` event with\n   `error_type=\"OutsideRepoPathError\"`, prints\
+      \ `{\"ok\": false, ...}` JSON, and\n   returns rc=5.\n\n```diff\n--- a/scripts/agent_loop_mcp/_dispatch_codex.py\n\
+      +++ b/scripts/agent_loop_mcp/_dispatch_codex.py\n@@ -1212,29 +1212,71 @@ def\
+      \ main(argv: list[str] | None = None) -> int:\n     ns = p.parse_args(argv)\n\
+      \n     # Per v1.10.4 F1: fail-closed if repo_root can't be validated.\n    \
+      \ try:\n         repo_root = _resolve_repo_root()\n     except RepoRootResolutionError\
+      \ as exc:\n         # We don't have a valid log_path yet; print error to stderr-equivalent\
+      \ JSON.\n         print(json.dumps({\"ok\": False, \"error\": str(exc), \"error_type\"\
+      : \"RepoRootResolutionError\"}))\n         return 4\n\n-    # Per v1.10.4 F5:\
+      \ normalize all operator-supplied relative paths against\n-    # repo_root,\
+      \ NOT the process cwd. The codex subprocess runs with --cd repo_root,\n-   \
+      \ # so all path frames must agree.\n-    iter_dir = _normalize_relative_to_repo(ns.iteration_dir,\
+      \ repo_root)\n-    iter_dir.mkdir(parents=True, exist_ok=True)\n-    iteration_id\
+      \ = iter_dir.name\n-\n-    template_path = (\n-        _normalize_relative_to_repo(ns.prompt_template,\
+      \ repo_root)\n-        if ns.prompt_template\n-        else (Path(__file__).parent\
+      \ / \"dispatch_templates\" / \"codex_review_template.md\")\n-    )\n-    schema_path\
+      \ = (\n-        _normalize_relative_to_repo(ns.schema, repo_root)\n-       \
+      \ if ns.schema\n-        else (Path(__file__).parent / \"dispatch_templates\"\
+      \ / \"codex_review_schema.json\")\n-    )\n-    goal_packet_path = _normalize_relative_to_repo(ns.goal_packet,\
+      \ repo_root)\n-    review_target_normalized = _normalize_relative_to_repo(ns.review_target,\
+      \ repo_root)\n+    # v1.10.5 iter-0033 codex-rev-001 fix: compute log_path immediately\
+      \ so the\n+    # preflight normalize calls can log a structured dispatch_failed\
+      \ event on\n+    # containment rejection. Previously the calls below raised\n\
+      +    # OutsideRepoPathError before the main try/except, leaving operators with\n\
+      +    # a raw traceback and the audit log silent.\n+    log_path = repo_root\
+      \ / \"agent-loop\" / \"state\" / \"dispatch-log.jsonl\"\n+\n+    # Best-effort\
+      \ reviewer / pass identifiers for pre-normalize failure events.\n+    # These\
+      \ may be overwritten below once iter_dir resolves cleanly.\n+    _pre_iter_id\
+      \ = Path(ns.iteration_dir).name or \"unknown-iteration\"\n+    reviewer_id =\
+      \ ns.reviewer_id or f\"codex-{_pre_iter_id}-1\"\n+    pass_id = ns.pass_id or\
+      \ f\"{reviewer_id}-pass1\"\n+\n+    # Per v1.10.4 F5: normalize all operator-supplied\
+      \ relative paths against\n+    # repo_root, NOT the process cwd. The codex subprocess\
+      \ runs with --cd repo_root,\n+    # so all path frames must agree.\n+    # v1.10.5\
+      \ iter-0033: wrap in try/except so OutsideRepoPathError emits a\n+    # structured\
+      \ failure event instead of an uncaught traceback.\n+    try:\n+        iter_dir\
+      \ = _normalize_relative_to_repo(ns.iteration_dir, repo_root)\n+        iter_dir.mkdir(parents=True,\
+      \ exist_ok=True)\n+        iteration_id = iter_dir.name\n+\n+        template_path\
+      \ = (\n+            _normalize_relative_to_repo(ns.prompt_template, repo_root)\n\
+      +            if ns.prompt_template\n+            else (Path(__file__).parent\
+      \ / \"dispatch_templates\" / \"codex_review_template.md\")\n+        )\n+  \
+      \      schema_path = (\n+            _normalize_relative_to_repo(ns.schema,\
+      \ repo_root)\n+            if ns.schema\n+            else (Path(__file__).parent\
+      \ / \"dispatch_templates\" / \"codex_review_schema.json\")\n+        )\n+  \
+      \      goal_packet_path = _normalize_relative_to_repo(ns.goal_packet, repo_root)\n\
+      +        review_target_normalized = _normalize_relative_to_repo(ns.review_target,\
+      \ repo_root)\n+    except OutsideRepoPathError as exc:\n+        _log_dispatch(log_path,\
+      \ {\n+            \"event\": \"dispatch_failed\",\n+            \"error_type\"\
+      : \"OutsideRepoPathError\",\n+            \"error\": str(exc),\n+          \
+      \  \"reviewer_id\": reviewer_id,\n+            \"pass_id\": pass_id,\n+    \
+      \        \"iteration_id\": _pre_iter_id,\n+            \"timeout_seconds\":\
+      \ ns.timeout_seconds,\n+        })\n+        print(json.dumps({\"ok\": False,\
+      \ \"error\": str(exc), \"error_type\": \"OutsideRepoPathError\"}))\n+      \
+      \  return 5\n```\n\n(The existing `reviewer_id = ns.reviewer_id or f\"codex-{iteration_id}-1\"\
+      ` /\n`pass_id = ns.pass_id or f\"{reviewer_id}-pass1\"` / `log_path = repo_root\
+      \ /...`\nlines below the normalize block are now redundant and should be removed;\
+      \ the\ncanonical iteration_id (from `iter_dir.name`) overwrites `_pre_iter_id`\
+      \ once\nnormalization succeeds. The diff above doesn't show that delete but\
+      \ it's part\nof the patch — confirm acceptable.)\n\n**Test coverage**: add `test_outside_repo_review_target_via_main_emits_structured_failure`\n\
+      that invokes `_dispatch_codex.main()` with `--review-target` pointing outside\n\
+      repo, asserts rc=5, asserts stdout JSON has `\"error_type\": \"OutsideRepoPathError\"\
+      `,\nasserts `dispatch_failed` event with same error_type lands in dispatch-log.\n\
+      \n---\n\n## Patch 2 — codex-rev-002 + claude-rev-002 (MEDIUM)\n\n**Defect**:\
+      \ `_assemble_dispatches` in `_visibility_tui.py:104-118` keys state\nby `pass_id`\
+      \ only. Two iterations reusing the same `pass_id` collapse into\none entry;\
+      \ later terminal events incorrectly close unrelated active dispatches;\nTUI\
+      \ under-reports stalls (the failure mode it was built to surface).\n\n**Approach**:\
+      \ key by `(iteration_id, pass_id)` tuple. Preserve a `pass_id`-only\nfallback\
+      \ for legacy events that lack `iteration_id` (defensive; no current\nevent in\
+      \ the log lacks it, but the migration cost is one line).\n\n```diff\n--- a/scripts/agent_loop_mcp/_visibility_tui.py\n\
+      +++ b/scripts/agent_loop_mcp/_visibility_tui.py\n@@ -101,17 +101,23 @@ def _assemble_dispatches(events:\
+      \ list[dict]) -> dict:\n           \"recent\":   [end_event, ...],     # last\
+      \ 5 terminal events, newest first\n         }\n     \"\"\"\n-    by_pass: dict[str,\
+      \ dict] = {}  # pass_id -> {\"start\": ev, \"end\": ev}\n+    # iter-0033 codex-rev-002\
+      \ fix: key by (iteration_id, pass_id) tuple so a\n+    # pass_id reused across\
+      \ iterations doesn't collapse two dispatches into\n+    # one. iteration_id\
+      \ may be missing on legacy events; fall back to None\n+    # which still keys\
+      \ uniquely-per-pass_id within the legacy bucket.\n+    by_key: dict[tuple[str\
+      \ | None, str], dict] = {}\n     for ev in events:\n         pass_id = ev.get(\"\
+      pass_id\") or ev.get(\"reviewer_id\")\n         if not pass_id:\n          \
+      \   continue\n-        entry = by_pass.setdefault(pass_id, {\"start\": None,\
+      \ \"end\": None})\n+        iter_id = ev.get(\"iteration_id\")\n+        key\
+      \ = (iter_id, pass_id)\n+        entry = by_key.setdefault(key, {\"start\":\
+      \ None, \"end\": None})\n         kind = ev.get(\"event\")\n         if kind\
+      \ == \"dispatch_start\":\n             entry[\"start\"] = ev\n         elif\
+      \ kind in (\"dispatch_done\", \"dispatch_failed\", \"dispatch_refused\"):\n\
+      \             entry[\"end\"] = ev\n\n     active = [\n-        v[\"start\"]\
+      \ for v in by_pass.values() if v[\"start\"] and not v[\"end\"]\n+        v[\"\
+      start\"] for v in by_key.values() if v[\"start\"] and not v[\"end\"]\n     ]\n\
+      \     recent_terminal = [\n-        v[\"end\"] for v in by_pass.values() if\
+      \ v[\"end\"]\n+        v[\"end\"] for v in by_key.values() if v[\"end\"]\n \
+      \    ]\n```\n\n**Test coverage**: add `test_assemble_pass_id_collision_across_iterations`\n\
+      that synthesizes two iterations sharing pass_id \"p1\" where only one has a\n\
+      terminal event, asserts both are tracked separately (the un-terminated one\n\
+      appears in active, the other in recent).\n\n---\n\n## Patch 3 — claude-rev-003\
+      \ (MEDIUM)\n\n**Defect**: `_normalize_relative_to_repo` containment check uses\n\
+      `Path.relative_to()` which is case-sensitive in string comparison. Windows\n\
+      filesystem is case-insensitive — same on-disk file can be addressed as\nmixed-case\
+      \ paths. False-positive containment rejection possible on Windows.\n\n**Approach**:\
+      \ on Windows, if the standard `relative_to()` fails, retry the\ncontainment\
+      \ check with case-folded string compare before raising\nOutsideRepoPathError.\n\
+      \n```diff\n--- a/scripts/agent_loop_mcp/_dispatch_codex.py\n+++ b/scripts/agent_loop_mcp/_dispatch_codex.py\n\
+      @@ -180,12 +180,29 @@ def _normalize_relative_to_repo(path_str: str | None,\
+      \ repo_root: Path) -> Path |\n     p = Path(path_str)\n     resolved = p.resolve()\
+      \ if p.is_absolute() else (repo_root / p).resolve()\n     repo_root_resolved\
+      \ = repo_root.resolve()\n+    contained = False\n     try:\n         resolved.relative_to(repo_root_resolved)\n\
+      +        contained = True\n     except ValueError:\n+        # iter-0033 claude-rev-003\
+      \ fix: Path.relative_to is case-sensitive\n+        # in string compare. Windows\
+      \ filesystem is case-insensitive; mixed-\n+        # case repo_root vs path\
+      \ can trigger a false-positive containment\n+        # rejection. On Windows,\
+      \ retry with case-folded string compare.\n+        import sys as _sys\n+   \
+      \     if _sys.platform == \"win32\":\n+            resolved_lc = str(resolved).lower().replace(\"\
+      \\\\\", \"/\")\n+            root_lc = str(repo_root_resolved).lower().replace(\"\
+      \\\\\", \"/\")\n+            if resolved_lc == root_lc or resolved_lc.startswith(root_lc.rstrip(\"\
+      /\") + \"/\"):\n+                contained = True\n+    if not contained:\n\
+      \         raise OutsideRepoPathError(\n             f\"path {path_str!r} resolves\
+      \ to {resolved} which is outside repo_root \"\n             f\"{repo_root_resolved}.\
+      \ agent-loop-mcp dispatch only reads files inside \"\n             f\"the repo.\
+      \ Move the file into the repo or pass a path relative to it.\"\n         )\n\
+      \     return resolved\n```\n\n**Test coverage**: add `test_containment_case_insensitive_on_windows`\n\
+      that synthesizes mixed-case repo_root and an inside-repo path with different\n\
+      casing; asserts containment passes on Windows (skipped on non-win32). On\nLinux\
+      \ this test is a no-op (skip).\n\n---\n\n## Patch 4 — claude-rev-004 (LOW)\n\
+      \n**Defect**: New containment regression tests exercise the helper\n`_normalize_relative_to_repo`\
+      \ directly. No test exercises the full\n`_dispatch_codex.main()` entry where\
+      \ containment fires on operator-supplied\nargs. A future refactor that relocates\
+      \ the containment call could silently\nbypass it end-to-end.\n\n**Approach**:\
+      \ this is fundamentally the same test as the one in Patch 1's\ntest coverage\
+      \ section. Single end-to-end main()-entry containment test covers\nboth findings.\
+      \ No separate patch needed; mark this finding as resolved by\nPatch 1's test\
+      \ addition.\n\n---\n\n## Cross-cutting verification (acceptance)\n\nAfter landing\
+      \ all 4 patches:\n- pytest: must add ≥ 2 new tests (containment-via-main + pass_id-collision);\n\
+      \  optionally +1 for Windows case-fold (skip on non-win32). New baseline:\n\
+      \  current 359 + 2 or 3.\n- smoke: 60/60 unchanged\n- gates: 11/11 unchanged\
+      \ after staging + commit\n- `G_pytest_dispatch_codex` test count baseline bumped\
+      \ if Patch 1's\n  end-to-end test lands in `test_dispatch_codex.py`\n\n## Out\
+      \ of scope for iter-0033\n\n- v1.10.5 review_target_path / hash plumbing — already\
+      \ landed in commit `6e4aa822`.\n- TUI display logic beyond `_assemble_dispatches`\
+      \ — not implicated by codex findings.\n- `_dispatch_codex.py` template/schema\
+      \ unrelated to containment — out of scope.\n\n## Reviewer questions\n\nFocused\
+      \ asks for codex (non-exclusive):\n\n1. **Patch 1 placement**: is the try/except\
+      \ boundary correctly drawn? Are\n   there OTHER exception types `_normalize_relative_to_repo`\
+      \ could raise that\n   should also route through the same structured failure\
+      \ path\n   (e.g., `OSError` if `iter_dir.mkdir` fails)?\n2. **Patch 1 rc=5**:\
+      \ appropriate vs existing rcs (1=invocation/parse, 2=other,\n   3=smoke-env-gate,\
+      \ 4=repo-root-resolution)? Any collision risk?\n3. **Patch 2 fallback semantics**:\
+      \ does the `(None, pass_id)` legacy fallback\n   risk masking a legitimate iteration\
+      \ boundary issue? Alternative: drop the\n   fallback and require iteration_id\
+      \ (stricter but breaks if any legacy\n   event lacks it).\n4. **Patch 3 Windows\
+      \ case-fold**: any edge case where `str(resolved).lower()`\n   fails to canonicalize\
+      \ (e.g., NFC/NFD unicode normalization issues, 8.3\n   short names that resolved()\
+      \ doesn't expand)?\n5. **Patch 4 elision**: is collapsing claude-rev-004 into\
+      \ Patch 1's test\n   appropriate, or should it be a separately authored test\
+      \ for clarity?\n"
+    scripts/agent_loop_mcp/_dispatch_codex.py: "\"\"\"Phase 4 v1.1 — auto-codex-dispatch\
+      \ helper.\n\nReplaces the operator paste-buffer flow for codex reviews. Reads\
+      \ a goal_packet\nfor context, substitutes a markdown prompt template, shells\
+      \ out to `codex` CLI,\nparses the JSON response (constrained via codex's --output-schema),\
+      \ wraps it in\na sealed-packet outer structure, and calls T6 (review.write_and_seal)\
+      \ directly.\nWrites a richly-attributed audit trail to agent-loop/state/dispatch-log.jsonl.\n\
+      \nNOT an MCP tool. CLI-only. Per Phase 3 anti-scope, scripts/agent_loop_mcp/tools/*\n\
+      is FROZEN; this helper is in the package root and calls T6's handle in-process.\n\
+      \nUSAGE\n-----\n  python -m agent_loop_mcp._dispatch_codex \\\n      --goal-packet\
+      \ <path/to/goal_packet.yaml> \\\n      --iteration-dir <path/to/iteration-XXXX/>\
+      \ \\\n      [--reviewer-id codex-iterXXXX-N] \\\n      [--pass-id codex-iterXXXX-N-passN]\
+      \ \\\n      [--prompt-template <path>] \\\n      [--schema <path>] \\\n    \
+      \  [--codex-bin <path>] \\\n      [--timeout-seconds 600] \\\n      [--smoke]\n\
+      \nExit 0 = sealed pass produced; non-zero = failure (codex error, parse fail,\n\
+      schema fail, seal fail). JSON to stdout on success.\n\"\"\"\nfrom __future__\
+      \ import annotations\n\nimport argparse\nimport hashlib\nimport json\nimport\
+      \ os\nimport re\nimport shutil\nimport subprocess\nimport sys\nimport tempfile\n\
+      import time\nfrom pathlib import Path\n\nimport yaml\n\n\n_VALID_SEVERITIES\
+      \ = {\"low\", \"medium\", \"high\", \"blocking\", \"critical\"}\n_FINDING_ID_PATTERN\
+      \ = re.compile(r\"^codex-rev-\\d+$\")\n_REQUIRED_FINDING_FIELDS = (\"id\", \"\
+      severity\", \"summary\", \"citation\", \"risk\", \"recommendation\")\n# Per\
+      \ Task #24 (iter-0014): patch_proposal is the optional finding key.\n# iter-0018\
+      \ Finding 4: patch_not_proposed_reason is added — used in strict mode\n# to\
+      \ record why a patch wasn't authored. Mutually exclusive with patch_proposal\n\
+      # (a finding can't both have a patch and a reason for not having one).\n# Anti-self-verification:\
+      \ verified / self_verified / correct / approved / confirmed\n# are NOT in this\
+      \ set; they remain rejected by the unknown-key gate as before.\n_ALLOWED_FINDING_KEYS\
+      \ = set(_REQUIRED_FINDING_FIELDS) | {\"patch_proposal\", \"patch_not_proposed_reason\"\
+      }\n_ALLOWED_TOP_LEVEL_KEYS = {\"findings\", \"goal_satisfied\", \"blocking_objections\"\
+      , \"goal_satisfied_rationale\"}\n_BLOCKING_SEVERITIES = {\"blocking\", \"critical\"\
+      }\n\n# Per Task #24 (iter-0014): patch_proposal binding fields per codex 2026-05-10\
+      \ v4.\n# 2026-05-10 schema/validator alignment: expected_tests promoted to required\
+      \ to\n# match codex_review_schema.json:24 (strict-output schema). The two layers\n\
+      # previously disagreed (schema required, validator optional); a non-CLI caller\n\
+      # could construct a patch_proposal missing expected_tests and pass the python\n\
+      # validator while codex CLI would reject the same shape upstream.\n_PATCH_PROPOSAL_REQUIRED\
+      \ = (\"patch_id\", \"applies_to_findings\", \"base_sha\", \"unified_diff\",\
+      \ \"files_touched\", \"expected_tests\")\n_PATCH_PROPOSAL_OPTIONAL = ()\n_PATCH_PROPOSAL_ALLOWED\
+      \ = set(_PATCH_PROPOSAL_REQUIRED) | set(_PATCH_PROPOSAL_OPTIONAL)\n_PATCH_ID_PATTERN\
+      \ = re.compile(r\"^codex-rev-\\d+-patch$\")\n\n# iter-0028 F4 (codex-rev-002):\
+      \ unified-diff body header parser regex.\n# Captures the path after `--- a/`\
+      \ or `+++ b/`. The `/dev/null` marker\n# (conventional unified-diff create/delete)\
+      \ is filtered out by the caller.\n# Tolerates leading whitespace on the line\
+      \ (unlikely but cheap).\n_DIFF_FILE_HEADER_RE = re.compile(\n    r\"^(?:---\\\
+      s+a/|\\+\\+\\+\\s+b/)(?P<path>\\S+)\\s*$\",\n    re.MULTILINE,\n)\n# iter-0028\
+      \ F1+F2 (codex-rev-003): tokens that signal codex-cli's proprietary\n# `apply_patch`\
+      \ format (NOT standard unified-diff). The iter-0026 F2 hunk-\n# anchored applier\
+      \ rejects this shape at apply time; iter-0028 moves the\n# rejection to validate\
+      \ time and explains the expected format.\n_APPLY_PATCH_BEGIN_MARKER = \"***\
+      \ Begin Patch\"\n_APPLY_PATCH_UPDATE_MARKER = \"*** Update File\"\n\n\n# Per\
+      \ v1.10.4 F1 (codex review on 0ae7b80d): repo_root resolution must fail-closed.\n\
+      # Repo markers: directories that MUST exist at the resolved root for it to be\
+      \ a valid\n# audiobook-project / agent-loop repo. site-packages doesn't have\
+      \ these; cwd in a\n# random directory doesn't either; the actual repo does.\n\
+      _REPO_ROOT_MARKERS = (\"agent-loop\", \"scripts/agent_loop_mcp\", \"scripts/agent_loop\"\
+      )\n\n\nclass RepoRootResolutionError(RuntimeError):\n    \"\"\"Raised when repo_root\
+      \ cannot be resolved to a valid repo (no markers found).\"\"\"\n\n\ndef _has_repo_markers(candidate:\
+      \ Path) -> bool:\n    \"\"\"Return True iff candidate contains all _REPO_ROOT_MARKERS\
+      \ as subpaths.\"\"\"\n    return all((candidate / marker).is_dir() for marker\
+      \ in _REPO_ROOT_MARKERS)\n\n\ndef _resolve_repo_root() -> Path:\n    \"\"\"\
+      Resolve the repo root, fail-closed if no valid candidate is found.\n\n    Per\
+      \ v1.10.4 F1 hardening: the prior fallback to\n    Path(__file__).resolve().parent.parent.parent\
+      \ was unsafe — when the helper\n    runs as an installed module from python_env/Lib/site-packages,\
+      \ that fallback\n    landed at python_env/Lib (NOT the repo root), causing codex\
+      \ --cd, T6 archive\n    writes, and dispatch-log writes to all target the wrong\
+      \ tree.\n\n    Resolution order (first candidate with all repo markers wins):\n\
+      \      1. AGENT_LOOP_MCP_REPO_ROOT env var (must validate)\n      2. Path.cwd()\
+      \ (operator usually invokes from repo root)\n      3. Walk parents of Path(__file__)\
+      \ (only succeeds when running in-tree;\n         the in-tree __file__ is scripts/agent_loop_mcp/_dispatch_codex.py\
+      \ so\n         3-up = repo root with markers)\n\n    If no candidate validates,\
+      \ raise RepoRootResolutionError with a clear\n    operator-facing message naming\
+      \ the env var to set. Never silently fall\n    back to site-packages.\n    \"\
+      \"\"\n    candidates_tried: list[tuple[str, Path]] = []\n\n    override = os.environ.get(\"\
+      AGENT_LOOP_MCP_REPO_ROOT\")\n    if override:\n        candidate = Path(override).resolve()\n\
+      \        candidates_tried.append((\"AGENT_LOOP_MCP_REPO_ROOT\", candidate))\n\
+      \        if _has_repo_markers(candidate):\n            return candidate\n  \
+      \      # iter-0028 F5 (codex-rev-004): operator-supplied env var is\n      \
+      \  # authoritative. If set but the path fails marker validation, do NOT\n  \
+      \      # silently fall through to cwd / __file__ candidates — the operator's\n\
+      \        # intent was an explicit override, and silent re-resolution invites\n\
+      \        # the very confusion the env var was meant to eliminate. Raise with\n\
+      \        # a clear message naming the env var. Empty-string env (treated as\n\
+      \        # falsy above) is the \"unset\" case and DOES fall through.\n     \
+      \   raise RepoRootResolutionError(\n            f\"AGENT_LOOP_MCP_REPO_ROOT={override!r}\
+      \ was set but the path \"\n            f\"{candidate} does not contain all required\
+      \ repo markers \"\n            f\"{_REPO_ROOT_MARKERS}. Not falling through\
+      \ to cwd / __file__ \"\n            f\"discovery — operator-supplied env var\
+      \ is authoritative. \"\n            f\"Either fix the path (it must contain\
+      \ {_REPO_ROOT_MARKERS} as \"\n            f\"subdirectories) or unset AGENT_LOOP_MCP_REPO_ROOT\
+      \ to use \"\n            f\"automatic discovery.\"\n        )\n\n    cwd = Path.cwd().resolve()\n\
+      \    candidates_tried.append((\"Path.cwd()\", cwd))\n    if _has_repo_markers(cwd):\n\
+      \        return cwd\n\n    # __file__-parent walk: only finds repo root when\
+      \ source-tree-installed.\n    here = Path(__file__).resolve()\n    for parent\
+      \ in (here.parent, here.parent.parent, here.parent.parent.parent):\n       \
+      \ candidates_tried.append((f\"parent of __file__ ({parent.name})\", parent))\n\
+      \        if _has_repo_markers(parent):\n            return parent\n\n    tried_msg\
+      \ = \"; \".join(f\"{name}={path}\" for name, path in candidates_tried)\n   \
+      \ raise RepoRootResolutionError(\n        f\"Cannot resolve agent-loop-mcp repo\
+      \ root. None of the candidates contain \"\n        f\"all required markers {_REPO_ROOT_MARKERS}.\
+      \ Set AGENT_LOOP_MCP_REPO_ROOT \"\n        f\"to the repo root directory (e.g.,\
+      \ the directory containing 'agent-loop/' \"\n        f\"and 'scripts/'). Candidates\
+      \ tried: {tried_msg}\"\n    )\n\n\nclass OutsideRepoPathError(ValueError):\n\
+      \    \"\"\"v1.10.5 containment hardening: operator-supplied path resolves outside\
+      \ repo_root.\"\"\"\n\n\ndef _normalize_relative_to_repo(path_str: str | None,\
+      \ repo_root: Path) -> Path | None:\n    \"\"\"Normalize an operator-supplied\
+      \ path against repo_root.\n\n    Per v1.10.4 F5 hardening: operator may supply\
+      \ relative paths to --goal-packet,\n    --review-target, --prompt-template,\
+      \ --schema. The codex subprocess runs with\n    --cd repo_root, so relative\
+      \ paths must be interpreted in the repo_root frame\n    too — NOT against the\
+      \ process cwd (which may differ if a future MCP wrapper\n    or service caller\
+      \ invokes us from elsewhere).\n\n    Per v1.10.5 containment hardening: after\
+      \ resolution the path MUST be inside\n    repo_root. Absolute paths previously\
+      \ passed through unchanged via p.resolve(),\n    which let any caller supply\
+      \ (or have an MCP tool wrapper pass through) an\n    out-of-tree absolute path\
+      \ and have its contents pulled into the codex prompt.\n    That's a real boundary\
+      \ leak — review-target/goal-packet/schema/template are\n    all read with read_text().\
+      \ Containment fails closed with a clear diagnostic.\n\n    None passes through\
+      \ as None.\n    \"\"\"\n    if path_str is None:\n        return None\n    p\
+      \ = Path(path_str)\n    resolved = p.resolve() if p.is_absolute() else (repo_root\
+      \ / p).resolve()\n    repo_root_resolved = repo_root.resolve()\n    try:\n \
+      \       resolved.relative_to(repo_root_resolved)\n    except ValueError:\n \
+      \       raise OutsideRepoPathError(\n            f\"path {path_str!r} resolves\
+      \ to {resolved} which is outside repo_root \"\n            f\"{repo_root_resolved}.\
+      \ agent-loop-mcp dispatch only reads files inside \"\n            f\"the repo.\
+      \ Move the file into the repo or pass a path relative to it.\"\n        )\n\
+      \    return resolved\n\n\ndef _load_goal_packet(path: Path) -> dict:\n    \"\
+      \"\"Load + minimally validate a goal_packet.yaml. Returns the parsed dict.\"\
+      \"\"\n    text = Path(path).read_text(encoding=\"utf-8\")\n    data = yaml.safe_load(text)\n\
+      \    if not isinstance(data, dict):\n        raise ValueError(f\"goal_packet\
+      \ root must be a mapping, got {type(data).__name__}\")\n    return data\n\n\n\
+      def _load_template(path: Path) -> str:\n    return Path(path).read_text(encoding=\"\
+      utf-8\")\n\n\n# Per iter-0021: language fence map for touched-file embedding.\
+      \ Codex's\n# read-only sandbox cannot reliably read repo files; the helper embeds\n\
+      # touched-file contents directly in the prompt as fenced code blocks. The\n\
+      # extension -> fence-language mapping is conservative (text fence for\n# unknown\
+      \ extensions); covers the file types this project's iterations\n# actually touch.\n\
+      _FENCE_LANG_BY_EXT = {\n    \".py\": \"python\",\n    \".pyi\": \"python\",\n\
+      \    \".md\": \"markdown\",\n    \".yaml\": \"yaml\",\n    \".yml\": \"yaml\"\
+      ,\n    \".json\": \"json\",\n    \".toml\": \"toml\",\n    \".sh\": \"bash\"\
+      ,\n    \".bash\": \"bash\",\n    \".cmd\": \"batch\",\n    \".js\": \"javascript\"\
+      ,\n    \".ts\": \"typescript\",\n    \".html\": \"html\",\n    \".css\": \"\
+      css\",\n    \".sql\": \"sql\",\n}\n\n\ndef _format_touched_files_contents(contents:\
+      \ dict[str, str]) -> str:\n    \"\"\"Render touched-file contents as ``## File:\
+      \ <path>`` + fenced code block.\n\n    Per iter-0021 spec: codex receives file\
+      \ contents inline because its\n    sandbox cannot reliably perform filesystem\
+      \ reads. The format is plain\n    markdown so the prompt renders correctly when\
+      \ codex reads the prompt.\n\n    File order is sorted by path for deterministic\
+      \ prompt SHA. Unknown\n    extensions fall back to a ``text`` fence.\n    \"\
+      \"\"\n    if not contents:\n        return \"(no touched-file contents embedded)\"\
+      \n    lines: list[str] = []\n    for path in sorted(contents.keys()):\n    \
+      \    ext = Path(path).suffix.lower()\n        lang = _FENCE_LANG_BY_EXT.get(ext,\
+      \ \"text\")\n        lines.append(f\"## File: {path}\")\n        lines.append(\"\
+      \")\n        lines.append(f\"```{lang}\")\n        body = contents[path]\n \
+      \       # Trim a single trailing newline so the closing fence sits on its own\n\
+      \        # line without a blank gap; preserve internal newlines verbatim.\n\
+      \        if body.endswith(\"\\n\"):\n            body = body[:-1]\n        lines.append(body)\n\
+      \        lines.append(\"```\")\n        lines.append(\"\")\n    return \"\\\
+      n\".join(lines).rstrip() + \"\\n\"\n\n\ndef _build_prompt(\n    goal_packet:\
+      \ dict,\n    template_text: str,\n    iteration_dir: str | None = None,\n  \
+      \  review_packet_path: str | None = None,\n    review_target_path: str | None\
+      \ = None,\n    review_target_hash: str | None = None,\n    review_packet: dict\
+      \ | None = None,\n) -> str:\n    \"\"\"Substitute goal_packet fields + review-target\
+      \ fields into the template's {placeholders}.\n\n    Per F6 (codex review 2026-05-09):\
+      \ explicit review-target fields tell codex\n    exactly which input it should\
+      \ review, preventing wrong-scope inference in\n    dirty repositories.\n\n \
+      \   Per iter-0021: when ``review_packet`` is supplied and contains\n    ``defect_target.touched_files_contents``,\
+      \ those file bodies are embedded\n    inline at the ``{touched_files_contents_block}``\
+      \ placeholder. Codex's\n    sandbox cannot reliably read repo files; embedded\
+      \ contents replace the\n    filesystem read.\n\n    Missing optional fields\
+      \ render as empty strings or \"(not specified)\" so the\n    template keeps\
+      \ formatting.\n    \"\"\"\n    auth = goal_packet.get(\"authorization\", {})\
+      \ or {}\n    goal = goal_packet.get(\"goal\", {}) or {}\n\n    def _format_list(xs):\n\
+      \        if not xs:\n            return \"(none)\"\n        return \"\\n\".join(f\"\
+      \  - {x}\" for x in xs)\n\n    def _format_gates(gates):\n        if not gates:\n\
+      \            return \"(none)\"\n        lines = []\n        for g in gates:\n\
+      \            gid = g.get(\"id\", \"?\")\n            desc = g.get(\"description\"\
+      , \"\")\n            check = g.get(\"check\", \"\")\n            lines.append(f\"\
+      \  - {gid}: {desc}\\n      check: {check}\")\n        return \"\\n\".join(lines)\n\
+      \n    def _or_unspecified(v):\n        return v if v is not None and v != \"\
+      \" else \"(not specified)\"\n\n    # iter-0021: extract touched-file contents\
+      \ from review_packet if present.\n    touched_contents: dict[str, str] = {}\n\
+      \    if isinstance(review_packet, dict):\n        defect_target = review_packet.get(\"\
+      defect_target\")\n        if isinstance(defect_target, dict):\n            tfc\
+      \ = defect_target.get(\"touched_files_contents\")\n            if isinstance(tfc,\
+      \ dict):\n                # Coerce values to strings; reject non-string entries\
+      \ silently\n                # rather than raising — the helper writer is the\
+      \ type guard.\n                touched_contents = {\n                    k:\
+      \ v for k, v in tfc.items()\n                    if isinstance(k, str) and isinstance(v,\
+      \ str)\n                }\n\n    substitutions = {\n        \"{goal_summary}\"\
+      : str(goal.get(\"summary\", \"\")),\n        \"{desired_end_state}\": str(goal.get(\"\
+      desired_end_state\", \"\")),\n        \"{allowed_files}\": _format_list(goal_packet.get(\"\
+      allowed_files\", [])),\n        \"{acceptance_gates}\": _format_gates(goal_packet.get(\"\
+      acceptance_gates\", [])),\n        \"{scope_signature}\": str(auth.get(\"scope_signature\"\
+      , \"\")),\n        \"{authorized_by}\": str(auth.get(\"authorized_by\", \"\"\
+      )),\n        \"{authorized_at_utc}\": str(auth.get(\"authorized_at_utc\", \"\
+      \")),\n        \"{iteration_dir}\": _or_unspecified(iteration_dir),\n      \
+      \  \"{review_packet_path}\": _or_unspecified(review_packet_path),\n        \"\
+      {review_target_path}\": _or_unspecified(review_target_path),\n        \"{review_target_hash}\"\
+      : _or_unspecified(review_target_hash),\n        \"{touched_files_contents_block}\"\
+      : _format_touched_files_contents(touched_contents),\n    }\n    out = template_text\n\
+      \    for placeholder, value in substitutions.items():\n        out = out.replace(placeholder,\
+      \ value)\n    return out\n\n\nclass CodexInvocationError(RuntimeError):\n  \
+      \  \"\"\"Raised when the codex CLI exits non-zero, times out, or is not found.\"\
+      \"\"\n\n\nclass CodexOutputParseError(ValueError):\n    \"\"\"Raised when codex\
+      \ output is not parseable JSON or lacks the expected top-level shape.\"\"\"\n\
+      \n\ndef _resolve_codex_bin(codex_bin: str) -> str:\n    \"\"\"Resolve a codex\
+      \ binary spec to an actual executable file path.\n\n    Per v1.10.3 Windows\
+      \ hardening (real-codex smoke 2026-05-09):\n      - Python's subprocess on Windows\
+      \ does NOT apply PATHEXT lookup to bare\n        names, so `codex` (which is\
+      \ on PATH only as `codex.cmd`/`.ps1`/etc.)\n        fails with \"binary not\
+      \ found\". `shutil.which(\"codex\")` DOES apply\n        PATHEXT and returns\
+      \ the resolved path.\n      - On Windows, `shutil.which` returns the FIRST PATHEXT\
+      \ match by default;\n        order is `.COM; .EXE; .BAT; .CMD; .VBS; .JS; .WS;\
+      \ .PS1`. npm-installed\n        CLIs ship `<name>.cmd` (directly executable\
+      \ by CreateProcess) AND\n        `<name>.ps1` (needs powershell.exe wrapper).\
+      \ Without intervention,\n        `shutil.which(\"codex\")` could return `.ps1`\
+      \ (in some PATH orders) and\n        Python's subprocess would fail with WinError\
+      \ 193 (\"not a valid Win32\n        application\"). Prefer `.cmd` explicitly\
+      \ when the bare-name resolution\n        lands on a script Python can't exec.\n\
+      \n    Returns the resolved path. If no resolution is possible (codex_bin already\n\
+      \    looks like an absolute path OR shutil.which returns nothing), returns the\n\
+      \    input unchanged so subprocess.run produces a clear \"binary not found\"\
+      .\n    \"\"\"\n    # If caller already gave a full path that exists, use it\
+      \ as-is.\n    if os.path.sep in codex_bin or (len(codex_bin) > 1 and codex_bin[1]\
+      \ == \":\"):\n        return codex_bin\n    resolved = shutil.which(codex_bin)\n\
+      \    if resolved is None:\n        return codex_bin\n    # On Windows, prefer\
+      \ .cmd over .ps1 (Python's subprocess can directly exec\n    # .cmd via CreateProcess\
+      \ but not .ps1 which needs powershell.exe).\n    if sys.platform == \"win32\"\
+      \ and resolved.lower().endswith(\".ps1\"):\n        cmd_alt = shutil.which(codex_bin\
+      \ + \".cmd\")\n        if cmd_alt:\n            return cmd_alt\n    return resolved\n\
+      \n\ndef _get_codex_version(codex_bin: str) -> str:\n    \"\"\"Best-effort: shell\
+      \ out to `<codex> --version` and return the version string.\n\n    Returns 'unknown'\
+      \ on any failure (FileNotFoundError, non-zero exit, parse fail).\n    Used for\
+      \ audit-log provenance only; never blocks dispatch.\n    \"\"\"\n    try:\n\
+      \        result = subprocess.run(\n            [_resolve_codex_bin(codex_bin),\
+      \ \"--version\"],\n            capture_output=True,\n            text=True,\n\
+      \            encoding=\"utf-8\",\n            errors=\"replace\",\n        \
+      \    timeout=10,\n        )\n        if result.returncode == 0:\n          \
+      \  return result.stdout.strip() or \"unknown\"\n    except (FileNotFoundError,\
+      \ subprocess.TimeoutExpired, OSError):\n        pass\n    return \"unknown\"\
+      \n\n\ndef _invoke_codex(\n    prompt: str,\n    codex_bin: str,\n    timeout_seconds:\
+      \ int,\n    repo_root: Path,\n    schema_path: Path,\n) -> str:\n    \"\"\"\
+      Shell out to codex CLI; return the final assistant message text. Raises CodexInvocationError.\n\
+      \n    Verified against codex-cli 0.129.0 (`codex exec --help` 2026-05-09):\n\
+      \      - `codex exec` takes prompt via stdin when prompt arg is `-` or omitted\
+      \ with piped stdin.\n      - `--skip-git-repo-check` lets codex run outside\
+      \ a clean git tree.\n      - `--cd <DIR>` sets the codex working directory (reviewer-safe\
+      \ scoping).\n      - `--sandbox read-only` prevents codex from mutating the\
+      \ workspace (reviewer-safe execution).\n      - `--output-schema <FILE>` constrains\
+      \ the final assistant message to the JSON schema.\n      - `-o <FILE>` writes\
+      \ the FINAL assistant message to FILE (no streaming-output parsing).\n    \"\
+      \"\"\n    with tempfile.NamedTemporaryFile(mode=\"w\", suffix=\".json\", delete=False,\
+      \ encoding=\"utf-8\") as tmp:\n        out_file = tmp.name\n    try:\n     \
+      \   cmd = [\n            _resolve_codex_bin(codex_bin),\n            \"exec\"\
+      ,\n            \"--skip-git-repo-check\",\n            \"--cd\", str(repo_root),\n\
+      \            \"--sandbox\", \"read-only\",\n            \"--output-schema\"\
+      , str(schema_path),\n            \"-o\", out_file,\n            \"-\",\n   \
+      \     ]\n        try:\n            # Per v1.10.3 Windows hardening (real-codex\
+      \ smoke 2026-05-09): even with\n            # text=True + encoding=\"utf-8\"\
+      , Python's subprocess on Windows opens stdin\n            # in TEXT MODE which\
+      \ performs newline translation (\\n -> \\r\\n) on the byte\n            # stream\
+      \ AFTER UTF-8 encoding. This corrupts multibyte UTF-8 sequences if\n       \
+      \     # a \\n falls mid-codepoint OR if the receiver counts bytes assuming no\n\
+      \            # translation. Codex (which expects exact UTF-8 bytes) reports\
+      \ \"invalid\n            # byte at offset N\" when any non-ASCII codepoint is\
+      \ present.\n            #\n            # Fix: encode prompt to UTF-8 bytes ourselves\
+      \ and pass binary input\n            # (text=False, no encoding= kwarg). subprocess\
+      \ writes bytes verbatim to\n            # the stdin pipe, no translation. stdout/stderr\
+      \ are also bytes; we decode\n            # stderr for human-readable error messages.\n\
+      \            result = subprocess.run(\n                cmd,\n              \
+      \  input=prompt.encode(\"utf-8\"),\n                capture_output=True,\n \
+      \               timeout=timeout_seconds,\n            )\n        except subprocess.TimeoutExpired:\n\
+      \            raise CodexInvocationError(f\"codex timeout after {timeout_seconds}s\"\
+      ) from None\n        except FileNotFoundError:\n            raise CodexInvocationError(f\"\
+      codex binary not found: {codex_bin}\") from None\n        if result.returncode\
+      \ != 0:\n            # stderr is bytes (binary mode); decode for the error message.\n\
+      \            stderr_str = (\n                result.stderr.decode(\"utf-8\"\
+      , errors=\"replace\")\n                if result.stderr\n                else\
+      \ \"\"\n            )\n            stdout_str = (\n                result.stdout.decode(\"\
+      utf-8\", errors=\"replace\")\n                if result.stdout\n           \
+      \     else \"\"\n            )\n            # Per v1.10.3 Windows hardening:\
+      \ codex echoes its config + the input\n            # prompt to stderr before\
+      \ any actual error message. Old 500-char\n            # truncation hid the real\
+      \ error. Show last 4000 chars of stderr\n            # (where the error usually\
+      \ lives) + a hint about stdout if non-empty.\n            stderr_tail = stderr_str.strip()[-4000:]\n\
+      \            stdout_hint = (\n                f\"; stdout_tail={stdout_str.strip()[-500:]!r}\"\
+      \n                if stdout_str.strip()\n                else \"\"\n       \
+      \     )\n            raise CodexInvocationError(\n                f\"codex exit={result.returncode};\
+      \ stderr_tail={stderr_tail!r}{stdout_hint}\"\n            )\n        try:\n\
+      \            return Path(out_file).read_text(encoding=\"utf-8\")\n        except\
+      \ OSError as exc:\n            raise CodexInvocationError(f\"codex output file\
+      \ unreadable: {exc}\") from exc\n    finally:\n        try:\n            Path(out_file).unlink()\n\
+      \        except OSError:\n            pass\n\n\ndef _compute_per_patch_base_sha(\n\
+      \    defect_target: dict,\n    patch_files_touched: list,\n    repo_root: Path\
+      \ | None = None,\n) -> str | None:\n    \"\"\"iter-0024 F2 + iter-0026 F1: compute\
+      \ per-patch bundle_sha matching the\n    on-disk bytes hash that apply.codex_patch\
+      \ produces at drift-check time.\n\n    iter-0026 F1 fix:\n      The prior helper\
+      \ computed bundle_sha by encoding text strings from\n      ``defect_target.touched_files_contents``\
+      \ (UTF-8). On Windows with CRLF\n      line endings on disk, ``apply.codex_patch``\
+      \ (which hashes raw disk bytes\n      via ``_closure_invariant.bundle_sha``)\
+      \ saw a DIFFERENT hash, forcing\n      manual per-patch re-anchor for every\
+      \ codex-applied patch. The fix:\n      when ``repo_root`` is supplied, defer\
+      \ entirely to\n      ``_closure_invariant.bundle_sha(repo_root, patch_files_touched)``\
+      \ so the\n      stamp matches apply-time disk bytes exactly.\n\n      When ``repo_root``\
+      \ is None (legacy unit-test path), fall back to the\n      iter-0024 text-encoding\
+      \ behaviour. This preserves backward compatibility\n      for tests that don't\
+      \ materialise files on disk.\n\n    Returns None when:\n      - patch_files_touched\
+      \ is empty, OR\n      - (text fallback only) defect_target has no touched_files_contents\
+      \ dict,\n        OR any patch file is missing / non-string content.\n\n    On\
+      \ None return, caller falls back to defect_target.base_sha (iter-0022\n    behaviour)\
+      \ so legacy tests / callers without touched_files_contents still\n    work.\n\
+      \    \"\"\"\n    if not patch_files_touched:\n        return None\n\n    # iter-0026\
+      \ F1: disk-bytes path matches apply.codex_patch exactly.\n    if repo_root is\
+      \ not None:\n        # Validate path types early so we never feed bundle_sha\
+      \ a non-string\n        # entry (it would TypeError on PurePath construction).\n\
+      \        for raw_path in patch_files_touched:\n            if not isinstance(raw_path,\
+      \ str):\n                return None\n        # Defer import: keeps _closure_invariant\
+      \ a soft dependency at module\n        # load time (mirrors apply_codex_patch's\
+      \ import discipline).\n        from agent_loop_mcp._closure_invariant import\
+      \ bundle_sha as _bundle_sha\n        try:\n            return _bundle_sha(repo_root,\
+      \ list(patch_files_touched))\n        except ValueError:\n            # Path\
+      \ contained forbidden \\0 / \\n separator chars; fall through\n            #\
+      \ to None so caller falls back to defect_target.base_sha.\n            return\
+      \ None\n\n    # Legacy text-encoding fallback (no repo_root supplied — typically\
+      \ a\n    # unit-level test that doesn't materialise files on disk).\n    contents\
+      \ = defect_target.get(\"touched_files_contents\")\n    if not isinstance(contents,\
+      \ dict):\n        return None\n\n    # Defer import to avoid circular dependency\
+      \ at module load time.\n    from agent_loop_mcp._closure_invariant import _normalize_path\n\
+      \n    normalised_pairs: list[tuple[str, str]] = []\n    for raw_path in patch_files_touched:\n\
+      \        if not isinstance(raw_path, str):\n            return None\n      \
+      \  # Look up content via the ORIGINAL path key (review-packet\n        # touched_files_contents\
+      \ keys are the operator-supplied paths). Then\n        # normalise for the canonical\
+      \ bundle form.\n        if raw_path not in contents:\n            return None\n\
+      \        body = contents[raw_path]\n        if not isinstance(body, str):\n\
+      \            return None\n        try:\n            norm = _normalize_path(raw_path)\n\
+      \        except ValueError:\n            return None\n        content_hash =\
+      \ hashlib.sha256(body.encode(\"utf-8\")).hexdigest()\n        normalised_pairs.append((norm,\
+      \ content_hash))\n\n    parts = [f\"{p}\\0{h}\" for p, h in sorted(normalised_pairs)]\n\
+      \    canonical = \"\\n\".join(parts)\n    return hashlib.sha256(canonical.encode(\"\
+      utf-8\")).hexdigest()\n\n\ndef _validate_patch_proposal(\n    finding_index:\
+      \ int,\n    finding_id: str,\n    pp: dict,\n    all_finding_ids: set,\n   \
+      \ goal_packet: dict | None,\n    review_packet: dict | None = None,\n    repo_root:\
+      \ Path | None = None,\n) -> None:\n    \"\"\"Validate a single patch_proposal\
+      \ block per Task #24 (iter-0014) binding rules.\n\n    Raises CodexOutputParseError\
+      \ on any violation. MUTATES the supplied `pp`\n    dict by stamping `unified_diff_sha256`\
+      \ (helper-computed) so downstream\n    consumers see the canonical diff hash\
+      \ without recomputing.\n\n    Per iter-0022: when ``review_packet`` is supplied\
+      \ AND has a string\n    ``defect_target.base_sha``, the helper OVERWRITES ``pp[\"\
+      base_sha\"]`` with\n    that canonical value. Codex's read-only sandbox emits\
+      \ a hallucinated\n    base_sha (iter-0021 empirical finding); the operator-stamped\n\
+      \    ``defect_target.base_sha`` (computed via ``bundle_sha`` at review-packet\n\
+      \    author time) is the authoritative repo-state hash. When review_packet is\n\
+      \    absent or lacks a string defect_target.base_sha, codex's emission is kept\n\
+      \    (backward compat for unit tests + legacy callers).\n\n    Rules (per codex\
+      \ 2026-05-10 v4 + iter-0020 ergonomics fix + iter-0022 base_sha stamp):\n  \
+      \    - patch_proposal is dict (None already accepted by caller bypass)\n   \
+      \   - keys are EXACTLY the closed set {patch_id, applies_to_findings, base_sha,\n\
+      \        unified_diff, files_touched, expected_tests}; extras rejected\n   \
+      \   - patch_id matches ^codex-rev-\\\\d+-patch$\n      - patch_id == f\"{finding_id}-patch\"\
+      \ (derived from this finding's id;\n        replaces the old content-bound formula\
+      \ codex's sandbox couldn't compute)\n      - applies_to_findings non-empty list\
+      \ of strings, each in all_finding_ids\n      - files_touched non-empty list\
+      \ of strings\n      - unified_diff non-empty string\n      - if goal_packet\
+      \ supplied: every files_touched path must be in\n        goal_packet.allowed_files\
+      \ (matched via _self_drive._path_in_scope), and\n        no path may match goal_packet.forbidden_files\n\
+      \      - helper computes sha256(unified_diff) and stamps it on pp as\n     \
+      \   `unified_diff_sha256` (not produced by codex; drift-detection field)\n \
+      \     - iter-0022: helper overwrites pp[\"base_sha\"] from review_packet\n \
+      \       defect_target.base_sha when present (string-typed)\n    \"\"\"\n   \
+      \ if not isinstance(pp, dict):\n        raise CodexOutputParseError(\n     \
+      \       f\"findings[{finding_index}].patch_proposal must be object, got {type(pp).__name__}\"\
+      \n        )\n    # Closed-key set; reject extras (anti-self-verification claims\
+      \ like 'verified')\n    unknown = set(pp.keys()) - _PATCH_PROPOSAL_ALLOWED\n\
+      \    if unknown:\n        raise CodexOutputParseError(\n            f\"findings[{finding_index}].patch_proposal\
+      \ has unexpected keys: {sorted(unknown)}\"\n        )\n    # Required fields\
+      \ present\n    for required in _PATCH_PROPOSAL_REQUIRED:\n        if required\
+      \ not in pp:\n            raise CodexOutputParseError(\n                f\"\
+      findings[{finding_index}].patch_proposal missing required field: {required!r}\"\
+      \n            )\n    # Type checks on string fields\n    for str_field in (\"\
+      patch_id\", \"base_sha\", \"unified_diff\"):\n        if not isinstance(pp[str_field],\
+      \ str):\n            raise CodexOutputParseError(\n                f\"findings[{finding_index}].patch_proposal.{str_field}\
+      \ must be string, \"\n                f\"got {type(pp[str_field]).__name__}\"\
+      \n            )\n    # Type checks on list fields\n    for list_field in (\"\
+      applies_to_findings\", \"files_touched\"):\n        if not isinstance(pp[list_field],\
+      \ list):\n            raise CodexOutputParseError(\n                f\"findings[{finding_index}].patch_proposal.{list_field}\
+      \ must be array, \"\n                f\"got {type(pp[list_field]).__name__}\"\
+      \n            )\n    if \"expected_tests\" in pp and not isinstance(pp[\"expected_tests\"\
+      ], list):\n        raise CodexOutputParseError(\n            f\"findings[{finding_index}].patch_proposal.expected_tests\
+      \ must be array, \"\n            f\"got {type(pp['expected_tests']).__name__}\"\
+      \n        )\n\n    # Non-empty constraints\n    if not pp[\"unified_diff\"]:\n\
+      \        raise CodexOutputParseError(\n            f\"findings[{finding_index}].patch_proposal.unified_diff\
+      \ must be non-empty\"\n        )\n    if not pp[\"files_touched\"]:\n      \
+      \  raise CodexOutputParseError(\n            f\"findings[{finding_index}].patch_proposal.files_touched\
+      \ must be non-empty\"\n        )\n\n    # iter-0028 F1+F2 (codex-rev-003): reject\
+      \ codex-cli's proprietary\n    # `apply_patch` format at validate time. iter-0027\
+      \ codex emitted this\n    # shape on its sole patch_proposal (the iter-0026\
+      \ F2 applier rejected\n    # it at apply time, but only after seal). The standard\
+      \ unified-diff\n    # form (--- a/<path> / +++ b/<path> / @@ -L,N +L,N @@) is\
+      \ the only\n    # accepted format. The named-error string is grep-friendly for\
+      \ callers.\n    diff_text = pp[\"unified_diff\"]\n    if diff_text.lstrip().startswith(_APPLY_PATCH_BEGIN_MARKER)\
+      \ or (\n        _APPLY_PATCH_UPDATE_MARKER in diff_text\n    ):\n        raise\
+      \ CodexOutputParseError(\n            f\"findings[{finding_index}].patch_proposal:\
+      \ \"\n            f\"unified_diff_apply_patch_format_not_supported. The unified_diff\
+      \ \"\n            f\"field uses codex-cli's proprietary apply_patch format \"\
+      \n            f\"({_APPLY_PATCH_BEGIN_MARKER!r}/{_APPLY_PATCH_UPDATE_MARKER!r}).\
+      \ \"\n            f\"Use standard unified-diff format with '--- a/<path>' and\
+      \ \"\n            f\"'+++ b/<path>' headers and '@@ -L,N +L,N @@' hunks instead.\"\
+      \n        )\n\n    # iter-0028 F4 (codex-rev-002): parse `--- a/<path>` and\
+      \ `+++ b/<path>`\n    # headers in the diff body. Every body-referenced path\
+      \ must be in\n    # files_touched (declared) AND (when goal_packet is supplied)\
+      \ in\n    # allowed_files AND NOT in forbidden_files. /dev/null is conventional\n\
+      \    # create/delete marker and skipped.\n    body_paths: set[str] = set()\n\
+      \    for match in _DIFF_FILE_HEADER_RE.finditer(diff_text):\n        path =\
+      \ match.group(\"path\").strip()\n        if not path or path == \"dev/null\"\
+      :\n            continue\n        body_paths.add(path)\n    declared_files =\
+      \ set(pp[\"files_touched\"])\n    for body_path in sorted(body_paths):\n   \
+      \     if body_path not in declared_files:\n            raise CodexOutputParseError(\n\
+      \                f\"findings[{finding_index}].patch_proposal: \"\n         \
+      \       f\"unified_diff_body_path_outside_scope: {body_path!r} appears \"\n\
+      \                f\"in the diff body (--- a/ or +++ b/ header) but is not in\
+      \ \"\n                f\"files_touched {sorted(declared_files)}. Every diff-body\
+      \ path \"\n                f\"must be declared in files_touched so scope-check\
+      \ semantics \"\n                f\"agree across both surfaces.\"\n         \
+      \   )\n    if not pp[\"applies_to_findings\"]:\n        raise CodexOutputParseError(\n\
+      \            f\"findings[{finding_index}].patch_proposal.applies_to_findings\
+      \ must be non-empty\"\n        )\n\n    # Items in the lists must be strings\n\
+      \    for j, item in enumerate(pp[\"applies_to_findings\"]):\n        if not\
+      \ isinstance(item, str):\n            raise CodexOutputParseError(\n       \
+      \         f\"findings[{finding_index}].patch_proposal.applies_to_findings[{j}]\
+      \ \"\n                f\"must be string, got {type(item).__name__}\"\n     \
+      \       )\n    for j, item in enumerate(pp[\"files_touched\"]):\n        if\
+      \ not isinstance(item, str):\n            raise CodexOutputParseError(\n   \
+      \             f\"findings[{finding_index}].patch_proposal.files_touched[{j}]\
+      \ \"\n                f\"must be string, got {type(item).__name__}\"\n     \
+      \       )\n\n    # patch_id regex (iter-0020: codex-producible form, not content-bound)\n\
+      \    if not _PATCH_ID_PATTERN.match(pp[\"patch_id\"]):\n        raise CodexOutputParseError(\n\
+      \            f\"findings[{finding_index}].patch_proposal.patch_id {pp['patch_id']!r}\
+      \ does not \"\n            f\"match pattern ^codex-rev-\\\\d+-patch$\"\n   \
+      \     )\n\n    # patch_id finding-id binding (iter-0020): must equal f\"{finding_id}-patch\"\
+      \n    # Replaces the old content-bound formula (patch-{base_sha[:12]}-{sha256(diff)[:12]})\n\
+      \    # which codex's read-only sandbox couldn't compute. Drift detection still\n\
+      \    # works via base_sha + post_sha + the helper-computed unified_diff_sha256\n\
+      \    # stamped on the apply event.\n    expected_patch_id = f\"{finding_id}-patch\"\
+      \n    if pp[\"patch_id\"] != expected_patch_id:\n        raise CodexOutputParseError(\n\
+      \            f\"findings[{finding_index}].patch_proposal.patch_id {pp['patch_id']!r}\
+      \ must \"\n            f\"equal {expected_patch_id!r} (derived from this finding's\
+      \ id field)\"\n        )\n\n    # applies_to_findings must reference IDs present\
+      \ in this review\n    for ref in pp[\"applies_to_findings\"]:\n        if ref\
+      \ not in all_finding_ids:\n            raise CodexOutputParseError(\n      \
+      \          f\"findings[{finding_index}].patch_proposal.applies_to_findings references\
+      \ \"\n                f\"unknown finding id {ref!r}; known ids: {sorted(all_finding_ids)}\"\
+      \n            )\n\n    # Goal-packet scope checks (skip when goal_packet is\
+      \ None — backward compat\n    # for unit-level test invocation; the main pipeline\
+      \ always supplies it).\n    if goal_packet is not None:\n        # Reuse the\
+      \ same matcher used by the supervisor stop rules so the\n        # allowed/forbidden\
+      \ semantics agree across enforcement layers.\n        from agent_loop_mcp._self_drive\
+      \ import _path_in_scope\n        allowed = goal_packet.get(\"allowed_files\"\
+      ) or []\n        forbidden = goal_packet.get(\"forbidden_files\") or []\n  \
+      \      for path in pp[\"files_touched\"]:\n            if not _path_in_scope(path,\
+      \ allowed):\n                raise CodexOutputParseError(\n                \
+      \    f\"findings[{finding_index}].patch_proposal.files_touched path \"\n   \
+      \                 f\"{path!r} is not in goal_packet.allowed_files {allowed}\"\
+      \n                )\n            if forbidden and _path_in_scope(path, forbidden):\n\
+      \                raise CodexOutputParseError(\n                    f\"findings[{finding_index}].patch_proposal.files_touched\
+      \ path \"\n                    f\"{path!r} matches goal_packet.forbidden_files\
+      \ {forbidden}\"\n                )\n        # iter-0028 F4: body-path scope\
+      \ check. body_paths is a strict subset of\n        # files_touched (enforced\
+      \ above), but the allowed/forbidden semantics\n        # MUST be re-checked\
+      \ against the body-extracted set so the named-error\n        # string clearly\
+      \ attributes scope failures to the diff body when they\n        # originate\
+      \ there. (For paths already in files_touched, this is a\n        # redundant\
+      \ pass — the earlier loop fired. The body-only path here is\n        # the sneaky-emission\
+      \ case the validate-time gate exists to catch.)\n        for body_path in sorted(body_paths):\n\
+      \            if not _path_in_scope(body_path, allowed):\n                raise\
+      \ CodexOutputParseError(\n                    f\"findings[{finding_index}].patch_proposal:\
+      \ \"\n                    f\"unified_diff_body_path_outside_scope: {body_path!r}\
+      \ \"\n                    f\"is in the diff body but not in goal_packet.allowed_files\
+      \ \"\n                    f\"{allowed}\"\n                )\n            if\
+      \ forbidden and _path_in_scope(body_path, forbidden):\n                raise\
+      \ CodexOutputParseError(\n                    f\"findings[{finding_index}].patch_proposal:\
+      \ \"\n                    f\"unified_diff_body_path_outside_scope: {body_path!r}\
+      \ \"\n                    f\"is in the diff body and matches goal_packet.forbidden_files\
+      \ \"\n                    f\"{forbidden}\"\n                )\n\n    # iter-0020:\
+      \ helper computes the canonical diff hash and stamps it on the\n    # validated\
+      \ patch_proposal output. Codex can't compute this from a\n    # read-only sandbox;\
+      \ the helper authoritatively supplies it for downstream\n    # drift detection\
+      \ (apply layer's last_mutation.unified_diff_sha256).\n    pp[\"unified_diff_sha256\"\
+      ] = hashlib.sha256(\n        pp[\"unified_diff\"].encode(\"utf-8\")\n    ).hexdigest()\n\
+      \n    # iter-0024 F2 fix: helper now stamps a PER-PATCH base_sha computed against\n\
+      \    # the patch's OWN files_touched subset (a strict subset of the review-packet\n\
+      \    # defect_target.files). The prior iter-0022 logic stamped every patch with\n\
+      \    # the FULL multi-file defect_target.base_sha — but apply.codex_patch\n\
+      \    # computes bundle_sha against the patch's files_touched alone, so a single-\n\
+      \    # file patch derived from a 5-file defect_target failed base_sha_drift\
+      \ on\n    # apply. Documented as operational_caveat per_patch_base_sha_reanchor_required\n\
+      \    # in iter-0023/iteration-outcome.yaml.\n    #\n    # Computation source:\
+      \ review_packet.defect_target.touched_files_contents\n    # (authored by _author_review_packet\
+      \ — maps each defect_target file to its\n    # full text at review-packet author\
+      \ time). The per-patch bundle_sha is\n    # computed against the subset map,\
+      \ matching bundle_sha's canonical form\n    # (sorted (normalised_path, sha256(content))\
+      \ pairs).\n    #\n    # Backward compat: when touched_files_contents is missing\
+      \ OR any patch\n    # file is absent from it, the helper falls back to iter-0022\
+      \ behaviour\n    # (stamps defect_target.base_sha verbatim) so legacy tests\
+      \ + legacy\n    # callers don't break.\n    if isinstance(review_packet, dict):\n\
+      \        defect_target = review_packet.get(\"defect_target\")\n        if isinstance(defect_target,\
+      \ dict):\n            # iter-0026 F1: pass repo_root so helper hashes disk bytes\
+      \ (matches\n            # apply.codex_patch's bundle_sha contract; eliminates\
+      \ the Windows\n            # CRLF mismatch that forced manual re-anchor on every\
+      \ codex patch\n            # in iter-0023/0025).\n            per_patch_sha\
+      \ = _compute_per_patch_base_sha(\n                defect_target,\n         \
+      \       pp.get(\"files_touched\") or [],\n                repo_root=repo_root,\n\
+      \            )\n            if per_patch_sha is not None:\n                pp[\"\
+      base_sha\"] = per_patch_sha\n            else:\n                stamped = defect_target.get(\"\
+      base_sha\")\n                if isinstance(stamped, str) and stamped:\n    \
+      \                pp[\"base_sha\"] = stamped\n\n\ndef _parse_codex_output(\n\
+      \    text: str,\n    goal_packet: dict | None = None,\n    review_packet: dict\
+      \ | None = None,\n    repo_root: Path | None = None,\n) -> dict:\n    \"\"\"\
+      Parse codex's structured JSON output + locally validate the shape.\n\n    Codex\
+      \ is invoked with --output-schema; the final assistant message MUST be JSON\n\
+      \    matching the schema. This function adds defense-in-depth validation per\n\
+      \    codex review F2 (2026-05-09) AND v1.10.2 hardening F2/F3:\n      - root\
+      \ is a JSON object\n      - top-level keys are EXACTLY {findings, goal_satisfied,\
+      \ blocking_objections}\n        (+ optional goal_satisfied_rationale); unknown\
+      \ keys rejected\n      - findings is a list; each finding has ALL 6 required\
+      \ fields (id, severity,\n        summary, citation, risk, recommendation) —\
+      \ citation/risk/recommendation are\n        REQUIRED per F3 to prevent weak/non-actionable\
+      \ reviews\n      - each finding has NO extra keys (additionalProperties:false\
+      \ enforcement);\n        only optional NEW key allowed is patch_proposal (Task\
+      \ #24 / iter-0014).\n        Anti-self-verification: verified / self_verified\
+      \ / correct / approved /\n        confirmed are NOT in the allowed set; they\
+      \ remain rejected.\n      - severity in {low,medium,high,blocking,critical}\
+      \ enum\n      - id matches ^codex-rev-\\\\d+$\n      - all string fields (id,\
+      \ severity, summary, citation, risk, recommendation,\n        goal_satisfied_rationale)\
+      \ are actual strings (per F2)\n      - goal_satisfied is bool\n      - blocking_objections\
+      \ is a list of STRINGS (per F2 — list-items typed)\n      - blocking_objections\
+      \ invariant (per F3): set(blocking_objections) ==\n        set(f.id for f in\
+      \ findings if f.severity in {\"blocking\", \"critical\"})\n      - if a finding\
+      \ has patch_proposal: its keys/types/content-binding are\n        validated,\
+      \ and (when goal_packet is supplied) files_touched paths must\n        be in\
+      \ allowed_files and not in forbidden_files (Task #24 / iter-0014).\n\n    goal_packet\
+      \ is OPTIONAL for backward-compat / unit-level testing; the main\n    pipeline\
+      \ always supplies it so scope checks run.\n\n    Per iter-0022: ``review_packet``\
+      \ is OPTIONAL. When supplied AND it carries\n    a string ``defect_target.base_sha``,\
+      \ every parsed patch_proposal has its\n    ``base_sha`` field OVERWRITTEN with\
+      \ that canonical operator-stamped value.\n    The schema permits codex to emit\
+      \ any string for ``base_sha``; the helper\n    authoritatively replaces it post-parse.\
+      \ Backward compat: when review_packet\n    is None or lacks a string defect_target.base_sha,\
+      \ codex's emission is kept.\n    \"\"\"\n    try:\n        parsed = json.loads(text)\n\
+      \    except json.JSONDecodeError as exc:\n        raise CodexOutputParseError(f\"\
+      codex output is not valid JSON: {exc}\") from exc\n\n    if not isinstance(parsed,\
+      \ dict):\n        raise CodexOutputParseError(\n            f\"codex output\
+      \ JSON root must be an object, got {type(parsed).__name__}\"\n        )\n\n\
+      \    # Reject unknown top-level keys (F2)\n    unknown_top = set(parsed.keys())\
+      \ - _ALLOWED_TOP_LEVEL_KEYS\n    if unknown_top:\n        raise CodexOutputParseError(\n\
+      \            f\"codex output JSON has unexpected top-level keys: {sorted(unknown_top)}\"\
+      \n        )\n\n    # Required top-level keys\n    # Per v1.10.4 F4: validator\
+      \ now requires goal_satisfied_rationale, mirroring\n    # the schema (which\
+      \ requires it for OpenAI structured-output strictness).\n    # Prior: optional\
+      \ + type-checked-if-present; new: required + type-checked.\n    for required\
+      \ in (\"findings\", \"goal_satisfied\", \"blocking_objections\", \"goal_satisfied_rationale\"\
+      ):\n        if required not in parsed:\n            raise CodexOutputParseError(f\"\
+      codex output JSON missing required key: {required!r}\")\n\n    # Type checks\
+      \ on top-level\n    if not isinstance(parsed[\"findings\"], list):\n       \
+      \ raise CodexOutputParseError(\"'findings' must be an array\")\n    if not isinstance(parsed[\"\
+      goal_satisfied\"], bool):\n        raise CodexOutputParseError(\n          \
+      \  f\"'goal_satisfied' must be boolean, got {type(parsed['goal_satisfied']).__name__}\"\
+      \n        )\n    if not isinstance(parsed[\"blocking_objections\"], list):\n\
+      \        raise CodexOutputParseError(\n            f\"'blocking_objections'\
+      \ must be an array, got {type(parsed['blocking_objections']).__name__}\"\n \
+      \       )\n\n    # blocking_objections items must all be strings (F2)\n    for\
+      \ i, item in enumerate(parsed[\"blocking_objections\"]):\n        if not isinstance(item,\
+      \ str):\n            raise CodexOutputParseError(\n                f\"blocking_objections[{i}]\
+      \ must be string, got {type(item).__name__}\"\n            )\n\n    # Per v1.10.4\
+      \ F4: goal_satisfied_rationale is now REQUIRED (not optional);\n    # presence\
+      \ already enforced above. Type-check it here.\n    if not isinstance(parsed[\"\
+      goal_satisfied_rationale\"], str):\n        raise CodexOutputParseError(\n \
+      \           f\"'goal_satisfied_rationale' must be string, got \"\n         \
+      \   f\"{type(parsed['goal_satisfied_rationale']).__name__}\"\n        )\n\n\
+      \    # Per-finding validation\n    # First, collect all finding IDs (for patch_proposal.applies_to_findings\
+      \ cross-check)\n    all_finding_ids: set = set()\n    for i, finding in enumerate(parsed[\"\
+      findings\"]):\n        if isinstance(finding, dict) and isinstance(finding.get(\"\
+      id\"), str):\n            all_finding_ids.add(finding[\"id\"])\n\n    blocking_finding_ids\
+      \ = []\n    for i, finding in enumerate(parsed[\"findings\"]):\n        if not\
+      \ isinstance(finding, dict):\n            raise CodexOutputParseError(\n   \
+      \             f\"findings[{i}] must be an object, got {type(finding).__name__}\"\
+      \n            )\n        # Reject unknown finding keys (F2). _ALLOWED_FINDING_KEYS\
+      \ now includes\n        # patch_proposal as the ONLY new optional key (Task\
+      \ #24 / iter-0014).\n        # Anti-self-verification fields (verified / self_verified\
+      \ / correct /\n        # approved / confirmed) remain rejected here.\n     \
+      \   unknown_keys = set(finding.keys()) - _ALLOWED_FINDING_KEYS\n        if unknown_keys:\n\
+      \            raise CodexOutputParseError(\n                f\"findings[{i}]\
+      \ has unexpected keys: {sorted(unknown_keys)}\"\n            )\n        # Required\
+      \ finding fields (F3: citation/risk/recommendation now required)\n        for\
+      \ required in _REQUIRED_FINDING_FIELDS:\n            if required not in finding:\n\
+      \                raise CodexOutputParseError(\n                    f\"findings[{i}]\
+      \ missing required field: {required!r}\"\n                )\n        # All required\
+      \ string fields must be actual strings (F2)\n        for str_field in (\"id\"\
+      , \"severity\", \"summary\", \"citation\", \"risk\", \"recommendation\"):\n\
+      \            if not isinstance(finding[str_field], str):\n                raise\
+      \ CodexOutputParseError(\n                    f\"findings[{i}].{str_field} must\
+      \ be string, got \"\n                    f\"{type(finding[str_field]).__name__}\"\
+      \n                )\n        # Severity enum\n        if finding[\"severity\"\
+      ] not in _VALID_SEVERITIES:\n            raise CodexOutputParseError(\n    \
+      \            f\"findings[{i}] has invalid severity {finding['severity']!r};\
+      \ \"\n                f\"must be one of {sorted(_VALID_SEVERITIES)}\"\n    \
+      \        )\n        # ID pattern\n        if not _FINDING_ID_PATTERN.match(finding[\"\
+      id\"]):\n            raise CodexOutputParseError(\n                f\"findings[{i}]\
+      \ id {finding['id']!r} does not match pattern \"\n                f\"^codex-rev-\\\
+      \\d+$\"\n            )\n        # Optional patch_proposal validation (Task #24\
+      \ / iter-0014).\n        # Schema permits null; treat null as absent.\n    \
+      \    pp = finding.get(\"patch_proposal\")\n        if pp is not None:\n    \
+      \        _validate_patch_proposal(\n                finding_index=i,\n     \
+      \           finding_id=finding[\"id\"],\n                pp=pp,\n          \
+      \      all_finding_ids=all_finding_ids,\n                goal_packet=goal_packet,\n\
+      \                review_packet=review_packet,\n                repo_root=repo_root,\n\
+      \            )\n        # iter-0018 Finding 4: patch_not_proposed_reason field\
+      \ validation.\n        # When present, must be a non-empty string. Mutually\
+      \ exclusive with\n        # patch_proposal — a finding can't have both.\n  \
+      \      reason = finding.get(\"patch_not_proposed_reason\")\n        if reason\
+      \ is not None:\n            if not isinstance(reason, str):\n              \
+      \  raise CodexOutputParseError(\n                    f\"findings[{i}].patch_not_proposed_reason\
+      \ must be string, \"\n                    f\"got {type(reason).__name__}\"\n\
+      \                )\n            if not reason.strip():\n                raise\
+      \ CodexOutputParseError(\n                    f\"findings[{i}].patch_not_proposed_reason\
+      \ must be non-empty\"\n                )\n            if pp is not None:\n \
+      \               raise CodexOutputParseError(\n                    f\"findings[{i}]:\
+      \ patch_proposal and patch_not_proposed_reason \"\n                    f\"are\
+      \ mutually exclusive (both provided)\"\n                )\n        # Track blocking-class\
+      \ findings for invariant check\n        if finding[\"severity\"] in _BLOCKING_SEVERITIES:\n\
+      \            blocking_finding_ids.append(finding[\"id\"])\n\n    # iter-0018\
+      \ Finding 4: strict fix_author_policy enforcement.\n    # When goal_packet.fix_author_policy\
+      \ == \"strict\", every finding MUST have\n    # either a patch_proposal OR a\
+      \ patch_not_proposed_reason. Permissive (the\n    # default + only prior behavior)\
+      \ does not require either. Unrecognized\n    # policy values are rejected.\n\
+      \    if goal_packet is not None:\n        policy = goal_packet.get(\"fix_author_policy\"\
+      , \"permissive\")\n        if policy not in (\"permissive\", \"strict\"):\n\
+      \            raise CodexOutputParseError(\n                f\"goal_packet.fix_author_policy={policy!r}\
+      \ is not a recognized \"\n                f\"value; allowed: 'permissive' (default),\
+      \ 'strict'\"\n            )\n        if policy == \"strict\":\n            for\
+      \ i, finding in enumerate(parsed[\"findings\"]):\n                has_patch\
+      \ = isinstance(finding.get(\"patch_proposal\"), dict)\n                has_reason\
+      \ = bool(finding.get(\"patch_not_proposed_reason\"))\n                if not\
+      \ (has_patch or has_reason):\n                    raise CodexOutputParseError(\n\
+      \                        f\"fix_author_policy=strict: findings[{i}] (id={finding.get('id')!r})\
+      \ \"\n                        f\"must have either patch_proposal OR patch_not_proposed_reason;\
+      \ \"\n                        f\"neither present\"\n                    )\n\n\
+      \    # Blocking objections invariant (F3): set must match blocking-class finding\
+      \ ids\n    expected_blocking = set(blocking_finding_ids)\n    actual_blocking\
+      \ = set(parsed[\"blocking_objections\"])\n    if expected_blocking != actual_blocking:\n\
+      \        missing = expected_blocking - actual_blocking\n        extra = actual_blocking\
+      \ - expected_blocking\n        msg_parts = [\"blocking_objections invariant\
+      \ violated:\"]\n        if missing:\n            msg_parts.append(f\"missing\
+      \ finding ids: {sorted(missing)}\")\n        if extra:\n            msg_parts.append(f\"\
+      unexpected ids (not blocking/critical findings): {sorted(extra)}\")\n      \
+      \  msg_parts.append(\n            f\"expected = {{f.id : f.severity in {{blocking,\
+      \ critical}}}} = {sorted(expected_blocking)}\"\n        )\n        msg_parts.append(f\"\
+      actual = {sorted(actual_blocking)}\")\n        raise CodexOutputParseError(\"\
+      ; \".join(msg_parts))\n\n    return parsed\n\n\ndef _sha256_str(text: str) ->\
+      \ str:\n    \"\"\"Return hex-digest sha256 of UTF-8 input. Used for provenance\
+      \ hashing.\"\"\"\n    return hashlib.sha256(text.encode(\"utf-8\")).hexdigest()\n\
+      \n\ndef _build_sealed_packet(\n    extracted: dict,\n    iteration_id: str,\n\
+      \    reviewer_id: str,\n    pass_id: str,\n    provenance: dict | None = None,\n\
+      ) -> dict:\n    \"\"\"Wrap codex's findings dict in the T6-required outer structure.\n\
+      \n    T6 (review.write_and_seal) requires top-level: iteration_id, reviewer_id,\
+      \ findings.\n    Optional but conventional: pass_id, goal_satisfied, blocking_objections,\n\
+      \    goal_satisfied_rationale.\n\n    Per F5 (codex review 2026-05-09): an optional\
+      \ `provenance` dict is embedded\n    as the `dispatch_provenance` key. T6 SHA-hashes\
+      \ the whole packet, so\n    provenance becomes part of the seal — the sealed\
+      \ YAML is independently\n    verifiable without consulting dispatch-log.jsonl.\
+      \ Pass None (or omit) to\n    skip the provenance block (e.g., in the unit test\
+      \ for _build_sealed_packet\n    itself which doesn't run the full pipeline).\n\
+      \    \"\"\"\n    packet = {\n        \"iteration_id\": iteration_id,\n     \
+      \   \"reviewer_id\": reviewer_id,\n        \"pass_id\": pass_id,\n        \"\
+      findings\": extracted.get(\"findings\", []),\n        \"goal_satisfied\": extracted.get(\"\
+      goal_satisfied\", False),\n        \"goal_satisfied_rationale\": extracted.get(\"\
+      goal_satisfied_rationale\", \"\"),\n        \"blocking_objections\": extracted.get(\"\
+      blocking_objections\", []),\n        # Per v1.10.3 Windows real-codex smoke:\
+      \ T6's audit_append_event requires\n        # `independence_attestation` for\
+      \ review_returned_and_sealed events (schema\n        # type: object|null). For\
+      \ auto-codex-dispatch, isolation is guaranteed by\n        # construction (codex\
+      \ is spawned with --sandbox read-only, --cd <repo_root>,\n        # no peer-review\
+      \ state visible; codex only sees the prompt + goal_packet +\n        # review_target).\
+      \ The attestation records this guarantee + references the\n        # dispatch_provenance\
+      \ block (which has the cryptographic hashes proving\n        # what was reviewed).\n\
+      \        \"independence_attestation\": {\n            \"method\": \"auto_codex_dispatch\"\
+      ,\n            \"reviewer_isolated_by_construction\": True,\n            \"\
+      no_peer_review_visible_at_dispatch\": True,\n            \"input_sources\":\
+      \ [\n                \"goal_packet (path passed via --goal-packet)\",\n    \
+      \            \"prompt_template (substituted by _build_prompt)\",\n         \
+      \       \"review_target (path passed via --review-target; may be unspecified)\"\
+      ,\n            ],\n            \"see_dispatch_provenance_for_input_hashes\"\
+      : True,\n        },\n    }\n    if provenance is not None:\n        packet[\"\
+      dispatch_provenance\"] = provenance\n    return packet\n\n\ndef _seal_via_t6(packet:\
+      \ dict, iteration_dir: Path) -> dict:\n    \"\"\"Call T6's handle in-process;\
+      \ mirror the sealed YAML to <iteration_dir>/codex-review.yaml.\n\n    T6's actual\
+      \ signature is handle(iteration_id, reviewer_id, pass_id, packet); it\n    writes\
+      \ the sealed YAML to its own deterministic archive path under\n    agent-loop/archive/review-passes/.\
+      \ We additionally COPY the sealed file to\n    <iteration_dir>/codex-review.yaml\
+      \ so the iteration directory has a local copy\n    keyed by its iteration name\
+      \ (the auto-dispatch convention).\n\n    Returns a dict with sealed_path (==\
+      \ iteration_dir/codex-review.yaml — the\n    iteration-local copy), packet_sha256,\
+      \ archive_sealed_path (T6's path),\n    index_updated, audit_event_id.\n   \
+      \ \"\"\"\n    from agent_loop_mcp.tools.review_write_and_seal import handle\
+      \ as t6_handle\n\n    result = t6_handle(\n        iteration_id=packet[\"iteration_id\"\
+      ],\n        reviewer_id=packet[\"reviewer_id\"],\n        pass_id=packet[\"\
+      pass_id\"],\n        packet=packet,\n    )\n    if \"error\" in result:\n  \
+      \      raise RuntimeError(f\"T6 seal failed: {result}\")\n\n    # Mirror to\
+      \ iteration-local path (auto-dispatch convention).\n    archive_path = Path(result[\"\
+      sealed_path\"])\n    local_path = iteration_dir / \"codex-review.yaml\"\n  \
+      \  shutil.copyfile(str(archive_path), str(local_path))\n\n    return {\n   \
+      \     \"sealed_path\": str(local_path),\n        \"archive_sealed_path\": str(archive_path),\n\
+      \        \"packet_sha256\": result[\"packet_sha256\"],\n        \"index_updated\"\
+      : result.get(\"index_updated\"),\n        \"audit_event_id\": result.get(\"\
+      audit_event_id\"),\n    }\n\n\ndef _log_dispatch(log_path: Path, event: dict)\
+      \ -> None:\n    \"\"\"Append one JSON line to dispatch-log.jsonl.\n\n    Per\
+      \ codex architecture review #4 (2026-05-09), dispatch_done events MUST include:\n\
+      \      - codex_version, prompt_sha256, output_sha256, schema_sha256\n      -\
+      \ goal_packet_sha256, scope_signature\n      - reviewer_id, pass_id, timeout_seconds,\
+      \ exit_code, sealed_path\n    Caller is responsible for populating these fields;\
+      \ this writer just appends.\n    Secrets must NEVER be logged. The raw subprocess\
+      \ cmd list is NOT passed to\n    this writer; callers log only codex_bin (string)\
+      \ + schema_path (string) +\n    timeout_seconds. Raw prompt / codex output /\
+      \ goal_packet content are never\n    logged; only their sha256 digests are.\n\
+      \    \"\"\"\n    log_path.parent.mkdir(parents=True, exist_ok=True)\n    event_with_ts\
+      \ = {\"timestamp_utc\": time.strftime(\"%Y-%m-%dT%H:%M:%SZ\", time.gmtime()),\
+      \ **event}\n    with log_path.open(\"a\", encoding=\"utf-8\") as f:\n      \
+      \  f.write(json.dumps(event_with_ts) + \"\\n\")\n\n\ndef main(argv: list[str]\
+      \ | None = None) -> int:\n    p = argparse.ArgumentParser(\n        prog=\"\
+      agent_loop_mcp._dispatch_codex\",\n        description=\"Auto-dispatch codex\
+      \ CLI as the second reviewer; auto-seal via T6.\",\n    )\n    p.add_argument(\"\
+      --goal-packet\", required=True)\n    p.add_argument(\"--iteration-dir\", required=True)\n\
+      \    p.add_argument(\"--reviewer-id\", default=None)\n    p.add_argument(\"\
+      --pass-id\", default=None)\n    p.add_argument(\"--prompt-template\", default=None)\n\
+      \    p.add_argument(\"--schema\", default=None, help=\"Path to JSON output schema\
+      \ (default: dispatch_templates/codex_review_schema.json)\")\n    p.add_argument(\"\
+      --codex-bin\", default=\"codex\")\n    p.add_argument(\"--timeout-seconds\"\
+      , type=int, default=600)\n    p.add_argument(\"--review-target\", default=None,\n\
+      \                   help=\"Optional path to a file containing the review input\
+      \ \"\n                        \"(diff, patch, etc.); helper computes sha256\
+      \ and \"\n                        \"passes both path + hash to the prompt for\
+      \ codex.\")\n    p.add_argument(\"--smoke\", action=\"store_true\",\n      \
+      \             help=\"Smoke mode: gated by AGENT_LOOP_MCP_RUN_REAL_CODEX_SMOKE=1\
+      \ env var (codex review #3)\")\n\n    ns = p.parse_args(argv)\n\n    # Per v1.10.4\
+      \ F1: fail-closed if repo_root can't be validated.\n    try:\n        repo_root\
+      \ = _resolve_repo_root()\n    except RepoRootResolutionError as exc:\n     \
+      \   # We don't have a valid log_path yet; print error to stderr-equivalent JSON.\n\
+      \        print(json.dumps({\"ok\": False, \"error\": str(exc), \"error_type\"\
+      : \"RepoRootResolutionError\"}))\n        return 4\n\n    # Per v1.10.4 F5:\
+      \ normalize all operator-supplied relative paths against\n    # repo_root, NOT\
+      \ the process cwd. The codex subprocess runs with --cd repo_root,\n    # so\
+      \ all path frames must agree.\n    iter_dir = _normalize_relative_to_repo(ns.iteration_dir,\
+      \ repo_root)\n    iter_dir.mkdir(parents=True, exist_ok=True)\n    iteration_id\
+      \ = iter_dir.name\n\n    template_path = (\n        _normalize_relative_to_repo(ns.prompt_template,\
+      \ repo_root)\n        if ns.prompt_template\n        else (Path(__file__).parent\
+      \ / \"dispatch_templates\" / \"codex_review_template.md\")\n    )\n    schema_path\
+      \ = (\n        _normalize_relative_to_repo(ns.schema, repo_root)\n        if\
+      \ ns.schema\n        else (Path(__file__).parent / \"dispatch_templates\" /\
+      \ \"codex_review_schema.json\")\n    )\n    goal_packet_path = _normalize_relative_to_repo(ns.goal_packet,\
+      \ repo_root)\n    review_target_normalized = _normalize_relative_to_repo(ns.review_target,\
+      \ repo_root)\n\n    # v1.10.5: compute review_target_path display string (relative\
+      \ to repo_root\n    # when possible) up front, so dispatch_start / dispatch_failed\
+      \ / dispatch_done\n    # all see the same value. Hash is computed inside the\
+      \ try block (requires\n    # reading the file).\n    review_target_path_str:\
+      \ str | None = None\n    if review_target_normalized is not None:\n        try:\n\
+      \            review_target_path_str = str(\n                review_target_normalized.relative_to(repo_root.resolve())\n\
+      \            ).replace(\"\\\\\", \"/\")\n        except ValueError:\n      \
+      \      review_target_path_str = str(review_target_normalized)\n\n    reviewer_id\
+      \ = ns.reviewer_id or f\"codex-{iteration_id}-1\"\n    pass_id = ns.pass_id\
+      \ or f\"{reviewer_id}-pass1\"\n\n    log_path = repo_root / \"agent-loop\" /\
+      \ \"state\" / \"dispatch-log.jsonl\"\n\n    # Per codex review F3 (2026-05-09):\
+      \ if --smoke is passed without the env-gate set,\n    # refuse before invoking\
+      \ codex. Operators/automation that pass --smoke are signaling\n    # \"this\
+      \ is a deliberate real-codex smoke run\"; the env var is the explicit consent.\n\
+      \    if ns.smoke and os.environ.get(\"AGENT_LOOP_MCP_RUN_REAL_CODEX_SMOKE\"\
+      ) != \"1\":\n        refuse_msg = (\n            \"--smoke requires AGENT_LOOP_MCP_RUN_REAL_CODEX_SMOKE=1\
+      \ in the environment. \"\n            \"This gate prevents accidental real-codex\
+      \ invocation under cost/auth/session \"\n            \"side effects. Set the\
+      \ env var explicitly to opt in, or drop --smoke for \"\n            \"normal\
+      \ (non-smoke) usage.\"\n        )\n        _log_dispatch(log_path, {\n     \
+      \       \"event\": \"dispatch_refused\",\n            \"error_type\": \"smoke_env_gate\"\
+      ,\n            \"error\": refuse_msg,\n            \"reviewer_id\": reviewer_id,\n\
+      \            \"pass_id\": pass_id,\n        })\n        print(json.dumps({\"\
+      ok\": False, \"error\": refuse_msg, \"error_type\": \"smoke_env_gate\"}))\n\
+      \        return 3\n\n    # Audit-log dispatch_start with the inputs that don't\
+      \ require codex execution\n    _log_dispatch(log_path, {\n        \"event\"\
+      : \"dispatch_start\",\n        \"iteration_id\": iteration_id,\n        \"reviewer_id\"\
+      : reviewer_id,\n        \"pass_id\": pass_id,\n        \"smoke\": ns.smoke,\n\
+      \        \"timeout_seconds\": ns.timeout_seconds,\n        \"codex_bin\": ns.codex_bin,\n\
+      \        \"schema_path\": str(schema_path),\n        # v1.10.5: visibility TUI\
+      \ / stall watchdog read this to display what\n        # the current dispatch\
+      \ is reviewing. Hash isn't available yet (file\n        # hasn't been read);\
+      \ it lands in dispatch_done / dispatch_failed.\n        \"review_target_path\"\
+      : review_target_path_str,\n    })\n\n# Per v1.10.4 F3: initialize provenance\
+      \ vars to None BEFORE try block so\n    # dispatch_failed paths can include\
+      \ whatever was computed before failure.\n    prompt_sha: str | None = None\n\
+      \    schema_sha: str | None = None\n    goal_packet_sha: str | None = None\n\
+      \    scope_sig: str | None = None\n    codex_version: str | None = None\n  \
+      \  output_sha: str | None = None\n    # v1.10.5: review_target_hash gets stamped\
+      \ after the file is read; init to\n    # None so dispatch_failed includes it\
+      \ even when the read never happened.\n    review_target_hash: str | None = None\n\
+      \n    def _failed_event(error_type: str, error: str) -> dict:\n        \"\"\"\
+      Per v1.10.4 F3: dispatch_failed events carry every provenance field\n      \
+      \  that was successfully computed before the failure, plus reviewer/pass ids.\n\
+      \        Never logs raw prompt / output / goal_packet content.\"\"\"\n     \
+      \   ev = {\n            \"event\": \"dispatch_failed\",\n            \"error_type\"\
+      : error_type,\n            \"error\": error,\n            \"reviewer_id\": reviewer_id,\n\
+      \            \"pass_id\": pass_id,\n            \"iteration_id\": iteration_id,\n\
+      \            \"timeout_seconds\": ns.timeout_seconds,\n        }\n        #\
+      \ Include only the hashes that were actually computed.\n        for k, v in\
+      \ (\n            (\"codex_version\", codex_version),\n            (\"prompt_sha256\"\
+      , prompt_sha),\n            (\"output_sha256\", output_sha),\n            (\"\
+      schema_sha256\", schema_sha),\n            (\"goal_packet_sha256\", goal_packet_sha),\n\
+      \            (\"scope_signature\", scope_sig),\n            # v1.10.5: review-target\
+      \ identity so dispatch_failed events can be\n            # correlated to the\
+      \ target that was being reviewed when the failure\n            # fired. Path\
+      \ is known pre-try; hash only after the file is read.\n            (\"review_target_path\"\
+      , review_target_path_str),\n            (\"review_target_hash\", review_target_hash),\n\
+      \        ):\n            if v is not None:\n                ev[k] = v\n    \
+      \    return ev\n\n    try:\n        goal_packet_text = goal_packet_path.read_text(encoding=\"\
+      utf-8\")\n        goal_packet = yaml.safe_load(goal_packet_text)\n        template_text\
+      \ = _load_template(template_path)\n\n        # review_target_hash is pre-initialized\
+      \ to None outside the try block\n        # (v1.10.5) so dispatch_failed events\
+      \ can include it.\n        review_packet_data: dict | None = None\n        if\
+      \ review_target_normalized is not None:\n            review_target_text = review_target_normalized.read_text(encoding=\"\
+      utf-8\")\n            review_target_hash = _sha256_str(review_target_text)\n\
+      \            # iter-0021: when --review-target points at a YAML review-packet\n\
+      \            # (the new convention), parse it so {touched_files_contents_block}\n\
+      \            # can be substituted in _build_prompt. If parsing fails (e.g.,\
+      \ the\n            # operator passed a raw .diff or .patch file), silently fall\
+      \ back\n            # to the legacy behavior — the prompt still renders, just\
+      \ without\n            # embedded file contents.\n            if review_target_normalized.suffix.lower()\
+      \ in (\".yaml\", \".yml\"):\n                try:\n                    candidate\
+      \ = yaml.safe_load(review_target_text)\n                    if isinstance(candidate,\
+      \ dict):\n                        review_packet_data = candidate\n         \
+      \       except yaml.YAMLError:\n                    review_packet_data = None\n\
+      \n        prompt = _build_prompt(\n            goal_packet,\n            template_text,\n\
+      \            iteration_dir=str(iter_dir),\n            review_packet_path=str(goal_packet_path),\n\
+      \            review_target_path=str(review_target_normalized) if review_target_normalized\
+      \ else None,\n            review_target_hash=review_target_hash,\n         \
+      \   review_packet=review_packet_data,\n        )\n        schema_text = schema_path.read_text(encoding=\"\
+      utf-8\")\n\n        # Compute provenance hashes BEFORE codex call (so we have\
+      \ them even if codex fails)\n        prompt_sha = _sha256_str(prompt)\n    \
+      \    schema_sha = _sha256_str(schema_text)\n        goal_packet_sha = _sha256_str(goal_packet_text)\n\
+      \        scope_sig = ((goal_packet or {}).get(\"authorization\", {}) or {}).get(\"\
+      scope_signature\", \"\")\n\n        codex_version = _get_codex_version(ns.codex_bin)\n\
+      \        codex_output = _invoke_codex(\n            prompt=prompt,\n       \
+      \     codex_bin=ns.codex_bin,\n            timeout_seconds=ns.timeout_seconds,\n\
+      \            repo_root=repo_root,\n            schema_path=schema_path,\n  \
+      \      )\n        output_sha = _sha256_str(codex_output)\n\n        # Per Task\
+      \ #24 (iter-0014): pass goal_packet so patch_proposal scope\n        # checks\
+      \ (allowed_files / forbidden_files) can run.\n        # Per iter-0022: pass\
+      \ review_packet so helper stamps patch_proposal.base_sha\n        # from review_packet.defect_target.base_sha\
+      \ (canonical operator-stamped value)\n        # instead of trusting codex's\
+      \ hallucinated emission.\n        # iter-0026 F1: pass repo_root so the per-patch\
+      \ base_sha stamp uses\n        # disk bytes (matches apply.codex_patch's bundle_sha\
+      \ contract; eliminates\n        # the CRLF mismatch surfaced in iter-0025).\n\
+      \        extracted = _parse_codex_output(\n            codex_output,\n     \
+      \       goal_packet=goal_packet,\n            review_packet=review_packet_data,\n\
+      \            repo_root=repo_root,\n        )\n        # v1.10.5: persist review_target_path\
+      \ + review_target_hash in sealed\n        # provenance so audit reconstruction\
+      \ and the visibility TUI can show\n        # which target was reviewed. (path\
+      \ is computed pre-try at function\n        # top; hash was computed at line\
+      \ ~1340 after reading review_target.)\n        provenance = {\n            \"\
+      codex_version\": codex_version,\n            \"prompt_sha256\": prompt_sha,\n\
+      \            \"output_sha256\": output_sha,\n            \"schema_sha256\":\
+      \ schema_sha,\n            \"goal_packet_sha256\": goal_packet_sha,\n      \
+      \      \"scope_signature\": scope_sig,\n            \"review_target_path\":\
+      \ review_target_path_str,\n            \"review_target_hash\": review_target_hash,\n\
+      \        }\n        packet = _build_sealed_packet(extracted, iteration_id, reviewer_id,\
+      \ pass_id, provenance=provenance)\n        result = _seal_via_t6(packet, iter_dir)\n\
+      \    except (CodexInvocationError, CodexOutputParseError) as exc:\n        _log_dispatch(log_path,\
+      \ _failed_event(type(exc).__name__, str(exc)))\n        print(json.dumps({\"\
+      ok\": False, \"error\": str(exc), \"error_type\": type(exc).__name__}))\n  \
+      \      return 1\n    except Exception as exc:\n        _log_dispatch(log_path,\
+      \ _failed_event(type(exc).__name__, str(exc)))\n        print(json.dumps({\"\
+      ok\": False, \"error\": str(exc), \"error_type\": type(exc).__name__}))\n  \
+      \      return 2\n\n    # Per v1.10.4 F2: dispatch_done logs the IMMUTABLE archive\
+      \ path + the audit\n    # event id, in addition to the local mirror path. The\
+      \ local mirror is\n    # overwritten by each successful re-run; the archive\
+      \ copy is the audit anchor.\n    _log_dispatch(log_path, {\n        \"event\"\
+      : \"dispatch_done\",\n        \"iteration_id\": iteration_id,\n        \"reviewer_id\"\
+      : reviewer_id,\n        \"pass_id\": pass_id,\n        \"codex_version\": codex_version,\n\
+      \        \"timeout_seconds\": ns.timeout_seconds,\n        \"exit_code\": 0,\n\
+      \        \"prompt_sha256\": prompt_sha,\n        \"output_sha256\": output_sha,\n\
+      \        \"schema_sha256\": schema_sha,\n        \"goal_packet_sha256\": goal_packet_sha,\n\
+      \        \"scope_signature\": scope_sig,\n        # v1.10.5: review-target identity\
+      \ in the audit event so the visibility\n        # TUI / watchdog / log scanners\
+      \ can identify what was reviewed without\n        # opening the sealed packet.\n\
+      \        \"review_target_path\": review_target_path_str,\n        \"review_target_hash\"\
+      : review_target_hash,\n        \"packet_sha256\": result.get(\"packet_sha256\"\
+      ),\n        \"archive_sealed_path\": result.get(\"archive_sealed_path\"),  #\
+      \ F2: immutable T6 archive\n        \"local_mirror_path\": result.get(\"sealed_path\"\
+      ),            # F2: convenience copy\n        \"sealed_path\": result.get(\"\
+      sealed_path\"),                  # backcompat\n        \"t6_audit_event_id\"\
+      : result.get(\"audit_event_id\"),         # F2: T6's own audit anchor\n    })\n\
+      \    print(json.dumps({\"ok\": True, \"pass_id\": pass_id, **result}))\n   \
+      \ return 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
+    scripts/agent_loop_mcp/_visibility_tui.py: "\"\"\"Visibility TUI for agent-loop-mcp\
+      \ dispatch + audit event streams.\n\nTier 0+1 of the 2026-05-10 visibility-TUI\
+      \ design doc. Read-only tail of\nthe existing JSONL event streams with stall\
+      \ detection. NO MCP tool surface\nadded, NO new event generation, NO operator\
+      \ control channel — those are\ndeliberately out of scope (see design doc).\n\
+      \nUsage\n-----\n    # Live tail (refresh every 2s; Ctrl-C to exit)\n    python\
+      \ scripts/agent_loop_mcp/_visibility_tui.py\n\n    # One-shot snapshot (renders\
+      \ once, exits 0 if no stall, 1 if any active\n    # dispatch is past the warning\
+      \ threshold). Used by CI / smoke / manual checks.\n    python scripts/agent_loop_mcp/_visibility_tui.py\
+      \ --once\n\n    # Custom poll + threshold\n    python scripts/agent_loop_mcp/_visibility_tui.py\
+      \ --tick 1.0 --warn-after 180\n\nWhat it shows\n-------------\n- Active dispatches:\
+      \ dispatch_start events with no matching dispatch_done /\n  dispatch_failed.\
+      \ Age, target file (v1.10.5), timeout, stall status.\n- Recent terminal events:\
+      \ last 5 dispatch_done / dispatch_failed entries.\n- Stall warning: dispatch\
+      \ age >= warn_after_seconds.\n- Stall alert: dispatch age >= 0.9 * timeout_seconds\
+      \ (or warn_after if no timeout).\n\nWhat it does NOT do\n-------------------\n\
+      - No MCP tool registration.\n- No event generation. Read-only consumer of the\
+      \ existing JSONL streams.\n- No watchdog actions (cleanup, retry, abort). That's\
+      \ Task #43.\n- No operator reply channel.\n- No human text on the MCP stdio\
+      \ pipe (we don't touch the MCP pipe at all).\n\"\"\"\nfrom __future__ import\
+      \ annotations\n\nimport argparse\nimport json\nimport os\nimport sys\nimport\
+      \ time\nfrom datetime import datetime, timezone\nfrom pathlib import Path\n\
+      from typing import Optional\n\n\n# --- Color helpers (ANSI; no rich/textual\
+      \ dependency) -----------------------\n\n_ANSI_ENABLED = sys.stdout.isatty()\n\
+      _RESET = \"\\x1b[0m\" if _ANSI_ENABLED else \"\"\n_DIM = \"\\x1b[2m\" if _ANSI_ENABLED\
+      \ else \"\"\n_BOLD = \"\\x1b[1m\" if _ANSI_ENABLED else \"\"\n_GREEN = \"\\\
+      x1b[32m\" if _ANSI_ENABLED else \"\"\n_YELLOW = \"\\x1b[33m\" if _ANSI_ENABLED\
+      \ else \"\"\n_RED = \"\\x1b[31m\" if _ANSI_ENABLED else \"\"\n_CYAN = \"\\x1b[36m\"\
+      \ if _ANSI_ENABLED else \"\"\n\n\ndef _color(s: str, code: str) -> str:\n  \
+      \  return f\"{code}{s}{_RESET}\" if _ANSI_ENABLED else s\n\n\n# --- File reading\
+      \ -----------------------------------------------------------\n\ndef _read_jsonl(path:\
+      \ Path) -> list[dict]:\n    \"\"\"Read a JSONL file. Returns empty list on missing/unreadable.\
+      \ Skips\n    malformed lines (defensive against partial writes in tail mode).\n\
+      \    \"\"\"\n    if not path.exists():\n        return []\n    events: list[dict]\
+      \ = []\n    try:\n        text = path.read_text(encoding=\"utf-8\")\n    except\
+      \ OSError:\n        return []\n    for line in text.splitlines():\n        line\
+      \ = line.strip()\n        if not line:\n            continue\n        try:\n\
+      \            events.append(json.loads(line))\n        except json.JSONDecodeError:\n\
+      \            # Partial write or corrupt line; skip without aborting the TUI.\n\
+      \            continue\n    return events\n\n\n# --- Time helpers -----------------------------------------------------------\n\
+      \ndef _parse_ts(s: Optional[str]) -> Optional[datetime]:\n    if not s:\n  \
+      \      return None\n    try:\n        # Tolerate both Z and +00:00 forms.\n\
+      \        s2 = s.replace(\"Z\", \"+00:00\")\n        return datetime.fromisoformat(s2)\n\
+      \    except (ValueError, TypeError):\n        return None\n\n\ndef _humanize_age(seconds:\
+      \ float) -> str:\n    if seconds < 60:\n        return f\"{seconds:.0f}s\"\n\
+      \    minutes, secs = divmod(int(seconds), 60)\n    if minutes < 60:\n      \
+      \  return f\"{minutes}m{secs:02d}s\"\n    hours, minutes = divmod(minutes, 60)\n\
+      \    return f\"{hours}h{minutes:02d}m\"\n\n\n# --- Dispatch state assembly -----------------------------------------------\n\
+      \ndef _assemble_dispatches(events: list[dict]) -> dict:\n    \"\"\"Walk the\
+      \ dispatch-log event stream; pair start events with terminal\n    (done/failed/refused)\
+      \ events by pass_id. Returns a dict shape:\n        {\n          \"active\"\
+      :   [start_event, ...],   # no terminal event\n          \"recent\":   [end_event,\
+      \ ...],     # last 5 terminal events, newest first\n        }\n    \"\"\"\n\
+      \    by_pass: dict[str, dict] = {}  # pass_id -> {\"start\": ev, \"end\": ev}\n\
+      \    for ev in events:\n        pass_id = ev.get(\"pass_id\") or ev.get(\"reviewer_id\"\
+      )\n        if not pass_id:\n            continue\n        entry = by_pass.setdefault(pass_id,\
+      \ {\"start\": None, \"end\": None})\n        kind = ev.get(\"event\")\n    \
+      \    if kind == \"dispatch_start\":\n            entry[\"start\"] = ev\n   \
+      \     elif kind in (\"dispatch_done\", \"dispatch_failed\", \"dispatch_refused\"\
+      ):\n            entry[\"end\"] = ev\n\n    active = [\n        v[\"start\"]\
+      \ for v in by_pass.values() if v[\"start\"] and not v[\"end\"]\n    ]\n    recent_terminal\
+      \ = [\n        v[\"end\"] for v in by_pass.values() if v[\"end\"]\n    ]\n \
+      \   # Sort by timestamp descending.\n    def _sort_key(ev):\n        return\
+      \ _parse_ts(ev.get(\"timestamp_utc\")) or datetime.min.replace(tzinfo=timezone.utc)\n\
+      \    recent_terminal.sort(key=_sort_key, reverse=True)\n    active.sort(key=_sort_key,\
+      \ reverse=True)\n    return {\"active\": active, \"recent\": recent_terminal[:5]}\n\
+      \n\n# --- Rendering --------------------------------------------------------------\n\
+      \ndef _render(dispatch_events: list[dict], audit_events: list[dict], warn_after:\
+      \ float, now: datetime) -> tuple[str, bool]:\n    \"\"\"Render the TUI screen.\
+      \ Returns (text, any_stalled).\n\n    any_stalled is True if at least one active\
+      \ dispatch is past warn_after_seconds.\n    \"\"\"\n    state = _assemble_dispatches(dispatch_events)\n\
+      \    lines: list[str] = []\n    any_stalled = False\n\n    lines.append(_color(\"\
+      agent-loop-mcp visibility TUI\", _BOLD + _CYAN))\n    lines.append(_color(f\"\
+      \  now={now.isoformat(timespec='seconds')}  warn_after={int(warn_after)}s\"\
+      , _DIM))\n    lines.append(\"\")\n\n    # Active dispatches\n    if state[\"\
+      active\"]:\n        lines.append(_color(f\"ACTIVE DISPATCHES ({len(state['active'])}):\"\
+      , _BOLD))\n        for ev in state[\"active\"]:\n            start_ts = _parse_ts(ev.get(\"\
+      timestamp_utc\"))\n            age_s = (now - start_ts).total_seconds() if start_ts\
+      \ else 0.0\n            timeout = ev.get(\"timeout_seconds\") or 0\n       \
+      \     alert_threshold = max(warn_after, 0.9 * timeout) if timeout else warn_after\n\
+      \            stalled = age_s >= warn_after\n            alert = age_s >= alert_threshold\
+      \ and timeout > 0\n            any_stalled = any_stalled or stalled\n\n    \
+      \        tag = _color(\"OK    \", _GREEN)\n            if alert:\n         \
+      \       tag = _color(\"ALERT \", _RED + _BOLD)\n            elif stalled:\n\
+      \                tag = _color(\"STALL \", _YELLOW + _BOLD)\n\n            iter_id\
+      \ = ev.get(\"iteration_id\", \"?\")\n            pass_id = ev.get(\"pass_id\"\
+      , \"?\")\n            target = ev.get(\"review_target_path\") or _color(\"(no\
+      \ review-target)\", _DIM)\n            timeout_disp = f\"timeout={timeout}s\"\
+      \ if timeout else \"timeout=?\"\n            lines.append(\n               \
+      \ f\"  {tag} {iter_id} / {pass_id}\"\n            )\n            lines.append(\n\
+      \                f\"        age={_humanize_age(age_s)}  {timeout_disp}  target={target}\"\
+      \n            )\n    else:\n        lines.append(_color(\"ACTIVE DISPATCHES\
+      \ (0): idle\", _DIM))\n    lines.append(\"\")\n\n    # Recent terminal events\n\
+      \    lines.append(_color(f\"RECENT TERMINAL EVENTS (last {len(state['recent'])}):\"\
+      , _BOLD))\n    if not state[\"recent\"]:\n        lines.append(_color(\"  (none)\"\
+      , _DIM))\n    for ev in state[\"recent\"]:\n        ts = ev.get(\"timestamp_utc\"\
+      , \"?\")\n        kind = ev.get(\"event\", \"?\")\n        iter_id = ev.get(\"\
+      iteration_id\", \"?\")\n        pass_id = ev.get(\"pass_id\", \"?\")\n     \
+      \   marker = _color(\"done  \", _GREEN) if kind == \"dispatch_done\" else (\n\
+      \                 _color(\"failed\", _RED)   if kind == \"dispatch_failed\"\
+      \ else\n                 _color(\"refused\", _YELLOW))\n        rt_hash = ev.get(\"\
+      review_target_hash\")\n        hash_disp = f\"  target_hash={rt_hash[:12]}…\"\
+      \ if rt_hash else \"\"\n        lines.append(f\"  {marker}  {ts}  {iter_id}\
+      \ / {pass_id}{hash_disp}\")\n    lines.append(\"\")\n\n    # MCP server lifecycle\
+      \ (from audit-log)\n    server_events = [e for e in audit_events if e.get(\"\
+      event\", \"\").startswith(\"mcp_server_\")]\n    if server_events:\n       \
+      \ last_server = server_events[-1]\n        lines.append(_color(\"MCP SERVER:\"\
+      , _BOLD))\n        lines.append(\n            f\"  last_event={last_server.get('event','?')}\
+      \  \"\n            f\"at={last_server.get('timestamp_utc','?')}\"\n        )\n\
+      \        lines.append(\"\")\n\n    return \"\\n\".join(lines), any_stalled\n\
+      \n\n# --- CLI --------------------------------------------------------------------\n\
+      \ndef _default_repo_root() -> Path:\n    \"\"\"Locate repo_root via the same\
+      \ env-var override as _dispatch_codex.\n    Falls back to a __file__-relative\
+      \ walk; if that fails the TUI exits with\n    a clear diagnostic rather than\
+      \ tailing nothing.\n    \"\"\"\n    override = os.environ.get(\"AGENT_LOOP_MCP_REPO_ROOT\"\
+      )\n    if override:\n        return Path(override).resolve()\n    # Walk up\
+      \ from this file: scripts/agent_loop_mcp/_visibility_tui.py -> repo root\n \
+      \   return Path(__file__).resolve().parent.parent.parent\n\n\ndef main(argv:\
+      \ list[str] | None = None) -> int:\n    parser = argparse.ArgumentParser(description=\"\
+      Visibility TUI for agent-loop-mcp dispatch streams.\")\n    parser.add_argument(\"\
+      --once\", action=\"store_true\", help=\"Render once and exit (non-tail mode).\"\
+      )\n    parser.add_argument(\"--tick\", type=float, default=2.0, help=\"Tail-mode\
+      \ refresh interval in seconds (default 2.0).\")\n    parser.add_argument(\"\
+      --warn-after\", type=float, default=300.0,\n                        help=\"\
+      Seconds before an active dispatch is flagged STALL (default 300 = 5min).\")\n\
+      \    parser.add_argument(\"--repo-root\", default=None,\n                  \
+      \      help=\"Override repo root (default: AGENT_LOOP_MCP_REPO_ROOT or __file__\
+      \ walk).\")\n    ns = parser.parse_args(argv)\n\n    repo_root = Path(ns.repo_root).resolve()\
+      \ if ns.repo_root else _default_repo_root()\n    dispatch_log = repo_root /\
+      \ \"agent-loop\" / \"state\" / \"dispatch-log.jsonl\"\n    audit_log = repo_root\
+      \ / \"agent-loop\" / \"state\" / \"mcp-server-audit.jsonl\"\n\n    if not dispatch_log.parent.exists():\n\
+      \        print(f\"ERROR: state dir not found: {dispatch_log.parent}\", file=sys.stderr)\n\
+      \        return 2\n\n    def render_once() -> bool:\n        dispatch_events\
+      \ = _read_jsonl(dispatch_log)\n        audit_events = _read_jsonl(audit_log)\n\
+      \        text, stalled = _render(dispatch_events, audit_events, ns.warn_after,\
+      \ datetime.now(timezone.utc))\n        if ns.once:\n            print(text)\n\
+      \        else:\n            # Clear screen + home cursor before each render.\n\
+      \            sys.stdout.write(\"\\x1b[2J\\x1b[H\")\n            sys.stdout.write(text)\n\
+      \            sys.stdout.write(\"\\n\")\n            sys.stdout.flush()\n   \
+      \     return stalled\n\n    if ns.once:\n        stalled = render_once()\n \
+      \       return 1 if stalled else 0\n\n    try:\n        while True:\n      \
+      \      render_once()\n            time.sleep(ns.tick)\n    except KeyboardInterrupt:\n\
+      \        sys.stdout.write(\"\\n\")\n        return 0\n\n\nif __name__ == \"\
+      __main__\":\n    sys.exit(main())\n"
+schema_version: 1
+iteration_id: iteration-0033-fix-iter-0032-findings

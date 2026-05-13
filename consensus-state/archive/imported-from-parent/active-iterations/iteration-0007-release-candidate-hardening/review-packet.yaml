@@ -1,0 +1,47 @@
+schema_version: 1
+iteration_id: iteration-0007-release-candidate-hardening
+objective: |
+  Phase 3 Release Candidate Hardening per operator directive 2026-05-09.
+  Reviewers ratify or block the 6-step RC plan (FREEZE / CLOSE / ITERATE /
+  BOUND / PACKAGE / GATE). Success bar = 7 release gates pass + 1 real G1-G5
+  ceremony completed without manual contract bypass.
+mode: implementation_with_real_g1_g5_self_test_via_mcp_toolchain
+gate_state:
+  consensus_state: implementation_ready
+  observational_mode: false
+  production_state: not_ready
+  production_ready: false
+  production_allowed: false
+decision_ledger_hash: null
+claude_md_hash: f8fc306383048356f10a97e977ac4c51342c1c0cf4b315d79b6e732b8ec7013d
+karpathy_principle_summary: |
+  Think Before Coding. Simplicity First. Surgical Changes. Goal-Driven Execution.
+  Plus the operator's Phase 3 anti-scope: stop adding capability; freeze G1-G5;
+  prove shippability via real iteration; do not expand external pass into
+  another architecture phase unless real blocker.
+changed_sections: []
+open_blockers: []
+check_results_if_any:
+  - {check: "scripts/agent_loop_mcp/_smoke_test.py", result: "51/51 passed", date: "2026-05-09"}
+  - {check: "scripts/agent_loop/run_validator_tests.py", result: "21/21 passed", date: "2026-05-09"}
+  - {check: "scripts/agent_loop/validate_disposition_index.py", result: "0 findings", date: "2026-05-09"}
+requested_output_schema: section_9_review_artifact
+packet_budget_applied:
+  max_changed_sections: 8
+  max_section_excerpt_lines: 120
+  truncations: []
+sanitization_log: []
+input_provenance:
+  input_path: agent-loop/active/iteration-0007-release-candidate-hardening/input.yaml
+  input_sha256: 203d6bdeb4189ae806369bdb2832776b66ef2190354d588c677e46f7445296c9
+  spec_path: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+  spec_sha256: 8807ccc13b95269193d3c19b6b7c0ec950735523e01fac77243b9b8f2a92ad96
+  design_spec_path: wiki/audiobook-project/agent-loop/2026-05-08-phase-1-mcp-server-design.md
+  design_spec_sha256: 929af277b7a8ef0a5575c416cddcc1a2354b272be1e69c3bcc4e82d97c2483bb
+  consolidated_findings_md_path: wiki/audiobook-project/agent-loop/2026-05-09-v1.9.x-third-party-review-findings.md
+  consolidated_findings_md_sha256: ce91663042014cd16506fb08ed701646fc9b41a4fbfd4b5bb270a564cfa5a82f
+  ledger_path: agent-loop/state/disposition-ledger.yaml
+  ledger_sha256: 4e0d5de7dd39e465feb81da38f2960d7c58fb505d8c17cf9dfa8359ca27595cd
+  missing_required_input_fields: []
+  generated_utc: '2026-05-09T05:00:00Z'
+packet_sha256: 72cbc370ddc4724da42452afd6b358376a3ff96f9996936b87089a4cbdd45b3d

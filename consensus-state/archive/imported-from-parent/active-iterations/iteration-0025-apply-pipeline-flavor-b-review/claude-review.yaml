@@ -1,0 +1,179 @@
+schema_version: 1
+iteration_id: iteration-0025-apply-pipeline-flavor-b-review
+reviewer_id: claude-iter0025-2
+pass_id: claude-iter0025-2-pass1
+agent: claude
+stance: closer_after_codex_mutation
+actor:
+  id: claude-iter0025-2
+  model_family: claude
+  role: closer
+  pass_id: claude-iter0025-2-pass1
+created_at_utc: '2026-05-10T20:58:30Z'
+review_target_hash: 27d4c7c2dac0c159597805419be6dd17e62915c7f1eb5b115e07cc7c9ce476f6
+review_target_hash_provenance:
+  source: apply_step_landed.last_mutation.post_sha
+  apply_event_id: 2026-05-10T20:58:12Z_apply_step_landed_codex-iter0025-1
+  iter_dir: agent-loop/active/iteration-0025-apply-pipeline-flavor-b-review/
+  files_touched:
+    - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+  notes: |
+    Two apply_step_landed events were emitted in iter-0025; the closer binds
+    to the LAST mutation's post_sha (rev-003-patch on loop_verify_codex_patch.py).
+    Earlier mutation (rev-002 on apply_codex_patch.py) is also covered by
+    the audit log; the closure invariant evaluator picks the most recent
+    (per iter-0024 F3-003 timestamp_utc-sorted ordering) for hash_match.
+goal_satisfied: true
+goal_satisfied_rationale: |
+  iter-0025 closes the SECOND SUBSYSTEM-WIDE Flavor B review of agent-loop
+  code (apply pipeline subsystem). Three real codex findings emitted; two
+  with patch_proposals, one (high-severity, no patch) with a
+  patch_not_proposed_reason. Both proposed patches were verified per
+  CLAUDE.md by claude and approved; both landed via apply.codex_patch
+  under operator authorization. Post-mutation pytest 296/296 passes (same
+  as baseline; codex patches were source-only).
+
+  Findings + landings:
+    codex-rev-001 (high, no-patch): unified-diff applier ignores hunk line
+      numbers; on repeated-context hunks the wrong occurrence could be
+      mutated. patch_not_proposed_reason: needs new tests beyond what the
+      embedded suite supports. Filed as iter-0026 followup.
+    codex-rev-002 (medium): apply_step_landed event omits top-level
+      canonical mutation fields (mutation_actor, patch_id, base_sha,
+      post_sha, timestamp) that closure invariant readers expect. Patch
+      adds them as extra_fields siblings of last_mutation; the audit
+      emitter flattens extra_fields to event top-level, so future apply
+      events will carry canonical mutation provenance directly without
+      the test-only hoist bridge in test_capstone_full_codex_fix_loop_end_to_end.
+      Surgical 5-line addition. Landed at post_sha=a407ac0a...
+    codex-rev-003 (medium): record_verdict doesn't bind approved_patch_id
+      to codex_finding_id. Patch adds expected_patch_id check refusing
+      mismatched pairs. Surgical 7-line addition. Landed at
+      post_sha=27d4c7c2... (the final post-mutation hash bound here).
+
+  Empirical regression check:
+    pytest_pre_review:    296 passed
+    pytest_post_rev_002:  296 passed
+    pytest_post_rev_003:  296 passed (final state)
+
+  Cross-family invariant:
+    last_mutation.actor.model_family = codex (codex-iter0025-1)
+    closer.actor.model_family        = claude (claude-iter0025-2)
+    Different families + different actor IDs -> cross_family PASS.
+
+  Hash binding:
+    review_target_hash = 27d4c7c2dac0c159597805419be6dd17e62915c7f1eb5b115e07cc7c9ce476f6
+    last_mutation.post_sha = 27d4c7c2dac0c159597805419be6dd17e62915c7f1eb5b115e07cc7c9ce476f6
+    Equal -> hash_match PASS.
+
+  Freshness:
+    closer.created_at_utc       = 2026-05-10T20:58:30Z
+    last_mutation.timestamp_utc = 2026-05-10T20:58:12Z
+    closer > mutation -> freshness PASS.
+
+  iter-0024 F1 verification (this is the FIRST production close exercising
+  the merge-direction fix):
+    last_mutation_from_audit() reads the nested
+    extra_fields.last_mutation.actor dict (model_family=codex) instead of
+    the legacy top-level actor string. cross_family check sees structured
+    model_family and passes. iter-0023 would have FAIL'd at this exact
+    point pre-iter-0024. Confirmed working.
+
+findings: []
+blocking_objections: []
+non_blocking_suggestions:
+  - id: claude-iter0025-followup-001
+    severity: medium
+    target: scripts/agent_loop_mcp/_dispatch_codex.py (_compute_per_patch_base_sha)
+    text: |
+      iter-0025 surfaced a real (but non-iter-0025-scope) defect in the
+      iter-0024 F2 per-patch base_sha helper: the helper computes
+      bundle_sha against the review-packet's touched_files_contents
+      (UTF-8 decoded text strings), but apply.codex_patch computes
+      bundle_sha against raw disk bytes. On Windows with CRLF line
+      endings, the two SHAs differ — the helper-stamped base_sha never
+      matches disk bundle_sha, so every apply path through F2 returns
+      base_sha_drift. Workaround used in iter-0025: manually re-anchor
+      each patch_proposal.base_sha to disk bundle_sha before applying
+      (the iter-0023-style operational_caveat per_patch_base_sha_reanchor).
+      Root cause: _author_review_packet stores text-decoded content
+      (which normalizes CRLF to LF in the YAML representation) while
+      bundle_sha hashes raw bytes (which preserves CRLF). This is
+      iter-0026 scope (out of iter-0025's allowed_files; _dispatch_codex.py
+      is in forbidden_files for iter-0025).
+      Fix candidates: (a) _compute_per_patch_base_sha falls back to
+      reading raw disk bytes when on Windows + CRLF; (b) bundle_sha
+      normalizes CRLF -> LF on read (changes the canonical form, breaks
+      backward-compat with existing iter-0023/0024 stamps); (c)
+      _author_review_packet stores raw-byte content (breaks YAML round-trip).
+      Recommendation: (a) — surgical, no canonical-form change, no
+      backward-compat issue.
+  - id: claude-iter0025-followup-002
+    severity: high
+    target: scripts/agent_loop_mcp/tools/apply_codex_patch.py (_apply_unified_diff)
+    text: |
+      codex-rev-001 finding (no patch authored). The minimal unified-diff
+      applier ignores hunk @@ line numbers and uses purely contextual
+      matching with forward linear-search drift recovery. On repeated-
+      context hunks (e.g., a function body with multiple identical
+      "return None" lines), the applier may mutate the wrong occurrence.
+      base_sha can still match because the file content is correct; the
+      audit post_sha records a real mutation that is NOT the reviewed
+      fix. Codex declined to author the fix because it needs new
+      regression tests spanning repeated-context scenarios. iter-0026
+      scope: replace the minimal applier with a proper unified-diff
+      parser that respects @@ line numbers (or use a vetted third-party
+      library like unidiff / python-patch).
+  - id: claude-iter0025-followup-003
+    severity: low
+    target: scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py:371-385
+    text: |
+      The capstone test's in-test hoist bridge (lines 371-385, lines
+      649-660) explicitly hoists nested last_mutation fields onto the
+      apply_step_landed event top-level. Post codex-rev-002 (canonical
+      top-level fields now emitted by the production audit path), the
+      bridge may be obsolete. iter-0026 should verify by removing the
+      bridge and re-running the capstone. If it passes, delete the
+      bridge code; the iter-0024 F1 + iter-0025 codex-rev-002 fixes
+      together cover both reader and emitter sides.
+
+scope_check:
+  files_in_scope: true
+  files_changed_listing:
+    - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+  forbidden_files_touched: false
+  notes: |
+    Codex's mutations touched only 2 of the 6 allowed files; the 4 test
+    files in scope were not modified (codex did not author test additions
+    in this iteration; the existing 296-test baseline remained green
+    pre and post). Patch sizes (5 + 7 LOC) both well under
+    max_patch_size=300.
+
+regression_check:
+  pytest_pre_mutation: 296 passed
+  pytest_post_mutation: 296 passed
+  pytest_delta_explanation: |
+    No test additions; codex's patches were source-only changes that
+    extended the audit-event canonical-field set (rev-002) and added a
+    binding refusal in record_verdict (rev-003). Neither broke any
+    existing test path. Existing record_verdict tests already conformed
+    to the new binding constraint (all helpers derive patch_id from
+    finding_id consistently per iter-0020 ergonomics).
+
+independence_attestation:
+  reviewer_did_not_co_author_implementation: true
+  reviewer_received_no_advance_summary_of_implementation_choices: false
+  reviewer_judged_against_sealed_goal_packet_only: true
+  reviewer_independently_verified_post_sha_against_apply_event: true
+  reviewer_independently_ran_pytest: true
+  notes: |
+    The closer (claude-iter0025-2) is a distinct actor.id from any codex
+    actor. Cross-family closure invariant treats actor-id + family
+    difference as the independence boundary. The implementation_critic
+    pass (claude-iter0025-1) is preserved at
+    claude-review-implementation-critic.yaml for audit. iter-0025 is the
+    FIRST production close to exercise iter-0024 F1 (merge-direction fix)
+    against a real audit log with structured nested actor dicts.
+
+sealed_at_utc: '2026-05-10T20:58:30Z'

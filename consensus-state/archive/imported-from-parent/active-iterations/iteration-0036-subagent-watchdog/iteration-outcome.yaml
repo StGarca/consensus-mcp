@@ -1,0 +1,106 @@
+schema_version: 1
+iteration_id: iteration-0036-subagent-watchdog
+created_utc: '2026-05-11T03:21:00Z'
+closing_state: quorum_close_passed
+ceremony_flavor: claude_fix_author_with_codex_pre_review
+parent_iteration: null
+subsystem: visibility_watchdog
+closing_reason: |
+  iter-0036 lands the watchdog half of Task #43 (post-hoc orphan
+  detection + dispatch_stalled audit hygiene + external-process fallback
+  policy memory). Bidirectional dispatch (streaming + heartbeats + abort-
+  signal-file) deferred to iter-0037 per codex pre-review scope split.
+
+  CHAIN (with workflow #4 pre-review):
+    1. Goal_packet authored with scope = _visibility_watchdog.py (new)
+       + _visibility_tui.py (edit) + tests + memory.
+    2. First codex pre-review dispatch (codex-iter0036-1) HUNG 29 minutes
+       past its 15-min internal timeout. Payload was design-plan.md +
+       _visibility_tui.py + ~600 lines of embedded code. Operator killed
+       the bash task; claude wrote a manual dispatch_failed event with
+       error_type=StuckDispatchManuallyTerminated to close audit shape.
+       THIS STALL ITSELF VALIDATED THE TASK #43 USE CASE.
+    3. Operator pivoted: pure post-hoc watchdog is insufficient; needs
+       bidirectional dispatch monitoring. Design conversation ensued:
+       operator chose 200-char truncation, 30s heartbeat, heartbeat-
+       silence auto-abort, Popen+readline (locked in).
+    4. Second codex pre-review dispatch (codex-iter0036-2) on design-
+       plan.md ALONE (no embedded code). Returned cleanly in ~40s with
+       4 findings:
+         codex-rev-001 (HIGH): dispatch_refused missing from terminal set
+         codex-rev-002 (MEDIUM): stall_reason drift from contract
+         codex-rev-003 (MEDIUM): scope creep into _dispatch_codex rewrite
+         codex-rev-004 (MEDIUM): external-process fallback policy doc
+                                missing
+    5. Operator accepted codex's scope-split (codex-rev-003): iter-0036
+       narrow, iter-0037 picks up bidirectional dispatch.
+    6. Claude integrated codex-rev-001/002/004 and implemented the
+       narrow scope:
+         - _visibility_watchdog.py: 5-terminal-event recognition;
+           stall_reason="watchdog_timeout"; append-only invariant;
+           _suggest_redispatch returns external codex-cli command line
+         - _visibility_tui.py: _assemble_dispatches recognizes stalled +
+           aborted as terminal; render() draws colored markers
+         - test_visibility_watchdog.py: 13 regression tests
+         - test_visibility_tui.py: 2 new regression tests
+         - memory/feedback_external_process_fallback.md (operator-locked
+           policy)
+         - MEMORY.md index updated
+    7. Empirical sweep: ran `_visibility_watchdog.py --action mark` on
+       the live dispatch-log. Detected + closed 2 historical orphans
+       (iter-0031-2 stalled subagent from 2026-05-10; iter-real-codex-
+       smoke-2026-05-09). Idempotency verified: second run returns rc=0.
+    8. Post-implementation claude review confirms all integrations;
+       goal_satisfied=true; blocking_objections=[].
+
+  KEY EMPIRICAL OBSERVATIONS:
+
+  (a) WORKFLOW #4 SCALING LIMIT DISCOVERED:
+    Iter-0036 round-1 stall revealed an upper bound on workflow #4
+    payload size. Embedding multiple full source files (~600 lines) in
+    one review-packet hangs the codex CLI. Future workflow #4 invocations
+    should prefer prose-design docs + small targeted diffs over full-
+    file embedding. Documented in closure-certificate notes.
+
+  (b) THE STALL ITSELF DEMONSTRATED THE NEED:
+    The very dispatch that was reviewing the watchdog code stalled. After
+    cleanup (manual dispatch_failed close), the new watchdog detected
+    the stall via the SAME audit-log scanning logic and would have
+    surfaced it automatically. This is iter-0031 happening again in
+    real-time and being recovered by the work we were doing.
+
+  (c) CROSS-AI CUMULATIVE CATCH RATE (workflow #4 across iter-0033
+      + iter-0035 + iter-0036):
+    8 codex pre-review findings; 8/8 real; 0 false positives; 0 post-
+    commit fixup iterations. Pattern holds.
+
+  (d) SCOPE-SPLIT VALIDATION:
+    Codex's recommendation to split iter-0036/0037 prevented bundling a
+    high-risk dispatch primitive rewrite with a low-risk new module.
+    Each iteration is now small enough to reviewable in one pass.
+
+next_action: |
+  iter-0037 (bidirectional dispatch, Phase A+B):
+    - Replace subprocess.run with Popen+readline in _dispatch_codex
+    - Emit dispatch_streamed_line (200-char truncated) per codex stdout line
+    - Emit dispatch_heartbeat every 30s while codex runs
+    - Watch agent-loop/state/abort-dispatch-<pass_id>.signal for operator abort
+    - SIGTERM codex on either operator-signal OR heartbeat-silence (90s default)
+    - Emit dispatch_aborted with abort_source field
+    - Migrate ~10 existing subprocess.run mocks to Popen mocks
+    - TUI updates to show streamed-line preview + heartbeat freshness
+    - New regression tests for streaming + heartbeat + abort
+
+  Task #43 status: half-complete after iter-0036. Will close on iter-0037.
+
+artifacts:
+  goal_packet: agent-loop/active/iteration-0036-subagent-watchdog/goal_packet.yaml
+  design_plan: agent-loop/active/iteration-0036-subagent-watchdog/design-plan.md
+  proposed_patches_round_1_stalled: agent-loop/active/iteration-0036-subagent-watchdog/proposed-patches.md
+  review_packet_round_2: agent-loop/active/iteration-0036-subagent-watchdog/review-packet.yaml
+  codex_review_round_1_stalled: agent-loop/archive/review-passes/2026-05-11-iteration-0036-subagent-watchdog-codex-iter0036-1-pass.yaml
+  codex_review_round_2_substantive: agent-loop/active/iteration-0036-subagent-watchdog/codex-review.yaml
+  claude_review: agent-loop/active/iteration-0036-subagent-watchdog/claude-review.yaml
+  closure_certificate: agent-loop/active/iteration-0036-subagent-watchdog/closure-certificate.yaml
+  archive:
+    codex_round_2: agent-loop/archive/review-passes/2026-05-11-iteration-0036-subagent-watchdog-codex-iter0036-2-pass.yaml

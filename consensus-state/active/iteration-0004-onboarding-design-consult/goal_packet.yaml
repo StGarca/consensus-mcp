@@ -1,0 +1,55 @@
+schema_version: 1
+pilot_id: iteration-0004-onboarding-design-consult
+goal:
+  summary: Cross-AI consult on two onboarding-design choices (binary resolution + output contracts).
+  desired_end_state: |
+    Codex reviews docs/design-consults/onboarding-binary-resolution-and-output-contracts.md
+    and emits ONE finding per question (two findings total). Each finding's
+    recommendation field carries the winning option; risk field carries the
+    rationale. severity: low (these are design choices, not defects).
+
+    Empty findings is NOT acceptable — both questions need a verdict.
+  non_goals:
+    - implement either option
+    - audit other docs
+    - propose patches
+allowed_files:
+  - docs/design-consults/onboarding-binary-resolution-and-output-contracts.md
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - consensus-state/active/iteration-0001-extraction-review/
+  - consensus-state/active/iteration-0002-consensus-resume-spec/
+  - consensus-state/active/iteration-0003-consensus-resume-implementation/
+  - consensus-state/archive/
+  - consensus-state/state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - pyproject.toml
+  - .github/
+  - docs/architecture/
+  - docs/workflows/
+  - docs/postmortems/
+  - docs/specs/
+  - docs/templates/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex emits two findings (one per question) with recommendation
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T19:45:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 1759aae5eea00a0a13c3568a6251d2fb2834e0e3cb3d2151f220312c4a7cf1f9

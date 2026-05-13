@@ -1,0 +1,251 @@
+schema_version: 1
+iteration_id: iteration-0003
+created_utc: "2026-05-08T00:00:00Z"
+operator_directive_received: "2026-05-08"
+operator_directive_quote: |
+  Proceed with iteration-0003 before readiness-flip work, but define the objective as
+  "repair iteration-0000 audit-chain residuals," not "rename only." First patch the
+  MD/index drift and side-effect note, then dispatch iter-0003 with reviewers forced
+  to decide whether the fix is retrospective audit reconstruction with explicit
+  provenance, or validator/spec grandfathering for historical audit hashes.
+
+objective: |
+  Repair iteration-0000 audit-chain residuals (HASH_CHAIN_BROKEN x2 high +
+  AUDIT_EVENT_NAME_NON_CANONICAL x3 low/grandfathered + a codex review sha
+  drift that surfaces only upon rename). Reviewers MUST evaluate three real
+  options and decide. This iteration is NOT "rename only".
+
+mode: implementation
+
+# ---- Operator guardrails (carried forward) ----
+
+operator_guardrails:
+  - id: G1
+    rule: "Target only unresolved real defects, not already-dispositioned cf-* history."
+    interpretation: "In-scope: iteration-0000 audit-chain residuals (HASH_CHAIN_BROKEN x2 + AUDIT_EVENT_NAME_NON_CANONICAL x3 + codex review sha mismatch that would surface upon rename). Out-of-scope: claude-rev-048..053 + iteration-0001 canonical-001/002/003/005/007 (separate operator decisions)."
+  - id: G2
+    rule: "Input packet must include defect list + current validator results."
+    interpretation: "Packet bundles iteration-0000 audit + codex review + ledger entry canonical-iter0002-005 + spec section 13 audit_log schema."
+  - id: G3
+    rule: "Iteration-0003 may apply fixes only if Phase 0 mutating gates are satisfied."
+    interpretation: "Mutating gates satisfied at boot: validate_disposition_index 0, validate_iteration on iter-0001 0, on iter-0002 0, smoke 21/21. canonical-006 dry-run gate on hypothetical post-edit state required before apply."
+  - id: G4
+    rule: "Independence audit must mark prior exposure to iteration-0000 + iteration-0001 + iteration-0002 + pass-20 + spec v1.7.6."
+    interpretation: "G4 forced post-exposure. corroboration_strength suggested_by_context for all findings."
+  - id: G5
+    rule: "Success metric: defects resolved, validators clean, no new disposition/index drift."
+    interpretation: |
+      Success iff:
+        - validate_iteration on iteration-0000/ -> 0 high findings (low/informational acceptable)
+        - validate_disposition_index, validate_review on each review yaml, validate_consensus -> 0 each
+        - smoke 21/21
+        - section 24 + disposition-ledger + archive index consistent post-apply
+
+# ---- Current iteration-0000 audit-chain state (briefing reviewers) ----
+
+iteration_0000_audit_current_state:
+  audit_yaml_path: agent-loop/active/iteration-0000/independence-audit.yaml
+  events_present:
+    - {event: review_packet_built, status: canonical_name_OK, sha256_recorded: "385d9589..."}
+    - {event: codex_reviewer_invoked, status: prefixed_NON_CANONICAL, canonical_form: reviewer_invoked}
+    - {event: codex_review_returned_and_sealed, status: prefixed_NON_CANONICAL, canonical_form: review_returned_and_sealed, sha256_recorded: "b0595ca4..."}
+    - {event: claude_reviewer_invocation_pending, status: prefixed_NON_CANONICAL, canonical_form: reviewer_invocation_pending, optional_per_section_13: true}
+  events_missing:
+    - {event: claude reviewer_invoked, status: ENTIRELY_ABSENT}
+    - {event: claude review_returned_and_sealed, status: ENTIRELY_ABSENT}
+  validator_findings_currently_firing:
+    - {id: HASH_CHAIN_BROKEN, count: 2, severity: high, claim: "0 canonical reviewer_invoked + 0 canonical review_returned_and_sealed; expected >= 2 each"}
+    - {id: AUDIT_EVENT_NAME_NON_CANONICAL, count: 3, severity: low_grandfathered, claim: "per-agent prefixes detected"}
+  hash_drift_that_will_surface_upon_rename:
+    affected: codex_review_returned_and_sealed -> review_returned_and_sealed event's sha256 field
+    recorded_value: "b0595ca4..."
+    current_canonical_sha_of_iteration_0000_codex_review_yaml: |
+      DRIFTED post-iteration-0002 mechanical change-07 (which added pre-canonical-pin
+      marker to iteration-0000/codex-review.yaml). Adding marker fields changed file
+      content, hence canonical sha. Audit's recorded sha is the ORIGINAL canonical
+      (pre-marker); current file canonical is post-marker.
+    if_ignored_after_rename: HASH_CHAIN_BROKEN x1 (sha mismatch) would fire even after rename
+  notes:
+    - "Operator finding 2026-05-08 high-1 explicitly named this drift class."
+
+# ---- Three real options for reviewers to evaluate ----
+
+options_for_reviewers_to_decide:
+
+  - id: A
+    label: "RETROSPECTIVE AUDIT RECONSTRUCTION WITH EXPLICIT PROVENANCE"
+    description: |
+      Edit iteration-0000/independence-audit.yaml directly:
+        1. Rename codex_reviewer_invoked -> reviewer_invoked (actor stays codex)
+        2. Rename codex_review_returned_and_sealed -> review_returned_and_sealed (actor codex)
+        3. Rename claude_reviewer_invocation_pending -> reviewer_invocation_pending
+        4. ADD claude reviewer_invoked event reconstructed from real session evidence
+           (claude-review.yaml exists in iteration-0000; its existence implies a
+           reviewer_invoked happened; reconstruct event with actor: claude,
+           independence_attestation matching the historical session)
+        5. ADD claude review_returned_and_sealed event with sha256 = current canonical
+           sha of iteration-0000/claude-review.yaml AT TIME OF RECONSTRUCTION
+           (not original session time; explicit provenance noted)
+        6. Resolve codex sha drift: either
+           (a-i) update sha256 to current canonical (loses original)
+           (a-ii) add reconstruction_provenance field noting "original sealed sha was
+                  b0595ca4...; post-iteration-0002 mechanical change-07 added marker;
+                  current canonical sha is X"
+    pros:
+      - "iteration-0000 audit becomes spec-compliant"
+      - "validator HASH_CHAIN_BROKEN clears entirely"
+      - "Provenance preservation (a-ii) keeps historical audit meaning"
+    cons:
+      - "ARTIFACT EDIT: changes the historical record. Reconstruction is post-hoc; not what original session emitted."
+      - "Synthetic reconstruction risks operator confusion if not clearly marked"
+      - "Adds reconstructed events with sha256 values that did NOT exist at original session time; explicit provenance MUST mark this"
+    scope_class: artifact_edit_to_iteration_0000_audit
+    spec_changes_required: none (just artifact edit)
+    code_changes_required: none
+
+  - id: B
+    label: "LOCAL GRANDFATHER FOR ITERATION-0000 (validator + spec carve-out)"
+    description: |
+      Extend v1.7.4 iteration-0000 grandfather clause to ALSO downgrade
+      HASH_CHAIN_BROKEN (currently HIGH) to LOW for iteration-0000 specifically.
+      Spec section 13 audit_log canonical_event_name_rule.iteration_0000_grandfather_clause
+      currently downgrades AUDIT_EVENT_NAME_NON_CANONICAL only; extend to
+      cover the missing-canonical-event-count case (HASH_CHAIN_BROKEN
+      subtype=missing_event_type).
+
+      Implementation:
+        - validate_iteration.py: when iteration_name == "iteration-0000",
+          downgrade HASH_CHAIN_BROKEN.subtype=missing_event_type from high to low.
+        - Spec section 13 grandfather block: extend text to include
+          HASH_CHAIN_BROKEN.subtype=missing_event_type.
+        - DO NOT touch iteration-0000 audit content.
+        - Renaming may STILL be desirable (cosmetic) but not required for clean validators.
+    pros:
+      - "ZERO artifact edit. No fabrication. Honest historical preservation."
+      - "Bounded scope: only iteration-0000."
+      - "Smallest spec/code change."
+    cons:
+      - "validator/spec change is architectural (claude-rev-028 requires operator + codex review)"
+      - "Doesn't fix codex sha drift either (still recorded; the prefixed-event audit IS effectively immune to canonical hash check; sha drift only surfaces on rename)"
+      - "Sets precedent of 'grandfather extends per-iteration'; future iterations might game this"
+    scope_class: validator_and_spec_change
+    spec_changes_required: section_13_grandfather_clause_extension
+    code_changes_required: validate_iteration.py iteration-0000 downgrade
+
+  - id: C
+    label: "WIDER GRANDFATHER SCOPE ON PRE-V1.7.4 ITERATION AUDIT VALIDITY"
+    description: |
+      Add a NEW pre_v1_7_4_iteration_audit_grandfather block to spec section 13
+      that treats ANY pre-v1.7.4 iteration audit_log as legacy. Skip canonical
+      event name + hash chain checks entirely for those iterations. Currently
+      iteration-0000 is the only such iteration; future iterations would pre-date
+      a future canonical-pin if any rules change again, so this is a forward-looking
+      generalization.
+
+      Implementation:
+        - Spec section 13: add pre_v1_7_4_iteration_audit_grandfather block
+        - validate_iteration.py: when iteration audit's frontmatter says
+          pre_v1_7_4_iteration: true, skip canonical event count + name checks
+          entirely (only basic structure + hash format checks remain)
+        - iteration-0000 audit gets the marker added (single field add at top)
+    pros:
+      - "Forward-looking; handles any future canonical-pin events"
+      - "Single field on audit_log marks pre-canonical-pin scope"
+      - "No artifact reconstruction; preserves historical audit verbatim"
+    cons:
+      - "Most architectural; widens scope. operator + codex review weight"
+      - "iteration-0000 still has codex sha drift (validator skips check; honesty cost)"
+      - "Sets precedent for 'we keep adding grandfather scopes' rather than fixing"
+    scope_class: spec_change_plus_validator_change_plus_single_field_artifact_marker
+    spec_changes_required: section_13_pre_v1_7_4_iteration_audit_grandfather_block
+    code_changes_required: validate_iteration.py grandfather skip logic
+
+# ---- Reviewers' job ----
+
+reviewer_decision_required:
+  question: "Which option (A / B / C) best repairs iteration-0000 audit-chain residuals?"
+  must_consider:
+    - "Honest framing: which option is most truthful about historical state?"
+    - "Code/spec change cost vs artifact-edit cost"
+    - "Operator preference precedent: codex-q-001 chose preserve+provenance over recompute (option A-ii aligns; option B aligns even stronger)"
+    - "Forward-looking: which option scales if more iterations become legacy?"
+    - "Validator hardening: which option leaves the validator in the most defensible state for future iterations?"
+  reviewers_may_propose_hybrid: yes (e.g., 'B for missing events; A-ii for codex sha drift if rename desired')
+  reviewers_may_propose_new_option: yes (D = anything else; explicit rationale required)
+
+# ---- Gate state ----
+
+gate_state:
+  consensus_state: implementation_ready   # spec-conforming canonical
+  observational_mode: false
+  production_state: not_ready
+  production_ready: false
+  production_allowed: false
+
+active_contract_readiness_lock:
+  locked_value: pending_phase_0_empirical_validation
+  locked_for_iteration_duration: true
+  forbidden_action: "DO NOT flip readiness. cf-007 readiness flip pass is separate."
+
+apply_order_rule:
+  rule: validators_first_then_apply
+  enforcement: |
+    canonical-006 dry-run on agent-loop/state/iteration-0003-staging/iteration-0000/
+    (or appropriate path for spec/validator changes). Apply only if dry-run validators
+    surface only acknowledged residuals.
+
+# ---- Prior review references ----
+
+prior_review_refs:
+  - {path: agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml, role: "pass-20 archive (background)"}
+  - {path: agent-loop/active/iteration-0001/, role: "blocked iteration; methodology context"}
+  - {path: agent-loop/active/iteration-0002/, role: "implementation_ready iteration; precedent for canonical-006 dry-run gate"}
+  - {path: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md, role: "v1.7.6 spec"}
+  - {path: agent-loop/state/disposition-ledger.yaml, role: "iteration_0002_to_iteration_0003_deferred block"}
+
+reviewer_stance_assignments:
+  codex: implementation_realist
+  claude: methodology_critic
+
+# ---- Proposed implementation scope (open; depends on reviewer-chosen option) ----
+
+proposed_implementation_scope:
+  if_option_A_chosen:
+    allowed_files:
+      - agent-loop/active/iteration-0000/independence-audit.yaml
+      - agent-loop/active/iteration-0003/**
+      - agent-loop/state/disposition-ledger.yaml
+      - agent-loop/archive/review-passes/index.yaml
+  if_option_B_chosen:
+    allowed_files:
+      - scripts/agent_loop/validate_iteration.py
+      - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md (section 13 only; frontmatter + revision_history + section 13 + section 24)
+      - agent-loop/active/iteration-0003/**
+      - agent-loop/state/disposition-ledger.yaml
+  if_option_C_chosen:
+    allowed_files:
+      - scripts/agent_loop/validate_iteration.py
+      - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md (section 13 + new grandfather block)
+      - agent-loop/active/iteration-0000/independence-audit.yaml (single field add)
+      - agent-loop/active/iteration-0003/**
+      - agent-loop/state/disposition-ledger.yaml
+  forbidden_files_all_options:
+    - production outputs
+    - "any spec section 1-23 outside the section explicitly named in chosen option"
+  forbidden_actions:
+    - flip active_contract_readiness
+    - render production audio
+    - merge to main
+    - apply patches without canonical-006 dry-run gate passing
+    - apply patches while consensus_state is blocked
+
+# ---- Closure ----
+
+closure_artifact: agent-loop/active/iteration-0003/iteration-outcome.yaml
+success_criteria_per_G5:
+  - "consensus chooses one of A/B/C/hybrid/D with rationale"
+  - "post-apply validate_iteration on agent-loop/active/iteration-0000/ -> 0 high findings (low acceptable for grandfathered options; fully clean for option A)"
+  - "validate_disposition_index, validate_review, validate_consensus -> 0 each"
+  - "smoke 21/21"
+  - "section 24 + disposition-ledger + archive index consistent"
+  - "active_contract_readiness UNCHANGED (still pending_phase_0_empirical_validation)"

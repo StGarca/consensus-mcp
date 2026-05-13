@@ -1,0 +1,134 @@
+schema_version: 1
+iteration_id: iteration-0007-release-candidate-hardening
+audit_purpose: 'section 13 independence_proof_required; iteration-0007 is the Phase
+  3 Release
+
+  Candidate Hardening ceremony per operator directive 2026-05-09. G4 forced
+
+  post-exposure carried; controller has full prior-arc context (iter-0000..0006
+
+  + Phase 1+2 MCP implementation tokens). Phase 3 anti-scope: no G6, no new
+
+  review-round mechanics, no new doc architecture; freeze G1-G5; prove
+
+  shippability via real iteration + clean-env install + 7-gate release checklist.
+
+  '
+global_independence_attestation:
+  achievable: false
+  reason: "G4 carried. Both reviewers explicitly briefed on:\n  - operator Phase 3\
+    \ directive + anti-scope\n  - 7 release gate criteria (G_smoke + G_validators\
+    \ + G_frontmatter + G_unstaged + G_untracked_pkg + G_install + G_real_iter)\n\
+    \  - iteration-0006 prior real ceremony (G1+G2 self-test on actual workload)\n\
+    \  - 44 review findings across 7 rounds (Round 1+2 closed; Source-MD/CFU/MD-set/R6/R7\
+    \ self-applied/re-review-pending)\n  - v1.9.0/v1.9.1/v1.9.2 spec history + lessons\n\
+    fresh_context: false; corroboration_strength: suggested_by_context for any\nconvergence\
+    \ on rc_plan_approved values.\n"
+audit_log:
+- event: review_packet_built
+  timestamp_utc: '2026-05-09T14:58:57Z'
+  event_id: 2026-05-09T14:58:57Z_review_packet_built_orchestrator
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0007-release-candidate-hardening/review-packet.yaml
+  sha256: 72cbc370ddc4724da42452afd6b358376a3ff96f9996936b87089a4cbdd45b3d
+- event: sealed_inputs_recorded
+  timestamp_utc: '2026-05-09T14:58:57Z'
+  event_id: 2026-05-09T14:58:57Z_sealed_inputs_recorded_orchestrator
+  actor: orchestrator
+  sealed_inputs:
+  - artifact: agent-loop/active/iteration-0007-release-candidate-hardening/input.yaml
+    sha256: 203d6bdeb4189ae806369bdb2832776b66ef2190354d588c677e46f7445296c9
+  - artifact: agent-loop/active/iteration-0007-release-candidate-hardening/review-packet.yaml
+    sha256: 72cbc370ddc4724da42452afd6b358376a3ff96f9996936b87089a4cbdd45b3d
+- event: reviewer_invoked
+  timestamp_utc: '2026-05-09T15:05:51Z'
+  event_id: 2026-05-09T15:05:51Z_reviewer_invoked_codex
+  actor: codex
+  artifact: agent-loop/active/iteration-0007-release-candidate-hardening/codex-review.yaml
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+  invocation_protocol:
+    runtime: subagent_dispatch
+    fresh_context: false
+    fresh_context_false_reason: G4 forced post-exposure
+    reviewer_brief_excluded:
+    - claude reviewer brief
+    - claude reviewer review.yaml
+    reviewer_brief_included:
+    - iteration-0007 input.yaml + review-packet.yaml
+    - consolidated review findings doc with Round 8 closure
+    - parent spec v1.9.2
+    - design spec g1-through-g5-implemented
+    - ledger v1.9.2
+    - iteration-0006 prior real ceremony
+    - CLAUDE.md
+    - all 10 MCP tool sources
+- event: reviewer_invoked
+  timestamp_utc: '2026-05-09T15:05:51Z'
+  event_id: 2026-05-09T15:05:51Z_reviewer_invoked_claude
+  actor: claude
+  artifact: agent-loop/active/iteration-0007-release-candidate-hardening/claude-review.yaml
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+  invocation_protocol:
+    runtime: subagent_dispatch
+    fresh_context: false
+    fresh_context_false_reason: G4 forced post-exposure
+    reviewer_brief_excluded:
+    - codex reviewer brief
+    - codex reviewer review.yaml
+    reviewer_brief_included:
+    - iteration-0007 input.yaml + review-packet.yaml
+    - consolidated review findings doc with Round 8 closure
+    - parent spec v1.9.2
+    - design spec g1-through-g5-implemented
+    - ledger v1.9.2
+    - iteration-0006 prior real ceremony
+    - CLAUDE.md
+    - all 10 MCP tool sources
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-09T15:13:32Z'
+  event_id: 2026-05-09T15:13:32Z_review_returned_and_sealed_codex
+  actor: codex
+  artifact: agent-loop/active/iteration-0007-release-candidate-hardening/codex-review.yaml
+  sha256: 45102226824b3080453e7a15f5edd8087009ae32959043ec2cd9861a2fe1a95b
+  independence_attestation:
+    seal_order_position: 1
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-09T15:13:32Z'
+  event_id: 2026-05-09T15:13:32Z_review_returned_and_sealed_claude
+  actor: claude
+  artifact: agent-loop/active/iteration-0007-release-candidate-hardening/claude-review.yaml
+  sha256: 4206fb744c9a703e2324bd8bc6afeb3bebd14809fa5596601ad64565ff13d358
+  independence_attestation:
+    seal_order_position: 1
+- event: consensus_built
+  timestamp_utc: '2026-05-09T15:16:11Z'
+  event_id: 2026-05-09T15:16:11Z_consensus_built_orchestrator
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0007-release-candidate-hardening/consensus.yaml
+  sha256: 33ca411e0a19752e7ec1ff4ca7993b915aae23e4167678deeee88aa6719eff6b
+  consensus_state: implementation_ready
+- event: apply_step_landed
+  timestamp_utc: '2026-05-09T15:20:52Z'
+  event_id: 2026-05-09T15:20:52Z_apply_step_landed_anon
+  effect: 'iter-0007 ceremonial files closure: write iteration-outcome.yaml + verification.yaml
+    via T5 (gates via T4). Phase 3 RC ceremony halt-point. Remaining v1.9.3-rc spec
+    md + ledger updates land out-of-MCP per consensus apply_orchestration.'
+  files_modified:
+  - iteration-outcome.yaml
+  - verification.yaml
+  dry_run_findings_count: 0
+- event: iteration_closed
+  timestamp_utc: '2026-05-09T15:21:10Z'
+  event_id: 2026-05-09T15:21:10Z_iteration_closed_orchestrator
+  actor: orchestrator
+  closing_state: implementation_ready_apply_landed
+  note: Phase 3 RC ceremony halt-point. Ceremonial files via T5 + T4 gate. Out-of-MCP
+    edits (spec md v1.9.3-rc + ledger v1_9_3_application_log) pending; P3 T5 (packaging)
+    + P3 T6 (9-gate verification) next.
+  governance_milestone_closed: false

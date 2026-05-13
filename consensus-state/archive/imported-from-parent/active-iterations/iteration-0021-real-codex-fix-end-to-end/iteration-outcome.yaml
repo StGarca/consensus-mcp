@@ -1,0 +1,225 @@
+schema_version: 1
+iteration_id: iteration-0021-real-codex-fix-end-to-end
+created_utc: '2026-05-10T22:30:00Z'
+closing_state: blocked_needs_operator
+closing_reason: |
+  iter-0021 was the empirical-proof companion to iter-0020. iter-0020
+  surfaced that codex's read-only sandbox could NOT reliably read repo
+  files (the diff hallucinated `def handle(args)` for a function whose
+  real signature is `def handle(iteration_dir: str, patch_id: str, actor: dict)`).
+  iter-0021 fix: embed touched-file FULL contents inline in the
+  review-packet so codex sees them as part of the prompt — no filesystem
+  read required.
+
+  PRIMARY EMPIRICAL PROOF (SUCCESS):
+    Codex DID emit a CONTENT-CORRECT unified_diff. The hunks match the
+    REAL source line-by-line:
+
+      @@ -133,6 +133,19 @@ def handle(
+           iter_dir = Path(iteration_dir)
+           repo_root = _resolve_repo_root()
+
+      +    required_actor_keys = ("id", "model_family", "role", "pass_id")
+      +    if not isinstance(actor, dict):
+      +        return _refuse(
+      +            "invalid_actor: actor must be an object with required actor keys: "
+      +            + ", ".join(required_actor_keys)
+      +        )
+      +    missing_actor_keys = [key for key in required_actor_keys if key not in actor]
+      +    if missing_actor_keys:
+      +        return _refuse(
+      +            "invalid_actor: missing required actor key(s): "
+      +            + ", ".join(missing_actor_keys)
+      +        )
+
+           # Defense-in-depth: validate patch_id format. The MCP layer enforces this
+
+    Hunk header `def handle(` references the REAL handle (3-arg signature),
+    NOT iter-0020's hallucinated `def handle(args)`. The test diff uses
+    real fixture names from test_apply_codex_patch.py (_make_actor,
+    _write_codex_review, _write_claude_verification, etc.). The diff
+    structurally APPLIES to the actual repo state.
+
+    The iter-0020 content-blindness blocker is empirically removed.
+    Embedding touched-file contents in the review-packet successfully
+    replaces codex's unreliable filesystem read.
+
+  SECONDARY EMPIRICAL FINDING (different blocker, separate iteration):
+    Codex emits a hallucinated `base_sha`. The patch_proposal carries
+    `base_sha: f612e7d4...` but the actual current bundle_sha (computed
+    by the helper-stamped value in defect_target.base_sha and verified
+    via `bundle_sha(repo_root, files_touched)`) is `0c9507...`. Codex
+    apparently did not propagate the helper-stamped base_sha from
+    review-packet.defect_target.base_sha into its emitted patch_proposal.
+
+    Consequence: apply.codex_patch refused with `base_sha_drift` (verified
+    by direct invocation, see closure_attempt section below). iter-0021
+    cannot drive the apply→close cycle to completion under the current
+    closure invariant — the cycle is blocked at the apply gate.
+
+    This is a SEPARATE blocker from iter-0021 scope. iter-0021 fixed
+    codex's content-blindness; the base_sha-emission issue is a new
+    follow-up.
+
+  WHAT iter-0021 PROVES OPERATIONALLY:
+    1. Touched-file contents embedded in review-packet successfully
+       unblock codex from emitting a content-correct unified_diff
+    2. The {touched_files_contents_block} prompt placeholder + helper
+       (_author_review_packet) + dispatcher YAML-parsing chain all hold
+       end-to-end (real codex-cli 0.129.0)
+    3. claude verifier (this assistant, recording verdict via T9
+       record_verdict) approves the diff content; review_scope_hash
+       seal is reproducible
+    4. apply.codex_patch correctly REFUSES on base_sha_drift, demonstrating
+       the drift detection gate works as designed (defense-in-depth for
+       cases like this one where codex emits a stale/wrong base_sha)
+    5. pytest 257→266 (+9 iter-0021 tests; all green); smoke 60/60
+
+  WHAT iter-0021 DOES NOT PROVE (next blocker, separate iteration):
+    - Codex emitting a CORRECT base_sha (must propagate the helper-stamped
+      defect_target.base_sha into patch_proposal.base_sha)
+    - End-to-end claude-verify → apply → close cross-family path
+      (blocked here at apply gate by base_sha drift)
+
+closure_attempt:
+  claude_verifier_verdict: approved
+  claude_verifier_rationale: |
+    Diff content is correct: handle signature matches real source
+    (iter-0021 PROOF). Actor validation block + regression test are
+    surgical (32 lines) and match spec. Test uses real fixtures
+    (_make_actor, _write_codex_review, etc.) from test_apply_codex_patch.py.
+    Files in allowed_files; patch size within limit; logic uses existing
+    _refuse helper. KNOWN CAVEAT: codex emitted base_sha=f612e7d4... but
+    actual current bundle_sha=0c9507... — apply will refuse on
+    base_sha_drift gate. This is a SEPARATE blocker from iter-0021 scope
+    (codex content-blindness) and is documented as a follow-up.
+  claude_review_scope_hash: 8af3c0999bfb3120315ff514ec056c37e0a18e69d1c1be53d8965e4af3cf74c0
+  apply_attempted: true
+  apply_outcome: refused_base_sha_drift
+  apply_error: |
+    base_sha_drift: codex saw base_sha=f612e7d465f2a027cf470fd69251265b0f6d2f15de766bd203235fd50c6db3d9,
+    current bundle_sha=0c9507575598bfebc25afe42eaa27358f967fc1ccbea287af7ae695f07adb94b
+    (touched files changed since codex review)
+  apply_outcome_meaning: |
+    The drift gate did its job. Codex's emitted base_sha does not match
+    the real bundle hash. iter-0022 must address this; iter-0021 stops
+    here on its primary success.
+
+verdict_summary:
+  embed_touched_files_contents_landed: YES
+  codex_authored_content_correct_unified_diff: YES (codex-iter0021-1 / codex-rev-001-patch)
+  diff_references_real_function_signature: YES (handle iter_dir / repo_root context)
+  claude_verifier_approved_diff: YES
+  apply_lands_mutation: NO (refused on base_sha_drift; separate blocker)
+  pytest_green_after_landing: YES (266/266 — no source mutations actually landed since apply refused)
+  smoke_green: YES (60/60)
+  empirical_proof_value: HIGH (iter-0020 blocker removed; new blocker
+    surfaced is codex's hallucinated base_sha emission, distinct from
+    content-blindness)
+
+artifacts_produced:
+  - agent-loop/active/iteration-0021-real-codex-fix-end-to-end/goal_packet.yaml
+  - agent-loop/active/iteration-0021-real-codex-fix-end-to-end/review-packet.yaml
+  - agent-loop/active/iteration-0021-real-codex-fix-end-to-end/codex-review.yaml
+  - agent-loop/active/iteration-0021-real-codex-fix-end-to-end/codex-patch-verifications/codex-rev-001-patch.yaml
+  - agent-loop/active/iteration-0021-real-codex-fix-end-to-end/iteration-outcome.yaml
+  - agent-loop/archive/review-passes/2026-05-10-iteration-0021-real-codex-fix-end-to-end-codex-iter0021-1-pass.yaml
+
+artifacts_modified:
+  - path: scripts/agent_loop_mcp/_dispatch_codex.py
+    description: |
+      Added _format_touched_files_contents helper (renders contents as
+      ``## File: <path>`` + fenced code block; per-extension language
+      mapping with text fallback). _build_prompt accepts review_packet
+      kwarg and substitutes {touched_files_contents_block} from
+      review_packet.defect_target.touched_files_contents. main() parses
+      the --review-target YAML when present and threads review_packet
+      through to _build_prompt.
+  - path: scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+    description: |
+      Added "Touched-file contents (authoritative source — iter-0021)"
+      section near top with {touched_files_contents_block} placeholder
+      and instructions telling codex to use embedded contents rather
+      than filesystem reads.
+  - path: scripts/agent_loop_mcp/_author_review_packet.py (NEW)
+    description: |
+      CLI helper for authoring/updating review-packet.yaml with
+      defect_target.{files, base_sha, touched_files_contents} populated
+      from real files on disk. Merges into existing review-packets;
+      preserves operator-authored fields outside defect_target.
+  - path: scripts/agent_loop_mcp/tests/test_iter_0021_touched_files.py (NEW)
+    description: |
+      9 unit tests covering _build_prompt substitution,
+      _format_touched_files_contents per-file formatting, default-template
+      authoring smoke, and _author_review_packet CLI behavior (creation,
+      merge, fail-on-missing-file).
+  - path: scripts/agent_loop_mcp/_smoke_test.py
+    description: |
+      Added test_author_review_packet_helper_works smoke probe; total
+      probes 59→60.
+  - path: agent-loop/active/iteration-0021-real-codex-fix-end-to-end/
+    description: New iteration directory with goal_packet, review-packet (helper-authored), codex-review, claude verification, and outcome.
+
+empirical_observations:
+  - "iter-0021 IS the empirical proof of the original loop concept's first half: codex emits content-correct code when given embedded source bodies."
+  - "Embedded contents in YAML format render correctly in codex's prompt context; codex used them instead of attempting filesystem reads."
+  - "Codex's base_sha emission remains a hallucination problem distinct from content-blindness; the drift gate caught it cleanly."
+  - "claude verifier approved the diff content + flagged the base_sha caveat; verification flow itself works as designed."
+  - "iter-0019 (patch_id ergonomics) + iter-0020 (codex emits valid patch_proposal) + iter-0021 (codex emits content-correct diff) form a 3-step empirical proof chain. Step 4 (codex emits correct base_sha) is the next missing link."
+
+operator_decision_required:
+  options:
+    - id: A
+      label: SHIP_ITER_0021_AS_CONTENT_CORRECTNESS_PROOF
+      description: |
+        Accept iter-0021's empirical proof of the embedded-contents fix
+        (CONTENT-CORRECT diff confirmed; claude verifier approved).
+        Treat the base_sha-emission issue as a separate iter-0022:
+        either teach codex to propagate review-packet.defect_target.base_sha
+        into patch_proposal.base_sha, or relax the apply layer's drift
+        gate to use the helper-stamped base_sha when codex's value is
+        absent or stale.
+    - id: B
+      label: HOTFIX_BASE_SHA_HANDLING_IN_APPLY_LAYER
+      description: |
+        Land an apply-layer change that prefers
+        review-packet.defect_target.base_sha over patch_proposal.base_sha
+        when both exist. This is a one-shot mitigation that would let
+        iter-0021 close end-to-end immediately. Risk: bypasses codex's
+        own attestation of what it reviewed.
+  recommendation: A — iter-0021's primary scope (codex emits content-correct
+    code) is empirically proven and should ship as the proof artifact.
+    iter-0022 can address codex's base_sha hallucination without
+    re-litigating iter-0021's scope.
+
+next_iteration_recommendations:
+  - id: iter_0022_codex_base_sha_propagation
+    description: |
+      Teach codex to propagate review-packet.defect_target.base_sha into
+      patch_proposal.base_sha (or alternatively: have the helper validator
+      stamp it from defect_target like it stamps unified_diff_sha256).
+      Once codex's base_sha is the correct helper-computed value, apply
+      will accept the patch and the full close cycle (claude verify →
+      apply → cross-family seal) becomes operationally provable.
+    when: post-iter-0021
+    priority: 1
+
+  - id: iter_0023_real_end_to_end_codex_fix_loop
+    description: |
+      With iter-0022 in place, re-run iter-0021's setup. Codex's emitted
+      patch_proposal carries the correct base_sha; apply lands the
+      mutation; claude (or codex with different actor.id, per #28 v5
+      cross-family rule) closes the cycle with a post-mutation review.
+      Closure invariant runs clean. This is the operator-vision end-to-end
+      demo.
+    when: post-iter-0022
+    priority: 2
+
+post_apply_status: |
+  iter-0021 closes blocked_needs_operator. The embedded-contents fix is
+  empirically proven (codex emitted a content-correct unified_diff;
+  claude verifier approved; pytest 266/266 green; smoke 60/60). The
+  remaining blocker for end-to-end autonomy is codex's hallucinated
+  base_sha emission (separate iter-0022 scope). Operator decides whether
+  iter-0021 ships here as the content-correctness proof or whether
+  iter-0022 lands inline before closing.

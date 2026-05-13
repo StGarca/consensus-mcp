@@ -1,0 +1,57 @@
+schema_version: 1
+pass_id: pass-5-codex-v1.2-expert
+reviewer: codex
+reviewed_utc: "2026-05-08T00:00:00Z"
+spec_under_review: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.2-ai-contract-plus-pass-4"
+depth: "execution-contract review / AI-noise control / pass-4 integration"
+overall_verdict: "pass-4 findings are useful, but must be promoted into active sections or archived; current file is backsliding into review-log format"
+findings:
+  blocking:
+    - id: rev-066-active-contract-scope-ambiguous
+      claim: "section 0 says sections 1-24 are active, but section 24 now contains unresolved findings, pending work, tradeoffs, and verdict metadata"
+      risk: "automation may treat unresolved findings as executable contract or ignore blocking findings as metadata"
+      required_change: "set active contract to sections 1-23; define section 24 as disposition metadata only; promote accepted findings into sections 1-23"
+    - id: rev-067-pass4-must-fixes-not-promoted
+      claim: "pass-4 marks rev-052/rev-054 as must-fix, but sections 10/17/20 still contain conflicting budgets and implicit state transitions"
+      risk: "iteration-0000 can fail in predictable ways even though the finding is recorded"
+      required_change: "apply rev-052 and rev-054 directly to sections 10, 17, and 20 before Phase 0"
+      duplicate_of_claude: "rev-052 + rev-054 (independent corroboration)"
+  high:
+    - id: rev-068-review-log-drift
+      claim: "the file is drifting back toward embedded review log format after the consolidation pass"
+      risk: "lower signal-to-noise for agents; future reviews may reason over stale pending text instead of active rules"
+      required_change: "keep only compact dispositions in section 24; archive full pass bodies externally; do not keep prose verdict blocks in the active MD"
+  medium:
+    - id: rev-069-non-ascii-machine-noise
+      claim: "non-ASCII section symbols, comparison symbols, plus/minus symbols, and dash punctuation were reintroduced"
+      risk: "PowerShell mojibake; machine comparisons and exact-string patching less reliable"
+      required_change: "replace with ASCII: section, <=, +/-, hyphen"
+    - id: rev-070-finding-id-gap-unexplained
+      claim: "findings jump from rev-038 to rev-052 without explicit reservation/archive explanation"
+      risk: "agents may infer missing findings or stale hidden context"
+      required_change: "either record rev-039..rev-051 as archived/reserved or renumber pass-4 findings"
+    - id: rev-071-iteration-0000-reviewer-conflicts-ai-only
+      claim: "rev-065 proposes operator sign-off for iteration-0000, which conflicts with the goal that no human will read the MD"
+      risk: "the bootstrap loop becomes human-blocked before the automation proves itself"
+      required_change: "require deterministic validators plus external bootstrap reviewer artifact; keep operator approval only for production authority"
+      supersedes_claude: "rev-065"
+    - id: rev-072-peer-question-taint-missing
+      claim: "rev-058 excludes peer-resolved questions from independent_finding_rate but does not mark peer-question context as tainted or preserve sealed original reviews"
+      risk: "peer questions can still collapse independence before consensus"
+      required_change: "seal initial reviews before peer questions; mark peer-answer-derived findings as tainted_context=true and exclude them from independence numerator"
+      supersedes_claude: "rev-058"
+  low:
+    - id: rev-073-frontmatter-schema-inconsistent
+      claim: "revision_history is prose-like YAML while review_passes is structured"
+      risk: "automation must special-case frontmatter parsing"
+      required_change: "convert revision_history entries to objects with version, date, summary, and status"
+disposition_in_spec_v1_3:
+  promoted: ["rev-066", "rev-067", "rev-068", "rev-069", "rev-070", "rev-072", "rev-073"]
+  superseded_claude_finding: ["rev-071 supersedes rev-065"]
+  deferred: ["rev-071 (Phase 0 implementation guidance, not spec text)"]
+note: |
+  This pass formally pushed back on claude's pass-4 behavior of writing
+  review bodies into spec section 24. The pushback was correct and produced
+  the v1.3 restructure: section 24 is now a pure disposition index, and
+  review-pass bodies live under agent-loop/archive/review-passes/.

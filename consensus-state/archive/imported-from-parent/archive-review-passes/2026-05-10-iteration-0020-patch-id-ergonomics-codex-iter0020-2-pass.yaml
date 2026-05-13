@@ -1,0 +1,39 @@
+iteration_id: iteration-0020-patch-id-ergonomics
+reviewer_id: codex-iter0020-2
+pass_id: codex-iter0020-2-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: Canonical review target could not be inspected in this sealed review session.
+  citation: agent-loop/active/iteration-0020-patch-id-ergonomics/review-packet.yaml:1
+  risk: Without the canonical review packet, any goal verdict or patch would be ungrounded
+    and could review the wrong surface.
+  recommendation: Rerun dispatch with the canonical review-packet.yaml readable through
+    the configured context-mode path, then review only that packet.
+  patch_not_proposed_reason: The canonical review target was not readable through
+    the available tools in this session, so I cannot author a grounded patch against
+    the sealed input.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The goal is not satisfied because the sealed canonical review
+  target was not inspected.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: fba588da6f73fb1a2aac91e160a11bc1729f568adecac4b3bdb643ac6b84d1be
+  output_sha256: b8059a3791b06a34f55ac27a0dc3f2e70d430bea66ff4186a871f5e84966eb76
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: b1375937294177dab24ab0c6da1e9c9c179cf6003684704e1bdba268720d4106
+  scope_signature: 9d0e1a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f
+sealed_at_utc: '2026-05-10T18:04:14Z'
+packet_sha256: 51e624a6153db3949e4b4576b63f78191ac4daaeba5044ec83ac1a6c42ce4c95
