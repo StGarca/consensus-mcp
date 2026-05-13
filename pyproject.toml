@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-version = "1.13.1"
+version = "1.14.0"
 description = "MCP server enforcing G1-G5 consensus gates (sealed-review provenance, canonical-006 dry-run, intra-file scope, production-scope match, mediated ledger updates)"
 authors = [{name = "stgarciaarca"}]
 requires-python = ">=3.10"
@@ -17,10 +17,13 @@ dependencies = [
 [project.scripts]
 consensus-mcp = "consensus_mcp.server:main"
 consensus-mcp-dispatch-codex = "consensus_mcp._dispatch_codex:main"
+consensus-mcp-dispatch-gemini = "consensus_mcp._dispatch_gemini:main"
+consensus-init = "consensus_mcp._init_wizard:main"
 
 [tool.setuptools]
 packages = [
   "consensus_mcp",
+  "consensus_mcp.contributors",
   "consensus_mcp.tools",
   "consensus_mcp.validators",
 ]
