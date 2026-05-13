@@ -108,14 +108,29 @@ then convergence rounds). iter-0016d converged after 6 review rounds
 (both reviewers goal_satisfied=true, zero findings). iter-0017 converged
 on first pass.
 
-**Known issues carried into v1.14.0:**
+**Test isolation (iter-0019):**
 
-- 5 pre-existing test_dispatch_codex.py tests fail under full-suite
-  ordering due to module-level `REPO_ROOT` caching in
-  `review_write_and_seal.py` (cached at import-time before test env-var
-  overrides). Standalone runs of the file pass cleanly (95/95+1 skipped).
-  Architectural fix (lazy resolution) deferred to a peer-reviewed
-  follow-up iteration.
+- The 5 long-standing test_dispatch_codex.py full-suite failures are
+  fixed. Root cause: `review_write_and_seal.py` and `audit_append_event.py`
+  cache `REPO_ROOT` / `ARCHIVE_DIR` / `INDEX_PATH` / `ACTIVE_DIR` at module
+  import time, so `monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))`
+  in tests had no effect — sealed packets landed in the real archive index,
+  polluting subsequent test runs. iter-0019 adds an `_isolate_archive_root`
+  test helper that monkeypatches the cached module attributes directly, so
+  every dispatch test now seals into a tmp_path-isolated archive. Full
+  suite: 658 pass + 1 skipped + 0 fail under any ordering.
+
+**Deferred to a follow-up iteration:**
+
+- Lazy / per-call resolution of `REPO_ROOT` (and derivatives) inside
+  `review_write_and_seal.py`, `audit_append_event.py`, and the other
+  tool modules that share the same module-load caching pattern. The
+  test workaround unblocks CI; the deeper architectural change still
+  needs peer-reviewed design.
+- 20 stale `iter-9999-*` fixture entries remain in
+  `consensus-state/archive/review-passes/index.yaml` from pre-iter-0019
+  test runs. They no longer cause failures (tests now isolate) but are
+  noise in the audit trail. Separate cleanup iteration if desired.
 
 ## 1.13.0 - 2026-05-12
 
@@ -153,10 +168,11 @@ initializes in CWD.
 - Visibility upgrade: dispatch_heartbeat events should expose a `status`
   field (loading / streaming / stalled) for operator clarity.
 
-**Known pre-existing pytest flake** (predates v1.13.0): 5 tests in
-`test_dispatch_codex.py` that pass in isolation but fail in the full suite
-due to test-ordering pollution. Not introduced by v1.13.0; tracked
-separately.
+**Known pre-existing pytest flake** (predates v1.13.0; **fixed in v1.14.0
+iter-0019**): 5 tests in `test_dispatch_codex.py` that pass in isolation
+but fail in the full suite due to test-ordering pollution. Not introduced
+by v1.13.0; tracked separately. See the v1.14.0 "Test isolation" section
+above for the resolution.
 
 ## 1.12.0 - 2026-05-11
 
