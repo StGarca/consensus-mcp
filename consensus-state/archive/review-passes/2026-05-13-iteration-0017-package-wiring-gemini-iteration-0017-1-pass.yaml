@@ -1,0 +1,32 @@
+iteration_id: iteration-0017-package-wiring
+reviewer_id: gemini-iteration-0017-1
+pass_id: gemini-iteration-0017-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The changes in pyproject.toml correctly bump the project
+  version to 1.14.0, add the 'consensus_mcp.contributors' package to setuptools, and
+  define the 'consensus-init' and 'consensus-mcp-dispatch-gemini' console scripts
+  as specified in the goal. All acceptance criteria are met.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 4a1a5f394c434aa9a9d20bc396c4a685a0be4cdcff04f17c49481b0102ce1e01
+  output_sha256: 57c1b784f39db0fa76a76e5d45596cc73d6d95d67a65b4c54fecac4c56f5562f
+  goal_packet_sha256: f2edf637272c2c35fbf73663f0cd462dcf9bca5821b06fbbc480824c340e93b4
+  scope_signature: b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1
+  review_target_path: consensus-state/active/iteration-0017-package-wiring/review-packet.yaml
+  review_target_hash: 017cde85aa745ebd41ac5000f9b767ee29c0191dc1763dc45cad0a78671fc76e
+  adapter: gemini
+sealed_at_utc: '2026-05-13T05:45:41Z'
+packet_sha256: 6afd402aeafafcd8041fb04af7e0c8d317ae4253355e0884f8b8cfebcaa2615a
