@@ -38,25 +38,30 @@ from pathlib import Path
 
 import yaml
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
+from consensus_mcp._paths import project_root, active_dir
 
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+# iter-0036 (Phase B step 9 per iter-0024 plan, HIGH-impact audit trail
+# tool): migrated from module-level REPO_ROOT/ACTIVE_DIR captures to lazy
+# `_paths` resolvers. Tests redirect paths via `monkeypatch.setenv`
+# (CONSENSUS_MCP_REPO_ROOT / CONSENSUS_MCP_STATE_ROOT), NOT
+# `monkeypatch.setattr` on this module — the latter is unsafe because
+# pytest's monkeypatch saves __getattr__-synthesized values into __dict__
+# at teardown, permanently shadowing the lazy resolver for subsequent
+# tests. iter_0018 already uses the setenv pattern; closure_invariant
+# was updated to match in this iteration. PEP 562 `__getattr__` still
+# provides backward compat for any external read of `module.REPO_ROOT`
+# / `module.ACTIVE_DIR`.
 
 
-REPO_ROOT = _resolve_repo_root()
-ACTIVE_DIR = REPO_ROOT / "consensus-state" / "active"
+def __getattr__(name: str):
+    """PEP 562 backward compat for external `module.REPO_ROOT` /
+    `module.ACTIVE_DIR` reads. Internal code should call `project_root()`
+    / `active_dir()` directly."""
+    if name == "REPO_ROOT":
+        return project_root()
+    if name == "ACTIVE_DIR":
+        return active_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 CANONICAL_EVENT_TYPES: dict[str, dict] = {
     "review_packet_built": {"required": ["artifact", "sha256"], "optional": []},
@@ -236,7 +241,7 @@ def handle(
         }
 
     # --- validate iteration dir ---
-    iteration_dir = ACTIVE_DIR / iteration_id
+    iteration_dir = active_dir() / iteration_id
     if not iteration_dir.is_dir():
         return {"error": f"iteration directory not found: {iteration_dir}"}
 
@@ -294,7 +299,7 @@ def handle(
         # iter-0018 Finding 3: mutation-completeness check. If the working tree
         # has paths that are NOT in any apply_step_landed event's files_touched
         # set, refuse. Conservative-fail-closed for manual edits.
-        unaudited = _detect_unaudited_mutation(audit_log, REPO_ROOT)
+        unaudited = _detect_unaudited_mutation(audit_log, project_root())
         if unaudited:
             return {
                 "error": (
