@@ -356,7 +356,7 @@ def _restore_from_tag(
     tag: str,
     iteration: str | None = None,
     dry_run: bool = False,
-) -> list[str]:
+) -> dict[str, list[str]]:
     """Restore consensus-state/ files from the named snapshot tag.
 
     Per codex-rev-001 + codex-rev-002 + codex-rev-003 fixes:
@@ -365,7 +365,11 @@ def _restore_from_tag(
         the snapshot are removed, not left as hybrid state).
       - Use _path_matches_subtree for --iteration boundary safety.
 
-    Returns the list of repo-relative paths that were (or would be) restored.
+    iter-0014 (codex-rev-001 round-6): returns a structured dict with separate
+    `copied` and `deleted` lists. Dry-run validates missing-iteration the SAME
+    way as a real restore and reports the deletions that scope-cleanup would
+    perform.
+
     Pre-snapshot safety is the caller's responsibility (see cmd_restore).
     """
     if iteration:
@@ -401,25 +405,38 @@ def _restore_from_tag(
                             continue
                         paths_to_restore.append(f.relative_to(worktree).as_posix())
 
-            if dry_run:
-                return paths_to_restore
+            # iter-0014 codex-rev-001 fix: validate missing-iteration in dry-run
+            # too (was only checked at real-restore time, so dry-run gave a
+            # false safety signal).
+            if not paths_to_restore and iteration:
+                raise SnapshotError(
+                    f"iteration {iteration!r} not found in snapshot {tag!r} — "
+                    f"nothing to restore. Check `list` for snapshots that "
+                    f"include this iteration."
+                )
 
-            if not paths_to_restore:
-                # codex-rev-001 round-5: empty-scope handling.
-                # For --iteration: the iteration doesn't exist in this snapshot
-                # — surface an error so the operator knows nothing was restored.
-                # For full restore: snapshot legitimately has no files; proceed
-                # to clean the consensus-state tree (matches the snapshot's
-                # "empty" state exactly).
-                if iteration:
-                    raise SnapshotError(
-                        f"iteration {iteration!r} not found in snapshot {tag!r} — "
-                        f"nothing to restore. Check `list` for snapshots that "
-                        f"include this iteration."
-                    )
-                # Full-restore empty path: fall through so the scope-clean step
-                # still removes existing files (the snapshot represents an empty
-                # consensus-state and we should faithfully reproduce that).
+            # iter-0014 codex-rev-001 fix: compute the deletion set so dry-run
+            # (and real restore) reports complete plan, not just additions.
+            snapshot_set = set(paths_to_restore)
+            paths_to_delete: list[str] = []
+            for scope in scope_subpaths:
+                tgt_scope = repo_root / scope
+                if not tgt_scope.exists():
+                    continue
+                if tgt_scope.is_file():
+                    rel = scope
+                    if rel not in snapshot_set:
+                        paths_to_delete.append(rel)
+                else:
+                    for f in tgt_scope.rglob("*"):
+                        if f.is_dir():
+                            continue
+                        rel = f.relative_to(repo_root).as_posix()
+                        if rel not in snapshot_set:
+                            paths_to_delete.append(rel)
+
+            if dry_run:
+                return {"copied": paths_to_restore, "deleted": paths_to_delete}
 
             # codex-rev-002 fix: clean the target scope BEFORE copying so files
             # absent from the snapshot are removed (no hybrid state).
@@ -437,7 +454,7 @@ def _restore_from_tag(
                 dst = repo_root / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
-            return paths_to_restore
+            return {"copied": paths_to_restore, "deleted": paths_to_delete}
         finally:
             _run_git(["worktree", "remove", "--force", str(worktree)], cwd=repo_root, check=False)
 
@@ -596,21 +613,8 @@ def cmd_restore(args: argparse.Namespace, repo_root: Path) -> int:
         print(f"error: branch {SNAPSHOT_BRANCH!r} does not exist — no snapshots to restore", file=sys.stderr)
         return 1
 
-    if args.dry_run:
-        try:
-            paths = _restore_from_tag(repo_root, args.tag, iteration=args.iteration, dry_run=True)
-        except SnapshotError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        print(f"DRY RUN: would restore {len(paths)} file(s) from tag {args.tag!r}")
-        for p in paths[:20]:
-            print(f"  {p}")
-        if len(paths) > 20:
-            print(f"  ... ({len(paths) - 20} more)")
-        return 0
-
     # codex-rev-001 round-3: fail-fast on unsafe --iteration BEFORE any
-    # dirty-check or snapshot work.
+    # dirty-check, dry-run, or snapshot work.
     if args.iteration:
         try:
             _validate_iteration_name(args.iteration)
@@ -618,14 +622,35 @@ def cmd_restore(args: argparse.Namespace, repo_root: Path) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
-    # codex-rev-002 round-5: verify tag exists BEFORE auto-pre-snapshot work.
-    # Prior order would create a pre-restore snapshot then fail with tag-not-
-    # found, polluting history with no-op safety snapshots.
+    # codex-rev-001 round-6 fix: tag validation must run BEFORE dry-run too —
+    # prior version only validated tag in the real-restore branch, so dry-run
+    # could accept a branch or commit ref that real restore would reject.
+    # Asymmetric validation defeated the dry-run safety goal.
     rev = _run_git(["rev-parse", "--verify", "--quiet", f"refs/tags/{args.tag}"],
                    cwd=repo_root, check=False)
     if rev.returncode != 0:
         print(f"error: tag {args.tag!r} not found", file=sys.stderr)
         return 2
+
+    if args.dry_run:
+        try:
+            plan = _restore_from_tag(repo_root, args.tag, iteration=args.iteration, dry_run=True)
+        except SnapshotError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        copied, deleted = plan["copied"], plan["deleted"]
+        print(f"DRY RUN: restore plan for tag {args.tag!r}")
+        print(f"  would COPY {len(copied)} file(s) from snapshot")
+        for p in copied[:10]:
+            print(f"    + {p}")
+        if len(copied) > 10:
+            print(f"    + ... ({len(copied) - 10} more)")
+        print(f"  would DELETE {len(deleted)} file(s) absent from snapshot (scope cleanup)")
+        for p in deleted[:10]:
+            print(f"    - {p}")
+        if len(deleted) > 10:
+            print(f"    - ... ({len(deleted) - 10} more)")
+        return 0
 
     if not args.force:
         # Pass the target tag so deletion-dirty detection (codex-rev-002 round-3)
@@ -657,11 +682,15 @@ def cmd_restore(args: argparse.Namespace, repo_root: Path) -> int:
                 return 1
 
     try:
-        restored = _restore_from_tag(repo_root, args.tag, iteration=args.iteration, dry_run=False)
+        result = _restore_from_tag(repo_root, args.tag, iteration=args.iteration, dry_run=False)
     except SnapshotError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"restored {len(restored)} file(s) from tag {args.tag!r}")
+    print(
+        f"restored from tag {args.tag!r}: "
+        f"{len(result['copied'])} file(s) copied, "
+        f"{len(result['deleted'])} file(s) deleted (scope cleanup)"
+    )
     if args.iteration:
         print(f"  iteration filter: {args.iteration}")
     return 0
