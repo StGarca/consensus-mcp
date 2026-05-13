@@ -216,31 +216,25 @@ def _scaffold_repo_markers(tmp_path):
 
 
 def _isolate_archive_root(tmp_path, monkeypatch):
-    """Redirect module-level paths in review_write_and_seal and audit_append_event
-    to tmp_path so this test does NOT pollute the real
+    """Redirect paths in review_write_and_seal and audit_append_event to
+    tmp_path so this test does NOT pollute the real
     consensus-state/archive/review-passes/index.yaml or independence-audit logs.
 
-    Both modules cache REPO_ROOT / ARCHIVE_DIR / INDEX_PATH / ACTIVE_DIR at
-    import time, so setting CONSENSUS_MCP_REPO_ROOT after import has no effect.
-    We monkeypatch the cached module attributes directly.
+    iter-0036/iter-0037: both modules now use lazy `_paths` resolvers and
+    read CONSENSUS_MCP_REPO_ROOT at call time. The `monkeypatch.setattr`
+    approach used previously is unsafe against __getattr__-only attributes
+    (pytest captures the lazy-synthesized value at setattr time and restores
+    it into __dict__ at teardown, permanently shadowing the resolver for
+    subsequent tests). Env-var redirection alone is now sufficient.
 
     Must be called AFTER _scaffold_repo_markers(tmp_path).
     """
-    from consensus_mcp.tools import review_write_and_seal as rws
-    from consensus_mcp.tools import audit_append_event as aae
-
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
 
     isolated_archive = tmp_path / "consensus-state" / "archive" / "review-passes"
     isolated_archive.mkdir(parents=True, exist_ok=True)
     isolated_active = tmp_path / "consensus-state" / "active"
     isolated_active.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(rws, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(rws, "ARCHIVE_DIR", isolated_archive)
-    monkeypatch.setattr(rws, "INDEX_PATH", isolated_archive / "index.yaml")
-    monkeypatch.setattr(aae, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(aae, "ACTIVE_DIR", isolated_active)
 
 
 def _stage_smoke_goal_packet(tmp_path):
