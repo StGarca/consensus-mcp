@@ -84,27 +84,20 @@ from pathlib import Path
 
 import yaml
 
+from consensus_mcp._paths import project_root
 from consensus_mcp.tools._md_sections import parse, reconstruct  # noqa: E402
 from consensus_mcp.tools.audit_append_event import handle as audit_handle  # noqa: E402
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
-
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+# iter-0035 (Phase B step 3 per iter-0024 plan): migrated from module-level
+# REPO_ROOT capture to lazy `_paths.project_root()` resolution.
 
 
-REPO_ROOT = _resolve_repo_root()
+def __getattr__(name: str):
+    """PEP 562 backward compat for external callers that referenced
+    `REPO_ROOT` as a module attribute (codex-rev-002 pass-1)."""
+    if name == "REPO_ROOT":
+        return project_root()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 SCHEMA = {
@@ -226,7 +219,7 @@ SCHEMA = {
 
 
 def _resolve_under_repo(path_str: str) -> Path | dict:
-    """Resolve to absolute path under REPO_ROOT. Returns Path or {error: ...}.
+    """Resolve to absolute path under project_root(). Returns Path or {error: ...}.
 
     Guards against path_str="" / path_str=None: refuse upfront with a structured
     file_required error rather than letting Path("").resolve() pass through to a
@@ -237,13 +230,13 @@ def _resolve_under_repo(path_str: str) -> Path | dict:
         return {"error": "file_required", "detail": "path argument is empty or None"}
     p = Path(path_str)
     if not p.is_absolute():
-        p = REPO_ROOT / p
+        p = project_root() / p
     try:
         resolved = p.resolve()
     except OSError as exc:
         return {"error": "file_not_found", "detail": str(exc)}
     try:
-        resolved.relative_to(REPO_ROOT.resolve())
+        resolved.relative_to(project_root().resolve())
     except ValueError:
         return {"error": "path_outside_repo", "detail": str(resolved)}
     if not resolved.exists():
@@ -272,9 +265,9 @@ def _file_marker(file_path: Path) -> str:
     for the canonical spec path (see _is_scope_allowed).
     """
     try:
-        rel = file_path.relative_to(REPO_ROOT.resolve())
+        rel = file_path.relative_to(project_root().resolve())
     except ValueError:
-        # File outside REPO_ROOT shouldn't reach here (caller refused).
+        # File outside project_root() shouldn't reach here (caller refused).
         return str(file_path).replace("\\", "/")
     return str(rel).replace("\\", "/")
 
@@ -395,7 +388,7 @@ def handle(
         return {
             "error": "invalid_consensus_yaml",
             "detail": (
-                f"consensus_yaml_path could not be resolved under REPO_ROOT: "
+                f"consensus_yaml_path could not be resolved under project_root(): "
                 f"{consensus_resolved_or_err}"
             ),
         }
@@ -486,7 +479,7 @@ def handle(
     audit_event_id: str | None = None
     if iteration_id is not None:
         try:
-            file_rel = str(target_path.relative_to(REPO_ROOT.resolve())).replace("\\", "/")
+            file_rel = str(target_path.relative_to(project_root().resolve())).replace("\\", "/")
         except ValueError:
             file_rel = str(target_path)
         audit_result = audit_handle(
