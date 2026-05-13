@@ -1,0 +1,49 @@
+iteration_id: iteration-0028-codex-proposal-mode
+reviewer_id: gemini-iteration-0028-4
+pass_id: gemini-iteration-0028-4-pass1
+findings:
+- id: gemini-rev-001
+  severity: low
+  summary: The number of new tests exceeds the count specified in the desired end
+    state.
+  citation: goal_packet.yaml:desired_end_state
+  risk: The goal packet's description of the change is inaccurate, which can cause
+    confusion for future reviewers or when analyzing historical data. The implementation
+    is more thoroughly tested than requested, so the risk is purely informational.
+  recommendation: Update the `desired_end_state` in the goal packet to reflect the
+    actual number of tests added. The description should state that `test_dispatch_codex_proposal_mode.py`
+    adds 29 tests and `test_dispatch_gemini_proposal_mode.py` adds 16 tests, for a
+    total of 45 new tests. The total test count for the suite should be updated from
+    734 (711 + 23) to 756 (711 + 45).
+  patch_proposal: null
+  patch_not_proposed_reason: null
+goal_satisfied: true
+goal_satisfied_rationale: The implementation correctly adds the `--mode` flag to both
+  codex and gemini dispatchers, along with the necessary proposal templates, schemas,
+  and parsing logic. The changes are thoroughly tested, exceeding the number of tests
+  specified in the goal. The single low-severity finding notes a discrepancy in the
+  test count documentation, which does not affect the correctness or quality of the
+  implementation.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 4456f43462f76b3d669f92cdd4481cce413b822d8c35791a9529453f8d03f14e
+  output_sha256: 69ef08e4112f558175a3f6bedcf1a66fdb0b5de46b844f62bd68a248bf6f4a84
+  goal_packet_sha256: fff079d61f9699cdb3f7b7b42e9db795547f4b8ad9fe56d632b6fb7279520ddc
+  scope_signature: 6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6
+  review_target_path: consensus-state/active/iteration-0028-codex-proposal-mode/review-packet.yaml
+  review_target_hash: d70bebad7fb8b70a0b14d7e21f16962c690eef411eca9bb7282fb3deff9ff28a
+  adapter: gemini
+sealed_at_utc: '2026-05-13T13:47:36Z'
+packet_sha256: 2209e393efc986ca8193e34554794c1da92ace07c458da348fe7a38a34538eb7
