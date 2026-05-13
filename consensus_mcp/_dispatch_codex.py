@@ -821,6 +821,12 @@ def _parse_codex_proposal_output(text: str, schema_path: Path | None = None) -> 
     effective_schema_path = schema_path or _CODEX_PROPOSAL_SCHEMA_PATH
     try:
         import jsonschema
+    except ImportError as exc:
+        raise CodexOutputParseError(
+            f"jsonschema package required for proposal-mode validation; "
+            f"install with `pip install jsonschema` or reinstall consensus-mcp: {exc}"
+        ) from exc
+    try:
         schema = json.loads(Path(effective_schema_path).read_text(encoding="utf-8"))
         jsonschema.validate(parsed, schema)
     except jsonschema.ValidationError as exc:
