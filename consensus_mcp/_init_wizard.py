@@ -102,6 +102,79 @@ def _detect_repo_root(start: Path | None = None) -> Path:
     return cwd
 
 
+# --- iter-0040: claude-code bootstrap pack helpers per iter-0039 converged plan ---
+
+
+def _resolve_claude_home() -> Path:
+    """Resolve ~/.claude (or override) for installing the bootstrap skill+command.
+
+    Precedence (per iter-0039 converged plan Q2):
+      1. `CLAUDE_HOME` env var (operator override; supports non-standard installs).
+      2. `~/.claude` resolved via Path.home() (POSIX + Windows USERPROFILE/HOME).
+    """
+    import os as _os
+    override = _os.environ.get("CLAUDE_HOME")
+    if override:
+        return Path(override)
+    return Path.home() / ".claude"
+
+
+def _claude_extensions_source_root() -> Path:
+    """Return the in-package source directory for claude_extensions assets."""
+    return Path(__file__).resolve().parent / "claude_extensions"
+
+
+_CLAUDE_EXTENSION_FILES = (
+    ("skills/consensus/SKILL.md", "skills/consensus/SKILL.md"),
+    ("commands/consensus-init.md", "commands/consensus-init.md"),
+)
+
+
+def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
+    """Copy the shipped skill + command files into the user's CLAUDE_HOME.
+
+    Idempotency contract (per iter-0039 converged plan Q2):
+      - If the destination file is byte-identical to the source, no-op.
+      - If the destination file diverges from the source AND force=False,
+        skip with a warning printed to stderr (user-edited content preserved).
+      - If force=True, overwrite divergent destinations.
+      - Missing destination → write fresh.
+
+    Returns a list of human-readable status lines (also printed by the caller).
+    """
+    source_root = _claude_extensions_source_root()
+    if not source_root.is_dir():
+        return [f"WARN: claude_extensions source missing at {source_root}; "
+                f"reinstall consensus-mcp to repair"]
+
+    statuses: list[str] = []
+    for rel_src, rel_dst in _CLAUDE_EXTENSION_FILES:
+        src = source_root / rel_src
+        dst = claude_home / rel_dst
+        if not src.exists():
+            statuses.append(f"WARN: source asset {src} missing; skipped")
+            continue
+
+        src_text = src.read_text(encoding="utf-8")
+        if dst.exists():
+            existing_text = dst.read_text(encoding="utf-8")
+            if existing_text == src_text:
+                statuses.append(f"unchanged: {dst}")
+                continue
+            if not force:
+                statuses.append(
+                    f"SKIP: {dst} diverges from shipped content; pass --force to overwrite"
+                )
+                continue
+            # force=True: fall through to write.
+
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(src_text, encoding="utf-8")
+        statuses.append(f"wrote: {dst}")
+
+    return statuses
+
+
 # --- iter-0031: .mcp.json bootstrap helpers per iter-0030 converged plan ---
 
 
@@ -701,10 +774,42 @@ def cmd_init(args) -> int:
             print(f"WARN: unknown mcp-json status {status!r}", file=sys.stderr)
     else:
         print(".mcp.json write skipped (--no-mcp-json)")
+
+    # iter-0040: optional install of Claude Code skill + slash command pack.
+    if getattr(args, "install_claude_code", False):
+        claude_home = _resolve_claude_home()
+        for line in _install_claude_extensions(claude_home, force=args.force):
+            print(line)
+
+    # iter-0040: when invoked from inside a Claude Code session, print
+    # contextual restart guidance so the user knows what to do next.
+    if getattr(args, "from_claude_code", False):
+        print()
+        print(
+            "Detected --from-claude-code: Claude Code must reload to "
+            "activate the consensus-mcp server. Either restart Claude "
+            "Code in this project (Ctrl-C, then `claude code`), or run "
+            "`/mcp` to reload MCP servers if your build supports it."
+        )
+
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
+    # iter-0040 (per iter-0039 converged plan Q6 bonus): the package also ships
+    # a `consensus` console-script alias. When invoked as `consensus init ...`,
+    # argv[0] is the literal subcommand "init". Strip it so argparse sees the
+    # same arguments as `consensus-init ...`. Any other leading token is left
+    # in place (treated as an unrecognized argument by argparse, which
+    # produces the expected usage error).
+    if argv is None:
+        raw = sys.argv[1:]
+    else:
+        raw = list(argv)
+    if raw and raw[0] == "init":
+        raw = raw[1:]
+    argv = raw
+
     parser = argparse.ArgumentParser(
         prog="consensus init",
         description="Initialize .consensus/config.yaml for cross-AI workflow",
@@ -731,6 +836,17 @@ def main(argv: list[str] | None = None) -> int:
                         help=("replace existing consensus-mcp entry in .mcp.json "
                               "even when it differs from the desired config. "
                               "Does NOT overwrite other servers in mcpServers."))
+
+    # iter-0040: Claude Code bootstrap pack flags (per iter-0039 converged plan).
+    parser.add_argument("--install-claude-code", action="store_true",
+                        help=("copy shipped skill + slash-command into "
+                              "$CLAUDE_HOME or ~/.claude so Claude Code can "
+                              "trigger consensus-init from chat. Idempotent; "
+                              "use --force to overwrite user-edited content."))
+    parser.add_argument("--from-claude-code", action="store_true",
+                        help=("the caller is a Claude Code skill / slash "
+                              "command; print contextual restart guidance "
+                              "after init."))
 
     parser.add_argument("--workflow", default=None,
                         choices=["3", "4", "post-review", "propose-converge", "advisory"],
