@@ -127,6 +127,12 @@ def _claude_extensions_source_root() -> Path:
 _CLAUDE_EXTENSION_FILES = (
     ("skills/consensus/SKILL.md", "skills/consensus/SKILL.md"),
     ("commands/consensus-init.md", "commands/consensus-init.md"),
+    # iter-0041: ship the operating-procedure skill (workflow #3 vs #4,
+    # round-1 dispatch order, gemini 429 handling, dispatcher hazards,
+    # snapshot/restore safety, peer-citation verification). Carries the
+    # transferable consensus-mcp memories forward into any project that
+    # runs `consensus-init --install-claude-code`.
+    ("skills/consensus-workflow/SKILL.md", "skills/consensus-workflow/SKILL.md"),
 )
 
 

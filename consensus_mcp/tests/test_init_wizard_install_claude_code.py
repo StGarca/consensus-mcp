@@ -44,6 +44,32 @@ def test_claude_extensions_command_md_ships_in_package():
     assert "description:" in text
 
 
+def test_consensus_workflow_skill_ships_in_package():
+    """iter-0041: operating-procedure skill must ship next to the bootstrap skill."""
+    pkg_root = Path(wiz.__file__).resolve().parent
+    skill = pkg_root / "claude_extensions" / "skills" / "consensus-workflow" / "SKILL.md"
+    assert skill.exists(), f"missing packaged consensus-workflow SKILL.md at {skill}"
+    text = skill.read_text(encoding="utf-8")
+    assert text.startswith("---")
+    assert "name: consensus-workflow" in text
+    # Sanity check that the skill carries the load-bearing rules.
+    assert "workflow #4" in text.lower() or "propose-converge" in text.lower()
+    assert "review-packet" in text.lower() or "review_target" in text.lower()
+
+
+def test_install_claude_code_copies_workflow_skill(tmp_path, monkeypatch):
+    """iter-0041: --install-claude-code also installs the consensus-workflow skill."""
+    fake_home = tmp_path / ".claude"
+    monkeypatch.setenv("CLAUDE_HOME", str(fake_home))
+    monkeypatch.chdir(tmp_path)
+
+    rc = wiz.main(["--install-claude-code"])
+    assert rc == 0
+    assert (fake_home / "skills" / "consensus" / "SKILL.md").exists()
+    assert (fake_home / "skills" / "consensus-workflow" / "SKILL.md").exists()
+    assert (fake_home / "commands" / "consensus-init.md").exists()
+
+
 # ---------- A2: --install-claude-code copies idempotently ----------
 
 def test_install_claude_code_copies_skill_and_command(tmp_path, monkeypatch):
