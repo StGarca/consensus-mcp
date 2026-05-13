@@ -245,4 +245,52 @@ passes:
   packet_sha256: a4ca1f432a78509af69a8fb44f6ab00b0aabf40699bab750e96bc0e4fc76f7e2
   iteration_id: iteration-0011-add-gemini-adapter
   reviewer_id: codex-iteration-0011-add-gemini-adapter-5
-last_updated_utc: '2026-05-13T03:16:30Z'
+- id: codex-iteration-0014-snapshot-integration-and-fixes-3-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-3-pass.yaml
+  sealed_at: '2026-05-13T03:18:49Z'
+  packet_sha256: 1be1b8e24155de66f060b17ca83eb2beb704fc61f0e25bb3c1ff8c9e081236b5
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-3
+- id: codex-iteration-0014-snapshot-integration-and-fixes-4-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-4-pass.yaml
+  sealed_at: '2026-05-13T03:28:15Z'
+  packet_sha256: 39671a61c949829933d7b032119f885bb723d04c61bd3e5c1f1a1026c1c408b7
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-4
+- id: codex-iteration-0014-snapshot-integration-and-fixes-5-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-5-pass.yaml
+  sealed_at: '2026-05-13T03:32:07Z'
+  packet_sha256: 80214944076ee9628d90ea600624df1fde3e0ed0995205834b3cc2c9d56eba4f
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-5
+- id: gemini-iteration-0014-snapshot-integration-and-fixes-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-gemini-iteration-0014-snapshot-integration-and-fixes-1-pass.yaml
+  sealed_at: '2026-05-13T03:33:33Z'
+  packet_sha256: ff878b5706328d6a5070a2365078a7bbcf21bccbe4034ab00f652209b6e4f579
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: gemini-iteration-0014-snapshot-integration-and-fixes-1
+- id: gemini-iteration-0014-snapshot-integration-and-fixes-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-gemini-iteration-0014-snapshot-integration-and-fixes-2-pass.yaml
+  sealed_at: '2026-05-13T03:35:00Z'
+  packet_sha256: 4b458c5dbdbe31ad8a2ce8bfe81ec4e15a2a795344f82c8099f4e130767708a5
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: gemini-iteration-0014-snapshot-integration-and-fixes-2
+- id: codex-iteration-0014-snapshot-integration-and-fixes-6-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-6-pass.yaml
+  sealed_at: '2026-05-13T03:39:02Z'
+  packet_sha256: f2769f951267c9ca424884e466afade8c30aeb249f27d2569cddfb40b16d7736
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-6
+- id: gemini-iteration-0014-snapshot-integration-and-fixes-3-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-gemini-iteration-0014-snapshot-integration-and-fixes-3-pass.yaml
+  sealed_at: '2026-05-13T03:49:31Z'
+  packet_sha256: 00ebcc0f9c3668c425700e80cd6f80e13901232f9e1ddb2962ced8f8406ea626
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: gemini-iteration-0014-snapshot-integration-and-fixes-3
+- id: codex-iteration-0014-snapshot-integration-and-fixes-7-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-7-pass.yaml
+  sealed_at: '2026-05-13T03:52:19Z'
+  packet_sha256: 1b5c67bfbe9add669d5ac949e9b2b50f61583a62653d7913f3ac2d2904118f78
+  iteration_id: iteration-0014-snapshot-integration-and-fixes
+  reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-7
+last_updated_utc: '2026-05-13T03:52:19Z'
