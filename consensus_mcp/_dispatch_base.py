@@ -562,13 +562,37 @@ def _build_sealed_packet(
             "prompt_template (substituted by _build_prompt)",
             "review_target (path passed via --review-target; may be unspecified)",
         ]
+
+    # iter-0028: detect proposal-mode payload. A proposal-shape `extracted`
+    # has `selected_target` (or sets `structural_abstention=true`) and
+    # lacks the review-shape fields. Sealed packet keeps the T6-required
+    # outer structure (findings stays present-and-empty so audit-event
+    # schema doesn't change) and additionally embeds the proposal payload
+    # under a top-level `proposal` key so the workflow engine and
+    # converged-plan authoring can read it directly.
+    is_proposal = (
+        "selected_target" in extracted
+        or extracted.get("structural_abstention") is True
+        or "rationale_vs_alternatives" in extracted
+    )
+
     packet = {
         "iteration_id": iteration_id,
         "reviewer_id": reviewer_id,
         "pass_id": pass_id,
         "findings": extracted.get("findings", []),
-        "goal_satisfied": extracted.get("goal_satisfied", False),
-        "goal_satisfied_rationale": extracted.get("goal_satisfied_rationale", ""),
+        "goal_satisfied": (
+            # In proposal mode, a non-abstaining contributor "satisfies" by
+            # producing a target; an abstention is treated as not-satisfied.
+            (not extracted.get("structural_abstention", False))
+            if is_proposal
+            else extracted.get("goal_satisfied", False)
+        ),
+        "goal_satisfied_rationale": (
+            extracted.get("rationale_vs_alternatives", "")
+            if is_proposal
+            else extracted.get("goal_satisfied_rationale", "")
+        ),
         "blocking_objections": extracted.get("blocking_objections", []),
         # Per v1.10.3 Windows real-codex smoke: T6's audit_append_event requires
         # `independence_attestation` for review_returned_and_sealed events (schema
@@ -588,6 +612,16 @@ def _build_sealed_packet(
     }
     if provenance is not None:
         packet["dispatch_provenance"] = provenance
+
+    if is_proposal:
+        packet["proposal"] = {
+            "selected_target": extracted.get("selected_target"),
+            "rationale_vs_alternatives": extracted.get("rationale_vs_alternatives", ""),
+            "deliverable_scope": extracted.get("deliverable_scope"),
+            "risks": extracted.get("risks", []),
+            "estimated_complexity": extracted.get("estimated_complexity"),
+            "structural_abstention": extracted.get("structural_abstention", False),
+        }
     return packet
 
 
