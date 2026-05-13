@@ -1,0 +1,181 @@
+iteration_id: iteration-0015-consensus-init-wizard-design
+reviewer_id: gemini-iteration-0015-consensus-init-wizard-design-convergence-1
+pass_id: gemini-iteration-0015-consensus-init-wizard-design-convergence-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: low
+  summary: Converged design proposal for iter-0015 consensus init wizard and config
+    schema.
+  citation: docs/design-consults/iter-0015-consensus-init-design-challenge.md:0
+  risk: 'The primary risk is in standardizing the configuration schema and workflow
+    engine logic while maintaining backward compatibility. The converged design mitigates
+    this by adopting a legacy-mode-with-warning approach, ensuring existing projects
+    are not broken while strongly encouraging adoption of the new, explicit configuration.
+    A secondary risk lies in the complexity of Workflow #4; the design addresses this
+    with clear artifact definitions and a phased implementation.'
+  recommendation: "### Part 1 \u2014 Consensus points\n\nAll three blind proposals\
+    \ (claude, codex, gemini) demonstrated strong consensus on the following core\
+    \ principles:\n\n1.  **Centralized Configuration**: A new, versioned `.consensus/config.yaml`\
+    \ file should be the source of truth for workflow configuration.\n2.  **`consensus\
+    \ init` CLI**: A dedicated `consensus init` command is needed to create and manage\
+    \ this configuration file, with both interactive and non-interactive modes.\n\
+    3.  **Workflow Engine Abstraction**: A new Python module (e.g., `_workflow_engine.py`)\
+    \ should be introduced to read the config and orchestrate the selected workflow,\
+    \ abstracting the dispatch logic from the main loop.\n4.  **Contributor/Adapter\
+    \ Model**: The existing `_dispatch_*.py` modules should be wrapped in a common\
+    \ `ContributorAdapter` interface, allowing them to be used as pluggable components\
+    \ by the new engine.\n5.  **Core Configurability Dimensions**: All proposals included\
+    \ the same set of configurable dimensions: Workflow Mode, Contributor Pool, Independence\
+    \ Model, Convergence Rule, Finding Disposition, Snapshot Trigger, and Patch Authoring.\n\
+    6.  **Idempotency**: The `init` command should be idempotent, safely handling\
+    \ reconfiguration of existing setups.\n7.  **Vocabulary Migration**: The term\
+    \ `reviewer` is too narrow and should be evolved to the more general term `contributor`\
+    \ in new code and artifacts.\n\n### Part 2 \u2014 Divergence points and Resolutions\n\
+    \nWhere the proposals differed, this converged plan selects or synthesizes a resolution.\n\
+    \n1.  **Backward Compatibility for Existing Repos**\n    *   **Proposals**: Claude/Gemini\
+    \ suggested a 'legacy mode' with a warning for repos without config. Codex proposed\
+    \ failing new iterations until `init` is run.\n    *   **Resolution**: Adopt the\
+    \ **legacy mode with a warning**. The engine will detect the absence of `.consensus/config.yaml`,\
+    \ apply hardcoded defaults matching the pre-iter-0015 behavior (Workflow #3, codex-only\
+    \ review), and log a prominent, one-time-per-session warning encouraging the user\
+    \ to run `consensus init`. This provides the best balance of non-disruption and\
+    \ forward progress.\n\n2.  **Default Workflow Mode**\n    *   **Proposals**: Claude/Gemini\
+    \ defaulted to Workflow #4. Codex defaulted to Workflow #3 for compatibility.\n\
+    \    *   **Resolution**: Default to **Workflow #4 if >= 2 contributors are detected,\
+    \ otherwise default to Workflow #3**. This is the most intelligent default, promoting\
+    \ the more robust workflow when the environment supports it, as proposed by Claude.\n\
+    \n3.  **Configuration Schema Structure**\n    *   **Proposals**: All three proposed\
+    \ similar keys but with different nesting. Claude's was the most detailed and\
+    \ well-grouped. Codex separated concerns like `patches` and `convergence` at the\
+    \ top level. Gemini's was the flattest.\n    *   **Resolution**: Adopt **Claude's\
+    \ schema structure** as the base. It provides a logical and extensible hierarchy.\
+    \ We will incorporate clearer key names suggested by the other reviewers (e.g.,\
+    \ `finding_disposition` from Codex).\n\n4.  **CLI Subcommands and Flags**\n  \
+    \  *   **Proposals**: Each had slightly different subcommand sets and flag names.\n\
+    \    *   **Resolution**: Synthesize the most useful commands and clearest flags.\
+    \ The final set will be `init`, `init --reconfigure` (all), `init --check` (from\
+    \ Codex), and `init --print-defaults` (from Codex). Flag names will be standardized\
+    \ for clarity (e.g., `--workflow`, `--contributors`, `--finding-disposition`).\n\
+    \n5.  **New Artifact Naming in Workflow #4**\n    *   **Proposals**: All agreed\
+    \ on `<contributor>-proposal.yaml`. For the final outcome, Claude proposed `converged-plan.yaml`,\
+    \ Codex `convergence-decision.yaml`, and Gemini `synthesis-and-plan.md`.\n   \
+    \ *   **Resolution**: Use **`converged-plan.yaml`**. It is descriptive and correctly\
+    \ implies the final state. The concept of `convergence-round-N.yaml` from Claude\
+    \ is also adopted for multi-round convergence attempts.\n\n6.  **Validation Rules\
+    \ & Edge Cases**\n    *   **Proposals**: Codex provided the most extensive list\
+    \ of validation rules for illegal combinations of settings. Claude's were also\
+    \ very strong.\n    *   **Resolution**: Combine the validation rules from **both\
+    \ Claude and Codex**, creating a comprehensive set to ensure configuration integrity.\n\
+    \n### Part 3 \u2014 Final Converged Design\n\nThis section outlines the complete,\
+    \ converged design incorporating the resolutions above.\n\n**Section A \u2014\
+    \ `consensus init` CLI surface**\n\n*   **Subcommands**:\n    *   `consensus init`:\
+    \ Interactive wizard to create a new `.consensus/config.yaml`.\n    *   `consensus\
+    \ init --reconfigure`: Re-run the wizard on an existing config, using current\
+    \ values as defaults.\n    *   `consensus init --check`: Validate the existing\
+    \ config and print the effective, normalized configuration.\n    *   `consensus\
+    \ init --print-defaults`: Print the default config to stdout without writing.\n\
+    *   **Flags**:\n    *   `--non-interactive`, `--accept-defaults`, `--dry-run`,\
+    \ `--force`\n    *   `--workflow {3,4,advisory}`\n    *   `--contributors {claude,codex,gemini,...}`\
+    \ (comma-separated)\n    *   `--independence {blind-first-reveal,visible-from-start,sequential}`\n\
+    \    *   `--convergence {unanimous,strict-majority,inclusive-majority,advisory}`\n\
+    \    *   `--finding-disposition {all-or-nothing,per-finding}`\n    *   `--snapshot-trigger\
+    \ {manual,on-close,periodic:N}` (N=iterations)\n    *   `--patch-authoring {claude,any,none}`\n\
+    *   **Interactive Flow**: Adopt Claude's detailed interactive flow, which provides\
+    \ clear questions, defaults, and a final summary before writing.\n*   **Idempotency**:\
+    \ The command will refuse to overwrite an existing config unless `--reconfigure`\
+    \ or `--force` is used. It will also add entries to `.gitignore` once, using markers\
+    \ to prevent duplicates.\n\n**Section B \u2014 `.consensus/config.yaml` schema**\n\
+    \n```yaml\nschema_version: 1\nproject:\n  name: <derived from cwd basename>\n\
+    \  # Metadata about when and how the config was created.\nworkflow:\n  mode: 4\
+    \              # 3 | 4 | advisory\n  independence: blind-first-reveal  # blind-first-reveal\
+    \ | visible-from-start | sequential\n  convergence: strict-majority      # unanimous\
+    \ | strict-majority | inclusive-majority | advisory\n  finding_disposition: per-finding\
+    \  # all-or-nothing | per-finding\n  max_convergence_rounds: 3         # Default\
+    \ number of rounds before surfacing to operator.\ncontributors:\n  enabled: [claude,\
+    \ codex, gemini]\n  claude:\n    role: orchestrator\n  codex:\n    cli_path: codex\
+    \ # Overridable path\n    model: null # Model can be specified here\n  gemini:\n\
+    \    cli_path: gemini # Overridable path\n    model: null # Model can be specified\
+    \ here\nsnapshot:\n  trigger: on-iteration-close       # manual | on-iteration-close\
+    \ | periodic:N\n  retention: unbounded              # unbounded | last:N | older-than:D\n\
+    patch_authoring:\n  authorized: [claude] # 'any' | 'none' | or a subset of enabled\
+    \ contributors\n```\n*   **Defaults**: As specified in Claude's proposal, defaulting\
+    \ to the most robust, collaborative workflow (#4, strict-majority, blind-first)\
+    \ when possible.\n*   **Validation**: A combination of the extensive rules outlined\
+    \ by both Claude and Codex will be implemented in the config loading module.\n\
+    \n**Section C \u2014 Workflow engine integration**\n\n*   **Location**: A new\
+    \ `consensus_mcp/_workflow_engine.py` will house the primary orchestration logic.\
+    \ A new directory `consensus_mcp/contributors/` will contain the adapters (`claude.py`,\
+    \ `codex.py`, `gemini.py`).\n*   **Config Loading**: At the start of each iteration,\
+    \ the engine will be instantiated. It will find and load `.consensus/config.yaml`.\
+    \ If not found, it enters legacy mode with a warning. The effective, validated\
+    \ config will be copied into the iteration directory as `effective-config.yaml`\
+    \ for auditability.\n*   **Adapter Dispatch**: The engine will use a `ContributorAdapter`\
+    \ interface as proposed by Claude. The engine will call methods like `propose()`,\
+    \ `review()`, and `converge()` on the adapters for the enabled contributors, based\
+    \ on the workflow configuration.\n*   **Backward Compatibility**: Handled via\
+    \ the 'legacy mode' described in Part 2. Old iteration directories will be readable\
+    \ as-is.\n*   **New Artifacts**: The set of artifacts defined by Claude is adopted:\
+    \ `<contributor>-proposal.yaml`, `convergence-round-N.yaml`, and `converged-plan.yaml`.\n\
+    \n**Section D \u2014 Migration plan**\n\n*   **Existing Repos**: Will operate\
+    \ in 'legacy mode' with a warning, as resolved in Part 2.\n*   **Renaming**: Introduce\
+    \ new `contributor.*` tools for proposing and converging. The existing `reviewer.dispatch_*`\
+    \ tools will be maintained as aliases for at least one minor version, logging\
+    \ a deprecation warning. This ensures old iterations remain valid.\n*   **Tests**:\
+    \ A comprehensive test suite will be developed, including:\n    1.  Unit tests\
+    \ for config loading and validation.\n    2.  Integration tests for the `WorkflowEngine`\
+    \ using mock/fake adapters that return predictable data, asserting that the correct\
+    \ dispatch logic is followed for various configurations.\n    3.  CLI tests for\
+    \ the `consensus init` command's interactivity, non-interactive modes, and idempotency.\n\
+    \n**Section E \u2014 Open questions for implementation**\n\nThis synthesizes the\
+    \ open questions from all three proposals. The recommended path is included, but\
+    \ these points merit final confirmation during implementation.\n\n1.  **Sequential\
+    \ Independence Sequence**: (From Gemini) How is the sequence defined? **Resolution**:\
+    \ The order of contributors in the `contributors.enabled` list will define the\
+    \ sequence.\n2.  **Per-finding Disposition in Workflow #4**: (From Claude/Gemini)\
+    \ How does this complex interaction work? **Resolution**: To manage initial complexity,\
+    \ `finding_disposition: per-finding` will initially be restricted to Workflow\
+    \ #3 and `advisory` mode. Support for Workflow #4 can be added later.\n3.  **Periodic\
+    \ Snapshot Trigger (Time-based)**: (From Gemini) A time-based trigger implies\
+    \ a daemon. **Resolution**: Defer time-based triggers. The initial implementation\
+    \ for `periodic` will only support `periodic:N` for 'every N iterations'.\n4.\
+    \  **Patch Authoring Conflict**: (From Claude) If multiple contributors propose\
+    \ a patch for the same finding, who wins? **Resolution**: The orchestrator (Claude)\
+    \ has the final say. It can choose one patch, merge them manually, or reject them\
+    \ all. The UI should present all proposed patches to the orchestrator.\n5.  **Failed/Timed-out\
+    \ Contributors**: (From Codex) How are timeouts handled in Workflow #4? **Resolution**:\
+    \ This should be a configurable policy. Add a `workflow.timeout_policy` field,\
+    \ defaulting to `treat-as-no-vote`. Other options could be `treat-as-blocking`\
+    \ or `shrink-quorum`.\n6.  **CLI Flag Prefixes**: (From Gemini) Should flags be\
+    \ prefixed to avoid collision? **Resolution**: No. The `consensus` command provides\
+    \ sufficient namespace. The chosen flag names are not common enough to be a significant\
+    \ risk."
+  patch_proposal: null
+  patch_not_proposed_reason: Design convergence phase. Implementation will follow
+    in a subsequent iteration based on this converged plan.
+goal_satisfied: true
+goal_satisfied_rationale: The proposal provides a complete, converged design by synthesizing
+  the three blind proposals, resolving all major divergence points, and presenting
+  a unified plan covering all required sections (A-E).
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: bb351f76689c1571ab6498ac8b594e4048fe32110d806ab09176983112503c4d
+  output_sha256: 7901b3e1cb69cc4141d60f3f50dd491d8dd6f4934613af8188acbef4b03ff2ba
+  goal_packet_sha256: 11b59def659df7785de8638183f69c49e2f3e7d3ce184164682c9389511bbcb0
+  scope_signature: 421f28a754549b851b1694f0124d4d706435f9831b223a9bac684adb4f209d74
+  review_target_path: consensus-state/active/iteration-0015-consensus-init-wizard-design/convergence-review-packet.yaml
+  review_target_hash: 1175a1a1b5f8688f3fe95f9712e89b3b867378e5202b5825d7577992cb4e3bb3
+  adapter: gemini
+sealed_at_utc: '2026-05-13T04:00:21Z'
+packet_sha256: dabdf069eea7ccf1c52be88a4a992964de92c4fc35b6a63ff8d483ffc3df311c

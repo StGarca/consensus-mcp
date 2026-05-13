@@ -1,0 +1,209 @@
+iteration_id: iteration-0015-consensus-init-wizard-design
+reviewer_id: codex-iteration-0015-consensus-init-wizard-design-1
+pass_id: codex-iteration-0015-consensus-init-wizard-design-1-pass1
+findings:
+- id: codex-rev-001
+  severity: low
+  summary: Design proposal for iter-0015 consensus init wizard + config schema
+  citation: docs/design-consults/iter-0015-consensus-init-design-challenge.md:0
+  risk: 'The highest-impact choice is to make workflow policy declarative and read
+    once at iteration start, so sealed packets can record the exact config that governed
+    dispatch. Backward compatibility should not silently preserve hardcoded workflow
+    #3 forever; legacy defaults are acceptable only as an explicit v0 compatibility
+    mode with warnings. The schema should separate contributors, workflow shape, convergence,
+    disposition, snapshots, and patch permissions so future adapters can be added
+    without changing existing config semantics. The init wizard should be idempotent
+    and diff-aware because configuration becomes a committed project contract, not
+    transient local state.'
+  recommendation: "## Section A - `consensus init` CLI surface\n\nSubcommands:\n-\
+    \ `consensus init`: create `.consensus/config.yaml` and ensure local runtime artifacts\
+    \ are ignored.\n- `consensus init --reconfigure`: load existing config, prompt\
+    \ with current values as defaults, write atomically after validation.\n- `consensus\
+    \ init --check`: validate existing config, print normalized effective config,\
+    \ exit `0` valid, `2` missing, `3` invalid.\n- `consensus init --print-defaults`:\
+    \ emit default YAML to stdout without writing.\n\nFlags:\n- `--workflow {3,4,advisory}`\
+    \ maps to post-review, propose-converge, advisory.\n- `--contributors claude,codex,gemini`\
+    \ enables contributor pool; minimum one.\n- `--independence {blind-first-reveal,visible-from-start,sequential}`.\n\
+    - `--convergence {unanimous,strict-majority,inclusive-majority,advisory}`.\n-\
+    \ `--finding-disposition {all-or-nothing,per-finding}`.\n- `--snapshot-trigger\
+    \ {manual-only,on-iteration-close,periodic}`.\n- `--snapshot-every-iterations\
+    \ N` and `--snapshot-every-minutes M`, required as applicable for `periodic`.\n\
+    - `--patch-authoring {claude-only,any-contributor,none}`.\n- `--interactive`,\
+    \ `--non-interactive`, `--accept-defaults`.\n- `--reconfigure`, `--force`, `--dry-run`,\
+    \ `--config PATH` default `.consensus/config.yaml`.\n\nInteractive prompt flow:\n\
+    1. Confirm repository root and target config path. Default: current git root plus\
+    \ `.consensus/config.yaml`.\n2. Choose workflow mode. Highlight default `3` for\
+    \ compatibility; describe `4` as blind proposals then convergence.\n3. Choose\
+    \ contributors. Default: `claude,codex`; allow `claude` alone; warn when workflow\
+    \ `4` has one contributor because blind consensus degenerates.\n4. Choose independence\
+    \ model. Default depends on workflow: `blind-first-reveal` for workflow `4`, `visible-from-start`\
+    \ for workflow `3` and `advisory`.\n5. Choose convergence rule. Default: `strict-majority`\
+    \ when contributors count >= 3, `unanimous` when count <= 2, `advisory` for advisory\
+    \ workflow.\n6. Choose finding disposition. Default: `all-or-nothing` for compatibility.\n\
+    7. Choose patch authoring permission. Default: `claude-only`.\n8. Choose snapshot\
+    \ trigger. Default: `on-iteration-close`; if `periodic`, ask iteration and minute\
+    \ cadence.\n9. Show normalized YAML preview and validation result. Ask `Write\
+    \ config?` unless non-interactive.\n10. Offer `.gitignore` update for volatile\
+    \ paths: `.consensus/tmp/`, `.consensus/cache/`, `.consensus/logs/`, while leaving\
+    \ `.consensus/config.yaml` committed.\n\nNon-interactive one-liner:\n`consensus\
+    \ init --non-interactive --workflow 4 --contributors claude,codex,gemini --independence\
+    \ blind-first-reveal --convergence strict-majority --finding-disposition per-finding\
+    \ --snapshot-trigger on-iteration-close --patch-authoring any-contributor`\n\n\
+    Idempotency:\n- If config is absent, create it.\n- If config exists and no `--reconfigure`,\
+    \ exit `0` when effective config already matches supplied flags; exit `4` with\
+    \ a concise diff when supplied flags would change it.\n- `--reconfigure` permits\
+    \ updates and preserves unknown future keys only if their parent `schema_version`\
+    \ is newer and `--force` is supplied; otherwise refuse with exit `3`.\n- Writes\
+    \ are atomic: create temp file in `.consensus/`, fsync where supported, then rename.\n\
+    - `.gitignore` updates are additive and bracketed with `# consensus-mcp` markers;\
+    \ reruns do not duplicate entries.\n\n## Section B - `.consensus/config.yaml`\
+    \ schema\n\nProposed YAML:\n```yaml\nschema_version: 1\nproject:\n  config_created_by:\
+    \ consensus init\n  config_created_at: null\nworkflow:\n  mode: 3\n  independence:\
+    \ visible-from-start\ncontributors:\n  enabled:\n    - claude\n    - codex\n \
+    \ adapters:\n    claude:\n      role: orchestrator\n    codex:\n      command:\
+    \ codex\n    gemini:\n      command: gemini\nconvergence:\n  rule: unanimous\n\
+    \  finding_disposition: all-or-nothing\npatches:\n  authoring: claude-only\nsnapshots:\n\
+    \  trigger: on-iteration-close\n  periodic:\n    every_iterations: null\n    every_minutes:\
+    \ null\nartifacts:\n  root: consensus-state\n  seal_reviews: true\n```\n\nTop-level\
+    \ keys and types:\n- `schema_version`: integer, required. Initial value `1`.\n\
+    - `project`: object, optional metadata only; engine must not require timestamps\
+    \ for determinism.\n- `workflow.mode`: enum string or integer normalized to strings\
+    \ `3`, `4`, `advisory`.\n- `workflow.independence`: enum `blind-first-reveal`,\
+    \ `visible-from-start`, `sequential`.\n- `contributors.enabled`: non-empty array\
+    \ of unique enum values `claude`, `codex`, `gemini`.\n- `contributors.adapters`:\
+    \ object keyed by contributor id; adapter-specific settings validated by adapter.\n\
+    - `convergence.rule`: enum `unanimous`, `strict-majority`, `inclusive-majority`,\
+    \ `advisory`.\n- `convergence.finding_disposition`: enum `all-or-nothing`, `per-finding`.\n\
+    - `patches.authoring`: enum `claude-only`, `any-contributor`, `none`.\n- `snapshots.trigger`:\
+    \ enum `manual-only`, `on-iteration-close`, `periodic`.\n- `snapshots.periodic.every_iterations`:\
+    \ nullable positive integer.\n- `snapshots.periodic.every_minutes`: nullable positive\
+    \ integer.\n- `artifacts.root`: string path relative to repo root, default `consensus-state`.\n\
+    - `artifacts.seal_reviews`: boolean, default `true`.\n\nDefaults when omitted:\n\
+    - `schema_version: 1` only when generating; loaded config must include it.\n-\
+    \ `workflow.mode: 3`.\n- `workflow.independence: visible-from-start`, except generated\
+    \ workflow `4` defaults to `blind-first-reveal`.\n- `contributors.enabled: [claude,\
+    \ codex]` if available adapters include codex; otherwise `[claude]`.\n- `convergence.rule:\
+    \ unanimous` for <=2 contributors, `strict-majority` for >=3 contributors, `advisory`\
+    \ for advisory workflow.\n- `convergence.finding_disposition: all-or-nothing`.\n\
+    - `patches.authoring: claude-only`.\n- `snapshots.trigger: on-iteration-close`.\n\
+    - `artifacts.root: consensus-state` and `artifacts.seal_reviews: true`.\n\nValidation\
+    \ rules:\n- Unknown top-level keys are warnings for same schema version, errors\
+    \ for older engine unless `x-` prefixed.\n- `contributors.enabled` must be unique\
+    \ and non-empty.\n- `workflow.mode: 4` plus one contributor is legal but emits\
+    \ warning `W_DEGENERATE_BLIND_WORKFLOW`; it behaves as single sealed proposal\
+    \ plus no quorum.\n- `workflow.mode: 3` with `patches.authoring: any-contributor`\
+    \ is illegal unless `convergence.finding_disposition: per-finding`, because post-review\
+    \ patch authorship otherwise collides with claude implementation ownership.\n\
+    - `workflow.mode: advisory` requires `convergence.rule: advisory`; other convergence\
+    \ rules are invalid.\n- `convergence.rule: strict-majority` with one contributor\
+    \ is invalid; use `unanimous` or `advisory`.\n- `convergence.rule: inclusive-majority`\
+    \ with two contributors is legal but warned because ties pass.\n- `workflow.independence:\
+    \ sequential` requires at least two contributors unless explicitly `--force`d\
+    \ with warning.\n- `snapshots.trigger: periodic` requires at least one of `every_iterations`\
+    \ or `every_minutes`; both null is invalid.\n- Non-periodic snapshot trigger requires\
+    \ both periodic values null.\n- Adapter commands must not contain shell metacharacter\
+    \ strings; store argv arrays in future if command arguments are needed.\n\n##\
+    \ Section C - Workflow engine integration\n\nEngine location:\n- Add `consensus_mcp/config.py`\
+    \ for loading, normalizing, and validating `.consensus/config.yaml`.\n- Add `consensus_mcp/workflow_engine.py`\
+    \ for iteration planning and state transitions.\n- Add `consensus_mcp/contributors/`\
+    \ with adapters: `claude.py`, `codex.py`, `gemini.py`. Existing `reviewer.dispatch_codex`\
+    \ and `reviewer.dispatch_gemini` become compatibility wrappers around contributor\
+    \ adapters.\n\nConfig read model:\n- At iteration start, engine discovers repo\
+    \ root, loads `.consensus/config.yaml`, normalizes defaults, validates, then copies\
+    \ the effective config into the iteration directory as `effective-config.yaml`.\n\
+    - The sealed `goal_packet.yaml` records `config_sha256` and `schema_version` so\
+    \ later review can prove which rules applied.\n- Config is not reread mid-iteration\
+    \ except by explicit `consensus iteration replan --allow-config-change`, which\
+    \ creates a new iteration event and seal.\n\nDispatch model:\n- Engine constructs\
+    \ a contributor plan from `contributors.enabled` and `workflow.*`.\n- Adapter\
+    \ interface: `prepare_input(iteration, contributor, phase)`, `dispatch(packet)`,\
+    \ `collect_result()`, `normalize_result()`.\n- Workflow `3`: claude implementation\
+    \ artifact first, enabled non-claude contributors receive post-review packets\
+    \ according to convergence rule.\n- Workflow `4`: all enabled contributors receive\
+    \ blind proposal packets with only shared inputs. Outputs are sealed as independent\
+    \ proposal artifacts. Reveal phase indexes proposals and dispatches convergence\
+    \ packets according to rule.\n- Advisory: contributors produce recommendations;\
+    \ claude final decision artifact records accepted rationale without requiring\
+    \ quorum.\n- Sequential independence: first enabled contributor proposes, second\
+    \ receives prior proposal and critiques, third synthesizes; order is explicit\
+    \ in `contributors.enabled`.\n\nBackward compatibility:\n- Existing iterations\
+    \ `iter-0001` through `iter-0014` are read as legacy sealed artifacts. Do not\
+    \ rewrite them.\n- Missing config for an existing historical iteration maps to\
+    \ `schema_version: 0`, `workflow.mode: 3`, `contributors.enabled: [claude,codex]`\
+    \ if codex artifact exists, and `convergence.rule: all existing hardcoded behavior`\
+    \ only for display/replay.\n- New iterations in repos without config should fail\
+    \ closed after a grace command: `consensus run` exits `2` with `Run consensus\
+    \ init first`; `consensus run --legacy-defaults` may generate a v1 config matching\
+    \ legacy defaults.\n\nNew artifact types and lifecycle:\n- `effective-config.yaml`:\
+    \ normalized config copied at iteration start.\n- `proposal-packet.yaml`: contributor-specific\
+    \ sealed blind input for workflow `4`.\n- `<contributor>-proposal.json`: structured\
+    \ proposal output, sealed before reveal.\n- `proposal-manifest.yaml`: list of\
+    \ proposal hashes and contributors, created after blind phase closes.\n- `reveal-packet.yaml`:\
+    \ convergence input containing all sealed proposal hashes and revealed content.\n\
+    - `<contributor>-convergence-review.json`: each contributor's convergence vote\
+    \ or critique.\n- `convergence-decision.yaml`: final rule evaluation, vote counts,\
+    \ accepted findings, and rationale.\n- `finding-disposition.yaml`: required when\
+    \ `per-finding`; maps finding ids to accepted/rejected/deferred plus sub-quorum\
+    \ evidence.\n\n## Section D - Migration plan\n\nRepos without `.consensus/config.yaml`:\n\
+    - For historical read-only commands, synthesize legacy config in memory and label\
+    \ it `schema_version: 0`.\n- For commands that create new iterations, require\
+    \ config. Exit `2` with exact remediation: `consensus init --workflow 3 --contributors\
+    \ claude,codex --convergence unanimous`.\n- Provide `consensus init --from-legacy`\
+    \ to write v1 YAML matching current behavior and commit-friendly ignore markers.\n\
+    \nVocabulary migration:\n- Introduce neutral terms `contributor`, `proposal`,\
+    \ `convergence`, and `adapter` in new modules and artifacts.\n- Keep `reviewer.dispatch_codex`\
+    \ and `reviewer.dispatch_gemini` as deprecated aliases for one minor release cycle\
+    \ or until iter-0025, whichever is later.\n- Alias wrappers should call `contributors.codex.dispatch()`\
+    \ and emit one deprecation warning in CLI logs, never inside sealed artifact content.\n\
+    - Do not rename old artifact files in previous iterations.\n\nTesting:\n- Unit-test\
+    \ config normalization with table cases for every dimension and illegal combination.\n\
+    - Snapshot-test generated YAML from interactive defaults and non-interactive flags.\n\
+    - Use fake adapters implementing the contributor interface; they write deterministic\
+    \ JSON and never spawn real codex/gemini.\n- Engine tests should assert dispatch\
+    \ plan order, sealed artifact names, config hash capture, and convergence outcomes\
+    \ for N=1, N=2, N=3.\n- Add CLI tests for idempotency: absent config, existing\
+    \ same config, existing changed config, `--reconfigure`, `.gitignore` marker dedupe.\n\
+    - Add backward-compat tests that load old iteration fixtures without config and\
+    \ verify read-only replay succeeds while new iteration creation refuses until\
+    \ init.\n\n## Section E - Open questions for convergence phase\n\n- Should `workflow.mode`\
+    \ be stored as strings `post-review` and `propose-converge` instead of numeric\
+    \ `3` and `4`, while accepting `3` and `4` as CLI aliases?\n- Is `claude` always\
+    \ required in `contributors.enabled`, or should the schema truly permit `codex,gemini`\
+    \ only for non-Claude orchestrators later?\n- Should adapter settings store executable\
+    \ names only, or full argv arrays plus environment allowlists?\n- Should `inclusive-majority`\
+    \ be available by default, given that two-contributor ties pass and may surprise\
+    \ operators?\n- Does `per-finding` convergence need stable finding ids before\
+    \ reveal, or can the convergence phase assign canonical ids after proposal normalization?\n\
+    - Should `.consensus/config.yaml` include policy for model names and sandbox permissions,\
+    \ or keep those in adapter-local config outside this initial schema?\n- Should\
+    \ `consensus init` modify `.gitignore` automatically in non-interactive mode,\
+    \ or require `--update-gitignore` to avoid unrequested workspace edits?\n- What\
+    \ is the exact lifecycle for failed or timed-out contributors in workflow `4`:\
+    \ absent vote, reject vote, or configurable quorum shrink?"
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: true
+goal_satisfied_rationale: The review emits exactly one low-severity design finding
+  with Sections A through E and no patch proposal, matching the blind proposal phase
+  requirements.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 4865e5cdde424f8e7b76d6d06521bef340cb152d9d6c484148ba96ad966ce124
+  output_sha256: fd13f7a070a69774864d7e31add9ac963ee97cb312b0637d9813463be52f9631
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 2fb13d94dc6a4ec4ceeecc76b4068ce6fa37f41723abc0b1190d24fbfcd97ee1
+  scope_signature: 78f0f2acd138cb4d3ada84a721b35a395ff3b3920b360492f6f0ffdfd72c0530
+  review_target_path: consensus-state/active/iteration-0015-consensus-init-wizard-design/review-packet.yaml
+  review_target_hash: 8697025e43579038b850f41545e40f138bfb25a9f790cd9f1970b35fe00082cf
+sealed_at_utc: '2026-05-13T03:58:16Z'
+packet_sha256: eaf19a3d66b326507ae533efb4ac51c3f79f4737f8fc241c40f960e7cfedb3c1

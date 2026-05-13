@@ -293,4 +293,28 @@ passes:
   packet_sha256: 1b5c67bfbe9add669d5ac949e9b2b50f61583a62653d7913f3ac2d2904118f78
   iteration_id: iteration-0014-snapshot-integration-and-fixes
   reviewer_id: codex-iteration-0014-snapshot-integration-and-fixes-7
-last_updated_utc: '2026-05-13T03:52:19Z'
+- id: gemini-iteration-0015-consensus-init-wizard-design-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0015-consensus-init-wizard-design-gemini-iteration-0015-consensus-init-wizard-design-1-pass.yaml
+  sealed_at: '2026-05-13T03:57:58Z'
+  packet_sha256: 603752da5e4ec3e4dbfca404d423df0f6178d86dc251787c83e70d0f9b040fbc
+  iteration_id: iteration-0015-consensus-init-wizard-design
+  reviewer_id: gemini-iteration-0015-consensus-init-wizard-design-1
+- id: codex-iteration-0015-consensus-init-wizard-design-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0015-consensus-init-wizard-design-codex-iteration-0015-consensus-init-wizard-design-1-pass.yaml
+  sealed_at: '2026-05-13T03:58:16Z'
+  packet_sha256: eaf19a3d66b326507ae533efb4ac51c3f79f4737f8fc241c40f960e7cfedb3c1
+  iteration_id: iteration-0015-consensus-init-wizard-design
+  reviewer_id: codex-iteration-0015-consensus-init-wizard-design-1
+- id: gemini-iteration-0015-consensus-init-wizard-design-convergence-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0015-consensus-init-wizard-design-gemini-iteration-0015-consensus-init-wizard-design-convergence-1-pass.yaml
+  sealed_at: '2026-05-13T04:00:21Z'
+  packet_sha256: dabdf069eea7ccf1c52be88a4a992964de92c4fc35b6a63ff8d483ffc3df311c
+  iteration_id: iteration-0015-consensus-init-wizard-design
+  reviewer_id: gemini-iteration-0015-consensus-init-wizard-design-convergence-1
+- id: codex-iteration-0015-consensus-init-wizard-design-convergence-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0015-consensus-init-wizard-design-codex-iteration-0015-consensus-init-wizard-design-convergence-1-pass.yaml
+  sealed_at: '2026-05-13T04:00:54Z'
+  packet_sha256: 55bc4229637efa35fae288f8b7dfc6a2d4cddad211894a8ab90b210273c167c1
+  iteration_id: iteration-0015-consensus-init-wizard-design
+  reviewer_id: codex-iteration-0015-consensus-init-wizard-design-convergence-1
+last_updated_utc: '2026-05-13T04:00:54Z'
