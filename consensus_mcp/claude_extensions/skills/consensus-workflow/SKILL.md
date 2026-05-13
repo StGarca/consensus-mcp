@@ -1,0 +1,157 @@
+---
+name: consensus-workflow
+description: Operating procedures for working with consensus-mcp in any project. Trigger when the user asks to run a consensus consult, dispatch codex/gemini for review, evaluate a workflow #3 vs #4 decision, debug a stalled or failed reviewer dispatch, or any question about HOW the cross-AI consensus workflow runs (as opposed to "consensus init" which only bootstraps). Phrases include "consensus review", "consensus iteration", "consensus consult", "run a consult", "dispatch codex", "dispatch gemini", "workflow 3", "workflow 4", "propose-converge", "post-review".
+---
+
+# Consensus-mcp operating procedures
+
+Load-bearing rules for working with consensus-mcp. These are not
+project-specific tips — they apply in every project that uses the
+cross-AI consensus workflow. Follow them by default; deviate only when
+the operator explicitly says otherwise.
+
+## Workflow selection
+
+**Default to workflow #4 (propose-converge with blind-first-reveal) for
+any decision with real design surface** — API shape, trade-off, novel
+mechanism, anything where reasonable people could disagree on the right
+approach. Workflow #3 (post-review: claude implements, codex+gemini
+audit) is for **execution per a converged design** or for hot-patches
+that block in-flight work.
+
+The mistake to avoid is defaulting to #3 because it's faster and
+calling everything "execution." Test: did the converged plan specify
+the API shape, error contract, mechanism? If not, those choices are
+themselves design surface — go through #4.
+
+Listing 2+ design choices in a single response = workflow #4
+candidate. Stop and route to a consult.
+
+## Workflow #3 vs #4 in one line
+
+- **#3 (post-review)**: claude writes the patch first, codex + gemini
+  audit afterward. Used for clear execution work.
+- **#4 (propose-converge)**: all enabled contributors propose
+  independently in round 1 (blind), then converge across reviewed
+  rounds. Used for design questions.
+- **Advisory**: dispatches happen but no vote is load-bearing. Rare.
+
+## Round-1 dispatch order (workflow #4)
+
+**Dispatch peer contributors FIRST in background, then author my own
+proposal in parallel while they run.** Independence (blind-first-
+reveal) depends on **visibility**, not **temporal order**. No
+contributor sees another's output → independence preserved regardless
+of who started writing first. This optimization saves wall-clock and
+surfaces dispatcher errors earlier.
+
+Constraints: the goal_packet MUST be final before kicking off
+contributors (mid-flight rewrites mean wasted dispatches), and this
+applies to round 1 only — round 2+ explicitly require seeing round-1
+outputs.
+
+## Dispatching codex / gemini
+
+**`--review-target` must be a `.yaml` review-packet, not a raw `.md`
+or `.diff` file.** The peer reviewer sandboxes refuse to read paths
+under `consensus-state/`, so the file contents have to be embedded
+inline. Use `python -m consensus_mcp._author_review_packet
+--iteration-dir <dir> --files <comma-list>` to author a packet with
+`defect_target.touched_files_contents` populated, then pass
+`<dir>/review-packet.yaml` as the review target.
+
+**The MCP wrapper `reviewer_dispatch_codex` has a 45-second silence
+threshold** that is often too aggressive on cold-start. The shell
+binary `consensus-mcp-dispatch-codex` respects
+`CONSENSUS_MCP_STALL_SILENCE_SECONDS` (default 180s) and is the right
+fallback when the MCP wrapper times out.
+
+**Proposal-mode dispatch requires `--mode proposal`** on the shell
+binaries. The MCP wrappers as of v1.14.0 don't expose this flag —
+fall back to the shell CLI for round-1 #4 dispatch.
+
+## Gemini 429 handling (priority-tiered)
+
+- **Low-priority iterations** (chores, doc syncs, simple migrations):
+  if gemini returns a single 429, skip it and proceed with a 2-AI
+  consensus (claude + codex). Don't retry.
+- **High-priority iterations** (design questions, security review,
+  blocking decisions): allow one retry on 429; skip only after 2
+  consecutive 429s.
+
+The signal "skip vs retry" is the cost of getting it wrong — when a
+chore goes through with 2-AI consensus, the worst case is "we get a
+weaker review"; when a design decision goes through with 2-AI
+consensus, the worst case is "we ratify a flawed design."
+
+## Codex auth model
+
+Codex uses **token-based auth, not API keys.** If a dispatch hangs
+with "AuthRequired" messages, the most common cause is a **secondary
+MCP** that codex itself is configured to use — not codex's own auth.
+Check codex's MCP config (`~/.codex/config.toml`) for any nested MCP
+references; remove or disable the offending entry. Codex's own auth
+refresh is rarely the culprit.
+
+## Iteration-state persistence (data-loss risk)
+
+`consensus-state/active/iteration-*/` is **gitignored by design** —
+in-flight iteration scratch (proposals, audits, partial reviews)
+should not pollute the main branch's commit history. But this means
+**a `git clean -fdX` (or a CI build agent that wipes untracked
+files) will silently delete your in-progress consensus work.**
+
+Mitigation: `python -m consensus_mcp._snapshot_state snapshot --label
+<short-label>` after each iteration close. Snapshots live on the
+orphan branch `consensus-state-snapshots`. To recover:
+`python -m consensus_mcp._snapshot_state restore --tag <tag-name>`.
+
+For long iterations: snapshot mid-flight too. Cheap insurance.
+
+## Verifying peer-cited file content
+
+When a codex or gemini reviewer cites file content in a finding,
+**grep the cited file to confirm the content exists** before
+acting on the finding. Reviewers occasionally hallucinate
+("README.md line 67 contains @docs/roadmap/v1.14.0-deferred.md"
+when line 67 actually contains `@v1.14.0`).
+
+If the cited content doesn't exist (verified via grep), dismiss the
+finding with empirical evidence in the commit message:
+"codex-rev-NNN dismissed: cited content at <path>:<line> does not
+exist (grep shows `<actual>`). Reviewer hallucination."
+
+Don't ignore reviewer findings silently — write the dismissal as a
+matter of record so the audit trail survives.
+
+## Non-trivial changes go through peer review
+
+Any **non-trivial change to consensus-mcp itself** must go through
+peer review (workflow #4 if design surface, workflow #3 if pure
+execution). The threshold for "trivial" is small: typo fixes, doc
+formatting, individual log-line tweaks. Anything touching
+contributor adapters, dispatchers, tool registration, sealing, or
+goal-packet validation = non-trivial.
+
+This rule does NOT apply to the user's own project work using
+consensus-mcp as a tool — there, the operator decides what's
+non-trivial in their codebase.
+
+## "Consensus" trigger word
+
+When the user says "consensus" in a sentence about reviewing,
+deciding, or analyzing — **use the consensus-mcp tools (workflow
+#4 or workflow #3 as appropriate), NOT the older /council skill.**
+Council was a single-Claude multi-persona simulation; consensus-mcp
+is a real cross-AI workflow with sealed-provenance peer reviewers.
+
+## When in doubt
+
+The conservative move is **workflow #4 with all enabled contributors**.
+The extra wall-clock is bounded; the cost of ratifying a flawed
+design via 2-AI audit is not.
+
+If a dispatch is failing in a way you can't diagnose in 5 minutes,
+stop and ask the operator. Don't keep retrying — there is almost
+always a config or auth issue upstream, and burning more dispatches
+deepens the hole.

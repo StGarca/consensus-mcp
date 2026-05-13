@@ -44,4 +44,8 @@ consensus_mcp = [
   # into ~/.claude by `consensus-init --install-claude-code`.
   "claude_extensions/skills/consensus/SKILL.md",
   "claude_extensions/commands/consensus-init.md",
+  # iter-0041: operating-procedure skill carrying the transferable
+  # consensus-mcp workflow rules (workflow #3 vs #4, dispatch order,
+  # gemini 429, snapshot/restore, dispatcher hazards).
+  "claude_extensions/skills/consensus-workflow/SKILL.md",
 ]
