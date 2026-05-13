@@ -8,7 +8,7 @@ Per design spec (docs/architecture/phase-1-completion.md
 lines 287-302):
 
   inputs:
-    file: string (spec md path; must resolve under REPO_ROOT)
+    file: string (spec md path; must resolve under project_root())
     section_id: string (e.g., 'frontmatter', 'section_0' .. 'section_24')
   outputs:
     section_text: string
@@ -20,7 +20,7 @@ lines 287-302):
 FAILURE MODES
 -------------
   - file_not_found:        file path does not exist on disk.
-  - path_outside_repo:     resolved path is not under REPO_ROOT (path-traversal guard).
+  - path_outside_repo:     resolved path is not under project_root() (path-traversal guard).
   - invalid_utf8:          file is not valid utf-8.
   - section_not_found:     section_id does not appear in parsed file. Returns
                            available_section_ids list to aid caller diagnosis.
@@ -42,33 +42,21 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from consensus_mcp._paths import project_root
 from consensus_mcp.tools._md_sections import parse  # noqa: E402
 
-def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> fallback to source-tree-relative discovery.
-
-    Source-tree fallback walks 4 parents up from this module file (matches the
-    consensus_mcp/tools/<name>.py layout). Env override is required when
-    the package is installed via wheel into a venv where the 4-parents-up walk
-    lands outside the source repo. (Round 7 follow-up; tightly-scoped fix
-    authorized 2026-05-09 per operator decision after P3 T5 install-smoke surfaced
-    the hidden coupling.)
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
-
-
-REPO_ROOT = _resolve_repo_root()
+# iter-0034 (Phase B step 2 per iter-0024 plan): migrated from module-level
+# REPO_ROOT capture to lazy `_paths.project_root()` resolution. Each call
+# reads env state, so monkeypatch.setenv("CONSENSUS_MCP_PROJECT_ROOT", ...)
+# and CONSENSUS_MCP_REPO_ROOT (legacy fallback) take effect without
+# requiring iter-0019's _isolate_archive_root for this tool.
 
 
 SCHEMA = {
     "name": "repo.get_section",
     "description": (
         "Section-aware read of a spec md region. Returns ONLY the requested "
-        "section (frontmatter or section_N). Refuses paths outside REPO_ROOT."
+        "section (frontmatter or section_N). Refuses paths outside project_root()."
     ),
     "input_schema": {
         "type": "object",
@@ -133,10 +121,10 @@ SCHEMA = {
 
 
 def _resolve_under_repo(file: str) -> Path | dict:
-    """Resolve file to absolute path under REPO_ROOT. Returns Path or {error: ...}.
+    """Resolve file to absolute path under project_root(). Returns Path or {error: ...}.
 
     Guards against file="" / file=None: Path("").resolve() returns the cwd
-    (REPO_ROOT under normal invocation), which would pass the existence check
+    (project_root() under normal invocation), which would pass the existence check
     but fail downstream on read_text with PermissionError on Windows. Refuse
     upfront with a structured `file_required` error instead. (Round 6 F8 fix.)
     """
@@ -144,13 +132,13 @@ def _resolve_under_repo(file: str) -> Path | dict:
         return {"error": "file_required", "detail": "file argument is empty or None"}
     p = Path(file)
     if not p.is_absolute():
-        p = REPO_ROOT / p
+        p = project_root() / p
     try:
         resolved = p.resolve()
     except OSError as exc:
         return {"error": "file_not_found", "detail": str(exc)}
     try:
-        resolved.relative_to(REPO_ROOT.resolve())
+        resolved.relative_to(project_root().resolve())
     except ValueError:
         return {"error": "path_outside_repo", "detail": str(resolved)}
     if not resolved.exists():
