@@ -581,4 +581,40 @@ passes:
   packet_sha256: 83e6a81bc208748281612283c28abb23e27613c6ac758a05279c56a1f59d190b
   iteration_id: iteration-0022-mcp-wire-workflow-engine
   reviewer_id: codex-iteration-0022-5
-last_updated_utc: '2026-05-13T08:25:09Z'
+- id: codex-iteration-0023-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0023-readme-v1140-refresh-codex-iteration-0023-1-pass.yaml
+  sealed_at: '2026-05-13T08:40:24Z'
+  packet_sha256: 18e95cdd11b70328d282de75179975dcdae307e3dc39f2c3fd27309abcf630e7
+  iteration_id: iteration-0023-readme-v1140-refresh
+  reviewer_id: codex-iteration-0023-1
+- id: gemini-iteration-0023-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0023-readme-v1140-refresh-gemini-iteration-0023-1-pass.yaml
+  sealed_at: '2026-05-13T08:40:40Z'
+  packet_sha256: 0a8afd16bc8c3c7a9997a10d5549a2aad968fa95d3173580001a88b60d8be807
+  iteration_id: iteration-0023-readme-v1140-refresh
+  reviewer_id: gemini-iteration-0023-1
+- id: gemini-iteration-0023-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0023-readme-v1140-refresh-gemini-iteration-0023-2-pass.yaml
+  sealed_at: '2026-05-13T08:41:34Z'
+  packet_sha256: 6c94e636aec3f8b537129b50f53532bee08b3709045f4e678f4a3c6eda45678c
+  iteration_id: iteration-0023-readme-v1140-refresh
+  reviewer_id: gemini-iteration-0023-2
+- id: codex-iteration-0023-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0023-readme-v1140-refresh-codex-iteration-0023-2-pass.yaml
+  sealed_at: '2026-05-13T08:41:57Z'
+  packet_sha256: e6ab543055c30f5cf028d42c78007cee662a07db9155c060cdb727f64bc3de82
+  iteration_id: iteration-0023-readme-v1140-refresh
+  reviewer_id: codex-iteration-0023-2
+- id: codex-iteration-0023-3-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0023-readme-v1140-refresh-codex-iteration-0023-3-pass.yaml
+  sealed_at: '2026-05-13T08:42:52Z'
+  packet_sha256: 72c5b4aa8e881206891fbac7c870c73b870caccee35b7fd3a6a3c8ba2ae4af0a
+  iteration_id: iteration-0023-readme-v1140-refresh
+  reviewer_id: codex-iteration-0023-3
+- id: gemini-iteration-0023-3-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0023-readme-v1140-refresh-gemini-iteration-0023-3-pass.yaml
+  sealed_at: '2026-05-13T08:43:42Z'
+  packet_sha256: 2b6dcac878fcc97c403bd96a0b899ccfc9c5b7a3d97aa18ffbd5790ac73d7aa4
+  iteration_id: iteration-0023-readme-v1140-refresh
+  reviewer_id: gemini-iteration-0023-3
+last_updated_utc: '2026-05-13T08:43:42Z'
