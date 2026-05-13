@@ -191,4 +191,10 @@ passes:
   packet_sha256: 12790c0f73b6c01d1b518c34959cf1435068ff8db708e8cf2a2dd23d86a38869
   iteration_id: iteration-0013-snapshot-import-implementation
   reviewer_id: codex-iteration-0013-snapshot-import-implementation-7
-last_updated_utc: '2026-05-13T02:10:24Z'
+- id: codex-iteration-0013-snapshot-import-implementation-8-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0013-snapshot-import-implementation-codex-iteration-0013-snapshot-import-implementation-8-pass.yaml
+  sealed_at: '2026-05-13T02:20:22Z'
+  packet_sha256: 092436722963b4a9980366da12d49165ddc37d8a97667d50f17842b1956465c6
+  iteration_id: iteration-0013-snapshot-import-implementation
+  reviewer_id: codex-iteration-0013-snapshot-import-implementation-8
+last_updated_utc: '2026-05-13T02:20:22Z'
