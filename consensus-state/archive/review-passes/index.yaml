@@ -461,4 +461,28 @@ passes:
   packet_sha256: e46d482c728e6184b189c55bdd361f79d81c936c647ec157078aaae47154e49a
   iteration_id: iteration-0018-changelog-v1140
   reviewer_id: gemini-iteration-0018-1
-last_updated_utc: '2026-05-13T06:18:46Z'
+- id: codex-iteration-0019-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0019-test-isolation-codex-iteration-0019-1-pass.yaml
+  sealed_at: '2026-05-13T06:56:40Z'
+  packet_sha256: 6c31b619051fd238da361c8c6a3a848cff9ed4d3ff264ab7f8965b6ee59eaa9c
+  iteration_id: iteration-0019-test-isolation
+  reviewer_id: codex-iteration-0019-1
+- id: gemini-iteration-0019-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0019-test-isolation-gemini-iteration-0019-1-pass.yaml
+  sealed_at: '2026-05-13T06:57:37Z'
+  packet_sha256: 1693f633010e52a814dcc393766cb58596d2031a5931912f5e2bbfd6fe206e5a
+  iteration_id: iteration-0019-test-isolation
+  reviewer_id: gemini-iteration-0019-1
+- id: codex-iteration-0019-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0019-test-isolation-codex-iteration-0019-2-pass.yaml
+  sealed_at: '2026-05-13T07:00:55Z'
+  packet_sha256: 3abafbc1a8f09034e80050d69dd989d505068568d1b4bc2a18b89a99ed458225
+  iteration_id: iteration-0019-test-isolation
+  reviewer_id: codex-iteration-0019-2
+- id: gemini-iteration-0019-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-13-iteration-0019-test-isolation-gemini-iteration-0019-2-pass.yaml
+  sealed_at: '2026-05-13T07:01:15Z'
+  packet_sha256: 6eef59efcc87bacab7269a8422e7758835986a181c64d0a06a5f3e9ecb8a221a
+  iteration_id: iteration-0019-test-isolation
+  reviewer_id: gemini-iteration-0019-2
+last_updated_utc: '2026-05-13T07:01:15Z'
