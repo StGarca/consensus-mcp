@@ -562,14 +562,22 @@ def test_no_mutation_yet_close_not_gated():
 def test_closure_certificate_authored_on_pass(tmp_path, monkeypatch):
     """#9 When invariant passes and iteration_closed is recorded, closure-certificate.yaml is authored.
 
-    Drive through the audit_append_event T6 layer. We monkeypatch ACTIVE_DIR
-    to tmp_path so the test doesn't touch the real consensus-mcp repo tree.
+    Drive through the audit_append_event T6 layer. iter-0036: redirect state
+    root via env var (NOT monkeypatch.setattr on the tool module — pytest
+    teardown leaks __getattr__-synthesized values into __dict__ and poisons
+    subsequent tests). Also stub _detect_working_tree_changes so T7's
+    unaudited-mutation check is deterministic.
     """
-    monkeypatch.setattr(audit_append_event, "ACTIVE_DIR", tmp_path)
+    state_root = tmp_path / "state"
+    monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(state_root))
+    monkeypatch.setattr(
+        audit_append_event, "_detect_working_tree_changes",
+        lambda repo_root: ["foo.py"],
+    )
 
     iter_id = "iteration-test-cert"
-    iter_dir = tmp_path / iter_id
-    iter_dir.mkdir()
+    iter_dir = state_root / "active" / iter_id
+    iter_dir.mkdir(parents=True)
 
     # Pre-populate an audit log with a structured apply_step_landed event.
     apply_event = _make_apply_step_event(
@@ -633,11 +641,17 @@ def test_t6_refuses_iteration_closed_when_invariant_fails(tmp_path, monkeypatch)
     """T6 refuses to write iteration_closed when invariant fails.
 
     Set up: codex authored last mutation; codex tries to close (cross_family fail).
+    iter-0036: env-var redirection instead of unsafe setattr.
     """
-    monkeypatch.setattr(audit_append_event, "ACTIVE_DIR", tmp_path)
+    state_root = tmp_path / "state"
+    monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(state_root))
+    monkeypatch.setattr(
+        audit_append_event, "_detect_working_tree_changes",
+        lambda repo_root: ["foo.py"],
+    )
     iter_id = "iteration-test-refuse"
-    iter_dir = tmp_path / iter_id
-    iter_dir.mkdir()
+    iter_dir = state_root / "active" / iter_id
+    iter_dir.mkdir(parents=True)
 
     apply_event = _make_apply_step_event(
         actor_id="codex-iter0017-1",
@@ -686,11 +700,19 @@ def test_t6_refuses_iteration_closed_when_invariant_fails(tmp_path, monkeypatch)
 
 
 def test_t6_no_mutation_yet_iteration_closed_allowed(tmp_path, monkeypatch):
-    """When no apply_step_landed events exist, T6 does NOT block iteration_closed."""
-    monkeypatch.setattr(audit_append_event, "ACTIVE_DIR", tmp_path)
+    """When no apply_step_landed events exist, T6 does NOT block iteration_closed.
+
+    iter-0036: env-var redirection + working-tree stub.
+    """
+    state_root = tmp_path / "state"
+    monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(state_root))
+    monkeypatch.setattr(
+        audit_append_event, "_detect_working_tree_changes",
+        lambda repo_root: [],
+    )
     iter_id = "iteration-test-no-mutation"
-    iter_dir = tmp_path / iter_id
-    iter_dir.mkdir()
+    iter_dir = state_root / "active" / iter_id
+    iter_dir.mkdir(parents=True)
     audit_path = iter_dir / "independence-audit.yaml"
     audit_path.write_text(
         yaml.safe_dump({"audit_log": []}, sort_keys=False),
