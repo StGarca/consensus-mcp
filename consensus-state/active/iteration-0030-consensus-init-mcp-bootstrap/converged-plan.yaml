@@ -1,0 +1,205 @@
+iteration_id: iteration-0030-consensus-init-mcp-bootstrap
+workflow_mode: propose-converge
+independence: blind-first-reveal
+convergence_rule_applied: strict-majority
+converged_at_round: 1
+
+participants:
+  - contributor: claude
+    pass_id: claude-iteration-0030-1-blind-proposal
+    proposal_path: claude-proposal.yaml
+    selected_target: "Auto-write .mcp.json by default; merge mode; dev-folder skip via consensus_mcp/server.py + pyproject name check; sys.executable-paired binary discovery; replace-entry-completely idempotency"
+    vote: approve
+  - contributor: codex
+    pass_id: codex-iteration-0030-1-blind-proposal
+    proposal_path: codex-review.yaml
+    selected_target: "Auto-write .mcp.json by default; conservative merge with divergent-entry conflict mode; marker-based project-root detection (git rev-parse > strong markers > cwd); shutil.which discovery with --mcp-command override; no-semantic-change idempotency"
+    vote: approve
+    notes: |
+      First successful substantive codex vote in a workflow #4 consult
+      since proposal-mode shipped (iter-0028). Validates that the meta-
+      arc iter-0021/0024/0027/0028 paid off. Codex's response had:
+        - findings: []
+        - goal_satisfied: true
+        - proposal block fully populated with selected_target,
+          rationale, deliverable_scope (5 sub-fields), 3 risks,
+          estimated_complexity, structural_abstention: false
+      Codex disagreed substantively with claude on Q3 (project-root
+      detection) and Q4 (binary discovery) — see converged positions
+      below. Codex also raised a 6th design point about absolute-path
+      portability of .mcp.json that claude had not surfaced.
+  - contributor: gemini
+    pass_id: gemini-iteration-0030-2-blind-proposal (attempted)
+    proposal_path: null
+    selected_target: null
+    vote: environmental-abstention
+    abstention_reason: |
+      2 consecutive 429 RESOURCE_EXHAUSTED / MODEL_CAPACITY_EXHAUSTED
+      on gemini-2.5-pro via cloudcode-pa.googleapis.com. Per the
+      iter-0029 feedback-gemini-429-skip memory rule (high-priority
+      iteration: 1 retry allowed, then env-abstain). Treated as
+      structural-abstention NOT a block vote; convergence proceeds with
+      claude + codex.
+
+convergence_rationale: |
+  Strict-majority threshold of 2 met via claude + codex substantive
+  votes. Both contributors AGREE on:
+    - Auto-write .mcp.json by default with opt-out flag
+    - Merge mode for existing .mcp.json (preserve other servers)
+    - No-semantic-change idempotency on rerun
+
+  Substantive DISAGREEMENT on 2 design points, resolved by adopting
+  codex's positions because they are more general / less brittle:
+
+  Q3 — Project-root / dev-folder detection.
+    Claude: special-case dev folder via consensus_mcp/server.py +
+            pyproject name match
+    Codex:  use marker-based project-root detection (git rev-parse >
+            strong markers > cwd); no special dev-folder logic
+    ADOPTED: Codex's approach. Marker-based detection is more general,
+    handles the dev-folder case via "existing .mcp.json + merge mode"
+    (the dev folder's existing config gets preserved), and works for
+    arbitrary project layouts.
+
+  Q4 — Binary discovery.
+    Claude: sys.executable-paired (always)
+    Codex:  --mcp-command override > shutil.which("consensus-mcp") >
+            fallback to sys.executable -m consensus_mcp.server
+    ADOPTED: Codex's approach. PATH-based discovery + override flag is
+    more portable for dev installs, non-pipx setups, and CI bootstrap.
+    sys.executable-pair is a sensible fallback but not the primary.
+
+  Codex's Q5 nuance (divergent-entry conflict mode) adopted as the
+  policy: when consensus-mcp entry already exists with different
+  values, leave the file untouched and print an actionable conflict
+  message. Optional --force flag may replace only the managed entry.
+
+  Codex's bonus Q6 (post-init status line) adopted: emit a one-line
+  status naming the file path and outcome (created/merged/already
+  current/skipped-by-opt-out/blocked-by-conflict).
+
+  Additional risk codex surfaced (absolute path vs portable command
+  in .mcp.json) noted for iter-0031: default to PATH-relative
+  "consensus-mcp" command when binary is on PATH, fall back to
+  absolute discovered path only when shutil.which fails.
+
+decision: |
+  Implement iter-0031: extend `consensus-init` to auto-write .mcp.json
+  with the merged-converged design.
+
+next_iteration_id: iteration-0031-consensus-init-mcp-bootstrap-impl
+
+deliverable_scope:
+  files_in_scope:
+    - consensus_mcp/_init_wizard.py
+    - consensus_mcp/tests/test_init_wizard.py (extend) or new
+      test_init_wizard_mcp_json.py
+  files_out_of_scope:
+    - MCP server protocol behavior
+    - Claude Code user-scope MCP configuration
+    - pipx installation mechanics
+    - workflow_engine / contributors / config.py
+
+  new_helpers_in_init_wizard:
+    - _resolve_mcp_command() — returns (command, args, used_path)
+      precedence: --mcp-command override > shutil.which("consensus-mcp")
+                  > sys.executable + ["-m", "consensus_mcp.server"]
+      Returns the cmd string for .mcp.json + tracks whether it's
+      PATH-portable or absolute-path.
+    - _resolve_project_root_for_init() — uses git rev-parse if
+      available; else ascends from cwd looking for strong markers
+      (.git, pyproject.toml, package.json, CLAUDE.md, .mcp.json,
+      consensus-state); else cwd. Refuses to write .mcp.json outside
+      the resolved root.
+    - _write_mcp_json(root, state_root, project_root, command,
+      args, mode='merge'|'force'|'skip') — does the JSON read+merge+
+      write. Validates JSON parse before merge; on parse failure,
+      skip+warn. On divergent existing entry: skip+warn unless
+      --force.
+
+  new_cli_flags:
+    - --no-mcp-json: opt out of .mcp.json bootstrap
+    - --mcp-command STR: override the command used in .mcp.json
+    - --mcp-force: replace existing consensus-mcp entry on divergence
+      (does NOT overwrite other servers; merge for all non-conflicting
+      cases)
+
+  exit_status_messages:
+    - "wrote .mcp.json at <path> (consensus-mcp registered)"
+    - "merged consensus-mcp into existing .mcp.json at <path>"
+    - "consensus-mcp entry in .mcp.json at <path> already current"
+    - "skipped .mcp.json (--no-mcp-json)"
+    - "BLOCKED: existing consensus-mcp entry at <path> differs from
+       desired config. Use --mcp-force to replace, or edit manually."
+    - "WARN: .mcp.json at <path> failed to parse as JSON; not
+       modifying. Fix the file manually or delete it and re-run."
+
+key_design_decisions:
+  - Default-on auto-write; --no-mcp-json opt-out
+  - Merge mode preserves all non-conflicting MCP server entries
+  - Conflict mode (divergent existing consensus-mcp entry): skip+warn
+    by default; --mcp-force to replace just the managed entry
+  - Project-root detection: git rev-parse > strong markers > cwd
+  - Binary discovery: --mcp-command > shutil.which > sys.executable -m
+  - JSON output: pretty-printed, trailing newline, sort_keys=False for
+    human-readability
+  - Idempotency contract: re-running with same inputs produces no
+    semantic content diff (and ideally no byte diff)
+  - All paths in env vars are resolved to absolute on Windows AND
+    POSIX (consistent JSON whether you're on either)
+
+acceptance_gates_for_iter_0031:
+  - A1: full suite stays green (current 759 + new tests)
+  - A2: fresh project (empty dir) → consensus-init writes valid
+        .mcp.json with parseable JSON, correct mcpServers.consensus-mcp
+        entry, correct STATE_ROOT and PROJECT_ROOT env vars
+  - A3: existing .mcp.json with another server (e.g., playwright) →
+        consensus-init merges, BOTH servers present after
+  - A4: --no-mcp-json skips .mcp.json entirely; config.yaml still
+        written
+  - A5: re-running consensus-init produces identical .mcp.json
+        (byte-for-byte) — true idempotency
+  - A6: existing consensus-mcp entry with DIFFERENT command/env →
+        skip+warn, file unchanged, exit status non-zero or a marker
+        signaling "blocked-by-conflict"
+  - A7: --mcp-force replaces ONLY the consensus-mcp entry; other
+        servers preserved
+  - A8: malformed .mcp.json (e.g., trailing comma) → skip+warn, file
+        unchanged
+  - A9: project-root detection: tested from nested cwd (e.g.,
+        `<root>/src/sub/`), should still resolve to <root>
+  - A10: --mcp-command override threads through to written file
+  - A11: cross-platform path: Windows uses .exe suffix on absolute
+         fallback path; POSIX does not. Tested via mocked sys.platform.
+
+risks_inherited:
+  - Claude Code's .mcp.json schema may evolve. Implementation targets
+    the documented project-level format as of MCP spec 2024-11-05.
+  - Absolute paths in .mcp.json reduce portability if the file is
+    committed. Default to "consensus-mcp" PATH-relative command when
+    shutil.which finds it; only fall back to absolute path when not.
+  - First-time users with running Claude Code session won't see new
+    server until restart. Init wizard prints reminder.
+  - Conflict mode may still need manual fix from operator if their
+    custom consensus-mcp config is intentional. That's acceptable.
+
+recommended_workflow_for_iter_0031: workflow #3 post-review
+recommended_workflow_rationale: |
+  Implementation per a substantively-converged design. Workflow #3 with
+  codex+gemini audit (and proposal-mode now available if any sub-design
+  question emerges mid-implementation) is the right shape.
+
+historical_significance: |
+  iter-0030 is the FIRST workflow #4 consult run where codex engaged
+  substantively as a full peer rather than structurally-abstaining due
+  to template friction. The proposal-mode infrastructure shipped in
+  iter-0028 produced its intended effect: a real 2-of-3 substantive
+  convergence (gemini env-abstained due to 429 capacity, not template
+  friction). The meta-arc iter-0021 → iter-0024 → iter-0027 → iter-0028
+  → iter-0030 closes the loop: "the project that proves consensus
+  works on real design questions now actually works for its own
+  design questions."
+
+sealed_at_utc: '2026-05-13T15:35:00Z'
+authored_by: claude-orchestrator (per claude + codex substantive
+  convergence; gemini env-abstained 2x 429 per [[feedback-gemini-429-skip]])
