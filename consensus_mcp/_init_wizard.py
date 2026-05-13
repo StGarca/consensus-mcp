@@ -671,6 +671,18 @@ def cmd_init(args) -> int:
         print(yaml.safe_dump(cfg.default_config(), sort_keys=False, default_flow_style=False))
         return 0
 
+    # iter-0040 hot-fix: `--install-claude-code` is a one-time GLOBAL operation
+    # (copy skill + slash command into ~/.claude). It is NOT a per-project
+    # bootstrap, and should not trigger the interactive wizard or write
+    # .consensus/config.yaml / .mcp.json. Short-circuit here, run the install,
+    # and exit. Users who want BOTH the global pack install AND a per-project
+    # bootstrap should run the two commands separately.
+    if getattr(args, "install_claude_code", False):
+        claude_home = _resolve_claude_home()
+        for line in _install_claude_extensions(claude_home, force=args.force):
+            print(line)
+        return 0
+
     # gemini pass-3 rev-001: --dry-run no longer forces non-interactive. Users
     # can preview an interactive session via `consensus init --dry-run`.
     # Interactivity is suppressed only by --non-interactive or --accept-defaults.
@@ -774,12 +786,6 @@ def cmd_init(args) -> int:
             print(f"WARN: unknown mcp-json status {status!r}", file=sys.stderr)
     else:
         print(".mcp.json write skipped (--no-mcp-json)")
-
-    # iter-0040: optional install of Claude Code skill + slash command pack.
-    if getattr(args, "install_claude_code", False):
-        claude_home = _resolve_claude_home()
-        for line in _install_claude_extensions(claude_home, force=args.force):
-            print(line)
 
     # iter-0040: when invoked from inside a Claude Code session, print
     # contextual restart guidance so the user knows what to do next.
