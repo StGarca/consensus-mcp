@@ -784,6 +784,85 @@ def _parse_codex_output(
     return parsed
 
 
+_CODEX_PROPOSAL_SCHEMA_PATH = (
+    Path(__file__).parent / "dispatch_templates" / "codex_proposal_schema.json"
+)
+
+
+def _parse_codex_proposal_output(text: str, schema_path: Path | None = None) -> dict:
+    """Parse + validate codex proposal-mode output (iter-0028).
+
+    Validation runs against `schema_path` (operator override via --schema)
+    when provided, else against the built-in `codex_proposal_schema.json`.
+    The override contract from the dispatcher CLI must thread through here
+    so a custom schema actually constrains the validator (codex pass-3
+    rev-001: previously this was hard-coded, breaking the override
+    promise).
+
+    selected_target and deliverable_scope may be null when
+    structural_abstention is true; required to be non-null when
+    structural_abstention is false. The schema allows null but the
+    cross-field semantic check enforces presence.
+
+    Raises CodexOutputParseError on shape mismatch.
+    """
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise CodexOutputParseError(
+            f"codex proposal output is not valid JSON: {exc}"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise CodexOutputParseError(
+            f"codex proposal output root must be a JSON object; got {type(parsed).__name__}"
+        )
+
+    effective_schema_path = schema_path or _CODEX_PROPOSAL_SCHEMA_PATH
+    try:
+        import jsonschema
+        schema = json.loads(Path(effective_schema_path).read_text(encoding="utf-8"))
+        jsonschema.validate(parsed, schema)
+    except jsonschema.ValidationError as exc:
+        raise CodexOutputParseError(
+            f"codex proposal output failed schema validation at "
+            f"{'/'.join(str(p) for p in exc.absolute_path) or '<root>'}: {exc.message}"
+        ) from exc
+    except FileNotFoundError as exc:
+        raise CodexOutputParseError(
+            f"proposal schema not found at {effective_schema_path}: {exc}"
+        ) from exc
+
+    # Parser-level invariants (codex pass-4 rev-002 + pass-6 rev-001):
+    # defense-in-depth against operator-supplied schemas that relax these.
+    # The built-in schema enforces them, but an override could weaken
+    # minLength on rationale, omit structural_abstention entirely, or
+    # let through a non-boolean truthy value. Enforce here regardless of
+    # which schema is in effect.
+    if not isinstance(parsed.get("rationale_vs_alternatives"), str) or not parsed["rationale_vs_alternatives"].strip():
+        raise CodexOutputParseError(
+            "rationale_vs_alternatives must be a non-empty string (parser invariant)"
+        )
+    if "structural_abstention" not in parsed or not isinstance(parsed["structural_abstention"], bool):
+        raise CodexOutputParseError(
+            "structural_abstention must be present and boolean (parser invariant)"
+        )
+
+    # Cross-field semantic check the schema can't express:
+    # when NOT abstaining, selected_target and deliverable_scope must be non-null.
+    if not parsed["structural_abstention"]:
+        if parsed["selected_target"] is None:
+            raise CodexOutputParseError(
+                "selected_target is required when structural_abstention is false"
+            )
+        if parsed["deliverable_scope"] is None:
+            raise CodexOutputParseError(
+                "deliverable_scope is required when structural_abstention is false"
+            )
+
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="consensus_mcp._dispatch_codex",
@@ -795,6 +874,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pass-id", default=None)
     p.add_argument("--prompt-template", default=None)
     p.add_argument("--schema", default=None, help="Path to JSON output schema (default: dispatch_templates/codex_review_schema.json)")
+    p.add_argument("--mode", default="review", choices=["review", "proposal"],
+                   help=("Dispatch mode (iter-0028 per iter-0027 converged plan). "
+                         "'review' (default): use codex_review_template.md + schema "
+                         "for code-review tasks. 'proposal': use codex_proposal_template.md "
+                         "+ schema for design-consult / workflow #4 proposal tasks. "
+                         "--prompt-template and --schema overrides take precedence over --mode."))
     p.add_argument("--codex-bin", default="codex")
     p.add_argument("--timeout-seconds", type=int, default=600)
     p.add_argument("--review-target", default=None,
@@ -838,15 +923,26 @@ def main(argv: list[str] | None = None) -> int:
         iter_dir.mkdir(parents=True, exist_ok=True)
         iteration_id = iter_dir.name
 
+        # iter-0028: mode selects the default template/schema pair when no
+        # explicit overrides are passed. --prompt-template and --schema
+        # overrides still win, preserving backward compatibility.
+        _default_template_name = (
+            "codex_proposal_template.md" if ns.mode == "proposal"
+            else "codex_review_template.md"
+        )
+        _default_schema_name = (
+            "codex_proposal_schema.json" if ns.mode == "proposal"
+            else "codex_review_schema.json"
+        )
         template_path = (
             _normalize_relative_to_repo(ns.prompt_template, repo_root)
             if ns.prompt_template
-            else (Path(__file__).parent / "dispatch_templates" / "codex_review_template.md")
+            else (Path(__file__).parent / "dispatch_templates" / _default_template_name)
         )
         schema_path = (
             _normalize_relative_to_repo(ns.schema, repo_root)
             if ns.schema
-            else (Path(__file__).parent / "dispatch_templates" / "codex_review_schema.json")
+            else (Path(__file__).parent / "dispatch_templates" / _default_schema_name)
         )
         goal_packet_path = _normalize_relative_to_repo(ns.goal_packet, repo_root)
         review_target_normalized = _normalize_relative_to_repo(ns.review_target, repo_root)
@@ -1035,12 +1131,20 @@ def main(argv: list[str] | None = None) -> int:
         # iter-0026 F1: pass repo_root so the per-patch base_sha stamp uses
         # disk bytes (matches apply.codex_patch's bundle_sha contract; eliminates
         # the CRLF mismatch surfaced in iter-0025).
-        extracted = _parse_codex_output(
-            codex_output,
-            goal_packet=goal_packet,
-            review_packet=review_packet_data,
-            repo_root=repo_root,
-        )
+        # iter-0028: route output parsing based on --mode. Review mode uses
+        # the existing review-shape parser; proposal mode uses a separate
+        # proposal-shape parser that validates against codex_proposal_schema.
+        if ns.mode == "proposal":
+            # Thread the operator's effective --schema override through so
+            # a custom proposal schema actually constrains the validator.
+            extracted = _parse_codex_proposal_output(codex_output, schema_path=schema_path)
+        else:
+            extracted = _parse_codex_output(
+                codex_output,
+                goal_packet=goal_packet,
+                review_packet=review_packet_data,
+                repo_root=repo_root,
+            )
         # v1.10.5: persist review_target_path + review_target_hash in sealed
         # provenance so audit reconstruction and the visibility TUI can show
         # which target was reviewed. (path is computed pre-try at function
@@ -1054,6 +1158,8 @@ def main(argv: list[str] | None = None) -> int:
             "scope_signature": scope_sig,
             "review_target_path": review_target_path_str,
             "review_target_hash": review_target_hash,
+            # iter-0028 codex pass-6 rev-002: record mode for parity with gemini.
+            "mode": ns.mode,
         }
         packet = _build_sealed_packet(extracted, iteration_id, reviewer_id, pass_id, provenance=provenance)
         result = _seal_via_t6(packet, iter_dir)
