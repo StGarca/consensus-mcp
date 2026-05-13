@@ -134,8 +134,44 @@ on first pass.
   every call. Backward compatible — no existing tool touched.
 - iter-0026 (Phase B step 1): migrated `state_read_decision_ledger`
   to use `_paths.state_root()`. First test coverage for that tool
-  (5 new tests including the lazy-resolution regression demo). Phase
-  B migrations continue in iter-0034+ for remaining 9 tools.
+  (5 new tests including the lazy-resolution regression demo).
+- iter-0034 (Phase B step 2): migrated `repo_get_section` to
+  `_paths.project_root()`. Removed local `_resolve_repo_root`.
+- iter-0035 (Phase B steps 3-8): batched 6 LOW-impact tools onto
+  the lazy resolvers in one commit — `repo_set_section`,
+  `state_update_decision_ledger`, `patch_stage_and_dry_run`,
+  `patch_apply_consensus_patch`,
+  `gate_evaluate_production_with_scope_match`, `review_read_post_seal`.
+  PEP 562 `__getattr__` hooks added per-tool for external
+  `module.REPO_ROOT` back-compat.
+- iter-0036 (Phase B step 9, HIGH-impact audit-trail tool): migrated
+  `audit_append_event` from cached `REPO_ROOT/ACTIVE_DIR` to lazy
+  `project_root()`/`active_dir()`. Cleaned up 3 closure_invariant
+  tests that used unsafe `monkeypatch.setattr(audit_append_event,
+  "ACTIVE_DIR", tmp_path)` — pytest's monkeypatch captures the
+  `__getattr__`-synthesized value at setattr time and restores it
+  into `__dict__` at teardown, permanently poisoning subsequent
+  tests. Switched to `monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT",
+  ...)` matching the iter_0018 pattern.
+- iter-0037 (Phase B step 10, final + HIGHEST-impact seal-pipeline
+  tool): migrated `review_write_and_seal` from cached
+  `REPO_ROOT/ARCHIVE_DIR/INDEX_PATH` plus the in-handle
+  `from consensus_mcp.tools.audit_append_event import ACTIVE_DIR`
+  capture to lazy `project_root()`/`archive_dir()`/`index_path()`/
+  `active_dir()` resolvers. `_isolate_archive_root` test helper in
+  `test_dispatch_codex.py` simplified — only `monkeypatch.setenv(
+  "CONSENSUS_MCP_REPO_ROOT", ...)` remains; the previously-required
+  5 `setattr` calls (now unsafe against `__getattr__` attributes)
+  are gone.
+
+**Phase B closed.** All 10 tool migrations landed (iter-0026..0037).
+No tool now holds a cached module-level `REPO_ROOT`/`ACTIVE_DIR`/
+`ARCHIVE_DIR`/`INDEX_PATH`/etc. — every path read is lazy and honors
+env-var redirection at call time. Suite green at 773 passed,
+1 skipped. The cross-project pipx install pattern from iter-0030
+now works in any project: `pipx install consensus-mcp` once, then
+`consensus-init` in any project writes a working `.mcp.json` and
+the lazy resolvers pick up the per-project state root automatically.
 
 **Codex proposal mode (iter-0027 → iter-0028):**
 
@@ -211,15 +247,13 @@ to operator memory as
 
 **Deferred to a follow-up iteration:**
 
-- Remaining 9 Phase B tool migrations (per iter-0024 plan):
-  `repo_get_section`, `repo_set_section`, `state_update_decision_ledger`,
-  `patch_stage_and_dry_run`, `patch_apply_consensus_patch`,
-  `gate_evaluate_production_with_scope_match`, `review_read_post_seal`,
-  `audit_append_event`, `review_write_and_seal`. Each migrates from
-  cached `REPO_ROOT` to `_paths.state_root()` composition.
 - 20 stale `iter-9999-*` fixture entries remain in
   `consensus-state/archive/review-passes/index.yaml`. Cosmetic only;
   separate cleanup iteration if desired.
+- Phase C cleanup of `_isolate_archive_root`-style fixtures that are
+  now no-ops or simplifiable; the test helpers still work but most of
+  the `monkeypatch.setattr` calls inside them became redundant once
+  Phase B finished. Pure refactor, no behavior change.
 
 ## 1.13.0 - 2026-05-12
 
