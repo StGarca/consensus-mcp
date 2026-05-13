@@ -1,0 +1,47 @@
+iteration_id: iteration-0016d-init-wizard
+reviewer_id: codex-iteration-0016d-init-wizard-3
+pass_id: codex-iteration-0016d-init-wizard-3-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Balanced but reversed .gitignore markers cause unrelated user content to
+    be removed
+  citation: consensus_mcp/_init_wizard.py:310
+  risk: If a user has a malformed .gitignore with the close marker before the open
+    marker, open_count == close_count, so the stripping logic treats all lines after
+    the later open marker as managed content and drops them when rewriting. That violates
+    the requirement to preserve user content under malformed markers.
+  recommendation: Treat marker order as malformed unless every open marker is followed
+    by a close marker before another close/open imbalance can occur; preserve the
+    file untouched except for appending a fresh managed block when marker ordering
+    is invalid.
+  patch_not_proposed_reason: The prompt did not provide exact embedded line numbers
+    or a defect_target.base_sha, and the safer fix needs a new regression test plus
+    matched hunks against the embedded file contents; recommend patching both update_gitignore
+    marker parsing and test coverage in the allowed files.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The init wizard covers the requested CLI/config behavior,
+  but .gitignore management can delete user content for malformed marker ordering,
+  so the preservation requirement is not fully met.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 1ad1a914dee7fe1b77f40ca116fa620716b78144690e1898448e9fafd4024742
+  output_sha256: 5e1e8854f4200cb160266df119282d1db5f5d8f48fdabd4f92e888b133644c6b
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 17e216ba7d891603a1b6dece32e79a104c80cacdfd4b16452e510bad3833d79c
+  scope_signature: a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90
+  review_target_path: consensus-state/active/iteration-0016d-init-wizard/review-packet.yaml
+  review_target_hash: 1889989e50759fb5cd95169eacac0ed4722ef31f94ee76e5fe3a49e6cc200ec5
+sealed_at_utc: '2026-05-13T04:57:30Z'
+packet_sha256: 64564debe4dee229071ac1b278bd2328ec59ebc00c45f56297a41ad5dd37ac4b
