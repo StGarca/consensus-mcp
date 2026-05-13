@@ -1,6 +1,6 @@
 # consensus-mcp
 
-**Peer review for AI code, automated.** Two AI agents check each other's work before any code lands. Like the four-eyes principle at a software company, except both sets of eyes belong to LLMs — and they have to agree before the change ships.
+**Peer review for AI code, automated.** A pool of AI contributors (Claude + Codex + Gemini in the default configuration; the pool is operator-configurable) check each other's work before any code lands. Like the four-eyes principle at a software company, except every set of eyes belongs to a different model family — and they have to converge before the change ships.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
@@ -18,16 +18,17 @@ consensus-mcp is the infrastructure that makes that automatic.
 
 ## What it does (in plain English)
 
-When you ask an AI to write code, fix a bug, or review a change, consensus-mcp:
+When you ask the contributor pool to write code, fix a bug, or review a change, consensus-mcp:
 
 1. **Captures the request as a sealed contract** — what's being changed, what files are touched, what success looks like, who authorized it. This is the `goal_packet`.
-2. **Dispatches a second AI to review** — typically OpenAI Codex via its CLI. It produces a structured findings document with severity-graded defects, citations to specific file:line locations, and proposed patches.
-3. **The first AI (typically Claude) reviews the reviewer** — verifies findings against the actual code, agrees, disagrees, or adds findings of its own.
-4. **Both agents must reach consensus** before the change is allowed to land.
+2. **Routes through the operator-chosen workflow** — three modes shipped in v1.14.0: `post-review` (#3, one AI implements, the others review), `propose-converge` (#4, all contributors propose blindly then converge across rounds), and `advisory` (recommendations only; orchestrator decides).
+3. **Each contributor produces a sealed artifact** — structured findings with severity-graded defects, citations to specific file:line locations, and proposed patches (where applicable). Codex via the codex CLI, Gemini via the gemini CLI, Claude as the in-process orchestrator.
+4. **The configured convergence rule decides** — unanimous, strict-majority, inclusive-majority, or advisory. Workflow #4 hides each contributor's proposal from the others until reveal phase, then runs convergence rounds until the rule is satisfied or the round limit is hit.
 5. **Every step is cryptographically sealed** with content hashes so you can prove later what was reviewed by whom and when.
-6. **A separate watchdog process catches stuck reviews** — real-time output streaming, heartbeats, and a kill-switch file the operator can write to abort.
+6. **State snapshots into an orphan git branch** — `consensus-state-snapshots` carries point-in-time captures of the gitignored iteration tree, so a `git clean -fdX` can't lose work.
+7. **A separate watchdog process catches stuck reviews** — real-time output streaming, heartbeats, and a kill-switch file the operator can write to abort.
 
-The end result: changes that pass two AIs aren't just "looks good to one model." They're "looks good to two models that habitually disagree."
+The end result: changes that pass three independent model families aren't "looks good to one model" — they're "looks good to three models that each fail in different ways."
 
 ## Quick start
 
@@ -38,33 +39,64 @@ pip install consensus-mcp
 Then in your repo:
 
 ```bash
-# 1. Make sure you have codex-cli installed
-# (https://github.com/openai/codex-cli or your preferred MCP-compatible model)
+# 1. Install the contributor CLIs you want in your pool.
+#    Codex (https://github.com/openai/codex-cli) and Gemini
+#    (https://github.com/google-gemini/gemini-cli) are auto-detected.
+#    Claude is always present as the in-process orchestrator.
 
-# 2. Author a goal packet describing what you want done
-# (template: docs/templates/goal_packet.yaml)
+# 2. Initialize the project — interactive prompts for all 9 governance dimensions:
+consensus-init
+# Or non-interactive with sensible defaults:
+consensus-init --non-interactive --accept-defaults
 
-# 3. Dispatch the review
-python -m consensus_mcp._dispatch_codex \
-    --goal-packet path/to/goal.yaml \
-    --iteration-dir path/to/iteration/ \
-    --reviewer-id codex-review-1 \
-    --review-target path/to/code-or-diff.yaml
+# 3. Author a goal packet describing what you want done
+#    (per-iteration goal_packet.yaml under consensus-state/active/<iter>/)
 
-# 4. (Optional) Watch it live in another terminal
-python -m consensus_mcp._visibility_tui
+# 4. Run an iteration end-to-end via the `consensus.run_iteration` MCP tool,
+#    or call its handler directly:
+python -c "
+from consensus_mcp.tools.consensus_run_iteration import handle
+result = handle(
+    iteration_dir='consensus-state/active/iteration-xxxx',
+    goal_packet_path='consensus-state/active/iteration-xxxx/goal_packet.yaml',
+    target_path='path/to/problem-or-patch.yaml',
+)
+print(result)
+"
+
+# 5. Inspect the outcome:
+python -c "
+from consensus_mcp.tools.consensus_get_iteration_outcome import handle
+print(handle(iteration_dir='consensus-state/active/iteration-xxxx'))
+"
 ```
 
-For real-time stall detection:
+The single-reviewer dispatchers are still available as escape hatches:
 
 ```bash
-# In one terminal: the dispatch above
-# In another terminal: live observability
-python -m consensus_mcp._visibility_tui
-
-# If a review hangs, write the abort signal:
-echo "abort: this looks stuck" > consensus-state/abort-dispatch-codex-review-1-pass1.signal
+python -m consensus_mcp._dispatch_codex --goal-packet ...
+python -m consensus_mcp._dispatch_gemini --goal-packet ...
 ```
+
+For real-time stall detection: every codex/gemini dispatch streams output and emits 30-second heartbeats. If the model stalls past `CONSENSUS_MCP_STALL_SILENCE_SECONDS` (default 180), the wrapper kills the process group and records `dispatch_aborted`. The operator can also write `consensus-state/abort-dispatch-<pass_id>.signal` to force an abort within 500ms.
+
+## The 9 operator-configurable dimensions
+
+`.consensus/config.yaml` (generated by `consensus-init`) is the single source of truth for project governance. Every dimension is a project-level choice, not a hardcoded default:
+
+| Dimension | Choices |
+|---|---|
+| `workflow.mode` | `post-review` (#3), `propose-converge` (#4), `advisory` |
+| `workflow.independence` | `blind-first-reveal`, `visible`, `sequential` |
+| `convergence.rule` | `unanimous`, `strict-majority`, `inclusive-majority`, `advisory` |
+| `convergence.finding_disposition` | `all-or-nothing`, `per-finding` |
+| `contributors.enabled` | ordered list (claude always present; codex/gemini optional; future adapters pluggable) |
+| `snapshots.trigger` | `manual-only`, `on-iteration-close`, `periodic` |
+| `snapshots.periodic.every_iterations` | integer cadence |
+| `patches.authoring` | `claude-only`, `any-contributor`, `none` |
+| `workflow.timeout_policy` | `treat-as-no-vote`, `treat-as-blocking`, `shrink-quorum` |
+
+`consensus-init --print-defaults` emits the full schema. `consensus-init --reconfigure` re-prompts with the existing config as the prompt defaults and prints a unified diff before writing.
 
 ## How it actually works
 
@@ -131,7 +163,7 @@ Concrete examples of the kind of defect cross-AI review surfaces that single-AI 
 
 **AI processes stall silently.** Before bidirectional monitoring, a stuck codex dispatch could hang for the full 15-minute internal timeout — and sometimes longer if the wrapper itself wedged. Now: streamed output + 30s heartbeats + 45s silence threshold = stuck dispatches die in under a minute.
 
-**Cross-AI authorship-vs-reviewer collapse.** A naive "two-AI review" architecture can have both AIs be Claude (one instance reviews, another implements). That's not cross-AI; that's same-model bias laundered through state. consensus-mcp enforces `model_family` as the cross-AI axis — two different families (claude/codex) must touch any closing review.
+**Cross-AI authorship-vs-reviewer collapse.** A naive "two-AI review" architecture can have both AIs be Claude (one instance reviews, another implements). That's not cross-AI; that's same-model bias laundered through state. consensus-mcp enforces `model_family` as the cross-AI axis — two different families (e.g., claude/codex, claude/gemini, codex/gemini) must touch any closing review. v1.14.0 extends this from 2 to N: with three contributors in the default pool, the convergence rule (strict-majority by default for N≥3) requires at least two-of-three cross-family agreement.
 
 **Pre-commit vs post-commit catch.** Workflow #4 (claude proposes patches, codex pre-reviews the proposed diff, claude integrates feedback, then implements) catches defects before they hit the working tree. Workflow #3 (claude implements, codex reviews after) catches them post-commit and requires fix iterations. The bootstrap deployment used both; workflow #4 had a 100% catch-fix rate; workflow #3 required 6 followup iterations.
 
@@ -143,55 +175,74 @@ Concrete examples of the kind of defect cross-AI review surfaces that single-AI 
 
 ```
 consensus_mcp/
-├── _dispatch_codex.py          # External codex-CLI dispatcher (Popen + streaming + heartbeats + abort)
-├── _self_drive.py              # Stop-rule evaluator + goal-packet validator
-├── _author_review_packet.py    # Embed file contents into review-packets
-├── _closure_invariant.py       # Cross-family + hash-match + freshness gate
-├── _visibility_tui.py          # Real-time event-stream TUI
-├── _visibility_watchdog.py     # Post-hoc orphan-dispatch cleanup
-├── _release_gate_check.py      # 11-gate release readiness check
-├── server.py                   # MCP server entry point
-├── tools/                      # 14 MCP tools (dispatch, seal, verify, apply, etc.)
-├── dispatch_templates/         # Codex review template + JSON schema
-├── validators/                 # Disposition index + scope check + run_validator_tests
-└── tests/                      # 420+ regression tests
+├── _init_wizard.py             # `consensus-init` CLI (9 dimensions, interactive + flags)
+├── _dispatch_codex.py          # Codex-CLI dispatcher (Popen + streaming + heartbeats + abort)
+├── _dispatch_gemini.py         # Gemini-CLI dispatcher (same dispatch-base helpers as codex)
+├── _dispatch_base.py           # Shared dispatcher primitives (resolve, prompt, seal, log)
+├── _engine_factory.py          # Build adapters + WorkflowEngine from config + repo_root
+├── _snapshot_state.py          # Orphan-branch snapshot/list/restore/diff
+├── _import_parent_history.py   # One-time mirror of upstream iteration history
+├── workflow_engine.py          # Workflow #3/#4/advisory orchestrator
+├── config.py                   # Schema + validate + load + legacy synthesis
+├── contributors/               # Adapter layer (Claude, Codex, Gemini, Fake* for tests)
+│   ├── base.py                 # ContributorAdapter ABC + DispatchPacket + SealedArtifact
+│   ├── claude.py               # In-process orchestrator self
+│   ├── codex.py                # subprocess wrapper around _dispatch_codex
+│   └── gemini.py               # subprocess wrapper around _dispatch_gemini
+├── server.py                   # MCP server entry point + tool registration
+├── tools/                      # MCP tools
+│   ├── consensus_run_iteration.py        # Drive one iteration via the engine
+│   ├── consensus_get_iteration_outcome.py # Read-only inspector
+│   ├── reviewer_dispatch_codex.py        # Single-reviewer escape hatch
+│   ├── reviewer_dispatch_gemini.py       # Single-reviewer escape hatch
+│   ├── review_write_and_seal.py          # T6 — cryptographic seal + archive
+│   ├── apply_codex_patch.py              # Apply sealed patches under containment
+│   └── ...                                # 17+ tools total
+├── dispatch_templates/         # Codex + Gemini review templates + JSON schemas
+├── validators/                 # Disposition index + scope check + validator runner
+└── tests/                      # 688+ regression tests (1 skipped)
 
-consensus-state/                # Runtime state (gitignored except .gitkeep)
+consensus-state/                # Runtime state (gitignored; recoverable via snapshot branch)
 ├── active/                     # Per-iteration working dirs
-├── archive/                    # Sealed review-pass archive
+├── archive/                    # Sealed review-pass archive + parent-history mirror
 └── state/                      # Dispatch log + audit log + ledger
+
+consensus-state-snapshots/      # Orphan git branch (NOT a directory) — point-in-time
+                                # captures of consensus-state/active/ for recovery
+                                # against accidental `git clean -fdX`.
 ```
 
 ## Workflow taxonomy
 
-The bootstrap deployment surfaced four distinct workflows. Pick the one that matches your situation:
+v1.14.0 ships three orchestrator-supported workflow modes. The choice is per-project via `consensus-init` (or `consensus-init --workflow <mode>`):
 
-| # | Name | Authoring AI | Reviewing AI | When to use |
-|---|---|---|---|---|
-| **#1** | codex-fix-author | codex | claude | codex found a defect AND wants to fix it; claude verifies |
-| **#2** | Flavor B subsystem review | both (parallel) | both (cross-validate) | reviewing existing code with no pending change |
-| **#3** | design-then-claude-implements | claude | codex (post-commit) | bidirectional design conversation, then claude implements unilaterally |
-| **#4** | claude-as-fix-author with codex pre-review | claude | codex (pre-implementation) | claude is the fix-author; codex reviews proposed diffs BEFORE they land |
+| Mode | Independence | When to use |
+|---|---|---|
+| **`post-review` (#3)** | `visible` — reviewers see the implementation | Implementation work per a converged design. One AI implements; the others audit. Fast, low-overhead, good for execution-mode iterations. |
+| **`propose-converge` (#4)** | `blind-first-reveal` — every contributor proposes against the problem statement **before** seeing any peer output, then convergence rounds reveal all proposals and iterate to a consensus | Open design questions, architectural choices, anywhere the value comes from independent reasoning. iter-0015 canonical reference run is in `consensus-state/archive/imported-from-parent/`. |
+| **`advisory`** | `visible` | The orchestrator wants recommendations but reserves final decision-making. Useful when the contributors disagree on fundamentals and the operator needs all viewpoints surfaced rather than collapsed by a convergence rule. |
 
-Workflow #4 has the strongest pre-commit catch rate in the bootstrap deployment. See `docs/workflows/workflow-4-preferred.md`.
+Earlier workflow taxonomy (#1 codex-fix-author, #2 Flavor B subsystem review) is preserved in the parent-project archive under `consensus-state/archive/imported-from-parent/` for provenance but is **not** part of the v1.14.0 orchestrator-supported surface — implement those via the single-reviewer escape hatches if you need them.
 
 ## Documentation
 
 - [`docs/architecture/orchestration-spec.md`](docs/architecture/orchestration-spec.md) — the full multi-agent consensus orchestration design
 - [`docs/architecture/autonomy-contract.md`](docs/architecture/autonomy-contract.md) — what the AI is allowed to do without operator approval
-- [`docs/architecture/visibility-tui-design.md`](docs/architecture/visibility-tui-design.md) — the visibility TUI + watchdog design
 - [`docs/workflows/workflow-4-preferred.md`](docs/workflows/workflow-4-preferred.md) — when and how to use workflow #4
 - [`docs/workflows/external-process-fallback.md`](docs/workflows/external-process-fallback.md) — recovery policy for stalled dispatches
 - [`docs/postmortems/iter-0019-0036-failures.md`](docs/postmortems/iter-0019-0036-failures.md) — failure modes encountered during bootstrap, with how each was caught
 
 ## Status
 
-**1.12.0** — standalone release (2026-05-11). Extracted from the project that produced and stress-tested it. 420+ regression tests passing. The bootstrap deployment is the test corpus; new users can build on a stable surface.
+**1.14.0** — multi-AI contributor pool, blind-first-reveal workflow #4, configurable governance, snapshot/restore. Extracted from the project that produced and stress-tested it; restarted at iter-0001 as a standalone. 688+ regression tests passing (1 skipped, 0 failing under any ordering). The bootstrap deployment is the test corpus; new users can build on a stable surface.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the v1.14.0 feature train (iter-0009 through iter-0022).
 
 ## Requirements
 
 - Python 3.10+
-- An MCP-compatible LLM (the bootstrap uses OpenAI Codex CLI; the architecture is model-agnostic as long as the model can produce JSON-schema-conformant output)
+- For multi-contributor pools: [`codex-cli`](https://github.com/openai/codex-cli) and/or [`gemini-cli`](https://github.com/google-gemini/gemini-cli) on PATH (auto-detected by `consensus-init`)
+- Claude is always present as the in-process orchestrator
 - PyYAML
 
 ## License
@@ -202,4 +253,4 @@ MIT — see [LICENSE](LICENSE).
 
 The project is self-hosted: consensus-mcp uses itself for its own review process. Pull requests go through the four-step cycle. If you contribute, expect cross-AI review feedback on your change.
 
-When in doubt about a finding, the closure invariant is the tiebreaker: did two different model families agree on the same code state? If yes, the change can land. If no, the iteration stays open until they agree.
+When in doubt about a finding, the closure invariant is the tiebreaker: did the configured convergence rule pass on the same code state with cross-family contributors? If yes, the change can land. If no, the iteration stays open until the configured rule is satisfied.
