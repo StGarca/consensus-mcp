@@ -1,0 +1,39 @@
+iteration_id: iteration-gemini-trust-env-fix
+reviewer_id: gemini-gtef-1
+pass_id: gemini-gtef-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The change correctly and minimally resolves the v1.15.1
+  named blocker. The new `_gemini_subprocess_env` helper correctly injects `GEMINI_CLI_TRUST_WORKSPACE=true`
+  into the subprocess environment, which is the verified root-cause fix for gemini
+  CLI >= 0.43.0-preview.0 failing in untrusted directories. The implementation is
+  accompanied by a comprehensive set of unit tests covering all specified requirements
+  for the helper function. All associated documentation (CHANGELOG.md, docs/advisories.md)
+  has been updated to reflect the fix. The change meets all acceptance gates and adheres
+  strictly to the scope.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: a350b607a28572987cc90d156c3655479eb879b082d554bf2f73f391bdc467ca
+  output_sha256: be2743d834ef5a67cc8fcbae7593510a68f8952c8b8221f76259d757c724cf2f
+  goal_packet_sha256: d09fb217efc5382937bd529d5384acf0f3d6f3bcf97506598ef04eac42111bf5
+  scope_signature: gemini-trust-env-fix-v1152
+  review_target_path: consensus-state/active/iteration-gemini-trust-env-fix/review-packet.yaml
+  review_target_hash: 1833cbbc829046ee0cef546a3fbb5b303283c34bb72f370947d352f615137342
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T17:22:11Z'
+packet_sha256: 2a858332257c7f982ebe1681750a96a6ed6f581b10f902fdec327224cc98df52
