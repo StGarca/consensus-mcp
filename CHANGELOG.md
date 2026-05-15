@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.15.2 - unreleased
+
+**Named blocker (carried from v1.15.1 Workflow B audit):**
+`consensus_mcp/_dispatch_gemini.py` must set
+`GEMINI_CLI_TRUST_WORKSPACE` (or pass `--skip-trust`). gemini CLI
+≥ `0.43.0-preview.0` refuses headless runs in an untrusted
+directory, emitting the trust error to stderr with empty stdout →
+the dispatcher fails `GeminiOutputParseError`. Diagnosed first-hand
+during the v1.15.1 audit (gemini pass-1 failed twice for exactly
+this); worked around there via the env var. `_dispatch_gemini.py`
+was in the v1.15.1 iteration's `forbidden_files`, so the
+dispatcher-level fix is correctly scoped here. See
+`docs/advisories.md` (Advisory 2026-05-15).
+
 ## 1.15.1 - 2026-05-15
 
 **Machine-enforcement of the converged-plan convention** — closes the
