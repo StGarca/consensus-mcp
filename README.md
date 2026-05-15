@@ -51,7 +51,7 @@ agree."
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.6
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.7
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -103,14 +103,26 @@ can override either.
 
 ## Does it actually work?
 
-consensus-mcp is built using itself. During its own development the
-AI panel caught **38 real defects before commit, with zero false
-positives** — including a race condition, a safety check that silently
-failed open, and a path-matching bug, each missed by single-AI review.
+consensus-mcp is built using itself — every change goes through its
+own cross-AI review. The original bootstrap deployment *measured*
+**38 real defects caught before commit, zero false positives**
+across 6 peer-reviewed subsystems (a race condition, a fail-open
+safety gate, a path-matching bug — each missed by single-AI
+review). It has been self-hosted continuously since: **70+
+consensus iterations** across the v1.13–v1.15 line, where cross-AI
+audits routinely caught blocking defects *pre-merge* — e.g. the
+v1.15.1 converged-plan enforcement gaps, the v1.15.2
+gemini-dispatch trust bug, and the v1.15.4 CI-dormancy /
+test-hermeticity bugs (see [`CHANGELOG.md`](CHANGELOG.md) and the
+Releases page). The "38" is the original *measured* baseline, not
+a running tally — deliberately not inflated to an uncounted
+number, because unfalsifiable metrics are exactly what this tool
+exists to catch. The point is the pattern held across 70+
+iterations.
 
 ## Status
 
-**Current: v1.15.6.** Recent work hardened the review machinery
+**Current: v1.15.7.** Recent work hardened the review machinery
 (machine-enforced plan conventions, dispatcher fixes), made the
 documentation match shipped reality, and fixed the release/branch
 model so `main` (and this landing page) and GitHub Actions CI stay
