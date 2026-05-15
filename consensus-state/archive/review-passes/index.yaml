@@ -917,4 +917,16 @@ passes:
   packet_sha256: f352d79d98bcdf9ce13f8f1eab4faa20ee257e6bdeb9c14f26a570484fa1cbc1
   iteration_id: iteration-0043-codex-gemini-adapter-mode-forwarding
   reviewer_id: codex-iteration-0043-1
-last_updated_utc: '2026-05-15T02:52:45Z'
+- id: codex-iter-audit-pypi-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-audit-2026-05-14-pypi-invention-codex-iter-audit-pypi-1-pass.yaml
+  sealed_at: '2026-05-15T03:23:54Z'
+  packet_sha256: 1be8597efc93a657660d7982918f555f4c3fac030b0adaa5f31f68d3c84a7268
+  iteration_id: iteration-audit-2026-05-14-pypi-invention
+  reviewer_id: codex-iter-audit-pypi-1
+- id: gemini-iter-audit-pypi-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-audit-2026-05-14-pypi-invention-gemini-iter-audit-pypi-1-pass.yaml
+  sealed_at: '2026-05-15T03:24:12Z'
+  packet_sha256: dc9ccf2ed05025691619fd11fa58356e39626fa91da0f6dfb5a9f893c6a035ef
+  iteration_id: iteration-audit-2026-05-14-pypi-invention
+  reviewer_id: gemini-iter-audit-pypi-1
+last_updated_utc: '2026-05-15T03:24:12Z'
