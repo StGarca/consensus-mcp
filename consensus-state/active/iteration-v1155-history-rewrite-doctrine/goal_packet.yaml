@@ -1,0 +1,62 @@
+schema_version: 1
+pilot_id: iteration-v1155-history-rewrite-doctrine
+workflow_mode: post-review
+goal:
+  summary: |
+    v1.15.5: post-history-rewrite doctrine reconciliation +
+    consensus-state/README. Operator directed a full git filter-repo
+    rewrite (upstream purge + stgarca→stgarca account
+    migration), already executed + verified + force-pushed to
+    github.com/stgarca. This iteration audits the DOCTRINE/DOC
+    reconciliation that must accompany it.
+  desired_end_state: |
+    Bundled consensus-workflow SKILL.md carries a sanctioned-
+    exception carve-out so it no longer self-contradicts the
+    just-performed main force-push; consensus-state/README.md
+    (tracked) documents the runtime tree + relabels the GitHub
+    folder; CHANGELOG 1.15.5 states the artifact-scoped truth (all
+    tag SHAs changed; pinned-URL impact). No engine/behavior change.
+  non_goals:
+    - re-litigating the operator-authorized rewrite (done, verified)
+    - scrubbing the "(v2.0.0)" commit SUBJECT (out of authorized
+      scope; folder-label fixed via the tracked README instead)
+    - any engine/config/dispatcher change
+  type: bugfix
+risk_class: none
+allowed_files:
+  - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+  - consensus-state/README.md
+  - CHANGELOG.md
+  - README.md
+  - pyproject.toml
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/workflow_engine.py
+acceptance_gates:
+  - id: A1
+    description: SKILL.md sanctioned-exception carve-out is self-consistent with the v1.15.4 fast-forward doctrine + cut-sequence (no contradiction, no stale step refs)
+    check: 'grep "Sanctioned-exception carve-out" SKILL.md'
+  - id: A2
+    description: carve-out gates the exception on operator-auth + backup + pre-push verification + suite-green (not a blanket force-push license)
+    check: 'true'
+  - id: A3
+    description: consensus-state/README.md is tracked + accurate (no upstream; gitignore reality correct)
+    check: 'git check-ignore consensus-state/README.md == not-ignored'
+  - id: A4
+    description: CHANGELOG 1.15.5 states artifact-scoped truth (every tag SHA changed; tag-pinned pipx OK, raw-SHA/old-remote dead)
+    check: 'true'
+  - id: A5
+    description: full suite green, 0 regressions (doc-only)
+    check: pytest -q
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T19:10:00Z'
+  scope_signature: 'v1155-history-rewrite-doctrine-reconciliation'
+stop_conditions:
+  - max_iteration_count_reached
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: unanimous
+  finding_disposition: weighted-synthesis
