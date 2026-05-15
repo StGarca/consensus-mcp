@@ -188,6 +188,80 @@ packet must still declare `all-or-nothing` to pass validation, but
 regardless.** Once the engine constraint is removed, the default
 flips to weighted-synthesis at the data layer too.
 
+## Safety interlock first (HEADLINE — highest-value rule)
+
+For **safety-critical / data-loss / bricking / irreversible-risk**
+defects: a root-cause-**INDEPENDENT** safeguard that is valuable
+even if the root-cause hypothesis is 100% false **MUST** ship in
+the same change as the hypothesized fix. **Stopping the bleeding
+outranks perfecting the diagnosis.**
+
+Field-proven (ChilipadScreen i2c boot-loop report, 2026-05-15): an
+independent boot-loop breaker, made hypothesis-independent *by
+design*, un-bricked a medical-safety device and kept it serving
+across **two** consecutive consensus iterations whose converged
+root causes were both later refuted on-device. It was called "the
+single highest-value decision."
+
+Auditable bar: **"would this safeguard still work if the root cause
+were entirely different?"** If a reviewer cannot answer *yes* from
+the safeguard's mechanism alone, it does not qualify — it is a
+disguised bet on the hypothesis, not an interlock.
+
+## Convergence is agreement, not truth
+
+**Convergence measures agreement, not correctness.** Two clean
+strict-majority 2-of-2 convergences (and one round-1 *unanimous*
+one) shipped root causes that on-device tests then refuted.
+
+**Fast independent unanimity is a VERIFY-HARDER flag, not
+confidence.** When contributors agree quickly, suspect a *shared
+prior*: independent agents reasoning from the same incomplete
+differential is the multi-agent analog of single-agent
+rationalize-away (see the disconfirming-evidence doctrine). Unanimity
+is evidence only when the contributors reasoned from *different*
+differentials — so make the differential visible (the dispatch
+templates now require each contributor to state the prior it
+reasoned from; at reveal, a shared prior is exposed instead of
+laundered as "independent agreement").
+
+### Provisional-until-proven (defined defect class)
+
+For claims **not falsifiable from the artifacts in evidence** —
+hardware/firmware state, environment/toolchain, concurrency/timing,
+anything refutable only by an *external* observation — a converged
+root cause is **PROVISIONAL**. The converged plan's
+`falsification.empirical_status` is `pending` until the named
+discriminating experiment runs; it then becomes `proven` (the
+refutation observation did NOT occur) or **`refuted`** (it did —
+the load-bearing terminal state; the hypothesis is dead, the
+iteration does not close on it, and the decisive experiment for
+the next iteration carries forward). **"Fixed" / "shipped" /
+"root-cause-correct" language is forbidden before `proven`.**
+(Pure-code defects refutable by a unit test already carry their
+proof — no extra ceremony; forcing one there is the theater this
+rule is meant to prevent.)
+
+### Anti-theater property (what makes falsification real)
+
+A falsification is real **only if its refuting observation is
+(1) pre-specified, (2) a specific observable, and (3) for the
+defined class, EXTERNAL to the reasoning that produced the
+hypothesis.** External tests can't be rationalized in the room —
+that is precisely why the device refuted what code-reading could
+not. "We'll test it" is not a falsification; "X at address Y still
+returns 0x103 on a clean POWERON" is.
+
+Also name **the single decisive experiment that must run before
+the next iteration** (the report's Exp-4 pattern) — the one test
+that most cleanly partitions the remaining hypothesis space.
+
+See `docs/workflows/converged-plan-convention.md` for the
+converged-plan blocks (`falsification`, `independent_safeguard`,
+`decisive_experiment_before_next_iteration`). These are an
+authoring convention enforced by this doctrine now; machine
+validation is a sequenced follow-up.
+
 ## Dispatching codex / gemini
 
 **`--review-target` must be a `.yaml` review-packet, not a raw `.md`

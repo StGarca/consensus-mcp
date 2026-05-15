@@ -37,7 +37,7 @@ The end result: changes that pass three independent model families aren't "looks
 ```bash
 # Install via pipx — isolated venv, console scripts on PATH, no
 # polluting individual project venvs:
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.14.8
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.0
 
 # (Optional but recommended) install the Claude Code bootstrap pack —
 # a tiny skill + slash command so you can run `consensus init` from
@@ -45,7 +45,7 @@ pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.14.8
 consensus-init --install-claude-code
 ```
 
-(If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.14.8` — but pipx is the recommended pattern for cross-project use.)
+(If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.15.0` — but pipx is the recommended pattern for cross-project use.)
 
 `--install-claude-code` is a **standalone global operation** — it copies three files into your Claude Code config and exits:
 
@@ -279,7 +279,10 @@ Earlier workflow taxonomy (#1 codex-fix-author, #2 Flavor B subsystem review) is
 
 ## Status
 
-**1.14.8** (current) — Workflow A/B/C operator vocabulary; bundled
+**1.15.0** (current) — convergence-correctness doctrine (safety
+interlock first; convergence ≠ correctness; provisional-until-proven;
+anti-theater falsification) + v1.14.9 T6 seal collision fix.
+**1.14.8** — Workflow A/B/C operator vocabulary; bundled
 operating-procedure skill carrying load-bearing doctrine (parallelism,
 weighted-synthesis convergence, no-deferral, verify-before-invent,
 artifact-scoped claims, Friday release cadence); Workflow C

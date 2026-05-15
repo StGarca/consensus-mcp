@@ -45,6 +45,31 @@ acceptance gates that pass the completion test (concrete +
 verifiable + small implementation cost), put the work IN
 your current proposal's scope.
 
+## Convergence-correctness mandate (load-bearing)
+
+Convergence measures AGREEMENT, not truth. Independent agreement
+is evidence ONLY if contributors reasoned from DIFFERENT
+differentials. Therefore:
+
+1. State the **differential / prior you are reasoning from** —
+   the model of the problem that makes your answer follow. If
+   every contributor shares it, fast unanimity is a shared-prior
+   artifact, not confidence.
+2. If your root-cause / mechanism claim is **not falsifiable
+   from the artifacts in evidence** (hardware/firmware state,
+   environment/toolchain, concurrency/timing — refutable only by
+   an external observation), say so explicitly and name a
+   **pre-specified, specific, EXTERNAL refuting observation**:
+   the single observable that, if seen, proves your hypothesis
+   wrong. "We'll test it" is not acceptable; name the observable.
+   Such a claim is PROVISIONAL until that experiment runs.
+3. For safety-critical / data-loss / bricking / irreversible
+   defects, your proposal MUST include a root-cause-INDEPENDENT
+   safeguard that is valuable even if your hypothesis is 100%
+   false ("would it still work if the root cause were entirely
+   different?"). Stopping the bleeding outranks perfecting the
+   diagnosis.
+
 # Goal
 
 {goal_summary}

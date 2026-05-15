@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.15.0 - 2026-05-15
+
+**Convergence-correctness doctrine** — minor bump (cross-project
+doctrine evolution, not a hot-patch). From
+`iteration-convergence-correctness-doctrine` (Workflow A
+weighted-synthesis: claude + codex + gemini, no blocking
+objections; gemini dissented substantively on prominence +
+machine-enforcement and that dissent was incorporated, not
+outvoted — the shared-prior self-check passed), derived from a
+real downstream failure: the ChilipadScreen ESP32-P4 i2c
+boot-loop consensus-failure report (2026-05-15) where two clean
+strict-majority convergences (one round-1 *unanimous*) were both
+refuted on-device.
+
+Doctrine added to the bundled `consensus-workflow` skill + both
+dispatch-template preambles + a new
+`docs/workflows/converged-plan-convention.md`:
+
+- **Safety interlock first (headline rule).** Safety-critical /
+  data-loss / bricking / irreversible-risk defects MUST ship a
+  root-cause-INDEPENDENT safeguard with the hypothesized fix,
+  valuable even if the hypothesis is 100% false. Auditable bar:
+  "would it still work if the root cause were entirely
+  different?" Field-proven: an independent boot-loop breaker
+  un-bricked a medical-safety device across two failed
+  root-cause iterations ("the single highest-value decision").
+- **Convergence is agreement, not truth.** Fast independent
+  unanimity is a verify-harder flag — a shared-prior artifact is
+  the multi-agent analog of single-agent rationalize-away.
+  Dispatch templates now require each contributor to state the
+  differential/prior it reasoned from (shared prior exposed at
+  reveal instead of laundered as "independent agreement").
+- **Provisional-until-proven** for the defined not-falsifiable-
+  from-artifacts class (hardware/firmware state, environment/
+  toolchain, concurrency/timing): converged root cause is
+  PROVISIONAL; "fixed/shipped/root-cause-correct" language
+  forbidden until a pre-specified EXTERNAL discriminating
+  experiment runs.
+- **Anti-theater property:** a falsification is real only if its
+  refuting observation is pre-specified, a specific observable,
+  and (for that class) external to the reasoning that produced
+  the hypothesis.
+- **Converged-plan convention:** `falsification`,
+  `independent_safeguard`, and
+  `decisive_experiment_before_next_iteration` blocks documented
+  as an authoring standard, doctrine-enforced now.
+
+**Named blocker (sequenced follow-up):** engine/validator
+MACHINE-enforcement of the converged-plan blocks (gemini's
+`severity` field + `consensus_gate.py` mechanism is the recorded
+starting design). Concrete blocker, file-verified: no standalone
+converged-plan schema exists; `workflow_engine.py:505-525` reads
+generic YAML keys. Needs its own schema-design consult + a
+not-falsifiable-from-artifacts classifier first.
+
+**Field validation of v1.14.9:** the same report independently
+confirmed the v1.14.9 void-seal preservation working correctly —
+void rounds from the v1.14.0 path-only review bug were preserved
+as honest audit history and correctly not counted toward
+convergence. No new tooling; cited as regression evidence.
+
+Doc/skill/template/memory only — no engine, config, or code
+paths touched. Full test suite green, 0 regressions.
+
 ## 1.14.9 - 2026-05-15
 
 Seal-pipeline defect fix from iteration-seal-archive-collision-fix
