@@ -1,0 +1,184 @@
+iteration_id: iteration-converged-plan-machine-enforcement
+converged_at_utc: '2026-05-15T17:30:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+shared_prior_self_check:
+  result: PASSED
+  reasoning: |
+    All three converged on engine-path + structure-not-soundness +
+    NOT consensus_gate.py — but grounded: codex explicitly
+    re-verified each VERIFIED-CODE-SURFACE fact rather than
+    assuming, and the convergence follows from inspected code
+    (no schemas/ dir; _seal_converged_plan fixed keys; zero block
+    occurrences), not a shared hunch. The REAL divergence (block
+    origin: claude sidecar / codex typed intake / gemini
+    extract-from-winning-proposal) was substantive and is
+    SYNTHESIZED, not collapsed: gemini's provenance argument
+    refuted the loose-sidecar idea; gemini's "winning proposal"
+    was refuted by the project-default weighted-synthesis (no
+    single winner). Each refutation changed the outcome.
+
+q1_block_origin:
+  claude: '(a) orchestrator-authored sidecar, engine merges at seal'
+  codex: 'typed ConvergedPlanConvention human-authored convergence INPUT, validated+persisted before sealing'
+  gemini: 'extract from the WINNING proposal''s deliverable_scope (provenance via sealed proposals)'
+  weighted_synthesis: |
+    Synthesis pulling the strongest from each:
+    - gemini's provenance concern is decisive against a LOOSE
+      hand-edited sidecar: blocks with no seal/hash provenance
+      break the chain of evidence. REJECT loose sidecar.
+    - gemini's "extract from the winning proposal" is REFUTED by
+      the project default convergence rule = weighted-synthesis:
+      there is NO single winning proposal; the converged plan
+      INTEGRATES across all three. "winning proposal's
+      deliverable_scope" is ill-defined under the default. REJECT
+      mechanical single-winner extraction.
+    - ADOPT codex's typed convergence-input framing + claude's
+      orchestrator-authored synthesis, RECONCILED via provenance-
+      by-citation: the convention blocks are the ORCHESTRATOR's
+      post-convergence synthesis judgement, authored as a typed
+      object that is sealed AS PART OF converged-plan.yaml (same
+      hash/seal as the rest of the artifact — satisfies gemini's
+      provenance requirement WITHOUT a loose untracked file), and
+      EACH block MUST cite the contributor pass_ids whose content
+      it synthesizes from (gemini's chain-of-evidence preserved
+      by explicit citation, not by mechanical winner-extraction).
+    - codex external-refuting-observation honored: implementation
+      MUST first check whether an existing human-authored
+      convergence intake path can already carry these fields into
+      _seal_converged_plan; if so, wire that path instead of
+      adding a parallel object.
+
+q2_enforcing_component:
+  unanimous_core: 'engine path; NOT consensus_gate.py (verified production gate)'
+  weighted_synthesis: |
+    NEW consensus_mcp/schemas/converged_plan_convention.schema.json
+    (machine contract; schemas/ is net-new) + a SMALL validator
+    module (gemini's name: validators/validate_converged_plan.py)
+    invoked INSIDE workflow_engine._seal_converged_plan (claude:
+    closest to where the plan is written; codex: the only point
+    that can prevent a bad final artifact from sealing) + read-
+    time surfacing in consensus_get_iteration_outcome. Codex's
+    "semantic shape" checks ADOPTED but scoped as NON-TRIVIALITY
+    PRESENCE checks (differential stated; refuting observation
+    named; safeguard text not a no-op/echo; decisive experiment
+    present) — these check the required substructure is filled
+    with non-empty distinct content, they DO NOT judge soundness.
+
+q3_classifier:
+  weighted_synthesis: |
+    Unanimous in effect: the engine does NOT classify the defect
+    class (heuristics = the report's shared-prior trap). It
+    enforces only the CONSEQUENCES of the orchestrator-attested
+    falsification.falsifiable_from_artifacts bool:
+    false ⇒ discriminating_experiment & refutation_observation
+    non-empty AND empirical_status ∈ {pending, refuted} (never
+    proven/n/a) until a recorded experiment result exists.
+
+q4_strictness_backward_compat:
+  weighted_synthesis: |
+    Graduated (claude) + codex's "legacy not silently valid":
+    - hard-reject ONLY: (i) safety/data-loss/bricking/
+      irreversible risk class missing a conforming
+      independent_safeguard; (ii) empirical_status: proven with
+      no recorded experiment.
+    - warn + annotate convention_violations otherwise.
+    - config knob converged_plan_enforcement:
+      off|warn|graduated|strict (default graduated) +.consensus
+      config; doctrine guidance.
+    - convention_schema_version on the plan. Legacy/absent ⇒
+      consensus_get_iteration_outcome STILL reads it, but the
+      outcome is explicitly marked enforcement: doctrine-only
+      (codex: NOT silently valid). This session's own iter-0043
+      .. v1.15.0 plans are the regression fixtures for this.
+
+q5_recursive_trap:
+  weighted_synthesis: |
+    HIGHEST-ORDER. Unanimous + structural:
+    - validator verbs are present/non-empty/consistent ONLY; it
+      has NO code path that sets/derives any
+      approved|correct|ready|sound state from the convention
+      blocks (acceptance gate: grep the module — zero such
+      tokens).
+    - every result stamps a mandatory, non-removable
+      convention_gate.gate_scope: "presence-and-consistency
+      only; NOT a soundness assertion. A passing gate is NOT
+      evidence the hypothesis is correct or the safeguard
+      adequate — only that the required thinking was RECORDED.
+      'Would this safeguard still work if the root cause were
+      entirely different?' remains a HUMAN judgement."
+    - gemini's success-semantics adopted verbatim: a pass means
+      "the formal argument is PRESENT", never "the argument is
+      TRUE".
+    - codex: fail-closed for NEW Workflow A convergences when
+      required blocks are missing (subject to the q4 graduated
+      rule — safety class hard, else warn).
+    - consensus_get_iteration_outcome surfaces gate_scope
+      ADJACENT to any pass marker (cannot be read without it).
+
+q6_minimal_slice_and_artifact_truth:
+  weighted_synthesis: |
+    Ship the slice NOW with real code-path tests (engine + module
+    + schema + config = meaningful regression signal; closes the
+    v1.15.0 doc-only loose end). codex's artifact-truth
+    correction ADOPTED as doctrine: docs/CHANGELOG MUST state
+    exactly that v1.15.0 tag 4e81f9e is DOCTRINE-ONLY and machine
+    enforcement exists only from this new tag forward (artifact-
+    scoped-claims). Defer with a NEED-EVIDENCE blocker: operator
+    goal_packet defect_class/risk_class declaration UX + the
+    anti-gaming cross-check on falsifiable_from_artifacts — both
+    ill-posed until the shipped slice produces usage data.
+
+# === THIS PLAN DOGFOODS THE CONVENTION IT ENFORCES ===
+falsification:
+  hypothesis: "Sealing convention blocks into converged-plan.yaml via an engine-invoked structural validator enforces the v1.15.0 doctrine without becoming a green-means-correct trap."
+  falsifiable_from_artifacts: true
+  discriminating_experiment: "the shipped test_converged_plan_convention.py + the grep-no-correctness-tokens acceptance gate + the legacy-grandfather fixture test"
+  refutation_observation: "any test shows the validator setting/implying an approved|correct|ready|sound state from the blocks, OR a legacy iter-0043..v1.15.0 plan failing to load through consensus_get_iteration_outcome"
+  empirical_status: n/a
+  reason_na: "this is tooling code, falsifiable from artifacts; its proof is the test suite shipped WITH it — no external experiment required"
+independent_safeguard:
+  applicable: false
+  why: "this iteration is tooling, not a safety/data-loss/bricking/irreversible-risk defect; the risk class that mandates a root-cause-independent safeguard is not triggered. Stated explicitly rather than omitted (the convention requires the judgement to be recorded, not that a safeguard always exist)."
+decisive_experiment_before_next_iteration: null
+  # null is legitimate: falsifiable_from_artifacts:true and the
+  # proving tests ship in this iteration (empirical_status n/a).
+cited_pass_ids: [claude-cpme-1-pass1, codex-cpme-1-pass1, gemini-cpme-1-pass1]
+
+deliverable:
+  files_in_scope:
+    - consensus_mcp/schemas/converged_plan_convention.schema.json  # NEW
+    - consensus_mcp/validators/validate_converged_plan.py  # NEW (small; structure/consequence only; gemini name)
+    - consensus_mcp/workflow_engine.py  # _seal_converged_plan: ingest typed convention input via existing/closest path, validate, persist into the sealed plan, graduated strictness, stamp convention_gate.gate_scope + convention_schema_version
+    - consensus_mcp/tools/consensus_get_iteration_outcome.py  # surface convention_violations + gate_scope adjacent to pass marker; legacy ⇒ enforcement: doctrine-only
+    - consensus_mcp/config.py  # converged_plan_enforcement knob (off|warn|graduated|strict; default graduated)
+    - consensus_mcp/tests/test_converged_plan_convention.py  # NEW real code-path tests
+    - docs/workflows/converged-plan-convention.md  # machine-enforced from THIS tag; artifact-truth statement; provenance-by-citation; gate_scope
+    - CHANGELOG.md ; README.md (install URL+Status) ; pyproject.toml
+  files_out_of_scope:
+    - consensus_mcp/validators/consensus_gate.py  # production gate; explicitly NOT this (corrects recorded starting design)
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+  named_blockers_for_deferred_work:
+    - 'Operator goal_packet defect_class/risk_class declaration UX + anti-gaming cross-check on falsifiable_from_artifacts: ill-posed until the shipped slice produces real usage data. Need-evidence blocker, not a cop-out.'
+  acceptance_gates_gating:
+    - 'NEW schemas/converged_plan_convention.schema.json valid JSON Schema; empirical_status enum = proven|pending|refuted|n/a (matches v1.15.0)'
+    - 'implementation FIRST checks for an existing human-authored convergence intake path into _seal_converged_plan; reuses it if present (codex external-refuting-observation)'
+    - 'convention blocks are persisted INTO the sealed converged-plan.yaml (same hash/seal); each block cites contributor pass_ids (provenance-by-citation, no loose sidecar, no winner-extraction)'
+    - 'consequence rule: falsifiable_from_artifacts==false ⇒ discriminating_experiment & refutation_observation non-empty & empirical_status∈{pending,refuted}'
+    - 'safety risk-class missing conforming independent_safeguard ⇒ hard-reject; empirical_status:proven w/o recorded experiment ⇒ hard-reject; else warn+annotate (graduated); config knob respected'
+    - 'legacy plan (no convention_schema_version: this session iter-0043..v1.15.0) loads via consensus_get_iteration_outcome, marked enforcement: doctrine-only — NOT silently valid, NOT rejected'
+    - 'grep validate_converged_plan.py ⇒ ZERO approved/correct/ready/sound state-setting from convention blocks (recursive-trap structural check)'
+    - 'convention_gate.gate_scope non-soundness disclaimer stamped UNCONDITIONALLY + surfaced adjacent to pass marker in consensus_get_iteration_outcome'
+    - 'NEW test_converged_plan_convention.py covers all above; full suite green WITH meaningful code-path coverage (closes v1.15.0 doc-only loose end)'
+    - 'docs + CHANGELOG state exactly: v1.15.0 tag 4e81f9e = doctrine-only; machine-enforcement exists only from this new tag forward (artifact-scoped truth)'
+    - 'Workflow B audit: codex + gemini goal_satisfied=true, no blocking objections; auditors confirm the recursive-trap defense is STRUCTURAL (the grep gate) not cosmetic'
+  estimated_complexity: medium
+
+next_steps:
+  - 'Implement the slice now (no-deferral); FIRST verify the existing convergence intake path before adding new machinery.'
+  - 'Workflow B audit (codex + gemini).'
+  - 'Cut v1.15.1 (machine-enforcement of v1.15.0 doctrine; patch/minor per scope) from the worktree → origin + tag.'

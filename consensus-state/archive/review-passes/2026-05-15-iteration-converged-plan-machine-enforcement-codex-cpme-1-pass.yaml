@@ -1,0 +1,115 @@
+iteration_id: iteration-converged-plan-machine-enforcement
+reviewer_id: codex-cpme-1
+pass_id: codex-cpme-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Pick the engine path, not `consensus_gate.py` and not schema-first
+  validation. `consensus_gate.py` is verified as the P0-V6 production-readiness gate,
+  not converged-plan enforcement (verified via goal_packet VERIFIED CODE SURFACE #1).
+  A schema-first target is also the wrong center because no `consensus_mcp/schemas/`
+  directory exists (verified via #2), `_seal_converged_plan` writes a fixed key set
+  from `ConvergenceOutcome` with no place for human judgment blocks (verified via
+  #3), and the required block names have zero code occurrences today (verified via
+  #4). Differential/prior: key-presence validation would converge on the same green-means-correct
+  trap v1.15.0 warns against. Better value delta: make the convention blocks enter
+  the pipeline as explicit human-authored convergence input, then have the engine
+  validate and persist them at the only point that can prevent a bad final artifact
+  from being sealed. External refuting observation: if implementation inspection finds
+  an existing human-authored convergence-plan intake path that can already carry arbitrary
+  fields into `_seal_converged_plan`, this proposal should narrow to wiring that path
+  instead of adding a new intake object.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: ac6b8aa2ef43466680430ef4c68452a0f6ce473d87d5848036de5250321a4973
+  output_sha256: c21fff6b23a48b6d55feb89c7e19b3de4ae747cd41ac10f4e7985655123b0bf9
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: be1034336677893523088a00b2791e72a8300c7ba412f38b0bb114d1387a7811
+  scope_signature: e9f0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3
+  review_target_path: null
+  review_target_hash: null
+  mode: proposal
+proposal:
+  selected_target: pipeline-owned convention-block intake and fail-closed enforcement
+    before `converged-plan.yaml` sealing
+  rationale_vs_alternatives: 'Pick the engine path, not `consensus_gate.py` and not
+    schema-first validation. `consensus_gate.py` is verified as the P0-V6 production-readiness
+    gate, not converged-plan enforcement (verified via goal_packet VERIFIED CODE SURFACE
+    #1). A schema-first target is also the wrong center because no `consensus_mcp/schemas/`
+    directory exists (verified via #2), `_seal_converged_plan` writes a fixed key
+    set from `ConvergenceOutcome` with no place for human judgment blocks (verified
+    via #3), and the required block names have zero code occurrences today (verified
+    via #4). Differential/prior: key-presence validation would converge on the same
+    green-means-correct trap v1.15.0 warns against. Better value delta: make the convention
+    blocks enter the pipeline as explicit human-authored convergence input, then have
+    the engine validate and persist them at the only point that can prevent a bad
+    final artifact from being sealed. External refuting observation: if implementation
+    inspection finds an existing human-authored convergence-plan intake path that
+    can already carry arbitrary fields into `_seal_converged_plan`, this proposal
+    should narrow to wiring that path instead of adding a new intake object.'
+  deliverable_scope:
+    next_iteration_id: iteration-converged-plan-convention-enforcement
+    files_in_scope:
+    - consensus_mcp/workflow_engine.py
+    - existing module defining ConvergenceOutcome, after locating it in-tree
+    - consensus_mcp/validators/converged_plan_convention.py
+    - module defining `consensus_get_iteration_outcome`, only after locating it in-tree
+    - tests/test_converged_plan_convention.py
+    - tests/test_workflow_engine_converged_plan.py
+    - docs/workflows/converged-plan-convention.md
+    files_out_of_scope:
+    - consensus_mcp/validators/consensus_gate.py
+    - consensus_mcp/schemas/* as primary enforcement
+    - packaging, release, PyPI, npm, installer, or distribution changes unless project
+      files independently verify that channel
+    - immutable v1.15.0 tag artifact changes
+    key_design_decisions:
+    - Add a typed `ConvergedPlanConvention` object with required `falsification`,
+      `independent_safeguard`, and `decisive_experiment_before_next_iteration` blocks.
+    - Convention blocks enter before sealing as explicit human-authored input; `_seal_converged_plan`
+      assembles the final artifact and fails closed for new Workflow A convergences
+      when blocks are missing or invalid.
+    - 'Validator checks semantic shape, not only keys: stated differential/prior,
+      named code-or-external refuting observation, independent safeguard not identical
+      to the validator, and a decisive experiment executable before the next iteration.'
+    - Persist convention blocks into generated `converged-plan.yaml` with `empirical_status`,
+      default `proposed` unless evidence justifies another status.
+    - 'Keep old outcome reading backward-compatible: legacy plans without blocks load,
+      but are marked doctrine-only or unenforced, not silently valid.'
+    - 'Docs must state exact artifact truth: v1.15.0 tag `4e81f9e` contains doctrine
+      only; enforcement exists only in the new development artifact or later verified
+      version/tag.'
+    acceptance_gates:
+    - Workflow A convergence without convention blocks fails before writing `converged-plan.yaml`.
+    - Placeholder or empty convention text fails validation.
+    - Valid fixture with differential/prior, refuting observation, independent safeguard,
+      and decisive experiment seals successfully and persists all blocks.
+    - Regression test proves `consensus_mcp/validators/consensus_gate.py` is not used
+      for this enforcement path.
+    - Existing old `converged-plan.yaml` fixtures still load through `consensus_get_iteration_outcome`
+      without crash and are reported as legacy/unenforced.
+    - Docs name the enforcement entry point and distinguish v1.15.0 doctrine-only
+      tag `4e81f9e` from the new enforcement artifact.
+  risks:
+  - Semantic prose can still game the validator; mitigation is requiring named refuting
+    observations and an independent safeguard that cannot point only to the validator.
+  - Old iterations may lack blocks; mitigation is fail-closed only for new Workflow
+    A sealing and backward-compatible reading for historical artifacts.
+  - The exact CLI or file intake point is not verified in the prompt; implementation
+    must inspect and cite the project command path before adding any flag or operator-facing
+    mechanism.
+  - 'Mode coupling risk: enforce only where the converged-plan convention applies,
+    with tests proving the intended Workflow A path.'
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T15:58:27Z'
+packet_sha256: b81308948268f78a6f475540bff34e6255515a720c7ed0b0abc8c64e03cfdce6
