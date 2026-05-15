@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.14.9 - unreleased
+
+Open scope for next session. Autonomous run-2026-05-15-overnight
+halted cleanly after 5 iterations + 5 release tags (v1.14.4 →
+v1.14.8); see audit log at
+`consensus-state/autonomous-runs/run-2026-05-15-overnight/log.jsonl`.
+
+Queued candidates for next session:
+
+- Workflow C multi-iteration auto-execution loop (v1.15.0 named
+  blocker — multi-session work; cross-platform interrupt-file
+  watching + integration tests with real peer dispatches +
+  resume-after-halt semantics design).
+- iter-0045 candidate: empirically evaluate whether
+  `PHASE_CONVERGE → "proposal"` would produce higher-quality
+  converge-mode outputs than the current interim mapping
+  `PHASE_CONVERGE → "review"`. Requires several real
+  Workflow A converge-phase dispatches as the data source.
+- Project-level `.consensus/autonomous-policy.yaml` (deferred
+  from iter-three-gaps; needs empirical evidence operators
+  want it across multiple Workflow C runs — we have zero so far).
+
 ## 1.14.8 - 2026-05-14
 
 iter-5 of autonomous run-2026-05-15-overnight. Bundled
