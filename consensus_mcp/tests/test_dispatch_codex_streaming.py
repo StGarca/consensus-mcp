@@ -174,9 +174,18 @@ class _SyncClock:
         with self._cond:
             self._cond.notify_all()
 
+    def is_released(self) -> bool:
+        with self._cond:
+            return self._released
+
     def release_all(self) -> None:
         """Independent safeguard: free EVERY waiter immediately so a
-        broken handshake fails fast/loud instead of wedging CI."""
+        broken handshake fails fast/loud instead of wedging CI. The
+        fake proc's poll() also observes is_released() and
+        self-terminates, so the production runner loop actually EXITS
+        (it does not just spin on a never-exiting proc) — without that,
+        release_all only unblocked the driver while leaking a spinning
+        daemon (codex-v1159-wfb-4 codex-rev-001, integrated)."""
         with self._cond:
             self._released = True
             self._cond.notify_all()
@@ -217,6 +226,16 @@ class _FakePipeReader:
         self._parent = parent
 
     def readline(self):
+        # codex-v1159-wfb-4 codex-rev-003 (integrated): production's
+        # reader thread calls readline() in a tight `iter(readline,
+        # b"")` loop — so a call here happens-AFTER it processed the
+        # previous line into a `dispatch_streamed_line` event. Notify
+        # the clock so event-count waits (`_drive_streaming` /
+        # `_drive_post_stream`) have a TRUE happens-before waker for
+        # reader-thread-produced events, instead of falling back to
+        # the _REPOLL safety net (the reader does not otherwise notify;
+        # the runner's sleep()-beat is not ordered after this thread).
+        self._parent._clock.notify()
         while True:
             if self._idx >= len(self._schedule):
                 # Schedule drained: EOF once the proc has exited.
@@ -302,6 +321,20 @@ class StreamingFakeCodexPopen:
 
     def poll(self):
         if self._exited:
+            return self.returncode
+        # codex-v1159-wfb-4 codex-rev-001 (integrated): when the clock
+        # is released (a harness-timeout teardown), the fake proc MUST
+        # exit so the production poll loop terminates and the daemon
+        # runner thread actually dies — instead of _sleep returning
+        # immediately while proc.poll() stays None forever (a spinning
+        # leak after the driver raised). release_all() owns the single
+        # teardown signal; the fake observes it here (poll() is called
+        # every production iteration), so no second coordination
+        # surface / registration list is introduced.
+        if self._clock.is_released():
+            self._terminated = True
+            self._exited = True
+            self.returncode = -15
             return self.returncode
         now_rel = self._clock.now() - self._t0
         if now_rel >= self._exit_at:
@@ -568,7 +601,7 @@ def _drive_streaming(
         )
 
 
-def _drive_post_stream(
+def _advance_until_streamed(
     clock: _SyncClock,
     th: threading.Thread,
     log_path: Path,
@@ -577,18 +610,19 @@ def _drive_post_stream(
     step: float,
     max_steps: int = 64,
 ):
-    """codex-v1159-wfb-3 codex-rev-002 (high, integrated): phase-1
-    lockstep small advances (`step` < stall_silence_seconds) until
-    `min_streamed` lines are PROCESSED — so `last_streamed_ts` is set
-    and the subsequent silence-abort exercises the POST-stream path,
-    NOT pre-first-line startup silence (the coverage the original
-    test's now-removed `time.sleep(0.1)` guaranteed). Then delegate to
-    `_drive` for phase-2 (advance past the silence threshold → abort →
-    death). Same fast-fail discipline as `_drive`."""
+    """Lockstep small advances (`step` < stall_silence_seconds) until
+    `min_streamed` `dispatch_streamed_line` events are PROCESSED and
+    the runner is back parked mid-run. Establishes a DETERMINISTIC
+    mid-run state: callers can then assert post-stream behaviour
+    (silence path) or inject a mid-run operator-abort signal — never
+    the startup/pre-first-line path (codex-v1159-wfb-3 codex-rev-002
+    silence; codex-v1159-wfb-4 codex-rev-002 operator). Returns with
+    the runner alive + parked + ≥min_streamed events; raises LOUD
+    (release_all) on any wedge or shortfall."""
     if not clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers > 0):
         clock.release_all()
         th.join(timeout=5)
-        raise AssertionError("_drive_post_stream: runner never started (release_all fired)")
+        raise AssertionError("_advance_until_streamed: runner never started (release_all fired)")
 
     steps = 0
     while (
@@ -605,7 +639,7 @@ def _drive_post_stream(
             clock.release_all()
             th.join(timeout=5)
             raise AssertionError(
-                "_drive_post_stream: phase-1 per-step wait hit _CEILING "
+                "_advance_until_streamed: per-step wait hit _CEILING "
                 "(release_all fired; NOT a timing flake)"
             )
         steps += 1
@@ -614,13 +648,27 @@ def _drive_post_stream(
         clock.release_all()
         th.join(timeout=5)
         raise AssertionError(
-            f"_drive_post_stream: only "
+            f"_advance_until_streamed: only "
             f"{len(_events(log_path, 'dispatch_streamed_line'))} of "
-            f"{min_streamed} lines processed before phase-2 — POST-stream "
-            "coverage NOT established (release_all fired)"
+            f"{min_streamed} lines processed — deterministic mid-run "
+            "state NOT established (release_all fired)"
         )
-    # Phase-2: now last_streamed_ts is set → drive to the post-stream
-    # silence abort + thread death.
+
+
+def _drive_post_stream(
+    clock: _SyncClock,
+    th: threading.Thread,
+    log_path: Path,
+    *,
+    min_streamed: int,
+    step: float,
+):
+    """codex-v1159-wfb-3 codex-rev-002 (integrated): process
+    `min_streamed` lines first so `last_streamed_ts` is set and the
+    subsequent silence-abort exercises the POST-stream path (not
+    pre-first-line startup silence — the coverage the original test's
+    now-removed `time.sleep(0.1)` guaranteed), then drive to terminal."""
+    _advance_until_streamed(clock, th, log_path, min_streamed=min_streamed, step=step)
     _drive(clock, th)
 
 
@@ -872,6 +920,13 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
         time_fn=clock.now,
         popen_factory=factory,
     )
+    # codex-v1159-wfb-4 codex-rev-002 (integrated): establish a
+    # DETERMINISTIC mid-run state before writing the signal — wait
+    # until the scheduled "working" line is processed and the runner
+    # is parked mid-loop. Writing the signal before then could test
+    # startup-present-signal handling instead of the named H2 live
+    # mid-run operator-abort + termination path.
+    _advance_until_streamed(clock, th, log_path, min_streamed=1, step=1.0)
     signal_path = repo_root / "consensus-state" / "state" / "abort-dispatch-codex-test-pass1.signal"
     signal_path.write_text("operator manual abort", encoding="utf-8")
     _drive(clock, th, until=lambda: len(_events(log_path, "dispatch_aborted")) >= 1)

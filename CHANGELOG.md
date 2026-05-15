@@ -76,14 +76,31 @@ defects, integrated not dismissed):**
   `_drive_post_stream` (process N lines, THEN drive) + an
   assertion that the abort is tied to prior streamed output.
 
-The multi-pass Workflow B audit caught **4 substantive defects**
+- Pass-4: codex 0 blocking (pass-3 resolved); gemini clean 4th.
+  Three valid non-blocking findings integrated: (a, high)
+  `release_all()` didn't terminate the fake proc → daemon runner
+  spun after a pre-exit timeout (claim-vs-code) — fixed by
+  `is_released()` + fake `poll()` self-terminate; (b, high)
+  operator-abort test not provably mid-run before signal — fixed
+  via `_advance_until_streamed`; (c, medium) reader-produced log
+  events had no clock waker so event-count waits fell back to
+  `_REPOLL` — fixed by a `readline()`-entry notify (true
+  happens-before).
+
+The multi-pass Workflow B audit caught **7 substantive defects**
 self-certification would have shipped (governance scope;
-deadlock invariant claim-vs-code; SIGTERM coverage; post-stream
-coverage). Local after pass-3: streaming 8/8 deterministic ×6
-(sub-0.3s); full suite re-verified. The provisional-until-proven
+deadlock-invariant claim-vs-code; SIGTERM coverage; post-stream
+coverage; release_all-doesn't-terminate; operator mid-run
+determinism; reader-event waker). gemini cleared determinism/
+design 4×; codex traced control flow + coverage fidelity — the
+two priors were genuinely complementary, not redundant. Local
+after pass-4: streaming 8/8 deterministic ×6 (sub-0.21s); full
+suite re-verified. Audit trajectory: blocking → blocking →
+0-blocking(high) → converging. The provisional-until-proven
 ≥3-consecutive-green-Windows-CI gate runs on the post-audit
-final commit; v1.15.9 is NOT cut until codex returns 0 blocking
-AND that gate passes (attempts-API verified).
+final commit; v1.15.9 is NOT cut until codex `goal_satisfied=
+true` (or only trivial) AND that gate passes (attempts-API
+verified).
 
 ## 1.15.8 - 2026-05-15
 
