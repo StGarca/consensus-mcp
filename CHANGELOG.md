@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.14.5 - unreleased
+
+Open scope:
+
+- iter-0044: implement adapter `--mode` forwarding fix per
+  iter-0043 converged plan (CodexAdapter + GeminiAdapter forward
+  `packet.phase` → dispatcher `--mode`; centralized phase-to-mode
+  helper; MCP wrappers expose `phase` parameter; skill workaround
+  removed). Named blocker: requires adapter-boundary test
+  infrastructure.
+
 ## 1.14.4 - 2026-05-14
 
 Workflow A/B/C rename + Workflow C contract from
