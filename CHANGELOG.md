@@ -66,6 +66,18 @@ here too:
   timeout` retained as permanent hardening. Verified: targeted
   abort/dispatch suites 144/0; full suite 968 passed / 1 skipped /
   0 regressions with the guard active.
+- **POSIX-only `signal` AttributeError (the FINAL ubuntu blocker).**
+  Once (3) stopped the runner self-kill, ubuntu ran to completion
+  and surfaced the real last failure:
+  `test_terminate_process_tree_uses_signal_on_posix` asserted
+  `_dispatch_codex.signal.SIGTERM`, but the iter-0037 refactor moved
+  `_terminate_process_tree` to `_dispatch_base` and `_dispatch_codex`
+  only re-imports the function, not the `signal` module → 
+  `AttributeError`. This test is Windows-skipped, so it only ran on
+  POSIX CI — masked the entire time CI was dormant. Fixed: assert
+  against the stdlib `signal.SIGTERM` enum directly (module-agnostic;
+  the same object `_dispatch_base` passes). ubuntu was "1 failed,
+  898 passed, 10 skipped" — this was the 1.
 
 ## 1.15.6 - 2026-05-15
 
