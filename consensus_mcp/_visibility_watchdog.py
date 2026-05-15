@@ -46,7 +46,21 @@ import argparse
 import json
 import os
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
+
+# v1.15.8 Q1(d): `_locked_append` is the sealed-provenance/audit +
+# watchdog integrity primitive. Its OS file lock (msvcrt.locking /
+# fcntl.flock) serializes CROSS-process writers, but the observed
+# loss (windows-py3.10 CI: 46/50 lines from a 50-thread, ONE-process
+# fan-out) was INTRA-process thread contention — for which an OS file
+# lock is the wrong primitive (same lesson as v1.15.7
+# `_dispatch_base._log_dispatch`). A process-wide lock serializes all
+# in-process callers deterministically; the OS lock then only matters
+# for genuine cross-process contention. Converged via Workflow A
+# (claude+codex+gemini, weighted-synthesis, shared-prior check
+# PASSED): iteration-v1158-flaky-ci-and-locked-append.
+_APPEND_LOCK = threading.Lock()
 from pathlib import Path
 from typing import Iterator
 
@@ -193,11 +207,25 @@ def _locked_append(path: Path, payload: str) -> None:
     """Append ``payload`` to ``path`` under an OS-appropriate exclusive lock
     (xplat-rev-007 fix).
 
-    On Windows uses ``msvcrt.locking`` (byte-range; we lock the first byte
-    of the file from the writer's offset). On POSIX uses ``fcntl.flock``.
-    If neither module is importable we fall back to an unlocked append and
-    emit a one-time warning to stderr — concurrent writers may produce
-    torn lines.
+    Concurrency model (v1.15.8 Q1(d), Workflow A converged):
+      - INTRA-process (threads of one process): serialized by the
+        module-level ``_APPEND_LOCK`` held for the whole append. This
+        is the verified-observed contention class (F1: 50 threads /
+        one process lost 4 lines). Deterministic; no scheduler luck.
+      - CROSS-process: the OS lock (``msvcrt.locking`` byte-range on
+        Windows / ``fcntl.flock`` on POSIX) still serializes distinct
+        processes.
+      - **Fail-LOUD (independent safeguard):** if the OS lock cannot
+        be acquired we DO NOT silently write unlocked — that would
+        let the sealed-provenance/audit log be silently incomplete
+        (the F1 defect: ``except OSError: pass`` + unlocked write).
+        We raise so integrity loss is observable, never silent. This
+        protects audit integrity regardless of *why* the OS lock
+        failed.
+      - If neither lock module is importable (rare platform), the
+        in-process lock still serializes threads; cross-process is
+        unsupportable there, so we warn (unchanged) rather than fail
+        the platform outright.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     data = payload.encode("utf-8")
@@ -210,34 +238,38 @@ def _locked_append(path: Path, payload: str) -> None:
     except ImportError:
         fcntl = None  # type: ignore[assignment]
 
-    if msvcrt is None and fcntl is None:
-        sys.stderr.write(
-            "WARNING: _locked_append: neither msvcrt nor fcntl available; "
-            "falling back to unlocked append (concurrent writers may produce "
-            "torn lines).\n"
-        )
-        with path.open("ab") as f:
-            f.write(data)
-        return
+    with _APPEND_LOCK:
+        if msvcrt is None and fcntl is None:
+            sys.stderr.write(
+                "WARNING: _locked_append: neither msvcrt nor fcntl "
+                "available; cross-process serialization unavailable "
+                "(in-process writers are still serialized).\n"
+            )
+            with path.open("ab") as f:
+                f.write(data)
+            return
 
-    with path.open("ab") as f:
-        if msvcrt is not None:
-            # Windows byte-range lock: lock 1 byte at the current file
-            # offset. LK_LOCK blocks (with internal retries) until the
-            # lock is acquired. The lock auto-releases when the file
-            # handle closes, so we don't need an explicit LK_UNLCK.
-            try:
-                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-            except OSError:
-                # Lock acquisition failed (e.g., on a filesystem that
-                # doesn't support locking). Proceed unlocked; this is
-                # strictly best-effort cross-process serialization.
-                pass
-            f.write(data)
-        else:
-            # POSIX advisory lock; auto-released on close.
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            f.write(data)
+        with path.open("ab") as f:
+            if msvcrt is not None:
+                # Windows byte-range lock (1 byte at the writer's
+                # offset). LK_LOCK blocks with internal retries; the
+                # lock auto-releases on handle close.
+                try:
+                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                except OSError as exc:
+                    # Fail LOUD: never a silent unlocked write to an
+                    # integrity log. (Was: `except OSError: pass` +
+                    # unlocked write — the F1 audit-loss defect.)
+                    raise OSError(
+                        f"_locked_append: could not acquire OS lock on "
+                        f"{path} ({exc!r}); refusing a silent unlocked "
+                        f"write to a sealed-provenance/audit log"
+                    ) from exc
+                f.write(data)
+            else:
+                # POSIX advisory lock; auto-released on close.
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                f.write(data)
 
 
 def find_stalled(events, stall_threshold_seconds: float, now: datetime) -> list[dict]:
