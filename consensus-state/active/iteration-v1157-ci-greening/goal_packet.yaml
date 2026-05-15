@@ -1,0 +1,55 @@
+schema_version: 1
+pilot_id: iteration-v1157-ci-greening
+workflow_mode: post-review
+goal:
+  summary: |
+    Workflow B audit of the v1.15.7 CI-greening bundle (test-infra
+    only; re-enabled CI exposed pre-existing latent debts) AND
+    adjudication of the ONE open item's divergent fix-shape:
+    windows-py3.10 test_wall_time_hard_ceiling non-JSON line in
+    dispatch-log.jsonl during abort/thread-teardown (5/6 CI legs
+    green; py3.11/3.12 + all ubuntu pass).
+  desired_end_state: |
+    codex + gemini confirm the 5 landed fixes are correct
+    root-causes (not masks) — especially that the conftest
+    os.killpg/os.getpgid guard is test-hermeticity, NOT a
+    production-bug mask — AND converge on which of fix-shapes
+    A/B/C/D is correct for the open windows-py3.10 item, with
+    rationale argued from the embedded writer/teardown code.
+  non_goals:
+    - re-litigating the prior v1.15.x history-rewrite work
+    - production behavior changes beyond what an accepted (A) fix
+      for the open item would require
+  type: design_consult
+risk_class: none
+allowed_files:
+  - consensus_mcp/tests/conftest.py
+  - consensus_mcp/tests/test_dispatch_codex.py
+  - consensus_mcp/tests/test_dispatch_codex_streaming.py
+  - consensus_mcp/_dispatch_base.py
+  - .github/workflows/test.yml
+  - consensus-state/tests/fixtures/review_packet_known_good/input.yaml
+  - CHANGELOG.md
+forbidden_files:
+  - consensus_mcp/_dispatch_gemini.py
+acceptance_gates:
+  - id: A1
+    description: codex+gemini goal_satisfied on the 5 landed fixes (root-cause, not mask)
+    check: 'true'
+  - id: A2
+    description: explicit converged verdict on open-item fix-shape A/B/C/D with code-grounded rationale
+    check: 'true'
+  - id: A3
+    description: no blocking objection unaddressed
+    check: 'true'
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T21:30:00Z'
+  scope_signature: 'v1157-ci-greening-audit-and-openitem-adjudication'
+stop_conditions:
+  - max_iteration_count_reached
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis
