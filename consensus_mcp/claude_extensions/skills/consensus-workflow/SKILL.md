@@ -230,17 +230,30 @@ and no tag.
    Document any pre-existing known-issue flakes in CHANGELOG so
    they aren't mistaken for v<X.Y.Z> regressions.
 4. `git tag -a v<X.Y.Z> -m "..."` on the branch tip.
-5. Build wheel + sdist (`python -m build`). Smoke-test with
-   `pipx install` from local dist before publishing to PyPI.
-6. Publish to PyPI (operator action — confirm before running the
-   publish command since it is irreversible).
-7. `git push origin v<X.Y.Z>` (push the tag).
-8. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`
+5. `git push origin refs/heads/v<X.Y.Z> refs/tags/v<X.Y.Z>` (use
+   explicit `refs/heads/` and `refs/tags/` to disambiguate; the
+   branch and tag now share a name).
+6. **Release is complete.** Distribution is git-tag-based — users
+   install via `pipx install git+https://github.com/stgarca/
+   consensus-mcp.git@v<X.Y.Z>`. There is NO PyPI publish step;
+   the package is not registered on PyPI. Optional: build wheel
+   + sdist locally (`python -m build`) for local smoke-testing
+   only, not for upload.
+7. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`
    for hot-patches, OR `v<X.(Y+1).0>` for the next minor. Bump
-   `pyproject.toml` on the new branch to the new version.
-9. Push the new branch: `git push -u origin v<X.Y.Z+1>`.
+   `pyproject.toml` on the new branch to the new dev version
+   (e.g., `1.14.1.dev0`); add a `## X.Y.Z+1 - unreleased` stub
+   to CHANGELOG.md.
+8. Push the new branch: `git push -u origin v<X.Y.Z+1>`.
 
-**Convention note:** Release branches are SELF-CONTAINED. `main`
+**Distribution convention:** consensus-mcp ships via git tags +
+pipx, NOT PyPI. README documents `pipx install
+git+https://github.com/.../consensus-mcp.git@vX.Y.Z`. No
+`twine upload`, no `~/.pypirc`, no PyPI workflow exists. If you
+catch yourself proposing a PyPI step, stop — you're adding a
+channel that is not part of this project's release flow.
+
+**Branch convention:** Release branches are SELF-CONTAINED. `main`
 is NOT progressed by release cuts — it stays at whatever its tip
 was before the v<X.Y.Z> branch was cut. Each new release branches
 from the previous release's tip. `main` is essentially a stable
