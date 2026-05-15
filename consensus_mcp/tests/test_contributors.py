@@ -143,8 +143,10 @@ def test_claude_with_callback_seals_artifact(tmp_path):
             "blocking_objections": [],
         }
     def fake_t6(iteration_id, reviewer_id, pass_id, packet):
-        # Archive filename must contain the tokens for confinement check to pass.
-        archive_path = tmp_path / f"2026-05-13-{iteration_id}-{reviewer_id}-pass.yaml"
+        # iteration-seal-archive-collision-fix: 4-token filename
+        # (date, iteration_id, reviewer_id, pass_id) per converged plan
+        # + this test's own docstring contract.
+        archive_path = tmp_path / f"2026-05-13-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml"
         archive_path.write_text(yaml.safe_dump(packet), encoding="utf-8")
         return {"sealed_path": str(archive_path), "packet_sha256": "fakehash"}
     with patch("consensus_mcp.tools.review_write_and_seal.handle", side_effect=fake_t6):
@@ -219,7 +221,8 @@ def test_claude_artifact_filename_per_phase(tmp_path):
     def cb(packet):
         return {"findings": [], "goal_satisfied": True, "blocking_objections": []}
     def fake_t6(iteration_id, reviewer_id, pass_id, packet):
-        archive = tmp_path / f"2026-05-13-{iteration_id}-{reviewer_id}-pass.yaml"
+        # iteration-seal-archive-collision-fix: 4-token filename.
+        archive = tmp_path / f"2026-05-13-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml"
         archive.write_text(yaml.safe_dump(packet), encoding="utf-8")
         return {"sealed_path": str(archive), "packet_sha256": "h"}
     with patch("consensus_mcp.tools.review_write_and_seal.handle", side_effect=fake_t6):
