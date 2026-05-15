@@ -251,9 +251,22 @@ def _locked_append(path: Path, payload: str) -> None:
 
         with path.open("ab") as f:
             if msvcrt is not None:
-                # Windows byte-range lock (1 byte at the writer's
-                # offset). LK_LOCK blocks with internal retries; the
-                # lock auto-releases on handle close.
+                # Windows byte-range lock. msvcrt.locking locks N bytes
+                # from the CURRENT file position; in "ab" mode that
+                # position is this process's EOF, which DIFFERS per
+                # process as the file grows — so locking it gave NO
+                # cross-process exclusion (v1.15.8 codex-rev-001, a
+                # real residual integrity hole the Workflow B audit
+                # caught). Seek to a FIXED shared byte (offset 0) so
+                # ALL processes contend on the SAME range. The write
+                # still appends at EOF: Python "ab" opens with
+                # _O_APPEND, so every write goes to EOF regardless of
+                # this seek (verified by the 50-thread test). LK_LOCK
+                # blocks with internal retries; lock auto-releases on
+                # handle close. (Intra-process contention is already
+                # serialized by _APPEND_LOCK, so the only contender at
+                # this OS layer is a genuine other process.)
+                f.seek(0)
                 try:
                     msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
                 except OSError as exc:
