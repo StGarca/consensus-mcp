@@ -1,0 +1,49 @@
+iteration_id: iteration-v1158-flaky-ci-and-locked-append
+reviewer_id: codex-v1158-wfb-1
+pass_id: codex-v1158-wfb-1-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: Windows OS lock still only covers the caller's current EOF byte, so cross-process
+    writers can lock different byte ranges and append concurrently despite the fail-loud
+    path.
+  citation: consensus_mcp/_visibility_watchdog.py:148
+  risk: The audit/sealed-provenance append primitive can still silently interleave
+    or lose lines when a second process opens the file after the first writer has
+    locked the old EOF byte but before it writes/closes. That violates Q1(d)'s cross-process
+    serialization claim and the independent safeguard's premise.
+  recommendation: Use a fixed byte-range lock offset for Windows, e.g. seek to byte
+    0 before msvcrt.locking and restore/seek-to-end before writing, or otherwise lock
+    a stable sentinel range shared by every writer.
+  patch_not_proposed_reason: Allowed files are empty in the sealed goal_packet, so
+    a patch proposal touching consensus_mcp/_visibility_watchdog.py would be out of
+    scope.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: Q1's in-process threading.Lock direction is right and Q2's
+  interim skip is within the converged-plan allowance, but the Windows cross-process
+  OS lock is still not a stable shared lock range, so the audit-log integrity primitive
+  is not fully corrected.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 4575c66029271525dfab78361b4ac772101a06472c43976fe58dfa8998701092
+  output_sha256: f6a04811e21c9a56f53d6b3d1f986afa54255441214d77d4978006b5917f97be
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 4561b9b6653a527b9ee56cf951b44be475f8b52e403e20ff62b28ae982bc1a9d
+  scope_signature: v1158-flaky-ci-and-locked-append-integrity
+  review_target_path: consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/review-packet.yaml
+  review_target_hash: 86d4161168ba44fa8867a6a280c17369d930a05db43bbdc5f4656ff2bc316df7
+  mode: review
+sealed_at_utc: '2026-05-15T21:52:46Z'
+packet_sha256: 4a229dce49f029706b55af4920c4e01f9ecf305c417e8bdea754dda27a6e6e3f

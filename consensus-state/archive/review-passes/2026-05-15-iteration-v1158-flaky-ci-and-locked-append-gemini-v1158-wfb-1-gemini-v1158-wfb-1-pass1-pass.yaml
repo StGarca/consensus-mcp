@@ -1,14 +1,14 @@
 iteration_id: iteration-v1158-flaky-ci-and-locked-append
-reviewer_id: gemini-v1158-wfb-2
-pass_id: gemini-v1158-wfb-2-pass2
+reviewer_id: gemini-v1158-wfb-1
+pass_id: gemini-v1158-wfb-1-pass1
 findings: []
 goal_satisfied: true
-goal_satisfied_rationale: The goal is satisfied. The change to `_visibility_watchdog._locked_append`
-  correctly and robustly fixes the intra-process and cross-process locking issues
-  that caused data loss, as described in F1. The decision to skip the flaky timing-sensitive
-  tests in `test_dispatch_codex_streaming.py` on Windows CI runners is a sound tactical
-  solution to address the non-determinism described in F2, and the commitment to a
-  long-term fix is properly documented.
+goal_satisfied_rationale: The implementation correctly executes the converged plan.
+  The critical defect in `_locked_append` (Q1) is fixed with both a `threading.Lock`
+  for intra-process contention and a fail-loud safeguard for OS-level lock failures,
+  precisely matching plan Q1(d). The timing-flaky tests (Q2) are quarantined on Windows
+  CI as an interim measure, which is explicitly permitted by the converged plan's
+  Q2(c) and Q3, with a correctly named follow-up. The verification discipline is sound.
 blocking_objections: []
 independence_attestation:
   method: auto_gemini_dispatch
@@ -23,15 +23,15 @@ independence_attestation:
 dispatch_provenance:
   gemini_version: 0.43.0-preview.0
   model: gemini-2.5-pro
-  prompt_sha256: 6fdc97cdded23420711d8794f89368ea0ce55390b8eb77d9d3557aedebe66c3a
-  output_sha256: f85b174ff181a74c5f3761965afab79a5511c80cb86db2f714906da527b402de
+  prompt_sha256: 136791b3e95661bcd283be4a17c8f9a7afc1c13c9e96c13d2eee2e81cc3e69e1
+  output_sha256: 38e327df27d9d3b64837e938606d2d06be697813de8925b3768e10ccf8028e10
   goal_packet_sha256: 4561b9b6653a527b9ee56cf951b44be475f8b52e403e20ff62b28ae982bc1a9d
   scope_signature: v1158-flaky-ci-and-locked-append-integrity
   review_target_path: consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/review-packet.yaml
-  review_target_hash: b2063d5717ffd2b479b344d67d5d6b339084253ebbb1812cde9f001f73d6d21d
+  review_target_hash: 86d4161168ba44fa8867a6a280c17369d930a05db43bbdc5f4656ff2bc316df7
   adapter: gemini
   mode: review
   proposal_schema_path: null
   proposal_schema_sha256: null
-sealed_at_utc: '2026-05-15T22:01:08Z'
-packet_sha256: 6d95f13f1903ea1db0e63f2f1bd4969da3f408e37f5e6a449890a9da0eae8b80
+sealed_at_utc: '2026-05-15T21:52:47Z'
+packet_sha256: e519d0247709e4a6c97c9e586387b10b9848a09a8a7f175c2842eadcb44fd03a

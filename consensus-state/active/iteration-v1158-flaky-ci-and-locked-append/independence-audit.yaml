@@ -30,3 +30,65 @@ audit_log:
     - review_target (path passed via --review-target; may be unspecified)
     - model (gemini CLI --model flag; no --output-schema enforcement)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T21:52:46Z'
+  event_id: 2026-05-15T21:52:46Z_review_returned_and_sealed_codex-v1158-wfb-1
+  actor: codex-v1158-wfb-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1158-flaky-ci-and-locked-append-codex-v1158-wfb-1-codex-v1158-wfb-1-pass1-pass.yaml
+  sha256: 4a229dce49f029706b55af4920c4e01f9ecf305c417e8bdea754dda27a6e6e3f
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T21:52:47Z'
+  event_id: 2026-05-15T21:52:47Z_review_returned_and_sealed_gemini-v1158-wfb-1
+  actor: gemini-v1158-wfb-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1158-flaky-ci-and-locked-append-gemini-v1158-wfb-1-gemini-v1158-wfb-1-pass1-pass.yaml
+  sha256: e519d0247709e4a6c97c9e586387b10b9848a09a8a7f175c2842eadcb44fd03a
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T22:01:01Z'
+  event_id: 2026-05-15T22:01:01Z_review_returned_and_sealed_codex-v1158-wfb-2
+  actor: codex-v1158-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1158-flaky-ci-and-locked-append-codex-v1158-wfb-2-codex-v1158-wfb-2-pass2-pass.yaml
+  sha256: 4ff944effd852cf728780d6ce26ac4dee79e5150890d169979b7379ae3883b0e
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T22:01:09Z'
+  event_id: 2026-05-15T22:01:09Z_review_returned_and_sealed_gemini-v1158-wfb-2
+  actor: gemini-v1158-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1158-flaky-ci-and-locked-append-gemini-v1158-wfb-2-gemini-v1158-wfb-2-pass2-pass.yaml
+  sha256: 6d95f13f1903ea1db0e63f2f1bd4969da3f408e37f5e6a449890a9da0eae8b80
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true

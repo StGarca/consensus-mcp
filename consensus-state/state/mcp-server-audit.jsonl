@@ -162,3 +162,4 @@
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-15T21:20:59Z", "findings_at_boot": 0}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-15T21:39:04Z", "findings_at_boot": 0}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-15T21:52:20Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T22:00:29Z", "findings_at_boot": 0}
