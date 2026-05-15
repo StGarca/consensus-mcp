@@ -30,3 +30,34 @@ audit_log:
     - prompt_template (substituted by _build_prompt)
     - review_target (path passed via --review-target; may be unspecified)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T17:55:32Z'
+  event_id: 2026-05-15T17:55:32Z_review_returned_and_sealed_codex-v1153-wfb-1
+  actor: codex-v1153-wfb-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1153-bundled-skill-currency-codex-v1153-wfb-1-codex-v1153-wfb-1-pass1-pass.yaml
+  sha256: d9868e81aab5756fc850a9b8239765722fa55a15e6724f5f0400f565ad78e457
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T17:56:16Z'
+  event_id: 2026-05-15T17:56:16Z_review_returned_and_sealed_gemini-v1153-wfb-2
+  actor: gemini-v1153-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1153-bundled-skill-currency-gemini-v1153-wfb-2-gemini-v1153-wfb-2-pass1-pass.yaml
+  sha256: 11e2593d6a7b6cef61cff8341372fd0156be0b345c570b7b20b9313881479761
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
