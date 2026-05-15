@@ -1,0 +1,37 @@
+iteration_id: iteration-seal-archive-collision-fix
+reviewer_id: gemini-sealfix-audit-1
+pass_id: gemini-sealfix-audit-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The implementation correctly follows the converged plan.
+  The new 4-token filename scheme resolves the path collision defect, the logic is
+  correctly reordered to prioritize the index check for idempotency, and the new integrity
+  guard prevents false success on tampered archives. The new tests are comprehensive
+  and targeted, and dependent tests have been updated correctly. No regressions or
+  deviations were found.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 8cff919e5c0ee0f4733dc6ef74063e324ad8da1a81e3bb18076a57cb30de66cb
+  output_sha256: c4a3a55b95013e8c250e7a92f7472b2c4572242a9774239b18fab25f0156b769
+  goal_packet_sha256: 74d05e8b7f94aeaedb2e80235b0af8fcb729fead7f5e54102942af83a5bce5a0
+  scope_signature: 5ea1c0111510a14ab0a1144b00b5104face70a075b00b5104faceabba110a14a
+  review_target_path: consensus-state/active/iteration-seal-archive-collision-fix/review-packet.yaml
+  review_target_hash: 52a0d45802a60c2316f0df6dd19644eb0d048e7ba1a615348cdede54e141f7f7
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T14:51:36Z'
+packet_sha256: 0491436836cd795a20aae36e8a094ef2505ae6281ac4c93770c9973c4d33ff1b

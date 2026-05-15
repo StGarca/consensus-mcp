@@ -1,0 +1,84 @@
+iteration_id: iteration-seal-archive-collision-fix
+reviewer_id: gemini-sealfix-1
+pass_id: gemini-sealfix-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: This directly fixes the root cause of the defect by using
+  the canonical uniqueness key for a review pass (`pass_id`) in the archive filename.
+  This aligns filename uniqueness with the `index.yaml` uniqueness key, eliminating
+  the collision path. It is superior to the status quo workaround, which overloads
+  the `reviewer_id` with sequencing data. It is also better than alternative fixes
+  like adding a simple counter on collision, as it's a deterministic solution based
+  on the data's own identity. The provided context confirms this change is backward-compatible
+  for reading existing archives and aligns with a pre-existing (but unimplemented)
+  design assertion in a test docstring, making it the lowest-risk, most correct path
+  forward.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 8b18fcc8a19454e3600795b55f0c8272a4d2183143ac4d0407ff9edf0b404c16
+  output_sha256: 59f874c1f12e337dbb438dd1ff69a2c3e8277bcc42188f46cae33865f5f9da2d
+  goal_packet_sha256: e070047d571e42931360c1c9ffc71bcafc815e08ef6c38cea8ed7235cd70ac74
+  scope_signature: 5ea1c0111510a14ab0a1144b00b5104face70a075b00b5104faceabba110a14a
+  review_target_path: null
+  review_target_hash: null
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\pipx\venvs\consensus-mcp\Lib\site-packages\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Change archive filename format to `{date_str}-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml`
+  rationale_vs_alternatives: This directly fixes the root cause of the defect by using
+    the canonical uniqueness key for a review pass (`pass_id`) in the archive filename.
+    This aligns filename uniqueness with the `index.yaml` uniqueness key, eliminating
+    the collision path. It is superior to the status quo workaround, which overloads
+    the `reviewer_id` with sequencing data. It is also better than alternative fixes
+    like adding a simple counter on collision, as it's a deterministic solution based
+    on the data's own identity. The provided context confirms this change is backward-compatible
+    for reading existing archives and aligns with a pre-existing (but unimplemented)
+    design assertion in a test docstring, making it the lowest-risk, most correct
+    path forward.
+  deliverable_scope:
+    next_iteration_id: iter-0029-seal-collision-fix
+    files_in_scope:
+    - consensus_mcp/tools/review_write_and_seal.py
+    - consensus_mcp/tests/test_contributors.py
+    files_out_of_scope:
+    - consensus_mcp/tools/review_read_post_seal.py
+    - Any tooling that parses archive filenames to extract metadata; context suggests
+      none exists.
+    - Existing sealed archives (no data migration).
+    key_design_decisions:
+    - The new archive filename format will be `{date_str}-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml`.
+    - This change will only apply to newly sealed archives. Existing archives will
+      not be renamed or migrated, preserving audit history.
+    - The `pass_id` must be available in the context passed to the `review_write_and_seal`
+      tool.
+    acceptance_gates:
+    - The filename generation logic in `review_write_and_seal.py` is updated to include
+      `pass_id`.
+    - Unit tests in `test_contributors.py` that hardcode the old filename format are
+      updated and pass.
+    - An integration test successfully seals two reviews from the same iteration with
+      the same `reviewer_id` but different `pass_id`s, verifying no collision occurs.
+    - Verification that existing, old-format archives can still be read successfully
+      by `review_read_post_seal.py`.
+  risks:
+  - There is a minor, unverified risk that some other tool or script outside the provided
+    context parses the archive filename instead of using `index.yaml`. Based on the
+    supplied information, this is unlikely as the read tool itself does not do this.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T14:43:06Z'
+packet_sha256: 894364f06e8f5e878e8e94c778bf7830032772586618bfe4a0739440a3d57988

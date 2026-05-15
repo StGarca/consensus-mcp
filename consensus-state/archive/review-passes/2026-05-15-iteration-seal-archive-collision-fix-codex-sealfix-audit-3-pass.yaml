@@ -1,0 +1,49 @@
+iteration_id: iteration-seal-archive-collision-fix
+reviewer_id: codex-sealfix-audit-3
+pass_id: codex-sealfix-audit-3-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: '`handle()` accepts a packet whose embedded `pass_id` differs from the
+    `pass_id` parameter, so the sealed body can disagree with the filename and index
+    identity.'
+  citation: consensus_mcp/tools/review_write_and_seal.py:243
+  risk: A caller typo or adapter bug can seal an archive indexed under one pass id
+    while the packet body claims another, breaking the stated raw-pass-id preservation
+    contract and weakening later audit/replay checks that compare packet body to index
+    metadata.
+  recommendation: Validate that `packet.pass_id`, when present, equals the `pass_id`
+    parameter; if only `pass_label` is present, keep the existing compatibility path
+    or document it explicitly. Add a regression test for mismatched packet/body pass
+    ids.
+  patch_not_proposed_reason: A patch would be straightforward, but the review target
+    did not embed the current review packet/base_sha needed for a helper-stamped patch
+    proposal; recommend applying the validation inside the existing pre-seal field
+    checks.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The collision fix itself is mostly implemented, but the
+  pass id contract is incomplete because the archive index/path can be keyed by a
+  different pass id than the sealed packet body records.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 67892a207507ee807645e00ca036d0dce6120565c7f80b702b7b1e5a8c0a60b7
+  output_sha256: 52dc29de53dc967bdb7f280fbc0e0e06aaa9858c3872922bcc583e50b6df0219
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 89beab38a9ef4e81d6c5f8908aa0d3bc2dd2a7bd745e9f603e7aa19991b3fc60
+  scope_signature: 5ea1c0111510a14ab0a1144b00b5104face70a075b00b5104faceabba110a14a
+  review_target_path: consensus-state/active/iteration-seal-archive-collision-fix/review-packet.yaml
+  review_target_hash: a8fc336da3b207612392fc3d02016d4bf6f511fd1eeac30723fa555cbb7511af
+  mode: review
+sealed_at_utc: '2026-05-15T14:58:17Z'
+packet_sha256: 9a913fdda2f30e1e40edb05296781718ab9e785089de6fc9631364976e4402ef

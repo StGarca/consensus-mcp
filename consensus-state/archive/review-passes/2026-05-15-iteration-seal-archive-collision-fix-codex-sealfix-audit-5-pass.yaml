@@ -1,0 +1,47 @@
+iteration_id: iteration-seal-archive-collision-fix
+reviewer_id: codex-sealfix-audit-5
+pass_id: codex-sealfix-audit-5-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: idempotent branch reports success even when the recorded archive hash is
+    missing or stale
+  citation: consensus_mcp/tools/review_write_and_seal.py:404
+  risk: A corrupt or manually edited archived mapping with the same content identity
+    but a missing or incorrect packet_sha256 can be accepted as an idempotent success,
+    returning an empty or stale hash instead of detecting the integrity mismatch promised
+    by the fix.
+  recommendation: After content identity matches, recompute the archived packet_sha256
+    from the on-disk mapping with packet_sha256 removed and compare it to the index
+    entry before returning success; return idempotent_target_integrity_mismatch on
+    missing or mismatched index/on-disk hash.
+  patch_not_proposed_reason: The provided embedded file block has no review_packet.defect_target.base_sha,
+    and this fix needs a careful hunk across the idempotency branch plus tests for
+    stale/missing index hashes; recommend applying in the next author loop.
+  patch_proposal: null
+goal_satisfied: true
+goal_satisfied_rationale: The pass-id collision fix and main idempotent behavior are
+  implemented; the remaining issue is a medium integrity hardening gap, not a blocking
+  failure of the requested collision fix.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 019f1473cc43d2bc21706da2961f257d0eec3eeb72e61acb910f788424ef4e94
+  output_sha256: ee2f345a90ad4e16b8d6a5d930131724eec080390da29fa5ab89eb104ea540b1
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 3b735b2e0f0fdfdeffd3386bfb4c0a4b6ce98fcbe6e5efefff2136ae38d65ca1
+  scope_signature: 5ea1c0111510a14ab0a1144b00b5104face70a075b00b5104faceabba110a14a
+  review_target_path: consensus-state/active/iteration-seal-archive-collision-fix/review-packet.yaml
+  review_target_hash: e73fed9c73e5df3175febd544c212c36f890e99b9660ab6a3b950b8eef5d27bc
+  mode: review
+sealed_at_utc: '2026-05-15T15:10:34Z'
+packet_sha256: 963f58a3a525a42ab98170f3ca8812a8bfdff24dc0d62e215de3ef1d3e0c10a5

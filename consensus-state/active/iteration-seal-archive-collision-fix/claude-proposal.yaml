@@ -1,0 +1,196 @@
+actor:
+  id: claude-sealfix-1
+  model_family: claude
+  role: design_proposer
+  pass_id: claude-sealfix-1-pass1
+iteration_id: iteration-seal-archive-collision-fix
+created_at_utc: '2026-05-15T05:05:00Z'
+mode: proposal
+structural_abstention: false
+proposal:
+  selected_target: |
+    FIX THE KEY DIVERGENCE: make the archive filename derive from
+    the SAME key the index uses (pass_id), reorder so the
+    pass_id-aware idempotency check runs BEFORE the path-exists
+    guard, and annotate superseded passes in the index so void
+    seals are honest audit history. One bundled fix; the forensic
+    scan of the 162 existing archives is the only genuinely
+    separable piece (named blocker).
+
+    Concrete answers:
+      Q1: (a) — `{date}-{iteration_id}-{pass_id}-pass.yaml`.
+      Q2: (a) — idempotent SUCCESS; reorder index check before
+          path-exists guard.
+      Q3: (a) — no migration; old archives readable via index
+          path resolution (verified: reader never parses
+          filename).
+      Q4: (c) — preserve void-seal FILE (free consequence of
+          Q1-a+Q2-a) AND annotate index entry
+          `superseded_by` so the audit trail records WHY.
+      Q5: (a)+(b) bundled; (c) forensic scan deferred with a
+          NAMED BLOCKER (not a cop-out — see rationale).
+
+  rationale_vs_alternatives: |
+    ROOT CAUSE: filename uniqueness and index uniqueness use
+    DIFFERENT keys. The index keys on pass_id (line 263); the
+    filename keys on reviewer_id (line 244). Every proposed fix
+    must close that gap. test_contributors.py:135's docstring
+    ("Archive filename must contain iteration_id + reviewer_id +
+    pass_id tokens") is direct evidence that pass_id-in-filename
+    was the ORIGINAL intended contract and the implementation
+    silently regressed. Q1-a is not new design — it restores a
+    documented-but-never-implemented invariant.
+
+    Q1 — Why (a) over (b)/(c)/(d):
+    - (a) makes the filename key == the index key. Single source
+      of uniqueness truth. pass_id conventionally embeds
+      reviewer_id as prefix (`{reviewer_id}-pass1`) so reviewer
+      identity remains legible in the filename without
+      redundancy.
+    - (b) reviewer_id + pass_id is redundant (pass_id already
+      contains reviewer_id by convention) AND worsens the
+      Windows 260-char path ceiling. iteration ids in this very
+      project run long (`iteration-seal-archive-collision-fix`);
+      `<wt-base>/.claude/worktrees/...` prefixes already eat
+      ~60 chars. (a) is the path-length-SAFEST option because it
+      DROPS a redundant segment.
+    - (c) sha8 content-addressing is elegant but (i) breaks the
+      "find the file for pass_id X" affordance, (ii) two
+      genuinely distinct passes that produce byte-identical
+      packets (possible for trivial empty-findings reviews)
+      would collapse to one file, silently losing a pass record.
+    - (d) filesystem-scan ordinal reintroduces a race window and
+      depends on directory state — fragile.
+
+    Q2 — Why (a) over (b)/(c):
+    The line 270 comment ALREADY states idempotent intent ("Same
+    hash -- idempotent"); the path-exists guard at 250 simply
+    fires first and defeats it. The fix is a REORDER, not new
+    behavior: move the index pass_id lookup ahead of the
+    path-exists guard.
+      - pass_id in index + same packet_sha256 → return SUCCESS
+        with the existing sealed_path + `idempotent: true`.
+      - pass_id in index + different packet_sha256 →
+        `index_collision` (unchanged; a real conflict).
+      - pass_id NOT in index but path exists → genuine filename
+        collision. With Q1-a the filename is pass_id-derived so
+        this should be unreachable; keep the guard as
+        defense-in-depth with a distinct detail string.
+    This makes dispatch/network retries safe WITHOUT forcing
+    operators to mint throwaway reviewer-ids — exactly the
+    failure in the triggering report. (b) pushes the idempotency
+    decision onto every caller (N call sites re-implement the
+    same check; drift guaranteed). (c) is the status quo.
+
+    Q3 — Why (a) over (b)/(c):
+    The 162 existing archives are SEALED AUDIT HISTORY. (b)
+    renaming them mutates immutable provenance — it defeats the
+    entire purpose of a sealed archive and would invalidate any
+    external attestation that referenced the old paths. Hard
+    reject. Verified that review_read_post_seal.py resolves via
+    the index's stored relative path and NEVER parses the
+    filename — so old archives remain 100% readable with zero
+    code changes under (a). Mixed-scheme directory is acceptable
+    precisely because the index, not the filename, is the
+    resolution source of truth. (c) dual-read-by-filename builds
+    speculative degraded-mode parsing for an index-loss scenario
+    that, if it ever occurs, is a far bigger incident than naming
+    — and is its own hardening consult, not this fix's burden.
+
+    Q4 — Why (c) over (a)/(b):
+    (a) alone (new pass_id → new file, void file preserved) is
+    the free mechanical consequence of Q1-a + Q2-a. But the
+    triggering report explicitly asked for "honest audit history
+    of the tooling bug" — that means recording WHY a pass was
+    superseded, not merely leaving an orphaned void file.
+    (c) preserves the void FILE (immutable) AND adds an optional
+    `superseded_by: <pass_id>` (and reciprocal `supersedes`)
+    field on the relevant index entries when the caller supplies
+    a `supersedes` argument. An auditor reading index.yaml then
+    sees the supersession chain without filesystem archaeology.
+    This is a single additive optional field, squarely within
+    the "only per-entry fields" non-goal boundary — not an
+    index.yaml structural redesign.
+
+    Q5 — Why (a)+(b) bundled, (c) deferred WITH a real blocker:
+    Per the no-deferral rule: (a) core fix + (b) index
+    annotation are the same defect's completeness. The triggering
+    report asked for BOTH the collision fix AND the audit-history
+    aspect; splitting (b) into a follow-up would be the exact
+    deferral anti-pattern the doctrine forbids. They share a
+    doctrine boundary (the seal pipeline's correctness +
+    auditability) → bundle.
+    (c) forensic scan of the 162 existing archives is genuinely
+    separable AND has a REAL open design question that blocks it:
+    "what remediation is even valid on immutable sealed history
+    if a past mis-seal is discovered?" A scan that finds problems
+    but has no defined, provenance-preserving remediation is
+    incomplete by construction. That is a named blocker (needs
+    its own consult on remediation semantics), not "complexity"
+    hand-waving.
+
+    Q6 — Missed dimensions:
+    1. RACE WINDOW: lines ~277-299 do a non-atomic read-modify-
+       write of index.yaml. Two concurrent dispatches with
+       distinct pass_ids can interleave and lose an index entry
+       (the packet files are safe via os.replace; the index is
+       not). This is PRE-EXISTING and orthogonal to the filename
+       defect — do NOT expand this fix to cover it, but flag it
+       as a separate hardening candidate (file-lock or
+       atomic-append index strategy).
+    2. test_contributors.py:135 docstring is the smoking gun that
+       pass_id-in-filename was always intended. The commit should
+       cite this as "restores the documented contract; the
+       implementation regressed silently at/before extraction."
+    3. Windows path ceiling: Q1-a is strictly better than today
+       (drops a segment). Worth a one-line note that the fix also
+       reduces path-length pressure rather than adding to it.
+    4. `index_collision` (same pass_id, DIFFERENT content)
+       currently rejects WITHOUT preserving the rejected packet.
+       For full forensic honesty a rejected-packet sidecar could
+       help — but that belongs with the deferred (c) forensic
+       scope, not here. Note it; don't build it.
+
+deliverable_scope:
+  next_iteration_id: implement-immediately-workflow-b-then-cut
+  files_in_scope:
+    - consensus_mcp/tools/review_write_and_seal.py  # filename→pass_id; reorder idempotency before path guard; idempotent:true marker; optional supersedes→superseded_by index annotation
+    - consensus_mcp/tests/test_contributors.py  # update :147 + :222 hardcoded filename strings to pass_id scheme (:135 docstring now matches reality)
+    - consensus_mcp/tests/test_seal_collision_fix.py  # NEW — idempotent re-seal success; same-reviewer-diff-pass distinct files; same-pass-diff-content index_collision; void file preserved; superseded_by annotation present
+    - CHANGELOG.md  # entry citing the documented-contract-restoration
+  files_out_of_scope:
+    - consensus_mcp/tools/review_read_post_seal.py  # no change — index path resolution already scheme-agnostic (verified)
+    - the 162 existing sealed archives  # immutable; no migration (Q3-a)
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - index.yaml structural shape  # only an additive optional per-entry field
+  key_design_decisions:
+    - 'Filename = {date}-{iteration_id}-{pass_id}-pass.yaml (filename key == index key; single source of uniqueness truth)'
+    - 'Reorder: index pass_id+sha check BEFORE path-exists guard; exact re-seal returns success + idempotent:true'
+    - 'path-exists guard retained as defense-in-depth backstop with distinct detail (should be unreachable under new scheme)'
+    - 'No migration of existing archives; reader is already index-path-based and scheme-agnostic (verified)'
+    - 'Optional supersedes arg → annotate prior index entry superseded_by + new entry supersedes (void seals = honest audit history)'
+    - 'Restores test_contributors.py:135 documented-but-never-implemented contract'
+  acceptance_gates:
+    gating:
+      - 'review_write_and_seal: filename contains pass_id, not bare reviewer_id'
+      - 'unit: same reviewer_id, two distinct pass_ids → two distinct files, no packet_path_collision'
+      - 'unit: same pass_id + same packet_sha256 → success with idempotent:true + existing path returned (no error)'
+      - 'unit: same pass_id + different packet_sha256 → index_collision (unchanged)'
+      - 'unit: void seal file is preserved when a superseding pass with a new pass_id is sealed'
+      - 'unit: when supersedes arg supplied, prior index entry gains superseded_by and new entry gains supersedes'
+      - 'unit: existing-scheme archive still resolvable via review_read_post_seal index lookup (backward-compat regression guard)'
+      - 'test_contributors.py:147 + :222 updated; full suite green (704 baseline + new)'
+      - 'CHANGELOG.md entry present; cites documented-contract restoration + the triggering report'
+    non_gating:
+      - 'manual: re-run the gemini-iteration-0012-2 scenario from the report — second pass with same reviewer_id, distinct pass_id, seals without collision'
+  named_blockers_for_deferred_work:
+    - 'Forensic scan of the 162 existing archives for latent mis-seals (Q5-c): BLOCKED on an undefined remediation model — a scan that detects a past mis-seal on immutable sealed history has no provenance-preserving corrective action defined. Needs its own consult on remediation semantics before the scan is worth building.'
+    - 'index.yaml non-atomic read-modify-write race (Q6.1): PRE-EXISTING, orthogonal to this defect. Separate hardening consult (file-lock vs atomic-append).'
+  estimated_complexity: small  # ~15-line core change + reorder + ~6 focused tests
+risks:
+  - 'pass_id values with filesystem-hostile characters (slashes, colons) would break the filename. Mitigation: sanitize pass_id for the filename (replace [^A-Za-z0-9._-] with -) while keeping the raw pass_id in the index + packet body. Add a test with a hostile pass_id.'
+  - 'Reordering the idempotency check ahead of the path guard could mask a genuine different-content overwrite if index and filesystem disagree (index says sealed, file missing/edited). Mitigation: on idempotent match, verify the existing file''s on-disk packet_sha256 still matches before returning success; if mismatched, surface a distinct integrity error rather than silently "succeeding".'
+  - 'Bundling Q4 superseded_by risks scope creep if auto-detection of supersession is attempted. Mitigation: ONLY honor an explicit caller-supplied supersedes arg; no auto-detection in this iteration (that would be its own design surface).'
+  - 'Mixed-scheme archive directory may confuse a human browsing the folder. Mitigation: CHANGELOG + a one-line README/docs note that the index is the resolution source of truth and mixed naming across the v1.14.x boundary is expected.'
+estimated_complexity: small

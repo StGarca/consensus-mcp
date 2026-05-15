@@ -1,8 +1,0 @@
-defect_target:
-  files:
-  - pyproject.toml
-  base_sha: 77e2167
-  touched_files_contents:
-    pyproject.toml: "[build-system]\nrequires = [\"setuptools>=64\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"consensus-mcp\"\nversion = \"1.14.0\"\ndescription = \"MCP server enforcing G1-G5 consensus gates (sealed-review provenance, canonical-006 dry-run, intra-file scope, production-scope match, mediated ledger updates)\"\nauthors = [{name = \"stgarca\"}]\nrequires-python = \">=3.10\"\nlicense = {text = \"MIT\"}\nreadme = \"README.md\"\ndependencies = [\n  \"pyyaml>=6.0\",\n]\n\n[project.scripts]\nconsensus-mcp = \"consensus_mcp.server:main\"\nconsensus-mcp-dispatch-codex = \"consensus_mcp._dispatch_codex:main\"\nconsensus-mcp-dispatch-gemini = \"consensus_mcp._dispatch_gemini:main\"\nconsensus-init = \"consensus_mcp._init_wizard:main\"\n\n[tool.setuptools]\npackages = [\n  \"consensus_mcp\",\n  \"consensus_mcp.contributors\",\n  \"consensus_mcp.tools\",\n  \"consensus_mcp.validators\",\n]\ninclude-package-data = true\n\n[tool.setuptools.package-data]\nconsensus_mcp = [\n  \"dispatch_templates/*.md\",\n  \"dispatch_templates/*.json\",\n  \"docs/*.md\",\n  \"spec_template.md\",\n  \"tests/fixtures/dispatch_codex/*\",\n]\n"
-schema_version: 1
-iteration_id: iteration-0017-package-wiring

@@ -1,0 +1,34 @@
+iteration_id: iteration-seal-archive-collision-fix
+workflow: "A (design consult) → B (post-review audit)"
+closed_at_utc: '2026-05-15T15:15:00Z'
+ships_in: v1.14.9
+convergence:
+  rule: strict-majority
+  result: converged
+  design_consult:
+    contributors_responsive: [claude, codex, gemini]
+    blocking_objections: []
+    note: weighted-synthesis; codex+gemini majority shifted Q1 to the 4-token scheme
+  implementation_audit_workflow_B:
+    gemini: {pass: gemini-sealfix-audit-1, goal_satisfied: true, findings: 0, blocking_objections: []}
+    codex_passes:
+      - {pass: codex-sealfix-audit-1, result: watchdog_silence_kill_cold_start_retry}
+      - {pass: codex-sealfix-audit-2, goal_satisfied: false, finding: "output_schema omits new idempotent error codes", severity: medium}
+      - {pass: codex-sealfix-audit-3, goal_satisfied: false, finding: "no packet.pass_id vs param consistency guard", severity: medium}
+      - {pass: codex-sealfix-audit-4, goal_satisfied: false, findings: ["HIGH: idempotency wall-clock dependent (sealed_at_utc in hash)", "MEDIUM: integrity guard crashes on non-mapping archive", "MEDIUM: pass-label-only body lacks raw pass_id"]}
+      - {pass: codex-sealfix-audit-5, goal_satisfied: true, blocking_objections: [], finding: "idempotent branch returns missing/stale index sha (non-blocking)", severity: medium, status: resolved_post_approval_with_tests}
+    final_state: converged (gemini approved core; codex goal_satisfied=true no blocking; lone non-blocking medium remediated + test-pinned)
+findings_resolved_total: 6
+highest_severity_caught: HIGH (timestamp-dependent idempotency — would have shipped a dead feature without Workflow B)
+files_in_scope:
+  - consensus_mcp/tools/review_write_and_seal.py
+  - consensus_mcp/tests/test_seal_collision_fix.py  # NEW, 19 cases
+  - consensus_mcp/tests/test_contributors.py  # fake_t6 → 4-token scheme
+  - CHANGELOG.md
+  - pyproject.toml  # 1.14.9.dev0 → 1.14.9
+test_results: {baseline: 714, current: 723, regressions: 0}
+deferred_with_named_blockers:
+  - "superseded_by index annotation: 2/3 scoped out as beyond minimal defect; file preservation already satisfies the report"
+  - "forensic scan of 162 archives: blocked on undefined remediation model for immutable sealed history"
+  - "index.yaml non-atomic read-modify-write race: pre-existing, orthogonal; separate hardening consult"
+git: "implemented in isolated worktree (worktree-seal-collision-fix, based on v1.14.9 @ 301bbbb); pushed to origin v1.14.9 + tag"
