@@ -1,0 +1,31 @@
+iteration_id: iteration-0044-adapter-mode-forwarding
+reviewer_id: codex-iter0044-2
+pass_id: codex-iter0044-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The embedded review target forwards packet phase to dispatcher
+  --mode in both adapters, exposes phase/mode resolution in both MCP wrappers with
+  backward-compatible omission when unset, and adds focused coverage for the adapter
+  boundary that caused the defect.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: c38a63c0a278463bd8aeefb4b15f85d2467113f5f71b418c033e736638cfa01f
+  output_sha256: 7aa9b9e1c62bd52fb1d3f06c6345b8e4ee232246a715642dea4164ed476e13b9
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 902443845aca6e5c88665583b94ce8c23f5492c77639f1ea92cba4470c066519
+  scope_signature: 0044a01244ab0a1144b00b5104face70a075b00b5104faceabba110a14abc012
+  review_target_path: consensus-state/active/iteration-0044-adapter-mode-forwarding/review-packet.yaml
+  review_target_hash: 8a88088989b71ef084208d6346f791e5d400b3225140e609c4155f3941fc2ef6
+  mode: review
+sealed_at_utc: '2026-05-15T04:32:13Z'
+packet_sha256: 12824c40a47cd8474f36626341c3662366d7d618e5723e26af92b67fa0e3ae79
