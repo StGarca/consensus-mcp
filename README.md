@@ -51,7 +51,7 @@ agree."
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.7
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.8
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -122,13 +122,20 @@ iterations.
 
 ## Status
 
-**Current: v1.15.7.** Recent work hardened the review machinery
-(machine-enforced plan conventions, dispatcher fixes), made the
-documentation match shipped reality, and fixed the release/branch
-model so `main` (and this landing page) and GitHub Actions CI stay
-on the latest released state. Full per-release detail is in
-[`CHANGELOG.md`](CHANGELOG.md); upgrade guidance for known-issue
-releases is in [`docs/advisories.md`](docs/advisories.md).
+**Current: v1.15.8.** v1.15.8 fixes a real audit/sealed-provenance
+integrity defect: the `_locked_append` primitive could silently
+lose log lines under contention. It now serializes in-process
+deterministically, locks a fixed shared byte across processes on
+Windows, and **fails loud** rather than ever writing an unlocked
+audit line. Confirmed by a two-pass cross-AI Workflow B audit
+(gemini clean; codex's pass-1 blocking cross-process objection
+fixed and cleared in pass-2). Per the project's
+provisional-until-proven discipline, the tag is cut only after the
+fix's commit passes ≥3 consecutive green Windows CI runs — a
+single green run is explicitly treated as insufficient. Full
+per-release detail is in [`CHANGELOG.md`](CHANGELOG.md); upgrade
+guidance for known-issue releases is in
+[`docs/advisories.md`](docs/advisories.md).
 
 Extracted from the project that produced and stress-tested it, then
 restarted as a standalone tool. ~970 regression tests, green.
