@@ -1,0 +1,71 @@
+iteration_id: iteration-v1153-bundled-skill-currency
+closed_at_utc: '2026-05-15T18:05:00Z'
+version_target: v1.15.3
+workflow: |
+  Workflow A consult (scope/content) → Workflow B execution + audit.
+  Triggered by operator question on 2-AI vs 3-AI consistency.
+goal: |
+  Correct stale forward-references in shipped v1.15.2 artifacts that
+  misled every new installer (2-AI and 3-AI identically), and write
+  the count-agnostic consistency invariant into doctrine.
+
+workflow_a_consult:
+  contributors: [claude, codex, gemini]
+  rule: weighted-synthesis
+  shared_prior_self_check: |
+    PASSED-WITH-CORRECTION. Fast 3/3 unanimity on scope was partly
+    a shared prior (codex + gemini both assumed F1-F4 complete);
+    claude's differing differential surfaced F7
+    (workflow-c-autonomous.md itself stale). F7 integrated into
+    scope, not laundered by the unanimity — the v1.15.0 doctrine
+    working on its own consult.
+  converged_scope: F1 F2 F3 F4 F7 + Q4-line
+
+implemented:
+  - F1 consensus-workflow SKILL.md — converged-plan convention machine-enforced as of v1.15.1
+  - F2 same skill — GEMINI_CLI_TRUST_WORKSPACE / empty-output≠429 (fixed v1.15.2)
+  - F3 both bundled skills — Workflow C engine UNIMPLEMENTED as of v1.15.2, no committed target
+  - F4 workflow_engine.py — NotImplementedError string + comment (string/comment only; no control flow)
+  - F7 workflow-c-autonomous.md — 5 stale v1.15.0 forward-refs corrected
+  - Q4 consensus-workflow SKILL.md — new normative count-agnostic consistency invariant block
+
+workflow_b_audit:
+  gemini: |
+    pass-1 failed transient (prose-preamble, NOT the v1.15.2 trust
+    bug — gemini ran + streamed; trust fix proven working). Retry
+    goal_satisfied=true, 0 blocking, 1 low (summary path typo,
+    fixed). pass-2 goal_satisfied=true, 0 blocking, 1 low
+    (Workflow-C text not lexically aligned to converged
+    canonical_text — load-bearing clause normalized across all 4
+    artifacts; resolved).
+  codex: |
+    pass-1 goal_satisfied=false, 0 blocking, 3 findings (1 high +
+    2 medium) — ALL verified against real content, none
+    hallucinated, all the SAME currency-drift thesis in in-scope
+    files, folded in per no-deferral: rev-001 the skill's
+    "engine ENFORCES all-or-nothing / until lifted" block was
+    itself stale (config.py already defaults weighted-synthesis);
+    rev-002 a live "v1.16.0+" version-promise heading; rev-003 my
+    summary overstated the grep. pass-2 goal_satisfied=true, 0
+    blocking, 0 findings.
+  gate_status: |
+    SATISFIED — both auditors goal_satisfied=true, zero blocking
+    objections at pass-2. The audit STRENGTHENED the patch (codex
+    found 2 more currency-drift instances consistent with the
+    consult's whole thesis; the v1.16.0+ removal extended the
+    anti-recurrence property). Remaining gemini items were LOW,
+    non-blocking, and were all integrated.
+
+operator_question_answered: |
+  YES — verified and now WRITTEN INTO DOCTRINE (Q4): the upgraded
+  workflow + v1.15.1 machine-enforcement are scoped by WORKFLOW
+  MODE, never by contributor count. A 2-AI install (claude+codex)
+  and a 3-AI install are governed identically — same doctrine,
+  same seal-time gate, same enforcement knob. Only the
+  convergence-rule DEFAULT differs (unanimous@2 vs
+  strict-majority@3, operator-overridable). propose-converge
+  requires N>=2 so 2-AI gets full Workflow A enforcement; only
+  autonomous-execute requires exactly 3.
+
+named_blockers_carried_forward: []
+result: CLOSED — goal satisfied, audit gate met, operator question answered + codified.
