@@ -45,13 +45,27 @@ here too:
   fixture path (the doc contains all 7 `SANITIZE_PATTERNS`); now
   **21/21**. Not Windows-specific — reproduced locally; latent since
   iter-0001, masked by dormant CI.
-- **ubuntu `exit code 143` (mystery SIGTERM ~23%).** A different
-  test (not the 4 above) hangs on the Linux runner and the job is
-  killed before pytest can name it. Added `pytest-timeout` to the
-  workflow (`--timeout=120`) so a hang becomes a NAMED failing test
-  with a traceback instead of an unattributable job kill — both the
-  diagnostic and permanent CI hardening. Follow-up: the named
-  culprit gets the same skipif/proper-mock treatment.
+- **ubuntu job-kill (exit 143 / "operation canceled" ~25%) —
+  ROOT-CAUSED + fixed.** Not a hang and not the 4 above:
+  `test_dispatch_codex_streaming.py::_FakePopen.pid` returned
+  **`0`**. On POSIX, `_dispatch_base._terminate_process_tree` does
+  `os.killpg(os.getpgid(proc.pid), SIG*)`; `os.getpgid(0)` resolves
+  to **the caller's own process group**, so the abort/watchdog
+  tests SIGTERM'd the pytest / GitHub-Actions job *itself* (instant,
+  hence pytest-timeout never fired). Windows uses the
+  `send_signal`/`taskkill` branch, so it was masked locally and CI
+  was dormant v1.13.0→v1.15.3 so it stayed hidden until v1.15.4
+  re-enabled CI. Latent since iter-0039. Fixed two ways:
+  (a) corrected the synthetic pid to a never-live value so
+  `os.getpgid` raises `ProcessLookupError` → the documented
+  `proc.terminate()` fallback runs; (b) a suite-wide
+  `tests/conftest.py` autouse guard that neutralizes
+  `os.killpg`/`os.getpgid` so NO test can ever signal a real
+  process group (production `_terminate_process_tree` logic still
+  runs; every `dispatch_aborted` assertion unchanged). `pytest-
+  timeout` retained as permanent hardening. Verified: targeted
+  abort/dispatch suites 144/0; full suite 968 passed / 1 skipped /
+  0 regressions with the guard active.
 
 ## 1.15.6 - 2026-05-15
 
