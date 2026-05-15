@@ -12,7 +12,22 @@ the entry stays for the historical record.
 
 ## Advisory 2026-05-15: v1.15.8 named follow-up — deterministic clock harness (Q2(a))
 
-**Affected versions:** `v1.15.8` (forward, until addressed).
+**RESOLVED in v1.15.9** (pending the provisional-until-proven
+≥3-consecutive-green-Windows-CI gate on the v1.15.9 tag commit).
+The Q2(a) deterministic-harness rework landed via Workflow A
+consult `iteration-v1159-deterministic-clock-harness`: a private
+keyword-only `_invoke_codex(_sleep=)` seam (default `time.sleep`
+— zero production behavior change) + a `threading.Condition`
+`_SyncClock`; ALL real sleep removed from the drive path;
+`@_FLAKY_WINDOWS_CI` DELETED; all 8 clock-driven tests migrated;
+`release_all()` independent safeguard. Both codex pass-2
+non-blocking findings below (skip breadth + interim-not-
+deterministic) are thereby retired — the breadth is moot (no
+skip) and the deterministic rework IS the fix. See CHANGELOG
+1.15.9. The text below is retained as the historical record of
+the v1.15.8 interim.
+
+**Affected versions:** `v1.15.8` only (v1.15.9+ resolved).
 
 **Severity:** Tracked engineering follow-up — NOT a defect in
 shipped behavior. The v1.15.8 load-bearing fix (`_visibility_

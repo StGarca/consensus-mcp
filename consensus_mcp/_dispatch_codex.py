@@ -292,6 +292,8 @@ def _invoke_codex(
     poll_interval: float = 0.5,
     time_fn=None,
     popen_factory=None,
+    *,
+    _sleep=None,
 ) -> str:
     """Shell out to codex CLI via Popen + reader threads (iter-0037 bidirectional).
 
@@ -321,6 +323,16 @@ def _invoke_codex(
         time_fn = time.time
     if popen_factory is None:
         popen_factory = subprocess.Popen
+    # Private, keyword-only sleep seam (v1.15.9 converged plan
+    # q1_sync_mechanism). Defaults to `time.sleep` → ZERO change to
+    # production behavior. The streaming test harness injects a
+    # SyncClock-backed blocker so the poll loop has a deterministic
+    # happens-before with the test driver instead of racing real
+    # wall-clock on loaded CI runners. Chosen over monkeypatching
+    # global `time.sleep` (no global-state leak — see the
+    # monkeypatch-pollution lesson).
+    if _sleep is None:
+        _sleep = time.sleep
     can_log = log_path is not None and anchors is not None
 
     # iter-0007 F4 (deferred infra): allow env-var override of the stall-
@@ -524,7 +536,7 @@ def _invoke_codex(
                     f"codex exceeded {timeout_seconds}s wall timeout + {stall_silence_seconds}s grace"
                 )
 
-            time.sleep(poll_interval)
+            _sleep(poll_interval)
 
         # Process exited; drain reader threads.
         t_stdout.join(timeout=5)
