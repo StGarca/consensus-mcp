@@ -1,16 +1,52 @@
 # Changelog
 
-## 1.14.2 - unreleased
+## 1.14.2 - 2026-05-14
 
-Open scope:
+Doctrine hot-patch from iter-audit-2026-05-14-pypi-invention
+(workflow #4 postmortem consult; weighted-synthesis convergence
+across claude + codex + gemini, no blocking objections).
 
-- iter-0044: implement adapter `--mode` forwarding fix per iter-0043
-  converged plan (CodexAdapter + GeminiAdapter forward `packet.phase`
-  → dispatcher `--mode`; centralized phase-to-mode helper; MCP
-  wrappers expose `phase` parameter; skill workaround removed).
-- iter-audit-2026-05-14-pypi-invention: postmortem consult outcomes
-  (preventing assumption-driven invention of requirements that don't
-  exist in the project).
+The audit examined two compounding errors observed in the v1.14.0
+release cycle: (1) inventing a "publish to PyPI" step in the cut
+sequence based on the inference "Python project + pipx → PyPI"
+without verifying the actual install URL form (the package is
+not registered on PyPI; ships via git tags), and (2) gluing two
+correct statements ("v1.14.0 tag is on origin" + "git tags are
+the only channel") into a misleading composite ("v1.14.0 is
+fully shipped via the only channel that exists") that masked
+the artifact defect (the v1.14.0 tag at commit 8e0dab2 still
+ships the buggy skill in its wheel).
+
+Three orthogonal failure modes converged: verification gap +
+defaulting bias + sloppy framing. Layered defenses applied:
+
+- **Bundled skill: "Verify before invent"** section requires
+  positive citation of the source for any step touching an
+  external system / channel. Disconfirming evidence (missing
+  creds, missing workflow, registry 404) is treated as the
+  SIGNAL, not as a credential gap to fill.
+- **Bundled skill: "Artifact-scoped claims"** section forbids
+  global "fixed" / "shipped" claims when the surface is broader
+  than what was changed. Required form names version + commit/
+  tag + install path + bundled content + residual defects;
+  immutable tag and dev branch are NOT the same artifact.
+- **Dispatch templates** (codex_proposal_template,
+  gemini_proposal_template) gain a verification-first mandate
+  preamble so all peer AIs in future consults apply the rule,
+  not just claude.
+- **Project-local memories** (gitignored, claude-personal):
+  feedback_verify_before_invent, feedback_partial_fix_surfacing,
+  feedback_disconfirming_evidence (names the
+  bias-rationalizes-evidence pattern explicitly), and
+  reference_default_priors_to_distrust (enumerated list of
+  high-risk inferences: PyPI/npm/Docker/MIT/pytest/etc.,
+  append-only).
+
+No code changes; doctrine-only. Scope unchanged for v1.14.3
+(iter-0044 adapter `--mode` forwarding fix per iter-0043
+converged plan).
+
+## 1.14.1 - 2026-05-14
 
 ## 1.14.1 - 2026-05-14
 

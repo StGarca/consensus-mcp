@@ -184,6 +184,81 @@ exist (grep shows `<actual>`). Reviewer hallucination."
 Don't ignore reviewer findings silently — write the dismissal as a
 matter of record so the audit trail survives.
 
+## Verify before invent — cite before propose
+
+**Before introducing any step that touches an external system,
+channel, distribution mechanism, or inferred environmental
+capability — verify it exists in the project and CITE the
+verification source inline.**
+
+The rule applies to publish/install/deploy/distribute steps;
+sending messages (Slack, email, webhooks); posting to external
+services; uploading to registries (PyPI, npm, Docker Hub,
+GitHub Packages); registering anywhere; inferring CI/CD
+pipelines, license terms, dependency availability, tool
+presence, database schemas — any inferred capability or
+channel.
+
+Required citation form: a one-line inline reference next to
+the proposed step:
+- `verified via README.md:40 — install URL is git+https`
+- `verified via .github/workflows/release.yml:12 — publish job exists`
+- `verified via curl https://pypi.org/.../json — registered`
+- `not found — not proposing` (when verification fails)
+
+**When verification produces DISCONFIRMING evidence (no creds,
+no workflow, registry 404), treat that as the SIGNAL — not as
+a credential gap to fill.** "no creds" → check first whether
+the channel exists in the project at all; do not jump to
+"operator needs to provide creds." Operator pushback ("what
+is X?") → check whether X was introduced by inference rather
+than verification; do not jump to "operator unfamiliar with X."
+
+**Anti-pattern to abort on sight:** "I'll handle X and hand
+you Y at the end" framing makes invented requirements feel
+inevitable. Better framing: "verified-required steps: <list
+with citations>; uncertain steps: <list>; please confirm or
+correct uncertain ones."
+
+Scope: required for high-impact actions (external system,
+channel, irreversible op, anything operator-visible). NOT
+required for routine local-dev steps (git status, file reads,
+test runs against a known repo).
+
+## Artifact-scoped claims — no global "fixed" or "shipped"
+
+**When making any "fixed", "shipped", "done", "complete"
+claim, the claim must be ARTIFACT-SCOPED — naming the
+specific version + commit/tag + install path + bundled
+content + known residual defects.** Globally-quantified
+claims like "X is fully shipped" or "Y is fixed" are
+forbidden when the affected surface is broader than the
+artifact you actually changed.
+
+**The canonical scenario:** an immutable tag and a dev
+branch with a fix are NOT the same artifact. Don't glue
+them together. If you fixed something on the v1.14.1 dev
+branch, the v1.14.0 tag at commit 8e0dab2 STILL ships the
+defect embedded in its wheel/install — name that explicitly.
+
+Required claim form when announcing a fix or completion:
+- Name the artifact: `v1.14.1 tag at commit 5f6cfe7`
+- Name what the artifact contains: "the corrected skill"
+- Name the unfixed surface explicitly: "the v1.14.0 tag is
+  immutable and STILL ships the buggy skill; users on
+  v1.14.0 need to upgrade to v1.14.1 to get the fix"
+- For multi-artifact surfaces, list each with status:
+  "fixed in dev branch ✓, fixed in v1.14.1 tag ✓, v1.14.0
+  tag still defective ✗"
+
+**Forbidden phrases when surface > what you changed:**
+- "X is fully shipped"
+- "X is done"
+- "X is fixed" (without scoping)
+- "the only channel that exists" (when an artifact-content
+  caveat is being suppressed)
+- "all clear" / "no issues remaining"
+
 ## Non-trivial changes go through peer review
 
 Any **non-trivial change to consensus-mcp itself** must go through
