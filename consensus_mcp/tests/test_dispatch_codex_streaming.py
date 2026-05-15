@@ -196,11 +196,15 @@ class StreamingFakeCodexPopen:
 
     @property
     def pid(self):
-        """iter-0039: _terminate_process_tree uses os.killpg(os.getpgid(proc.pid))
-        on POSIX. The fake returns a stable PID; real os.killpg would fail on
-        a synthetic PID but the test runs on Windows (where send_signal is
-        used) or accepts the OSError fallback to proc.terminate()."""
-        return 0
+        """`_terminate_process_tree` does os.killpg(os.getpgid(proc.pid))
+        on POSIX. Return a synthetic, never-live PID so os.getpgid raises
+        ProcessLookupError and the production OSError-fallback
+        (proc.terminate()) runs. The previous value `0` was WRONG — pid 0
+        means "the caller's own process group", so on Linux CI this fake
+        made the abort path SIGTERM the pytest/runner job itself
+        ("operation canceled"). Belt-and-suspenders: the suite-wide
+        conftest guard also neutralizes os.killpg/os.getpgid."""
+        return 2_147_483_647
 
     def wait(self, timeout=None):
         # We control exit via clock + terminate/kill; this is a no-op.
