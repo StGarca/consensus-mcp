@@ -42,10 +42,11 @@ The wizard will prompt for `--workflow`. Three modes plus advisory:
   overnight without operator-in-the-loop, auto-approving emergent
   scope items within an operator-pre-declared `autonomy_contract`.
   v1.14.4 ships the CONTRACT (validators, scope_check, halt-set,
-  audit-ledger); the multi-iteration engine ships in v1.15.0
-  (named blocker). Operators can stage and validate Workflow C
-  goal_packets in v1.14.4+; running them surfaces a clear
-  `NotImplementedError` pointing at v1.15.0.
+  audit-ledger); the multi-iteration engine is **UNIMPLEMENTED as
+  of v1.15.2 — no committed target version**. Operators can stage
+  and validate Workflow C goal_packets; running one raises a clear
+  `NotImplementedError`. Status:
+  `docs/workflows/workflow-c-autonomous.md`.
 - **Advisory** — dispatches happen but no vote is load-bearing. Rare.
 
 Numeric aliases (3, 4) still resolve at the CLI but emit a

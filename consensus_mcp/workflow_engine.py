@@ -153,18 +153,23 @@ class WorkflowEngine:
                 # iter-workflow-abc-introduce: v1.14.4 ships the contract
                 # (alias, validators, scope_check helper, schema,
                 # autonomy_contract block) but NOT the multi-iteration
-                # auto-execution loop. Engine path lands in v1.15.0
-                # (named blocker: cross-platform interrupt-file watching
-                # validation + integration tests with real peer dispatches +
-                # autonomy-ledger replay design). Operators can write and
-                # validate Workflow C goal_packets in v1.14.4; running them
-                # surfaces this clear NotImplementedError.
+                # auto-execution loop. The engine path remains
+                # UNIMPLEMENTED as of v1.15.2 — no committed target
+                # version (v1.15.0/1/2 shipped other work; the earlier
+                # "lands in v1.15.0" forward-reference came due
+                # unfulfilled and was corrected in v1.15.3 rather than
+                # re-promised). Named-blocker design: cross-platform
+                # interrupt-file watching validation + integration tests
+                # with real peer dispatches + autonomy-ledger replay.
+                # Operators can write and validate Workflow C
+                # goal_packets; running them surfaces this clear
+                # NotImplementedError.
                 raise NotImplementedError(
-                    "Workflow C (autonomous-execute) engine path is not "
-                    "implemented in v1.14.4; the contract (config alias, "
-                    "validators, scope_check, autonomy_contract schema) "
-                    "ships in v1.14.4 for staging only. Multi-iteration "
-                    "auto-execution lands in v1.15.0. See "
+                    "Workflow C (autonomous-execute) engine path is "
+                    "UNIMPLEMENTED as of v1.15.2; no committed target "
+                    "version. The contract (config alias, validators, "
+                    "scope_check, autonomy_contract schema) ships for "
+                    "staging/validation only. See "
                     "docs/workflows/workflow-c-autonomous.md for status."
                 )
             else:
