@@ -65,7 +65,18 @@ VALID_CONVERGENCE = {CONVERGE_UNANIMOUS, CONVERGE_STRICT_MAJ, CONVERGE_INCL_MAJ,
 # === Finding disposition ===
 DISPOSITION_ALL_OR_NOTHING = "all-or-nothing"
 DISPOSITION_PER_FINDING = "per-finding"
-VALID_DISPOSITION = {DISPOSITION_ALL_OR_NOTHING, DISPOSITION_PER_FINDING}
+DISPOSITION_WEIGHTED_SYNTHESIS = "weighted-synthesis"
+VALID_DISPOSITION = {
+    DISPOSITION_ALL_OR_NOTHING,
+    DISPOSITION_PER_FINDING,
+    DISPOSITION_WEIGHTED_SYNTHESIS,
+}
+# iter-three-gaps: workflow #4 (propose-converge) accepts only the two
+# plan-shaped dispositions. per-finding is post-review semantics.
+VALID_DISPOSITION_FOR_PROPOSE_CONVERGE = {
+    DISPOSITION_ALL_OR_NOTHING,
+    DISPOSITION_WEIGHTED_SYNTHESIS,
+}
 
 # === Snapshot triggers ===
 SNAPSHOT_MANUAL = "manual-only"
@@ -141,7 +152,7 @@ def default_config() -> dict:
         },
         "convergence": {
             "rule": CONVERGE_STRICT_MAJ,
-            "finding_disposition": DISPOSITION_ALL_OR_NOTHING,
+            "finding_disposition": DISPOSITION_WEIGHTED_SYNTHESIS,
         },
         "patches": {
             "authoring": PATCH_CLAUDE_ONLY,
@@ -299,13 +310,19 @@ def validate(config: dict) -> None:
             f"got {n_contributors} ({enabled!r}). Use post-review or advisory for solo setups."
         )
 
-    # Rule: workflow.mode=propose-converge forces all-or-nothing disposition (D5 majority)
-    if mode == WORKFLOW_PROPOSE_CONVERGE and disposition != DISPOSITION_ALL_OR_NOTHING:
+    # Rule: workflow.mode=propose-converge accepts the two plan-shaped
+    # dispositions only (iter-three-gaps doctrine: weighted-synthesis is the
+    # default for workflow #4; all-or-nothing remains valid as explicit opt-in
+    # for binary scope decisions / safety gates / compliance verdicts).
+    # per-finding stays post-review-only (its semantics fit defect lists, not
+    # plan synthesis).
+    if mode == WORKFLOW_PROPOSE_CONVERGE and disposition not in VALID_DISPOSITION_FOR_PROPOSE_CONVERGE:
         raise ConfigValidationError(
-            f"workflow.mode=propose-converge requires "
-            f"convergence.finding_disposition=all-or-nothing; "
-            f"got {disposition!r}. Per iter-0015 majority resolution, per-finding "
-            f"is restricted to post-review and advisory for v1."
+            f"workflow.mode=propose-converge accepts "
+            f"convergence.finding_disposition in "
+            f"{sorted(VALID_DISPOSITION_FOR_PROPOSE_CONVERGE)!r}; "
+            f"got {disposition!r}. per-finding is post-review semantics; "
+            f"use weighted-synthesis (default) or all-or-nothing for workflow #4."
         )
 
     # Rule: advisory mode requires advisory convergence rule
