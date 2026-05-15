@@ -10,6 +10,38 @@ the entry stays for the historical record.
 
 ---
 
+## Advisory 2026-05-15: v1.15.7 named follow-ups (non-blocking)
+
+**Affected versions:** `v1.15.7` (forward, until addressed).
+
+**Severity:** Tracked engineering follow-ups — NOT defects in
+shipped behavior. CI is fully green (all 6 legs) and the full
+suite is 968/0; these are scoped, deliberately-deferred items
+from the v1.15.7 CI-greening Workflow B audit.
+
+1. **Cross-process dispatch-log serialization.** v1.15.7 made
+   `_dispatch_base._log_dispatch` intra-process atomic (a
+   module-level `threading.Lock`) — the verified root cause of the
+   observed torn line (main + reader threads of one dispatcher).
+   It does **not** serialize a shared `dispatch-log.jsonl` across
+   *parallel dispatcher processes* (e.g. Workflow-A round-1
+   codex+gemini). This is **unobserved** and was explicitly
+   excluded (a blocking cross-process OS lock was tried and
+   regressed windows-py3.12 — see CHANGELOG v1.15.7). Revisit only
+   if parallel-dispatcher torn lines are ever observed.
+2. **4 codex-dispatch "smoke" tests are integration tests.**
+   `test_main_smoke_with_mocked_codex` + 3 siblings mock
+   `subprocess.run` but not the iter-0037 `Popen` path, so they
+   `skipif` when no real `codex` binary (CI runners). Proper fix:
+   rewrite onto the existing `make_fake_codex_popen_factory` /
+   `popen_factory=` pattern so they run hermetically everywhere,
+   then drop the skip.
+
+**User action:** none required. Recorded for the maintainer; no
+upgrade implication.
+
+---
+
 ## Advisory 2026-05-15: gemini dispatch fails on gemini CLI ≥ 0.43.0-preview.0
 
 **RESOLVED in `v1.15.2`** — `_dispatch_gemini.py` now injects
