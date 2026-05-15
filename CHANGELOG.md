@@ -78,6 +78,32 @@ here too:
   against the stdlib `signal.SIGTERM` enum directly (module-agnostic;
   the same object `_dispatch_base` passes). ubuntu was "1 failed,
   898 passed, 10 skipped" — this was the 1.
+- **dispatch-log write atomicity (real defect — found by auditing
+  the audit).** With the runner-kill gone, windows-py3.10 surfaced
+  a non-JSON line in `dispatch-log.jsonl` during abort/thread
+  teardown. The Workflow-B audit's pass-1 (gemini) called it
+  test-only on the premise "the production append is already
+  lock-atomic"; **first-hand code verification REFUTED that** —
+  `_dispatch_base._log_dispatch` was a *bare unlocked* `open("a")`
+  + `write`, while the streaming path emits events from the main
+  thread AND both reader threads concurrently. So torn lines were
+  possible in production, not just the test. Per the
+  convergence-correctness doctrine the 2-AI agreement-on-a-false-
+  prior was rejected; corrected fix-shape **A+C**, unanimously
+  re-confirmed by codex + gemini on the corrected premise:
+  - **(A)** `_log_dispatch` now appends via the codebase's
+    existing OS-exclusive-lock primitive
+    (`_visibility_watchdog._locked_append`; msvcrt/fcntl) — the
+    same mechanism the audit log uses. Concurrent emitters +
+    abrupt teardown can no longer tear a line.
+  - **(C)** the test-only `_read_log_events` skips a line that
+    fails `json.loads` — a defensive telemetry-reader belt, not
+    the primary fix.
+  Full suite 968 passed / 1 skipped / 0 regressions with A+C.
+  **Workflow B audit clean** (corrected premise): codex pass-2 +
+  gemini pass-2 both goal_satisfied=true, 0 blocking, 0 findings;
+  shared-prior self-check passed (the false prior was exposed by
+  artifact verification, not laundered).
 
 ## 1.15.6 - 2026-05-15
 

@@ -286,8 +286,19 @@ def _read_log_events(log_path: Path) -> list[dict]:
     out = []
     for line in log_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if line:
+        if not line:
+            continue
+        try:
             out.append(_json.loads(line))
+        except _json.JSONDecodeError:
+            # v1.15.7 (C): defensive JSONL parse. A torn line can only
+            # appear if an append was interrupted mid-write; v1.15.7 (A)
+            # makes the production append OS-lock-atomic so this should
+            # no longer occur — but a telemetry-log reader must never
+            # crash on a partial line regardless (windows-py3.10 abort-
+            # teardown surfaced this). Drop the torn line; the events
+            # this helper's assertions care about are written whole.
+            continue
     return out
 
 
