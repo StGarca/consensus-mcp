@@ -2,32 +2,33 @@
 
 ## 1.15.6 - unreleased
 
-_No changes yet. Branched from v1.15.5 tip. Repo is now
-`github.com/stgarca/consensus-mcp` (post-rewrite)._
+_No changes yet. Branched from v1.15.5 tip. Canonical repo:
+`github.com/stgarca/consensus-mcp`._
 
 ## 1.15.5 - 2026-05-15
 
-**Account migration + provenance purge + doctrine reconciliation.**
+**Identifier migration + provenance scrub + doctrine reconciliation.**
 
-Operator directed (1) zero `upstream` references anywhere
-and (2) GitHub account rename `stgarca` → `stgarca`. Both
-required reaching immutable commit/tag messages, so — with
-explicit operator authorization — a full `git filter-repo` history
-rewrite was performed:
+Operator directed (1) removal of every reference to the former
+upstream project's name, and (2) migration to the renamed GitHub
+account (now `stgarca`). Both reached immutable commit/tag
+messages, so — with explicit operator authorization — a full
+`git filter-repo` history rewrite was performed:
 
-- **Rewrite:** literal replace `upstream`→`upstream`,
-  `stgarca`→`stgarca` across ALL blob contents AND
-  commit/tag messages, all 18 branches + 66 tags (127 commits).
-  Verified before pushing: zero target strings in any blob or
+- **Rewrite:** literal substitution of the former upstream
+  project name → `upstream` and the prior account handle →
+  `stgarca`, across ALL blob contents AND commit/tag messages,
+  all 18 branches + 66 tags (127 commits). Verified before
+  pushing: zero occurrences of either legacy token in any blob or
   message across every ref; all 17 release tags + branches
-  present; full suite green on the rewritten tree (token
-  replacements internally consistent). Pre-rewrite safety bundle
-  kept outside the repo.
+  present; full suite green on the rewritten tree (substitutions
+  internally consistent). Pre-rewrite safety bundle kept outside
+  the repo.
 - **Consequence (artifact-scoped truth):** every published tag SHA
   changed. Tag-pinned `pipx install …@vX.Y.Z` URLs keep working
-  (tags moved with the rewrite); any raw-commit-SHA pin or old
-  clone against the previous `stgarca` remote is dead. The
-  canonical repo is now `https://github.com/stgarca/consensus-mcp`.
+  (tags moved with the rewrite); any raw-commit-SHA pin or clone
+  against the previous account remote is dead. The canonical repo
+  is now `https://github.com/stgarca/consensus-mcp`.
 - **Doctrine reconciliation:** the v1.15.4 doctrine says `main` is
   never force-pushed. This rewrite force-pushed everything, so the
   bundled `consensus-workflow` skill now carries a
@@ -41,6 +42,11 @@ rewrite was performed:
   fresh commit rather than more history surgery) relabels the
   GitHub `consensus-state/` folder off the old root commit the
   operator flagged.
+- **Literal-zero pass:** a follow-up scrub removed the legacy
+  tokens from this changelog/commit/doctrine wording itself (they
+  are described only obliquely now) and from snapshot scratch, so
+  the repo contains zero literal occurrences anywhere — including
+  the record of the migration itself.
 
 No engine/config/behavior code touched. Full suite green. Workflow
 B audit: codex + gemini (bundled-doctrine change).

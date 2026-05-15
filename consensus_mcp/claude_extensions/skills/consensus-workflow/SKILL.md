@@ -581,9 +581,9 @@ running; (3) post-rewrite verification BEFORE pushing —
 refs, all release tags + branches still present, full suite green
 on the rewritten tip (token replacements must stay internally
 consistent); (4) force-push all branches + all tags together, then
-re-verify `origin/main` == local. Precedent: 2026-05-15
-`stgarca`→`stgarca` account migration + `upstream`
-provenance purge (127 commits, 18 branches, 66 tags rewritten;
+re-verify `origin/main` == local. Precedent: the 2026-05-15
+GitHub-account migration (handle now `stgarca`) + former-upstream
+provenance scrub (127 commits, 18 branches, 66 tags rewritten;
 backup `consensus-mcp-prefilter-backup-20260515-125935.bundle`).
 Consequence to state plainly when it happens: every published tag
 SHA changed; tag-pinned `pipx install @vX.Y.Z` URLs keep working
