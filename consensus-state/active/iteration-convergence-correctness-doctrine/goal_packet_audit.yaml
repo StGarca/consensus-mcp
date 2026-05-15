@@ -1,0 +1,135 @@
+schema_version: 1
+pilot_id: iteration-convergence-correctness-doctrine-audit
+workflow_mode: post-review
+independence: visible-from-start
+goal:
+  summary: |
+    Workflow B (post-review) audit of the convergence-correctness
+    doctrine implementation. The Workflow A consult converged
+    (weighted-synthesis: claude + codex + gemini; no blocking
+    objections; gemini's substantive dissent on prominence +
+    machine-enforcement was INCORPORATED, not outvoted — the
+    shared-prior self-check passed).
+
+    IMPLEMENTED (doc/skill/template/memory only — no engine/
+    config/code paths):
+      - consensus-workflow SKILL.md: new "Safety interlock first"
+        HEADLINE rule (gemini prominence weighting); "Convergence
+        is agreement, not truth" section (fast unanimity =
+        verify-harder flag, shared-prior named, links the
+        disconfirming-evidence doctrine); "Provisional-until-
+        proven" for the defined not-falsifiable-from-artifacts
+        class; "Anti-theater property"; decisive-experiment-
+        before-next-iteration.
+      - codex_proposal_template.md + gemini_proposal_template.md:
+        identical "Convergence-correctness mandate" preamble —
+        each contributor must (1) state the differential/prior it
+        reasoned from, (2) for external-only claims name a
+        pre-specified specific EXTERNAL refuting observation
+        (PROVISIONAL until run), (3) for the risk class include a
+        root-cause-independent safeguard.
+      - docs/workflows/converged-plan-convention.md: NEW —
+        falsification / independent_safeguard /
+        decisive_experiment_before_next_iteration blocks +
+        worked example + the machine-enforcement named blocker.
+      - CHANGELOG 1.15.0 entry; README install URLs + Status
+        bumped to v1.15.0; project memory added (out of repo).
+
+    Machine-enforcement DEFERRED with a file-verified named
+    blocker (no standalone converged-plan schema;
+    workflow_engine.py:505-525 reads generic YAML keys); gemini's
+    severity-field + consensus_gate.py recorded as the follow-up
+    starting design.
+
+    Tests: 723 pass, 0 regressions (doc/skill/template only).
+
+  question: |
+    RE-AUDIT (pass 2) CONTEXT: codex-convdoc-audit-1 raised one
+    medium (goal_satisfied=False, no blocking): "Worked example
+    introduces an empirical_status value (`refuted`) that the
+    convention's schema does not allow." RESOLVED: the
+    `empirical_status` enum is now `proven | pending | refuted |
+    n/a`; `refuted` is documented as THE load-bearing terminal
+    state (the report's iter-0012/0013 both ended there) and
+    MUST carry decisive_experiment forward; the worked-example
+    comment + the SKILL.md provisional-until-proven section were
+    made consistent (forbidden language gates on `proven`, not a
+    bare "passes"). gemini-convdoc-audit-1 had already approved
+    (goal_satisfied=true, 0 findings); this re-audit confirms the
+    codex finding is fully resolved and no new inconsistency was
+    introduced by adding the terminal state.
+
+    Audit the embedded review-target against the converged plan.
+
+    Q1 — Does the bundled-skill doctrine faithfully encode the
+    converged plan: safety-interlock-first as the HEADLINE rule
+    (not co-equal filler), convergence≠correctness with the
+    shared-prior mechanism named, provisional-until-proven scoped
+    to the defined class (NOT universal — avoid the box-tick
+    theater the report warns about), and the anti-theater
+    property stated as the load-bearing qualifier?
+
+    Q2 — Are the dispatch-template preambles correct and
+    symmetric (codex == gemini), and will the "state your
+    differential/prior" + "pre-specified external refuting
+    observation" instructions actually expose a shared prior at
+    reveal rather than add performative ceremony?
+
+    Q3 — Is the converged-plan-convention doc internally
+    consistent (falsifiable_from_artifacts ↔ empirical_status
+    states; the auditable independent_safeguard bar; the
+    decisive-experiment element), and is the machine-enforcement
+    named blocker a REAL blocker (file-verified absence of a
+    converged-plan schema) or a disguised deferral?
+
+    Q4 — Self-referential check (the consult warned about this):
+    did the consult itself avoid converging on a shared
+    "more-process" prior? Evidence offered: gemini dissented
+    (Q3-primary + machine-enforce-now) and that dissent was
+    incorporated (headline prominence + recorded follow-up
+    design), not outvoted; codex independently file-verified the
+    propagation path AND the deferral blocker. Confirm the
+    wrong-improvement observations were ENGAGED, not bypassed —
+    or flag if this is post-hoc rationalization.
+
+    Q5 — No-deferral check: is anything well-defined being
+    deferred without cause, or is the machine-enforcement
+    deferral legitimately blocked?
+
+    Required: stance on Q1-Q5 + blocking_objections + any
+    non-blocking findings. Approval = convergence; ships v1.15.0.
+  type: implementation_audit
+allowed_files:
+  - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+  - consensus_mcp/dispatch_templates/codex_proposal_template.md
+  - consensus_mcp/dispatch_templates/gemini_proposal_template.md
+  - docs/workflows/converged-plan-convention.md
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - .github/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: 723 tests pass, 0 regressions
+    check: 'true'
+  - id: A2
+    description: no blocking_objections
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers: []
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T16:30:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: strict-majority
+  finding_disposition: weighted-synthesis

@@ -1,0 +1,612 @@
+defect_target:
+  files:
+  - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+  - consensus_mcp/dispatch_templates/codex_proposal_template.md
+  - consensus_mcp/dispatch_templates/gemini_proposal_template.md
+  - docs/workflows/converged-plan-convention.md
+  base_sha: 5ca39589409dd131a80a5f8e2e794a2c7ad17d12001cfabc4f243a45bd798c74
+  touched_files_contents:
+    consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md: "---\nname:\
+      \ consensus-workflow\ndescription: Operating procedures for working with consensus-mcp\
+      \ in any project. Trigger when the user asks to run a consensus consult, dispatch\
+      \ codex/gemini for review, evaluate a Workflow B vs #4 decision, debug a stalled\
+      \ or failed reviewer dispatch, or any question about HOW the cross-AI consensus\
+      \ workflow runs (as opposed to \"consensus init\" which only bootstraps). Phrases\
+      \ include \"consensus review\", \"consensus iteration\", \"consensus consult\"\
+      , \"run a consult\", \"dispatch codex\", \"dispatch gemini\", \"workflow 3\"\
+      , \"workflow 4\", \"propose-converge\", \"post-review\".\n---\n\n# Consensus-mcp\
+      \ operating procedures\n\nLoad-bearing rules for working with consensus-mcp.\
+      \ These are not\nproject-specific tips — they apply in every project that uses\
+      \ the\ncross-AI consensus workflow. Follow them by default; deviate only when\n\
+      the operator explicitly says otherwise.\n\n## Workflow selection\n\n**Default\
+      \ to Workflow A (propose-converge with blind-first-reveal) for\nany decision\
+      \ with real design surface** — API shape, trade-off, novel\nmechanism, anything\
+      \ where reasonable people could disagree on the right\napproach. Workflow B\
+      \ (post-review: claude implements, codex+gemini\naudit) is for **execution per\
+      \ a converged design** or for hot-patches\nthat block in-flight work.\n\nThe\
+      \ mistake to avoid is defaulting to B because it's faster and\ncalling everything\
+      \ \"execution.\" Test: did the converged plan specify\nthe API shape, error\
+      \ contract, mechanism? If not, those choices are\nthemselves design surface\
+      \ — go through #4.\n\nListing 2+ design choices in a single response = Workflow\
+      \ A\ncandidate. Stop and route to a consult.\n\n## Workflow A / B / C in one\
+      \ line each\n\n**As of v1.14.4: letter aliases (A/B/C) replace numeric (3/4)\
+      \ as\ncanonical operator vocabulary. Numeric aliases stay accepted for\none\
+      \ cycle with `DeprecationWarning`.**\n\n- **Workflow A (propose-converge)**\
+      \ — DEFAULT. All enabled\n  contributors propose independently in round 1 (blind),\
+      \ then\n  converge across reviewed rounds. Used for design questions.\n  (Was\
+      \ numbered #4.)\n- **Workflow B (post-review)** — LIGHTWEIGHT/QUICK. Claude\
+      \ writes\n  the patch first, codex + gemini audit afterward. Used for clear\n\
+      \  execution work and hot-patches. (Was numbered #3.)\n- **Workflow C (autonomous-execute)**\
+      \ — LONG-FORM/OVERNIGHT. Runs\n  to completion without operator-in-the-loop,\
+      \ auto-approves\n  emergent scope items within operator-pre-declared\n  `autonomy_contract`\
+      \ boundaries. v1.14.4 ships the contract\n  (config alias, validators, scope_check\
+      \ helper, schema); the\n  multi-iteration engine ships in v1.15.0. See\n  `docs/workflows/workflow-c-autonomous.md`.\n\
+      - **Advisory** — dispatches happen but no vote is load-bearing. Rare.\n\n##\
+      \ Maximize parallelism — always\n\n**Default to parallel; serial is the choice\
+      \ that needs justification.**\nEvery operation in a consensus workflow that\
+      \ can run independently\nSHOULD run in parallel. This applies to:\n\n- Round-1\
+      \ peer dispatches (codex + gemini in background, claude\n  authors proposal\
+      \ in parallel)\n- Round-2+ batches where multiple peers are re-dispatched\n\
+      - Reading multiple sealed artifacts (one batched call, not N\n  serial reads)\n\
+      - Investigating multiple files / running multiple greps during\n  iteration\
+      \ scoping\n- Background long-running operations (snapshots, audits, blast-\n\
+      \  radius scans) kicked off to run alongside foreground work\n- Cross-iteration\
+      \ parallelism: when two iterations have no data\n  dependency, dispatch them\
+      \ as parallel branches (worktrees) and\n  converge results\n\nPractice has demonstrated\
+      \ drastic performance improvement when\nparallelism is fully exploited. Burden\
+      \ of proof flips: if you\nchoose serial, the reason must be a real data dependency\n\
+      (operation B needs operation A's output), not \"felt simpler\" or\n\"easier\
+      \ to reason about.\"\n\n### Round-1 dispatch order (Workflow A) — specific case\n\
+      \nDispatch peer contributors FIRST in background, then author your\nown proposal\
+      \ in parallel while they run. Independence (blind-\nfirst-reveal) depends on\
+      \ **visibility**, not **temporal order**.\nNo contributor sees another's output\
+      \ → independence preserved\nregardless of who started writing first. This optimization\
+      \ saves\nwall-clock and surfaces dispatcher errors earlier.\n\nConstraints:\
+      \ the goal_packet MUST be final before kicking off\ncontributors (mid-flight\
+      \ rewrites mean wasted dispatches), and the\n\"author in parallel\" optimization\
+      \ applies to round 1 only — round\n2+ explicitly require seeing round-1 outputs.\n\
+      \n## Consensus runs to COMPLETION — no gratuitous deferral\n\n**Default: consensus\
+      \ runs to completion when goals + acceptance\ngates are clear. Defer only when\
+      \ open design surface genuinely\nrequires more analysis, the implementation\
+      \ cost is large\n(multiple sessions worth), or the work has a real dependency\n\
+      on something not-yet-built.**\n\nThe deferral instinct comes from \"splitting\
+      \ reduces blast\nradius\" + \"small PRs are better.\" Both are RIGHT for genuinely\n\
+      independent units of work; both are WRONG when the items share\na doctrine boundary\
+      \ or when splitting just postpones the same\ndecisions without adding analysis.\n\
+      \n### The completion test\n\nWhen authoring a converged-plan.yaml or scoping\
+      \ a deliverable,\nask for each candidate item:\n\n1. Are the acceptance gates\
+      \ concrete and verifiable?\n2. Is there ANY open design question remaining (API\
+      \ shape,\n   trade-off, mechanism) that actually needs more thought?\n3. Is\
+      \ the implementation cost SMALL enough to fit in this\n   session? (rough heuristic:\
+      \ <60 minutes of edits + tests)\n\nIf (1)=yes AND (2)=no AND (3)=yes → **execute\
+      \ in the same\nsession, not a future iteration.** \"Future iteration\" is the\n\
+      cop-out — a way to pass the work to a hypothetical later-self\nwithout admitting\
+      \ later-self has the same context window and\nwill face the same decision.\n\
+      \n### Anti-patterns to abort\n\n- \"iter-XXXX candidate: <thing>\" with no concrete\
+      \ reason it\n  can't be done now → fold into current iteration.\n- \"Phase B\
+      \ / Phase C\" sequencing when phases share the same\n  doctrine boundary → bundle\
+      \ into one.\n- \"Defer to dedicated iteration\" because something is \"complex\"\
+      \n  when the complexity is BOUNDED (concrete decisions, finite\n  alternatives)\
+      \ → execute now; consult only on the open part.\n- Splitting a hot-patch across\
+      \ multiple version bumps when the\n  fixes share a single failure-mode → bundle\
+      \ into one tag.\n- Writing a goal_packet that ASSUMES future iterations will\n\
+      \  exist → write goal_packets that assume completion is the\n  default.\n\n\
+      ### Application to live consults\n\nBefore writing `next_iteration_id: ...`\
+      \ or `deferred to ...`\nin a converged plan, run the completion test on each\
+      \ item.\nIf the test passes, delete the deferral and add the work to\nthe current\
+      \ scope. Only ratify the deferral if the test\ngenuinely fails, and name the\
+      \ SPECIFIC blocker\n(not \"complexity,\" not \"out of scope\" — name the missing\n\
+      data, the dependency, or the design question).\n\n### Sequencing-as-deferral\
+      \ is the same anti-pattern\n\nDon't sequence three independent fixes across\
+      \ three\nhot-patches when bundling them into one passes the\ncompletion test.\
+      \ Sequencing produces the same end-state with\nmore bookkeeping and more chances\
+      \ for drift. The cost of\n\"big PR\" is real but bounded; the cost of perpetual\
+      \ deferral\nbacklog is unbounded.\n\n## Convergence model — weighted-synthesis\
+      \ by default\n\n**Default convergence model: weighted-synthesis.** All ideas\
+      \ of\nall proposals are weighed for benefit to the project as a whole.\nNo good\
+      \ ideas are lost; no babies tossed with the bathwater.\n\nWhen writing a `converged-plan.yaml`:\n\
+      \n- Structure synthesis per-question (or per-decision-point), naming\n  each\
+      \ contributor's position and explaining which element was\n  adopted and why.\n\
+      - When a contributor's position was NOT adopted, explicitly note\n  WHY (sequencing,\
+      \ scope, evidence quality) so the good idea is\n  preserved as a follow-up rather\
+      \ than lost.\n- Scan each rejected proposal element: if there's no follow-up\n\
+      \  iteration, ADR, or CHANGELOG note capturing it, write one.\n- Report votes\
+      \ per question (transparency) but treat the synthesis\n  as an integration,\
+      \ not a vote winner.\n\n`all-or-nothing` finding-disposition (the legacy default\
+      \ in\n`config.py:295-308` for Workflow A) is **edge-case opt-in only.**\nReserve\
+      \ it for binary scope decisions (\"ship X or not\"), security/\nsafety gates\
+      \ (\"approve patch or reject\"), or legal/compliance\nverdicts where partial\
+      \ acceptance is incoherent. Operator must\nexplicitly opt in via `goal_packet.convergence.finding_disposition:\n\
+      all-or-nothing` with rationale.\n\n**Engine-level follow-up:** `config.py:295-308`\
+      \ currently ENFORCES\n`all-or-nothing` for `workflow.mode=propose-converge`.\
+      \ Until that\nconstraint is lifted (tracked as a separate iteration), the goal\n\
+      packet must still declare `all-or-nothing` to pass validation, but\n**author\
+      \ the convergence document in weighted-synthesis style\nregardless.** Once the\
+      \ engine constraint is removed, the default\nflips to weighted-synthesis at\
+      \ the data layer too.\n\n## Safety interlock first (HEADLINE — highest-value\
+      \ rule)\n\nFor **safety-critical / data-loss / bricking / irreversible-risk**\n\
+      defects: a root-cause-**INDEPENDENT** safeguard that is valuable\neven if the\
+      \ root-cause hypothesis is 100% false **MUST** ship in\nthe same change as the\
+      \ hypothesized fix. **Stopping the bleeding\noutranks perfecting the diagnosis.**\n\
+      \nField-proven (ChilipadScreen i2c boot-loop report, 2026-05-15): an\nindependent\
+      \ boot-loop breaker, made hypothesis-independent *by\ndesign*, un-bricked a\
+      \ medical-safety device and kept it serving\nacross **two** consecutive consensus\
+      \ iterations whose converged\nroot causes were both later refuted on-device.\
+      \ It was called \"the\nsingle highest-value decision.\"\n\nAuditable bar: **\"\
+      would this safeguard still work if the root cause\nwere entirely different?\"\
+      ** If a reviewer cannot answer *yes* from\nthe safeguard's mechanism alone,\
+      \ it does not qualify — it is a\ndisguised bet on the hypothesis, not an interlock.\n\
+      \n## Convergence is agreement, not truth\n\n**Convergence measures agreement,\
+      \ not correctness.** Two clean\nstrict-majority 2-of-2 convergences (and one\
+      \ round-1 *unanimous*\none) shipped root causes that on-device tests then refuted.\n\
+      \n**Fast independent unanimity is a VERIFY-HARDER flag, not\nconfidence.** When\
+      \ contributors agree quickly, suspect a *shared\nprior*: independent agents\
+      \ reasoning from the same incomplete\ndifferential is the multi-agent analog\
+      \ of single-agent\nrationalize-away (see the disconfirming-evidence doctrine).\
+      \ Unanimity\nis evidence only when the contributors reasoned from *different*\n\
+      differentials — so make the differential visible (the dispatch\ntemplates now\
+      \ require each contributor to state the prior it\nreasoned from; at reveal,\
+      \ a shared prior is exposed instead of\nlaundered as \"independent agreement\"\
+      ).\n\n### Provisional-until-proven (defined defect class)\n\nFor claims **not\
+      \ falsifiable from the artifacts in evidence** —\nhardware/firmware state, environment/toolchain,\
+      \ concurrency/timing,\nanything refutable only by an *external* observation\
+      \ — a converged\nroot cause is **PROVISIONAL**. The converged plan's\n`falsification.empirical_status`\
+      \ is `pending` until the named\ndiscriminating experiment runs; it then becomes\
+      \ `proven` (the\nrefutation observation did NOT occur) or **`refuted`** (it\
+      \ did —\nthe load-bearing terminal state; the hypothesis is dead, the\niteration\
+      \ does not close on it, and the decisive experiment for\nthe next iteration\
+      \ carries forward). **\"Fixed\" / \"shipped\" /\n\"root-cause-correct\" language\
+      \ is forbidden before `proven`.**\n(Pure-code defects refutable by a unit test\
+      \ already carry their\nproof — no extra ceremony; forcing one there is the theater\
+      \ this\nrule is meant to prevent.)\n\n### Anti-theater property (what makes\
+      \ falsification real)\n\nA falsification is real **only if its refuting observation\
+      \ is\n(1) pre-specified, (2) a specific observable, and (3) for the\ndefined\
+      \ class, EXTERNAL to the reasoning that produced the\nhypothesis.** External\
+      \ tests can't be rationalized in the room —\nthat is precisely why the device\
+      \ refuted what code-reading could\nnot. \"We'll test it\" is not a falsification;\
+      \ \"X at address Y still\nreturns 0x103 on a clean POWERON\" is.\n\nAlso name\
+      \ **the single decisive experiment that must run before\nthe next iteration**\
+      \ (the report's Exp-4 pattern) — the one test\nthat most cleanly partitions\
+      \ the remaining hypothesis space.\n\nSee `docs/workflows/converged-plan-convention.md`\
+      \ for the\nconverged-plan blocks (`falsification`, `independent_safeguard`,\n\
+      `decisive_experiment_before_next_iteration`). These are an\nauthoring convention\
+      \ enforced by this doctrine now; machine\nvalidation is a sequenced follow-up.\n\
+      \n## Dispatching codex / gemini\n\n**`--review-target` must be a `.yaml` review-packet,\
+      \ not a raw `.md`\nor `.diff` file.** The peer reviewer sandboxes refuse to\
+      \ read paths\nunder `consensus-state/`, so the file contents have to be embedded\n\
+      inline. Use `python -m consensus_mcp._author_review_packet\n--iteration-dir\
+      \ <dir> --files <comma-list>` to author a packet with\n`defect_target.touched_files_contents`\
+      \ populated, then pass\n`<dir>/review-packet.yaml` as the review target.\n\n\
+      **The MCP wrapper `reviewer_dispatch_codex` has a 45-second silence\nthreshold**\
+      \ that is often too aggressive on cold-start. The shell\nbinary `consensus-mcp-dispatch-codex`\
+      \ respects\n`CONSENSUS_MCP_STALL_SILENCE_SECONDS` (default 180s) and is the\
+      \ right\nfallback when the MCP wrapper times out.\n\n**Proposal-mode dispatch\
+      \ requires `--mode proposal`** on the shell\nbinaries. The MCP wrappers as of\
+      \ v1.14.0 don't expose this flag —\nfall back to the shell CLI for round-1 #4\
+      \ dispatch.\n\n## Gemini 429 handling (priority-tiered)\n\n- **Low-priority\
+      \ iterations** (chores, doc syncs, simple migrations):\n  if gemini returns\
+      \ a single 429, skip it and proceed with a 2-AI\n  consensus (claude + codex).\
+      \ Don't retry.\n- **High-priority iterations** (design questions, security review,\n\
+      \  blocking decisions): allow one retry on 429; skip only after 2\n  consecutive\
+      \ 429s.\n\nThe signal \"skip vs retry\" is the cost of getting it wrong — when\
+      \ a\nchore goes through with 2-AI consensus, the worst case is \"we get a\n\
+      weaker review\"; when a design decision goes through with 2-AI\nconsensus, the\
+      \ worst case is \"we ratify a flawed design.\"\n\n## Codex auth model\n\nCodex\
+      \ uses **token-based auth, not API keys.** If a dispatch hangs\nwith \"AuthRequired\"\
+      \ messages, the most common cause is a **secondary\nMCP** that codex itself\
+      \ is configured to use — not codex's own auth.\nCheck codex's MCP config (`~/.codex/config.toml`)\
+      \ for any nested MCP\nreferences; remove or disable the offending entry. Codex's\
+      \ own auth\nrefresh is rarely the culprit.\n\n## Iteration-state persistence\
+      \ (data-loss risk)\n\n`consensus-state/active/iteration-*/` is **gitignored\
+      \ by design** —\nin-flight iteration scratch (proposals, audits, partial reviews)\n\
+      should not pollute the main branch's commit history. But this means\n**a `git\
+      \ clean -fdX` (or a CI build agent that wipes untracked\nfiles) will silently\
+      \ delete your in-progress consensus work.**\n\nMitigation: `python -m consensus_mcp._snapshot_state\
+      \ snapshot --label\n<short-label>` after each iteration close. Snapshots live\
+      \ on the\norphan branch `consensus-state-snapshots`. To recover:\n`python -m\
+      \ consensus_mcp._snapshot_state restore --tag <tag-name>`.\n\nFor long iterations:\
+      \ snapshot mid-flight too. Cheap insurance.\n\n## Verifying peer-cited file\
+      \ content\n\nWhen a codex or gemini reviewer cites file content in a finding,\n\
+      **grep the cited file to confirm the content exists** before\nacting on the\
+      \ finding. Reviewers occasionally hallucinate\n(\"README.md line 67 contains\
+      \ @docs/roadmap/v1.14.0-deferred.md\"\nwhen line 67 actually contains `@v1.14.0`).\n\
+      \nIf the cited content doesn't exist (verified via grep), dismiss the\nfinding\
+      \ with empirical evidence in the commit message:\n\"codex-rev-NNN dismissed:\
+      \ cited content at <path>:<line> does not\nexist (grep shows `<actual>`). Reviewer\
+      \ hallucination.\"\n\nDon't ignore reviewer findings silently — write the dismissal\
+      \ as a\nmatter of record so the audit trail survives.\n\n## Verify before invent\
+      \ — cite before propose\n\n**Before introducing any step that touches an external\
+      \ system,\nchannel, distribution mechanism, or inferred environmental\ncapability\
+      \ — verify it exists in the project and CITE the\nverification source inline.**\n\
+      \nThe rule applies to publish/install/deploy/distribute steps;\nsending messages\
+      \ (Slack, email, webhooks); posting to external\nservices; uploading to registries\
+      \ (PyPI, npm, Docker Hub,\nGitHub Packages); registering anywhere; inferring\
+      \ CI/CD\npipelines, license terms, dependency availability, tool\npresence,\
+      \ database schemas — any inferred capability or\nchannel.\n\nRequired citation\
+      \ form: a one-line inline reference next to\nthe proposed step:\n- `verified\
+      \ via README.md:40 — install URL is git+https`\n- `verified via .github/workflows/release.yml:12\
+      \ — publish job exists`\n- `verified via curl https://pypi.org/.../json — registered`\n\
+      - `not found — not proposing` (when verification fails)\n\n**When verification\
+      \ produces DISCONFIRMING evidence (no creds,\nno workflow, registry 404), treat\
+      \ that as the SIGNAL — not as\na credential gap to fill.** \"no creds\" → check\
+      \ first whether\nthe channel exists in the project at all; do not jump to\n\"\
+      operator needs to provide creds.\" Operator pushback (\"what\nis X?\") → check\
+      \ whether X was introduced by inference rather\nthan verification; do not jump\
+      \ to \"operator unfamiliar with X.\"\n\n**Anti-pattern to abort on sight:**\
+      \ \"I'll handle X and hand\nyou Y at the end\" framing makes invented requirements\
+      \ feel\ninevitable. Better framing: \"verified-required steps: <list\nwith citations>;\
+      \ uncertain steps: <list>; please confirm or\ncorrect uncertain ones.\"\n\n\
+      Scope: required for high-impact actions (external system,\nchannel, irreversible\
+      \ op, anything operator-visible). NOT\nrequired for routine local-dev steps\
+      \ (git status, file reads,\ntest runs against a known repo).\n\n## Artifact-scoped\
+      \ claims — no global \"fixed\" or \"shipped\"\n\n**When making any \"fixed\"\
+      , \"shipped\", \"done\", \"complete\"\nclaim, the claim must be ARTIFACT-SCOPED\
+      \ — naming the\nspecific version + commit/tag + install path + bundled\ncontent\
+      \ + known residual defects.** Globally-quantified\nclaims like \"X is fully\
+      \ shipped\" or \"Y is fixed\" are\nforbidden when the affected surface is broader\
+      \ than the\nartifact you actually changed.\n\n**The canonical scenario:** an\
+      \ immutable tag and a dev\nbranch with a fix are NOT the same artifact. Don't\
+      \ glue\nthem together. If you fixed something on the v1.14.1 dev\nbranch, the\
+      \ v1.14.0 tag at commit 8e0dab2 STILL ships the\ndefect embedded in its wheel/install\
+      \ — name that explicitly.\n\nRequired claim form when announcing a fix or completion:\n\
+      - Name the artifact: `v1.14.1 tag at commit 5f6cfe7`\n- Name what the artifact\
+      \ contains: \"the corrected skill\"\n- Name the unfixed surface explicitly:\
+      \ \"the v1.14.0 tag is\n  immutable and STILL ships the buggy skill; users on\n\
+      \  v1.14.0 need to upgrade to v1.14.1 to get the fix\"\n- For multi-artifact\
+      \ surfaces, list each with status:\n  \"fixed in dev branch ✓, fixed in v1.14.1\
+      \ tag ✓, v1.14.0\n  tag still defective ✗\"\n\n**Forbidden phrases when surface\
+      \ > what you changed:**\n- \"X is fully shipped\"\n- \"X is done\"\n- \"X is\
+      \ fixed\" (without scoping)\n- \"the only channel that exists\" (when an artifact-content\n\
+      \  caveat is being suppressed)\n- \"all clear\" / \"no issues remaining\"\n\n\
+      ## Non-trivial changes go through peer review\n\nAny **non-trivial change to\
+      \ consensus-mcp itself** must go through\npeer review (Workflow A if design\
+      \ surface, Workflow B if pure\nexecution). The threshold for \"trivial\" is\
+      \ small: typo fixes, doc\nformatting, individual log-line tweaks. Anything touching\n\
+      contributor adapters, dispatchers, tool registration, sealing, or\ngoal-packet\
+      \ validation = non-trivial.\n\nThis rule does NOT apply to the user's own project\
+      \ work using\nconsensus-mcp as a tool — there, the operator decides what's\n\
+      non-trivial in their codebase.\n\n## \"Consensus\" trigger word\n\nWhen the\
+      \ user says \"consensus\" in a sentence about reviewing,\ndeciding, or analyzing\
+      \ — **use the consensus-mcp tools (workflow\n#4 or Workflow B as appropriate),\
+      \ NOT the older /council skill.**\nCouncil was a single-Claude multi-persona\
+      \ simulation; consensus-mcp\nis a real cross-AI workflow with sealed-provenance\
+      \ peer reviewers.\n\n## Release cadence — Friday cut if anything landed\n\n\
+      **Cut a release tag every Friday if at least one iteration closed\nthat week.\
+      \ Release-cut is a procedure with a trigger, not an\nad-hoc decision.**\n\n\
+      The structural failure mode this prevents: iterations close\ncontinuously (acceptance\
+      \ gates pass → done), but the release-cut\nceremony has no trigger of its own.\
+      \ So work accumulates on the\n`v<X.Y.Z>` branch indefinitely and downstream\
+      \ pipx/PyPI users get\nstale versions while the README documents features they\
+      \ cannot\ninstall. This actually happened — v1.14.0 sat at 37 commits across\n\
+      iter-0009..iter-0043 over 3 days with a release-ready CHANGELOG\nand no tag.\n\
+      \n**Cut sequence (apply in order on the v<X.Y.Z> branch tip):**\n\n1. Update\
+      \ `CHANGELOG.md` date stamp to the cut date; add an\n   addendum for any iterations\
+      \ that landed after the section was\n   first authored.\n2. Verify `pyproject.toml`\
+      \ `version` matches the branch.\n3. Run the full test suite; surface regressions\
+      \ before tagging.\n   Document any pre-existing known-issue flakes in CHANGELOG\
+      \ so\n   they aren't mistaken for v<X.Y.Z> regressions.\n4. `git tag -a v<X.Y.Z>\
+      \ -m \"...\"` on the branch tip.\n5. `git push origin refs/heads/v<X.Y.Z> refs/tags/v<X.Y.Z>`\
+      \ (use\n   explicit `refs/heads/` and `refs/tags/` to disambiguate; the\n  \
+      \ branch and tag now share a name).\n6. **Release is complete.** Distribution\
+      \ is git-tag-based — users\n   install via `pipx install git+https://github.com/stgarca/\n\
+      \   consensus-mcp.git@v<X.Y.Z>`. There is NO PyPI publish step;\n   the package\
+      \ is not registered on PyPI. Optional: build wheel\n   + sdist locally (`python\
+      \ -m build`) for local smoke-testing\n   only, not for upload.\n7. Branch the\
+      \ next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`\n   for hot-patches, OR `v<X.(Y+1).0>`\
+      \ for the next minor. Bump\n   `pyproject.toml` on the new branch to the new\
+      \ dev version\n   (e.g., `1.14.1.dev0`); add a `## X.Y.Z+1 - unreleased` stub\n\
+      \   to CHANGELOG.md.\n8. **Bump README install URLs to `@v<X.Y.Z>` (the just-cut\
+      \ tag,\n   NOT the dev version) on the new dev branch.** This step\n   prevents\
+      \ the bleeding-wound failure mode where the README\n   continues to point users\
+      \ at an older defective tag after a\n   fix is published. Grep `@v<old-prefix>`\
+      \ to catch all stale\n   refs; bump them all in one commit.\n9. Push the new\
+      \ branch: `git push -u origin v<X.Y.Z+1>`.\n10. **If the just-cut tag has a\
+      \ known issue worth flagging to\n    users on older versions** — add an entry\
+      \ to\n    `docs/advisories.md` naming the affected versions, the\n    issue,\
+      \ the correct upgrade target, and the user action\n    required. The advisory\
+      \ is the long-lived record; CHANGELOG\n    entries get buried as new releases\
+      \ ship.\n\n**Distribution convention:** consensus-mcp ships via git tags +\n\
+      pipx, NOT PyPI. README documents `pipx install\ngit+https://github.com/.../consensus-mcp.git@vX.Y.Z`.\
+      \ No\n`twine upload`, no `~/.pypirc`, no PyPI workflow exists. If you\ncatch\
+      \ yourself proposing a PyPI step, stop — you're adding a\nchannel that is not\
+      \ part of this project's release flow.\n\n**Branch convention:** Release branches\
+      \ are SELF-CONTAINED. `main`\nis NOT progressed by release cuts — it stays at\
+      \ whatever its tip\nwas before the v<X.Y.Z> branch was cut. Each new release\
+      \ branches\nfrom the previous release's tip. `main` is essentially a stable\n\
+      pointer to \"the divergence point of the most recently cut release.\"\nDo NOT\
+      \ merge release branches back into main.\n\n**Variations:**\n\n- **Empty-week\
+      \ skip:** if zero iterations landed, no cut. Never\n  cut empty releases.\n\
+      - **Hot-patches between Fridays:** cut as `v<X.Y.Z+1>` whenever a\n  hot-patch\
+      \ lands; don't wait for Friday for a fix release.\n- **Operator hold:** the\
+      \ operator may explicitly delay a cut\n  (\"hold v1.14.0 until iter-0050\").\
+      \ Default without explicit\n  hold is \"cut Friday.\"\n\nRelease-cut is itself\
+      \ an operating procedure — not a design\ndecision and not subject to peer consensus.\n\
+      \n## When in doubt\n\nThe conservative move is **Workflow A with all enabled\
+      \ contributors**.\nThe extra wall-clock is bounded; the cost of ratifying a\
+      \ flawed\ndesign via 2-AI audit is not.\n\nIf a dispatch is failing in a way\
+      \ you can't diagnose in 5 minutes,\nstop and ask the operator. Don't keep retrying\
+      \ — there is almost\nalways a config or auth issue upstream, and burning more\
+      \ dispatches\ndeepens the hole.\n"
+    consensus_mcp/dispatch_templates/codex_proposal_template.md: "You are one of several\
+      \ AI contributors participating in a design consult.\nThis is NOT a code review.\
+      \ You are being asked to GENERATE a proposal in\nresponse to a design question\
+      \ — not to find defects in existing code.\n\nThe orchestrator runs this consult\
+      \ under Workflow A (propose-converge,\nblind-first-reveal; was numbered #4 prior\
+      \ to v1.14.4): every\ncontributor's proposal is sealed before any contributor\
+      \ sees the\nothers' outputs. Your job here is to think\nindependently and answer\
+      \ the question put before the consult, then return\na structured proposal.\n\
+      \n## Verification-first mandate (load-bearing)\n\nBefore proposing any step\
+      \ that touches an external system, channel,\ndistribution mechanism, or environmental\
+      \ capability — VERIFY the\nchannel exists in the project and CITE the verification\
+      \ source\ninline (e.g., `verified via README.md:40 — install URL is\ngit+https`).\
+      \ Do not infer publish/install/distribute mechanisms\nfrom generic patterns\
+      \ (\"Python project → PyPI\", \"Node project →\nnpm\", \"Open-source → MIT license\"\
+      ). When verification produces\ndisconfirming evidence (no creds, no workflow,\
+      \ registry 404),\ntreat that as the SIGNAL that the inferred channel does not\n\
+      apply — not as a credential gap to fill.\n\nWhen making \"fixed\" or \"shipped\"\
+      \ claims about an artifact, name\nthe specific version + commit/tag and explicitly\
+      \ state which\nartifacts contain the fix AND which do not. The immutable tag\n\
+      and the dev branch are not the same artifact; do not glue them\ntogether.\n\n\
+      This mandate is a converged outcome of iter-audit-2026-05-14-\npypi-invention.\
+      \ Apply it to every step you propose.\n\n## Completion mandate (load-bearing)\n\
+      \nWhen sketching deliverable scope: default to COMPLETION in the\ncurrent iteration\
+      \ when goals + acceptance gates are clear and\nimplementation cost is small.\
+      \ Do NOT defer well-defined work\nto \"future iterations\" without naming a\
+      \ specific blocker\n(missing data, real dependency, open design question). \"\
+      Will\nbe addressed in iter-XXXX\" / \"deferred to follow-up\" /\n\"Phase B\"\
+      \ without a concrete reason is an anti-pattern that\nbuilds backlog faster than\
+      \ work completes. If you can name\nacceptance gates that pass the completion\
+      \ test (concrete +\nverifiable + small implementation cost), put the work IN\n\
+      your current proposal's scope.\n\n## Convergence-correctness mandate (load-bearing)\n\
+      \nConvergence measures AGREEMENT, not truth. Independent agreement\nis evidence\
+      \ ONLY if contributors reasoned from DIFFERENT\ndifferentials. Therefore:\n\n\
+      1. State the **differential / prior you are reasoning from** —\n   the model\
+      \ of the problem that makes your answer follow. If\n   every contributor shares\
+      \ it, fast unanimity is a shared-prior\n   artifact, not confidence.\n2. If\
+      \ your root-cause / mechanism claim is **not falsifiable\n   from the artifacts\
+      \ in evidence** (hardware/firmware state,\n   environment/toolchain, concurrency/timing\
+      \ — refutable only by\n   an external observation), say so explicitly and name\
+      \ a\n   **pre-specified, specific, EXTERNAL refuting observation**:\n   the\
+      \ single observable that, if seen, proves your hypothesis\n   wrong. \"We'll\
+      \ test it\" is not acceptable; name the observable.\n   Such a claim is PROVISIONAL\
+      \ until that experiment runs.\n3. For safety-critical / data-loss / bricking\
+      \ / irreversible\n   defects, your proposal MUST include a root-cause-INDEPENDENT\n\
+      \   safeguard that is valuable even if your hypothesis is 100%\n   false (\"\
+      would it still work if the root cause were entirely\n   different?\"). Stopping\
+      \ the bleeding outranks perfecting the\n   diagnosis.\n\n# Goal\n\n{goal_summary}\n\
+      \n# Question being asked\n\n{desired_end_state}\n\n# Context (read-only — embedded\
+      \ for your reference)\n\n{touched_files_contents_block}\n\n# Authorization\n\
+      \nscope_signature: {scope_signature}\nauthorized_by: {authorized_by}\nauthorized_at_utc:\
+      \ {authorized_at_utc}\n\n# Review target\n\niteration_dir: {iteration_dir}\n\
+      review_packet_path: {review_packet_path}\nreview_target_path: {review_target_path}\n\
+      review_target_hash (sha256): {review_target_hash}\n\nThe `review_target_path`\
+      \ is provided as context (it may include the goal\npacket itself, other contributors'\
+      \ proposals from prior rounds, or\nrelevant source files). Read it AS CONTEXT\
+      \ for your proposal — do NOT\ntreat it as code to defect-find. Your task is\
+      \ to PROPOSE, not REVIEW.\n\n# Your task\n\n1. Read the question in the goal_summary\
+      \ / desired_end_state above.\n2. If there is a candidate list, pick ONE candidate\
+      \ (or propose another\n   target in `selected_target` if none of the candidates\
+      \ is the actual\n   best move).\n3. Justify why your pick is better than the\
+      \ alternatives — be concrete\n   about the value delta, not just \"this seems\
+      \ good.\"\n4. Sketch the deliverable scope: what would the next iteration look\n\
+      \   like? Files touched, key design decisions, validators/tests, risks,\n  \
+      \ scope boundaries.\n5. If you genuinely cannot engage with the question (insufficient\n\
+      \   context, scope mismatch, the question doesn't make sense for your\n   role),\
+      \ set `structural_abstention: true` and explain in\n   `rationale_vs_alternatives`.\
+      \ Honest abstention is preferable to\n   confabulating a proposal.\n\n# Output\
+      \ format — STRICT REQUIREMENTS\n\nCodex is invoked with `--output-schema <effective_schema>`.\
+      \ By default\nthis is `codex_proposal_schema.json` from\n`consensus_mcp/dispatch_templates/`,\
+      \ but an operator may override via\nthe dispatcher's `--schema` flag. The shape\
+      \ shown below is the BUILT-IN\nschema. If an operator overrides `--schema` without\
+      \ also overriding\n`--prompt-template`, your output must still match the override\
+      \ (codex-cli\nenforces the override at the CLI level, and the helper validator\
+      \ re-checks\npost-parse). When in doubt, follow the structure below; malformed\
+      \ output\nis rejected.\n\n## Schema reference\n\n```json\n{\n  \"selected_target\"\
+      : \"<the candidate you picked, or your own proposed target>\",\n  \"rationale_vs_alternatives\"\
+      : \"<concrete value-delta argument — why this and not the other candidates>\"\
+      ,\n  \"deliverable_scope\": {\n    \"next_iteration_id\": \"<proposed iter id,\
+      \ e.g., iteration-0028-...>\",\n    \"files_in_scope\": [\"<path>\", \"...\"\
+      ],\n    \"files_out_of_scope\": [\"<path>\", \"...\"],\n    \"key_design_decisions\"\
+      : [\"<decision 1>\", \"...\"],\n    \"acceptance_gates\": [\"<gate description>\"\
+      , \"...\"]\n  },\n  \"risks\": [\"<risk 1>\", \"<risk 2>\"],\n  \"estimated_complexity\"\
+      : \"small|medium|large\",\n  \"structural_abstention\": false\n}\n```\n\n##\
+      \ Rules\n\n- `selected_target` is REQUIRED unless `structural_abstention: true`.\n\
+      \  When abstaining, set `selected_target: null`.\n- `rationale_vs_alternatives`\
+      \ is REQUIRED in all cases (when abstaining,\n  explain why; when proposing,\
+      \ justify against alternatives).\n- `deliverable_scope` is REQUIRED unless abstaining.\n\
+      - `estimated_complexity` must be exactly one of \"small\", \"medium\",\n  \"\
+      large\".\n- `structural_abstention` defaults to false. Set true ONLY if you\n\
+      \  genuinely cannot engage — not as a low-effort escape hatch.\n\n## Don'ts\n\
+      \n- Do NOT return code-review-shaped output (`findings: []`,\n  `goal_satisfied`,\
+      \ `blocking_objections`) — that's for `--mode review`.\n- Do NOT pick a target\
+      \ by enumerating defects in the question.\n- Do NOT confabulate context that\
+      \ isn't in the embedded files. If\n  important context is missing, abstain or\
+      \ note it as a risk.\n\n# Why this template exists (iter-0027 / iter-0028)\n\
+      \nEarlier consults (iter-0021, iter-0024) discovered that the code-review\n\
+      template forces every output into defect-finding shape, blocking codex\nfrom\
+      \ substantively participating in design questions. This template\nfixes that\
+      \ by changing the FRAMING and OUTPUT SCHEMA for design-consult\ncalls. Your\
+      \ output here participates in the convergence rule (strict-\nmajority, unanimous,\
+      \ etc.) just like a review output does, but as a\nproposal rather than as a\
+      \ verdict.\n"
+    consensus_mcp/dispatch_templates/gemini_proposal_template.md: "You are one of\
+      \ several AI contributors participating in a design consult.\nThis is NOT a\
+      \ code review. You are being asked to GENERATE a proposal in\nresponse to a\
+      \ design question — not to find defects in existing code.\n\nThe orchestrator\
+      \ runs this consult under Workflow A (propose-converge,\nblind-first-reveal;\
+      \ was numbered #4 prior to v1.14.4): every\ncontributor's proposal is sealed\
+      \ before any contributor sees the\nothers' outputs. Your job here is to think\n\
+      independently and answer the question put before the consult, then return\n\
+      a structured proposal.\n\n## Verification-first mandate (load-bearing)\n\nBefore\
+      \ proposing any step that touches an external system, channel,\ndistribution\
+      \ mechanism, or environmental capability — VERIFY the\nchannel exists in the\
+      \ project and CITE the verification source\ninline (e.g., `verified via README.md:40\
+      \ — install URL is\ngit+https`). Do not infer publish/install/distribute mechanisms\n\
+      from generic patterns (\"Python project → PyPI\", \"Node project →\nnpm\", \"\
+      Open-source → MIT license\"). When verification produces\ndisconfirming evidence\
+      \ (no creds, no workflow, registry 404),\ntreat that as the SIGNAL that the\
+      \ inferred channel does not\napply — not as a credential gap to fill.\n\nWhen\
+      \ making \"fixed\" or \"shipped\" claims about an artifact, name\nthe specific\
+      \ version + commit/tag and explicitly state which\nartifacts contain the fix\
+      \ AND which do not. The immutable tag\nand the dev branch are not the same artifact;\
+      \ do not glue them\ntogether.\n\nThis mandate is a converged outcome of iter-audit-2026-05-14-\n\
+      pypi-invention. Apply it to every step you propose.\n\n## Completion mandate\
+      \ (load-bearing)\n\nWhen sketching deliverable scope: default to COMPLETION\
+      \ in the\ncurrent iteration when goals + acceptance gates are clear and\nimplementation\
+      \ cost is small. Do NOT defer well-defined work\nto \"future iterations\" without\
+      \ naming a specific blocker\n(missing data, real dependency, open design question).\
+      \ \"Will\nbe addressed in iter-XXXX\" / \"deferred to follow-up\" /\n\"Phase\
+      \ B\" without a concrete reason is an anti-pattern that\nbuilds backlog faster\
+      \ than work completes. If you can name\nacceptance gates that pass the completion\
+      \ test (concrete +\nverifiable + small implementation cost), put the work IN\n\
+      your current proposal's scope.\n\n## Convergence-correctness mandate (load-bearing)\n\
+      \nConvergence measures AGREEMENT, not truth. Independent agreement\nis evidence\
+      \ ONLY if contributors reasoned from DIFFERENT\ndifferentials. Therefore:\n\n\
+      1. State the **differential / prior you are reasoning from** —\n   the model\
+      \ of the problem that makes your answer follow. If\n   every contributor shares\
+      \ it, fast unanimity is a shared-prior\n   artifact, not confidence.\n2. If\
+      \ your root-cause / mechanism claim is **not falsifiable\n   from the artifacts\
+      \ in evidence** (hardware/firmware state,\n   environment/toolchain, concurrency/timing\
+      \ — refutable only by\n   an external observation), say so explicitly and name\
+      \ a\n   **pre-specified, specific, EXTERNAL refuting observation**:\n   the\
+      \ single observable that, if seen, proves your hypothesis\n   wrong. \"We'll\
+      \ test it\" is not acceptable; name the observable.\n   Such a claim is PROVISIONAL\
+      \ until that experiment runs.\n3. For safety-critical / data-loss / bricking\
+      \ / irreversible\n   defects, your proposal MUST include a root-cause-INDEPENDENT\n\
+      \   safeguard that is valuable even if your hypothesis is 100%\n   false (\"\
+      would it still work if the root cause were entirely\n   different?\"). Stopping\
+      \ the bleeding outranks perfecting the\n   diagnosis.\n\n# Goal\n\n{goal_summary}\n\
+      \n# Question being asked\n\n{desired_end_state}\n\n# Context (read-only — embedded\
+      \ for your reference)\n\n{touched_files_contents_block}\n\n# Authorization\n\
+      \nscope_signature: {scope_signature}\nauthorized_by: {authorized_by}\nauthorized_at_utc:\
+      \ {authorized_at_utc}\n\n# Review target\n\niteration_dir: {iteration_dir}\n\
+      review_packet_path: {review_packet_path}\nreview_target_path: {review_target_path}\n\
+      review_target_hash (sha256): {review_target_hash}\n\nThe `review_target_path`\
+      \ is provided as context. Read it AS CONTEXT for\nyour proposal — your task\
+      \ is to PROPOSE, not REVIEW.\n\n# Your task\n\n1. Read the question in the goal_summary\
+      \ / desired_end_state above.\n2. If there is a candidate list, pick ONE candidate\
+      \ (or propose another\n   target in `selected_target` if none of the candidates\
+      \ is the actual\n   best move).\n3. Justify why your pick is better than the\
+      \ alternatives — be concrete\n   about the value delta.\n4. Sketch the deliverable\
+      \ scope for the next iteration: files touched,\n   key design decisions, acceptance\
+      \ gates, risks, scope boundaries.\n5. If you genuinely cannot engage (insufficient\
+      \ context, scope mismatch),\n   set `structural_abstention: true` and explain\
+      \ in\n   `rationale_vs_alternatives`. Honest abstention beats confabulation.\n\
+      \n# Output format\n\nReturn JSON matching this shape. The dispatcher post-parses\
+      \ and validates\nyour output against the active proposal schema — by default\n\
+      `gemini_proposal_schema.json` from `consensus_mcp/dispatch_templates/`,\nunless\
+      \ an operator override path was passed via `--schema`. The shape\nshown below\
+      \ is the BUILT-IN schema. If an operator overrides it without\nalso overriding\
+      \ `--prompt-template`, the override may diverge from this\ntemplate, in which\
+      \ case the dispatcher will reject your output. When in\ndoubt, follow the structure\
+      \ below; malformed output is rejected.\n\n```json\n{\n  \"selected_target\"\
+      : \"<the candidate you picked, or your own proposed target>\",\n  \"rationale_vs_alternatives\"\
+      : \"<concrete value-delta argument>\",\n  \"deliverable_scope\": {\n    \"next_iteration_id\"\
+      : \"<proposed iter id>\",\n    \"files_in_scope\": [\"<path>\", \"...\"],\n\
+      \    \"files_out_of_scope\": [\"<path>\", \"...\"],\n    \"key_design_decisions\"\
+      : [\"<decision 1>\", \"...\"],\n    \"acceptance_gates\": [\"<gate description>\"\
+      , \"...\"]\n  },\n  \"risks\": [\"<risk 1>\", \"<risk 2>\"],\n  \"estimated_complexity\"\
+      : \"small|medium|large\",\n  \"structural_abstention\": false\n}\n```\n\n##\
+      \ Rules\n\n- `selected_target` is REQUIRED unless `structural_abstention: true`.\n\
+      - `rationale_vs_alternatives` is REQUIRED in all cases.\n- `deliverable_scope`\
+      \ is REQUIRED unless abstaining (then null).\n- `estimated_complexity` is one\
+      \ of \"small\", \"medium\", \"large\".\n- `structural_abstention` defaults to\
+      \ false.\n\n## Don'ts\n\n- Do NOT return code-review-shaped output (`findings`,\
+      \ `goal_satisfied`,\n  `blocking_objections`) — that's for `--mode review`.\n\
+      - Do NOT confabulate missing context. Abstain or note as a risk.\n\n# Why this\
+      \ template exists (iter-0027 / iter-0028)\n\nEarlier consults (iter-0021, iter-0024)\
+      \ hit template friction in design\nmode. This template explicitly frames the\
+      \ task as proposal generation,\nnot code review.\n"
+    docs/workflows/converged-plan-convention.md: "# Converged-plan convention: falsification,\
+      \ independent safeguard, decisive experiment\n\nStatus: **authoring convention,\
+      \ doctrine-enforced.** Machine\nvalidation (engine/validator) is a sequenced\
+      \ follow-up — see the\nnamed blocker at the end.\n\nOrigin: `iteration-convergence-correctness-doctrine`\
+      \ (Workflow A\nweighted-synthesis: claude + codex + gemini; no blocking\nobjections),\
+      \ derived from the ChilipadScreen i2c boot-loop\nconsensus-failure report (2026-05-15),\
+      \ where two clean\nstrict-majority convergences were both refuted on-device.\n\
+      \nThese blocks belong in `converged-plan.yaml` for any iteration\nwhose `type`\
+      \ is a defect/root-cause investigation. They are\n**not** new voting mechanics\
+      \ — correctness discipline layered on\ntop of the existing strict-majority /\
+      \ weighted-synthesis rules.\n\n---\n\n## 1. `falsification` (required for defect/root-cause\
+      \ iterations)\n\n```yaml\nfalsification:\n  hypothesis: <the converged root\
+      \ cause, one sentence>\n  falsifiable_from_artifacts: true|false\n    # true\
+      \  → refutable by reading the evidence already in the\n    #         packet\
+      \ (code, logs, diffs). Its proof is a test you\n    #         can add now; no\
+      \ external experiment required.\n    # false → refutable ONLY by an external\
+      \ observation\n    #         (device/runtime/integration/toolchain). This is\
+      \ the\n    #         DEFINED CLASS: hardware/firmware state, environment/\n\
+      \    #         toolchain, concurrency/timing.\n  discriminating_experiment:\
+      \ <the single external test that would\n    refute the hypothesis — concrete\
+      \ enough to run as-is>\n  refutation_observation: <the specific observable that,\
+      \ if seen,\n    proves the hypothesis WRONG. Pre-specified. Not \"we'll test\n\
+      \    it\" — name the observable, e.g. \"i2c_master_transmit still\n    returns\
+      \ 0x103 at i2c.cpp:91 on a clean POWERON\">\n  empirical_status: proven | pending\
+      \ | refuted | n/a\n    # n/a       → falsifiable_from_artifacts:true and the\
+      \ proving\n    #             test is included in this iteration.\n    # pending\
+      \   → defined class, experiment named but not yet run.\n    #             \"\
+      fixed\"/\"shipped\"/\"root-cause-correct\" language\n    #             is FORBIDDEN\
+      \ while pending.\n    # proven    → the experiment ran and did NOT produce the\n\
+      \    #             refutation_observation.\n    # refuted   → the experiment\
+      \ ran and DID produce the\n    #             refutation_observation. The hypothesis\
+      \ is dead;\n    #             the iteration does NOT close on this root cause.\n\
+      \    #             This is the load-bearing terminal state — the\n    #    \
+      \         ChilipadScreen report's iter-0012 and iter-0013\n    #           \
+      \  both ended here, which is precisely why this\n    #             convention\
+      \ exists. A refuted status MUST carry\n    #             forward decisive_experiment_before_next_iteration.\n\
+      ```\n\n**Anti-theater property (doctrine):** a falsification is real\nonly if\
+      \ `refutation_observation` is (1) pre-specified, (2) a\nspecific observable,\
+      \ and (3) for the defined class, EXTERNAL to\nthe reasoning that produced the\
+      \ hypothesis. External tests can't\nbe rationalized in the room — that is exactly\
+      \ why the device\nrefuted what code-reading could not.\n\n## 2. `independent_safeguard`\
+      \ (required for the risk class)\n\nRequired when the defect is **safety-critical\
+      \ / data-loss /\nbricking / irreversible-risk**.\n\n```yaml\nindependent_safeguard:\n\
+      \  mechanism: <what it does>\n  works_if_root_cause_wrong: true   # MUST be\
+      \ true\n  why: <why it still protects even if the hypothesis is 100%\n    false\
+      \ — answerable from the mechanism alone>\n  ships_with_fix: true           \
+      \   # same change as the\n                                    # hypothesized\
+      \ fix, not later\n```\n\nAuditable bar: **\"would this safeguard still work\
+      \ if the root\ncause were entirely different?\"** If a reviewer cannot answer\n\
+      *yes* from `mechanism` + `why` alone, it is a disguised bet on\nthe hypothesis,\
+      \ not an interlock, and does not satisfy the\nrequirement. Stopping the bleeding\
+      \ outranks perfecting the\ndiagnosis (field-proven: an independent boot-loop\
+      \ breaker\nun-bricked a medical-safety device across two failed root-cause\n\
+      iterations).\n\n## 3. `decisive_experiment_before_next_iteration`\n\n```yaml\n\
+      decisive_experiment_before_next_iteration: <the single test that\n  most cleanly\
+      \ partitions the remaining hypothesis space, to run\n  BEFORE opening the next\
+      \ iteration> | null\n  # null only when empirical_status: proven (or n/a) AND\
+      \ the fix\n  # is confirmed.\n```\n\nThe ChilipadScreen report's \"Exp-4\" (build\
+      \ the unmodified\nreference under our toolchain) is the canonical example: one\
+      \ test\nthat cleanly separates \"our firmware\" from \"the toolchain\" and\n\
+      \"should precede any further consensus iteration.\"\n\n---\n\n## Worked example\
+      \ (abbreviated, from the report)\n\n```yaml\nfalsification:\n  hypothesis: \"\
+      sdStorage_init shared-LDO disturbance perturbs the I2C/DSI rail\"\n  falsifiable_from_artifacts:\
+      \ false\n  discriminating_experiment: \"build flag skips sdStorage_init before\
+      \ display; capture boot-1 serial\"\n  refutation_observation: \"first i2c_master_transmit\
+      \ still returns ESP_ERR_INVALID_STATE at i2c.cpp:91 with SD_MMC.begin() provably\
+      \ absent\"\n  empirical_status: pending     # the experiment was then run and\
+      \ DID\n                                # produce the refutation_observation\
+      \ →\n                                # terminal state becomes `refuted` (a\n\
+      \                                # legal enum value), NOT `proven`. The\n  \
+      \                              # iteration does not close on this root\n   \
+      \                             # cause; decisive_experiment carries fwd.\nindependent_safeguard:\n\
+      \  mechanism: \"boot-loop breaker: on 2nd crashed boot, skip display and continue\
+      \ headless\"\n  works_if_root_cause_wrong: true\n  why: \"triggers on the crash\
+      \ symptom (reboot count), not on any I2C/LDO theory\"\n  ships_with_fix: true\n\
+      decisive_experiment_before_next_iteration: \"flash unmodified reference Drawing_board.ino\
+      \ under our pioarduino toolchain (Exp-4)\"\n```\n\nThe report's outcome is the\
+      \ lesson: the hypothesis was unanimous\nand refuted; the **independent safeguard\
+      \ kept a medical device\nserving anyway**; the decisive experiment was correctly\
+      \ named as\nthe next step instead of opening another speculative iteration.\n\
+      \n---\n\n## Named blocker — machine enforcement (sequenced follow-up)\n\nEngine/validator\
+      \ enforcement of these blocks is **deferred** with\na concrete, file-verified\
+      \ blocker: there is no standalone\nconverged-plan schema; the engine reads/writes\
+      \ generic YAML plan\nkeys (`workflow_engine.py:505-525`,\n`consensus_get_iteration_outcome.py:114-123`).\
+      \ Enforcement needs\nits own schema-design consult plus a not-falsifiable-from-artifacts\n\
+      classifier, or it becomes a rejected-goal_packet papercut.\nStarting design\
+      \ for that follow-up (gemini's proposal in this\nconsult): a `severity` field\
+      \ on the goal packet + a\n`consensus_gate.py` check that fails a critical-severity\
+      \ proposal\nlacking a decoupled `independent_safeguard`. Until then this\nconvention\
+      \ is enforced by doctrine (the bundled consensus-workflow\nskill, loaded every\
+      \ consult) and by Workflow B audit.\n"
+schema_version: 1
+iteration_id: iteration-convergence-correctness-doctrine

@@ -1,0 +1,220 @@
+actor:
+  id: claude-convdoc-1
+  model_family: claude
+  role: design_proposer
+  pass_id: claude-convdoc-1-pass1
+iteration_id: iteration-convergence-correctness-doctrine
+created_at_utc: '2026-05-15T16:05:00Z'
+mode: proposal
+structural_abstention: false
+proposal:
+  selected_target: |
+    SHIP THE DISCIPLINE AS DOCTRINE NOW (bundled skill +
+    dispatch-template preambles + a documented converged-plan
+    convention); DEFER engine/validator machine-enforcement of
+    the new converged-plan blocks with a NAMED BLOCKER. The
+    report's own evidence is that the load-bearing safeguard is
+    the verify-before-commit GATE plus the discipline around it
+    — none of which needs engine code to take effect; it needs
+    the orchestrator + contributors to be told, every consult,
+    three things the report proves matter.
+
+    Concrete answers:
+      Q1: (d) — (a) falsifiability field + (c) doctrine/template
+          always; (b) shared-prior falsification round for the
+          Q2 defect class.
+      Q2: (a) + (d) — defined not-falsifiable-from-artifacts
+          class (hardware/firmware/env/toolchain/concurrency/
+          timing); fix is PROVISIONAL until a named refutation
+          experiment passes; documented `falsification` block.
+      Q3: (a) — required root-cause-INDEPENDENT safeguard for a
+          defined risk class (safety-critical / data-loss /
+          bricking / irreversible).
+      Q4: (e) — skill + template preambles + documented
+          converged-plan convention now; project memory;
+          machine-enforcement deferred.
+      Q5: doctrine + convention ship now; engine/validator
+          machine-enforcement = named blocker (multi-session,
+          touches goal_packet validation + engine + every
+          downstream packet).
+
+  rationale_vs_alternatives: |
+    GUARDING AGAINST THE IRONY (per the goal_packet's own
+    warning): this consult could itself converge on a shared
+    prior — "more process = better." The report explicitly
+    warns process ceremony can become theater (Q6). So every
+    recommendation below is paired with the single observation
+    that would show it is the WRONG improvement. If the consult
+    converges fast and unanimously WITHOUT engaging those
+    disconfirming observations, that itself is the lesson-2
+    failure mode and the convergence should be distrusted.
+
+    Q1 — why (d):
+    The deepest lesson is #2: fast independent unanimity from a
+    SHARED DIFFERENTIAL is the multi-agent analog of single-
+    agent rationalize-away ([[disconfirming-evidence]]). 0013
+    was round-1 unanimous and wrong because all three reasoned
+    from "power domain fits INVALID_STATE." Defenses:
+      - (c) is the cheapest, highest-leverage: a dispatch-
+        template instruction requiring each contributor to state
+        THE DIFFERENTIAL/PRIOR THEY REASONED FROM. At reveal a
+        shared prior becomes visible instead of being laundered
+        as "independent agreement." This costs one sentence per
+        proposal and directly attacks lesson 2.
+      - (a) falsifiability field makes "is this even falsifiable
+        from the artifacts we hold, or only by an external
+        test?" an explicit converge-time question. 0012/0013
+        would have been stamped converged-PENDING-EMPIRICAL-
+        PROOF, not "done" — the status would have told the truth.
+      - (b) shared-prior falsification round (a mandatory "argue
+        why this is wrong; name the one refuting observation"
+        pass) for the Q2 class, where being confidently wrong is
+        expensive.
+    Reject (c)-only: doctrine without the falsifiability status
+    field still lets a converged-but-unproven hypothesis present
+    as done — exactly the trap. Reject (b)-only: a falsification
+    round on pure-code defects already provable by tests is the
+    box-tick theater the report warns about.
+    WRONG-IMPROVEMENT OBSERVATION: if, post-adoption, iterations
+    that DO name a falsification test still converge-then-refute
+    at the prior rate — the field became a tick-box that didn't
+    change behavior. That observation refutes Q1.
+
+    Q2 — why (a)+(d) not (b)/(c):
+    The class boundary is principled: "falsifiable from the
+    artifacts in evidence?" A pure-code defect refutable by a
+    unit test ALREADY has its empirical proof (the test) — (b)
+    universal prove-before-commit would force a redundant
+    ceremony there and breed theater. The dangerous class is
+    precisely what the report hit: hardware/firmware state,
+    environment/toolchain, concurrency/timing — coherent and
+    UNFALSIFIABLE from code reading alone; "only the device test
+    could refute it, and did." For that class the fix is
+    PROVISIONAL until the named discriminating experiment passes;
+    the `falsification` block (hypothesis /
+    discriminating_experiment / refutation_observation / status)
+    is the recorded contract. (c) operator-tagging alone misses
+    cases the orchestrator should classify; keep operator
+    override but let doctrine require the orchestrator to
+    classify.
+    WRONG-IMPROVEMENT OBSERVATION: if class-tagged defects still
+    ship provisional fixes that get refuted because the named
+    experiment was not actually DISCRIMINATING (couldn't refute
+    the hypothesis even in principle), the gate exists but the
+    experiment-quality bar is the real gap — Q2 mis-targeted.
+
+    Q3 — why (a):
+    The report names decoupling safety from root cause "the
+    single highest-value decision," empirically proven: R4 (a
+    boot-loop breaker made independent BY DESIGN) un-bricked a
+    MEDICAL-SAFETY device and kept it serving across TWO failed
+    root-cause iterations. That is not project trivia (option c)
+    — consensus-mcp is a review-gate tool whose bundled skill
+    exists to propagate exactly this class of cross-project
+    discipline. Doctrine: for safety-critical / data-loss /
+    bricking / irreversible-risk defects, the converged plan
+    MUST include a safeguard that still protects if the root-
+    cause hypothesis is 100% wrong, and it ships in the same
+    change as the hypothesized fix. Pairs with the no-deferral
+    doctrine: the safeguard ships even while the root cause is
+    unresolved.
+    WRONG-IMPROVEMENT OBSERVATION: if the requirement yields
+    nominal "safeguards" that secretly depend on the same
+    hypothesis (false safety, worse than none), the requirement
+    failed. The auditable bar: "would this safeguard still work
+    if the root cause is entirely different?" — if a reviewer
+    cannot answer yes from the safeguard's mechanism alone, it
+    does not satisfy Q3.
+
+    Q4/Q5 — why doctrine now, engine-enforcement deferred:
+    The report's load-bearing safeguard (lesson 3) is the
+    verify-before-commit GATE and the discipline around it —
+    every bit of which takes effect the moment the orchestrator
+    and the peer contributors are TOLD, via the bundled skill +
+    the dispatch-template preambles. That is the cross-project
+    propagation path used for every doctrine decision this
+    session and it needs zero engine code. A documented
+    converged-plan CONVENTION (the falsification +
+    independent_safeguard + decisive-experiment blocks as an
+    authoring standard, doctrine-validated by the orchestrator)
+    delivers the full discipline immediately. MACHINE-
+    enforcement (goal_packet/converged-plan schema validation in
+    the engine + validator) is real additional surface that
+    touches every downstream packet and the engine path — a
+    genuine multi-session change with its own design + test
+    burden. That is a NAMED BLOCKER, not a cop-out: the
+    discipline is fully effective via doctrine; machine-
+    enforcement only removes reliance on the orchestrator
+    remembering, which is a hardening, not the safeguard itself.
+
+    Q6:
+    - Adopt the report's Exp-4 pattern as a standard converged-
+      plan element for the defined class: name the SINGLE
+      decisive experiment that must run before the next
+      iteration. The report shows its value (it "cleanly
+      separates our firmware from the toolchain").
+    - Lesson 5 independently VALIDATES the just-shipped v1.14.9
+      void-seal preservation in a real field failure. No new
+      tooling assertion needed — the report IS the regression
+      evidence; cite it in the CHANGELOG as field confirmation.
+    - The performative-falsification risk is the STRONGEST
+      counter to this whole consult and must be answered head
+      on. What makes falsification real, not theater: the
+      refuting observation must be (i) specified IN ADVANCE,
+      (ii) a SPECIFIC observable (not "we'll test it"), and
+      (iii) for the defined class, EXTERNAL to the contributors'
+      reasoning (device/runtime/integration) — because an
+      external test cannot be rationalized in the room, which is
+      exactly why the device refuted what code-reading could
+      not. The anti-theater property, stated as doctrine: "a
+      falsification is real only if its refuting observation is
+      pre-specified and external to the reasoning that produced
+      the hypothesis."
+
+deliverable_scope:
+  next_iteration_id: implement-immediately-then-workflow-B
+  files_in_scope:
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # new sections: convergence≠correctness + shared-prior flag + falsification-before-landed (defined class) + decouple-safety + anti-theater property
+    - consensus_mcp/dispatch_templates/codex_proposal_template.md  # preamble: state-your-differential + (for defined class) name the pre-specified external refuting observation
+    - consensus_mcp/dispatch_templates/gemini_proposal_template.md  # same
+    - docs/workflows/converged-plan-convention.md  # NEW — documented converged-plan blocks: falsification{hypothesis,discriminating_experiment,refutation_observation,status}; independent_safeguard; decisive_experiment_before_next_iteration
+    - CHANGELOG.md  # entry; cite report lesson 5 as field validation of v1.14.9 void-seal preservation
+    - C:/Users/<you>/.claude/projects/.../memory/feedback_convergence_not_correctness.md  # NEW project-local reinforcement
+  files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - consensus_mcp/workflow_engine.py  # machine-enforcement deferred (named blocker)
+    - consensus_mcp/config.py
+    - the ChilipadScreen project (downstream; its Exp-4 is its own next step)
+  named_blockers_for_deferred_work:
+    - 'Engine/validator MACHINE-ENFORCEMENT of the converged-plan falsification + independent_safeguard + decisive_experiment blocks: touches goal_packet validation, the workflow engine, and every downstream packet shape — multi-session surface with its own design + regression-test burden. The discipline is fully effective via doctrine + documented convention now; machine-enforcement only removes reliance on orchestrator memory (a hardening). Real blocker: needs its own design consult on the schema + the not-falsifiable-from-artifacts classifier so it does not become a rejected-goal_packet papercut.'
+  key_design_decisions:
+    - 'Convergence ≠ correctness + fast-unanimity-is-a-verify-harder-flag enters the bundled skill as load-bearing doctrine'
+    - 'Dispatch-template preamble requires each contributor to state the differential/prior it reasoned from (shared prior visible at reveal)'
+    - 'Defined defect class (not falsifiable from artifacts: hardware/firmware/env/toolchain/concurrency/timing) → fix is PROVISIONAL until a pre-specified external refutation experiment passes'
+    - 'Required root-cause-INDEPENDENT safeguard for safety/data-loss/bricking/irreversible defects, shipped with the hypothesized fix'
+    - 'Anti-theater property as explicit doctrine: a falsification is real only if its refuting observation is pre-specified AND external to the reasoning that produced the hypothesis'
+    - 'Converged-plan documented convention (falsification / independent_safeguard / decisive_experiment) — authoring standard now, machine-enforced later (named blocker)'
+    - 'Report lesson 5 cited as field validation of v1.14.9 void-seal preservation'
+  acceptance_gates:
+    gating:
+      - 'skill: section present stating convergence measures agreement not truth + fast unanimity = verify-harder flag, with the shared-prior mechanism named'
+      - 'skill: defined defect class + provisional-until-empirically-proven gate documented'
+      - 'skill: required independent-safeguard doctrine for the risk class, with the auditable "works if root cause is entirely different?" bar'
+      - 'skill: anti-theater property stated verbatim as doctrine'
+      - 'both dispatch templates: preamble requires stating the reasoning differential/prior; for the defined class, requires a pre-specified external refuting observation'
+      - 'docs/workflows/converged-plan-convention.md exists with the three blocks specified + an example'
+      - 'project memory feedback_convergence_not_correctness.md created + indexed in MEMORY.md, linking [[disconfirming-evidence]]'
+      - 'CHANGELOG entry cites ChilipadScreen report lesson 5 as field validation of v1.14.9'
+      - 'full test suite green, 0 regressions (doc/skill/template only — no code paths touched)'
+      - 'Workflow B audit: codex + gemini, goal_satisfied=true, no blocking objections'
+    non_gating:
+      - 'the consult itself did not converge fast+unanimous WITHOUT engaging the wrong-improvement observations (self-check against lesson 2)'
+  estimated_complexity: small  # doctrine/doc/template only; no engine or config code
+risks:
+  - 'Performative falsification: a mandatory falsification block becomes a box-tick. Mitigation: the anti-theater property (pre-specified + external refuting observation) is itself doctrine and is auditable in Workflow B.'
+  - 'Class-boundary disputes: "is this falsifiable from artifacts?" is a judgment call. Mitigation: doctrine gives the test ("could a contributor refute this by reading only the evidence in the packet, or is an external observation required?") + operator override; machine-classifier deferred precisely because it needs its own design.'
+  - 'Doctrine bloat in the bundled skill. Mitigation: each section ≤ ~15 lines, rule + one-line why + the auditable bar; this consult REMOVES nothing and the skill is already the propagation channel of record.'
+  - 'This consult ironically converging on a shared "more process" prior. Mitigation: the non-gating self-check + every recommendation carrying its own disconfirming observation; Workflow B instructed to check whether the wrong-improvement observations were engaged, not bypassed.'
+  - 'Deferring machine-enforcement could let the documented convention rot if orchestrators ignore it. Mitigation: it is doctrine in the bundled skill (loaded every consult), not just a doc; the named blocker explicitly scopes the hardening follow-up.'
+estimated_complexity: small

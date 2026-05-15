@@ -1,0 +1,102 @@
+iteration_id: iteration-convergence-correctness-doctrine
+reviewer_id: gemini-convdoc-1
+pass_id: gemini-convdoc-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "This proposal directly codifies the 'single highest-value\
+  \ decision' from the ChilipadScreen failure report: decoupling safety remediation\
+  \ from root cause analysis. Prioritizing a minimal, robust safety interlock for\
+  \ critical failures (like boot loops or availability loss) provides immediate user\
+  \ value and mitigates risk, creating stability for a more thorough root-cause investigation.\
+  \ While alternatives like 'Unanimity-Requires-Hardened-Verification' or 'Formalize-Falsification-Experiment'\
+  \ improve intellectual rigor, they do not address the primary, tangible lesson of\
+  \ the report \u2014 that stopping the 'bleeding' with a safe, simple fix is more\
+  \ valuable than perfecting the diagnosis while the system remains in a failed state.\
+  \ This change is the most direct and impactful way to apply the lessons learned\
+  \ to improve safety and reliability across all projects using consensus-mcp."
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: c4ee1d5f66dbe141897282c73bd0c298010129dfbbb8ad456eaf5026635357bd
+  output_sha256: eb21cafa8c3a69c048ccd843735803cc98900cad81e46bbcefcefa9e93795a16
+  goal_packet_sha256: d6237efb6ac4601d602e5f4321c19ea5f99a3a90248c781f9e7dbebad0af99b8
+  scope_signature: c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0
+  review_target_path: null
+  review_target_hash: null
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\pipx\venvs\consensus-mcp\Lib\site-packages\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: 'Doctrine Update: Mandate ''Safety Interlock First'' for High-Severity
+    Failures'
+  rationale_vs_alternatives: "This proposal directly codifies the 'single highest-value\
+    \ decision' from the ChilipadScreen failure report: decoupling safety remediation\
+    \ from root cause analysis. Prioritizing a minimal, robust safety interlock for\
+    \ critical failures (like boot loops or availability loss) provides immediate\
+    \ user value and mitigates risk, creating stability for a more thorough root-cause\
+    \ investigation. While alternatives like 'Unanimity-Requires-Hardened-Verification'\
+    \ or 'Formalize-Falsification-Experiment' improve intellectual rigor, they do\
+    \ not address the primary, tangible lesson of the report \u2014 that stopping\
+    \ the 'bleeding' with a safe, simple fix is more valuable than perfecting the\
+    \ diagnosis while the system remains in a failed state. This change is the most\
+    \ direct and impactful way to apply the lessons learned to improve safety and\
+    \ reliability across all projects using consensus-mcp."
+  deliverable_scope:
+    next_iteration_id: iter-0029-doctrine-safety-interlock-first
+    files_in_scope:
+    - consensus_mcp/goal_packet_schema.yaml
+    - consensus_mcp/dispatch_templates/gemini_proposal_template.md
+    - consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+    - consensus_mcp/validators/consensus_gate.py
+    - consensus_mcp/docs/README.md
+    - docs/architecture/orchestration-spec.md
+    - consensus_mcp/tests/test_consensus_gate.py
+    files_out_of_scope:
+    - consensus_mcp/workflow_engine.py
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    key_design_decisions:
+    - A 'severity' field will be added to `goal_packet_schema.yaml`, with 'critical'
+      as an option to trigger this workflow.
+    - The `gemini_proposal_template.md` will be updated with a new required section,
+      'Safety Interlock Proposal', which must be addressed for goals marked with 'critical'
+      severity.
+    - The `consensus_gate.py` validator will be enhanced to check for 'critical' severity
+      and fail proposals that do not adequately propose a decoupled safety interlock
+      as the primary objective of the iteration.
+    - Doctrine documentation will be updated to define 'safety interlock' as a minimal,
+      robust, and hypothesis-independent change that restores system safety or availability,
+      explicitly distinguishing it from a root cause fix.
+    acceptance_gates:
+    - A new test case with a 'critical' severity goal is added; `run_validator_tests.py`
+      must confirm that a proposal without a valid safety interlock is rejected by
+      the consensus gate.
+    - The CLI help and documentation for `consensus-mcp` (specifically `consensus_mcp/docs/README.md`)
+      are updated to clearly explain the 'Safety Interlock First' doctrine and how
+      to use the 'severity' flag.
+    - When running a dry run of a new iteration on a 'critical' goal, the system correctly
+      identifies and enforces the requirement for a safety interlock proposal.
+  risks:
+  - 'The definition of ''critical'' severity might be ambiguous, leading to inconsistent
+    application. Mitigation: Provide clear examples in the documentation of what constitutes
+    a critical failure (e.g., boot loops, data corruption, loss of primary function).'
+  - 'Forcing an interlock-first approach could slow down a simple, obvious, and safe
+    root-cause fix. Mitigation: The doctrine will allow a direct fix to be proposed
+    if it''s justified as being as simple and safe as a decoupled interlock, making
+    the choice explicit and auditable.'
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T15:30:30Z'
+packet_sha256: fcfd75398c84898c65db224e0727ef9783fba0cdeb78a16068b128c84b59ef11
