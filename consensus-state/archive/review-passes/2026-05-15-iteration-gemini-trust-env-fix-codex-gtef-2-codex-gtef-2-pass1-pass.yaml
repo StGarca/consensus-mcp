@@ -1,0 +1,58 @@
+iteration_id: iteration-gemini-trust-env-fix
+reviewer_id: codex-gtef-2
+pass_id: codex-gtef-2-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: CHANGELOG still says gemini audit used the manual env-var workaround
+  citation: CHANGELOG.md:30
+  risk: The release record contradicts A4 and the advisory provenance, making it look
+    like the source fix was not proven end-to-end without the workaround.
+  recommendation: Update the v1.15.2 changelog to state that gemini was dispatched
+    from source with the manual workaround unset, matching the sealed pass evidence.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-001-patch
+    applies_to_findings:
+    - codex-rev-001
+    base_sha: e2a91a7dafd0fbaa71d9c7ebccbc9a4b53fa5ae1448069d803825eff705032ac
+    unified_diff: "--- a/CHANGELOG.md\n+++ b/CHANGELOG.md\n@@ -26,10 +26,11 @@\n `_dispatch_gemini.py`\
+      \ was in the v1.15.1 iteration's\n `forbidden_files`, so the dispatcher-level\
+      \ fix was correctly\n deferred to this version rather than patched out-of-scope.\n\
+      \ \n-Workflow B audit: codex + gemini (gemini dispatched via the\n-documented\
+      \ env-var workaround, since the fix is not yet in the\n-installed path). Full\
+      \ suite green; 4 new unit tests for\n-`_gemini_subprocess_env` in `test_dispatch_gemini.py`.\n\
+      +Workflow B audit: codex + gemini (gemini dispatched from the\n+source tree\
+      \ with the manual env-var workaround explicitly unset,\n+proving the new subprocess\
+      \ env injection end-to-end). Full suite\n+green; 4 new unit tests for `_gemini_subprocess_env`\
+      \ in\n+`test_dispatch_gemini.py`.\n \n ## 1.15.1 - 2026-05-15\n"
+    files_touched:
+    - CHANGELOG.md
+    expected_tests: []
+    unified_diff_sha256: 28617b16fbc802470ca34da3e30784729b3f651d4b18a6362e6b505d3adf532d
+goal_satisfied: false
+goal_satisfied_rationale: The code fix and advisory text meet the functional blocker,
+  but the changelog still records the opposite of the required no-workaround end-to-end
+  audit evidence.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: a0f73449ad165d847dd81038ede228b06bcbeeca0731d84a6cd3a1da0218f4a9
+  output_sha256: f5bc4b101cb08987b7d757ed1d51380338652c68dc5b77730cb494521c371d05
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: d09fb217efc5382937bd529d5384acf0f3d6f3bcf97506598ef04eac42111bf5
+  scope_signature: gemini-trust-env-fix-v1152
+  review_target_path: consensus-state/active/iteration-gemini-trust-env-fix/review-packet.yaml
+  review_target_hash: 280fe9c409733275edd5b88351b57ffbf1a248831aae5bc968e17ce4034b79f1
+  mode: review
+sealed_at_utc: '2026-05-15T17:27:23Z'
+packet_sha256: fae71444bedd64478b6aca00f08dd6d525a573ff5e684ad8925124502dc18d7f

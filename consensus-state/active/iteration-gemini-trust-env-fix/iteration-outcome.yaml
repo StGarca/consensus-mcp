@@ -1,0 +1,46 @@
+iteration_id: iteration-gemini-trust-env-fix
+closed_at_utc: '2026-05-15T17:30:00Z'
+version_target: v1.15.2
+workflow: |
+  Workflow B (post-review): claude implemented the clear-root-cause
+  fix; codex + gemini audited. Root cause empirically verified
+  (controlled --skip-trust vs env-var comparison), not inferred.
+goal: |
+  Close the v1.15.1 named blocker: gemini dispatch fails
+  empty-output on gemini CLI >=0.43.0-preview.0 because
+  _dispatch_gemini.py did not establish workspace trust.
+
+acceptance_gates:
+  - id: A1
+    status: pass
+    evidence: 4 unit tests for _gemini_subprocess_env (sets var; preserves PATH + full inheritance; no os.environ mutation; forces true over inherited false). pytest -k subprocess_env green.
+  - id: A2
+    status: pass
+    evidence: env=_gemini_subprocess_env() threaded into the _invoke_gemini Popen call; --skip-trust retained defense-in-depth.
+  - id: A3
+    status: pass
+    evidence: full suite 968 passed, 1 skipped, 0 regressions.
+  - id: A4
+    status: pass
+    evidence: |
+      gemini-gtef-1 dispatched with GEMINI_CLI_TRUST_WORKSPACE
+      explicitly `env -u`'d sealed gemini-review.yaml
+      goal_satisfied=true — END-TO-END in-vivo proof the source fix
+      works (the audit of the fix was made possible by the fix).
+
+workflow_b_audit:
+  gemini: pass-1 goal_satisfied=true, 0 blocking, 0 findings (+ A4 in-vivo proof)
+  codex: |
+    pass-1 (0 blocking; 2 doc-accuracy findings — advisory
+    self-contradiction after hasty resolved-marking, both verified
+    correct) → pass-2 (0 blocking; 1 doc finding — CHANGELOG
+    workaround wording) → pass-3 goal_satisfied=true, 0 blocking,
+    0 findings. Zero code findings any pass — the fix accepted by
+    both auditors immediately; only my own doc inaccuracies were
+    iterated.
+
+resolved:
+  - 'Advisory 2026-05-15 (gemini CLI >=0.43 trust): RESOLVED in v1.15.2.'
+
+named_blockers_carried_forward: []
+result: CLOSED — goal satisfied, all acceptance gates pass, Workflow B audit clean.

@@ -1,12 +1,11 @@
 defect_target:
   files:
   - consensus-state/active/iteration-gemini-trust-env-fix/fix-response-pass2.md
-  - consensus-state/active/iteration-gemini-trust-env-fix/implementation-summary.md
   - consensus_mcp/_dispatch_gemini.py
   - consensus_mcp/tests/test_dispatch_gemini.py
   - CHANGELOG.md
   - docs/advisories.md
-  base_sha: e216b3faef69c6058ef691b3ac6dbe5f20ab4632e9ee7a6edeaaa18bc04032b9
+  base_sha: f90590a12dd6dec994cff9ded1d4fab16d96dff9d05974c4d623779e3985799d
   touched_files_contents:
     consensus-state/active/iteration-gemini-trust-env-fix/fix-response-pass2.md: '#
       Fix response — Workflow B pass-2 (codex pass-1 disposition)
@@ -83,42 +82,6 @@ defect_target:
       no blocking. No open design surface.
 
       '
-    consensus-state/active/iteration-gemini-trust-env-fix/implementation-summary.md: "#\
-      \ Workflow B audit target — v1.15.2 gemini workspace-trust fix\n\nCloses the\
-      \ v1.15.1 named blocker (advisory 2026-05-15). Branch\n`v1.15.2`. This is a\
-      \ clear-root-cause execution bugfix → Workflow B.\n\n## Root cause (empirically\
-      \ verified 2026-05-15, not inferred)\n\ngemini CLI `0.43.0-preview.0`+ refuses\
-      \ headless runs in an\n\"untrusted\" directory: trust error → stderr, **empty\
-      \ stdout** →\ndispatcher fails `GeminiOutputParseError` (\"Expecting value:\
-      \ line\n1 column 1\"). The dispatcher already passed `--skip-trust` but no\n\
-      `env=` to Popen.\n\nControlled comparison on this host (gemini 0.43.0-preview.0):\n\
-      - **`--skip-trust` only, no env:** bypassed trust BUT gemini went\n  autonomous\
-      \ (ignored the JSON directive, started planning a repo\n  refactor) and hit\
-      \ 429. Non-deterministic, unusable.\n- **`GEMINI_CLI_TRUST_WORKSPACE=true`,\
-      \ no flag:** clean `OK`,\n  exit 0. Deterministic.\n- Corroborated by the v1.15.1\
-      \ audit: env var → 2 clean gemini\n  approvals (pass-2, pass-3); without → 2\
-      \ empty failures (pass-1 +\n  auto-retry).\n\nConclusion: `--skip-trust` is\
-      \ NOT load-bearing on this version;\n`GEMINI_CLI_TRUST_WORKSPACE` is. `--skip-trust`\
-      \ retained\ndefense-in-depth (harmless, accepted by the CLI).\n\n## Change\n\
-      \n`consensus_mcp/_dispatch_gemini.py`:\n- NEW `_gemini_subprocess_env()`: returns\
-      \ `os.environ.copy()` with\n  `GEMINI_CLI_TRUST_WORKSPACE` forced to `\"true\"\
-      ` (an inherited\n  `false` from operator/CI must not defeat the fix); never\
-      \ mutates\n  `os.environ`.\n- `_invoke_gemini` Popen call now passes\n  `env=_gemini_subprocess_env()`.\n\
-      - Docstring updated: `--skip-trust` is defense-in-depth, not\n  load-bearing;\
-      \ the env var is the fix.\n\n`consensus_mcp/tests/test_dispatch_gemini.py`:\
-      \ 4 new unit tests\n(sets the var; preserves PATH + full inheritance; no os.environ\n\
-      mutation; overrides an inherited `false`).\n\n`CHANGELOG.md`: 1.15.2 entry.\
-      \ `docs/advisories.md`: advisory\n2026-05-15 marked RESOLVED in v1.15.2.\n\n\
-      ## Verification\n\n- `pytest -k subprocess_env`: 4 green.\n- `test_dispatch_gemini.py`:\
-      \ 41 green.\n- Full suite: **968 passed, 1 skipped, 0 regressions**.\n- **End-to-end:**\
-      \ this iteration's own gemini audit pass is\n  dispatched from source WITHOUT\
-      \ the manual env-var workaround. If\n  gemini-review.yaml seals with a verdict,\
-      \ the fix is proven in\n  vivo (acceptance gate A4).\n\n## Audit questions\n\
-      \n- Q1 goal_satisfied: does the fix correctly + minimally close the\n  blocker\
-      \ without regressing gemini review semantics?\n- Q2: is forcing the var over\
-      \ an inherited value correct (vs.\n  `setdefault`)? Consider an operator who\
-      \ deliberately set\n  `GEMINI_CLI_TRUST_WORKSPACE=false`.\n- Q3: any blocking\
-      \ objection? State the differential/prior you\n  reasoned from.\n"
     consensus_mcp/_dispatch_gemini.py: "\"\"\"Phase 4 v1.14.0 — auto-gemini-dispatch\
       \ helper (gemini adapter).\n\nSibling of _dispatch_codex.py. Reuses generic\
       \ dispatch infrastructure from\n_dispatch_base.py (extracted in iter-0010);\
@@ -986,9 +949,12 @@ defect_target:
       \ deterministic\n  output, and the two clean v1.15.1 Workflow B audit approvals.\n\
       \n`_dispatch_gemini.py` was in the v1.15.1 iteration's\n`forbidden_files`, so\
       \ the dispatcher-level fix was correctly\ndeferred to this version rather than\
-      \ patched out-of-scope.\n\nWorkflow B audit: codex + gemini (gemini dispatched\
-      \ via the\ndocumented env-var workaround, since the fix is not yet in the\n\
-      installed path). Full suite green; 4 new unit tests for\n`_gemini_subprocess_env`\
+      \ patched out-of-scope.\n\nWorkflow B audit clean: gemini `goal_satisfied=true`,\
+      \ 0 blocking,\n0 findings — **dispatched from source with\n`GEMINI_CLI_TRUST_WORKSPACE`\
+      \ explicitly unset**, so the audit pass\nof this fix was made possible BY this\
+      \ fix (end-to-end in-vivo\nproof; acceptance gate A4). codex: 0 blocking; doc-accuracy\n\
+      findings on the advisory/changelog wording integrated. Full suite\ngreen: 968\
+      \ passed, 1 skipped, 0 regressions; 4 new unit tests for\n`_gemini_subprocess_env`\
       \ in `test_dispatch_gemini.py`.\n\n## 1.15.1 - 2026-05-15\n\n**Machine-enforcement\
       \ of the converged-plan convention** — closes the\nv1.15.0 NAMED BLOCKER. From\
       \ `iteration-converged-plan-machine-\nenforcement` (Workflow A weighted-synthesis:\
