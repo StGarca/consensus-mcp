@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.15.8 - unreleased
+## 1.15.8 - 2026-05-15
 
 **Windows-CI flakes — root-caused via Workflow A consult.** The
 re-enabled CI kept showing the *same commit* green on one run, red
@@ -25,6 +25,20 @@ independent_safeguard).
   independent safeguard so a sealed-provenance/audit log can never
   be silently incomplete, regardless of *why* the OS lock failed.
   Fixes the test deterministically (not a quarantine).
+- **Cross-process Windows lock — `codex-rev-001` (pass-1 blocking,
+  resolved).** The Workflow B pass-1 audit caught a real residual
+  hole: `msvcrt.locking` locks N bytes from the *current* file
+  position, and `_locked_append` opens the log `"ab"`, so that
+  position is the *calling process's EOF* — which differs per
+  process as the file grows. Cross-process writers therefore
+  locked *different* byte ranges and could append concurrently:
+  the fail-loud safeguard's premise was not actually met
+  cross-process. Fix: `f.seek(0)` before `msvcrt.locking(fileno,
+  LK_LOCK, 1)` so every process contends on the *same* fixed byte
+  (offset 0). Writes still land at EOF — Python `"ab"` opens with
+  `_O_APPEND`, so the write goes to EOF regardless of the seek
+  (the seek positions only the lock range); proven by the
+  50-thread test (no overwrite/loss).
 - **Q2(c interim) — timing-fragile heartbeat-pattern tests.** Four
   tests drive the `_invoke_codex` runner thread + advance a
   controllable clock with real `time.sleep` ticks then `join`;
@@ -43,7 +57,13 @@ independent_safeguard).
   (the over-claim that bit this session).
 
 Full suite 968 passed / 1 skipped / 0 regressions. Workflow B
-audit: codex + gemini.
+audit: gemini clean both passes (`goal_satisfied=true`, 0
+findings); codex pass-1 blocked on `codex-rev-001` (cross-process
+byte-range) → fixed → codex pass-2 **0 blocking objections**. The
+two non-blocking codex pass-2 findings (Q2(c) skip breadth +
+deterministic-rework deferral) are integrated, not dismissed, in
+`docs/advisories.md` (2026-05-15 v1.15.8) with the shared-mechanism
+evidence and the explicitly-named residual Windows coverage gap.
 
 ## 1.15.7 - 2026-05-15
 

@@ -10,6 +10,73 @@ the entry stays for the historical record.
 
 ---
 
+## Advisory 2026-05-15: v1.15.8 named follow-up — deterministic clock harness (Q2(a))
+
+**Affected versions:** `v1.15.8` (forward, until addressed).
+
+**Severity:** Tracked engineering follow-up — NOT a defect in
+shipped behavior. The v1.15.8 load-bearing fix (`_visibility_
+watchdog._locked_append` intra-process `threading.Lock` +
+fixed-byte-0 cross-process Windows lock + fail-loud `OSError`)
+was confirmed RESOLVED by **both** Workflow B pass-2 reviewers
+(gemini `goal_satisfied=true`, 0 findings; codex 0 blocking
+objections — the pass-1 blocking `codex-rev-001` cross-process
+byte-range defect is fixed). This advisory records the two
+**non-blocking** codex pass-2 findings on the Q2(c) interim,
+integrated here rather than dismissed.
+
+1. **Q2(c) Windows-CI skip is the converged-plan-sanctioned
+   interim, not the Q2(a) deterministic rework (codex-rev-002,
+   medium).** The converged plan's unanimous *preferred* answer is
+   Q2(a): replace `_ControllableClock` + `_FakePipeReader`'s real
+   `time.sleep` poll ticks (`test_dispatch_codex_streaming.py:126,
+   137`) + `th.join(timeout=...)` (`:304,476,540,597,663`) with a
+   test↔runner synchronizing handshake (Condition/Event/queue) so
+   the reader/runner wake deterministically on `clock.advance()`
+   with no real sleeps and no scheduling-budget dependence. This
+   is a multi-thread harness redesign with genuine deadlock risk
+   (the precise stall mode this release line repeatedly hit) — an
+   open concurrency-design question, NOT a bounded mechanical edit.
+   The converged plan explicitly pre-sanctioned the Q2(c) interim
+   "if Q2(a) overruns the iteration bound, with a concrete named
+   follow-up." It does. This is that follow-up. **Proper fix:**
+   the synchronizing-clock redesign, scoped as its own iteration
+   (Workflow A — it has real design surface).
+
+2. **Skip breadth: 4 tests, 1 with first-hand CI evidence
+   (codex-rev-001-pass2, high) — shared-mechanism justification +
+   recorded residual gap.** `@_FLAKY_WINDOWS_CI` skips
+   `test_heartbeat_fires_at_interval` (the F2-verified flake) plus
+   `test_heartbeat_silence_triggers_abort`,
+   `test_operator_abort_signal_file_triggers_abort`,
+   `test_wall_time_hard_ceiling`. codex correctly noted only the
+   first has first-hand Windows-CI failure evidence. **Why the
+   breadth is justified (verifiable from the code, not loose
+   similarity):** all four starve on the *same* harness path — the
+   `_FakePipeReader.readline()` real `time.sleep(self._real_tick)`
+   poll loop (`:126,137`) feeding a daemon runner thread the test
+   then `th.join(timeout=...)`s. The flake is structural to that
+   reader/runner-starvation-under-loaded-Windows-scheduling
+   mechanism, *not* to heartbeat logic — so the same root cause
+   makes all four nondeterministic on loaded Windows runners. **The
+   residual coverage gap codex named, recorded explicitly:** while
+   skipped on Windows GitHub Actions, Windows-only regressions in
+   (i) silence-triggered process termination, (ii) operator
+   abort-signal-file detection/cleanup, and (iii) wall-time
+   hard-ceiling abort are covered ONLY by Linux CI (every push) +
+   local Windows dev — NOT Windows CI. The logic under test is
+   driven by the injected `time_fn`, so it is not a Windows
+   product code path; the gap is loss of the *Windows-runner*
+   environment for those three behaviors until Q2(a) lands. The
+   Q2(a) rework eliminates both the breadth and the gap by making
+   all four run everywhere.
+
+**User action:** none required. Recorded for the maintainer; no
+upgrade implication. The shipped integrity fix is complete and
+peer-confirmed; these are deferred test-harness quality items.
+
+---
+
 ## Advisory 2026-05-15: v1.15.7 named follow-ups (non-blocking)
 
 **Affected versions:** `v1.15.7` (forward, until addressed).
