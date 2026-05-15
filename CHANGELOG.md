@@ -1,5 +1,97 @@
 # Changelog
 
+## 1.15.1 - 2026-05-15
+
+**Machine-enforcement of the converged-plan convention** — closes the
+v1.15.0 NAMED BLOCKER. From `iteration-converged-plan-machine-
+enforcement` (Workflow A weighted-synthesis: claude + codex + gemini;
+shared-prior self-check PASSED; no blocking objections; the consult
+dogfooded the very convention it enforces). The recorded v1.15.0
+"starting design" (gemini's `severity` field + `consensus_gate.py`
+mechanism) was **partially refuted by first-hand code-reading** during
+the consult: `consensus_mcp/validators/consensus_gate.py` is the
+Phase-0 production-readiness gate (P0-V6) and is the WRONG component —
+the v1.15.0 doctrine working correctly on its own audit trail.
+
+**Artifact truth (scoped claim):** the **v1.15.0 tag `4e81f9e` is
+DOCTRINE-ONLY** — it shipped the convention as an authoring convention
+enforced by the bundled skill + Workflow B audit, with **zero engine
+code**. Machine enforcement exists **only from the v1.15.1 tag
+forward**. Users on v1.15.0 get doctrine; they must upgrade to v1.15.1
+to get the gate.
+
+Shipped (real code paths — meaningful regression signal, unlike
+v1.15.0's doc-only change):
+
+- **`consensus_mcp/schemas/converged_plan_convention.schema.json`**
+  (NEW; `schemas/` is net-new) — JSON Schema for the convention
+  object; `empirical_status` enum `proven|pending|refuted|n/a` matches
+  v1.15.0 verbatim.
+- **`consensus_mcp/validators/validate_converged_plan.py`** (NEW;
+  small; structure + consequence ONLY). Enforces the consequence of
+  the orchestrator-attested `falsifiable_from_artifacts` bool — the
+  engine does **not** classify the defect (keyword heuristics are the
+  shared-prior trap the v1.15.0 report documents). **Recursive-trap
+  defense (highest-order constraint):** the validator has zero code
+  path deriving any approved/correct/ready/sound state from the
+  blocks (pinned by `test_validator_source_sets_no_correctness_state`
+  grepping the module), and every result carries an unconditional
+  `gate_scope` disclaimer: *"presence-and-consistency only; NOT a
+  soundness assertion … remains a human judgement."* A pass means the
+  required thinking was **recorded**, never that it is **true**.
+- **`workflow_engine._seal_converged_plan`** — ingests the optional
+  orchestrator-authored `convention-input.yaml` via the ONE channel
+  that already reaches seal time (a file in `iteration_dir`; no new
+  parameter threaded through `run_iteration`/the MCP tool — codex's
+  external-refuting-observation honored), validates it, and seals the
+  blocks **INTO** `converged-plan.yaml` (same write, same hash) with
+  required `cited_pass_ids` (provenance-by-citation: not a loose
+  untracked sidecar, not a single-winner extraction — gemini's
+  chain-of-evidence requirement). **Fail-closed:** a hard-reject does
+  NOT write `converged-plan.yaml`.
+- **Graduated strictness** (`convergence.converged_plan_enforcement`:
+  `off|warn|graduated|strict`, default `graduated`). Hard-reject ONLY
+  (i) operator-declared safety/data-loss/bricking/irreversible risk
+  class missing a conforming root-cause-independent
+  `independent_safeguard`, and (ii) `empirical_status:proven` with no
+  recorded `experiment_result`; warn + annotate `convention_violations`
+  otherwise.
+- **`consensus_get_iteration_outcome`** surfaces `enforcement` +
+  `convention_gate_scope` + `convention_violations`; a reader can
+  never see a pass marker without the non-soundness disclaimer next
+  to it. Legacy / absent-convention plans (this session's iter-0043
+  .. v1.15.0) still load, explicitly marked `enforcement:
+  doctrine-only` — **NOT silently valid, NOT rejected**.
+
+**Named blocker (need-evidence, deferred — not a cop-out):** operator
+goal_packet `defect_class`/`risk_class` declaration UX + an
+anti-gaming cross-check on `falsifiable_from_artifacts`. Both are
+ill-posed until the shipped slice produces real usage data.
+
+**Workflow B audit chain** (codex + gemini, post-implementation):
+gemini APPROVED (`goal_satisfied=true`, no blocking). codex pass-1
+raised 2 blocking + 2 high — all verified against real code (no
+hallucinations; all correctly caught the slice under-implementing
+the converged plan) and integrated TDD-first: the third named block
+(`decisive_experiment_before_next_iteration`) is now schema-required
++ validated; `doctrine-only` is a READ-time legacy classification
+only (a new convergence missing blocks is validated under the
+configured level, not bypassed); `convention_schema_version` is
+pinned exactly (never defaulted/rewritten); a hard-reject removes any
+stale `converged-plan.yaml` (fail-closed truly closed). **Design
+note (intentional, peer-converged):** under the default `graduated`
+level a new *non-safety* convergence missing blocks is sealed as
+**warn + annotate** (loudly marked via `convention_gate.
+enforcement_note`, never a silent pass), NOT hard-rejected — this is
+the converged plan's deliberate q4/q5 decision (incl. codex's own
+consult position) to avoid the rejected-goal_packet papercut. Strict
+enforcement is opt-in via `converged_plan_enforcement: strict`.
+
+Full suite green: 964 passed, 1 skipped, 0 regressions (38 new
+code-path tests in `test_converged_plan_convention.py`, including
+all audit-integration fixes — they close the v1.15.0 doc-only loose
+end with a meaningful regression signal).
+
 ## 1.15.0 - 2026-05-15
 
 **Convergence-correctness doctrine** — minor bump (cross-project
