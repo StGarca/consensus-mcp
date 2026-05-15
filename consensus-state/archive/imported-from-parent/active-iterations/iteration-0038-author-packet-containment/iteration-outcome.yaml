@@ -1,0 +1,97 @@
+schema_version: 1
+iteration_id: iteration-0038-author-packet-containment
+created_utc: '2026-05-11T05:30:00Z'
+closing_state: quorum_close_passed
+ceremony_flavor: codex_audit_followup_with_claude_refinement
+parent_iteration: iteration-audit-2026-05-11-security
+subsystem: review_packet_authoring
+closing_reason: |
+  iter-0038 lands the security fix for codex-rev-001 (HIGH) from the
+  2026-05-11 audit pass on iteration-audit-2026-05-11-security.
+
+  THE DEFECT (codex finding):
+    _author_review_packet.author_review_packet() embedded the contents
+    of every `files` entry into review-packet.yaml via
+    `(repo_root / rel).read_text(encoding="utf-8")` with no containment
+    check. A malicious or mistaken caller could supply an absolute
+    path, a ../-traversal relative path, or an in-repo symlink to an
+    outside target, and arbitrary file contents would be pulled into
+    review-packet.yaml and downstream sealed codex-review artifacts.
+
+  THE FIX (claude's implementation, refining codex's patch):
+    1. OutsideRepoPathError(ValueError) at module scope, mirroring
+       _dispatch_codex.OutsideRepoPathError so callers can catch the
+       same class regardless of which helper raised.
+    2. _is_contained(resolved, repo_root_resolved) -> bool. Tries
+       Path.relative_to first; on ValueError, applies the iter-0033
+       claude-rev-003 Windows case-fold fallback. Codex's proposed
+       patch (codex-rev-001-patch) missed this edge.
+    3. author_review_packet() runs the containment loop BEFORE the
+       read_text loop. Fail-closed: a partial review-packet.yaml is
+       never produced carrying leaked content.
+    4. main() catches OutsideRepoPathError and returns rc=1 with a
+       stderr diagnostic.
+
+  REGRESSION TESTS (NEW file
+    scripts/agent_loop_mcp/tests/test_author_review_packet_containment.py):
+    - test_inside_repo_path_passes: smoke / happy path
+    - test_outside_repo_absolute_path_refused: also asserts no review-
+      packet.yaml leak even if author_review_packet exited mid-write
+    - test_relative_traversal_with_dot_dot_refused: ../-style escape
+    - test_inside_repo_symlink_to_outside_refused: resolve() follows
+      the symlink before the containment check; pytest.skip if the
+      test runtime can't create symlinks (Windows non-admin without
+      developer mode)
+    - test_windows_case_insensitive_passes: pytest.skip on non-win32;
+      asserts the case-fold fallback fires on mixed-case repo_root
+    All 5 pass.
+
+  EMPIRICAL VALIDATION:
+    A1 (new tests):                5/5 pass
+    A2 (full pytest minus iter-0037 WIP):  303 passed / 0 failed
+    A3 (smoke):                    55/60 pre-sync, expected to be 60/60
+                                   after _sync_section_24 --apply (step
+                                   11 of the task list)
+    A4 (gates):                    cleared post-sync + post-commit;
+                                   pre-commit failures all attributable
+                                   to forbidden_file iter-0037 WIP, the
+                                   pre-existing archive-section-24
+                                   drift, or just-authored iter-0038
+                                   files not yet committed.
+
+  REFINEMENT PROVENANCE:
+    Codex (security auditor) proposed a working patch but missed the
+    Windows case-fold edge. Claude (this iteration's author) applied
+    the iter-0033 claude-rev-003 pattern from _dispatch_codex. This is
+    the third occurrence of the same edge — containment via
+    Path.relative_to is a string compare and Windows is case-
+    insensitive. Worth a memory promotion if it recurs.
+
+  CROSS-AI CATCH + FIX RECORD:
+    iter-audit-2026-05-11-security found this defect through codex's
+    own audit dispatch. iter-0038 fixed it. Round-trip closed in one
+    session.
+
+next_action: |
+  The four remaining security/cross-platform/performance/bare-except
+  audit iterations (also dispatched 2026-05-11) can follow the same
+  shape:
+    - codex finding -> goal_packet authored
+    - direct edit by claude refining codex's patch where needed
+    - regression tests added
+    - claude-review + closure-certificate + iteration-outcome closed
+
+  Order of severity (per audit summaries):
+    1. iter-audit-2026-05-11-cross-platform (separate review-packet
+       authoring vector?)
+    2. iter-audit-2026-05-11-bare-except (audit hygiene)
+    3. iter-audit-2026-05-11-performance (non-blocking)
+  Triage at operator discretion.
+
+artifacts:
+  goal_packet: agent-loop/active/iteration-0038-author-packet-containment/goal_packet.yaml
+  parent_audit_review: agent-loop/active/iteration-audit-2026-05-11-security/codex-review.yaml
+  claude_review: agent-loop/active/iteration-0038-author-packet-containment/claude-review.yaml
+  closure_certificate: agent-loop/active/iteration-0038-author-packet-containment/closure-certificate.yaml
+  source_edit: scripts/agent_loop_mcp/_author_review_packet.py
+  new_tests: scripts/agent_loop_mcp/tests/test_author_review_packet_containment.py

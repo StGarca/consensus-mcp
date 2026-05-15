@@ -1,0 +1,585 @@
+schema_version: 1
+pass_id: pass-20-claude-phase0-validator-suite-build
+reviewer: claude-opus-4-7
+date: 2026-05-08
+spec_path: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.7.2-ai-contract"
+review_type: "Phase 0 deliverable build event with iteration-0000 real-data spot-check across all 6 newly-built validators"
+
+# ---- Independence framing ----
+
+independence_attestation:
+  fresh_context: false
+  rationale: |
+    Pass-20 cannot claim independence per section 13 independence_proof_required.
+    This pass IS the build of the validator suite plus an immediate real-data
+    spot-check on iteration-0000. The author had:
+      - full exposure to spec v1.7.2 throughout the build
+      - full exposure to all 6 implementer subagent reports
+      - full exposure to iteration-0000 artifacts
+    Findings reported here are inherently post-exposure. Per cf-001 enforcement
+    notes (Phase 0 honor-system) and pass-19 framing convention.
+  exposure_metadata:
+    artifacts_read_during_build:
+      - spec v1.7.2 frontmatter + sections 0, 6, 7, 8, 9, 10, 11, 12, 13, 16, 17, 20, 22
+      - agent-loop/active/iteration-0000/* (all 8 artifacts) via validator outputs
+      - agent-loop/archive/review-passes/2026-05-08-claude-pass-19-v1.7.1-audit.yaml
+      - agent-loop/archive/review-passes/index.yaml
+    treat_pass_20_findings_as: |
+      Section 13 corroboration_strength: suggested_by_context. NOT independent.
+      Severity gate evaluation per finding still applies, but auto-promotion
+      to blocking via independence is blocked per claude-rev-008 weaponization
+      defense. Findings are valid as observed defects against real artifacts;
+      operator decides resolution priority.
+
+stance: implementation_realist_with_real_data_spotcheck
+
+# ---- Verdict ----
+
+verdict:
+  phase_0_validator_suite_build: COMPLETE
+  validators_built: 6_of_6
+  smoke_tests_pass: 21_of_21
+  iteration_0000_real_data_spotcheck: 9_findings_surfaced (1_unrelated_observational_design)
+  spec_ambiguities_surfaced_during_build: 5
+  active_contract_readiness: KEEP_pending_phase_0_empirical_validation
+  next_required_action_recommendation: operator_picks_iteration_0001_target
+  iteration_0001_blocking_status:
+    strictly_blocked: false
+    recommended_blocked_until: |
+      Operator decides whether iteration-0001 fixes iteration-0000's real defects
+      (claude-rev-044 YAML parse error is the most operationally significant)
+      OR targets a different live decision and accepts iteration-0000 known-debt.
+    rationale: |
+      Phase 0 INFRASTRUCTURE is complete. The validator suite works, smoke tests
+      pass, real data flows through every gate. But iteration-0000 itself has
+      9 real-data findings, including one (claude-rev-044) that prevents
+      validate_iteration from reading the §22 metrics block at all. If
+      iteration-0001 is run on a new target without addressing iteration-0000,
+      the next iteration inherits the broken-metrics state.
+
+# ---- Phase 0 deliverable status update ----
+
+phase_0_deliverables_status:
+  - id: validate_disposition_index.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/validate_disposition_index.py exists; pre-existing per v1.5"
+    smoke_test_status: passing
+  - id: validate_review.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/validate_review.py exists; landed in pass-20"
+    smoke_test_status: "6/6 expected finding IDs caught"
+    real_data_spotcheck:
+      target: agent-loop/active/iteration-0000/codex-review.yaml
+      findings: 0
+      target_2: agent-loop/active/iteration-0000/claude-review.yaml
+      findings_2: 3 (claude-rev-040, claude-rev-041, claude-rev-042)
+  - id: validate_consensus.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/validate_consensus.py exists; landed in pass-20"
+    smoke_test_status: "11/11 expected finding IDs caught"
+    real_data_spotcheck:
+      target: agent-loop/active/iteration-0000/consensus.yaml
+      findings: 14 (all INVALID_ENUM_VALUE; rolled into claude-rev-043)
+  - id: build_review_packet.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/build_review_packet.py exists; landed in pass-20"
+    smoke_test_status: "build path: 7+ injection patterns redacted; validate path: 10 MISSING_REQUIRED_KEY on known-bad fixture"
+    real_data_spotcheck:
+      target: rebuilds packet from agent-loop/active/iteration-0000/input.yaml
+      findings: 0 on rebuilt packet
+      note: "real iteration-0000 review-packet.yaml has separate finding (claude-rev-047)"
+  - id: validate_iteration.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/validate_iteration.py exists; landed in pass-20"
+    smoke_test_status: "9/9 expected finding IDs caught"
+    real_data_spotcheck:
+      target: agent-loop/active/iteration-0000/
+      findings: 11 high (claude-rev-044, claude-rev-045, claude-rev-046, claude-rev-047, partial overlap with claude-rev-040)
+  - id: scope_check.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/scope_check.py exists; landed in pass-20"
+    smoke_test_status: "3/3 scenarios (in-scope, out-of-scope, missing-scope)"
+    real_data_spotcheck:
+      target: agent-loop/active/iteration-0000/consensus.yaml + HEAD~1..HEAD diff
+      findings: 1 (claude-rev-048)
+  - id: consensus_gate.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/consensus_gate.py exists; landed in pass-20"
+    smoke_test_status: "3/3 terminal states (not_ready, ready_pending, approved)"
+    real_data_spotcheck:
+      target: agent-loop/active/iteration-0000/{consensus.yaml, verification.yaml} no approval
+      result: state=not_ready, 2 findings (MISSING_CODEX_CLEARANCE, MISSING_CLAUDE_CLEARANCE)
+      note: |
+        Expected behavior, not a finding. iteration-0000 is observational-only
+        and has no production_clearances block by design. Recorded for
+        completeness; no claude-rev-NNN allocated.
+  - id: run_validator_tests.py
+    status: implemented_and_smoke_tested
+    evidence: "scripts/agent_loop/run_validator_tests.py extended in pass-20"
+    smoke_test_status: "21/21 tests pass (V0..V6 all green)"
+
+# ---- Severity gate replay (claim_class predicate per codex-rev-010) ----
+
+severity_gate_replay:
+  claude_rev_040:
+    max_source_severity: high
+    claim_class: process
+    gate_result: auto_block_eligible
+    BUT_corroboration_strength: suggested_by_context
+    final_outcome: blocking_held (severity stays at high; cannot auto-promote due to taint)
+  claude_rev_041:
+    max_source_severity: low
+    claim_class: correctness
+    gate_result: confirmed_suggestion (low severity does not auto-block even though claim_class is in eligible set)
+  claude_rev_042:
+    max_source_severity: medium
+    claim_class: correctness
+    gate_result: confirmed_suggestion
+  claude_rev_043:
+    max_source_severity: high
+    claim_class: correctness
+    gate_result: auto_block_eligible
+    BUT_corroboration_strength: suggested_by_context
+    final_outcome: blocking_held
+  claude_rev_044:
+    max_source_severity: high
+    claim_class: correctness
+    gate_result: auto_block_eligible
+    BUT_corroboration_strength: suggested_by_context
+    final_outcome: blocking_held (real YAML parse error; operationally significant)
+  claude_rev_045:
+    max_source_severity: high
+    claim_class: correctness
+    gate_result: auto_block_eligible
+    BUT_corroboration_strength: suggested_by_context
+    final_outcome: blocking_held
+  claude_rev_046:
+    max_source_severity: high
+    claim_class: correctness
+    gate_result: auto_block_eligible
+    BUT_corroboration_strength: suggested_by_context
+    final_outcome: blocking_held
+  claude_rev_047:
+    max_source_severity: high
+    claim_class: correctness
+    gate_result: auto_block_eligible
+    BUT_corroboration_strength: suggested_by_context
+    final_outcome: blocking_held
+  claude_rev_048:
+    max_source_severity: medium
+    claim_class: scope
+    gate_result: confirmed_suggestion (claim_class scope NOT in [safety, correctness, security, process])
+    note: "spec md is in forbidden_files; HEAD~1..HEAD diff modifies spec md. Indicates iteration-0000's implementation_scope is mis-specified for an observational pass that necessarily edits the spec, OR scope is correct and the diff should not happen on this branch."
+  claude_rev_049:
+    max_source_severity: medium
+    claim_class: methodology
+    gate_result: confirmed_suggestion
+  claude_rev_050:
+    max_source_severity: medium
+    claim_class: methodology
+    gate_result: confirmed_suggestion
+  claude_rev_051:
+    max_source_severity: medium
+    claim_class: methodology
+    gate_result: confirmed_suggestion
+  claude_rev_052:
+    max_source_severity: low
+    claim_class: methodology
+    gate_result: confirmed_suggestion
+  claude_rev_053:
+    max_source_severity: medium
+    claim_class: scope
+    gate_result: confirmed_suggestion
+
+# ---- iteration-0000 real-data findings (claude-rev-040..048) ----
+
+real_data_findings_on_iteration_0000:
+
+  - id: claude-rev-040-corroborated-by-on-claude-review
+    severity: high
+    claim_class: process
+    file: agent-loop/active/iteration-0000/claude-review.yaml
+    section: section_9 + section_13
+    surfacing_validator: validate_review.py
+    finding_class: CORROBORATED_BY_FORBIDDEN
+    claim: "claude-review.yaml emits corroborated_by entries on findings; per codex-rev-009 resolution (v1.5) corroborated_by is synthesizer-only and lives on consensus.canonical_findings, not reviewer artifacts."
+    evidence: "validate_review.py output flags 1 CORROBORATED_BY_FORBIDDEN finding when run against this file."
+    proposed_resolution: |
+      Edit iteration-0000 claude-review.yaml to remove corroborated_by entries
+      from blocking_objections / non_blocking_suggestions. The corroboration
+      synthesis can be re-derived by the synthesizer pass and recorded on
+      consensus.canonical_findings (where it already partially lives).
+    out_of_scope_for_pass_20: |
+      Pass-20 is build + spotcheck. Editing iteration-0000 artifacts is the
+      job of iteration-0001 if operator picks self-fix as the target.
+
+  - id: claude-rev-041-partially-cleared-underscore-vs-hyphen
+    severity: low
+    claim_class: correctness
+    file: agent-loop/active/iteration-0000/claude-review.yaml
+    section: section_9
+    surfacing_validator: validate_review.py
+    finding_class: INVALID_ENUM_VALUE
+    claim: "claude-review.yaml uses challenge_result: partially_cleared (underscore); spec section 9 enum is partially-cleared (hyphen)."
+    evidence: "validate_review.py output flags 1 INVALID_ENUM_VALUE on this field."
+    proposed_resolution: |
+      Two options. (a) Fix the artifact: change underscore to hyphen.
+      (b) Widen the spec: section 9 accepts both forms or canonicalizes to
+      underscore (Python idiomatic). Spec change requires operator + codex
+      review per claude-rev-028. Recommend (a) as the surgical fix.
+    cosmetic_note: |
+      Real cost is low; semantically clear. Listed for completeness because
+      the validator catches it cleanly.
+
+  - id: claude-rev-042-no-blockers-without-rationale
+    severity: medium
+    claim_class: correctness
+    file: agent-loop/active/iteration-0000/claude-review.yaml
+    section: section_9
+    surfacing_validator: validate_review.py
+    finding_class: NO_BLOCKERS_WITHOUT_RATIONALE
+    claim: "claude-review.yaml has empty blocking_objections AND empty no_objection_rationale.text. Spec section 9 validity rule: empty blocking_objections requires non-empty rationale text."
+    evidence: "validate_review.py output flags 1 NO_BLOCKERS_WITHOUT_RATIONALE finding."
+    proposed_resolution: |
+      Edit claude-review.yaml to populate no_objection_rationale.text with the
+      explicit no-objection logic at iteration-0000 review time. The substantive_pushback
+      rule (section 13) requires either >=1 blocking objection or substantive rationale;
+      neither is currently present, which would otherwise trigger an adversarial-pass.
+
+  - id: claude-rev-043-consensus-yaml-enum-drift
+    severity: high
+    claim_class: correctness
+    file: agent-loop/active/iteration-0000/consensus.yaml
+    section: section_13
+    surfacing_validator: validate_consensus.py
+    finding_class: INVALID_ENUM_VALUE (14 occurrences)
+    claim: |
+      iteration-0000 consensus.yaml uses enum values not in the section 13 schema:
+        consensus_state: implementation_ready_observational_only (not in spec set)
+        merge_method: shared_section_shared_concern, related_topic_shared_concern (not in spec set)
+        status: deferred_to_v1_7, recorded_for_iteration_0001_observation, deferred_to_v1_7_per_observational_mode (not in spec set)
+    evidence: "14 INVALID_ENUM_VALUE findings from validate_consensus.py against this file."
+    proposed_resolutions:
+      - id: A
+        approach: |
+          Widen section 13 enums to accept observational-mode values. Add an
+          enum subgroup like consensus_state.observational_modes:
+          [implementation_ready_observational_only, ...]. Same for merge_method
+          and status. Architectural change; requires operator + codex review.
+      - id: B
+        approach: |
+          Rewrite iteration-0000 consensus.yaml to use only spec-defined enum
+          values. May lose nuance the synthesizer originally encoded.
+        risk: "May discard real semantic information."
+      - id: C
+        approach: |
+          Define section 13 observational_mode flag at consensus level. When
+          observational_mode: true, enum constraints relax. Matches existing
+          codex-rev-038 spirit (iteration-0000 observational-only).
+        recommendation: preferred (cleanest separation; single architectural change)
+    out_of_scope_for_pass_20: "Architectural; needs operator+codex review."
+
+  - id: claude-rev-044-iteration-outcome-yaml-parse-error
+    severity: high
+    claim_class: correctness
+    file: agent-loop/active/iteration-0000/iteration-outcome.yaml
+    section: section_22
+    surfacing_validator: validate_iteration.py
+    finding_class: YAML_PARSE_ERROR
+    claim: "iteration-outcome.yaml has unquoted colon at line 71 causing pyyaml.safe_load to fail. Validator cannot read the §22 metrics block from this file."
+    evidence: "validate_iteration.py reports YAML_PARSE_ERROR. Manual inspection of line 71 shows an unquoted colon in an inline string value."
+    operational_significance: |
+      This is the highest-impact finding. Until the parse error is fixed,
+      validate_iteration cannot evaluate any §22 metric (token usage,
+      independent_finding_rate, blockers_found, etc.) for iteration-0000.
+      The done_claim_rule second condition ("iteration-0000 metrics exist
+      in section 22") is technically satisfied (file exists, metrics present
+      in raw form) but operationally degraded.
+    proposed_resolution: |
+      Surgical fix: quote the offending value at line 71. Mechanical edit;
+      pass-20 author DID NOT fix this because pass-20 is a review pass;
+      iteration-0001 self-fix path would address it.
+
+  - id: claude-rev-045-audit-event-name-drift
+    severity: high
+    claim_class: correctness
+    file: agent-loop/active/iteration-0000/independence-audit.yaml
+    section: section_13
+    surfacing_validator: validate_iteration.py
+    finding_class: HASH_CHAIN_BROKEN (2 occurrences)
+    claim: |
+      independence-audit.yaml uses event names with per-agent prefix:
+        codex_reviewer_invoked
+        codex_review_returned_and_sealed
+        claude_reviewer_invoked
+        claude_review_returned_and_sealed
+      Spec section 13 audit_log canonical event names are:
+        reviewer_invoked
+        review_returned_and_sealed
+      with the agent identity carried in the actor field, not in the event name.
+    evidence: "validate_iteration.py reports HASH_CHAIN_BROKEN x2 (one per reviewer slot). The validator looks for canonical event names; finds none; therefore cannot verify the seal-time sha256 chain."
+    proposed_resolutions:
+      - id: A
+        approach: "Fix audit-write code to emit canonical event names. Mechanical."
+      - id: B
+        approach: "Widen spec audit_log schema to accept per-agent-prefixed event names."
+        downside: "More noise in event-name space; defeats the actor-field design."
+      - id: C
+        approach: "Both: fix the artifact AND add a §13 note that per-agent prefixes are forbidden in canonical event names."
+        recommendation: preferred
+    out_of_scope_for_pass_20: "Architectural; needs operator+codex review for option B or C."
+
+  - id: claude-rev-046-packet-sha256-canonical-convention-drift
+    severity: high
+    claim_class: correctness
+    file: |
+      agent-loop/active/iteration-0000/codex-review.yaml
+      agent-loop/active/iteration-0000/claude-review.yaml
+    section: section_7 + section_13
+    surfacing_validator: validate_iteration.py
+    finding_class: PACKET_SHA_MISMATCH (2 occurrences)
+    claim: |
+      Both review yamls' reviewed_packet_sha256 fields do not match the
+      sha256 of the packet computed via the convention validate_iteration
+      (and the build_review_packet builder) uses:
+        hashlib.sha256(yaml.safe_dump(yaml.safe_load(open(p)), sort_keys=True).encode("utf-8")).hexdigest()
+    evidence: "validate_iteration.py reports PACKET_SHA_MISMATCH x2."
+    proposed_resolutions:
+      - id: A
+        approach: |
+          Pin the canonical hash convention in spec section 7 (or section 13
+          where reviewed_packet_sha256 is referenced). Choose one.
+        recommendation: |
+          Use the convention pass-20 builders use:
+          hashlib.sha256(yaml.safe_dump(yaml.safe_load(open(p)), sort_keys=True).encode("utf-8")).hexdigest()
+          Document explicitly. Architectural; needs operator+codex review.
+      - id: B
+        approach: "Fix iteration-0000 review yamls to use the canonical hash."
+        risk: "If real reviewers used a different convention, iteration-0000 was already running on a different (now-unspecified) hash convention; just fixing the value loses information."
+      - id: C
+        approach: "Both A and B."
+    out_of_scope_for_pass_20: "Architectural for option A; mechanical for B."
+    cross_reference: claude-rev-051
+
+  - id: claude-rev-047-packet-missing-required-fields
+    severity: high
+    claim_class: correctness
+    file: agent-loop/active/iteration-0000/review-packet.yaml
+    section: section_7
+    surfacing_validator: validate_iteration.py
+    finding_class: PACKET_MISSING_REQUIRED_FIELD (5 occurrences)
+    claim: |
+      iteration-0000 review-packet.yaml is missing required_packet_fields
+      enumerated in section 7:
+        - karpathy_principle_summary
+        - gate_state
+        - decision_ledger_hash
+        - claude_md_hash
+        - requested_output_schema
+    evidence: "validate_iteration.py reports PACKET_MISSING_REQUIRED_FIELD x5."
+    proposed_resolutions:
+      - id: A
+        approach: |
+          Edit iteration-0000 review-packet.yaml to add the 5 required fields.
+          Mechanical. Build_review_packet.py can regenerate from input.yaml.
+        recommendation: preferred
+      - id: B
+        approach: |
+          Mark iteration-0000 review-packet as observational-mode-relaxed and
+          allow these fields to be optional in observational mode.
+        downside: "Spec contract dilution."
+    out_of_scope_for_pass_20: "Mechanical; iteration-0001 self-fix candidate."
+
+  - id: claude-rev-048-forbidden-file-touched-spec-md
+    severity: medium
+    claim_class: scope
+    file: agent-loop/active/iteration-0000/consensus.yaml -> implementation_scope
+    section: section_13
+    surfacing_validator: scope_check.py
+    finding_class: FORBIDDEN_FILE_TOUCHED
+    claim: |
+      iteration-0000 consensus.yaml has forbidden_files including patterns that
+      match the spec md. HEAD~1..HEAD diff on this branch touched the spec md.
+      scope_check.py therefore flags FORBIDDEN_FILE_TOUCHED.
+    evidence: "scope_check.py output report path: agent-loop/state/scope-check-report.yaml shows passed=False with 1 FORBIDDEN_FILE_TOUCHED finding."
+    interpretation: |
+      Two readings.
+      (1) The consensus implementation_scope is mis-specified for a context
+          where the spec md is intentionally edited (every spec patch
+          touches the spec md). For an observational iteration that does
+          not edit anything, forbidden_files including the spec md is fine;
+          for any iteration that revises the spec, forbidden_files must NOT
+          include the spec md.
+      (2) The HEAD~1..HEAD diff is unrelated to iteration-0000's
+          implementation_scope, so the comparison is misleading. iteration-0000's
+          scope check should have been against a diff scoped to iteration-0000's
+          activity window, not against an unrelated branch diff.
+      Pass-20 author favors interpretation (2) but both deserve a spec note:
+      scope_check should clarify "what diff" against "what scope".
+    proposed_resolutions:
+      - id: A
+        approach: "Add a §16 / §20 clarification: scope_check is run against a diff scoped to iteration-N's activity window; usage outside that window produces noise and is operator-only debugging."
+      - id: B
+        approach: "Operator instructs which iteration's activity window to use when invoking scope_check.py manually. Phase 0 acceptable as documentation only."
+    out_of_scope_for_pass_20: "Documentation update preferred (option A); architectural-light."
+
+# ---- Spec ambiguities surfaced during build (claude-rev-049..053) ----
+
+spec_ambiguities_surfaced_during_build:
+
+  - id: claude-rev-049-production-clearances-shape-undefined
+    severity: medium
+    claim_class: methodology
+    spec_section: section_17
+    surfacing_event: V6 consensus_gate.py implementer subagent had to invent a Phase 0 placeholder convention.
+    claim: |
+      Section 17 production_ready_if lists codex_production_clearance and
+      claude_production_clearance as preconditions, but the spec does not
+      define how those clearances are signaled in consensus.yaml. Implementer
+      adopted a Phase 0 placeholder: production_clearances: {codex: approved, claude: approved}
+      block at consensus.yaml top level.
+    evidence: "scripts/agent_loop/consensus_gate.py implementer report flagged this as ambiguity #1."
+    proposed_resolution: |
+      Promote production_clearances block to canonical section 17 schema.
+      Architectural change; requires operator + codex review per claude-rev-028.
+    placeholder_in_use: |
+      Phase 0: production_clearances: {codex: approved | rejected | pending,
+                                       claude: approved | rejected | pending}
+      consensus_gate.py reads this block; absence == not granted.
+
+  - id: claude-rev-050-operator-production-scope-matches-leniency
+    severity: medium
+    claim_class: methodology
+    spec_section: section_17
+    surfacing_event: V6 consensus_gate.py implementer report ambiguity #2.
+    claim: |
+      Section 17 operator_production_scope_matches predicate is referenced
+      but the matching logic between approval.production_scope and the
+      consensus's production_scope declaration is not specified.
+      Implementer scoped Phase 0 check to enum-membership only:
+      type IN {render, merge, deploy, data-mutation}.
+    evidence: "consensus_gate.py implementer report ambiguity #2."
+    proposed_resolution: |
+      Define exact matching rules in section 17. Likely:
+        approval.production_scope.type == consensus.production_scope.type AND
+        approval.production_scope.target prefix-matches or equals consensus target.
+      Architectural change; requires operator + codex review.
+    placeholder_in_use: "Phase 0: enum-membership only; tighten in Phase 1."
+
+  - id: claude-rev-051-packet-sha256-canonical-hash-convention
+    severity: medium
+    claim_class: methodology
+    spec_section: section_7 + section_13
+    surfacing_event: V4 validate_iteration.py implementer chose a canonical convention; iteration-0000 review yamls use a different (unspecified) convention.
+    claim: |
+      Spec references reviewed_packet_sha256 and packet_sha256 but does not
+      pin the canonical hash convention. Implementer chose:
+        hashlib.sha256(yaml.safe_dump(yaml.safe_load(open(p)), sort_keys=True).encode("utf-8")).hexdigest()
+      iteration-0000 artifacts appear to use a different convention (see claude-rev-046).
+    evidence: "Cross-pass observation between V3 and V4 implementers; both adopted the same canonical convention but iteration-0000 artifacts predate the spec pinning."
+    proposed_resolution: |
+      Pin the convention in section 7 explicitly. One sentence:
+        "All YAML file sha256 values referenced in this spec are computed as
+         hashlib.sha256(yaml.safe_dump(yaml.safe_load(open(p)), sort_keys=True).encode('utf-8')).hexdigest()"
+      Architectural; requires operator + codex review.
+    cross_reference: claude-rev-046
+
+  - id: claude-rev-052-decision-ledger-hash-when-ledger-absent
+    severity: low
+    claim_class: methodology
+    spec_section: section_7
+    surfacing_event: V3 build_review_packet.py implementer report.
+    claim: |
+      Section 7 required_packet_fields includes decision_ledger_hash, but the
+      decision-ledger.yaml file does not exist in the current repo state.
+      Implementer's behavior: emit null with no error.
+    evidence: "build_review_packet.py implementer concern note; absence is real (file does not exist)."
+    proposed_resolution: |
+      Spec section 7 should clarify: when decision-ledger.yaml does not exist,
+      decision_ledger_hash is null and packet builder MUST log a warning.
+      Mechanical-light; could be promoted as a one-line spec clarification.
+    placeholder_in_use: "null emission, no warning. Acceptable for Phase 0."
+
+  - id: claude-rev-053-phase0-validators-list-incomplete
+    severity: medium
+    claim_class: scope
+    spec_section: section_16
+    surfacing_event: |
+      Section 16 phase0_validators block names 4 validators
+      (validate_review.py, validate_consensus.py, validate_iteration.py,
+      scope_check.py). Pass-20 also built build_review_packet.py and
+      consensus_gate.py per the operator's plan, but section 16 does not list them.
+    claim: |
+      Section 16 phase0_validators list is incomplete. The 6 deliverables
+      built in pass-20 should all appear. Either:
+        (a) section 16 widens to include all 6, OR
+        (b) build_review_packet and consensus_gate are Phase 0 deliverables
+            tracked in section 23 only, not in section 16.
+    evidence: "Direct text inspection of section 16."
+    proposed_resolution: |
+      Update section 16 phase0_validators to:
+        - validate_review.py
+        - validate_consensus.py
+        - validate_iteration.py
+        - scope_check.py
+        - build_review_packet.py
+        - consensus_gate.py
+      Architectural-light; mechanical addition. Could be argued as
+      claude-rev-028-permissible (Phase 0 deliverable bookkeeping), but to
+      be safe: requires operator confirmation given it changes the spec body.
+
+# ---- Verification signals ----
+
+verification_signals:
+  validators_built: 6 of 6
+  total_smoke_tests_passed: 21 of 21
+  fixture_directories_created: 13
+  fixture_files_created: 35 (approximately)
+  validate_disposition_index_status: clean (0 findings on v1.7.2)
+  iteration_0000_real_data_findings_total: 11 (high) + 0 (medium) + 0 (low) = 11 high (claude-rev-040 through claude-rev-048 with claude-rev-046 spanning 2 occurrences and claude-rev-047 spanning 5 occurrences)
+  spec_ambiguity_findings_total: 5 (claude-rev-049..053)
+  total_findings_pass_20: 14 (claude-rev-040..053)
+  next_claude_rev_allocation: claude-rev-054
+  ascii_clean_archive_yaml: true
+  spec_body_unchanged_by_pass_20: true
+  artifact_under_test_unchanged_by_pass_20: true
+  pass_20_author_self_patch_authority_used: |
+    Phase 0 deliverable implementation (always_allowed_regardless_of_above).
+    Did NOT touch sections 1-23 architectural rules.
+    Spec frontmatter next_required_action update will be made in pass-20 commit
+    as separate operation per claude_self_patch_constraint.
+
+# ---- Self-improvement loop notes ----
+
+operator_directives_followed:
+  - rule: "Always fully write back review findings (feedback_review_writeback_full)"
+    note: "pass-20 archive yaml IS the writeback; not delivered conversationally only."
+  - rule: "Just execute, no permission asks (feedback_just_execute)"
+    note: "all 6 validators dispatched in parallel; no mid-stream check-ins."
+  - rule: "Always use Opus for agents (feedback_always_opus)"
+    note: "all 6 implementer subagents dispatched with model=opus."
+  - rule: "Never act on or report assumptions (feedback_no_assumptions)"
+    note: "all 5 validator self-tests spot-verified on operator machine before V7 integration; iteration-0000 findings backed by validator output paths, not narrative claims."
+  - rule: "Complete fulfillment default (feedback_complete_fulfillment)"
+    note: "all 6 validators built in one pass; not phased into build-one-see-if-it-sticks."
+
+operator_directives_partially_followed:
+  - rule: "Always fully write back review findings (feedback_review_writeback_full)"
+    note: "initially delivered conversationally; operator flagged 'has the MD been updated'; pass-20 archive yaml then authored. This is a correction, not a clean follow. Treat as process learning, not success."
+
+# ---- Recommended next operator actions ----
+
+recommended_operator_actions:
+  - id: A
+    action: "Pick iteration-0001 target."
+    options:
+      - "1. Self-fix iteration-0000 real defects (claude-rev-040, 041, 042, 044, 047 are mechanical fixes; claude-rev-043, 045, 046 need architectural+codex review)"
+      - "2. Run iteration-0001 against a different live decision (operator-named target)"
+    recommendation: "Option 1 is tightest fulfillment of the validator suite's purpose; Option 2 is fine if a higher-priority operational decision exists."
+  - id: B
+    action: "Decide architectural changes for claude-rev-043 (consensus enum widening), claude-rev-045 (audit event names), claude-rev-046+051 (canonical hash convention), claude-rev-049 (production_clearances schema), claude-rev-053 (section 16 widening)."
+    when: "Either before iteration-0001 or as iteration-0001's payload."
+  - id: C
+    action: "Update CLAUDE.md or memory/ to record the writeback-rule miss observed at start of pass-20 (delivered conversationally before operator flagged it). The rule already exists; this is a reinforcement, not a new rule."
+    optional: true

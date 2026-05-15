@@ -1,0 +1,69 @@
+schema_version: 1
+iteration_id: iteration-0000
+audit_purpose: section 13 independence_proof_required; documents reviewer exposure
+  metadata
+audit_log:
+- utc: '2026-05-08T00:00:00Z'
+  event: review_packet_built
+  actor: orchestrator (claude_acting_as_orchestrator)
+  artifact: review-packet.yaml
+  sha256: 385d9589e98f55ac2ec877443b59280c62f11e131bdb5337e8aae6daba5435f97
+- utc: '2026-05-08T00:00:00Z'
+  event: codex_reviewer_invoked
+  actor: orchestrator
+  invocation_protocol:
+    runtime: subagent_dispatch
+    fresh_context: true
+    reviewer_brief_excluded:
+    - any_prior_review_under_archive_review_passes
+    - claude-review_yaml (does not yet exist)
+    - any_anchor_to_other_reviewer_findings
+    reviewer_brief_included:
+    - spec_path
+    - disposition_ledger_path
+    - review_packet_path
+    - validator_script_for_context
+    - agent_wip_schema_for_context
+  independence_attestation:
+    seal_order_position: 1
+    claude_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+- utc: '2026-05-08T00:00:00Z'
+  event: codex_review_returned_and_sealed
+  actor: orchestrator
+  artifact: codex-review.yaml
+  sha256: b0595ca4053e2c7da7c21b41ca4e3018b05f7ebcffc1ebf7481b8ff0e51a24e7
+  sealed: true
+  findings_count: 16
+  severity_breakdown:
+    blocking: 3
+    non_blocking_suggestions: 4
+    implementation_risks: 3
+    clarifying_questions: 1
+    assumptions_challenged: 3
+    self_resolved: 1
+  sha_drift_note_iteration_0003_option_B: Recorded sha256 b0595ca4... is the original
+    session-time canonical of iteration-0000/codex-review.yaml. Post-iteration-0002
+    mechanical change-07 added pre-canonical-pin marker fields to that file, drifting
+    current canonical sha. Original preserved here per Option B + codex-q-001 preserve+provenance
+    precedent. Cosmetic rename to canonical event names was REJECTED by iteration-0003
+    because it would expose the drift as 3 NEW HIGH HASH_CHAIN_BROKEN sha-mismatch
+    findings. Validator's per-agent-prefixed event names skip the sha check; documented
+    latent condition.
+- utc: '2026-05-08T00:00:00Z'
+  event: claude_reviewer_invocation_pending
+  actor: orchestrator
+  next_constraint: 'claude reviewer (this conversation, methodology_critic stance)
+    MUST
+
+    produce claude-review.yaml WITHOUT reading codex-review.yaml. To
+
+    enforce this, the reviewer (claude itself) confirms having NOT read
+
+    codex-review.yaml between this audit entry and claude-review.yaml
+
+    write event. The synthesizer will detect post-hoc anchoring via
+
+    canonical-key match patterns.
+
+    '

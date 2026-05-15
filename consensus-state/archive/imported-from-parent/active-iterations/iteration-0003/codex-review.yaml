@@ -1,0 +1,449 @@
+schema_version: 1
+agent: codex
+stance: implementation_realist
+iteration_id: iteration-0003
+reviewed_packet_sha256: "d3d4db94e00f6b05edc867c3db3ad3af83768ead8b9dbe988c2033e9661455b5"
+
+overall_position:
+  implementation_ready: true
+  production_ready: false
+  confidence: high
+
+chosen_option: B
+chosen_option_rationale: |
+  Option B (local grandfather extension for iteration-0000) is the
+  implementation-realist pick. It is the only option that (a) preserves the
+  historical audit log verbatim - zero synthetic events, zero invented sha256s
+  - while (b) clearing the two HIGH HASH_CHAIN_BROKEN findings the operator
+  wants resolved, and (c) costs ~10 LOC validator + ~15 lines spec for a
+  bounded, named carve-out that does not scale into a generic loophole. The
+  precedent from codex-q-001 (preserve historical sha + add provenance marker
+  rather than recompute) ratifies the same approach: when a v1.7.4 rule
+  retroactively invalidates pre-v1.7.4 artifacts, we grandfather the artifact
+  rather than rewrite history. Option A fabricates events the original session
+  never emitted; Option C generalizes a mechanism for N=1 (only one pre-v1.7.4
+  iteration exists) which violates Simplicity First.
+
+blocking_objections: []
+
+non_blocking_suggestions:
+
+  - id: codex-iter0003-rev-001-document-codex-sha-drift-as-latent-not-fixed
+    severity: low
+    claim_class: process
+    claim: |
+      Option B does NOT touch the codex review sha drift. The audit's
+      codex_review_returned_and_sealed event records sha256
+      'b0595ca4...' which no longer matches the current canonical sha
+      of iteration-0000/codex-review.yaml ('8d53388e...' as of
+      2026-05-08 post-iteration-0002 marker addition). Under Option B
+      the validator does not detect this drift because the event name
+      is per-agent-prefixed and therefore is NOT classified as a
+      canonical review_returned_and_sealed event in Rule 5; the
+      sha256-vs-canonical-file check at validate_iteration.py:361-415
+      iterates only entries where event == "review_returned_and_sealed".
+      So the drift is latent: invisible to validators, but real.
+    file: agent-loop/active/iteration-0000/independence-audit.yaml
+    section: audit_log[2]
+    evidence: |
+      Recorded sha (audit_log[2].sha256): b0595ca4053e2c7da7c21b41ca4e3018b05f7ebcffc1ebf7481b8ff0e51a24e7
+      Current canonical sha of file: 8d53388e27300bf4217b908fe4812cf6bdc65cfb4cac4c8a43c97b8f474d91d4
+      Drift cause: iteration-0002 change-07 added pre-canonical-pin
+      marker (hash_convention + do_not_recompute) to the codex review
+      yaml; canonical_yaml_sha256 changed as a side effect.
+      Validator filter: validate_iteration.py:361-364 checks
+      entry.get("event") != "review_returned_and_sealed", so per-agent
+      prefixed events skip the sha check entirely.
+    suggested_resolution: |
+      Add a one-line annotation comment to the audit_log[2] entry under
+      Option B's apply scope (or as a documentation-only tweak in the
+      iteration-0003 closure artifact) noting:
+        "Recorded sha is the original session-time canonical sha
+         (pre-iteration-0002 change-07 marker addition). Current file
+         canonical has drifted post-marker; this is preserved per
+         pre-canonical-pin grandfather (codex-q-001 precedent)."
+      No artifact edit beyond an optional comment; no validator
+      change; preserves historical seal record honestly.
+
+  - id: codex-iter0003-rev-002-bound-grandfather-to-iteration-0000-explicitly
+    severity: low
+    claim_class: correctness
+    claim: |
+      Option B's spec section 13 grandfather extension MUST literally
+      name iteration-0000 (not "pre-v1.7.4 iterations" generally), and
+      validate_iteration.py MUST gate on the literal string equality
+      iteration_name == "iteration-0000". The packet language
+      "for iteration-0000 specifically" is correct. A future
+      operator/agent reading "the iteration-0000 grandfather block"
+      could be tempted to extend it to "any pre-v1.7.4 iteration";
+      that is Option C dressed up. Bound it tight, name iteration-0000
+      explicitly, and require any future grandfather scope expansion
+      to land via a new operator decision, not via interpretation of
+      this clause.
+    file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+    section: section_13
+    evidence: |
+      Existing AUDIT_EVENT_NAME_NON_CANONICAL grandfather at
+      validate_iteration.py:323 already gates on
+      is_iteration_0000 = (iteration_name == "iteration-0000").
+      The HASH_CHAIN_BROKEN missing-event-type extension should
+      mirror that exact predicate to keep the carve-out consistent.
+    suggested_resolution: |
+      In validate_iteration.py at the missing-event-type loop
+      (lines 305-316), use the SAME is_iteration_0000 predicate
+      (already computed at line 323) to downgrade severity from
+      "high" to "low" when the iteration is iteration-0000.
+      Spec section 13 grandfather block should explicitly say
+      "iteration-0000 specifically; future iterations MUST emit
+      canonical events".
+
+  - id: codex-iter0003-rev-003-add-grandfather-claim-text-to-finding
+    severity: low
+    claim_class: process
+    claim: |
+      Under Option B, when validate_iteration.py downgrades the
+      missing-event-type HASH_CHAIN_BROKEN findings for iteration-0000,
+      the finding's claim text should append
+      "(informational; iteration-0000 grandfathered as pre-canonical-pin)"
+      to mirror the existing AUDIT_EVENT_NAME_NON_CANONICAL claim text
+      pattern at validate_iteration.py:356. Otherwise an operator
+      reading the validator report might still see two LOW findings
+      and ask "why are these high-named-bug-class findings still
+      here", not realizing they are dispositioned. Consistent claim
+      text aligns the two related grandfather paths.
+    file: scripts/agent_loop/validate_iteration.py
+    section: missing_event_type loop (lines 305-316)
+    evidence: |
+      AUDIT_EVENT_NAME_NON_CANONICAL grandfather already appends a
+      bracketed disposition note at line 356:
+      "(informational; iteration-0000 grandfathered as pre-canonical-pin)"
+      The new HASH_CHAIN_BROKEN grandfather should emit the same form.
+    suggested_resolution: |
+      Append the bracketed informational tag to the claim string when
+      severity is downgraded.
+
+agreements:
+
+  - id: codex-iter0003-agree-001-three-options-are-faithful
+    text: |
+      The packet's three options A/B/C are a faithful and exhaustive
+      enumeration of the realistic repair space. No fourth option D
+      proposes itself. Hybrid (B for missing-events + A-ii cosmetic
+      rename for codex sha drift) is technically open per the packet
+      but adds artifact-edit cost without a benefit Option B alone
+      doesn't already deliver.
+
+  - id: codex-iter0003-agree-002-this-is-not-rename-only
+    text: |
+      Operator-stated framing "not rename only" is correct. A pure
+      rename (codex_reviewer_invoked -> reviewer_invoked) without
+      either reconstructing missing claude events (Option A) or
+      grandfathering missing-event-count (Option B/C) would actually
+      WORSEN validator state: it would convert 3 LOW
+      AUDIT_EVENT_NAME_NON_CANONICAL findings into 3 NEW HIGH
+      HASH_CHAIN_BROKEN sha-mismatch findings (because rename changes
+      file content, breaks recorded shas). This is exactly the
+      "hash drift surfaces upon rename" concern named in the packet
+      under hash_drift_that_will_surface_upon_rename. Option B sidesteps
+      this entirely by leaving artifact bytes alone.
+
+disagreements: []
+
+patch_recommendations:
+
+  - id: codex-iter0003-patch-001-validator-iteration-0000-grandfather-missing-events
+    note: implementation patch for Option B; validator code change
+    edit:
+      file: scripts/agent_loop/validate_iteration.py
+      target_section: rule_5_missing_event_type_loop
+      change_kind: replace_block
+      old_string: |2
+              for ev, min_count in required_events.items():
+                  actual = event_counts.get(ev, 0)
+                  if actual < min_count:
+                      findings.append({
+                          "id": "HASH_CHAIN_BROKEN",
+                          "severity": "high",
+                          "subtype": "missing_event_type",
+                          "event": ev,
+                          "expected_min": min_count,
+                          "actual": actual,
+                          "claim": f"independence-audit.audit_log has {actual} {ev!r} event(s); expected >= {min_count}",
+                      })
+      new_string: |2
+              # v1.7.6 (canonical-iter0003-001 ratification): iteration-0000
+              # grandfather extends to HASH_CHAIN_BROKEN.subtype=missing_event_type.
+              # Pre-canonical-pin audits used per-agent-prefixed event names; under
+              # canonical names the count is zero. Bounded to iteration-0000 by
+              # literal string equality; future iterations MUST emit canonical events.
+              is_iteration_0000_for_grandfather = (iteration_name == "iteration-0000")
+              for ev, min_count in required_events.items():
+                  actual = event_counts.get(ev, 0)
+                  if actual < min_count:
+                      findings.append({
+                          "id": "HASH_CHAIN_BROKEN",
+                          "severity": "low" if is_iteration_0000_for_grandfather else "high",
+                          "subtype": "missing_event_type",
+                          "event": ev,
+                          "expected_min": min_count,
+                          "actual": actual,
+                          "grandfathered": is_iteration_0000_for_grandfather,
+                          "claim": f"independence-audit.audit_log has {actual} {ev!r} event(s); expected >= {min_count}"
+                                   + (" (informational; iteration-0000 grandfathered as pre-canonical-pin)" if is_iteration_0000_for_grandfather else ""),
+                      })
+
+  - id: codex-iter0003-patch-002-spec-section-13-grandfather-block-extension
+    note: implementation patch for Option B; spec section 13 prose change
+    edit:
+      file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+      target_section: section_13_canonical_event_name_rule_iteration_0000_grandfather_clause
+      change_kind: extend_block
+      old_string: |2
+                  iteration_0000_grandfather_clause: |
+                    iteration-0000 audit yaml uses the forbidden prefix style.
+                    Per pre-canonical-pin marker logic (section 7), pre-v1.7.4
+                    audits are not retroactively rewritten. validate_iteration.py
+                    treats iteration-0000 audit as historical; AUDIT_EVENT_NAME_NON_CANONICAL
+                    is downgraded to informational (severity: low) for iteration-0000
+                    specifically. v1.7.4+ iterations MUST use canonical names.
+      new_string: |2
+                  iteration_0000_grandfather_clause: |
+                    iteration-0000 audit yaml uses the forbidden prefix style.
+                    Per pre-canonical-pin marker logic (section 7), pre-v1.7.4
+                    audits are not retroactively rewritten. validate_iteration.py
+                    treats iteration-0000 audit as historical; AUDIT_EVENT_NAME_NON_CANONICAL
+                    is downgraded to informational (severity: low) for iteration-0000
+                    specifically. v1.7.4+ iterations MUST use canonical names.
+
+                    v1.7.6 extension (canonical-iter0003-001 ratification):
+                    iteration-0000 also lacks any CANONICAL review_returned_and_sealed
+                    or reviewer_invoked event under the canonical naming rule (because
+                    it emitted per-agent-prefixed variants). validate_iteration.py
+                    therefore additionally downgrades HASH_CHAIN_BROKEN.subtype=
+                    missing_event_type findings from high to low for iteration-0000
+                    specifically. The grandfather is bounded by literal string equality
+                    iteration_name == "iteration-0000"; it does NOT extend to any
+                    other past or future iteration. Any further pre-canonical-pin
+                    legacy audits would require an explicit operator decision and a
+                    new grandfather block, not interpretation of this clause.
+
+  - id: codex-iter0003-patch-003-disposition-ledger-mark-canonical-iter0002-005-resolved
+    note: ledger update for Option B closure
+    edit:
+      file: agent-loop/state/disposition-ledger.yaml
+      target_section: iteration_0002_to_iteration_0003_deferred
+      change_kind: move_entry_to_iteration_0003_resolved
+      proposed_text: |
+        Move canonical-iter0002-005-iteration-0000-audit-event-name-rename
+        out of iteration_0002_to_iteration_0003_deferred and into a new
+        iteration_0003_findings_resolved block. Resolution note:
+        "Resolved via Option B (local grandfather extension). v1.7.6
+         spec section 13 + validate_iteration.py extended to grandfather
+         HASH_CHAIN_BROKEN.subtype=missing_event_type for iteration-0000.
+         iteration-0000 audit yaml NOT modified. validator now reports
+         5 LOW findings (3 AUDIT_EVENT_NAME_NON_CANONICAL grandfathered,
+         2 HASH_CHAIN_BROKEN.missing_event_type grandfathered) plus 2 LOW
+         PACKET_SHA_HISTORICAL findings; 0 HIGH findings. Codex review
+         sha drift latent and documented (codex-iter0003-rev-001) but
+         does not surface under canonical-event-name filter."
+
+implementation_risks:
+
+  - id: codex-iter0003-risk-001-grandfather-precedent-creep
+    risk: |
+      Each grandfather extension adds an entry to a list that future
+      reviewers read as "the project tolerates carve-outs for legacy
+      issues". Three grandfather classes now exist for iteration-0000:
+      AUDIT_EVENT_NAME_NON_CANONICAL (v1.7.4), PACKET_SHA_HISTORICAL
+      (v1.7.4 codex-q-001), and HASH_CHAIN_BROKEN.missing_event_type
+      (v1.7.6 this iteration). At three, the pattern is documented;
+      at five, the pattern starts feeling load-bearing.
+    mitigation_suggestion: |
+      Option B's spec block must explicitly say "any further
+      grandfather class requires a NEW operator decision; this
+      block is not an interpretation surface". The patch text
+      above includes that language verbatim. After Option B lands,
+      the next iteration MUST NOT add a fourth grandfather class
+      without an operator-explicit canonical-finding decision.
+
+  - id: codex-iter0003-risk-002-test-fixtures-may-need-update
+    risk: |
+      validate_iteration.py --self-test exercises iteration_known_good
+      and iteration_known_bad fixtures. The bad fixture intentionally
+      triggers HASH_CHAIN_BROKEN. If the bad fixture's directory name
+      happens to be 'iteration-0000', the grandfather predicate would
+      downgrade those test findings from high to low and the
+      assertion 'expected = {..., "HASH_CHAIN_BROKEN", ...}' over the
+      seen-id set still holds (id matches regardless of severity), but
+      severity-counting tests elsewhere in the suite could regress.
+    mitigation_suggestion: |
+      Before applying patch-001, grep for fixture directory names
+      under agent-loop/tests/fixtures/ and confirm iteration_known_bad
+      is NOT named iteration-0000. If it is, rename the fixture or
+      keep current name and add a fixture-bypass override on the
+      grandfather predicate. Cheap to verify; <1 min.
+
+  - id: codex-iter0003-risk-003-canonical-006-dry-run-must-pass-on-validator-edit
+    risk: |
+      Spec section 0 anti_regression_criterion (canonical-006) requires
+      validators-first dry-run on hypothetical post-edit state for
+      iteration-applied changes touching >5 files. Option B's edit set
+      is 4 files (validator + spec + ledger + iteration-0003 closure
+      artifact), which is BELOW the >5 file threshold; the canonical-006
+      gate technically does not bind. But the operator's directive
+      explicitly named "canonical-006 dry-run gate on hypothetical
+      post-edit state required before apply" in input.yaml G3. So
+      run the dry-run anyway. If dry-run fires anything beyond the
+      acknowledged 5 LOW findings, do NOT apply.
+    mitigation_suggestion: |
+      Stage the patches in agent-loop/state/iteration-0003-staging/
+      mirror, run validate_iteration.py against the staged
+      iteration-0000 + the staged validator script, confirm:
+        - HASH_CHAIN_BROKEN findings count: 2 (severity downgraded
+          to low)
+        - AUDIT_EVENT_NAME_NON_CANONICAL count: 3 (low; unchanged)
+        - PACKET_SHA_HISTORICAL count: 2 (low; unchanged)
+        - HIGH count: 0
+        - Total finding count: 7 (5 grandfathered + 2 historical)
+      Then apply. If counts diverge, abort and re-review.
+
+clarifying_questions: []
+
+self_resolved_questions:
+
+  - id: codex-iter0003-srq-001-does-rename-help-anything
+    question: |
+      If Option B is chosen, is there any value in ALSO renaming the
+      three per-agent-prefixed event names to canonical form (cosmetic
+      cleanup), or does Option B cleanly stand alone?
+    ambiguity_type: repo-discoverable
+    resolution_method: trace_validator_behavior_under_each_scenario
+    resolved: true
+    resolved_value: |
+      Stand-alone. Renaming WITHOUT also reconstructing missing events
+      would convert 3 LOW AUDIT_EVENT_NAME_NON_CANONICAL findings into
+      0 of those + 3 NEW HIGH HASH_CHAIN_BROKEN sha-mismatch findings
+      (because the renamed entries would now classify as canonical
+      review_returned_and_sealed events, triggering the sha256-vs-file
+      check at validate_iteration.py:361-415; the recorded shas predate
+      iteration-0002 marker addition and no longer match). So renaming
+      under Option B is strictly negative. Reject the cosmetic rename;
+      keep iteration-0000 audit yaml byte-identical.
+    evidence:
+      - type: code
+        ref: scripts/agent_loop/validate_iteration.py:361-415
+      - type: file
+        ref: agent-loop/active/iteration-0000/independence-audit.yaml
+
+  - id: codex-iter0003-srq-002-is-option-c-marker-additive-or-skipping
+    question: |
+      Option C's pre_v1_7_4_iteration marker on iteration-0000 audit -
+      does it ADD information or SKIP validation? The packet text says
+      "skip canonical event name + hash chain checks entirely". Is
+      "skip" the right primitive for a finding-class we want recorded
+      as known/dispositioned?
+    ambiguity_type: methodology
+    resolution_method: contrast_skip_vs_grandfather_semantics
+    resolved: true
+    resolved_value: |
+      "Skip" is the wrong primitive. Grandfathering EMITS the finding
+      with downgraded severity AND a disposition note; Option C SKIPS
+      emission entirely. Skipping makes the validator silent on a real
+      historical state, which loses information for future audit. This
+      is one more reason to prefer B over C: B keeps the validator
+      honest about what the audit log contains.
+    evidence:
+      - type: file
+        ref: agent-loop/active/iteration-0003/input.yaml
+        line_ref: options_for_reviewers_to_decide.id_C.description
+    loops_used: 1
+    escalated_to_operator: false
+
+assumptions_challenged:
+
+  - id: codex-iter0003-assume-001-option-a-reconstruction-can-be-honest
+    assumption: |
+      "Option A retrospective reconstruction with explicit provenance
+      is honest if the reconstruction_provenance field marks the
+      synthetic origin of the inserted events."
+    challenge_result: partially-cleared
+    evidence: |
+      Provenance fields can mark "this event was reconstructed at
+      iteration-0003 close, not emitted by the original session", but
+      they cannot recover the original session-time sha256 of
+      iteration-0000/claude-review.yaml. The reconstructed event MUST
+      use one of: (a) current canonical sha (loses original meaning),
+      (b) a placeholder, or (c) a label like "session-time sha
+      unknown; current canonical is X". None of these reconstruct what
+      the original audit would have sealed. Option A is therefore
+      "honestly synthetic" at best; the historical record now contains
+      events that did not exist at the time. For a contract that
+      prizes audit integrity (section 13 independence_proof), this is
+      a real cost. Option B avoids it entirely.
+
+  - id: codex-iter0003-assume-002-option-c-is-forward-looking
+    assumption: |
+      "Option C wider grandfather scope is forward-looking and handles
+      any future canonical-pin events better than Option B's bounded
+      carve-out."
+    challenge_result: failed
+    evidence: |
+      Forward-looking architecture is virtuous when there is realistic
+      forward demand. There is exactly ONE pre-v1.7.4 iteration in
+      this project (iteration-0000); the spec is now at v1.7.6 and
+      canonical-pin events are ratified; there is no pipeline of
+      additional pre-pin iterations. Option C generalizes for N=1.
+      Karpathy Simplicity First specifically calls out "no abstractions
+      for single-use code". Option C's pre_v1_7_4_iteration marker is
+      a single-use abstraction; rejecting it costs nothing and saves
+      future-spec-reader confusion ("when should I add a marker?
+      What other iterations qualify?"). Option B's bounded "iteration-0000
+      only" is Simplicity-First-correct.
+
+  - id: codex-iter0003-assume-003-validator-self-test-fixtures-uninvolved
+    assumption: |
+      "validate_iteration.py --self-test fixtures are not affected by
+      Option B's grandfather predicate."
+    challenge_result: partially-cleared
+    evidence: |
+      The grandfather predicate gates on iteration_name ==
+      "iteration-0000" via Path.name comparison. self-test fixtures
+      live under agent-loop/tests/fixtures/iteration_known_good/ and
+      iteration_known_bad/. Path.name == "iteration_known_good" or
+      "iteration_known_bad" -> grandfather predicate False, no severity
+      downgrade. The self-test assertion checks ID-set membership
+      ("HASH_CHAIN_BROKEN" in seen) not severity counts, so even if
+      the fixtures were renamed iteration-0000 (which they aren't),
+      the test would still pass on ID match. Risk is low but I am
+      flagging it as risk codex-iter0003-risk-002 above for
+      verification before apply rather than relying on this
+      reasoning alone.
+
+no_objection_rationale:
+  required_when_no_blockers: true
+  text: |
+    No blocking objections issued. Option B is the implementation-realist
+    pick: smallest change set (~10 LOC validator, ~15 lines spec, 1 ledger
+    entry move, 1 closure artifact), zero artifact rewriting, zero
+    synthetic events, bounded grandfather scope explicitly named
+    iteration-0000-only, and consistent with the codex-q-001
+    preserve-history-with-provenance precedent. Three non-blocking
+    suggestions and three implementation risks are filed; assumptions
+    challenged is non-empty (3 entries, evidence-backed). Methodology
+    critique on grandfather-precedent creep is filed as a risk for the
+    parallel methodology_critic reviewer to weigh. Per section 9 schema
+    + section 13 substantive_pushback rule, all required fields are
+    present.
+
+independence_attestation:
+  fresh_context: false
+  rationale: "G4 forced post-exposure"
+  prior_review_exposure:
+    - iteration-0000/codex-review.yaml (read for sha drift analysis per input.yaml required reading 4)
+    - iteration-0000/claude-review.yaml (read for sha analysis per input.yaml required reading 5)
+    - iteration-0000/independence-audit.yaml (the artifact under repair)
+    - iteration-0001/ (methodology context per input.yaml prior_review_refs)
+    - iteration-0002/ (precedent for canonical-006 dry-run gate)
+    - pass-20 archive (background)
+    - spec v1.7.6
+  peer_reviewer_artifacts_read: []

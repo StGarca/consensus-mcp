@@ -1,0 +1,207 @@
+schema_version: 1
+iteration_id: iteration-0028-codex-dispatch-followup
+created_utc: '2026-05-10T23:30:00Z'
+closing_state: manual_close_landed
+ceremony_flavor: A_direct_implementation
+parent_iteration: iteration-0027-codex-dispatch-flavor-b-review
+subsystem: codex_dispatch
+
+closing_reason: |
+  iter-0028 is a Flavor A surgical-implementation follow-up landing all 4
+  findings codex emitted in iter-0027 against the codex-dispatch subsystem.
+  No Flavor B ceremony (no review-packet, no codex re-dispatch, no
+  closure-certificate). TDD applied per finding: RED tests added first,
+  then implementation, then GREEN verified, regressions surfaced + fixed
+  in pre-existing test fixtures.
+
+  Findings landed (priority order):
+
+  F3 (HIGH, codex-rev-001) — MCP wrapper rc-vs-stdout decoupling
+    scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py:handle()
+    now captures _dispatch_codex.main(argv)'s return code. After JSON
+    parsing: if rc != 0 AND parsed["ok"] is not False, force ok=False
+    and stamp wrapper_forced_ok_false_due_to_nonzero_rc=True. Honest-
+    failure passthrough (rc != 0 AND parsed["ok"]==False) leaves dict
+    untouched. Malformed-stdout path (WrapperJsonDecodeError) unchanged.
+
+    Tests added (test_reviewer_dispatch_codex.py): +5
+      - test_handle_rc_zero_with_ok_true_passes_through
+      - test_handle_rc_nonzero_with_ok_true_forces_ok_false
+      - test_handle_rc_nonzero_with_ok_false_passes_through
+      - test_handle_rc_nonzero_with_malformed_stdout_wraps_as_before
+      - test_handle_rc_nonzero_with_missing_ok_key_forces_ok_false
+
+  F4 (HIGH, codex-rev-002) — unified_diff body path scope check
+    scripts/agent_loop_mcp/_dispatch_codex.py:_validate_patch_proposal
+    now parses --- a/<path> and +++ b/<path> headers from unified_diff,
+    via a module-level regex _DIFF_FILE_HEADER_RE. Skips /dev/null
+    (create/delete marker). Body-path set must satisfy:
+      - every body path in files_touched (else
+        unified_diff_body_path_outside_scope error)
+      - every body path in goal_packet.allowed_files (when goal_packet
+        supplied)
+      - no body path in goal_packet.forbidden_files
+
+    Tests added (test_dispatch_codex.py): +6
+      - test_patch_proposal_diff_body_paths_must_be_in_files_touched
+      - test_patch_proposal_diff_body_paths_must_be_in_allowed_files
+      - test_patch_proposal_diff_body_minus_a_only_validates
+      - test_patch_proposal_dev_null_paths_ignored_for_scope
+      - test_patch_proposal_diff_body_forbidden_path_rejected_via_body_check
+      - (plus 3 below shared with F1+F2)
+
+  F1+F2 (MEDIUM, codex-rev-003) — template+validator format rejection
+    F2: codex_review_template.md line ~204 fixed. Prior text claimed
+        "expected_tests is the only optional field" — wrong; schema
+        requires expected_tests. Replaced with "All six fields are
+        REQUIRED; emit expected_tests: [] when no focused tests are known."
+        plus a self-documenting iter-0028 correction note.
+    F1: codex_review_template.md gained a dedicated subsection
+        "unified_diff format requirements (iter-0028 F1)" showing both
+        ACCEPTED (--- a/path / +++ b/path / @@ -L,N +L,N @@) and
+        REJECTED (*** Begin Patch / *** Update File: / *** End Patch)
+        formats with example bodies. The validator now refuses any
+        unified_diff that starts with "*** Begin Patch" or contains
+        "*** Update File", raising unified_diff_apply_patch_format_not_supported
+        with text pointing at the expected unified-diff form.
+
+    Tests added (test_dispatch_codex.py): +5
+      - test_patch_proposal_diff_body_apply_patch_format_rejected
+      - test_patch_proposal_diff_body_update_file_marker_rejected
+      - test_patch_proposal_standard_unified_diff_accepted
+      - test_template_does_not_claim_expected_tests_is_only_optional
+      - test_template_explicitly_rejects_apply_patch_format
+
+  F5 (MEDIUM, codex-rev-004) — _resolve_repo_root env-var fail-closed
+    scripts/agent_loop_mcp/_dispatch_codex.py:_resolve_repo_root: when
+    AGENT_LOOP_MCP_REPO_ROOT is set but the path fails _has_repo_markers,
+    raise RepoRootResolutionError immediately with an operator-facing
+    message naming the env var. NO fall-through to cwd/__file__ when env
+    var is set-but-invalid. Empty-string env (falsy) continues to fall
+    through to cwd-discovery (matches the existing 'if override:' truthy
+    gate). The pre-existing
+    test_resolve_repo_root_env_without_markers_falls_through_to_other_candidates
+    test name/docstring was minimally updated (now
+    test_resolve_repo_root_marker_check_rejects_empty_dir) to no longer
+    lie about fall-through.
+
+    Tests added (test_dispatch_codex.py): +4
+      - test_resolve_repo_root_env_set_and_invalid_raises
+      - test_resolve_repo_root_env_set_and_valid_uses_env
+      - test_resolve_repo_root_env_unset_falls_back_to_cwd
+      - test_resolve_repo_root_env_empty_string_treated_as_unset
+
+  Pre-existing test fixture regressions surfaced by F4 (each fixed
+  with the minimum-impact diff/files_touched alignment):
+    - test_patch_proposal_no_goal_packet_skips_scope_check: prior used
+      mismatched diff body + files_touched (intent: no-op, fact: F4 hit).
+      Updated to use matching path on both sides.
+    - test_iter_0018_cross_ai_invariant._good_patch_proposal: prior used
+      'foo' in diff body but 'scripts/foo.py' in files_touched. Updated
+      to 'scripts/foo.py' on both sides.
+
+primary_empirical_finding:
+  iter_0027_findings_landed: ALL 4
+  defect_class_breakdown:
+    - id: F3_wrapper_rc
+      severity: high
+      defense_class: defense_in_depth
+      landed: true
+    - id: F4_diff_body_scope
+      severity: high
+      defense_class: scope_enforcement
+      landed: true
+    - id: F1_F2_format_drift
+      severity: medium
+      defense_class: prompt_template + validate_time_check
+      landed: true
+    - id: F5_env_fail_closed
+      severity: medium
+      defense_class: operator_intent_authority
+      landed: true
+
+artifacts_produced:
+  - agent-loop/active/iteration-0028-codex-dispatch-followup/goal_packet.yaml
+  - agent-loop/active/iteration-0028-codex-dispatch-followup/iteration-outcome.yaml
+
+artifacts_modified:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+  - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_iter_0018_cross_ai_invariant.py
+  - scripts/agent_loop_mcp/_release_gate_check.py
+
+empirical_observations:
+  - "TDD per Karpathy #4 (Goal-Driven Execution): every finding had RED tests authored before implementation; GREEN verified per fix."
+  - "F4 (diff-body scope) surfaced 2 pre-existing test-fixture mismatches that were silent bugs (test_patch_proposal_no_goal_packet_skips_scope_check + test_iter_0018_cross_ai_invariant._good_patch_proposal). These were corrected with the minimum-impact change to keep diff body and files_touched aligned."
+  - "F1 (apply_patch rejection) is purely defensive: codex-cli's proprietary format reached the iter-0026 F2 hunk-anchored applier in iter-0027 and was rejected there at apply time. iter-0028 moves rejection forward to validate time so the prompt template + validator now agree."
+  - "F5 (env fail-closed) is operator-intent-prioritization: prior silent fall-through could mask a typo-d env var so the helper would re-resolve via cwd/__file__ and the operator wouldn't notice. New behaviour: explicit env var is authoritative; invalid path raises rather than silently using a different root."
+
+operational_caveats:
+  - id: iter_0028_section_24_sync_not_needed
+    description: |
+      No new sealed review-packets were produced this iteration (Flavor A,
+      no codex dispatch). archive/review-passes/ is unchanged. The
+      G_archive_section_24_synced gate passes by no-op.
+  - id: iter_0028_test_count_bump_67_to_81
+    description: |
+      _release_gate_check.gate_pytest_dispatch_codex literal expected count
+      bumped from 67 to 81 (iter-0026 baseline -> iter-0028 with +14 new
+      tests across F4 + F1/F2 + F5 in test_dispatch_codex.py). This is a
+      hardcoded literal in the gate file; future iterations adding tests
+      to test_dispatch_codex.py must bump this number.
+
+iter_0029_followup_scope:
+  - id: subsystem_4_supervisor_state_machine
+    description: |
+      Subsystem 4 (supervisor state machine in loop_run_goal.py) is the
+      next Flavor B review subject. Same protocol as iter-0023 / 0025 / 0027:
+      author goal_packet with 6-file scope, author review-packet with
+      embedded touched-file contents, dispatch real codex, claude verifies
+      patches, apply approved, close.
+    readiness: ready
+    blockers: none_known
+    rationale: |
+      iter-0028 cleared all iter-0027 followup. The codex-dispatch
+      subsystem is now Flavor-B-clean (no outstanding findings). The
+      supervisor state machine has not yet been Flavor-B reviewed; this
+      is the natural next target. Estimated 6 files in scope:
+        - scripts/agent_loop_mcp/tools/loop_run_goal.py
+        - scripts/agent_loop_mcp/_self_drive.py (supervisor stop-rule helper)
+        - scripts/agent_loop_mcp/tests/test_loop_run_goal.py
+        - scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py
+        - scripts/agent_loop_mcp/docs/state-schema.md (mention of supervisor states)
+        - scripts/agent_loop_mcp/_validate_closure_invariant.py (terminal-state hook)
+
+acceptance_gates:
+  A1_pytest:
+    status: PASS
+    detail: '335 passed in 5.48s (316 iter-0026 baseline + 19 new iter-0028 tests = +5 reviewer_dispatch + +14 dispatch_codex; 2 pre-existing fixture regressions fixed in same diff)'
+  A2_iter_outcome_landed:
+    status: PASS
+    detail: 'this file; closing_state=manual_close_landed'
+
+release_gates_post_commit:
+  expected: 11/11
+  state_at_iter_close:
+    G_smoke: PASS
+    G_validators: PASS
+    G_frontmatter: PASS
+    G_unstaged: pending_commit
+    G_untracked_pkg: PASS
+    G_install: PASS
+    G_install_smoke: PASS
+    G_server_starts: PASS
+    G_real_iter: PASS
+    G_pytest_dispatch_codex: PASS
+    G_archive_section_24_synced: PASS
+  note: G_unstaged passes after the iter-0028 commit lands.
+
+post_close_status: |
+  iter-0028 closes manual_close_landed. 4 codex findings from iter-0027
+  applied with TDD coverage (+19 new tests on top of 316 baseline = 335
+  pytest green). 10/11 release gates PASS pre-commit; G_unstaged PASSES
+  after commit. No Flavor B ceremony, no codex re-dispatch in this
+  iteration. iter-0029 ready: supervisor state machine subsystem 4.

@@ -1,0 +1,59 @@
+iteration_id: iteration-0033-fix-iter-0032-findings
+reviewer_id: codex-iter0033-2
+pass_id: codex-iter0033-2-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Patch 1 still leaves non-containment preflight failures as raw tracebacks
+  citation: agent-loop/active/iteration-0033-fix-iter-0032-findings/proposed-patches.md:82
+  risk: '`iter_dir.mkdir()` and `Path.resolve()`/filesystem errors inside the pre-main
+    preflight can still escape before the main `try/except`, so operators get the
+    same no-`dispatch_failed`/TUI-blind failure mode for invalid or unwritable iteration
+    paths.'
+  recommendation: Catch `OSError`/filesystem preflight failures in the same early
+    boundary, emit `dispatch_failed` with the derived reviewer/pass/iteration anchors,
+    and return an existing generic failure rc such as 2 unless rc=5 is intentionally
+    reserved for all preflight path failures.
+  patch_not_proposed_reason: Review target is a proposed-patches artifact; claude
+    should fold this into the pending implementation patch.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: low
+  summary: Patch 1 keeps default reviewer/pass ids tied to the pre-normalized iteration
+    name
+  citation: agent-loop/active/iteration-0033-fix-iter-0032-findings/proposed-patches.md:73
+  risk: When `--iteration-dir` resolves through an alias such as a symlink or `.`
+    path, `iteration_id` comes from `iter_dir.name` but default `reviewer_id`/`pass_id`
+    remain based on `_pre_iter_id`, creating inconsistent audit and sealed-packet
+    identifiers versus current behavior.
+  recommendation: Use the pre-normalize IDs only for the early failure event, then
+    recompute `reviewer_id = ns.reviewer_id or f"codex-{iteration_id}-1"` and `pass_id
+    = ns.pass_id or f"{reviewer_id}-pass1"` after normalization succeeds.
+  patch_not_proposed_reason: Review target is a proposed-patches artifact; claude
+    should fold this into the pending implementation patch.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: Patch 2, Patch 3, and Patch 4 are acceptable, but Patch
+  1 needs the early failure boundary and post-normalize identity handling tightened
+  before landing.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 13dc99e677eac08427e9a137add7585cf0d4d958d63ddc4216254fb5af54d499
+  output_sha256: a85f3033bce469f5de6192fc49498ee49da9f7d63decffd19c2eacf3b0d69341
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: fa810e4d61ee9b1cfcda41f9c64a184825cb488fc0ecc89a836b9e6557bea6ed
+  scope_signature: 7702ac7284abb2737c0a96d04128e1c48b9a341c146d76f65f43726162e27042
+  review_target_path: agent-loop/active/iteration-0033-fix-iter-0032-findings/review-packet.yaml
+  review_target_hash: 2f1d089acd87d5fa38befb1324060af8f00bb6926be0b1122a27218dacfb134d
+sealed_at_utc: '2026-05-11T00:57:40Z'
+packet_sha256: b63bea9a2a622b80691aebae5ff44aab292b3411cb0139432bc53f116f4d9f74

@@ -1,0 +1,56 @@
+iteration_id: iteration-0035-self-drive-fixes
+reviewer_id: codex-iter0035-1
+pass_id: codex-iter0035-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Patch 1 follows untracked symlinks when counting lines instead of counting
+    the link Git would commit.
+  citation: agent-loop/active/iteration-0035-self-drive-fixes/proposed-patches.md:93
+  risk: An untracked symlink can make the stop rule count an arbitrary target outside
+    the repo, skip a broken link, or read a very large target; that does not mirror
+    `git add -A && git commit` semantics and can produce false positives or misses.
+  recommendation: Detect symlinks with `lstat`/`is_symlink()` before opening untracked
+    paths, then count the symlink itself by an explicit policy such as one added line
+    for the link target text, or zero with a breadcrumb; never dereference it.
+  patch_not_proposed_reason: 'Workflow #4 assigns Claude as fix author; this review
+    should feed back required changes before implementation.'
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Patch 1 undercounts untracked text files whose final line has no trailing
+    newline.
+  citation: agent-loop/active/iteration-0035-self-drive-fixes/proposed-patches.md:100
+  risk: '`text.count("\n")` counts a one-line untracked file as zero and undercounts
+    every non-empty file without a trailing newline, so many one-line files can bypass
+    `max_patch_size` even though Git numstat would count them as additions.'
+  recommendation: Count the final unterminated line, for example `text.count("\n")
+    + (1 if text and not text.endswith("\n") else 0)`, or use an equivalent helper
+    with tests for no-trailing-newline files.
+  patch_not_proposed_reason: 'Workflow #4 assigns Claude as fix author; this review
+    should feed back required changes before implementation.'
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: Patch 2, Patch 3, and Patch 4 look directionally correct,
+  but Patch 1 still has untracked-file counting gaps that should be fixed before landing.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: c82350d77380cb15a4007208d27bd5c123054641bb3d9a780446a4b7ba82665c
+  output_sha256: 65cdf258173dc14bbd5be9aaec0c5f19de86dd4f8ff834e104a52d1a7d614dda
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: f4512c188adf4e21ace5f8c82ef727c089fa9a04b6f92b40e490eebc0f49c03b
+  scope_signature: e6c7bfe47569fd17d7d6555ab215ae9c88e3c0de7bbbe19b2083c8282823353a
+  review_target_path: agent-loop/active/iteration-0035-self-drive-fixes/review-packet.yaml
+  review_target_hash: 36b4c30bf283658b30dd059b195c6c0f2f75f9e6573e67a99521b76db1055a34
+sealed_at_utc: '2026-05-11T02:07:31Z'
+packet_sha256: 7833963e6d270e5adfe6a8dd35af66c0ec8d0cf622bd97094069d4544a3a90e4

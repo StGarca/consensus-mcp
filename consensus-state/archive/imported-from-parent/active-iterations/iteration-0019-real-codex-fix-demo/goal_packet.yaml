@@ -1,0 +1,74 @@
+schema_version: 1
+pilot_id: iteration-0019-real-codex-fix-demo
+goal:
+  summary: First real-codex demo of the codex-fix-author cycle (#18 umbrella, post-#29 cross-family hardening)
+  desired_end_state: |
+    Codex emits a valid `patch_proposal` block (per iter-0014 schema) on a
+    small, well-defined defect; claude verifies post-mutation per CLAUDE.md
+    (cross-family closer); apply.codex_patch lands the mutation under operator
+    authorization; codex post-correction re-review or claude direct close
+    seals the cycle.
+
+    The defect target: `apply.codex_patch.handle()` does not re-validate
+    the structural shape of `actor` when called directly via Python import
+    (only the patch_id regex is re-checked). Per iter-0016 minor finding #7
+    (security defense-in-depth): defense-in-depth check should ensure
+    actor has the 4 required keys (id, model_family, role, pass_id).
+
+    Codex's patch should add this re-validation to apply.codex_patch.handle
+    in a surgical 5-15 line addition + a test asserting refusal on missing
+    actor.model_family.
+  non_goals:
+    - modify _closure_invariant.py
+    - modify _self_drive.py
+    - modify _dispatch_codex.py
+    - introduce new MCP tools
+    - modify codex_review_schema.json
+    - bump pyproject.toml version
+allowed_files:
+  - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+  - agent-loop/active/iteration-0019-real-codex-fix-demo/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_closure_invariant.py
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - scripts/agent_loop_mcp/tools/loop_run_goal.py
+  - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+  - scripts/agent_loop_mcp/tools/audit_append_event.py
+  - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/server.py
+  - run/
+  - wiki/
+max_iterations: 2
+max_patch_size: 80
+fix_author_policy: strict   # iter-0014 strict mode — every finding MUST emit patch_proposal OR patch_not_proposed_reason
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: apply.codex_patch.handle has actor structural re-validation (defense-in-depth check)
+    check: 'grep -q "actor" scripts/agent_loop_mcp/tools/apply_codex_patch.py && grep -E "model_family|required actor key" scripts/agent_loop_mcp/tools/apply_codex_patch.py'
+  - id: A2
+    description: regression test asserts apply refuses on missing actor.model_family
+    check: 'grep -q "model_family" scripts/agent_loop_mcp/tests/test_apply_codex_patch.py'
+  - id: A3
+    description: pytest still green
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+  - claude_codex_disagree_on_goal_satisfied
+  - closure_cross_verification_failed
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-10T00:00:00Z'
+  codex_patch_apply_authorized: true   # per iter-0016: apply.codex_patch refuses unless this is true
+  scope_signature: 2a0d059f398ce15eb48105bf06f8c9361a31dd392ff46366fa29a0ba3a094b33

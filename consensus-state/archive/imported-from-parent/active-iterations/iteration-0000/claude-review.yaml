@@ -1,0 +1,349 @@
+schema_version: 1
+agent: claude
+agent_model: claude-opus-4-7
+stance: methodology_critic
+iteration_id: iteration-0000
+reviewed_packet_sha256: 385d9589e98f55ac2ec877443b59280c62f11e131bdb5337e8aae6daba5435f97
+independence_attestation:
+  read_codex_review_yaml_before_writing: false
+  read_archive_review_passes_during_this_review: false
+  inputs_consulted:
+  - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+    (the spec under review)
+  - agent-loop/state/disposition-ledger.yaml (to avoid re-raising disposed findings)
+  - agent-loop/active/iteration-0000/review-packet.yaml
+  - agent-loop/active/iteration-0000/independence-audit.yaml (own audit log)
+  inputs_excluded:
+  - agent-loop/active/iteration-0000/codex-review.yaml (sealed at b0595ca4...)
+  - all files under agent-loop/archive/review-passes/
+overall_position:
+  implementation_ready: true
+  production_ready: false
+  confidence: medium
+  reasoning: 'From a methodology lens, v1.6 is structurally sound enough to fire iteration-0000.
+
+    Findings below are not blocking the observational run; they identify methodology
+
+    gaps that will surface during operational iterations and should drive v1.7 design.
+
+    '
+blocking_objections: []
+non_blocking_suggestions:
+- id: claude-rev-031-iteration-0000-self-reference-paradox
+  severity: medium
+  claim_class: methodology
+  claim: 'iteration-0000 reviews v1.6 spec, which itself contains the section 23
+
+    iteration_0000_preflight rules. If a reviewer raises a finding against
+
+    section 23 preflight, the spec doesn''t say whether iteration-0000''s own
+
+    validity is invalidated. Halting-problem shape: the iteration testing
+
+    the contract is also testing the rules describing how it should run.
+
+    '
+  file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+  section: section_23
+  evidence: "section 23 iteration_0000_preflight defines its own preconditions.\n\
+    A reviewer finding (e.g. \"preflight rule X is wrong\") creates ambiguity:\n \
+    \ - does iteration-0000 still count as evaluable?\n  - does its outcome get recorded\
+    \ in section 22 metrics?\n  - does the kill-switch consider iteration-0000 a valid\
+    \ sample?\n"
+  suggested_resolution: 'v1.7 add section 23 rule: "Findings against section 23 preflight
+    rules
+
+    that surface during iteration-0000 produce a v1.7 patch proposal but
+
+    do NOT invalidate iteration-0000''s metrics. The iteration is recorded
+
+    as completed; its findings drive the next iteration''s preflight."
+
+    '
+- id: claude-rev-032-kill-switch-sample-size-undefined
+  severity: medium
+  claim_class: methodology
+  claim: 'Section 4 kill-switch fires when mean(independent_finding_rate, last_5_iterations)
+    < 0.30,
+
+    but doesn''t say what happens if iterations 1-5 have heterogeneous objectives.
+
+    Two reviewers might agree at high rate on clear-cut decisions and low rate on
+
+    ambiguous ones; the rate measures objective ambiguity as much as spec health.
+
+    '
+  file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+  section: section_4
+  evidence: 'Spec-review passes (excluded from kill-switch by section 22) showed
+
+    monotonic decline 0.86 -> 0.62 across cycles 4-14. If operational
+
+    iterations follow a similar pattern (different objectives produce
+
+    different rates), the kill-switch could fire on objective-mix variance
+
+    rather than two-agent independence collapse.
+
+    '
+  suggested_resolution: 'v1.7 add section 4: kill-switch sample size minimum (N>=10
+    operational
+
+    iterations after iteration-0000), AND objective-mix normalization
+
+    (compute rate per objective_class, average across classes, not raw mean).
+
+    '
+- id: claude-rev-033-sealed-review-honor-system-only
+  severity: medium
+  claim_class: methodology
+  claim: 'Section 13 independence_proof_required and section 15 seal_both_reviews
+
+    step rely on reviewer self-discipline to not read peer output between
+
+    seal time and own-review write time. The "seal" is a sha256 record,
+
+    not a technical enforcement. In iteration-0000 specifically, the same
+
+    agent (claude) acts as orchestrator AND second reviewer; the seal is
+
+    doubly honor-system.
+
+    '
+  file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+  section:
+  - section_13
+  - section_15
+  evidence: 'No technical mechanism prevents reading the sealed file. Phase 0 is
+
+    file-based; Phase 1 MCP could enforce via tool permissions, but Phase 0
+
+    has no enforcement layer.
+
+    Detection signal: post-hoc canonical-key match patterns can SUGGEST
+
+    anchoring but cannot prove or disprove it.
+
+    '
+  suggested_resolution: 'v1.7 add section 13: synthesizer should run a SEMANTIC-SIMILARITY
+    check
+
+    between reviewer outputs as a FINGERPRINT for anchoring detection.
+
+    If similarity above threshold, flag corroboration_strength as
+
+    suggested_by_context regardless of audit log claims.
+
+    Or: Phase 1 MCP enforces read-permission gates.
+
+    '
+- id: claude-rev-034-done-claim-rule-asymmetric
+  severity: medium
+  claim_class: process
+  claim: 'Section 0 done_claim_rule says a REVIEWER may not declare ''ready''
+
+    until validator-clean AND iteration-0000 metrics. But the rule
+
+    doesn''t cover SPEC AUTHORS editing frontmatter active_contract_readiness.
+
+    A future spec patch could set active_contract_readiness: ready without
+
+    satisfying the rule''s preconditions.
+
+    '
+  file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+  section: section_0
+  evidence: 'done_claim_rule.text refers to "verdicts" (reviewer outputs).
+
+    Frontmatter active_contract_readiness is set by patch authors, not
+
+    reviewers. Currently no rule prevents
+
+    "operator manually flips frontmatter to ready" without validator/metrics.
+
+    '
+  suggested_resolution: "v1.7 extend done_claim_rule:\n  \"active_contract_readiness=ready\
+    \ transition requires the same gates:\n  validator-clean AND iteration-0000 metrics\
+    \ in section 22.\n  The transition itself MUST be reviewed by both agents and\
+    \ operator\n  (no unilateral flip).\"\n"
+agreements:
+- id: agree-001
+  with: review-packet
+  claim: 'The observational-only mode for iteration-0000 is the right call.
+
+    Applying patches during the first orchestration run would mix two
+
+    classes of empirical data (orchestration mechanics vs patch correctness)
+
+    and confound diagnosis if anything fails.
+
+    '
+- id: agree-002
+  with: spec_section_0_self_patch_constraint
+  claim: 'Architectural lockdown forbidden_before_iteration_0000 is correct.
+
+    The pattern of 4-of-4 prior patches introducing regressions justifies
+
+    the lockdown empirically.
+
+    '
+- id: agree-003
+  with: spec_section_4_asymmetric_stances
+  claim: 'Operating in methodology_critic stance for this review feels distinct
+
+    from operating as a generic reviewer. The stance constraint actually
+
+    shapes which findings I considered worth raising vs which I''d have
+
+    raised in a free-form review.
+
+    '
+disagreements: []
+patch_recommendations:
+- id: patch-claude-rev-031-suggested
+  target_section: section_23
+  recommended_for_v1_7: true
+  edit_kind: addition
+  proposed_text_summary: Add iteration-0000 self-reference resolution rule per claude-rev-031
+- id: patch-claude-rev-032-suggested
+  target_section: section_4
+  recommended_for_v1_7: true
+  edit_kind: addition
+  proposed_text_summary: Add kill-switch sample size minimum + objective-mix normalization
+    per claude-rev-032
+- id: patch-claude-rev-033-suggested
+  target_section: section_13
+  recommended_for_v1_7: true
+  edit_kind: addition
+  proposed_text_summary: Add semantic-similarity fingerprint check for anchoring detection
+    per claude-rev-033
+- id: patch-claude-rev-034-suggested
+  target_section: section_0
+  recommended_for_v1_7: true
+  edit_kind: extension
+  proposed_text_summary: Extend done_claim_rule to cover active_contract_readiness
+    transitions per claude-rev-034
+implementation_risks:
+- id: risk-claude-rev-035-state-machine-edge-cases
+  severity: medium
+  claim_class: correctness
+  claim: 'Section 17 state_transitions don''t define behavior when transitions
+
+    occur during a transition (e.g. operator approval lands while
+
+    verification is running). The atomic write pattern in section 5 covers
+
+    file writes but not multi-step state mutations.
+
+    '
+  suggested_action: 'v1.7 or Phase 1 add section 17 transaction model: state mutations
+
+    must complete before next mutation begins. Phase 0 single-writer
+
+    lock partially addresses this but doesn''t bound transition duration.
+
+    '
+- id: risk-claude-rev-036-rebuttal-soft-convergence
+  severity: low
+  claim_class: methodology
+  claim: 'Symmetric rebuttal in section 11 has no anti-convergence rule.
+
+    Two reviewers can iteratively soften objections to reach agreement
+
+    without triggering section 13 weak-agreement detection (which only
+
+    fires on the initial review, not the rebuttal exchange).
+
+    '
+  suggested_action: 'v1.7 add section 11: rebuttal output must preserve at least one
+
+    original blocking_objection from each side OR explicitly mark the
+
+    iteration as ''agreement-via-mutual-softening'' (which then triggers
+
+    adversarial_pass).
+
+    '
+clarifying_questions: []
+self_resolved_questions: []
+assumptions_challenged:
+- id: assume-001
+  assumption: v1.6 spec is internally consistent because validate_disposition_index.py
+    reports 0 findings
+  challenge_method: read_section_by_section_for_methodology_gaps_validator_does_not_check
+  challenge_result: cleared
+  evidence: 'Validator catches cross-references and structural rules. Methodology
+
+    gaps (claude-rev-031..034) are by design outside validator scope.
+
+    The 0-findings result accurately reflects validator-checkable health,
+
+    not full methodological soundness.
+
+    '
+- id: assume-002
+  assumption: Observational-only mode prevents iteration-0000 from breaking anything
+  challenge_method: trace_each_artifact_write_in_section_15_and_section_20_step_lists
+  challenge_result: cleared
+  evidence: 'Section 23 iteration_0000_preflight.applies_patches=false combined with
+
+    section 0 self-patch constraint forbidden_before_iteration_0000 list
+
+    blocks both classes of mutation: spec patches AND architectural additions.
+
+    The only outputs are review/consensus/verification yamls in
+
+    agent-loop/active/iteration-0000/, all under the active/ subtree which
+
+    is operational state, not contract.
+
+    '
+- id: assume-003
+  assumption: The 4-of-4 consolidation regression pattern broke at v1.5/v1.6 because
+    of operator-ratified design
+  challenge_method: compare_v1_5_v1_6_change_provenance_vs_prior_versions
+  challenge_result: partially-cleared
+  evidence: 'v1.5 had operator ratification of all architectural changes (Tier 1/2/3).
+
+    v1.6 added agent-wip + tool_profiles from codex pass-16 borrows; these
+
+    were NOT ratified by operator the same way. Validator runs clean on v1.6
+
+    but absence of post-patch validator findings is not equivalent to absence
+
+    of methodology issues. The pattern-break hypothesis is supported by v1.5
+
+    data but v1.6 is too small a sample to confirm.
+
+    '
+  remaining_uncertainty: 'iteration-0000 + iteration-0001 will reveal whether v1.6''s
+    WIP and
+
+    tool_profiles were actually load-bearing for clean orchestration, or
+
+    whether they were speculative additions that happened to not break
+
+    anything observable.
+
+    '
+no_objection_rationale:
+  required_when_no_blockers: true
+  text: 'This review issues no blocking objections to iteration-0000 itself.
+
+    The 4 non-blocking suggestions (claude-rev-031..034) are methodology gaps
+
+    for v1.7 design; they do not block the observational run.
+
+    The 2 implementation_risks (claude-rev-035, -036) flag edge cases that
+
+    may or may not surface in iteration-0000.
+
+    Per section 13 substantive_pushback rule: assumptions_challenged is
+
+    non-empty (3 entries with evidence) and at least 3 non_blocking_suggestions
+
+    present, so the no-blocking-objections position is supported by evidence.
+
+    '
+hash_convention: pre-canonical-pin
+do_not_recompute: true

@@ -1,0 +1,119 @@
+schema_version: 1
+iteration_id: iteration-0023-closure-invariant-flavor-b-review
+reviewer_id: claude-iter0023-2
+pass_id: claude-iter0023-2-pass1
+agent: claude
+stance: closer_after_codex_mutation
+actor:
+  id: claude-iter0023-2
+  model_family: claude
+  role: closer
+  pass_id: claude-iter0023-2-pass1
+created_at_utc: '2026-05-10T20:26:33Z'
+review_target_hash: 46673542024835dfe115e7d752366d2bc3174e40de5de14c31cdf255fdc93b9f
+review_target_hash_provenance:
+  source: apply_step_landed.last_mutation.post_sha
+  apply_event_id: 2026-05-10T20:26:17Z_apply_step_landed_codex-iter0023-1
+  iter_dir: agent-loop/active/iteration-0023-closure-invariant-flavor-b-review/
+  files_touched:
+    - scripts/agent_loop_mcp/_validate_closure_invariant.py
+  notes: |
+    Three apply_step_landed events were emitted in iter-0023; the closer
+    binds to the LAST mutation's post_sha (rev-003-patch). Earlier mutations
+    (rev-001, rev-002) are also covered by the audit log; the closure
+    invariant evaluator picks the most recent for hash_match.
+goal_satisfied: true
+goal_satisfied_rationale: |
+  iter-0023 closes the first SUBSYSTEM-WIDE Flavor B review of agent-loop
+  code. Three real codex findings were emitted, all blocking/high severity,
+  all with patch_proposals; all 3 were verified per CLAUDE.md and approved
+  by claude verifier; all 3 landed via apply.codex_patch under operator
+  authorization.
+
+  Findings + landings:
+    codex-rev-001 (blocking): defense-in-depth fallback to
+      extra_fields.last_mutation when top-level last_mutation absent.
+      Surgical 4-line addition. Landed at post_sha=36c64616...
+    codex-rev-002 (blocking): freshness check now uses UTC-normalized
+      datetime parse instead of raw lex string compare on ISO 8601.
+      Adds _parse_utc_timestamp helper + uses it in both _closure_invariant
+      and _validate_closure_invariant. Landed at post_sha=d852a3ed...
+    codex-rev-003 (high): _load_review_yaml now derives reviewer_id from
+      structured actor.id when legacy fields absent. Landed at
+      post_sha=46673542... (the final post-mutation hash bound here).
+
+  Empirical regression check:
+    pytest_pre_review:    276 passed
+    pytest_post_rev_001:  276 passed
+    pytest_post_rev_002:  276 passed
+    pytest_post_rev_003:  276 passed (final state)
+
+  Cross-family invariant:
+    last_mutation.actor.model_family = codex (codex-iter0023-1)
+    closer.actor.model_family        = claude (claude-iter0023-2)
+    Different families + different actor IDs -> cross_family PASS.
+
+  Hash binding:
+    review_target_hash = 46673542024835dfe115e7d752366d2bc3174e40de5de14c31cdf255fdc93b9f
+    last_mutation.post_sha = 46673542024835dfe115e7d752366d2bc3174e40de5de14c31cdf255fdc93b9f
+    Equal -> hash_match PASS.
+
+  Freshness:
+    closer.created_at_utc       = 2026-05-10T20:26:33Z
+    last_mutation.timestamp_utc = 2026-05-10T20:26:17Z
+    closer > mutation -> freshness PASS.
+
+findings: []
+blocking_objections: []
+non_blocking_suggestions:
+  - id: claude-iter0023-followup-001
+    severity: low
+    target: scripts/agent_loop_mcp/_dispatch_codex.py (helper-stamp logic)
+    text: |
+      iter-0023 surfaced a real (but non-iter-0023-scope) defect in the
+      iter-0022 helper-stamp logic: when defect_target spans multiple
+      files but a patch_proposal touches a subset, the helper stamps the
+      multi-file bundle_sha onto the patch, but apply.codex_patch computes
+      bundle_sha against the patch's files_touched (a subset) — refusing
+      with base_sha_drift. Workaround used in iter-0023: rewrite each
+      patch_proposal.base_sha post-stamp to match its own files_touched
+      bundle. This is iter-0024 scope (out of iter-0023's allowed_files).
+      Per operator: deferred.
+
+scope_check:
+  files_in_scope: true
+  files_changed_listing:
+    - scripts/agent_loop_mcp/_closure_invariant.py
+    - scripts/agent_loop_mcp/_validate_closure_invariant.py
+  forbidden_files_touched: false
+  notes: |
+    Codex's mutations touched only 2 of the 5 allowed files; the 3 test
+    files in scope were not modified (no test additions were authored by
+    codex in this iteration; the existing test suite remained green at
+    276 passed pre and post). Patch sizes (~5/30/5 LOC each) all under
+    max_patch_size=300.
+
+regression_check:
+  pytest_pre_mutation: 276 passed
+  pytest_post_mutation: 276 passed
+  pytest_delta_explanation: |
+    No test additions; codex's patches were source-only changes that did
+    not break any existing test. The 3 patches improve real defects
+    (extra_fields hoist fallback, ISO 8601 freshness normalization, modern
+    actor-only review file recognition) without altering any
+    currently-tested behavior path.
+
+independence_attestation:
+  reviewer_did_not_co_author_implementation: true
+  reviewer_received_no_advance_summary_of_implementation_choices: false
+  reviewer_judged_against_sealed_goal_packet_only: true
+  reviewer_independently_verified_post_sha_against_apply_event: true
+  reviewer_independently_ran_pytest: true
+  notes: |
+    The closer (claude-iter0023-2) is a distinct actor.id from any codex
+    actor. Cross-family closure invariant treats actor-id + family
+    difference as the independence boundary. The implementation_critic
+    pass (claude-iter0023-1) is preserved at
+    claude-review-implementation-critic.yaml for audit.
+
+sealed_at_utc: '2026-05-10T20:26:33Z'

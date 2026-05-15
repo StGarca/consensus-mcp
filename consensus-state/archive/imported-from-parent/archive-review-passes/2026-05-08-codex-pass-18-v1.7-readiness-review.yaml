@@ -1,0 +1,86 @@
+schema_version: 1
+pass_id: pass-18-codex-v1-7-readiness-review
+reviewer: codex
+date: 2026-05-08
+spec_path: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.7-ai-contract"
+review_type: "v1.7 readiness-flip pre-review and v1.7 self-patch regression audit"
+
+verdict:
+  active_contract_readiness: "Keep pending_phase_0_empirical_validation."
+  readiness_flip_recommendation: "Do not flip readiness yet. v1.7 landed the cf-007 flip gate, but pass-18 found bookkeeping and validator-coverage regressions that should be cleaned before pass-19/Claude readiness review."
+  next_step: "Apply a small v1.7.1 cleanup patch, rerun validator/lint, then run pass-19 Claude review. If pass-19 is clean and the operator records rationale, readiness can flip. iteration-0001 should follow after the contract/index state is clean."
+  iteration_0001_before_readiness: "Defensible but weaker than fixing v1.7 first: iteration-0001 would produce useful empirical data, but it would run on a contract whose disposition index already contains known drift."
+
+evidence:
+  validator:
+    smoke_tests: "5/5 passed"
+    real_spec_validator_findings: 0
+    limitation_observed: "Validator reports zero findings while section 24 still contains stale pending_v1_7 entries and while codex-rev-049..051 ID collision remains visible in pass-17 archive/index."
+  local_search:
+    - "section 24 pending_v1_7 still lists codex-rev-049/codex-rev-050/codex-rev-051 from pass-17."
+    - "disposition-ledger.yaml later records pass_17_findings_resolved and iteration_0000_canonical_findings_resolved."
+    - "iteration-0000/codex-review.yaml uses codex-rev-049..codex-rev-064; pass-17 archive also uses codex-rev-049..codex-rev-051."
+    - "ASCII scan found non-ASCII/mojibake in active spec line 1657."
+
+findings:
+  - id: codex-rev-065-section24-v17-disposition-drift
+    severity: high
+    claim: "v1.7 resolved iteration-0000 cf findings and pass-17 findings in the ledger, but section 24 still reports pass-17 findings as pending_v1_7 and does not index the v1.7 cf promotions/deferments."
+    evidence:
+      - "section 24 status_counts still show resolved=96, pending=3 after v1.7."
+      - "section 24 pending_v1_7 lists codex-rev-049-cf-findings-not-archived-in-repo, codex-rev-050-path-x-ratification-should-not-bulk-trust-synthesizer, codex-rev-051-readiness-hold-is-correct-until-v1-7-gates-land."
+      - "disposition-ledger.yaml records iteration_0000_canonical_findings_resolved and pass_17_findings_resolved."
+    impact: "The readiness-flip gate depends on cf findings being dispositioned. Current source-of-truth split makes an agent see 'resolved' in the ledger and 'pending v1.7' in section 24."
+    recommended_fix: "v1.7.1 should update section 24 resolved/deferred counts and id-only lists for cf-001/cf-003/cf-004/cf-005/cf-007/cf-008, cf-002/cf-006/cf-risk-001..003, and pass-17 outcomes; remove or replace pending_v1_7."
+    disposition: archived_pending_v1_7_1
+
+  - id: codex-rev-066-pass17-id-collision-remains-visible
+    severity: high
+    claim: "pass-17 reused codex-rev-049..051 after iteration-0000 codex-review.yaml had already allocated codex-rev-049..064, violating section 0 namespace continuity."
+    evidence:
+      - "agent-loop/active/iteration-0000/codex-review.yaml uses codex-rev-049, codex-rev-050, codex-rev-051."
+      - "agent-loop/archive/review-passes/2026-05-08-codex-pass-17-path-x-readiness-review.yaml also uses codex-rev-049, codex-rev-050, codex-rev-051."
+      - "disposition-ledger.yaml acknowledges the collision, but archive index still reports pass-17 findings_id_range as codex-rev-049..codex-rev-051."
+    impact: "Future agents cannot reliably resolve codex-rev-049 without disambiguating iteration-0000 vs pass-17. The ledger workaround is useful, but the active archive/index still leak the collision."
+    recommended_fix: "Choose one canonical repair: either rewrite pass-17 finding IDs to a non-colliding range (preferred before commit), or permanently prefix pass-17-local IDs in both archive and index. Add validator detection in v1.8 or v1.7.1."
+    disposition: archived_pending_v1_7_1
+
+  - id: codex-rev-067-validator-misses-cross-artifact-disposition-drift
+    severity: medium
+    claim: "validate_disposition_index.py reports zero findings despite the section24/ledger mismatch and the ID collision."
+    evidence:
+      - "Real-spec validator run after v1.7 returned total_findings=0."
+      - "Same run reports pending_count=3 while v1.7 ledger says those pass-17 items are resolved."
+    impact: "The readiness-flip review could over-trust validator clean status. The validator is still useful, but its current scope is narrower than the readiness gate now needs."
+    recommended_fix: "Add checks for duplicate finding IDs across archive/active review artifacts and for section24 status entries that contradict disposition-ledger resolved/deferred blocks."
+    disposition: archived_pending_v1_8
+
+  - id: codex-rev-068-active-spec-nonascii-regression
+    severity: low
+    claim: "v1.7 introduced non-ASCII/mojibake into the active spec body despite section 0's ASCII rule."
+    evidence:
+      - "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md line 1657 contains mojibake for an em dash."
+    impact: "Low behavioral risk, but it violates the AI-only SNR contract and repeats an already-fixed class of issue."
+    recommended_fix: "Replace the mojibake/em dash with ASCII punctuation in v1.7.1; optionally clean the same pattern in active iteration artifacts."
+    disposition: archived_pending_v1_7_1
+
+  - id: codex-rev-069-v17-revision-history-overstates-actual-iteration-file-set
+    severity: low
+    claim: "v1.7 revision_history says section 5 was updated to reflect the actual iteration-0000 file set including peer-questions.yaml, but no peer-questions.yaml exists in agent-loop/active/iteration-0000/."
+    evidence:
+      - "revision_history v1.7: 'actual iteration-0000 file set (added independence-audit.yaml, peer-questions.yaml, iteration-outcome.yaml)'."
+      - "directory listing contains input, review-packet, codex-review, claude-review, independence-audit, consensus, verification, iteration-outcome; no peer-questions.yaml."
+    impact: "Minor, but it weakens the audit trail. Section 5 can define optional files, but revision_history should not call absent optional files actual produced artifacts."
+    recommended_fix: "Change the revision_history wording to distinguish state-tree allowed files from files actually produced in iteration-0000."
+    disposition: archived_pending_v1_7_1
+
+next_step_analysis:
+  pass18_then_pass19:
+    recommendation: preferred
+    reason: "pass-18 found small but real v1.7 drift. Fixing that before Claude pass-19 keeps the readiness review focused on clean state instead of known bookkeeping contradictions."
+  iteration0001_first:
+    recommendation: not_preferred_until_cleanup
+    reason: "Iteration-0001 would test project-decision usefulness, but it would also add artifacts on top of unresolved v1.7 index/ledger drift and known ID-collision debt."
+  readiness_flip:
+    recommendation: "blocked until pass-18 findings are resolved or explicitly waived, pass-19 agrees, validator/lint are clean, and operator records the transition rationale."

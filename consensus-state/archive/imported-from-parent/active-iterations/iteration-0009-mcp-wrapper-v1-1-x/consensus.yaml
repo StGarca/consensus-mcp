@@ -1,0 +1,92 @@
+schema_version: 1
+iteration_id: iteration-0009-mcp-wrapper-v1-1-x
+created_utc: '2026-05-10T02:09:00Z'
+
+consensus_state: implementation_ready
+production_state: not_ready
+review_consensus: true
+implementation_ready: true
+production_ready: false
+production_allowed: false
+observational_mode: false
+
+reviewed_artifacts:
+  goal_packet:
+    path: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/goal_packet.yaml
+    canonical_sha256: 39517199be6196611f8fc6c7cf38cdbc912844fcedc81cd4fb94dd153e8dc6e0
+  review_packet:
+    path: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/review-packet.yaml
+    canonical_sha256: 46553826460ffd9f5adb60cb16262d99aaa39d6f716ae025b181d4e5e153fcef
+  claude_review:
+    path: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/claude-review.yaml
+    canonical_sha256: 78c68ac5e57d25c1fd177d75d16bf857c10a87bb67970d5d251e5b51a81aeb4e
+  codex_review:
+    path: agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/codex-review.yaml
+    canonical_sha256: 4c321c7679fddf6ec9cbf1d2b2d2dece8c3c391677b80a294610e64a4aab3167
+
+reviewer_alignment:
+  goal_satisfied:
+    claude: true
+    codex: true
+    unanimous: true
+  blocking_objections:
+    claude: []
+    codex: []
+    unanimous_zero_blocking: true
+  finding_counts:
+    claude_non_blocking_low: 4
+    claude_non_blocking_medium: 0
+    claude_non_blocking_high: 0
+    codex_findings_total: 0
+  rationale_alignment: |
+    Both reviewers concur on substance: thin wrapper, in-scope, all gates pass,
+    no helper logic re-implemented, behavior-level test coverage. Claude
+    surfaces 4 low-severity polish suggestions; codex surfaces zero findings.
+    No divergence on the close-decision.
+
+converged_recommendations:
+  - "Wrapper is implementation_ready and meets goal_packet acceptance gates A1-A5."
+  - "Helper anti-scope upheld: scripts/agent_loop_mcp/_dispatch_codex.py untouched (forbidden_files honored)."
+  - "Test coverage is behavior-level (mocked main, real argv translation + return identity); 17 cases cover required + optional flag matrix."
+  - "Server registration follows the canonical pattern of the 10 prior tools (T2-T11)."
+
+divergent_recommendations: []
+
+claude_non_blocking_summary:
+  - id: claude-iter0009-001
+    severity: low
+    text: "Three helper flags (--prompt-template, --schema, --codex-bin) not exposed via wrapper input_schema. First two are sensible internal defaults; --codex-bin is borderline operator-facing — fold into v1.1.x+1 if/when an MCP caller needs it."
+  - id: claude-iter0009-002
+    severity: low
+    text: "handle() raises JSONDecodeError on non-JSON helper stdout instead of returning {ok: False, error: ...}. Programming-error path only (helper always prints JSON in normal flow); accept as canonical-pattern divergence to be revisited if it ever fires in practice."
+  - id: claude-iter0009-003
+    severity: low
+    text: "Comment imprecision around `if smoke:` vs `if smoke is None`. Behavior is correct (smoke=False omits flag); doc-only fix."
+  - id: claude-iter0009-004
+    severity: low
+    text: "No malformed-stdout test. Add fake_main that prints 'not json' and assert handle() raises (or wraps); current tests only exercise the JSON-emitting path."
+
+deferred_to_v1_1_x_plus_1:
+  - "Address claude-iter0009-001 if MCP callers need --codex-bin / --prompt-template / --schema overrides."
+  - "Address claude-iter0009-002 + claude-iter0009-004 by wrapping json.loads in try/except returning {ok: False, error_type: 'WrapperJsonDecodeError', error: <stdout-tail>}, plus add malformed-stdout test."
+  - "Address claude-iter0009-003 with a 1-word comment fix."
+
+independence_attestation:
+  claude_did_not_co_author_codex_review: true
+  codex_did_not_co_author_claude_review: true
+  reviewers_received_only_sealed_review_packet_plus_source_paths: true
+  no_orchestrator_verdict_was_passed_to_either_reviewer: true
+
+closure_decision:
+  unanimous_goal_satisfied: true
+  unanimous_zero_blocking: true
+  scope_held: true
+  acceptance_gates_passed: 5
+  acceptance_gates_total: 5
+  consensus_state_post_review: implementation_ready
+  notes: |
+    Both reviewers emit goal_satisfied=true with zero blocking_objections.
+    All 5 acceptance gates pass. Scope held (verify_scope: in_scope=true).
+    Claude surfaces 4 low-severity non-blocking polish suggestions; codex
+    surfaces zero findings. v1.1.x close decision: pass via unanimous quorum.
+    Polish items deferred to v1.1.x+1.

@@ -1,0 +1,193 @@
+schema_version: 1
+pass_id: pass-15-codex-accomplishments-review
+reviewer: codex
+date: 2026-05-08
+spec_version_reviewed: draft-v1.5-ai-contract
+contract_version_reviewed: multi-agent-consensus-mcp-v1.5
+review_type: accomplishments_audit_and_tooling_review
+verdict:
+  phase_0_ready: false
+  production_ready: false
+  contract_direction: strong
+  summary: |
+    The project has crossed the important line from prose-only agent debate
+    into a validator-backed, artifact-indexed loop. The most valuable
+    accomplishment is not the v1.5 prose; it is the switch to Path C:
+    deterministic checks, archived review bodies, a separate disposition
+    ledger, explicit production gates, and no pressure toward production.
+    However, the current checkout cannot reproduce the validator smoke test
+    because PyYAML is not installed or pinned. That keeps the loop below
+    Phase 0 readiness even though the architecture is now coherent.
+
+accomplishments:
+  - id: accomplished-001
+    claim: "Manual MD ping-pong has been converted into durable review artifacts."
+    evidence:
+      - "agent-loop/archive/review-passes/*.yaml contains pass bodies."
+      - "section 24 now acts as an index instead of a transcript store."
+      - "agent-loop/state/disposition-ledger.yaml externalizes disposition prose."
+    assessment: "Correct direction. This is the highest-signal way to conserve context."
+  - id: accomplished-002
+    claim: "The loop has proven that pushback is not optional."
+    evidence:
+      - "Multiple cycles caught self-introduced consolidation bugs."
+      - "Path C was selected after the pass-14 convergence warning."
+      - "The spec now blocks rubber-stamp agreement and premature ready claims."
+    assessment: "This is the central governance win. Keep treating agreement as evidence, not clearance."
+  - id: accomplished-003
+    claim: "Production gating is materially safer than earlier versions."
+    evidence:
+      - "operator approval store moved outside repo-controlled paths."
+      - "approval binding split into target, consensus, and verification hashes."
+      - "production_state remains separate from implementation readiness."
+    assessment: "Good design. Do not weaken this for convenience."
+  - id: accomplished-004
+    claim: "Corroboration ownership is now correctly assigned to the synthesizer."
+    evidence:
+      - "Reviewer schema no longer self-declares corroborated_by."
+      - "section 13 canonical findings own merge/corroboration state."
+    assessment: "This removes a real false-confirmation attack surface."
+  - id: accomplished-005
+    claim: "The first validator and fixture harness now exist."
+    evidence:
+      - "scripts/agent_loop/validate_disposition_index.py"
+      - "scripts/agent_loop/run_validator_tests.py"
+      - "agent-loop/tests/fixtures/spec_known_good/spec.md"
+      - "agent-loop/tests/fixtures/spec_known_bad/spec.md"
+    assessment: "Right tool class for this stage: local deterministic CLI before MCP."
+
+findings:
+  - id: codex-rev-033-validator-runtime-dependency-not-pinned
+    severity: blocking
+    status: candidate_pending_v1_6
+    claim: "The Phase 0 validator cannot be reproduced from the current checkout because PyYAML is not installed or pinned."
+    evidence:
+      - command: "python scripts/agent_loop/run_validator_tests.py"
+        observed: "pyyaml required (pip install pyyaml)"
+        exit_code: 1
+      - "requirements.txt does not list PyYAML."
+      - "pyproject.toml project.dependencies does not list PyYAML."
+    impact: |
+      The existing validate-disposition-index-report.yaml may be accurate,
+      but it is not reproducible by a fresh agent in this workspace. The
+      done-claim rule depends on a clean validator run, so Phase 0 cannot be
+      declared ready until the dependency is pinned or removed.
+    required_change: |
+      Either add PyYAML to the repo-managed dependency set and document the
+      validator install command, or replace PyYAML usage with a strict
+      repository-local parser for the supported YAML subset. Then rerun the
+      smoke harness and real-spec validator from a clean checkout.
+  - id: codex-rev-034-implemented-status-overstates-smoke-test-reality
+    severity: high
+    status: candidate_pending_v1_6
+    claim: "Section 23 marks validate_disposition_index.py and run_validator_tests.py as implemented, but implemented is defined as complete plus smoke tests pass."
+    evidence:
+      - "section 23 status_definitions: implemented = complete; smoke tests pass."
+      - "section 23 phase_0_deliverables marks both validator files implemented."
+      - "Local smoke harness currently exits 1 before tests execute."
+    impact: |
+      The status enum is good, but the current values are not defensible
+      until the validator harness runs in the repo environment.
+    required_change: |
+      After codex-rev-033 is fixed, rerun the harness. If it passes, keep
+      implemented. If not, downgrade affected files to scaffolded until the
+      harness is green.
+  - id: codex-rev-035-validator-report-lacks-run-provenance
+    severity: medium
+    status: candidate_pending_v1_6
+    claim: "validate-disposition-index-report.yaml reports zero findings but does not record enough provenance to audit or reproduce that claim."
+    evidence:
+      - "Report includes stats and findings but no command, generated_utc, python version, dependency versions, git HEAD, dirty state, spec sha256, or archive index sha256."
+    impact: |
+      A stale report can look authoritative after the spec, archive index, or
+      working tree changes. This is exactly the kind of hidden drift the loop
+      is meant to eliminate.
+    required_change: |
+      Extend validator output with generated_utc, command_line,
+      python_version, dependency_versions, git_head, git_dirty_summary,
+      spec_sha256, archive_index_sha256, and validator_script_sha256.
+  - id: codex-rev-036-archive-index-still-too-prose-heavy-for-ai-hot-path
+    severity: medium
+    status: candidate_pending_v1_6
+    claim: "The archive index is improved, but it still contains long narrative blocks that should not be in the hot-path index for AI agents."
+    evidence:
+      - "agent-loop/archive/review-passes/index.yaml contains pass metadata plus loop_self_test_observations, path_c_kickoff narrative, convergence assessment, and historical interpretation blocks."
+    impact: |
+      The index is no longer as noisy as the old MD transcript, but agents
+      still have to scan historical prose when they only need pass ids,
+      artifact paths, id ranges, and current unresolved items.
+    required_change: |
+      Split archive metadata from analysis history. Keep index.yaml to pass
+      ids, reviewer, version, id range, archive path, and status. Move trend
+      analysis and path-c narrative to state/history YAML files referenced
+      by id.
+  - id: codex-rev-037-phase0-needs-schema-validator-not-only-custom-regex
+    severity: medium
+    status: candidate_pending_v1_6
+    claim: "The custom validator is the right first tool, but Phase 0 should not rely only on ad hoc regex/YAML checks as artifact schemas grow."
+    evidence:
+      - "validate_disposition_index.py hand-parses headings and selected YAML fields."
+      - "Upcoming review.yaml, consensus.yaml, verification.yaml, and gate-state.yaml need stricter shape validation."
+    impact: |
+      Regex checks are good for spec-specific invariants, but schema drift
+      will reappear unless artifact shapes are enforced by a general schema
+      layer.
+    required_change: |
+      Add JSON Schema or Pydantic models for review, consensus, verification,
+      gate state, archive index, and disposition ledger. Keep the current
+      custom validator for cross-file invariants that schemas cannot express.
+  - id: codex-rev-038-next-work-should-shift-from-spec-review-to-iteration-0000
+    severity: medium
+    status: candidate_pending_v1_6
+    claim: "Further broad spec-review passes now have diminishing returns compared with a small empirical iteration-0000."
+    evidence:
+      - "v1.5 resolved the known v1.4 blocker set."
+      - "Remaining uncertainty is mostly runtime/tooling: dependency reproducibility, validator provenance, schema enforcement, and dry-run metrics."
+    impact: |
+      More prose debate risks optimizing the contract instead of proving the
+      loop. The next high-signal step is to run the smallest real loop that
+      produces review artifacts, consensus, verification, and metrics.
+    required_change: |
+      Fix codex-rev-033 first, then run iteration-0000 on a tiny nonproduction
+      fixture. Use its actual failures to drive v1.6 instead of adding more
+      speculative rules.
+
+tooling_assessment:
+  mcp_server_now:
+    recommendation: "not yet"
+    rationale: |
+      MCP is appropriate after artifact schemas and CLI validators stabilize.
+      Today it would add integration surface before the file contracts are
+      empirically proven. Keep Phase 0 as files plus deterministic scripts.
+  yaml_artifacts:
+    recommendation: "continue, but pin parser and add schema checks"
+    rationale: |
+      YAML is acceptable for agent-readable state if every artifact is
+      schema-validated and reports carry provenance. Without pinned parsing,
+      YAML becomes an environment assumption.
+  python_cli_validators:
+    recommendation: "best current tool class"
+    rationale: |
+      Local CLIs are cheap, auditable, git-friendly, and easy for both agents
+      to invoke. They conserve tokens better than asking either model to
+      re-read full documents.
+  json_schema_or_pydantic:
+    recommendation: "add in Phase 0 before MCP"
+    rationale: |
+      Use schema tooling for artifact shapes and reserve custom Python for
+      cross-file semantic checks.
+
+net_assessment:
+  what_changed: |
+    The loop is no longer just two models editing Markdown. It now has
+    durable artifacts, deterministic validation, an explicit production
+    firewall, monotonic review ids, and a documented resistance to premature
+    launch claims.
+  main_pushback: |
+    Do not let the existence of a zero-finding report stand in for a
+    reproducible clean run. Fix the dependency/provenance gap before calling
+    the validator implemented or moving to Phase 0 readiness.
+  next_best_step: |
+    Resolve codex-rev-033, rerun smoke tests and the real-spec validator,
+    then perform iteration-0000 on a tiny fixture. Stop doing broad
+    architecture review unless iteration-0000 exposes a contract-level gap.

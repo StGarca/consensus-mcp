@@ -1,0 +1,242 @@
+schema_version: 1
+iteration_id: iteration-0026-apply-pipeline-followup
+created_utc: '2026-05-10T22:30:00Z'
+closing_state: flavor_a_followup_closed
+ceremony_flavor: A_operator_deferred_fixes
+parent_iteration: iteration-0025-apply-pipeline-flavor-b-review
+
+closing_reason: |
+  iter-0026 is a Flavor A iteration landing surgical followup fixes for the
+  four findings iter-0025 surfaced but couldn't address within its scope
+  (forbidden_files limit or test-side fixes).
+
+  No codex patch authorship needed (the operator dispatched directly). All
+  fixes TDD: red tests first, implementation, green.
+
+primary_empirical_finding: |
+  All four iter-0025 deferred findings (F1 CRLF helper / F2 hunk-line-number
+  ignore / F3 obsolete hoist bridge / F4 remaining claude-iter0025 findings)
+  landed clean. pytest 296 -> 316 (+20 tests). Full agent_loop_mcp suite green.
+
+  Pre-commit release-gate state: 9/11 green; G_unstaged + G_untracked_pkg fail
+  before commit (expected — resolves on commit).
+
+fixes_landed:
+  F2_hunk_anchored_diff_applier:
+    severity: high
+    target: scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    description: |
+      _apply_unified_diff was doing pure linear text-matching, ignoring
+      @@ -orig_start,orig_count +new_start,new_count @@ hunk headers. On
+      files with repeated context lines the wrong occurrence could be
+      silently mutated.
+
+      Fix: parse @@ headers with _HUNK_HEADER_RE; each hunk anchored at
+      orig_start - 1 (zero-indexed). Pre-hunk gap copy, body walk with
+      strict context+delete-line matching at the anchored position, post-
+      hunk tail copy. Hunks must arrive in increasing orig_start order
+      (standard unified-diff form) or refuse with hunk_out_of_order.
+      Context/delete mismatch at the anchored position refuses with
+      hunk_context_mismatch (named, operator-actionable).
+    test_file: scripts/agent_loop_mcp/tests/test_apply_codex_patch_hunk_anchored.py
+    test_count: 4
+    tests:
+      - test_repeated_context_picks_correct_hunk
+      - test_hunk_context_mismatch_refuses_cleanly
+      - test_multi_hunk_each_anchored_to_its_own_line_numbers
+      - test_repeated_context_first_hunk_targeted
+  F1_crlf_base_sha_helper:
+    severity: medium
+    target: scripts/agent_loop_mcp/_dispatch_codex.py
+    description: |
+      _compute_per_patch_base_sha computed bundle_sha by encoding text
+      strings from defect_target.touched_files_contents (UTF-8). On
+      Windows with CRLF line endings on disk, apply.codex_patch's
+      bundle_sha (which reads raw disk bytes) produced a DIFFERENT hash.
+      Every helper-stamped per-patch base_sha returned base_sha_drift at
+      apply time; iter-0023/0025 forced manual re-anchor for every patch.
+
+      Fix: helper accepts optional repo_root. When supplied, defers to
+      _closure_invariant.bundle_sha(repo_root, patch_files_touched) (disk
+      bytes — same code path as apply.codex_patch). When repo_root is None
+      (legacy unit-test path) falls back to text encoding.
+      _validate_patch_proposal and _parse_codex_output thread repo_root
+      through. CLI main() already resolves repo_root for codex --cd; now
+      it also passes it to _parse_codex_output for the stamp.
+    test_file: scripts/agent_loop_mcp/tests/test_iter_0026_crlf_base_sha.py
+    test_count: 4
+    tests:
+      - test_helper_stamped_base_sha_matches_disk_bundle_sha_with_crlf
+      - test_helper_stamped_base_sha_matches_disk_bundle_sha_with_lf
+      - test_helper_no_repo_root_falls_back_to_text_encoding
+      - test_helper_with_repo_root_but_file_missing_returns_disk_empty_hash
+  F3_remove_obsolete_hoist_bridge:
+    severity: low
+    target: scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py
+    description: |
+      Lines 371-385 (happy-path) + 649-660 (codex-then-codex test) manually
+      hoisted nested last_mutation fields onto apply_step_landed event
+      top-level. iter-0025 codex-rev-002 fixed the EMITTER side (apply
+      event now puts canonical mutation fields at top-level via
+      extra_fields); iter-0024 F1 fixed the READER side
+      (last_mutation_from_audit merge direction). Bridge no longer
+      needed.
+
+      Fix: removed both hoist blocks; replaced with comments explaining
+      iter-0024 F1 + iter-0025 codex-rev-002 made them obsolete. Capstone
+      tests still pass.
+    test_count_delta: 0  # tests pass without the bridge; no new tests
+  F4_remaining_claude_iter0025_findings:
+    severity: medium
+    targets:
+      - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+      - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+    description: |
+      Six findings from claude-iter0025-1 implementation_critic pass landed:
+
+        F4-001 actor non-empty: _validate_actor now refuses empty/None/non-
+              string id and pass_id (prior key-presence check accepted
+              id="" / id=None / id=42 which corrupts audit-log provenance).
+
+        F4-002 partial-apply rollback: apply step captures per-file
+              pre-apply content BEFORE the os.replace loop. On per-file
+              failure, rolls back already-applied files (write pre-apply
+              text, or unlink if didn't exist pre-apply) so applied=False
+              is truthful and no on-disk mutation persists.
+
+        F4-004 /dev/null explicit refusal: `+++ /dev/null` (file deletion)
+              now refuses with named reason file_deletion_unsupported
+              instead of coincidentally failing via files_touched lookup.
+              `--- /dev/null` (file-add) keeps working via the existing
+              target.exists()==False branch — no explicit handling needed
+              (per Karpathy Simplicity First: don't add code for working
+              cases).
+
+        F4-005 lazy-import drift: moved `import re` and _PATCH_ID_PATTERN
+              from inside _record_verdict_handler to module level in
+              loop_verify_codex_patch.py. Style consistent with the rest
+              of the module.
+
+        F4-006 record_verdict input enum: tightened SCHEMA input enum to
+              {approved, corrected_resubmit, None}. "blocked" is an
+              internal placeholder produced by build_inputs mode (still
+              in output_schema enum); not a legal record_verdict INPUT.
+              Schema and handler now agree.
+
+        F4-007 test coverage gaps: added 3 missing test cases
+              (base_sha empty, codex_review.yaml missing, diff_apply_failed
+              in single-file no-side-channel path) per claude-iter0025-007.
+    test_file: scripts/agent_loop_mcp/tests/test_apply_codex_patch_f4_coverage.py
+    test_count: 12
+    tests:
+      # F4-001 (4 tests)
+      - test_refuses_when_actor_id_is_empty_string
+      - test_refuses_when_actor_pass_id_is_empty_string
+      - test_refuses_when_actor_id_is_none
+      - test_refuses_when_actor_id_is_not_string
+      # F4-002 (1 test)
+      - test_partial_apply_failed_rolls_back_already_applied_files
+      # F4-004 (2 tests)
+      - test_diff_delete_via_plus_plus_plus_dev_null_explicit_refusal
+      - test_diff_add_via_dash_dash_dash_dev_null_works_explicitly
+      # F4-005 (1 test)
+      - test_record_verdict_handler_has_no_inline_import_re
+      # F4-006 (1 test)
+      - test_record_verdict_input_enum_excludes_blocked
+      # F4-007 (3 tests)
+      - test_refuses_when_codex_review_yaml_missing
+      - test_refuses_when_base_sha_is_empty_string
+      - test_refuses_diff_apply_failed_in_single_file_no_sidechannel
+
+artifacts_produced:
+  - agent-loop/active/iteration-0026-apply-pipeline-followup/goal_packet.yaml
+  - agent-loop/active/iteration-0026-apply-pipeline-followup/iteration-outcome.yaml
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch_hunk_anchored.py
+  - scripts/agent_loop_mcp/tests/test_iter_0026_crlf_base_sha.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch_f4_coverage.py
+
+artifacts_modified:
+  - path: scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    description: |
+      F2: _apply_one_file_diff rewritten to be hunk-anchored (parses @@ headers,
+      walks per-hunk with anchored context/delete checks).
+      F4-001: _validate_actor adds non-empty-string check for id + pass_id.
+      F4-002: apply step captures pre-apply content + rolls back on per-file failure.
+      F4-004: _apply_unified_diff refuses +++ /dev/null with named reason.
+      Net: ~120 LoC delta (mostly the F2 rewrite + F4-002 rollback logic).
+  - path: scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+    description: |
+      F4-005: import re + _PATCH_ID_PATTERN moved to module level.
+      F4-006: SCHEMA verdict input enum tightened (drop "blocked").
+      Net: ~6 LoC delta.
+  - path: scripts/agent_loop_mcp/_dispatch_codex.py
+    description: |
+      F1: _compute_per_patch_base_sha accepts repo_root; uses disk-bytes
+        bundle_sha when supplied (matches apply.codex_patch exactly).
+      _validate_patch_proposal + _parse_codex_output thread repo_root through.
+      CLI main() passes repo_root to _parse_codex_output.
+      Net: ~30 LoC delta.
+  - path: scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py
+    description: |
+      F3: removed test-only hoist bridges (lines 371-385 + 649-660); replaced
+      with comments documenting iter-0024 F1 + iter-0025 codex-rev-002
+      together made them obsolete.
+
+empirical_observations:
+  - "iter-0026 lands 4 fixes touching 4 production files + 4 test files."
+  - "pytest 296 -> 316 (+20 tests). All green; no regressions in adjacent tests (test_iter_0022, test_iter_0024 still pass)."
+  - "F1 CRLF fix eliminates the per-patch re-anchor caveat that lived from iter-0023 through iter-0025. Future codex-applied patches on Windows no longer need manual base_sha rewriting at apply time."
+  - "F2 hunk-anchored applier matches standard unified-diff semantics. Repeated-context hunks now anchor at the correct line; context/delete mismatch fails closed with explicit reason."
+  - "F4-002 rollback makes the partial-apply error path truthful: applied=False now means no on-disk mutation persisted (was: applied=False with file_a left mutated)."
+
+operational_caveats:
+  - id: f4_002_rollback_best_effort
+    description: |
+      F4-002's rollback writes the captured pre-apply text back via write_text.
+      If the rollback itself raises (e.g., filesystem full, permission revoked
+      mid-operation), the error message appends rollback_errors=[...] so the
+      operator can manually reconcile. Rollback is best-effort, not
+      transactional — the operator's responsibility on rollback failure is
+      manual git checkout / file restore.
+  - id: f1_helper_repo_root_required_for_crlf_match
+    description: |
+      The CRLF fix is only effective when repo_root is supplied to the helper.
+      Callers that hand-build patch_proposal validation (unit tests using
+      _parse_codex_output(text, review_packet=...) without repo_root=) get
+      the legacy text-encoding behaviour. That's intentional — they don't
+      have a disk to read. Production callers (the CLI main()) always have
+      a repo_root.
+
+acceptance_gates:
+  A1_pytest:
+    status: PASS
+    detail: '316 passed in 5.5s (296 baseline + 20 new = 316 expected)'
+  A2_release_gates_pre_commit:
+    status: PARTIAL
+    detail: |
+      9/11 green pre-commit. G_unstaged + G_untracked_pkg fail (expected;
+      resolves on commit of iter-0026 changes). All other gates green
+      including G_archive_section_24_synced, G_install_smoke,
+      G_pytest_dispatch_codex.
+
+iter_0027_recommendation: |
+  iter-0026 closes Subsystem 2 (apply pipeline) followup work. The apply
+  pipeline is now in clean state:
+    - Hunk-anchored diff applier (F2)
+    - Disk-bytes-matching base_sha stamp (F1)
+    - Truthful partial-apply with rollback (F4-002)
+    - Explicit /dev/null refusal (F4-004)
+    - Non-empty actor enforcement (F4-001)
+    - Schema-handler agreement on record_verdict input (F4-006)
+    - Module-level pattern constant (F4-005)
+    - Obsolete test bridge removed (F3)
+
+  Ready for iter-0027 = Subsystem 3 (codex dispatch).
+  Candidate scope: _dispatch_codex.py + dispatch_templates/ + _author_review_packet.py
+  + the dispatch_codex test suites. Flavor B subsystem review against a real
+  codex CLI; same shape as iter-0023 (closure invariant) and iter-0025
+  (apply pipeline).
+
+post_close_status: |
+  All 4 followup findings resolved. 316/316 pytest. 9/11 gates green
+  pre-commit (G_unstaged + G_untracked_pkg resolve on commit).

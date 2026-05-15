@@ -1,0 +1,115 @@
+iteration_id: iteration-0027-codex-dispatch-flavor-b-review
+reviewer_id: codex-iter0027-1
+pass_id: codex-iter0027-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: MCP wrapper strips the helper return code, so callers cannot distinguish
+    nonzero helper exits that still print success-shaped JSON.
+  citation: scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py:161
+  risk: A helper failure path, parser bug, or malicious/misbehaving helper that exits
+    nonzero after printing an ok-looking payload is returned verbatim by the MCP tool.
+    The wrapper contract says nonzero helper exits are failures, but handle() never
+    inspects main()'s return code, so direct MCP callers can treat failed dispatches
+    as successful sealed reviews.
+  recommendation: Capture _dispatch_codex.main(argv)'s return code and, when it is
+    nonzero, force ok=false unless the helper already emitted a failure dict.
+  patch_not_proposed_reason: 'A precise patch would require editing the embedded wrapper
+    and tests; propose adding rc capture in handle(), wrapping success-shaped JSON
+    on rc != 0, and adding a regression test for nonzero return with {''ok'': True}
+    stdout.'
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: Patch validation trusts files_touched only and never checks that unified_diff
+    paths match the allowed file set.
+  citation: scripts/agent_loop_mcp/_dispatch_codex.py:577
+  risk: Codex can emit files_touched for an allowed file while embedding a unified_diff
+    that modifies an out-of-scope or forbidden path. The helper stamps the proposal
+    as valid, and downstream apply code may apply the diff content rather than the
+    declared files_touched list, bypassing the dispatch scope gate.
+  recommendation: Parse unified_diff file headers and require every changed path to
+    match files_touched and the goal_packet allowed/forbidden checks before accepting
+    the patch_proposal.
+  patch_not_proposed_reason: Fix needs careful unified-diff path parsing semantics
+    for /dev/null, renames, prefixes, and downstream apply expectations; not safe
+    to ship surgically from the embedded subset without verifying apply.codex_patch
+    behavior.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: Template tells reviewers expected_tests is optional even though the schema
+    requires it inside every non-null patch_proposal.
+  citation: scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md:156
+  risk: Codex may omit expected_tests based on the prompt, but the strict output schema
+    requires it. That contradiction increases malformed reviewer output and failed
+    dispatches, especially when a finding includes a patch_proposal.
+  recommendation: Update the template to say expected_tests is required by the schema,
+    allowing an empty array when no focused tests are known.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-003-patch
+    applies_to_findings:
+    - codex-rev-003
+    base_sha: 1cd0b1e0b326247a20a205fdac830d18c822c86ede1f1e49033909a8089e1baa
+    unified_diff: '*** Begin Patch
+
+      *** Update File: scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+
+      @@
+
+      -`expected_tests` is the only optional field; everything else is required.
+
+      +`expected_tests` is required by the schema when `patch_proposal` is non-null;
+
+      +use an empty array when no focused tests are known. Everything else is also
+
+      +required.
+
+      *** End Patch
+
+      '
+    files_touched:
+    - scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+    expected_tests:
+    - python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+      scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py -q
+    unified_diff_sha256: 6d2fb9aea543c72f627c613b060324ceb3ac1abea96c4e73947ad0fc1921cdd0
+- id: codex-rev-004
+  severity: medium
+  summary: Repo-root env override can escape the intended project when cwd has markers
+    after an invalid AGENT_LOOP_MCP_REPO_ROOT is supplied.
+  citation: scripts/agent_loop_mcp/_dispatch_codex.py:87
+  risk: An operator or service setting AGENT_LOOP_MCP_REPO_ROOT to an invalid explicit
+    directory may still dispatch against cwd if cwd happens to contain markers. That
+    weakens the fail-closed guarantee for explicit repo-root provenance and can seal/log
+    reviews in an unintended checkout.
+  recommendation: If AGENT_LOOP_MCP_REPO_ROOT is set but does not validate, raise
+    RepoRootResolutionError immediately instead of falling through to cwd and __file__
+    candidates.
+  patch_not_proposed_reason: Behavior change may affect existing operator fallback
+    workflows and requires updating the env-without-markers test expectation; should
+    be decided deliberately with the wrapper/service callers.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: Subsystem review found scope-enforcement and wrapper-result
+  handling defects plus a prompt/schema drift issue.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: 16b9756c7986165134c22373000874facc44ce84b8f009a563010fe5b5858c64
+  output_sha256: af0e22d2d15f416f6ad9195c99c38715906c67626216c4a768cf9609f71bb493
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 1750fd47cebcd9b0e5351daf1302dc65117cd90f6c96c5f4595bcea07d78b874
+  scope_signature: 52a791000a0a20085c4df1517946e40dda66085616ef6940cefc17ddde3ec816
+sealed_at_utc: '2026-05-10T21:30:43Z'
+packet_sha256: aef3c8d53ada2f089554afef1f6080912bc1202a125757c6324846a4e66773a7

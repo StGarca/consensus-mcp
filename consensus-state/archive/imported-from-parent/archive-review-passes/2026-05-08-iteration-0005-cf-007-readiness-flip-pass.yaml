@@ -1,0 +1,218 @@
+schema_version: 1
+pass_id: pass-21-iteration-0005-cf-007-readiness-flip
+reviewer_pair:
+  codex: codex (implementation_realist)
+  claude: claude-opus-4-7 (methodology_critic)
+date: 2026-05-08
+spec_path: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed_pre_apply: "draft-v1.7.9-ai-contract"
+spec_version_post_apply: "draft-v1.8.0-ai-contract"
+review_type: "cf-007 dedicated readiness-flip review pass per spec section 0 done_claim_rule applies_to_frontmatter_readiness_flip rule"
+iteration_directory: "agent-loop/active/iteration-0005-cf-007-readiness-flip/"
+
+# ---- Independence framing ----
+
+independence_attestation:
+  fresh_context: false
+  rationale: |
+    cf-007 dual-reviewer pass forced post-exposure per G4. Both reviewers
+    explicitly briefed on:
+      - all 4 cf-007 preconditions evidence
+      - iteration-0000..0004 artifacts (full 5-iteration arc)
+      - pass-20 archive
+      - v1.7.9 spec (section 0 cf-007 + done_claim_rule + claude-rev-028)
+      - disposition-ledger
+      - validate-disposition-index-report.yaml (live state)
+    fresh_context: false; corroboration_strength: suggested_by_context for all findings.
+
+# ---- Verdict ----
+
+verdict:
+  flip_approved_unanimous: true
+  proposed_new_readiness_value_unanimous: phase_0_validated
+  proposed_do_not_treat_as_phase_0_ready_value_unanimous: false
+  reviewer_concerns_aligned: true
+  apply_landed_post_operator_authorization: true
+  apply_landed_utc: "2026-05-08T00:00:00Z"
+  cf_007_all_5_preconditions_met: true
+
+# ---- Reviewer evidence ----
+
+codex_review:
+  archived_at: "agent-loop/active/iteration-0005-cf-007-readiness-flip/codex-review.yaml"
+  sealed_sha256_at_seal: "ee05404843f03c08d4ef631455e16cdea4eea30ff07ddfa415bbf1f6db4a1bda"
+  validator_status: "validate_review.py 0 findings"
+  flip_approved: true
+  proposed_new_readiness_value: phase_0_validated
+  proposed_do_not_treat_as_phase_0_ready_value: false
+  preconditions_verified_independently:
+    p1_validate_disposition_index_clean: "VERIFIED via direct read of validate-disposition-index-report.yaml: 0 findings; archived=20 resolved=130 deferred=49"
+    p2_iteration_0000_metrics_in_section_22: "VERIFIED via direct read of iteration-0000/iteration-outcome.yaml lines 89-117: all 5 metric blocks present"
+    p3_cf_findings_dispositioned: "VERIFIED via disposition-ledger.yaml: cf-001..008 + iter-0004 11 items; pending_operator_decision=0"
+    p4_dual_reviewer_pass: "self-assertion (one of two)"
+  blocking_objections: 0
+  non_blocking_suggestions: 3 (cosmetic-flip risk; post-flip ambiguity; operator approval form clarity)
+  recommendation_to_operator: "approve flip with phase_0_validated + do_not_treat false; operator approval form should explicitly name flip as governance milestone not behavior unlock"
+
+claude_review:
+  archived_at: "agent-loop/active/iteration-0005-cf-007-readiness-flip/claude-review.yaml"
+  sealed_sha256_at_seal: "1449b513057ac17121d681522e34f43e55969112dd83733075a49a592637ecb0"
+  sealed_sha256_post_correction: "13435863c72beed5..."
+  sha_correction_note: "post-seal correction of reviewed_packet_sha256 from packet self-hash to canonical-full per spec section 7; same-class fix as iter-0004 codex correction; documented in iteration-0005 audit_log + iteration-outcome.yaml"
+  validator_status: "validate_review.py 0 findings (both pre + post correction)"
+  flip_approved: true
+  proposed_new_readiness_value: phase_0_validated
+  proposed_do_not_treat_as_phase_0_ready_value: false
+  preconditions_verified_independently:
+    p1_validate_disposition_index_clean: "VERIFIED: 0 findings; counts match status_counts"
+    p2_iteration_0000_metrics_in_section_22: "VERIFIED LITERALLY: spec text says 'exist'; all 5 blocks present with documented null tokens (observational mode); claude refused to retroactively tighten the gate to 'non-null'"
+    p3_cf_findings_dispositioned: "VERIFIED: ledger lines 547-566 show all 5 deferred entries with explicit rationale field"
+    p4_dual_reviewer_pass: "self-assertion (one of two; in progress at seal)"
+  blocking_objections: 0
+  non_blocking_suggestions: 4 (claude-rev-054 phase_0_validated wording over naked ready; claude-rev-055 section 23 forbidden_now line stale; claude-rev-056 flip operationally near-cosmetic; methodology distinction lock-pattern vs flip-mechanism for canonical-007)
+  honesty_assessment: |
+    Operator project guidance reading is the honest one ('phase 0 done, redirect
+    to renders'); arc actually closed all 11 dispositions across 4
+    implementation_ready iterations with validators clean throughout. The
+    cf-007 dual-reviewer + operator-authorization gate is operating as designed.
+
+# ---- Operator authorization (precondition 5) ----
+
+operator_authorization:
+  received_utc: "2026-05-08T00:00:00Z"
+  response: "authorize defaults"
+  interpretation: "approve all reviewer-proposed values + use suggested rationale template (shortcut response per consensus.operator_authorization_form_for_apply.shortcut_responses_acceptable)"
+  field_responses_via_shortcut:
+    field_1_explicit_authorization: yes
+    field_2_supplied_rationale: "applied via suggested template (landed in revision_history v1.8.0 entry)"
+    field_3_new_readiness_value: phase_0_validated
+    field_4_do_not_treat_change: false (preserve field; flip value)
+    field_5_section_23_forbidden_now_line_handling: annotate_as_historical_inline
+
+# ---- Apply step (canonical-006 dry-run + apply) ----
+
+apply_step:
+  staging_dir: "agent-loop/state/iteration-0005-cf-007-readiness-flip-staging/"
+  staged_changes:
+    - {target: spec_md, content: "frontmatter v1.7.9 -> v1.8.0; section 23 forbidden_now historical-inline annotation; revision_history v1.7.9 superseded + v1.8.0 entry"}
+    - {target: ledger, content: "spec_version v1.7.9 -> v1.8.0; v1_8_0_application_log block"}
+  canonical_006_dry_run:
+    validators_run: [validate_disposition_index]
+    findings_pre_apply: 0
+    gate_decision: APPROVED_FOR_APPLY
+  apply_landed:
+    files_modified:
+      - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+      - agent-loop/state/disposition-ledger.yaml
+    post_apply_validation:
+      validate_disposition_index_findings: 0
+      iteration_0000_findings: "7 LOW (acknowledged residuals; unchanged from pre-apply)"
+      iteration_0001_through_0005_findings: "0 each"
+      smoke_harness: "21/21"
+
+# ---- Frontmatter changes ----
+
+frontmatter_changes_applied:
+  status: "draft-v1.7.9-ai-contract -> draft-v1.8.0-ai-contract"
+  contract_version: "multi-agent-consensus-mcp-v1.7.9 -> multi-agent-consensus-mcp-v1.8.0"
+  active_contract_readiness: "pending_phase_0_empirical_validation -> phase_0_validated"
+  do_not_treat_as_phase_0_ready: "true -> false"
+  next_required_action: "design_and_run_cf_007_readiness_flip_review -> redirect_to_render_outcomes_or_phase_1_mcp_design"
+
+# ---- Section 23 changes ----
+
+section_23_changes_applied:
+  forbidden_now_active_contract_readiness_flip_line: |
+    "active_contract_readiness flip" (HISTORICAL pre-cf-007; superseded 2026-05-08:
+    cf-007 readiness flip pass authorized + applied per operator authorization;
+    v1.7.2 phase_0_next_step block already marked superseded_by: v1_7_3; this line
+    preserved for audit trail)
+
+# ---- Ledger changes ----
+
+ledger_changes_applied:
+  spec_version: "draft-v1.7.9-ai-contract -> draft-v1.8.0-ai-contract"
+  v1_8_0_application_log_added: true
+
+# ---- Empirical observations ----
+
+empirical_observations:
+  - "First UNANIMOUS dual-reviewer agreement on a non-spec-literal proposed value (phase_0_validated rather than naked 'ready')"
+  - "Both reviewers independently arrived at same value because of acknowledged 7 LOW grandfathered residuals on iteration-0000"
+  - "Both reviewers independently chose preserve-field-and-flip-value over remove-field for do_not_treat_as_phase_0_ready (audit trail per codex-q-001 precedent)"
+  - "Spec section 0 cf-007 mechanism worked as designed: dual-reviewer pass + operator authorization gate + canonical-006 dry-run; no shortcut taken"
+  - "Both reviewers explicitly named flip as 'governance milestone, not behavior unlock' to prevent future readers from misreading phase_0_validated as 'production unlocked'"
+  - "Five-iteration arc (iter-0000..0004) + cf-007 review (iter-0005) closes Phase 0 governance"
+
+# ---- Reviewer concerns surfaced (non-blocking; documented for operator visibility) ----
+
+reviewer_concerns_surfaced:
+  - id: claude-iter0005-cosmetic-flip-risk
+    summary: "flip is operationally near-cosmetic; only validate_disposition_index reads active_contract_readiness today; production_ready_if (section 17) does not depend"
+    surfaced_to: operator_authorization_form
+    operator_acknowledged_via: authorize_defaults_shortcut
+  - id: codex-iter0005-post-flip-ambiguity
+    summary: "post-flip ambiguity about what gets unblocked downstream; should be explicit in revision_history rationale"
+    surfaced_to: operator_authorization_form
+    operator_acknowledged_via: authorize_defaults_shortcut (template includes governance-milestone framing)
+  - id: claude-iter0005-section-23-stale-forbidden-now
+    summary: "section 23 forbidden_now: active_contract_readiness flip language is contradictory post-flip; needs annotation or removal"
+    surfaced_to: operator_authorization_form_field_5
+    operator_decision_via_shortcut: annotate_as_historical_inline
+    applied: true
+
+# ---- Post-apply hygiene round (operator finding 2026-05-08) ----
+
+post_apply_hygiene_round:
+  trigger: |
+    Operator finding 2026-05-08 post-flip: 3 stale-closure findings on iter-0005
+    artifacts (consensus.yaml + iteration-outcome.yaml had pre-apply text remaining
+    despite closing_state declaring applied) + 1 validator gap (case-insensitive
+    + operator_response_pending: true scan missing).
+  fixes_applied_v1_8_0_continuation:
+    - id: high_1_consensus_yaml_post_apply_state
+      target: agent-loop/active/iteration-0005-cf-007-readiness-flip/consensus.yaml
+      fix: "5x operator_response_pending true -> false; 3x apply_status BLOCKED_PENDING_OPERATOR_AUTHORIZATION -> applied_post_operator_authorization_2026_05_08"
+    - id: high_2_iteration_outcome_yaml_post_apply_metrics
+      target: agent-loop/active/iteration-0005-cf-007-readiness-flip/iteration-outcome.yaml
+      fix: "implementation_quality.implemented_changes 0 -> 3; checks_passed false -> true; checks_skipped_count 2 -> 0; artifacts_modified_outside_iteration_dir empty list -> spec md + ledger entries; process_outcomes 3 stale fields renamed to post-apply versions"
+    - id: medium_3_validator_gap
+      target: scripts/agent_loop/validate_iteration.py
+      fix: "ITERATION_CLOSURE_INCOHERENT extended: case-insensitive substring match (catches BLOCKED_PENDING_OPERATOR_AUTHORIZATION uppercase that lowercase-only 'pending' missed); recursive scan for operator_response_pending: true boolean fields anywhere in consensus tree"
+      validator_version_bump: "0.3.0-v1.7.8-hygiene -> 0.3.1-v1.8.1-closure-hardened"
+  empirical_validation: |
+    Pre-fix: validate_iteration on iter-0005 surfaced 8 high findings.
+    Post-fix: 0 findings. Synthetic test: pending_apply on synthetic outcome
+    triggers ITERATION_CLOSURE_INCOHERENT as expected.
+
+# ---- Verification signals ----
+
+verification_signals:
+  validate_disposition_index_post_v1_8_0: "0 findings"
+  validate_iteration_post_v1_8_0:
+    iteration_0000: "7 LOW findings (acknowledged residuals; unchanged)"
+    iteration_0001: "0 findings"
+    iteration_0002: "0 findings"
+    iteration_0003: "0 findings"
+    iteration_0004: "0 findings"
+    iteration_0005_cf_007: "0 findings"
+  smoke_harness: "21/21 passed"
+  status_counts:
+    archived: 20 (will be 21 after this archive entry indexed)
+    resolved: 130
+    deferred: 49
+    dropped: 1
+
+# ---- Lessons-learned class for this pass ----
+
+lessons_learned:
+  - id: post_apply_closure_artifact_hygiene
+    observation: "Even with v1.7.8 ITERATION_CLOSURE_INCOHERENT validator, post-apply closure artifact updates are easy to miss (5 operator_response_pending fields + 3 apply_status fields + multiple process_outcomes labels). Validator must scan EVERYTHING, not just the most-obvious top-level fields."
+    fix_landed: validator hardening v0.3.1
+  - id: case_normalization_for_status_strings
+    observation: "BLOCKED_PENDING_OPERATOR_AUTHORIZATION uppercase variant slipped past lowercase-only 'pending' substring match. Future status string conventions should be lowercase OR validator must case-normalize."
+    fix_landed: case-insensitive match in validator
+  - id: dual_reviewer_unanimous_value_consensus
+    observation: "iter-0005 produced first unanimous reviewer agreement on a non-spec-literal value (phase_0_validated). Both arrived independently because both engaged with the underlying tension (LOW residuals + governance vs behavior framing). This is the dual-reviewer pattern at its best."
+  - id: operator_shortcut_authorization_pattern
+    observation: "operator's 'authorize defaults' shortcut response collapsed 5 form fields into single response with template-derived rationale. Pattern works when reviewer-proposed values are unanimous AND template is sufficient. Future cf-007-style passes can use same shortcut."

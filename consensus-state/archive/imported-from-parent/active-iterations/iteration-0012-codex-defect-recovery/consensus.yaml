@@ -1,0 +1,158 @@
+schema_version: 1
+iteration_id: iteration-0012-codex-defect-recovery
+created_utc: '2026-05-10T05:50:00Z'
+
+consensus_state: implementation_ready
+production_state: not_ready
+review_consensus: false   # supervisor's disagreement rule fires per stale round-1 codex
+implementation_ready: true   # F1-F5 all empirically verified
+production_ready: false
+production_allowed: false
+observational_mode: false
+
+reviewed_artifacts:
+  goal_packet:
+    path: agent-loop/active/iteration-0012-codex-defect-recovery/goal_packet.yaml
+    notes: 'forbidden_files refined mid-iteration; scope_signature_history preserved in review-packet'
+  review_packet:
+    path: agent-loop/active/iteration-0012-codex-defect-recovery/review-packet.yaml
+    notes: 'updated to address codex round-1 sig-drift finding'
+  claude_review:
+    path: agent-loop/active/iteration-0012-codex-defect-recovery/claude-review.yaml
+    notes: 'round-2 review; goal_satisfied=true after F4+F5 round-2 fixes'
+  codex_review:
+    path: agent-loop/active/iteration-0012-codex-defect-recovery/codex-review.yaml
+    notes: 'round-1 sealed copy restored from T6 archive; substance addressed in round-2'
+
+reviewer_alignment:
+  goal_satisfied:
+    claude_round_1: true   # initial review
+    claude_round_2: true   # after F4+F5 round-2 fixes
+    codex_round_1: false   # found F4 substring + F5 phantom block
+    codex_round_2_3_4_attempts: rejected_by_helper_validator
+    unanimous_on_current_state: false   # supervisor flags disagreement
+    semantic_unanimous_after_fixes: true   # round-1 codex findings addressed
+
+  blocking_objections:
+    claude: []
+    codex_round_1: []   # findings were medium/low, not blocking
+    note: 'no blocking_objections from either side; goal_satisfied=false from codex was severity-driven not blocker-driven'
+
+  finding_counts:
+    claude_round_1_non_blocking: 2
+    claude_round_2_non_blocking: 2
+    codex_round_1_total: 2   # codex-rev-001 medium + codex-rev-002 low
+    codex_round_2_3_4_attempts_rejected: 3
+
+recovery_chain_demonstrated:
+  class_3_recovery_status: |
+    PARTIAL DEMO. Codex round-1 found 2 real defects (codex-rev-001 medium F4
+    substring + codex-rev-002 low F5 phantom block). Both addressed in
+    round-2 with empirical verification (n=7 -> n=6 for F4; new
+    fault_recovery_demo_status block exists for F5). Round-2 claude review
+    confirmed goal_satisfied=true. Round-2+ codex re-dispatches REJECTED
+    by helper validator due to codex consistently emitting narrative text
+    in blocking_objections instead of canonical 'codex-rev-NNN' IDs (3
+    independent attempts). Helper invariant correctly catches malformed
+    output; codex's substance was: 'review_target_path content unavailable
+    / lacks verifiable patch/code content'. That is a DIFFERENT finding
+    class than round-1.
+  what_was_proved:
+    - 'F2 stop-rule diff collection (HIGH severity codex finding) caught real working-tree violations on first run — fix self-validated'
+    - 'F3 helper exception wrapping returns structured {ok:false} for direct MCP callers'
+    - 'F4 G_real_iter substring->exact membership (codex round-1 medium) verified by n changing 7->6'
+    - 'F5 fault_recovery_demo_status block (codex round-1 low) added to iter-0011 outcome.yaml'
+    - 'cross_document_drift_detected stop rule fired correctly when review-packet updated mid-iteration'
+    - 'claude_codex_goal_satisfaction_disagreement stop rule fired correctly on stale round-1 codex'
+    - 'Recovery cycle: codex-finds -> address -> verify -> codex-re-review (3 layers traversed)'
+  what_was_not_proved:
+    - 'Single CLEAN second codex seal post-fix (codex-side format issue blocks)'
+    - 'Operator-pristine quorum_close_passed close (supervisor strict-correctly blocks)'
+
+converged_recommendations:
+  - 'F2/F3/F4-round-2/F5-round-2 implementations verified by independent claude review + empirical evidence'
+  - 'helper failure-containment behavior demonstrated end-to-end across multiple layers'
+  - 'codex output-format issue is real systemic concern; warrants iter-0013 prompt-template review'
+
+divergent_recommendations:
+  - id: codex_round_1_vs_round_2_state
+    codex_round_1_position: 'goal_satisfied=false (real findings codex-rev-001+002)'
+    claude_round_2_position: 'goal_satisfied=true (round-1 findings addressed)'
+    synthesizer_resolution: |
+      Both reviewers were correct relative to the artifact they reviewed.
+      Codex round-1 reviewed pre-fix state and correctly emitted findings.
+      Claude round-2 reviewed post-fix state and correctly emitted clean.
+      The "disagreement" is artifact-time-skew, not substance-disagreement.
+
+iter_0013_carry_forwards:
+  - id: codex_prompt_template_finding_id_format
+    description: |
+      Codex consistently emits narrative text as finding IDs in
+      blocking_objections (3 independent attempts on iter-0012; also
+      observed once in iter-0010 where re-dispatch eventually produced
+      well-formed output). The dispatch_templates/codex_review_template.md
+      apparently doesn't sufficiently constrain codex to use canonical
+      'codex-rev-NNN' IDs. Helper validator correctly rejects but the
+      effect is that codex re-seals are nondeterministic.
+    severity: medium
+    target: scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+    recommendation: |
+      Tighten the prompt template's output-format section to make
+      ID-format requirement unambiguous. Add explicit examples of
+      well-formed vs malformed finding IDs.
+
+  - id: review_packet_should_embed_diff
+    description: |
+      Codex's persistent finding "review target lacks verifiable patch/
+      code content" (3 attempts) suggests review-packets that summarize
+      changes via shas + paths are insufficient for codex. To enable
+      reliable codex review, review-packets should embed the actual diff
+      text inline (or codex needs sandbox-read access expanded). Currently
+      codex has read-only sandbox access; in principle it CAN read paths
+      mentioned in the review-packet, but seems to flag absence of
+      embedded content anyway.
+    severity: low
+    target: 'review-packet.yaml authoring convention'
+    recommendation: |
+      Either: (a) embed unified diff output in review-packet under
+      review_target.diff, or (b) document that codex must read referenced
+      paths and update prompt template to reinforce this.
+
+  - id: loop_run_goal_pass_id_collision
+    description: |
+      loop.run_goal auto-dispatch uses default pass_id pattern
+      (codex-<iter_id>-1-pass1) which collides with previously-sealed
+      passes if invoked twice on the same iteration. The T6 helper
+      raises packet_path_collision; loop.run_goal correctly contains it
+      as ok=false but cannot recover. Adding pass_id parameter to
+      loop.run_goal SCHEMA + an auto-incrementing default would fix.
+    severity: medium
+    target: 'tools/loop_run_goal.py auto-dispatch'
+
+independence_attestation:
+  claude_did_not_co_author_codex_review: true
+  codex_did_not_co_author_claude_review: true
+  reviewers_received_only_sealed_review_packet: true
+  no_orchestrator_verdict_was_passed_to_either_reviewer: true
+
+closure_decision:
+  full_quorum_close_passed: false
+  reason: |
+    supervisor's claude_codex_goal_satisfaction_disagreement rule fires per
+    stale round-1 codex. Substantive close (round-1 findings addressed +
+    round-2 claude confirms) cannot be expressed as a CONTRACT terminal
+    state without operator override. Per autonomy contract, close as
+    blocked_needs_operator with detailed status above.
+
+  blocked_needs_operator: true
+  operator_decision_required:
+    options:
+      - 'OVERRIDE: accept iter-0012 as substantively closed (round-1 codex findings empirically addressed; round-2 claude confirms; round-2 codex format issue is iter-0013 territory)'
+      - 'SPAWN ITER-0013: fix codex prompt template (iter_0013_carry_forwards.codex_prompt_template_finding_id_format) then re-dispatch codex on iter-0012'
+      - 'BOTH: accept iter-0012 + spawn iter-0013'
+
+  recommendation: |
+    OPTION 3 (BOTH). The substantive value of iter-0012's F1-F5 fixes is
+    captured and verified. The codex re-seal blocker is a real systemic
+    issue worthy of its own iteration. Operator-time efficiency:
+    accept iter-0012 close-with-caveat now; queue iter-0013.

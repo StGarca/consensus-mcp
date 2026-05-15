@@ -1,0 +1,365 @@
+schema_version: 1
+pass_id: pass-14-claude-on-codex-pass-13
+reviewer: claude-opus-4-7
+reviewed_utc: "2026-05-08T00:00:00Z"
+spec_under_review: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.4-ai-contract-patched-pass-10-pass-12-plus-codex-pass-13"
+depth: "expert review of v1.4-twice-patched + dual-pass response to codex pass-13 + new findings on disable-mechanism semantics + meta-observation on claude self-patching not converging"
+overall_verdict: |
+  Codex pass-13 caught 5 self-bugs in claude pass-12 patches (codex-rev-025
+  schema-active-despite-disable, codex-rev-026 §17-broken-but-live,
+  codex-rev-027 known_blockers-incomplete, codex-rev-028 patch-history-gap,
+  codex-rev-029 partial-provisional-flagging). Pattern is now extremely
+  robust: 4 of 4 consolidation/patch passes have introduced bugs that
+  the next cross-reviewer pass catches. Pass-14 corroborates pass-13 on
+  most findings, applies safe inline patches (6), and adds 7 new claude
+  findings including a meta-finding that claude self-patching is NOT
+  CONVERGING and operator should consider taking over patch authority.
+  THIS PASS DOES NOT DECLARE READY FOR PHASE 0.
+
+codex_pass_13_findings_reviewed:
+  agree_apply_now:
+    - id: codex-rev-025-disabled-corroboration-schema-still-active
+      claude_assessment: |
+        Codex right. When pass-12 disabled section 13 corroboration,
+        section 9 schema field corroborated_by remained active and
+        section 24 entries still referenced it. Disable was at the
+        rule-statement level only; dependent schemas not deprecated.
+        This is a self-introduced bug from pass-12.
+      pass_14_disposition: applied (section 9 corroborated_by marked _deprecated_while_disabled with re-enable trigger)
+
+    - id: codex-rev-026-production-gate-known-broken-but-still-live
+      claude_assessment: |
+        Codex right. Pass-12 listed codex-rev-011 in known_blockers but
+        section 17 still has the broken hash check. A tool reading
+        sections 1-23 and missing frontmatter readiness can implement
+        the known-broken approval check. Same disable-incompleteness
+        pattern as codex-rev-025.
+      pass_14_disposition: applied (section 17 prepended with global guard: production approval transitions DISABLED while frontmatter active_contract_readiness != ready)
+
+    - id: codex-rev-027-frontmatter-known-blockers-omits-load-bearing-validator-gap
+      claude_assessment: |
+        Codex right. claude-rev-015 (validate_disposition_index.py not
+        built) was in section 24 governance but missing from frontmatter
+        known_blockers. Packet builders reading frontmatter only would
+        miss the most load-bearing infrastructure gap.
+      pass_14_disposition: applied (frontmatter known_blockers gained 'infrastructure' bucket with claude-rev-015 + codex-rev-031)
+
+    - id: codex-rev-028-patch-level-not-represented-in-revision-history
+      claude_assessment: |
+        Codex right. active_contract_patch_level was in frontmatter as
+        a string but revision_history had no patch entries. Inconsistent
+        metadata: tools reading revision_history only would think v1.4
+        is the latest stamp.
+      pass_14_disposition: applied (revision_history gained v1.4+pass-10, v1.4+pass-12, v1.4+pass-14 entries; v1.4 marked superseded_by_patches)
+
+    - id: codex-rev-029-archive-index-provisional-rates-incomplete
+      claude_assessment: |
+        Codex right. Pass-12 marked passes 9-10 and 11-12 rates provisional
+        but left passes 4-5 and 7-8 rates unmarked even though same
+        formula gap applies. Earlier metrics looked more authoritative.
+      pass_14_disposition: applied (all 4 cycles in archive index marked formula_status: PROVISIONAL with same explanation)
+
+    - id: codex-rev-032-gitignore-nonascii-comments-remain
+      claude_assessment: |
+        Codex right. Pass-12 only normalized the agent-loop block; other
+        gitignore section comments retained em dashes (wiki, fish-overlay,
+        audio/video/model defense-in-depth). Same ASCII rule should apply
+        consistently within the same file.
+      pass_14_disposition: applied (3 remaining em dashes in .gitignore replaced with hyphens)
+
+  agree_keep_blocking_for_v1_5:
+    - id: codex-rev-030-section24-index-only-violation-now-explicitly-accepted
+      claude_assessment: |
+        Codex right. Section 24 says "index-only" but pending/deferred/
+        applied/tradeoff blocks remain. The contract knowingly carries
+        a contradiction. Same drift as codex-rev-001 / codex-rev-012 /
+        codex-rev-020. Resolution requires either renaming section 24
+        OR moving non-index material to disposition-ledger.yaml.
+      proposed_fix_for_v1_5: |
+        Two options:
+          (a) Rename section 24 to "Disposition Metadata" - acknowledges
+              that prose lives there, no longer "index-only"
+          (b) Create agent-loop/state/disposition-ledger.yaml; section 24
+              keeps id+target+pointer only
+        Option (b) requires building disposition-ledger infrastructure,
+        but keeps the index-only invariant honest. Option (a) is the
+        smaller patch but capitulates on the original design intent.
+      pass_14_disposition: pending_v1_5_blocking (operator decides between (a) and (b))
+
+    - id: codex-rev-031-nonexistent-phase0-script-tree-not-surfaced
+      claude_assessment: |
+        Codex caught a real distinction. Frontmatter says "blocked" but
+        doesn't separate "design blocker" (architectural fix needed)
+        from "implementation-not-built blocker" (validator just doesn't
+        exist yet). For Phase 0 progress tracking these are different.
+      proposed_fix_for_v1_5: |
+        Section 23 phase_0_deliverables gets per-item implementation_status:
+          implementation_status: "specified | scaffolded | implemented | validated"
+        Frontmatter known_blockers.infrastructure references the status,
+        not just the absence.
+      pass_14_disposition: pending_v1_5 (medium urgency)
+
+new_findings:
+  high:
+    - id: claude-rev-024-disable-mechanism-informal
+      severity: high
+      claim: |
+        The pass-12 disable mechanism in section 13 is INFORMAL: it sets
+        a status field "TEMPORARILY_DISABLED_PENDING_V1_5" but doesn't
+        remove or guard the rule body. Codex pass-13 caught two
+        manifestations of this insufficiency:
+          - codex-rev-025: section 9 still has corroborated_by field
+          - codex-rev-026: section 17 still has broken hash check
+        Both are the same class of bug: "marking-as-disabled doesn't
+        actually disable for tools that don't honor the status field."
+      generalization: |
+        Whenever a finding is listed as a known_blocker, the affected
+        section MUST either:
+          (a) be explicitly disabled with a guard at the SECTION level
+              that any tool will see (like the section 17 global guard
+              added in pass-14)
+          (b) be removed/commented out with explicit DISABLED markers
+          (c) have an inline warning visible to anyone reading just
+              that section in isolation
+        Just listing in frontmatter is insufficient because section 0
+        says sections 1-23 are active contract.
+      proposed_fix_for_v1_5: |
+        Section 0 add rule:
+          known_blocker_section_marking_rule:
+            "Any section listed as a known_blocker source MUST contain
+            an inline DISABLED or BROKEN_PENDING_V1_5 marker as the
+            first non-heading content of that section, plus a guard
+            block that tools must check. Frontmatter listing alone
+            does not satisfy this rule."
+      pass_14_disposition: pending_v1_5 (generalizes codex-rev-025 + codex-rev-026)
+
+    - id: claude-rev-025-known-blocker-broken-code-pattern
+      severity: high
+      claim: |
+        The pattern "list a finding in known_blockers but leave the
+        broken code in active sections" is now a recognized failure
+        mode that recurs across passes. Pass-12 introduced this
+        pattern; codex pass-13 caught it. The structural fix is
+        claude-rev-024 above.
+      relationship: |
+        claude-rev-024 is the proposed structural rule.
+        claude-rev-025 is the empirical observation that motivates
+        the rule.
+      pass_14_disposition: pending_v1_5_companion_to_claude-rev-024
+
+    - id: claude-rev-027-active-section-known-broken-structural-contradiction
+      severity: high
+      claim: |
+        The contradiction between "active_contract_readiness:
+        blocked_pending_v1_5" (frontmatter) and "section 17/13/9
+        schemas remain technically active" (sections 1-23 are
+        the active contract per section 0) is a STRUCTURAL problem,
+        not a marking gap. Two possible architectural resolutions:
+          (a) Active sections that contain known broken behavior
+              should be DELETED or REPLACED with explicit DISABLED
+              markers in the section body (consistent with claude-rev-024).
+          (b) Or section 0 active-contract scope should temporarily
+              EXCLUDE sections with known blockers (e.g.,
+              "active = sections 1-23 EXCEPT section 13
+              dual-reviewer-corroboration block AND section 17
+              transition guards subset").
+        Option (b) is cleaner architecturally but requires section 0
+        update each time blockers land/clear. Option (a) is uniform.
+      proposed_fix_for_v1_5: choose (a) and apply uniformly when v1.5 lands
+      pass_14_disposition: pending_v1_5_blocking
+
+    - id: claude-rev-028-claude-self-patching-not-converging-meta
+      severity: high
+      claim: |
+        The pattern "claude introduces 5+ self-bugs per consolidation/
+        patch pass; codex catches them" is now extremely robust:
+          - pass-10 (claude on pass-9): introduced 5 bugs caught by pass-11
+          - pass-12 (claude on pass-11): introduced 5 bugs caught by pass-13
+          - pass-14 (claude on pass-13, this pass): time will tell
+        4 of 4 consolidation/patch passes by claude have introduced
+        bugs. The architecture's two-agent design correctly catches
+        them, but the spec author (claude) is NOT CONVERGING toward
+        a clean spec via self-editing.
+      meta_observation: |
+        Operator has been doing some review work (linter modifications,
+        archive-index updates, restating writeback rule). At what
+        point should claude STOP self-patching and operator take
+        over patch authority? This is a v1.5+ governance question.
+        Possible answers:
+          (a) Claude continues patching but with stricter constraints
+              (only ASCII fixes, only deletions, no new structures)
+          (b) Operator takes patch authority for v1.5; claude reviews only
+          (c) Build validate_disposition_index.py first; require it
+              to pass clean before any further claude patches
+      proposed_fix_for_v1_5: |
+        Section 0 governance rule:
+          claude_self_patch_constraint:
+            "Until validate_disposition_index.py runs clean on the
+            spec AND iteration-0000 produces empirical metrics,
+            claude inline patches MUST be limited to:
+              - version stamp updates
+              - ASCII normalization
+              - .gitignore allowlist additions (after verification)
+              - status-field disable markers
+              - section-body guards on known-blocker code
+            All architectural changes MUST be operator-approved with
+            codex agreement BEFORE landing inline."
+      pass_14_disposition: pending_v1_5_governance
+
+  medium:
+    - id: claude-rev-026-frontmatter-known-blockers-context-gap
+      severity: medium
+      claim: |
+        Pass-12 added known_blockers list with finding IDs. A
+        frontmatter-only reader gets IDs without context. Either
+        embed brief summaries (would violate index-only) OR add
+        explicit details_at field per blocker pointing to archive.
+      proposed_fix_for_v1_5: |
+        known_blockers entries become structured:
+          - id: <finding-id>
+            severity: blocking | high | medium
+            details_at: <archive path>
+            mitigated_by: <pass-N if temporarily mitigated>
+        Single-line listing is preserved when no mitigation exists;
+        details_at field is present in every entry.
+      pass_14_disposition: pending_v1_5
+
+    - id: claude-rev-029-pass-numbering-versus-iteration-numbering
+      severity: medium
+      claim: |
+        Spec-review passes are numbered 1-14. When iteration-0000
+        starts, it will produce iteration-NNNN passes (different
+        concept from spec-review passes). Section 0 doesn't address
+        this. Already partially noted in claude-rev-021. Need:
+          - section 0 add explicit naming: "spec-review passes
+            (pass-N) vs operational iteration passes (iteration-NNNN)"
+          - section 4 kill-switch reference operational iterations
+            only (claude-rev-012 covers this; just needs cross-link)
+      pass_14_disposition: pending_v1_5 (low urgency until iteration-0000 starts)
+
+    - id: claude-rev-030-operator-as-reviewer-implicit
+      severity: medium
+      claim: |
+        Operator has been doing review-like work in this thread:
+          - linter modifications (multiple times)
+          - archive-index updates (multiple times)
+          - restating writeback rule
+          - directing "stop trying to prematurely launch"
+          - approving/rejecting design decisions
+        Section 4.8 (operator role) only describes operator approval
+        authority. The reviewer-like work is implicit but unmodeled.
+        For Phase 0 the operator likely has additional roles:
+          - approving v1.5 architectural decisions
+          - reviewing claude-rev-028 self-patch constraint
+          - acting as tie-breaker on cross-reviewer disagreements
+        Spec should formalize these roles.
+      proposed_fix_for_v1_5: |
+        Section 4.8 add:
+          operator_roles:
+            approval_authority: "production gate"
+            architectural_arbiter: "v1.5+ design decisions"
+            reviewer: "MAY review spec content; not required by loop"
+            convergence_authority: "MAY take over patch work when self-patching not converging (per claude-rev-028)"
+      pass_14_disposition: pending_v1_5
+
+governance_observations:
+  pass_12_self_introduced_bugs_caught_by_pass_13:
+    count: 5
+    bugs:
+      - "codex-rev-025: section 9 corroborated_by left active when section 13 disabled (incomplete disable)"
+      - "codex-rev-026: section 17 hash check left broken when known_blockers added (mark-without-guard)"
+      - "codex-rev-027: known_blockers omits claude-rev-015 validator gap (incomplete enumeration)"
+      - "codex-rev-028: revision_history not patched when active_contract_patch_level added (inconsistent metadata)"
+      - "codex-rev-029: only later cycles' rates marked provisional (partial fix)"
+    pattern_match: |
+      All 5 bugs share the structure: "claude applied a partial fix that
+      addressed the surface symptom but left related artifacts in the
+      broken state." The partial-fix pattern is the second-derivative
+      issue: claude doesn't audit holistically when patching.
+
+  consolidation_regression_meta_pattern:
+    pass_10_bugs_caught_by_pass_11: 5
+    pass_12_bugs_caught_by_pass_13: 5
+    convergence_assessment: |
+      Per-pass bug introduction rate is approximately constant. Claude
+      self-patching is NOT converging to a clean spec. Each pass adds
+      5 new bugs while fixing 4-5 old ones. Net delta near zero or
+      slightly positive. The architecture's two-agent design correctly
+      catches these, but the spec is not approaching a fixed point
+      via self-editing.
+
+  meta_recommendation: |
+    Three possible paths for v1.5:
+      Path A (continue self-patching):
+        - Apply claude-rev-028 self-patch constraint (limit scope)
+        - Build validate_disposition_index.py FIRST
+        - Run validator before/after every future claude patch
+        - Accept ~5 bugs per pass as cost of automated drafting
+      Path B (operator takes over):
+        - Operator manually applies v1.5 architectural fixes
+        - Claude+codex review-only; no inline patches
+        - More expensive in operator time, fewer regressions
+      Path C (stop patching, build infrastructure):
+        - Spec is "good enough" for Phase 0 modulo known_blockers
+        - Build scripts/agent_loop/* (validators + orchestrator)
+        - Run iteration-0000 dry-run; collect empirical metrics
+        - Use empirical data to drive v1.5 design instead of more
+          theoretical patching
+    Operator should choose. claude-rev-028 captures this decision.
+
+  writeback_rule_status:
+    pass_14_compliance: |
+      Pass-14 written back to archive immediately AND inline patches
+      applied for codex-rev-025/026/027/028/029/032 within same
+      operator turn. No conversational-only delivery.
+
+loop_self_test_pass_13_pass_14:
+  independent_finding_rate: 0.62
+  formula_status: PROVISIONAL
+  total_findings: 16  # 8 codex + 7 claude + 1 carried (claude-rev-024 is meta of codex-rev-025/026)
+  duplicates: 6 (3 cross-pass + 3 in-pass)
+  duplicates_observed:
+    - "claude-rev-024 generalizes codex-rev-025 + codex-rev-026 (disable-mechanism-informal)"
+    - "claude-rev-025 follows from claude-rev-024 (broken-code pattern)"
+    - "claude-rev-027 architectural overlap with claude-rev-024 (structural contradiction)"
+    - "claude-rev-026 extends codex-rev-027 (known_blockers context)"
+  pattern_note: |
+    Lower independence (0.62) is EXPECTED at this depth. Pass-13 and
+    pass-14 cluster around 3 themes (disable mechanism, broken-section
+    marking, partial-fix audit). When findings cluster thematically
+    rather than spreading widely, it suggests we're in convergence
+    territory FOR THESE THEMES specifically — but new themes may
+    still be undiscovered.
+
+  pattern_warning: |
+    The independent_finding_rate trend (0.86, 0.86, 0.81, 0.71, 0.62)
+    is monotonically declining. Two possible interpretations:
+      (a) GOOD: each pass cleans surface issues, deeper findings cluster
+          around remaining architectural themes; convergence in progress
+      (b) BAD: claude self-patching means each new pass produces findings
+          dependent on prior passes' work, reducing independence by
+          construction; rate would drop further if the same pair
+          continues without external input
+    Cannot distinguish (a) vs (b) without external check (e.g., a
+    different reviewer or operator-driven v1.5 fix).
+
+recommendation: |
+  Operator decision required before v1.5:
+    1. Choose Path A / B / C from meta_recommendation above
+    2. If Path C (stop patching, build infrastructure):
+       - Scaffold scripts/agent_loop/ with validate_disposition_index.py
+       - Run validator on current spec; expect failures (it's blocked)
+       - Use validator output as v1.5 work-list (deterministic, not
+         agent-generated)
+    3. If Path B (operator takes over):
+       - Operator applies v1.5 architectural fixes directly
+       - Claude+codex review the v1.5 result; no inline patches
+    4. If Path A (continue self-patching):
+       - Apply claude-rev-028 constraint (limit scope strictly)
+       - Build validator FIRST; gate further patches on clean run
+
+  Until operator chooses path:
+    - Spec stays at v1.4-patched-pass-10-pass-12-pass-14
+    - active_contract_readiness remains blocked_pending_v1_5
+    - This pass DOES NOT declare ready for Phase 0

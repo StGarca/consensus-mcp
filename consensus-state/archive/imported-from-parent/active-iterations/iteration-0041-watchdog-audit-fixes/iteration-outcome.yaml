@@ -1,0 +1,48 @@
+schema_version: 1
+iteration_id: iteration-0041-watchdog-audit-fixes
+created_utc: '2026-05-11T05:05:00Z'
+closing_state: quorum_close_passed
+ceremony_flavor: parallel_audit_fix_agent_dispatch
+parent_iteration: null
+subsystem: visibility_watchdog_audit_fixes
+closing_reason: |
+  Landed 3 audit findings in scripts/agent_loop_mcp/_visibility_watchdog.py
+  from 2026-05-11 parallel audit dispatches.
+
+  FINDINGS ADDRESSED:
+    perf-rev-005 HIGH: _read_jsonl slurps entire dispatch-log.jsonl every
+      run. Added _read_jsonl_streaming(path, since_ts=None) generator +
+      --window-days CLI flag (default 7; 0 disables). Legacy _read_jsonl
+      kept as thin list-returning wrapper for back-compat.
+    xplat-rev-006 MEDIUM: _default_repo_root parent.parent.parent walk
+      could land in site-packages after a non-editable install. Replaced
+      with marker-validated resolver:
+        1. AGENT_LOOP_MCP_REPO_ROOT env (authoritative; raises if invalid)
+        2. Path.cwd() if markers present
+        3. Walk parents of __file__ until markers OR root
+      Fails loudly via new RepoRootResolutionError if none match.
+    xplat-rev-007 MEDIUM: JSONL append had no cross-process serialization
+      on Windows. Added _locked_append(path, payload) helper using
+      msvcrt.locking on Windows + fcntl.flock on POSIX. emit_stalled_event
+      now routes through it.
+
+  Version bump: WATCHDOG_VERSION 1.0.0 -> 1.1.0.
+
+  VERIFICATION:
+    pytest scripts/agent_loop_mcp/tests/test_visibility_watchdog.py
+      → 27 passed (was 14; +13 new regression tests:
+      - streaming reader filter + missing-timestamp + legacy-compat
+      - repo_root walks-to-marker / env-var-honored / env-var-invalid / no-markers-anywhere
+      - locked_append basic + parent-dir-creation + 50-thread fan-out concurrent-safe
+      - main --window-days flag honored + zero-disables)
+    Full suite: 417 passed
+
+  LOC DELTA: +420 / -23 (net +397; 196 in source, 247 in test file).
+
+  Smoke-tested against real repo dispatch-log: stale_count=0 (the 2
+  historical orphans were already marked dispatch_stalled in iter-0036).
+
+artifacts:
+  audit_sources:
+    - agent-loop/active/iteration-audit-2026-05-11-performance/codex-review.yaml
+    - agent-loop/active/iteration-audit-2026-05-11-cross-platform/codex-review.yaml

@@ -1,0 +1,56 @@
+iteration_id: iteration-0039-dispatch-crossplat-fixes
+reviewer_id: codex-iter0039-1
+pass_id: codex-iter0039-1-pass2
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: MSYS drive-path conversion accepts any slash-prefixed two-character prefix
+    as a Windows drive
+  citation: agent-loop/active/iteration-0039-dispatch-crossplat-fixes/proposed-patches.md:150
+  risk: Inputs like `/tmp/codex` or `/_/foo` can be rewritten into invalid native
+    paths such as `T:\codex` or `_:\foo`, breaking non-drive absolute paths under
+    Git Bash/MSYS instead of resolving the requested binary.
+  recommendation: Gate conversion on a real drive letter, for example `codex_bin[1].isalpha()`,
+    and leave other slash-prefixed paths unchanged. Consider explicitly handling `/cygdrive/<drive>/...`
+    if Cygwin support is desired.
+  patch_not_proposed_reason: Only proposed-patches.md is embedded; the implementation/test
+    files needed for an exact unified diff are not available in the sealed packet.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Windows process-group startup omits hidden-window handling for taskkill
+    fallback
+  citation: agent-loop/active/iteration-0039-dispatch-crossplat-fixes/proposed-patches.md:119
+  risk: The proposed force-kill path can briefly flash a console window or inherit
+    interactive console behavior on Windows, which is avoidable and was already raised
+    as a reviewer question.
+  recommendation: Use `subprocess.CREATE_NO_WINDOW` for the `taskkill` fallback when
+    available, or document why visible taskkill behavior is acceptable for this workflow.
+  patch_not_proposed_reason: Only proposed-patches.md is embedded; the implementation/test
+    files needed for an exact unified diff are not available in the sealed packet.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The proposal covers the three intended findings, but the
+  binary path conversion and Windows force-kill details still need tightening before
+  the desired cross-platform end state is fully satisfied.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 9eb79d128aa15ab52315a43ce7e4f1aa10eef503d3cf3fe6fb32a28ffaff07ec
+  output_sha256: 0991265de948ed3e444086c20cd9400c3f53ce3db1d1702b5b3ce851e55273f8
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: d12e53f2e9f0b5aaed2098ac287aa039784cf9cb31d6b267f96857e17ad8061f
+  scope_signature: 9422ff7f048c7227d006c4100fbde2acb0182f3ffe1587eb8b80cbf18c264ec1
+  review_target_path: agent-loop/active/iteration-0039-dispatch-crossplat-fixes/review-packet.yaml
+  review_target_hash: a033988b6d3bdede8e1f1496766d2b7a4f210e9cfbb1d140cac07db49fe4f995
+sealed_at_utc: '2026-05-11T12:32:10Z'
+packet_sha256: aacb1f4d1335e6833d7bb0a38708fad74d35866976922d2d9e5a8b8e0e268c46

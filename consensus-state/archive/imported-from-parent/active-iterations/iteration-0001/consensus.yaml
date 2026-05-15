@@ -1,0 +1,419 @@
+schema_version: 1
+iteration_id: iteration-0001
+created_utc: "2026-05-08T00:00:00Z"
+
+# ---- State ----
+
+consensus_state: blocked
+production_state: not_ready
+review_consensus: false
+implementation_ready: false
+production_ready: false
+production_allowed: false
+
+# ---- Reviewer disagreement note ----
+
+reviewer_overall_disagreement:
+  codex_overall_position:
+    implementation_ready: true
+    note: "codex marked implementation_ready true conditional on operator answers to q-001 + q-003, but emitted 2 blocking_objections that contract its own readiness. Treating structured blocking_objections field as authoritative per spec section 9 validity rules."
+  claude_overall_position:
+    implementation_ready: false
+    note: "claude emitted 5 blocking_objections; explicit not-ready."
+  canonical_state: blocked
+  rationale: |
+    Per section 13 one-blocker-blocks rule: any blocking_objection from either
+    reviewer makes consensus_state: blocked. Total raw blockers across
+    reviewers: 7 (codex 2 + claude 5). Post-dedup canonical_findings: 7
+    (no exact key collisions). All carry corroboration_strength: suggested_by_context
+    per G4 post-exposure framing (cf-001 enforcement notes).
+
+# ---- Canonical findings (synthesizer-merged; one entry per unique key) ----
+
+# canonical_finding_key: (file, section, claim_class, normalized_claim_text_hash)
+# All findings carry corroboration_strength: suggested_by_context per G4.
+# Severity gate replay (claim_class predicate per codex-rev-010):
+#   - "either predicate true" -> auto_blocking_must_apply
+#   - BUT corroboration_strength: suggested_by_context -> auto_promotion: blocked
+#   - Outcome: severity stays at source value; no auto-promotion to blocking
+#     (none needed: most are already blocking at source from claude reviewer)
+
+canonical_findings:
+
+  - canonical_id: canonical-001
+    canonical_finding_key:
+      file: agent-loop/active/iteration-0001/input.yaml
+      section: proposed_implementation_scope
+      claim_class: scope
+      normalized_claim_hash: "scope_check_cannot_enforce_intra_file_region"
+    source_findings:
+      - "codex:codex-001"
+    merge_method: exact
+    severity: medium
+    status: accepted
+    required_change: |
+      Three options offered by codex; recommended (b): remove
+      wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+      from allowed_files for iteration-0001's implementation scope. Operator
+      applies any spec md edits post-iteration outside scope_check enforcement.
+    corroborated_by:
+      - reviewer: codex
+        finding_id: codex-001
+        corroboration_strength: suggested_by_context
+    severity_gate_replay:
+      max_source_severity: medium
+      claim_class: scope
+      gate_result: confirmed_suggestion (scope not in [safety, correctness, security, process])
+
+  - canonical_id: canonical-002
+    canonical_finding_key:
+      file: agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+      section: real_data_findings_on_iteration_0000.claude_rev_047
+    claim_class: correctness
+    normalized_claim_hash: "pass_20_claude_rev_047_field_enumeration_wrong"
+    source_findings:
+      - "codex:codex-002"
+    merge_method: exact
+    severity: high
+    status: accepted
+    required_change: |
+      Treat validate_iteration.py output as authoritative for the missing-fields
+      list, not pass-20's narrative enumeration. The actually-missing fields per
+      validator: changed_sections + check_results_if_any (NOT gate_state +
+      requested_output_schema; both present in iteration-0000 review-packet.yaml
+      per codex spot-check).
+    corroborated_by:
+      - reviewer: codex
+        finding_id: codex-002
+        corroboration_strength: suggested_by_context
+    severity_gate_replay:
+      max_source_severity: high
+      claim_class: correctness
+      gate_result: auto_block_eligible
+      auto_promotion: blocked (post-exposure)
+      final_outcome: severity stays at high (already actionable; not auto-promoted to blocking)
+
+  - canonical_id: canonical-003
+    canonical_finding_key:
+      file: agent-loop/active/iteration-0001/input.yaml
+      section: corroborated_by_root_cause
+    claim_class: process
+    normalized_claim_hash: "iteration_0001_plan_patches_symptom_not_root_cause"
+    source_findings:
+      - "claude:claude-001"
+    merge_method: exact
+    severity: medium
+    status: accepted
+    required_change: |
+      Add a deferred_decision OR explicit canonical_finding investigating
+      WHY iteration-0000 acquired corroborated_by on claude-review.yaml after
+      codex-rev-009 (NOT claude-rev-009 per claude reviewer attribution drift
+      note risk-002) had landed in v1.5. Hypothesis: pre-v1.5 schema cached
+      somewhere; OR human-edit drift; OR spec interpretation ambiguity. Without
+      root-cause: same bug recurs in iteration-0002+.
+    corroborated_by:
+      - reviewer: claude
+        finding_id: claude-001
+        corroboration_strength: suggested_by_context
+    severity_gate_replay:
+      max_source_severity: medium
+      claim_class: process
+      gate_result: auto_block_eligible (process in eligible set)
+      auto_promotion: blocked (post-exposure)
+      final_outcome: severity stays at medium
+
+  - canonical_id: canonical-004
+    canonical_finding_key:
+      file: agent-loop/active/iteration-0001/input.yaml
+      section: claude_rev_043_conflation
+    claim_class: methodology
+    normalized_claim_hash: "iteration_0001_conflates_architectural_and_process"
+    source_findings:
+      - "claude:claude-002"
+    merge_method: exact
+    severity: high
+    status: accepted
+    required_change: |
+      Split claude-rev-043 into two distinct iteration-0001 work items:
+      (a) architectural enum widening proposal (deferred to operator + codex
+          ratification per claude-rev-028 self-patch constraint)
+      (b) process gate for future iterations: validate_consensus.py runs as
+          pre-commit gate; consensus.yaml fails validate => iteration cannot
+          close. The process gate is implementable in this iteration.
+    corroborated_by:
+      - reviewer: claude
+        finding_id: claude-002
+        corroboration_strength: suggested_by_context
+    severity_gate_replay:
+      max_source_severity: high
+      claim_class: methodology
+      gate_result: auto_promotion_blocked (methodology not in eligible set)
+      final_outcome: severity stays at high
+
+  - canonical_id: canonical-005
+    canonical_finding_key:
+      file: agent-loop/active/iteration-0001/input.yaml
+      section: gate_state.consensus_state_inherited_from_iteration_0000
+    claim_class: correctness
+    normalized_claim_hash: "iteration_0001_input_uses_non_spec_enum_value_being_fixed"
+    source_findings:
+      - "claude:claude-003"
+    merge_method: exact
+    severity: high
+    status: accepted
+    required_change: |
+      input.yaml line 86 sets gate_state.consensus_state_inherited_from_iteration_0000
+      to "implementation_ready_observational_only" -- which IS the very enum
+      drift target by claude-rev-043. The plan documents iteration-0000's
+      state in iteration-0001's input using the non-spec value. Either:
+      (a) replace with spec-conforming "implementation_ready" + a separate
+          observational_mode: true note
+      (b) replace with quoted-string-treated-as-data + explicit comment that
+          the value is iteration-0000's literal state, NOT iteration-0001's
+          declaration of state
+      Recommend (b) since changing the value misrepresents iteration-0000;
+      requires comment annotation to prevent validate_consensus from flagging
+      iteration-0001 input.yaml itself. Validator scope check: validate_consensus
+      is targeted at consensus.yaml not input.yaml; this is descriptive metadata.
+      Confirm validator boundary; document in fix.
+    corroborated_by:
+      - reviewer: claude
+        finding_id: claude-003
+        corroboration_strength: suggested_by_context
+    severity_gate_replay:
+      max_source_severity: high
+      claim_class: correctness
+      gate_result: auto_block_eligible
+      auto_promotion: blocked (post-exposure)
+      final_outcome: severity stays at high
+
+  - canonical_id: canonical-006
+    canonical_finding_key:
+      file: agent-loop/active/iteration-0001/input.yaml
+      section: success_criteria_per_G5
+    claim_class: process
+    normalized_claim_hash: "anti_regression_validators_run_after_not_before"
+    source_findings:
+      - "claude:claude-004"
+    merge_method: exact
+    severity: blocking
+    status: accepted
+    required_change: |
+      Per anti_regression_criterion (section 0; claude-rev-001): consolidation
+      passes touching >5 sections OR removing a behavioral rule MUST run
+      validate_disposition_index.py AND validate_review.py BEFORE landing.
+      iteration-0001 touches >5 files (claude-review, consensus, iteration-outcome,
+      independence-audit, review-packet at minimum) — qualifies as consolidation.
+      Plan ordering currently reads as edit-then-validate. Reorder:
+        1. Take baseline validator readings.
+        2. Stage proposed edits as pending.
+        3. Run validators on staged-but-unapplied state via dry-run.
+        4. Apply only if validators pass.
+      Phase 0 implementation: orchestrator can compute hypothetical post-edit
+      file via memory + run validator; OR validators support --dry-run mode.
+      Choose one; document.
+    corroborated_by:
+      - reviewer: claude
+        finding_id: claude-004
+        corroboration_strength: suggested_by_context
+    severity_gate_replay:
+      max_source_severity: blocking
+      claim_class: process
+      gate_result: auto_block_eligible
+      auto_promotion: blocked (post-exposure)
+      final_outcome: severity stays at blocking
+
+  - canonical_id: canonical-007
+    canonical_finding_key:
+      file: agent-loop/active/iteration-0001/input.yaml
+      section: closure_artifact_implications
+    claim_class: process
+    normalized_claim_hash: "iteration_0001_may_inadvertently_satisfy_done_claim_rule"
+    source_findings:
+      - "claude:claude-005"
+    merge_method: exact
+    severity: high
+    status: accepted
+    required_change: |
+      Fixing claude-rev-044 (iteration-outcome.yaml YAML parse error) makes
+      iteration-0000's section 22 metrics readable again. done_claim_rule
+      (section 0; claude-rev-007) condition #2 is "iteration-0000 dry-run
+      produces empirical metrics in section 22." If parse-error-fix flips
+      that from degraded-state to satisfied, AND validate_disposition_index
+      stays clean, BOTH done_claim conditions hold. cf-007 readiness flip
+      gate then becomes legally possible without explicit operator gate.
+      Required: lock active_contract_readiness explicitly to
+      pending_phase_0_empirical_validation in iteration-0001 input artifact
+      AND in spec frontmatter for the duration; flip only via dedicated
+      readiness-flip review pass per cf-007.
+    corroborated_by:
+      - reviewer: claude
+        finding_id: claude-005
+        corroboration_strength: suggested_by_context
+    severity_gate_replay:
+      max_source_severity: high
+      claim_class: process
+      gate_result: auto_block_eligible
+      auto_promotion: blocked (post-exposure)
+      final_outcome: severity stays at high
+
+# ---- Accepted changes (reviewer patch_recommendations cleared by canonical merge) ----
+
+accepted_changes: []
+# RATIONALE: consensus_state is blocked; section 20 step stop_if_not_implementation_ready
+# halts orchestrator. No patches apply this iteration. codex emitted 11 patch_recommendations
+# (patches 001-011); these are recorded in deferred_decisions for iteration-0001-revised
+# (next iteration after blocker resolution).
+
+rejected_changes: []
+
+# ---- Deferred decisions ----
+
+deferred_decisions:
+  - id: codex_patches_001_through_011_blocked_pending_canonical_resolution
+    blocked_by_canonical_findings: [canonical-001, canonical-002, canonical-003, canonical-004, canonical-005, canonical-006, canonical-007]
+    description: |
+      codex-review patch_recommendations are well-formed mechanical edits. They
+      cannot apply this iteration because the methodology canonical findings
+      (especially canonical-006 anti-regression order, canonical-005 plan
+      self-violation, canonical-007 readiness lock) indicate the plan itself
+      requires revision before any patches land. After plan revision, re-dispatch
+      reviewers; if then implementation_ready, apply codex patches.
+    proposed_resolution_path: |
+      iteration-0001-revised:
+        1. Address canonical-001..007 via input.yaml revision and process changes.
+        2. Re-build review-packet against revised input.
+        3. Re-dispatch both reviewers.
+        4. If consensus_state: implementation_ready, apply codex patches under that consensus's scope.
+        5. Validate. Close.
+
+  - id: claude_rev_043_architectural_enum_widening_proposal
+    description: |
+      Pass-20 claude-rev-043 + this iteration's reviewer-pair both agree:
+      consensus.yaml enum widening (option C: observational_mode flag) needs
+      operator + codex review per claude-rev-028. Neither codex-iter0001
+      (implementation_realist) nor claude-iter0001 (methodology_critic) has
+      authority to ratify. Operator decides; this iteration records as deferred.
+    architectural_proposal_summary: |
+      Add to spec section 13 consensus.yaml schema:
+        observational_mode: <bool, default false>
+      When true, validate_consensus relaxes enum constraints on consensus_state,
+      merge_method, and status to accept observational-mode-specific values
+      (set defined alongside the canonical enum).
+    operator_action_required: ratification + spec section 13 patch language
+    co_signature_required: codex (per claude-rev-028 always_requires_operator_approval_plus_codex_review)
+
+  - id: claude_rev_045_audit_event_name_canonicalization
+    description: "Architectural option C (fix artifact + add §13 note); both reviewers/operator-decision needed."
+    operator_action_required: ratification (option A pure mechanical OR option C add-note-architectural)
+    co_signature_required: codex
+
+  - id: claude_rev_046_canonical_hash_convention_pin
+    description: "Architectural option A (pin convention in §7); codex empirically verified the pass-20-author convention is byte-stable across line endings + UTF-8 BOM."
+    proposed_pin_text: |
+      All YAML file sha256 values referenced in this spec are computed as:
+        hashlib.sha256(yaml.safe_dump(yaml.safe_load(open(p)), sort_keys=True).encode("utf-8")).hexdigest()
+    operator_action_required: ratification
+    co_signature_required: codex
+
+  - id: codex_q001_historical_packet_sha_recompute_vs_preserve
+    description: |
+      Codex q-001 (codex-review.yaml line 371) was lost in initial synthesizer
+      compression of canonical-002 / claude_rev_046 pin. Restoring as explicit
+      deferred decision per operator audit.
+    question: |
+      When the canonical hash convention (proposed_pin_text above) is ratified
+      and applied as the implementer step in iteration-0001-revised, does the
+      operator want the implementer to:
+        (a) RECOMPUTE the historical reviewed_packet_sha256 in iteration-0000
+            review yamls and the audit_log review_packet_built entry, replacing
+            with canonical-convention values. This fully clears
+            validate_iteration.py findings (PACKET_SHA_MISMATCH x2 in
+            iteration-0000) but loses the original synthesizer-time hash; or
+        (b) PRESERVE the original historical hash 385d958... (and similar) AS
+            iteration-0000 historical provenance; add explicit
+            historical_hash_preserved_at_pre_canonical_pin: true marker on
+            the affected fields, and have validate_iteration.py treat that
+            marker as a documented exception. PACKET_SHA_MISMATCH stays in
+            iteration-0000 report as informational, not as a defect.
+        (c) BOTH: keep historical hash as a separate provenance field and
+            populate canonical hash for forward use; validate_iteration.py
+            checks the canonical hash but tolerates the provenance presence.
+    impact_per_option:
+      a: "iteration-0000 fully validator-clean post-fix; loses original synthesizer-time hash"
+      b: "iteration-0000 retains historical hash; validate_iteration.py needs marker-aware update (small spec/code change)"
+      c: "Most information preserved; largest implementation lift (two hash fields per artifact + validator update)"
+    operator_action_required: pick a / b / c
+    blocked_by: [canonical-002 must be resolved with this decision attached]
+    co_signature_required: none for option a (mechanical); codex review for options b or c (validator semantic change)
+    notes_from_reviewer:
+      - "Codex empirically verified canonical convention is byte-stable; pin is sound regardless of historical-hash decision."
+      - "Operator audit (post-iteration-0001) explicitly flagged this question as missing from initial synthesizer output."
+
+  - id: pass_20_self_review_bias_observation
+    description: |
+      Suggestion claude-006: pass-20 is self-authored by orchestrator; pass-20
+      classifications and severity ratings carry self-review bias. Iteration-0001
+      should not silently inherit those classifications. Operator may want to
+      mandate that any pass produced by orchestrator carries an explicit
+      self_review_bias_attestation field, AND that the next iteration validates
+      against pass-20 narrative independently (not just by its severity ratings).
+    operator_action_required: methodology decision (does orchestrator-self-review need a bias-attestation rule?)
+
+# ---- Unresolved disagreements ----
+
+unresolved_disagreements:
+  - id: implementation_ready_disagreement
+    codex_position: true
+    claude_position: false
+    resolution: claude_position_holds_per_section_13_one_blocker_blocks_default
+    rationale: |
+      codex's implementation_ready: true is contradicted by codex's own 2
+      blocking_objections, plus claude's 5 blocking_objections. Section 13:
+      "one blocking objection from either agent blocks by default." No path
+      through which claude's 5 blockers could be cleared without acknowledging
+      they exist; no path through which codex's true claim can hold while its
+      own blockers exist.
+
+# ---- Implementation scope (would-be; not used since blocked) ----
+
+implementation_scope:
+  status: not_applied_iteration_blocked
+  allowed_files: []   # empty by design: blocked iteration applies no patches
+  forbidden_files:
+    - "production outputs (audiobooks/**, listen/**, voices/**)"
+    - "spec sections 1-23 architectural rules (gated by claude-rev-028)"
+  allowed_actions: []
+  forbidden_actions:
+    - "render production audio"
+    - "merge to main"
+    - "apply patches while consensus_state is blocked"
+  declared_in_input:
+    pre_block_proposal: "see input.yaml proposed_implementation_scope.allowed_files"
+  note: "Scope declared but not enforced this iteration; implementation_ready=false halts at section 20 stop_if_not_implementation_ready step. forbidden_files + forbidden_actions populated per spec section 13 default requirement."
+
+# ---- Checks required (would-be; deferred to iteration-0001-revised) ----
+
+checks_required:
+  - id: validate_review_check
+    check_id: validator.validate_review
+    args:
+      paths:
+        - agent-loop/active/iteration-0001/codex-review.yaml
+        - agent-loop/active/iteration-0001/claude-review.yaml
+    status: passed_pre_consensus
+  - id: validate_consensus_check
+    check_id: validator.validate_consensus
+    args:
+      paths:
+        - agent-loop/active/iteration-0001/consensus.yaml
+    status: pending_iteration_close
+
+# ---- Iteration-0001 outcome path ----
+
+next_step_if_operator_accepts_blocked_state:
+  - "Operator reviews canonical-001..007 + deferred_decisions"
+  - "Operator selects path: revise plan -> iteration-0001-revised, OR table -> defer iteration-0001 entirely"
+  - "If revise: address canonical-005 (input.yaml self-violation) + canonical-006 (anti-regression order) FIRST"
+  - "Re-build packet, re-dispatch reviewers"
+  - "Codex patch_recommendations apply only after methodology consensus reached"

@@ -1,0 +1,64 @@
+schema_version: 1
+pilot_id: iteration-audit-2026-05-11-bare-except
+goal:
+  summary: "Audit dispatch — code reviewer auditing exception handling consistency across a Python codebase reviews agent-loop code for bare-except defects."
+  desired_end_state: |
+    iter-audit-2026-05-11-bare-except is one of 4 parallel codex audit dispatches
+    on the agent-loop code (other dimensions: security, performance, cross-platform). Each audit gets a
+    specialized codex persona via the review-target.md framing. Findings
+    are aggregated, claude evaluates each (cross-AI consensus loop per
+    operator-locked process), consensus findings get dispatched as parallel
+    workflow #4 fix cycles.
+
+    THIS DISPATCH: codex acts as a code reviewer auditing exception handling consistency across a Python codebase and produces findings on
+    bare-except defects in the embedded code excerpts.
+
+    Concerns (non-exclusive): bare `except:` clauses; overly-broad `except Exception:` that silences errors without logging; inconsistent fail-mode policy across modules; cases where exception is caught but no breadcrumb stop_rule is fired (silent skip).
+
+    OUT OF SCOPE for this audit: the other 3 dimensions (each has its own
+    parallel audit dispatch). Do NOT emit findings on those.
+
+    Findings format: per the standard codex_review_schema.json. Each
+    finding gets id (codex-rev-NNN), severity, summary, citation
+    (file:line), risk, recommendation, patch_proposal (preferred) OR
+    patch_not_proposed_reason (only if a patch isn't safely authorable
+    from the embedded content).
+
+    SUCCESS = sealed codex-review.yaml at
+    agent-loop/active/iteration-audit-2026-05-11-bare-except/codex-review.yaml
+    with findings and goal_satisfied/goal_satisfied_rationale set.
+  non_goals:
+    - emit findings on dimensions OUTSIDE this audit's framing (security/perf/cross-platform/bare-except are split across parallel dispatches)
+    - propose architectural rewrites (focus on targeted defects)
+    - modify any code (this is review-only)
+allowed_files:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/_author_review_packet.py
+  - scripts/agent_loop_mcp/_visibility_watchdog.py
+  - scripts/agent_loop_mcp/_visibility_tui.py
+  - agent-loop/active/iteration-audit-2026-05-11-bare-except/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/server.py
+  - scripts/agent_loop_mcp/tool_registry.py
+  - scripts/agent_loop_mcp/tools/
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - scripts/agent_loop_mcp/tests/
+  - run/
+  - wiki/
+  - pyproject.toml
+  - requirements.txt
+max_iterations: 1
+max_patch_size: 300
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates: []
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers: []
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T03:45:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 2c953e7b20372045374f9a10a4ed05c49ad520b9cd4f8c5dcd147b92c2548659

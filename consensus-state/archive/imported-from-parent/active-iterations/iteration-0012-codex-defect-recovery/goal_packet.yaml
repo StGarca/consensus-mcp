@@ -1,0 +1,75 @@
+schema_version: 1
+pilot_id: iteration-0012-codex-defect-recovery
+goal:
+  summary: Address codex's 2026-05-10 expert verdict findings (3 defects + 1 release-gate refresh + 1 label fix)
+  desired_end_state: |
+    F2 (HIGH): _self_drive.cmd_check_stop_rules + _self_drive.cmd_verify_scope inspect
+       staged + unstaged + untracked changed files (union), not just `git diff --cached`.
+       This closes the safety gap where unstaged forbidden-file edits bypass detection.
+    F3 (MED): reviewer_dispatch_codex.handle wraps the _dispatch_codex.main(argv) call
+       itself in try/except returning {ok: False, error_type: type(exc).__name__,
+       error: str(exc)} so helper exceptions don't leak to direct MCP callers.
+       (Currently only the post-stdout JSONDecodeError is wrapped.)
+    F4 (MED): _release_gate_check.gate_real_iter dynamically scans
+       agent-loop/active/iteration-*/iteration-outcome.yaml for the most recent
+       iteration with closing_state in {quorum_close_passed,
+       implementation_ready_apply_landed} instead of hardcoding iter-0007.
+    F5 (LOW): iter-0011 directory's iteration-outcome.yaml gets a clarifying
+       header stating the original "fault-recovery-demo" pilot_id was
+       aspirational; class 3 was not triggered. Authoritative status is
+       documented in fault_recovery_demo_status.demonstrated=false.
+  non_goals:
+    - modify _dispatch_codex.py
+    - modify the _self_drive scope_signature algorithm
+    - introduce new MCP tools
+    - bump pyproject version
+allowed_files:
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/_release_gate_check.py
+  - scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py
+  - scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+  - agent-loop/active/iteration-0011-fault-recovery-demo/iteration-outcome.yaml
+  - agent-loop/active/iteration-0012-codex-defect-recovery/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/tools/audit_append_event.py
+# Note: server.py + tools/loop_run_goal.py + run/ + wiki/ have pre-existing
+# uncommitted dirty state from iter-0009/0010/0011 + audiobook-project work
+# unrelated to iter-0012. Stop-rule fire on those files is a true positive
+# from the F2 fix's perspective but a false positive for iter-0012's intent.
+# The supervisor caught real working-tree drift; operator/orchestrator
+# decision: scope iter-0012 forbidden_files to ONLY the files iter-0012
+# itself must not modify. Pre-existing dirty state is the operator's
+# commit-time concern.
+max_iterations: 2
+max_patch_size: 200
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: stop-rule diff helper inspects staged + unstaged + untracked
+    check: 'grep -q "git ls-files\|--name-only HEAD\|--others" scripts/agent_loop_mcp/_self_drive.py'
+  - id: A2
+    description: reviewer.dispatch_codex.handle wraps helper main() call in try/except
+    check: 'grep -q "except Exception" scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py'
+  - id: A3
+    description: G_real_iter dynamic iteration scan present
+    check: 'grep -q "iteration-\\*\\|iteration_dirs\\|sorted.*iteration" scripts/agent_loop_mcp/_release_gate_check.py'
+  - id: A4
+    description: pytest still green
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+  - claude_codex_disagree_on_goal_satisfied
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-10T00:00:00Z'
+  scope_signature: 9dbf666ffbb433ab948579b5e89b5e5bbf6291d8f82478c80ca79c9353908087

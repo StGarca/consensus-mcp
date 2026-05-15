@@ -1,0 +1,155 @@
+schema_version: 1
+iteration_id: iteration-0019-real-codex-fix-demo
+created_utc: '2026-05-10T17:30:00Z'
+closing_state: blocked_needs_operator
+closing_reason: |
+  iter-0019 was the FIRST real-codex demo of the codex-fix-author cycle
+  post-#29 hardening. It produced substantive EMPIRICAL signal:
+
+  WHAT WORKED (post-#22 + #18 #4 hardening):
+    1. Codex's first dispatch was rejected by codex CLI's strict-output validator
+       (OpenAI requires every property to be in `required` array). This surfaced
+       a real schema bug introduced by iter-0014: `expected_tests` was optional
+       in `patch_proposal` and `patch_not_proposed_reason` was optional at
+       finding level. Both fixed inline:
+         - `patch_proposal.required` now includes `expected_tests`
+         - finding.required now includes `patch_proposal` AND `patch_not_proposed_reason`,
+           both as nullable types ([T, null]).
+       Mutual exclusivity is enforced at python parse-time by `_dispatch_codex`,
+       NOT at JSON Schema layer (since OpenAI strict-output rejects oneOf).
+
+    2. Third dispatch sealed cleanly. Codex emitted a valid finding for the
+       defect target (apply.codex_patch.handle actor shape re-validation gap):
+         id=codex-rev-001, severity=medium, summary correctly identifies the
+         defect, citation/risk/recommendation populated.
+
+    3. Strict mode (iter-0018 finding #4) WORKED: codex correctly used
+       `patch_not_proposed_reason` instead of `patch_proposal`, with reason
+       given. Both fields cannot be present (mutual exclusivity); validator
+       enforced.
+
+    4. Closure invariant trivially passes (no mutation = no gate); iter-0019
+       has no apply_step_landed events, so there's nothing to validate
+       cross-family against.
+
+  WHAT EMPIRICALLY DID NOT WORK:
+    Codex cannot produce a valid `patch_proposal.patch_id` because the
+    content-binding formula requires:
+      patch_id = patch-{base_sha[:12]}-{sha256(unified_diff)[:12]}
+
+    Codex's sandbox does NOT execute arbitrary code, so codex cannot:
+      - compute `bundle_sha(repo_root, files_touched)` for base_sha
+      - compute sha256(unified_diff_text) for the diff hash
+
+    Codex was self-aware enough to refuse to GUESS a patch_id (which would
+    fail the helper's content-binding check). It correctly chose
+    patch_not_proposed_reason in strict mode.
+
+  ARCHITECTURAL LEARNING — iter-0020 follow-up REQUIRED:
+    The review-packet author MUST pre-compute `base_sha` for the
+    `defect_target.files` and embed it in the review-packet so codex can
+    copy it into `patch_proposal.base_sha` directly. Codex can still
+    construct the unified_diff and compute its sha256 at-the-margin (sha256
+    of a string is deterministic and small enough that codex's reasoning
+    can in-line it via tool-use or hex-encoding the byte stream — though
+    this is fragile).
+
+    Cleaner path: drop the content-bound `patch_id` requirement. Use a
+    different uniqueness scheme:
+      - patch_id = uuid4() (codex generates a fresh UUID per finding)
+      - apply layer recomputes the bundle_sha at apply-time and stamps it
+        as `last_mutation.base_sha` (drift detection is unaffected)
+      - the apply layer's `unified_diff_sha256` field is the authoritative
+        content hash, not the patch_id
+
+    The patch_id was conceptually "un-relabelable" via content-binding, but
+    since the apply layer ALSO records `unified_diff_sha256` separately,
+    relabeling is already detectable downstream. The patch_id can become
+    purely a unique identifier (uuid4) without losing the security property.
+
+    iter-0020 should: (a) pre-compute base_sha in review-packet, AND/OR
+    (b) relax patch_id to uuid4. Operator decides which is cleaner.
+
+verdict_summary:
+  codex_output_reliability_post_iter_0013: GOOD (3rd dispatch sealed cleanly)
+  schema_bug_surfaced_and_fixed: YES (expected_tests + patch_not_proposed_reason both became required-but-nullable)
+  strict_mode_iter_0018_working: YES (codex used patch_not_proposed_reason correctly)
+  codex_authored_valid_patch_proposal: NO (sandbox cannot compute content-bound patch_id)
+  closure_invariant_validated: TRIVIAL (no mutation, no gate)
+  empirical_proof_value: HIGH (architectural gap surfaced; clear iter-0020 follow-up)
+
+artifacts_produced:
+  - agent-loop/active/iteration-0019-real-codex-fix-demo/goal_packet.yaml
+  - agent-loop/active/iteration-0019-real-codex-fix-demo/review-packet.yaml
+  - agent-loop/active/iteration-0019-real-codex-fix-demo/codex-review.yaml
+  - agent-loop/active/iteration-0019-real-codex-fix-demo/iteration-outcome.yaml
+  - agent-loop/archive/review-passes/2026-05-10-iteration-0019-real-codex-fix-demo-codex-iter0019-3-pass.yaml
+
+artifacts_modified:
+  - path: scripts/agent_loop_mcp/dispatch_templates/codex_review_schema.json
+    description: |
+      Schema fix surfaced by iter-0019: per OpenAI strict-output rules,
+      every property in `properties` must be in `required`. Added
+      `expected_tests` to patch_proposal.required + made
+      `patch_not_proposed_reason` and `patch_proposal` both
+      required-but-nullable at finding level. Mutual exclusivity now
+      enforced ONLY at python parse-time, not at JSON Schema layer.
+
+empirical_observations:
+  - "Codex output reliability post-iter-0013 hardening is materially better. 3 dispatches: 2 schema-rejected (real schema bugs found + fixed); 3rd sealed cleanly."
+  - "Codex strict-mode behavior (iter-0018 finding #4) is correct: codex used patch_not_proposed_reason when it couldn't author a valid patch."
+  - "Codex's self-awareness about the patch_id constraint is a positive signal: codex refused to guess and instead documented the obstruction."
+  - "The patch_id content-binding (iter-0014 #28 v4 design) is ergonomically blocked for codex's sandbox. Architectural gap, not a bug — codex's sandbox correctly cannot execute arbitrary hash code."
+  - "First sealed real-codex review with the patch_proposal mechanism in place. Even though no patch was authored, the cycle's MECHANICAL infrastructure is empirically validated through the dispatch + parse + seal + audit path."
+
+operator_decision_required:
+  options:
+    - id: A
+      label: ITER_0020_PRE_COMPUTE_BASE_SHA
+      description: |
+        Author iter-0020 review-packets with `defect_target.base_sha` pre-computed
+        via bundle_sha. Codex copies this into patch_proposal.base_sha and only
+        needs to compute sha256(unified_diff) which is small + deterministic.
+        Test if codex can in-line that hash.
+    - id: B
+      label: RELAX_PATCH_ID_TO_UUID4
+      description: |
+        Drop content-binding on patch_id. Use uuid4 for uniqueness.
+        Drift detection still works via base_sha + post_sha + unified_diff_sha256
+        (already stamped separately). patch_id becomes a label, not a hash.
+    - id: C
+      label: BOTH
+      description: |
+        iter-0020 pre-computes base_sha in review-packets AND relaxes patch_id.
+        Most ergonomic for codex.
+
+  recommendation: B or C — the content-binding was conceptual; uuid4 + separate
+    diff hash field gives the same drift-detection without the codex-sandbox
+    barrier.
+
+next_iteration_recommendations:
+  - id: iter_0020_patch_id_ergonomics
+    description: |
+      Address the codex-sandbox-can't-compute-hashes finding via Option A,
+      B, or C above. Re-run iter-0019-equivalent demo with the unblocked
+      patch_id ergonomics.
+    when: operator-decided
+    priority: 1
+
+  - id: codex_dispatch_template_strict_mode_section_inclusion
+    description: |
+      Verify the strict-mode section of codex_review_template.md ACTUALLY
+      reaches codex when goal_packet.fix_author_policy=strict. iter-0019
+      DID set strict mode, and codex DID use patch_not_proposed_reason
+      correctly — but spot-check the prompt-rendering path to ensure the
+      strict section is NOT silently dropped under any condition.
+    when: post-iter-0020
+    priority: 2
+
+post_apply_status: |
+  iter-0019 closes blocked_needs_operator. The cycle's mechanical
+  infrastructure is empirically validated for the dispatch + parse + seal
+  + audit chain. The patch authorship step requires iter-0020 ergonomics
+  fix before codex can produce valid patch_proposal blocks. The empirical
+  signal is high-value: it proves the OTHER pieces of the chain work
+  end-to-end with real codex output.

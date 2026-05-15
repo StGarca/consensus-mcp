@@ -1,0 +1,158 @@
+schema_version: 1
+pilot_id: iteration-0032-visibility-tui-v1105-flavor-b-review
+goal:
+  summary: Flavor B subsystem review of claude-authored v1.10.5 dispatch hardening + visibility TUI (commits 6e4aa822 + e2c4dac4).
+  desired_end_state: |
+    iter-0032 is the FIFTH subsystem-wide Flavor B review of agent-loop code
+    and the FIRST review of code claude authored unilaterally in the current
+    session (prior Flavor B reviews iter-0023/0025/0027/0029 targeted code
+    landed via the codex-fix-author cycle or pre-existing subsystems).
+
+    Operator-observed gap: pattern 3 in the workflow taxonomy (design-then-
+    claude-implements) currently has NO codified cross-AI review step.
+    The visibility-TUI + v1.10.5 hardening landed as commits 6e4aa822 and
+    e2c4dac4 with bidirectional design dialogue BEFORE code but no codex
+    review of the implementation AFTER. iter-0032 closes that gap.
+
+    Files in scope (4 files):
+      - scripts/agent_loop_mcp/_dispatch_codex.py
+          v1.10.5 hardening delta: _normalize_relative_to_repo containment
+          (OutsideRepoPathError), review_target_path_str pre-try
+          computation, review_target_hash pre-try init, dispatch_start /
+          dispatch_done / dispatch_failed all carry the new fields,
+          provenance dict carries review_target_path + review_target_hash.
+      - scripts/agent_loop_mcp/_visibility_tui.py
+          New standalone TUI. Read-only consumer of dispatch-log.jsonl +
+          mcp-server-audit.jsonl. Pairs start/done by pass_id; flags STALL
+          when age >= warn_after_seconds; flags ALERT when age >= 0.9 *
+          timeout_seconds. --once mode for CI (rc=1 on stall).
+      - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+          New regression tests added: outside_repo_refused, inside_repo_passes,
+          relative_path_passes, none_path_returns_none,
+          dispatch_failed_carries_review_target_fields_when_target_was_read.
+          Plus extended test_main_review_target_arg_threaded_through to
+          verify sealed provenance + dispatch_start + dispatch_done carry
+          the new v1.10.5 fields end-to-end.
+      - scripts/agent_loop_mcp/tests/test_visibility_tui.py
+          New: 10 unit tests covering _assemble_dispatches pairing logic,
+          _render stall/alert thresholds, _read_jsonl error tolerance,
+          main(--once) exit-code semantics.
+
+    What to look for (reviewer prompt — non-exclusive):
+      1. Containment correctness: can OutsideRepoPathError be bypassed via
+         symlinks, relative-with-../../ that resolves outside, or path
+         normalization edge cases?
+      2. review_target_path provenance: is the pre-try computation
+         consistent with the post-try usage? Any code path where path_str
+         is set but hash is None (or vice versa) that the audit consumer
+         would misinterpret?
+      3. dispatch_failed shape stability: the new fields are added via the
+         existing "non-None values only" loop. Confirm pre-codex failure
+         (e.g., goal_packet missing) carries review_target_path but NOT
+         hash, and post-codex failure carries both.
+      4. TUI stall semantics: does the threshold logic (STALL vs ALERT) hold
+         when timeout_seconds is None / 0 / missing? When multiple
+         dispatches are active concurrently? When pass_id collides across
+         iterations?
+      5. TUI security: no event GENERATION (only consumption). No
+         filesystem writes. No MCP tool surface. No subprocess.run calls.
+         Confirm the read-only invariant.
+      6. Test coverage: are the regression tests actually exercising the
+         contracts they claim? Any false-positive tests that would pass
+         even if the underlying code regressed?
+      7. CLAUDE.md adherence: Karpathy #2 simplicity (minimum code), #3
+         surgical changes (no unrelated edits), #4 goal-driven (verify
+         clauses in every step).
+
+    A real codex reviewer (codex-cli) is dispatched against the review-packet
+    (which embeds the 4 touched-file contents per iter-0021). Findings emit
+    either patch_proposal (preferred under fix_author_policy=strict) or
+    patch_not_proposed_reason. Approved patches land via apply.codex_patch
+    under operator authorization.
+
+    iter-0032 SUCCESS = the full Flavor B cycle closes:
+      1. Codex emits findings against the 4 files
+      2. For each finding with patch_proposal: claude verifier runs
+      3. Approved patches land via apply.codex_patch (cross-family closer
+         records review_target_hash=last_mutation.post_sha)
+      4. closure-certificate.yaml: 3/3 invariant_checks PASS, overall PASS
+      5. iteration_closed event recorded with closing_state=quorum_close_passed
+
+    If codex emits zero defects: goal_satisfied=true; close immediately
+    without mutation (trivial closure-certificate pass per iter-0027/0029 model).
+  non_goals:
+    - modify any agent_loop_mcp source file outside the 4-file scope
+    - modify run/, wiki/, or non-target code
+    - modify _self_drive.py (deferred to Task #44 / future iter-0033)
+    - modify _closure_invariant.py / _validate_closure_invariant.py (iter-0023/0024 covered)
+    - modify _author_review_packet.py / apply pipeline / supervisor (prior iters covered)
+    - bump pyproject.toml version
+    - introduce new MCP tools
+allowed_files:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_visibility_tui.py
+  - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_visibility_tui.py
+  - agent-loop/active/iteration-0032-visibility-tui-v1105-flavor-b-review/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_closure_invariant.py
+  - scripts/agent_loop_mcp/_validate_closure_invariant.py
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/_author_review_packet.py
+  - scripts/agent_loop_mcp/_release_gate_check.py
+  - scripts/agent_loop_mcp/server.py
+  - scripts/agent_loop_mcp/tool_registry.py
+  - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+  - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+  - scripts/agent_loop_mcp/tools/loop_run_goal.py
+  - scripts/agent_loop_mcp/tools/audit_append_event.py
+  - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/tools/patch_stage_and_dry_run.py
+  - scripts/agent_loop_mcp/tools/patch_apply_consensus_patch.py
+  - scripts/agent_loop_mcp/tools/review_write_and_seal.py
+  - scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+  - scripts/agent_loop_mcp/dispatch_templates/codex_review_schema.json
+  - scripts/agent_loop_mcp/tests/test_closure_invariant.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch_multifile.py
+  - scripts/agent_loop_mcp/tests/test_loop_verify_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_loop_run_goal.py
+  - scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py
+  - scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py
+  - scripts/agent_loop_mcp/tests/test_iter_0018_cross_ai_invariant.py
+  - scripts/agent_loop_mcp/tests/test_iter_0022_base_sha_stamp.py
+  - scripts/agent_loop_mcp/tests/test_iter_0024_per_patch_base_sha.py
+  - scripts/agent_loop_mcp/tests/test_iter_0026_crlf_base_sha.py
+  - run/
+  - wiki/
+  - pyproject.toml
+  - requirements.txt
+max_iterations: 2
+max_patch_size: 400
+fix_author_policy: strict
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: pytest still green after any landed patches
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+  - id: A2
+    description: closure-certificate.yaml exists with overall PASS
+    check: 'python -c "import yaml,sys; c=yaml.safe_load(open(''agent-loop/active/iteration-0032-visibility-tui-v1105-flavor-b-review/closure-certificate.yaml'')); sys.exit(0 if c[''overall'']==''PASS'' else 1)"'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+  - claude_codex_disagree_on_goal_satisfied
+  - closure_cross_verification_failed
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T00:30:00Z'
+  codex_patch_apply_authorized: true
+  scope_signature: 7702ac7284abb2737c0a96d04128e1c48b9a341c146d76f65f43726162e27042

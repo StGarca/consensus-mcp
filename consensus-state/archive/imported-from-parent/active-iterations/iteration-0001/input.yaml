@@ -1,0 +1,152 @@
+schema_version: 1
+iteration_id: iteration-0001
+created_utc: "2026-05-08T00:00:00Z"
+operator_directive_received: "2026-05-08"
+operator_directive_quote: |
+  Use iteration-0000's real defects as iteration-0001 target.
+  Reason: best signal. Known-bounded, real repo impact, already tied to contract validity.
+
+objective: "Resolve iteration-0000 unresolved real defects surfaced by pass-20 (claude-rev-040..048). Mechanical fixes apply; architectural-class findings (claude-rev-043 enum widening, claude-rev-045 audit event names, claude-rev-046 canonical hash convention) propose only and flag for operator + codex review per claude-rev-028 self-patch constraint."
+
+mode: implementation
+
+# ---- Operator-supplied guardrails (verbatim from 2026-05-08 directive) ----
+
+operator_guardrails:
+  - id: G1
+    rule: "Target only unresolved real defects, not already-dispositioned cf-* history."
+    interpretation: |
+      In-scope: claude-rev-040..048 (pass-20 PENDING_OPERATOR_DECISION).
+      Out-of-scope: cf-001..cf-008 (already resolved/deferred per spec section 24).
+      Out-of-scope: claude-rev-049..053 (pass-20 build-time spec ambiguities; operator decides separately).
+  - id: G2
+    rule: "Input packet must include defect list + current validator results."
+    interpretation: |
+      Packet bundles: pass-20 archive yaml (defect bodies), validate-disposition-index-report.yaml,
+      validate-iteration-report.yaml, validate-review-report.yaml, validate-consensus-report.yaml,
+      scope-check-report.yaml, consensus-gate-report.yaml. All produced or refreshed at iteration-0001 boot.
+  - id: G3
+    rule: "Iteration-0001 may propose/apply fixes only if Phase 0 mutating gates are satisfied."
+    interpretation: |
+      Mutating gates required-pass before any artifact mutation:
+        (a) scope_check.py: touched_files subset implementation_scope.allowed_files
+        (b) consensus_gate.py: production_state recomputed; not_ready acceptable for non-production fixes
+        (c) validate_consensus.py: consensus.yaml is well-formed before apply step
+      If any gate blocks: iteration-0001 propose-only (record patches in deferred_decisions; do not apply).
+  - id: G4
+    rule: "Independence audit must mark prior exposure to iteration-0000 artifacts."
+    interpretation: |
+      Both reviewers (codex + claude) are explicitly briefed with iteration-0000 artifacts as the review target.
+      independence_proof_required (section 13) cannot hold; independence_attestation declares
+      other_review_existed_at_invocation behavior, but more importantly, prior-exposure-to-iteration-0000
+      forces all derived findings to corroboration_strength: suggested_by_context per cf-001 audit_log
+      Phase 0 honor-system enforcement.
+  - id: G5
+    rule: "Success metric: defects resolved, validators clean, no new disposition/index drift."
+    interpretation: |
+      Iteration-0001 closes successfully iff:
+        - All claude-rev-040..048 either applied (mechanical) or proposed-with-rationale (architectural)
+        - validate_iteration on iteration-0000/ reports 0 high findings
+        - validate_review on claude-review.yaml reports 0 findings
+        - validate_consensus on consensus.yaml reports 0 findings (architectural fixes pending operator may keep some open)
+        - validate_disposition_index reports 0 findings (must hold across iteration-0001 commits)
+        - smoke harness: 21/21
+        - section 24 + disposition-ledger + archive index remain consistent
+
+# ---- Target ----
+
+target_sections:
+  - "9"    # review schema; claude-rev-041 partially_cleared enum
+  - "13"   # consensus + audit_log + corroborated_by ownership; claude-rev-040, claude-rev-043, claude-rev-045
+  - "7"    # packet schema; claude-rev-046, claude-rev-047
+  - "16"   # phase0_validators list; (out-of-scope per G1 but referenced for context)
+  - "17"   # production gates; (out-of-scope per G1 but referenced for context)
+  - "22"   # metrics; claude-rev-044 indirect (parse error blocks metric reads)
+  - "0"    # done_claim_rule + claude_self_patch_constraint (governance frame)
+
+target_files:
+  iteration_0000_artifacts_to_review:
+    - agent-loop/active/iteration-0000/claude-review.yaml             # claude-rev-040, 041, 042
+    - agent-loop/active/iteration-0000/consensus.yaml                 # claude-rev-043
+    - agent-loop/active/iteration-0000/iteration-outcome.yaml         # claude-rev-044
+    - agent-loop/active/iteration-0000/independence-audit.yaml        # claude-rev-045
+    - agent-loop/active/iteration-0000/review-packet.yaml             # claude-rev-046, 047
+    - agent-loop/active/iteration-0000/codex-review.yaml              # context only; no defects
+    - agent-loop/active/iteration-0000/verification.yaml              # context only
+  pass_20_archive_for_defect_bodies:
+    - agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+  current_validator_results:
+    - agent-loop/state/validate-disposition-index-report.yaml
+    # Validators that produce per-target reports MUST be re-run at iteration-0001 boot
+    # against the iteration-0000 artifacts; orchestrator runs these in update_file_index step.
+
+# ---- Gate state at iteration-0001 boot ----
+
+gate_state:
+  consensus_state_inherited_from_iteration_0000: implementation_ready_observational_only  # known-non-spec value per claude-rev-043
+  production_state: not_ready
+  production_ready: false
+  production_allowed: false
+  rationale: "iteration-0001 is not production-impacting; production gate stays not_ready throughout. Only consensus + scope gates govern."
+
+# ---- Prior review references (post-exposure forcing function) ----
+
+prior_review_refs:
+  - path: agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+    purpose: "Defect bodies. Both reviewers MUST read this; it IS the input."
+    exposure_implication: "All findings derived from this archive are corroboration_strength: suggested_by_context."
+  - path: agent-loop/active/iteration-0000/
+    purpose: "Artifacts under review."
+    exposure_implication: "Same as above; cannot achieve fresh_context."
+
+# ---- Stance assignment ----
+
+reviewer_stance_assignments:
+  codex: implementation_realist
+  claude: methodology_critic
+
+# ---- Implementation scope budget (binding once consensus is built; declared upfront for transparency) ----
+
+proposed_implementation_scope:
+  allowed_files:
+    - agent-loop/active/iteration-0000/claude-review.yaml
+    - agent-loop/active/iteration-0000/consensus.yaml
+    - agent-loop/active/iteration-0000/iteration-outcome.yaml
+    - agent-loop/active/iteration-0000/independence-audit.yaml
+    - agent-loop/active/iteration-0000/review-packet.yaml
+    - agent-loop/active/iteration-0001/**
+    - agent-loop/state/disposition-ledger.yaml                # for marking claude-rev-040..048 disposition
+    - agent-loop/archive/review-passes/index.yaml             # for adding any iteration-0001-produced pass entries
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md  # frontmatter + section 24 ONLY (not architectural sections 1-23)
+  forbidden_files:
+    - "production outputs (audiobooks/**, listen/**, voices/**)"
+    - "spec sections 1-23 architectural rules (gated by claude-rev-028 + claude-rev-001 anti-regression criterion)"
+  allowed_actions:
+    - "edit iteration-0000 artifacts to apply mechanical fixes from claude-rev-040..048"
+    - "propose architectural fixes for claude-rev-043, 045, 046 in deferred_decisions; do not apply"
+    - "run all Phase 0 validators (read-only); record reports under agent-loop/state/"
+    - "update spec frontmatter next_required_action and section 24 status_counts after success"
+  forbidden_actions:
+    - "modify spec sections 1-23"
+    - "promote architectural changes without operator + codex review"
+    - "merge to main"
+    - "render production audio"
+
+# ---- Closure mechanism ----
+
+closure_artifact: agent-loop/active/iteration-0001/iteration-outcome.yaml
+closure_required_metrics:
+  - tokens_per_iteration
+  - context_reuse
+  - review_quality   # incl. independent_finding_rate (will be < 1.0 by construction; both reviewers post-exposure)
+  - outcome_quality
+  - implementation_quality
+
+success_criteria_per_G5:
+  - "all claude-rev-040..048 disposition recorded (applied or proposed-with-rationale)"
+  - "validate_iteration on agent-loop/active/iteration-0000/ -> 0 high findings"
+  - "validate_review on iteration-0000/claude-review.yaml -> 0 findings"
+  - "validate_consensus on iteration-0000/consensus.yaml -> 0 findings OR explicit deferred entries with rationale"
+  - "validate_disposition_index -> 0 findings"
+  - "smoke harness -> 21/21"
+  - "section 24 + disposition-ledger + archive index parse + cross-reference clean"

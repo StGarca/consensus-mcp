@@ -1,0 +1,88 @@
+schema_version: 1
+pilot_id: iteration-0033-fix-iter-0032-findings
+goal:
+  summary: Pre-implementation review of claude-proposed patches for the 4 iter-0032 findings.
+  desired_end_state: |
+    iter-0033 inverts the codex-fix-author cycle: claude authors patches as
+    proposals; codex reviews the proposed patches BEFORE they land on disk.
+    This is workflow #3 hardening (design-then-claude-implements) extended
+    with a pre-commit codex code-review step.
+
+    Reviewer task: read proposed-patches.md (4 unified-diff patches addressing
+    the 4 iter-0032 findings) and evaluate:
+      - Patch 1 (codex-rev-001 + claude-rev-001 HIGH): preflight try/except
+        wrapping the 5 _normalize_relative_to_repo calls, structured
+        dispatch_failed event on OutsideRepoPathError.
+      - Patch 2 (codex-rev-002 + claude-rev-002 MEDIUM): (iteration_id,
+        pass_id) tuple key in _assemble_dispatches.
+      - Patch 3 (claude-rev-003 MEDIUM): Windows case-fold fallback in
+        containment compare.
+      - Patch 4 (claude-rev-004 LOW): folded into Patch 1's end-to-end test.
+
+    Each patch is shown as a unified diff in proposed-patches.md AGAINST the
+    current code (which is on disk in the files listed in allowed_files).
+    NO code on disk currently reflects these patches; the review target is
+    proposed-patches.md itself.
+
+    iter-0033 SUCCESS at this stage = codex emits findings on the proposed
+    patches (regression risk, scope drift, correctness, test coverage). If
+    codex emits findings with patch_proposal: claude evaluates whether to
+    integrate before implementation. If codex emits zero defects:
+    goal_satisfied=true, claude proceeds to implement.
+
+    Implementation (next phase, post-review):
+      - Claude lands all 4 patches per the proposed diffs (with any codex
+        feedback integrated)
+      - Pytest stays green; +2-3 new regression tests
+      - Smoke 60/60
+      - Gates 11/11
+      - This iteration's outcome.yaml is updated post-implementation with
+        the closing state and any implementation deltas from codex feedback.
+  non_goals:
+    - implement any patch before codex pre-review completes
+    - modify scripts/agent_loop_mcp/* outside the 4-file iter-0032 surface
+    - modify run/, wiki/ except this iteration's own dir
+    - introduce new MCP tools
+allowed_files:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_visibility_tui.py
+  - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_visibility_tui.py
+  - agent-loop/active/iteration-0033-fix-iter-0032-findings/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_closure_invariant.py
+  - scripts/agent_loop_mcp/_validate_closure_invariant.py
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/_author_review_packet.py
+  - scripts/agent_loop_mcp/_release_gate_check.py
+  - scripts/agent_loop_mcp/server.py
+  - scripts/agent_loop_mcp/tool_registry.py
+  - scripts/agent_loop_mcp/tools/
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - run/
+  - wiki/
+  - pyproject.toml
+  - requirements.txt
+max_iterations: 2
+max_patch_size: 400
+fix_author_policy: permissive
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: pytest still green after any landed patches
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T00:50:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 7702ac7284abb2737c0a96d04128e1c48b9a341c146d76f65f43726162e27042

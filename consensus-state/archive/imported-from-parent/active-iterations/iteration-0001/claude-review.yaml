@@ -1,0 +1,152 @@
+schema_version: 1
+agent: claude
+stance: methodology_critic
+iteration_id: iteration-0001
+reviewed_packet_sha256: "00a1a3047f83b3d13b67ac23ffcda97cd5eaeca2e5a7bc8d915cf1fe5e543f1f"
+
+overall_position:
+  implementation_ready: false
+  production_ready: false
+  confidence: medium
+
+blocking_objections:
+  - id: "claude-001"
+    severity: blocking
+    claim_class: methodology
+    claim: "Plan does not enforce or even define a corroborated_by emission lint at synthesis time. claude-rev-040 (CORROBORATED_BY_FORBIDDEN) is the same defect class codex-rev-009 (v1.5) tried to eliminate by removing the field from the reviewer schema. The fact iteration-0000 still emitted it shows the rule was textual-only and not gated by anything that fires before the artifact lands. Iteration-0001 patches the artifact (mechanical strip) without addressing the discipline gap that caused the regression. Without a discipline-layer fix, the next iteration will reintroduce it."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "objective + success_criteria_per_G5"
+    evidence: "input.yaml lists claude-rev-040 as a mechanical fix target (line 9). success_criteria_per_G5 stops at 'validate_review on claude-review.yaml -> 0 findings'. validate_review.py CORROBORATED_BY_FORBIDDEN runs only after the file is written. There is no pre-seal lint, no spec-side schema flag forbidding the field at write time, and no operator-readable explanation for how iteration-0000 acquired the field despite codex-rev-009 having promoted to spec sections 9+13 in v1.5 (per archive index). Plan re-treats a recurrence of a known-resolved finding as a one-off mechanical bug."
+    required_change: "input.yaml objective extended with a 'root_cause_investigation' clause for claude-rev-040: identify whether (a) iteration-0000 was authored against pre-v1.5 schema, (b) the codex-rev-009 promotion did not propagate to the reviewer authoring path, or (c) the spec text was ambiguous enough to allow re-emission. Outcome of investigation MUST inform whether the v1.5 promotion was correctly recorded in archive/index.yaml and whether section 9 schema sample needs an explicit 'DO NOT add corroborated_by' comment in the YAML schema example. Mechanical strip is fine as a fix; recurrence-prevention requires the root-cause step."
+  - id: "claude-002"
+    severity: blocking
+    claim_class: methodology
+    claim: "Plan treats claude-rev-043 (consensus enum drift) as a single architectural item to defer for operator+codex review, but the underlying defect class is a discipline gap (no validator gate on consensus enums at the time iteration-0000 was authored). validate_consensus.py now exists and catches it (14 INVALID_ENUM_VALUE), but the plan does not require iteration-0001 to retro-flag the gap as a process finding distinct from the architectural enum-widening question. These are two separate decisions: (1) widen enums vs rewrite the artifact (architectural), and (2) ensure no future iteration consensus.yaml lands without validate_consensus running first (process). Conflating them risks getting (1) right and (2) silently dropped."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "objective + target_sections"
+    evidence: "input.yaml line 9 calls claude-rev-043 'enum widening' only. success_criteria_per_G5 says 'validate_consensus.py reports 0 findings OR explicit deferred entries with rationale' (line 51). 'Explicit deferred entries' lets the architectural decision pend without forcing a corresponding process gate (e.g., 'consensus.yaml MUST pass validate_consensus before being committed' added to spec section 13 or section 20). Same pattern as claude-001: textual rule without commit-time enforcement."
+    required_change: "Split claude-rev-043 into two work items in input.yaml: (a) architectural enum question (defer, propose options A/B/C from pass-20), and (b) process gate (commit-time invocation of validate_consensus on any consensus.yaml). Item (b) is mechanical/process and can land in iteration-0001 without operator architectural review; item (a) defers as currently planned. Without (b), the architectural answer is moot."
+  - id: "claude-003"
+    severity: high
+    claim_class: process
+    claim: "input.yaml itself contains a non-spec enum value (consensus_state_inherited_from_iteration_0000: implementation_ready_observational_only) on line 86, which is precisely the defect class claude-rev-043 surfaces. The plan documents the inheritance with a comment 'known-non-spec value per claude-rev-043' but does not constrain iteration-0001 from emitting the same drift in iteration-0001's own future consensus.yaml. Carrying the bad enum forward as 'inherited state' normalizes the violation."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "gate_state"
+    evidence: "input.yaml line 86: 'consensus_state_inherited_from_iteration_0000: implementation_ready_observational_only  # known-non-spec value per claude-rev-043'. Spec section 13 schema (lines 60-62 of review-packet.yaml excerpt) defines consensus_state enum as 'blocked | implementation_ready | implemented | verified'. The 'observational_only' suffix is ad-hoc. Tagging the violation does not unviolate it; it documents the authors' awareness while letting the value persist."
+    required_change: "Either (a) replace 'implementation_ready_observational_only' on line 86 with a spec-defined enum value plus a side-channel observational flag (matches pass-20 claude-rev-043 option C), or (b) declare in input.yaml that 'inheriting non-spec values from iteration-0000 is part of the defect under investigation, not authoritative state'. Current text reads as authoritative inheritance."
+  - id: "claude-004"
+    severity: high
+    claim_class: process
+    claim: "Anti-regression criterion (section 0 / claude-rev-001) is not invoked anywhere in input.yaml. The plan touches 5+ iteration-0000 artifact files (claude-review.yaml, consensus.yaml, iteration-outcome.yaml, independence-audit.yaml, review-packet.yaml) and proposes spec-frontmatter + section-24 status_counts updates after success (line 128). Section 0 anti_regression_criterion requires consolidation passes touching >5 sections to run validate_disposition_index.py and validate_review.py BEFORE landing, AND that any rule-deletion be accompanied by a 'dropped: <rule-id>' entry in revision_history. The plan's allowed_actions does not require these BEFORE landing, only as part of success_criteria AFTER fixes apply. That ordering inverts the rule."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "allowed_actions + success_criteria_per_G5"
+    evidence: "input.yaml lines 124-128 list allowed_actions with 'edit iteration-0000 artifacts' and 'update spec frontmatter ... AFTER success'. Section 0 anti_regression_criterion text (review-packet.yaml line 311-316): 'Consolidation passes (any patch that touches >5 sections OR removes a behavioral rule) MUST run validate_disposition_index.py and validate_review.py BEFORE landing.' input.yaml's success_criteria run validators AFTER edits, not before."
+    required_change: "Add an explicit pre-land step in input.yaml allowed_actions: 'run validate_disposition_index.py + validate_review.py against current iteration-0000 state BEFORE applying any mechanical fix; record output to agent-loop/state/. Re-run AFTER each mechanical fix and again at iteration close.' Frontmatter status_counts update must additionally be gated by validate_disposition_index post-edit clean run."
+  - id: "claude-005"
+    severity: high
+    claim_class: process
+    claim: "iteration-0001 plan flips iteration-0000 artifact state, but iteration-0000 is the empirical baseline that done_claim_rule second condition refers to ('iteration-0000 dry-run produces empirical metrics in section 22'). After mechanical fixes apply, iteration-0000's metrics block changes shape (parse error fixed, audit-event names canonical, packet_sha256 canonical). This MAY satisfy or MAY break the spec-frontmatter readiness flip prerequisites. The plan does not check, and explicitly disclaims any frontmatter readiness flip ('production gate stays not_ready throughout'). But cf-007 (already deferred) extends done_claim_rule to spec-author frontmatter flips; if iteration-0001's edits incidentally satisfy the conditions for active_contract_readiness flip, an over-eager future pass could flip without dual-agent + operator review. The plan does not lock active_contract_readiness for the duration of iteration-0001."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "gate_state + closure_artifact"
+    evidence: "input.yaml gate_state (lines 85-90) declares 'production_state: not_ready' but says nothing about active_contract_readiness. Spec frontmatter (line 7 of spec) is currently active_contract_readiness: pending_phase_0_empirical_validation. cf-007 (consensus.yaml line 160-168) requires a dedicated readiness-flip review pass for any transition to 'ready'; iteration-0001 does not declare itself a readiness-flip review pass. The risk: iteration-0001 fixes the metrics-parse error AND the canonical hash convention, validators run clean post-edit, and a subsequent automated step sees 'all done_claim_rule conditions met' and flips active_contract_readiness without the dedicated review pass."
+    required_change: "Add an explicit lock in input.yaml gate_state: 'active_contract_readiness MUST remain pending_phase_0_empirical_validation throughout iteration-0001. Any state suggesting 'ready' is a side effect of fixes, not a green light. Frontmatter active_contract_readiness flip requires a separate readiness-flip review pass per cf-007.' Add to forbidden_actions: 'flip active_contract_readiness frontmatter'."
+
+non_blocking_suggestions:
+  - id: "claude-006"
+    severity: medium
+    claim_class: methodology
+    claim: "Pass-20 was self-authored by the orchestrator (claude acting as implementer + reviewer). iteration-0001 inherits its defect classifications (mechanical vs architectural) without a fresh evaluation. Pass-20 severity_gate_replay marked claude-rev-041 as 'low / cosmetic' and claude-rev-042 as 'medium', but those are pass-20 self-classifications. iteration-0001 input.yaml accepts them as ground truth (line 9). At minimum the plan should note that classifications are inherited from a self-review with known bias and may be re-rated during iteration-0001 if mechanical-vs-architectural turns out to be miscategorized."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "objective"
+    evidence: "input.yaml line 9 lists claude-rev-043, 045, 046 as architectural without independent re-classification. Pass-20 archive lines 124-194 contain severity_gate_replay block which IS the only classification record; it was authored by the same agent now planning the fix."
+    suggested_resolution: "Add to input.yaml a clause: 'Mechanical-vs-architectural classifications are inherited from pass-20 (orchestrator self-review). If during iteration-0001 a finding's classification is challenged by either reviewer with evidence, re-classify in disposition-ledger.yaml; do not silently keep pass-20 verdict.'"
+  - id: "claude-007"
+    severity: medium
+    claim_class: process
+    claim: "G2 (input packet must include defect list + current validator results) requires per-target validator reports refreshed at iteration-0001 boot, but input.yaml note line 80 ('orchestrator runs these in update_file_index step') is a placeholder, not an enforced gate. There is no validator-output attestation block in input.yaml that names which reports were generated, when, and with what hashes. If reports are stale or missing, G2 is unverifiable."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "target_files.current_validator_results"
+    evidence: "input.yaml lines 78-82 list only validate-disposition-index-report.yaml; the comment promises orchestrator will rerun the rest, but no required attestation: no 'validator_runs_at_boot' block with sha256s and timestamps."
+    suggested_resolution: "Add to input.yaml a 'validator_run_attestation' block with required fields: report_path, sha256, generated_utc, source_command. Treat absence as G2 not satisfied -> iteration-0001 does not proceed."
+  - id: "claude-008"
+    severity: medium
+    claim_class: methodology
+    claim: "G4 declares blanket post-exposure for all findings ('All findings: corroboration_strength suggested_by_context'). This is honest about iteration-0001 reviewers being briefed with iteration-0000 + pass-20, but it is too coarse: some iteration-0001 findings will be derived from validator output the reviewer ran themselves (independent observation of repo state), others will be straight echoes of pass-20 defect bodies (post-exposure). Treating both as identical 'suggested_by_context' loses signal. Per-finding annotation (independent_observation_of_validator_output vs echo_of_pass_20) would be more honest."
+    file: "agent-loop/active/iteration-0001/input.yaml"
+    section: "operator_guardrails.G4"
+    evidence: "input.yaml lines 36-43: G4 sets 'all derived findings to corroboration_strength: suggested_by_context'. No subdivision by derivation method. Validator-output-derived findings (e.g., 'I ran validate_review and saw 3 findings') are arguably more independent than pass-20-derived findings (e.g., 'I read pass-20 and adopted its defect list')."
+    suggested_resolution: "Refine G4 in input.yaml to distinguish two corroboration sub-strengths: (a) suggested_by_pass_20_archive (the reviewer read pass-20 and the finding originates there), (b) reproduced_via_validator (the reviewer ran the validator and observed the same finding). Both remain non-independent, but they have different fingerprints for a future independence audit."
+
+agreements:
+  - id: "agree-001"
+    with: "input.yaml.objective"
+    claim: "Splitting claude-rev-040..048 into mechanical (apply) vs architectural (propose-only) is sound application of claude-rev-028 self-patch constraint. Architectural changes require operator+codex review."
+  - id: "agree-002"
+    with: "input.yaml.G1"
+    claim: "Excluding claude-rev-049..053 (build-time spec ambiguities) from iteration-0001 scope is correct. Those are operator-decision items distinct from iteration-0000 defects."
+
+disagreements: []
+
+patch_recommendations: []   # methodology critic; no patch_recommendations beyond required_change clauses on blockers
+
+implementation_risks:
+  - id: "risk-001"
+    severity: medium
+    claim_class: process
+    claim: "iteration-0001 fixes iteration-0000 artifacts in place. Once edited, the original empirical baseline is gone. If a future pass needs to re-derive the iteration-0000 metrics from a frozen snapshot, that's no longer possible without git archaeology. Mitigated if a pre-edit copy is committed to archive/iteration-0000-pre-iter-0001-fix/ before any edit."
+    suggested_action: "Add to input.yaml allowed_actions a step: 'snapshot iteration-0000/ to agent-loop/archive/iteration-0000-pre-iter-0001-fix/ BEFORE any mechanical edit; record snapshot sha256s in iteration-0001/iteration-outcome.yaml.snapshots.'"
+  - id: "risk-002"
+    severity: low
+    claim_class: methodology
+    claim: "User prompt to this reviewer attributed the corroborated_by ownership rule to 'claude-rev-009' but the spec and disposition-ledger show it is codex-rev-009. Minor attribution drift, but in a self-reviewing system this kind of drift accumulates and ages into 'we all remember it as claude-rev-009.' Worth flagging now while the trail is fresh."
+    suggested_action: "Add a brief note in iteration-0001 disposition-ledger entry for claude-rev-040: 'parent rule is codex-rev-009 (synthesizer ownership of corroborated_by), promoted to spec sections 9+13 in v1.5.'"
+
+clarifying_questions:
+  - id: "q-001"
+    question: "Spec section 7 does not pin a canonical hash convention for reviewed_packet_sha256 (claude-rev-046). The packet builder and validators use yaml.safe_dump(yaml.safe_load(...)).encode('utf-8') sorted-keys. iteration-0000 reviewers used a different (unspecified) convention. Should iteration-0001 (a) propose the convention as a spec patch deferred for codex review, OR (b) propose AND apply the convention pin as a Phase 0 deliverable bookkeeping item per claude_self_patch_constraint always_allowed list?"
+    ambiguity_type: operator-owned
+    proposed_resolution_method: operator
+    owner: operator
+    blocks: ["implementation_ready"]
+  - id: "q-002"
+    question: "Spec section 13 audit_log canonical event names (claude-rev-045) are similarly under-specified: pass-20 surfaced that iteration-0000 used per-agent prefixes (codex_reviewer_invoked) where canonical is reviewer_invoked + actor field. Pass-20 proposed 3 options (A: fix artifact, B: widen spec, C: both + spec note). iteration-0001 input.yaml line 9 says 'propose only and flag for operator + codex review'. Which option does the operator favor (A, B, or C) so iteration-0001 can pre-stage the proposal artifact?"
+    ambiguity_type: operator-owned
+    proposed_resolution_method: operator
+    owner: operator
+    blocks: ["implementation_ready"]
+
+self_resolved_questions: []
+
+assumptions_challenged:
+  - id: "a-001"
+    assumption: "Pass-20 archive's claim that iteration-0000/iteration-outcome.yaml has an unquoted-colon parse error at line 71 col 44 is correct."
+    challenge_result: cleared
+    evidence: "Ran python yaml.safe_load on agent-loop/active/iteration-0000/iteration-outcome.yaml. Result: yaml.scanner.ScannerError: 'mapping values are not allowed here, line 71, column 44'. Line 71 reads: '    - cf-008: section 13 dangling reference: \"section_15_step\" -> \"section_20_step\".'. Two unquoted colons in the value. claude-rev-044 verified."
+  - id: "a-002"
+    assumption: "Pass-20 archive's claim that iteration-0000/claude-review.yaml emits corroborated_by (claude-rev-040) is correct."
+    challenge_result: cleared
+    evidence: "Read agent-loop/active/iteration-0000/claude-review.yaml line 258: 'corroborated_by: []   # synthesizer populates per section 13'. Field is present (empty list, but present). validate_review.py confirms: CORROBORATED_BY_FORBIDDEN finding emitted on this file. claude-rev-040 verified at the file level. Bonus observation: the inline comment 'synthesizer populates per section 13' shows the author expected the synthesizer to fill the field, which contradicts codex-rev-009's 'remove from reviewer schema' resolution. The author understood that the value would be filled later but did not understand that the FIELD itself must not exist on the reviewer artifact. This is the discipline gap claude-001 names."
+  - id: "a-003"
+    assumption: "iteration-0001 input.yaml does not itself contain non-spec enum values."
+    challenge_result: failed
+    evidence: "input.yaml line 86: 'consensus_state_inherited_from_iteration_0000: implementation_ready_observational_only  # known-non-spec value per claude-rev-043'. The plan documents the violation but propagates it. Failed assumption -> blocking objection claude-003."
+  - id: "a-004"
+    assumption: "Pass-20 self-review bias is mitigated by independence-attestation framing alone."
+    challenge_result: partially-cleared
+    evidence: "Pass-20 archive lines 11-34 (independence_attestation) declares fresh_context: false and acknowledges post-exposure correctly. But the severity_gate_replay block (lines 124-194) makes severity classifications under that same biased authorship and iteration-0001 input.yaml inherits those classifications without re-rating. Framing the bias is necessary but not sufficient; iteration-0001 plan should permit re-classification per claude-006."
+  - id: "a-005"
+    assumption: "Anti-regression criterion (section 0 / claude-rev-001) does not apply to iteration-0001 because it touches iteration-0000 artifacts, not spec sections 1-23."
+    challenge_result: failed
+    evidence: "Spec section 0 anti_regression_criterion text: 'Consolidation passes (any patch that touches >5 sections OR removes a behavioral rule)'. iteration-0001 plan touches 5 iteration-0000 artifact files + spec frontmatter + section 24 + disposition-ledger.yaml + archive/index.yaml = 9 files. The rule's >5-section trigger is shaped for spec sections, but the underlying intent is consolidation-pass discipline. Plan does not invoke the rule explicitly. Failed -> blocking objection claude-004."
+
+no_objection_rationale:
+  required_when_no_blockers: true
+
+independence_attestation:
+  fresh_context: false
+  rationale: "iteration-0001 review target IS iteration-0000 + pass-20 archive; cannot achieve fresh_context per G4. All findings: corroboration_strength suggested_by_context per cf-001 Phase 0 honor-system enforcement. Per claude-008 suggestion, future iterations may want to subdivide post-exposure into pass_20_archive_derived vs validator_output_derived; this review uses validator output for assumption a-001 (yaml.safe_load run) and a-002 (validate_review.py run) which are independent reproductions of pass-20 defect claims, while assumptions a-003, a-004, a-005 are direct readings of input.yaml + spec text."
+  prior_review_exposure:
+    - artifact: agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+      sha256: 6d59608c4c06b4d834a2c7abb9e7f03f15732d19ef99865d93ff5768a8df9416
+      role: "input (defect bodies); not a peer review"
+  peer_reviewer_artifacts_read: []

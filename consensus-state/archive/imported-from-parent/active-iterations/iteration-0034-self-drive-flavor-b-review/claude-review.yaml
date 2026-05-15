@@ -1,0 +1,204 @@
+iteration_id: iteration-0034-self-drive-flavor-b-review
+reviewer_id: claude-iter0034-1
+pass_id: claude-iter0034-1-pass1
+findings:
+- id: claude-rev-001
+  severity: high
+  summary: Confirms codex-rev-001 — patch_size_exceeds_max ignores untracked + unstaged-when-anything-staged
+  citation: scripts/agent_loop_mcp/_self_drive.py:449-467
+  risk: |
+    Verified independently against the cited lines. The logic is:
+      1. `git diff --cached --numstat` (staged only)
+      2. If staged output is empty, fall back to `git diff --numstat HEAD`
+         (tracked-unstaged + tracked-staged, but NOT untracked)
+      3. If staged output is NON-empty, take that branch and DO NOT count
+         unstaged additional changes
+    Two real fail-open paths:
+      a. Operator stages 5 lines, leaves 5000 lines unstaged in tracked
+         files. max_patch_size=1000 → rule does NOT fire (only 5 counted).
+      b. Operator stages anything, adds an enormous untracked file. Rule
+         does NOT fire (untracked never enters either git diff output).
+    Cross-finding agreement with codex-rev-001; "overlap means real bug".
+  recommendation: |
+    Count the union of staged tracked diffs + unstaged tracked diffs +
+    untracked file sizes (via wc -l on each new file). Decide policy on
+    binary files explicitly (currently silently counted as 0; reasonable
+    default). Add regression tests covering: staged-only, unstaged-only,
+    both, untracked-only, mixed.
+  patch_proposal: null
+  patch_not_proposed_reason: |
+    Defer to iter-0035 workflow #4 cycle (claude fix-author with codex
+    pre-implementation review). Multiple call sites + git semantics
+    benefit from codex pre-review of the proposed diff.
+- id: claude-rev-002
+  severity: high
+  summary: Confirms codex-rev-002 — _reviewer_clean returns None on missing goal_satisfied, ignoring blockers
+  citation: scripts/agent_loop_mcp/_self_drive.py:679-697
+  risk: |
+    Verified at the cited lines:
+      def _reviewer_clean(r):
+          if not isinstance(r, dict): return None
+          gs = _extract_goal_satisfied(r)
+          blockers = r.get("blocking_objections") or []
+          if gs is None: return None              # <-- early exit
+          return gs is True and not blockers
+
+    If a reviewer authors `blocking_objections: [...]` but omits
+    `goal_satisfied`, the function returns None. The caller at
+    `if claude_clean is False:` (line 694) uses strict identity check;
+    None ≠ False. Reviewer is not added to `disagreers`. With
+    validator_status="pass", an unresolved blocker fails open.
+
+    This is exactly the contract-boundary kind of defect codex tends to
+    catch (cf. iter-0025 EMITTER gap, iter-0027 wrapper rc drop).
+  recommendation: |
+    Treat non-empty blocking_objections as not-clean regardless of
+    goal_satisfied presence. Suggested order:
+      1. If blockers non-empty → return False
+      2. If gs is None → return None (in-flight, no signal)
+      3. Return gs is True and not blockers (which simplifies to `gs is True`
+         since blockers are empty by step 1's negation)
+  patch_proposal: null
+  patch_not_proposed_reason: |
+    Defer to iter-0035 alongside other fixes.
+- id: claude-rev-003
+  severity: medium
+  summary: Confirms codex-rev-003 — closure_cross_verification_failed silently no-ops on import failure
+  citation: scripts/agent_loop_mcp/_self_drive.py:729-736
+  risk: |
+    Verified at cited lines:
+      try:
+          from agent_loop_mcp._closure_invariant import (
+              check_closure_invariant as _check_inv,
+              last_mutation_from_audit as _lm_from_audit,
+          )
+      except Exception:
+          _check_inv = None
+          _lm_from_audit = None
+      if _check_inv is not None and audit_path.exists(): ...
+
+    Bare `except Exception` catches ImportError, ModuleNotFoundError, AND
+    ANY OTHER EXCEPTION the import might raise. Sets _check_inv=None →
+    line 738 skips the entire closure invariant check with no operator
+    signal. The 9/9 static contract (STOP_RULES_IMPLEMENTED list) remains
+    intact, but RUNTIME coverage drops to 8/9 silently.
+
+    Failure modes: packaging regression that breaks the import; accidental
+    rename/deletion of _closure_invariant.py; circular import; syntax
+    error in _closure_invariant.py.
+  recommendation: |
+    Fail closed: emit a stop_rule entry like
+    `{"rule": "closure_invariant_module_unavailable", "exception": str(exc)}`
+    when the import fails. Operator sees a clear signal; the check is not
+    silently skipped. Optionally narrow the except to (ImportError,
+    ModuleNotFoundError) so unrelated exceptions (e.g., a NameError during
+    module load) surface as a hard failure rather than silent skip.
+  patch_proposal: null
+  patch_not_proposed_reason: |
+    Defer to iter-0035 alongside other fixes.
+- id: claude-rev-004
+  severity: medium
+  summary: Confirms codex-rev-004 — _resolve_referenced_path basename fallback enables drift bypass
+  citation: scripts/agent_loop_mcp/_self_drive.py:350-367
+  risk: |
+    Verified at cited lines:
+      def _resolve_referenced_path(ref_path, iter_dir):
+          p = Path(ref_path)
+          if p.is_absolute(): return p
+          candidate = repo_root / ref_path
+          if candidate.exists(): return candidate
+          return iter_dir / Path(ref_path).name   # basename fallback
+
+    The basename fallback is the bypass. Concrete scenario:
+      - consensus.yaml has reviewed_artifacts.foo = {path: "wiki/notes/foo.md", canonical_sha256: "abc..."}
+      - Real wiki/notes/foo.md was deleted or never existed
+      - Step 2 (repo_root/ref_path).exists() returns False
+      - Step 3 returns iter_dir/foo.md
+      - If iter_dir/foo.md exists AND happens to have hash "abc...", drift
+        check passes — but the path claimed in consensus.yaml is NOT the
+        file that satisfied the hash.
+
+    A malicious consensus.yaml could deliberately use this to launder
+    hash-matched content from one location to another. Even without
+    malice, accidental same-name collisions are realistic in test
+    fixtures or template files.
+  recommendation: |
+    Drop the basename fallback for paths with directory components. Only
+    apply iter_dir-local resolution when ref_path is itself a bare
+    basename (no "/", no "\\") — semantically that's "this is iter-
+    relative." Anything with a directory component MUST resolve under
+    repo_root or be reported as missing. Add a regression test that
+    asserts the fallback does NOT trigger when ref_path contains "/".
+  patch_proposal: null
+  patch_not_proposed_reason: |
+    Defer to iter-0035 alongside other fixes.
+- id: claude-rev-005
+  severity: low
+  summary: Bare except patterns proliferate (audit observation, not blocking)
+  citation: scripts/agent_loop_mcp/_self_drive.py:406-407 + 729-736 + others
+  risk: |
+    `try: ... except Exception: stop_rules_fired.append({"rule": "...", "exception": str(exc)})`
+    appears at line 406-407 (git_check_failed) and line 729-736 (closure
+    invariant import). Both routes log a breadcrumb, but only the
+    git_check_failed path EMITS a stop_rule entry; the closure-invariant
+    one (claude-rev-003) silently no-ops. Inconsistent fail-mode policy
+    across the same file.
+
+    This isn't a fix proposal beyond what claude-rev-003 already
+    recommends; calling out as a maintainability finding. A consistent
+    "any caught exception fires a stop_rule of the form
+    {rule: <something>_unavailable_or_failed, exception: str}" policy
+    would make future audits trivial.
+  recommendation: |
+    Document the fail-mode policy in the module docstring. Apply
+    consistently in any new stop-rule code. Not blocking for iter-0035;
+    address opportunistically when touching adjacent code.
+  patch_proposal: null
+  patch_not_proposed_reason: |
+    Observational; recommendation is policy-doc rather than code patch.
+goal_satisfied: false
+goal_satisfied_rationale: |
+  Cross-AI review caught FOUR genuine fail-open paths in
+  _self_drive.py — the stop-rule subsystem responsible for blocking
+  unsafe transitions. Codex flagged 4 findings; claude verified all 4
+  independently against the cited code and adds claude-rev-005 as a
+  consistency observation.
+
+  Severity breakdown:
+    HIGH: codex-rev-001+claude-rev-001 (patch_size_exceeds_max miscounts)
+          codex-rev-002+claude-rev-002 (blocker fail-open on missing goal_satisfied)
+    MEDIUM: codex-rev-003+claude-rev-003 (closure import silent no-op)
+            codex-rev-004+claude-rev-004 (basename drift bypass)
+    LOW: claude-rev-005 (bare-except policy inconsistency)
+
+  All 4 codex findings had patch_not_proposed_reason citing context
+  limitations (closure_invariant module not embedded in packet,
+  reviewer-schema fixtures absent, etc.). Per operator-locked workflow
+  #4 preference (2026-05-11 memory `feedback_workflow_4_preferred.md`):
+  claude is the fix-author for iter-0035, with codex pre-implementation
+  review of the proposed patches BEFORE landing.
+
+  No mutation in iter-0034; this iteration closes as the review-only
+  half of the codex-fix-author cycle.
+blocking_objections: []
+independence_attestation:
+  method: cross_reviewer_independent_seal
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: false
+  notes: |
+    Claude saw codex-iter0034-1-pass1's sealed review before authoring
+    this review. claude-rev-001..004 are explicit confirmations of
+    codex's 4 findings, each verified independently against the cited
+    code (per "no assumptions" rule). claude-rev-005 is an independent
+    consistency observation claude noted while verifying claude-rev-003.
+  input_sources:
+    - agent-loop/active/iteration-0034-self-drive-flavor-b-review/codex-review.yaml
+    - agent-loop/active/iteration-0034-self-drive-flavor-b-review/review-packet.yaml
+    - scripts/agent_loop_mcp/_self_drive.py (live disk, post-iter-0033)
+review_target_hash: dbe1e7f6ffd8a0d26332510eff50d5ccebd0e825e0892a1611919fa01a0ee64b
+sealed_at_utc: '2026-05-11T01:50:00Z'
+actor:
+  id: claude-iter0034-1
+  model_family: claude
+  role: implementation_critic
+  pass_id: claude-iter0034-1-pass1

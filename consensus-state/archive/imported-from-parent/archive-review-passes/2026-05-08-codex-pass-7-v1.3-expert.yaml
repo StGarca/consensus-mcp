@@ -1,0 +1,69 @@
+schema_version: 1
+pass_id: pass-7-codex-v1.3-expert
+reviewer: codex
+reviewed_utc: "2026-05-08T00:00:00Z"
+spec_under_review: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.3-ai-contract"
+depth: "execution-contract / archive-index consistency / AI-only signal-to-noise"
+overall_verdict: >
+  v1.3 is materially stronger than v1.2: it applies the budget fix,
+  adds production-state transitions, moves review bodies into archive
+  files, converts section 24 to an index, and introduces namespaced
+  future finding ids. Remaining issues are mostly consistency and
+  enforceability gaps around index-only semantics, MCP/agent boundary,
+  and transition precision.
+findings:
+  high:
+    - id: codex-rev-001-section-24-behavior-leak
+      claim: "Section 24 is declared non-contract/index-only, but the tradeoffs block contains behavioral contract text: dual_reviewer_corroboration auto-promotes duplicate canonical findings."
+      evidence: "section 24 tradeoffs.dual_reviewer_corroboration"
+      risk: "An implementation that obeys sections 1-23 only will miss a behavioral rule that changes consensus outcomes."
+      required_change: "Promote the corroboration rule to section 13 consensus rules or section 22 metrics; section 24 should keep only an index pointer."
+    - id: codex-rev-002-invalid-disposition-target
+      claim: "Section 24 maps rev-005 to promoted_to: section_22_failure_modes, but no such section heading or anchor exists."
+      evidence: "section 24 resolved entry for rev-005; heading scan shows section 22 is Metrics only."
+      risk: "A validator that checks promoted_to references will fail, or worse, silently accept a dead reference."
+      required_change: "Retarget rev-005 to an existing section or create an explicit failure-mode subsection in the active contract."
+  medium:
+    - id: codex-rev-003-pass6-id-lifecycle-hidden
+      claim: "Pass 6 contains rev-074..rev-080 findings, but section 24 id_reservations only covers rev-001..rev-073 plus future namespaced prefixes."
+      evidence: "archive pass-6 new_findings rev-074..rev-080; section 24 id_reservations omit that range."
+      risk: "Agents can infer missing stale context or collide with legacy ids during migration to namespaced ids."
+      required_change: "Add rev-074..rev-080 to section 24 id reservations as archived pre-namespacing pass-6 ids, or migrate them to claude-rev-* in the archive."
+    - id: codex-rev-004-mcp-agent-call-boundary-fuzzy
+      claim: "Section 3 still lists shared project MCP -> later agent.call adapter, which can be read as MCP eventually orchestrating agents."
+      evidence: "section 3 topology lists 'later agent.call adapter' under shared project MCP."
+      risk: "This blurs the non-goal that MCP is not the orchestrator and can lead to duplicated control loops."
+      required_change: "Clarify that any agent.call surface is transport-only and may be invoked only by the external orchestrator."
+    - id: codex-rev-005-production-approval-transition-preconditions-thin
+      claim: "ready_pending_operator_approval_to_approved checks operator approval validity/scope but does not explicitly require current_state == ready_pending_operator_approval or production_ready_if still true at transition time."
+      evidence: "section 17 state_transitions."
+      risk: "A simplistic gate implementation may approve from stale ready state or after readiness conditions changed."
+      required_change: "Add current_state and current readiness/hash preconditions to the approval transition."
+    - id: codex-rev-006-runtime-manual-active-but-undefined
+      claim: "Section 19 keeps runtime: manual in the active schema while rev-061 is deferred as unresolved semantics."
+      evidence: "section 19 runtime enum; section 24 deferred rev-061."
+      risk: "Validators and orchestrator adapters cannot know whether manual runtime is allowed, replayable, or auditable."
+      required_change: "Define manual runtime semantics or remove manual from the active enum until needed."
+  low:
+    - id: codex-rev-007-archive-index-mojibake
+      claim: "archive review-passes/index.yaml contains mojibake in duplicate-observation text."
+      evidence: "archive index duplicates_observed uses mojibake for arrows and section symbols."
+      risk: "Low execution risk, but it damages exact-string comparison and AI readability."
+      required_change: "Normalize archive index text to ASCII even though archive YAMLs may use UTF-8."
+    - id: codex-rev-008-success-definition-still-prose
+      claim: "Section 1 success definition remains prose/list based while v1.3 says the spec is AI-only and section 24 defers rev-064 as cosmetic."
+      evidence: "section 1 success block; section 24 deferred rev-064 rationale."
+      risk: "Low, but it keeps a duplicate unmeasured success surface next to section 22 metrics."
+      required_change: "Either replace section 1 success with references to hard invariants and section 22 metrics, or mark it explicitly non-normative."
+positive_assessment:
+  - "v1.3 correctly fixed the sections 1-24 ambiguity by making section 24 index-only."
+  - "v1.3 correctly reconciled self-resolution peer-question budget with section 20 call_budget."
+  - "v1.3 correctly added peer-question taint handling and sealed-review semantics."
+  - "v1.3 correctly externalized review bodies to archive files and reduced spec-body noise."
+  - "The archive files exist; the archive pointer is not theoretical."
+recommendation: >
+  Do not restart broad spec polish. Apply the high findings and the narrow
+  transition/MCP-boundary fixes, then move to Phase 0 validators and the
+  synthetic iteration-0000 dry run. The document is now close enough that
+  implementation feedback will be more valuable than another full redesign pass.

@@ -1,0 +1,139 @@
+schema_version: 1
+iteration_id: iteration-0005-cf-007-readiness-flip
+audit_purpose: section 13 independence_proof_required; this iteration is the dedicated
+  cf-007 readiness-flip review pass per spec section 0 done_claim_rule applies_to_frontmatter_readiness_flip
+  rule. G4 forced post-exposure carried.
+global_independence_attestation:
+  achievable: false
+  reason: "G4 carried. Both reviewers explicitly briefed on:\n  - all 4 cf-007 preconditions\
+    \ evidence\n  - iteration-0000..0004 artifacts (full arc)\n  - pass-20 archive\n\
+    \  - v1.7.9 spec (section 0 cf-007 + done_claim_rule)\n  - disposition-ledger\n\
+    fresh_context: false; corroboration_strength: suggested_by_context.\n"
+audit_log:
+- utc: '2026-05-08T00:00:00Z'
+  event: review_packet_built
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0005-cf-007-readiness-flip/review-packet.yaml
+  sha256: 9a3d5c3c1d06404c580f3d7c8a2844eebe9017428ac77c9757de9eab97ab2275
+- utc: '2026-05-08T00:00:00Z'
+  event: sealed_inputs_recorded
+  actor: orchestrator
+  sealed_inputs:
+  - artifact: agent-loop/active/iteration-0005-cf-007-readiness-flip/input.yaml
+    sha256: e442675e83051c37e93f034ad481c59a9e3652802079baff0f9551796e03b3c8
+  - artifact: agent-loop/active/iteration-0005-cf-007-readiness-flip/review-packet.yaml
+    sha256: 9a3d5c3c1d06404c580f3d7c8a2844eebe9017428ac77c9757de9eab97ab2275
+- utc: '2026-05-08T00:00:00Z'
+  event: reviewer_invoked
+  actor: codex
+  artifact: agent-loop/active/iteration-0005-cf-007-readiness-flip/codex-review.yaml
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+  invocation_protocol:
+    runtime: subagent_dispatch
+    fresh_context: false
+    fresh_context_false_reason: G4 forced post-exposure
+    reviewer_brief_excluded:
+    - claude reviewer's brief
+    - claude reviewer's review.yaml
+    reviewer_brief_included:
+    - agent-loop/active/iteration-0005-cf-007-readiness-flip/input.yaml
+    - agent-loop/active/iteration-0005-cf-007-readiness-flip/review-packet.yaml
+    - agent-loop/active/iteration-0000..0004/* (full 5-iteration arc)
+    - agent-loop/state/disposition-ledger.yaml
+    - agent-loop/state/validate-disposition-index-report.yaml
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+- utc: '2026-05-08T00:00:00Z'
+  event: reviewer_invoked
+  actor: claude
+  artifact: agent-loop/active/iteration-0005-cf-007-readiness-flip/claude-review.yaml
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+  invocation_protocol:
+    runtime: subagent_dispatch
+    fresh_context: false
+    fresh_context_false_reason: G4 forced post-exposure
+    reviewer_brief_excluded:
+    - codex reviewer's brief
+    - codex reviewer's review.yaml
+    reviewer_brief_included:
+    - agent-loop/active/iteration-0005-cf-007-readiness-flip/input.yaml
+    - agent-loop/active/iteration-0005-cf-007-readiness-flip/review-packet.yaml
+    - agent-loop/active/iteration-0000..0004/* (full 5-iteration arc)
+    - agent-loop/state/disposition-ledger.yaml
+    - agent-loop/state/validate-disposition-index-report.yaml
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+- utc: '2026-05-08T00:00:00Z'
+  event: review_returned_and_sealed
+  actor: codex
+  artifact: agent-loop/active/iteration-0005-cf-007-readiness-flip/codex-review.yaml
+  sha256: ee05404843f03c08d4ef631455e16cdea4eea30ff07ddfa415bbf1f6db4a1bda
+  validator_status: validate_review.py 0 findings
+  flip_approved: true
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+    forced_post_exposure: true
+- utc: '2026-05-08T00:00:00Z'
+  event: review_returned_and_sealed
+  actor: claude
+  artifact: agent-loop/active/iteration-0005-cf-007-readiness-flip/claude-review.yaml
+  sha256: 13435863c72beed50b5ca6c088f1883b5978b4165c6612c5e4b03a68fa675dbd
+  validator_status: validate_review.py 0 findings
+  flip_approved: true
+  independence_attestation:
+    seal_order_position: 2
+    other_review_existed_at_invocation: true
+    other_review_sealed_sha256: ee05404843f03c08d4ef631455e16cdea4eea30ff07ddfa415bbf1f6db4a1bda
+    reviewer_could_have_seen_other_review: false
+    reason_could_not_see: subagent isolation
+    forced_post_exposure: true
+  sha256_pre_correction_note: Original sealed sha256 '1449b513057ac17121d681522e34f43e55969112dd83733075a49a592637ecb0'
+    reflected claude review yaml at original seal time. Post-seal correction (corrected
+    reviewed_packet_sha256 from packet self-hash to full canonical) shifted claude
+    review canonical to '13435863c72beed50b5ca6c088f1883b5978b4165c6612c5e4b03a68fa675dbd'.
+    Audit chain updated.
+- utc: '2026-05-08T00:00:00Z'
+  event: both_reviews_sealed
+  actor: orchestrator
+  note: UNANIMOUS flip_approved=true with identical proposed values; cf-007 precondition
+    4 (dual-reviewer) MET; precondition 5 (operator) PENDING
+- utc: '2026-05-08T00:00:00Z'
+  event: operator_authorization_received
+  actor: operator
+  authorization_form_response: authorize defaults
+  interpretation: approve all reviewer-proposed values + use suggested rationale template
+  effect: cf-007 precondition 5 MET
+- utc: '2026-05-08T00:00:00Z'
+  event: staged_3_changes
+  actor: orchestrator
+  staging_dir: agent-loop/state/iteration-0005-cf-007-readiness-flip-staging/
+  staged_files:
+  - spec.md (frontmatter v1.7.9->v1.8.0 + section 23 historical-inline annotation
+    + revision_history v1.8.0 entry)
+  - ledger.yaml (spec_version v1.7.9->v1.8.0 + v1_8_0_application_log block)
+- utc: '2026-05-08T00:00:00Z'
+  event: canonical_006_dry_run_executed
+  actor: orchestrator
+  validator: validate_disposition_index.py against staged spec md
+  findings: 0
+  gate_decision: APPROVED_FOR_APPLY
+- utc: '2026-05-08T00:00:00Z'
+  event: apply_step_landed
+  actor: orchestrator
+  effect: staged content copied to real spec md + real ledger; rolled-back-on-fail
+    mechanism not triggered
+  active_contract_readiness_after: phase_0_validated
+  do_not_treat_as_phase_0_ready_after: false
+  contract_version_after: multi-agent-consensus-mcp-v1.8.0
+- utc: '2026-05-08T00:00:00Z'
+  event: iteration_closed
+  actor: orchestrator
+  closing_state_post_apply: implementation_ready_apply_landed
+  cf_007_all_5_preconditions_met: true
+  governance_milestone_closed: true

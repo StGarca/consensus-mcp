@@ -1,0 +1,39 @@
+schema_version: 1
+iteration_id: iteration-0022-end-to-end-fix-loop
+last_mutation:
+  actor:
+    id: codex-iter0022-1
+    model_family: codex
+    role: fix_author
+    pass_id: codex-iter0022-1-pass1
+  patch_id: codex-rev-001-patch
+  files_touched:
+  - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+  base_sha: 0c9507575598bfebc25afe42eaa27358f967fc1ccbea287af7ae695f07adb94b
+  post_sha: 6e33539908dfdea969f5790e879e5c2af2de0262d6341af670d405b8ff9d6e83
+  unified_diff_sha256: 2bc80200e18397189c5584f0352e3e81f77500559f8e266ddd6bb6e690c8e3fb
+  timestamp: '2026-05-10T18:47:22Z'
+  event: apply_step_landed
+  timestamp_utc: '2026-05-10T18:47:22Z'
+  event_id: 2026-05-10T18:47:22Z_apply_step_landed_codex-iter0022-1
+  effect: codex_patch_applied
+  files_modified:
+  - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+  codex_finding_id: codex-rev-001
+closing_verdict:
+  actor:
+    id: claude-iter0022-2
+    model_family: claude
+    role: closer
+    pass_id: claude-iter0022-2-pass1
+  review_target_hash: 6e33539908dfdea969f5790e879e5c2af2de0262d6341af670d405b8ff9d6e83
+  created_at_utc: '2026-05-10T18:50:00Z'
+  review_scope_hash: null
+invariant_checks:
+  cross_family: PASS
+  hash_match: PASS
+  freshness: PASS
+overall: PASS
+generated_utc: '2026-05-10T18:52:22Z'

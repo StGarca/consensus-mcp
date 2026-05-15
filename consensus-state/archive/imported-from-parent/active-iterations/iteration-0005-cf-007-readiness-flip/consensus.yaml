@@ -1,0 +1,244 @@
+schema_version: 1
+iteration_id: iteration-0005-cf-007-readiness-flip
+created_utc: '2026-05-08T00:00:00Z'
+consensus_state: implementation_ready
+production_state: not_ready
+review_consensus: true
+implementation_ready: true
+production_ready: false
+production_allowed: false
+observational_mode: false
+cf_007_consensus:
+  flip_approved_unanimous: true
+  proposed_new_readiness_value_unanimous: phase_0_validated
+  proposed_do_not_treat_as_phase_0_ready_value_unanimous: false
+  reviewer_alignment:
+    codex_flip_approved: true
+    claude_flip_approved: true
+    codex_proposed_value: phase_0_validated
+    claude_proposed_value: phase_0_validated
+    unanimous: true
+    reviewer_concern_alignment: 'Both reviewers independently arrived at "phase_0_validated"
+      rather than naked
+
+      "ready" because the iteration-0000 has 7 LOW grandfathered residuals.
+
+      "phase_0_validated" matches section 23 implementation_status.validated semantics
+
+      (implemented + tested against real-world inputs in iteration-0000+); naked "ready"
+
+      reads as "no findings" to a future reader. Both also chose preserve-do_not_treat-with-false
+
+      over remove-field (audit-trail preservation per codex-q-001 precedent of preserve+provenance).
+
+      '
+  cf_007_preconditions_status:
+    precondition_1_validate_disposition_index_clean: VERIFIED (0 findings; codex +
+      claude both read state report directly)
+    precondition_2_iteration_0000_metrics_in_section_22: VERIFIED (all 5 metric blocks
+      present with required sub-fields per iter-0002 change-09; null token values
+      acceptable since iteration-0000 was observational)
+    precondition_3_cf_findings_dispositioned: VERIFIED (cf-001..008 + iteration_0004_dispositions
+      all 11 items; pending_operator_decision 0 + pending_iteration_0001_canonical_findings
+      0)
+    precondition_4_dual_reviewer_pass: MET (this iteration; both reviewers approved)
+    precondition_5_operator_explicit_authorization: PENDING (this iteration's apply
+      step is BLOCKED on operator response to authorization form below)
+reviewer_concerns_acknowledged:
+- id: claude-iter0005-cosmetic-flip-risk
+  source: claude reviewer
+  summary: flip is operationally near-cosmetic; only validate_disposition_index.py
+    reads active_contract_readiness (passthrough echo). production_ready_if (section
+    17) does NOT depend on the value. Operator approval should explicitly name flip
+    as governance milestone, not behavior unlock.
+  severity: low
+  status: surfaced_to_operator_authorization_form
+- id: codex-iter0005-post-flip-ambiguity
+  source: codex reviewer
+  summary: post-flip ambiguity about what gets unblocked downstream; should be explicit
+    in revision_history rationale
+  severity: low
+  status: surfaced_to_operator_authorization_form
+- id: claude-iter0005-section-23-stale-forbidden-now
+  source: claude reviewer
+  summary: 'section 23 forbidden_now: active_contract_readiness flip language inside
+    v1.7.2 phase_0_next_step block; superseded by v1.7.3 status field but the line
+    is still visible. Apply step should annotate as historical or replace block.'
+  severity: low
+  status: pending_apply_step_decision_per_operator
+canonical_findings:
+- canonical_id: canonical-iter0005-001
+  canonical_finding_key:
+    file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+    section: frontmatter
+    claim_class: process
+    normalized_claim_hash: cf_007_flip_approved_unanimously_pending_operator_authorization
+  source_findings:
+  - codex:codex-iter0005-flip-approval
+  - claude:claude-iter0005-flip-approval
+  merge_method: deterministic_key
+  severity: low
+  status: accepted
+  required_change: 'Flip frontmatter active_contract_readiness from pending_phase_0_empirical_validation
+
+    to phase_0_validated; flip do_not_treat_as_phase_0_ready from true to false; bump
+
+    contract_version + status to v1.8; add revision_history v1.8 entry recording the
+
+    flip + operator rationale + cf-007 review pass evidence (both reviewer sha256s).
+
+    '
+  apply_status: applied_post_operator_authorization_2026_05_08
+  operator_authorization_form: see consensus.operator_authorization_form_for_apply
+operator_authorization_form_for_apply:
+  status: RESOLVED_2026_05_08
+  operator_response: authorize defaults (approve all reviewer-proposed values + use
+    suggested rationale template)
+  apply_landed: true
+  required_for_apply: false_post_response
+  forbidden_apply_without_response: false_post_response
+  field_1_operator_explicit_authorization:
+    type: yes_no
+    description: Authorize claude to apply the readiness flip to real spec frontmatter?
+    operator_response_pending: false
+    operator_response_received_utc: '2026-05-08T00:00:00Z'
+    operator_response: authorize_defaults_shortcut_applied
+  field_2_operator_supplied_rationale:
+    type: text
+    description: 'Per spec section 0 done_claim_rule: ''operator records the transition
+      with explicit rationale in revision_history''. Provide the rationale that will
+      land in the v1.8 revision_history entry.'
+    operator_response_pending: false
+    suggested_template_for_operator_to_edit_or_replace: "iteration-0000..0004 arc\
+      \ complete. cf-007 readiness-flip review (iteration-0005)\nran 2026-05-08 with\
+      \ unanimous reviewer approval (codex + claude both flip_approved=true,\nboth\
+      \ proposed_new_readiness_value=phase_0_validated). All 4 spec preconditions\
+      \ met:\nvalidate_disposition_index 0 findings; iteration-0000 has all \xA722\
+      \ metric blocks;\nall cf-* + 11 pending dispositions cleared; dual-reviewer\
+      \ pass complete.\niteration-0000 retains 7 LOW grandfathered residuals (HASH_CHAIN_BROKEN\
+      \ x2 +\nAUDIT_EVENT_NAME_NON_CANONICAL x3 + PACKET_SHA_HISTORICAL x2) acknowledged\
+      \ via\nv1.7.4 + v1.7.7 grandfather clauses; \"phase_0_validated\" rather than\
+      \ naked \"ready\"\nreflects this. Flip is governance milestone (closes the polishing-the-loop\
+      \ phase\nper operator project guidance) not a behavior unlock; only validate_disposition_index\n\
+      reads the field today.\n"
+    operator_response_received_utc: '2026-05-08T00:00:00Z'
+    operator_response: authorize_defaults_shortcut_applied
+  field_3_operator_authorizes_new_readiness_value:
+    type: string
+    description: Confirm or override reviewer-proposed value 'phase_0_validated'.
+    reviewer_proposed: phase_0_validated
+    operator_response_pending: false
+    operator_response_received_utc: '2026-05-08T00:00:00Z'
+    operator_response: authorize_defaults_shortcut_applied
+  field_4_operator_authorizes_do_not_treat_change:
+    type: bool_or_remove
+    description: 'Confirm or override reviewer-proposed value: do_not_treat_as_phase_0_ready:
+      true -> false (preserve field; flip value).'
+    reviewer_proposed: false
+    operator_response_pending: false
+    operator_response_received_utc: '2026-05-08T00:00:00Z'
+    operator_response: authorize_defaults_shortcut_applied
+  field_5_operator_decision_on_section_23_forbidden_now_line:
+    type: enum {leave_as_historical_in_superseded_block, annotate_as_historical_inline,
+      remove_line, defer}
+    description: 'Section 23 v1.7.2 phase_0_next_step block (already marked superseded_by:
+      v1_7_3) contains forbidden_now: active_contract_readiness flip text. After flip,
+      this line is contradictory. Pick handling.'
+    reviewer_recommendation: annotate_as_historical_inline
+    operator_response_pending: false
+    operator_response_received_utc: '2026-05-08T00:00:00Z'
+    operator_response: authorize_defaults_shortcut_applied
+accepted_changes:
+- id: change-01
+  source_findings:
+  - canonical-iter0005-001
+  edit:
+    file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+    old_string: '<frontmatter status: draft-v1.7.9-ai-contract; active_contract_readiness:
+      pending_phase_0_empirical_validation; do_not_treat_as_phase_0_ready: true>'
+    new_string: '<status: draft-v1.8.0-ai-contract; active_contract_readiness: phase_0_validated;
+      do_not_treat_as_phase_0_ready: false; contract_version: multi-agent-consensus-mcp-v1.8.0;
+      revision_history: + v1.8.0 entry recording cf-007 flip + operator-supplied rationale>'
+  description: cf-007 readiness flip per unanimous reviewer approval + operator authorization
+    (PENDING)
+  apply_status: applied_post_operator_authorization_2026_05_08
+- id: change-02
+  source_findings:
+  - canonical-iter0005-001
+  edit:
+    file: agent-loop/state/disposition-ledger.yaml
+    old_string: '<spec_version: draft-v1.7.9-ai-contract>'
+    new_string: '<spec_version: draft-v1.8.0-ai-contract; + v1_8_0_application_log
+      block recording flip + reviewer sha256s + operator rationale>'
+  description: Ledger spec_version bump + v1.8.0 application log
+  apply_status: applied_post_operator_authorization_2026_05_08
+- id: change-03
+  source_findings:
+  - canonical-iter0005-001
+  edit:
+    file: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+    old_string: '<section 23 phase_0_next_step block forbidden_now: active_contract_readiness
+      flip line>'
+    new_string: '<per operator field_5 decision: e.g., annotate inline as ''historical
+      pre-cf-007 forbidden_now; cf-007 flip pass authorized in v1.8.0''>'
+  description: Section 23 stale-forbidden_now handling per operator field_5 decision
+  apply_status: applied_post_operator_authorization_2026_05_08
+apply_order:
+  rule: validators_first_then_apply_BLOCKED_ON_OPERATOR_AUTHORIZATION
+  staging_dir: agent-loop/state/iteration-0005-cf-007-readiness-flip-staging/
+  steps:
+  - 1. Iteration-0005 closes implementation_ready=true with apply step BLOCKED
+  - 2. Operator fills operator_authorization_form_for_apply
+  - 3. Operator authorizes apply
+  - 4. Claude stages 3 changes to staging dir
+  - 5. canonical-006 dry-run validators on staged spec md
+  - '6. If clean: copy to real; verify; close apply'
+  - '7. Else: regress; do not flip; surface dry-run findings'
+implementation_scope:
+  allowed_files:
+  - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+  - agent-loop/state/disposition-ledger.yaml
+  - agent-loop/active/iteration-0005-cf-007-readiness-flip/**
+  - agent-loop/state/iteration-0005-cf-007-readiness-flip-staging/**
+  forbidden_files:
+  - production outputs
+  - spec sections 1-23 outside section 23 v1.7.2 phase_0_next_step block
+  - frontmatter active_contract_readiness without operator field_1 = yes
+  allowed_actions:
+  - WRITE iteration-0005 closure artifacts (verification + iteration-outcome)
+  - WRITE operator_authorization_form_for_apply for operator to respond to
+  - 'AFTER operator authorization: stage + dry-run + apply 3 changes'
+  forbidden_actions:
+  - flip active_contract_readiness without operator field_1 = yes
+  - render production audio
+  - merge to main
+  - apply patches without canonical-006 dry-run gate
+active_contract_readiness_lock:
+  locked_value: pending_phase_0_empirical_validation
+  locked_for_iteration_duration_unless_operator_authorizes: true
+  expected_value_post_operator_authorization: phase_0_validated
+rejected_changes:
+- id: naked_ready_value_for_active_contract_readiness
+  reason: Both reviewers independently rejected naked 'ready'; chose 'phase_0_validated'
+    to reflect 7 LOW grandfathered residuals on iteration-0000
+- id: remove_do_not_treat_as_phase_0_ready_field
+  reason: Both reviewers chose flip-value-not-remove for audit trail preservation
+    per codex-q-001 precedent
+deferred_decisions: []
+unresolved_disagreements: []
+checks_required:
+- id: validate_review_codex_iter0005
+  check_id: validator.validate_review
+  status: passed
+- id: validate_review_claude_iter0005
+  check_id: validator.validate_review
+  status: passed
+- id: validate_consensus_iter0005
+  check_id: validator.validate_consensus
+  expected: 0_findings
+- id: dry_run_validators_on_staged_flip
+  check_id: validator.staged_dry_run
+  status: BLOCKED_PENDING_OPERATOR_AUTHORIZATION
+- id: post_apply_validate_disposition_index
+  check_id: validator.validate_disposition_index
+  status: BLOCKED_PENDING_OPERATOR_AUTHORIZATION

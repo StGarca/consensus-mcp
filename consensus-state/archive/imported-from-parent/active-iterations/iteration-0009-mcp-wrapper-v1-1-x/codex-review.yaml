@@ -1,0 +1,28 @@
+iteration_id: iteration-0009-mcp-wrapper-v1-1-x
+reviewer_id: codex-iter0009-1
+pass_id: codex-iter0009-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: review-packet.yaml describes an in-scope thin reviewer.dispatch_codex
+  wrapper over _dispatch_codex.main, server registration, behavior-level argv/return/stdout
+  tests, and all five acceptance gates passing including tools/list visibility and
+  no dispatch_codex regression.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.129.0
+  prompt_sha256: b0a614243b628456ce25bebcfc3674081e28d6121932a4629621581de5cb2833
+  output_sha256: 05e5e2b553ff5ee5364d36c691399600fbc099a970f32464a4236f4ca93a6ed7
+  schema_sha256: 1d2778531d65aeb7aa50197c65b1e8771567232dc2ae1fdab7a04da61c1041ac
+  goal_packet_sha256: dd4c61299b687f91581228fdced90600230ff9e2a2306c09651fe8896bea221a
+  scope_signature: bf0febb01c9f6a995342688658ce514b29a336268222959742e16ea4db0ab3eb
+sealed_at_utc: '2026-05-10T02:08:39Z'
+packet_sha256: 565ce44bb9277021fe3f7be206a6e182326e358e49311c6c46291a7b524a5ae0

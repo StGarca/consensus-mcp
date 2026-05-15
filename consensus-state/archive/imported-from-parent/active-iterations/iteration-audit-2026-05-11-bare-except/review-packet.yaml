@@ -1,0 +1,220 @@
+defect_target:
+  files:
+  - agent-loop/active/iteration-audit-2026-05-11-bare-except/review-target.md
+  base_sha: efe5344f57355ea74eaa035a4aa2257d3f8493f17ce3cfc1e301433e30999376
+  touched_files_contents:
+    agent-loop/active/iteration-audit-2026-05-11-bare-except/review-target.md: "#\
+      \ Bare-except / broad-except audit — agent-loop policy sweep\n\nAudit dimension:\
+      \ **bare-except** (overly-broad `except Exception:` or `except:` that silences\
+      \ errors and hides defects).\n\n## Audit question for codex\n\nSweep the agent_loop_mcp\
+      \ package for `except` clauses that catch too widely. Specific concerns (non-exclusive):\n\
+      \n1. **`except Exception:` with `pass`** — silently absorbs all errors including\
+      \ programming bugs (TypeError, AttributeError, KeyError) that should surface\
+      \ during dev.\n2. **`except Exception:` with `return None` / `return {}` / `return\
+      \ False`** — converts ANY exception (including KeyboardInterrupt-adjacent or\
+      \ assertion failures) into a successful-looking sentinel. Caller can't tell\
+      \ \"no data\" from \"code is broken\".\n3. **`except Exception as exc:` that\
+      \ logs `str(exc)` only** — drops the traceback. Caller sees a one-line error\
+      \ and never finds out where the bug actually lives.\n4. **Catching `Exception`\
+      \ when only `OSError`/`yaml.YAMLError`/`subprocess.CalledProcessError` should\
+      \ be expected** — pulls in unintended sibling classes (e.g., RecursionError,\
+      \ MemoryError, TypeError-from-mismatched-API).\n5. **Catching `Exception` to\
+      \ gate a fallback when a narrower exception would suffice** — e.g., a `_read_yaml_or_empty`\
+      \ that catches `Exception` instead of `(OSError, yaml.YAMLError, UnicodeDecodeError)`.\
+      \ A bug in yaml parsing logic itself becomes \"file unreadable\" and the caller\
+      \ silently uses an empty dict.\n\nclaude-rev-005 (iter-0034) flagged this as\
+      \ a policy-inconsistency theme. This audit is the comprehensive sweep across\
+      \ all `agent_loop_mcp/*.py` files (excluding tests and top-level CLI exception\
+      \ handlers — see Out-of-scope).\n\n## Files in scope (excerpts below)\n\n- `scripts/agent_loop_mcp/_self_drive.py`\n\
+      - `scripts/agent_loop_mcp/_dispatch_codex.py`\n- `scripts/agent_loop_mcp/_visibility_watchdog.py`\
+      \ — note: bare-except already narrow throughout (OSError / JSONDecodeError /\
+      \ ValueError / TypeError); no findings expected\n- `scripts/agent_loop_mcp/_visibility_tui.py`\
+      \ — note: already narrow (OSError / json.JSONDecodeError / (ValueError, TypeError)\
+      \ / KeyboardInterrupt); no findings expected\n- `scripts/agent_loop_mcp/_author_review_packet.py`\n\
+      - `scripts/agent_loop_mcp/_closure_invariant.py` — note: already narrow (OSError\
+      \ / ValueError); no findings expected\n- `scripts/agent_loop_mcp/_validate_closure_invariant.py`\n\
+      - `scripts/agent_loop_mcp/_release_gate_check.py`\n- `scripts/agent_loop_mcp/_sync_section_24.py`\
+      \ — note: no try/except blocks at all; no findings expected\n\n---\n\n## Excerpt\
+      \ 1: `_self_drive.py:213` — silently skip git subprocess failure\n\n```python\n\
+      def _collect_changed_files(repo_root: Path) -> list[str]:\n    \"\"\"Return\
+      \ the de-duplicated union of git's three change-views.\"\"\"\n    seen: set[str]\
+      \ = set()\n    invocations = [\n        [\"git\", \"diff\", \"--cached\", \"\
+      --name-only\"],\n        [\"git\", \"diff\", \"--name-only\"],\n        [\"\
+      git\", \"ls-files\", \"--others\", \"--exclude-standard\"],\n    ]\n    for\
+      \ cmd in invocations:\n        try:\n            r = subprocess.run(\n     \
+      \           cmd,\n                cwd=str(repo_root),\n                capture_output=True,\n\
+      \                text=True,\n                check=False,\n                timeout=30,\n\
+      \            )\n            for ln in r.stdout.splitlines():\n             \
+      \   p = ln.strip()\n                if p:\n                    seen.add(p)\n\
+      \        except Exception:\n            # Best-effort: silently skip this view,\
+      \ like the prior cached-only\n            # path did via the outer try/except\
+      \ in callers. Callers may surface\n            # the failure as a 'git_check_failed'\
+      \ breadcrumb separately.\n            continue\n    return sorted(seen)\n```\n\
+      \nComment claims \"callers may surface\" but the inner loop drops the exception\
+      \ entirely with no logging. Narrow would be `(subprocess.TimeoutExpired, OSError,\
+      \ FileNotFoundError)`.\n\n## Excerpt 2: `_self_drive.py:285` — `_evaluate_one_gate`\
+      \ catches Exception\n\n```python\ndef _evaluate_one_gate(gate: dict, repo_root:\
+      \ Path) -> dict:\n    gate_id = gate.get(\"id\", \"?\")\n    check = gate.get(\"\
+      check\", \"\")\n    if not check:\n        return {\"id\": gate_id, \"passed\"\
+      : False, \"error\": \"no_check_command\"}\n    try:\n        r = subprocess.run(check,\
+      \ shell=True, cwd=str(repo_root), capture_output=True, text=True, timeout=120)\n\
+      \        return {\n            \"id\": gate_id,\n            \"passed\": r.returncode\
+      \ == 0,\n            \"exit_code\": r.returncode,\n            \"stdout_tail\"\
+      : r.stdout.splitlines()[-1] if r.stdout else \"\",\n        }\n    except Exception\
+      \ as exc:\n        return {\"id\": gate_id, \"passed\": False, \"exception\"\
+      : str(exc)}\n```\n\nCatches Exception to capture `str(exc)` into the result\
+      \ dict. A TypeError from `gate.get(...)` returning a non-string would silently\
+      \ be reported as a \"gate failed\". Narrow to `(subprocess.TimeoutExpired, OSError,\
+      \ subprocess.SubprocessError)` to distinguish \"gate timed out / process error\"\
+      \ from \"bug in this function\".\n\n## Excerpt 3: `_self_drive.py:289-297` —\
+      \ `_read_yaml_or_empty` swallows everything\n\n```python\ndef _read_yaml_or_empty(path:\
+      \ Path) -> dict:\n    \"\"\"Best-effort yaml load; returns {} on missing/parse\
+      \ failure rather than raising.\"\"\"\n    try:\n        if not path.exists():\n\
+      \            return {}\n        loaded = yaml.safe_load(path.read_text(encoding=\"\
+      utf-8\"))\n        return loaded if isinstance(loaded, dict) else {}\n    except\
+      \ Exception:\n        return {}\n```\n\nThis is called from many stop-rule branches.\
+      \ If yaml.safe_load itself has a bug (or a memory-error from a giant input),\
+      \ the caller silently sees `{}` and proceeds as if the file were empty. Narrow\
+      \ to `(OSError, yaml.YAMLError, UnicodeDecodeError)`. Anything else (TypeError,\
+      \ AttributeError) indicates a programming bug that should propagate.\n\n## Excerpt\
+      \ 4: `_self_drive.py:420` — git_check exception breadcrumb\n\n```python\nforbidden\
+      \ = packet.get(\"forbidden_files\", [])\nrepo_root = _resolve_repo_root()\n\
+      try:\n    changed = _collect_changed_files(repo_root)\n    for forbidden_path\
+      \ in forbidden:\n        for c in changed:\n            if _path_matches_pattern(c,\
+      \ forbidden_path):\n                stop_rules_fired.append({\"rule\": \"patch_would_touch_forbidden_files\"\
+      , \"forbidden\": forbidden_path, \"changed\": c})\nexcept Exception as exc:\n\
+      \    stop_rules_fired.append({\"rule\": \"git_check_failed\", \"exception\"\
+      : str(exc)})\n```\n\nThis one is at least surfacing the exception in the output.\
+      \ But it wraps a call that internally already catches Exception (line 213).\
+      \ So this outer except only sees exceptions from `_path_matches_pattern` or\
+      \ the loop body itself — `fnmatch` shouldn't raise; this catch arguably won't\
+      \ fire for real reasons.\n\n## Excerpt 5: `_self_drive.py:438` — `review_yaml_parse_failed`\
+      \ breadcrumb\n\n```python\nfor review_path in (claude_path, codex_path):\n \
+      \   if review_path.exists():\n        try:\n            yaml.safe_load(review_path.read_text(encoding=\"\
+      utf-8\"))\n        except Exception as exc:\n            stop_rules_fired.append({\n\
+      \                \"rule\": \"review_yaml_parse_failed\",\n                \"\
+      path\": str(review_path),\n                \"exception\": str(exc),\n      \
+      \      })\n```\n\nNarrow to `yaml.YAMLError`. As written, a UnicodeDecodeError\
+      \ or OSError is also reported as \"yaml parse failed\", which mis-labels the\
+      \ actual problem.\n\n## Excerpt 6: `_self_drive.py:539` — patch_size_exceeds_max\
+      \ swallows everything silently\n\n```python\n        if total > max_patch_size:\n\
+      \            stop_rules_fired.append({\n                \"rule\": \"patch_size_exceeds_max\"\
+      ,\n                \"patch_size\": total,\n                \"max\": max_patch_size,\n\
+      \                \"reason\": f\"patch_size={total}, max={max_patch_size}\",\n\
+      \            })\n    except Exception:\n        # Treat git failure as missing-data;\
+      \ do not fire (matches existing\n        # git_check_failed precedent for the\
+      \ forbidden-files branch).\n        pass\n```\n\n`pass` with no breadcrumb.\
+      \ If git is broken, no stop-rule fires, and the operator never knows. At least\
+      \ a `stop_rules_fired.append({\"rule\": \"patch_size_check_failed\", \"exception\"\
+      : ...})` would surface the failure.\n\n## Excerpt 7: `_self_drive.py:633` —\
+      \ drift-finding canonical-sha compute failure\n\n```python\ndef _check_drift(claim_label:\
+      \ str, ref_path: str, claimed_sha: str):\n    \"\"\"Append a drift finding if\
+      \ the claimed_sha doesn't match the actual file.\"\"\"\n    if not claimed_sha\
+      \ or not ref_path:\n        return\n    target = _resolve_referenced_path(ref_path,\
+      \ iter_dir)\n    if not target.exists():\n        drift_findings.append({...})\n\
+      \        return\n    try:\n        actual = _canonical_sha256_of_yaml_file(target)\n\
+      \    except Exception as exc:\n        drift_findings.append({\n           \
+      \ \"claim\": claim_label,\n            \"referenced_path\": ref_path,\n    \
+      \        \"claimed_sha\": claimed_sha,\n            \"reason\": f\"canonical_sha_compute_failed:\
+      \ {exc}\",\n        })\n        return\n```\n\nReports the exception so this\
+      \ is better. Still, narrow `(OSError, yaml.YAMLError)` would distinguish \"\
+      file can't be read\" from \"yaml is malformed\" from \"we have a bug\".\n\n\
+      ## Excerpt 8: `_self_drive.py:894` — `cmd_verify_scope`\n\n```python\ntry:\n\
+      \    changed = _collect_changed_files(repo_root)\nexcept Exception as exc:\n\
+      \    print(json.dumps({\"in_scope\": False, \"error\": str(exc)}))\n    return\
+      \ 1\n```\n\n`_collect_changed_files` already absorbs its own exceptions (line\
+      \ 213). This outer except is unlikely to fire — but if it does (e.g., `_resolve_repo_root`\
+      \ raising), the catch is broad. Narrow OR demote to a guard against specific\
+      \ known failures.\n\n## Excerpt 9: `_dispatch_codex.py:1468` — catch-all in\
+      \ main()\n\n```python\nexcept (CodexInvocationError, CodexOutputParseError)\
+      \ as exc:\n    _log_dispatch(log_path, _failed_event(type(exc).__name__, str(exc)))\n\
+      \    print(json.dumps({\"ok\": False, \"error\": str(exc), \"error_type\": type(exc).__name__}))\n\
+      \    return 1\nexcept Exception as exc:\n    _log_dispatch(log_path, _failed_event(type(exc).__name__,\
+      \ str(exc)))\n    print(json.dumps({\"ok\": False, \"error\": str(exc), \"error_type\"\
+      : type(exc).__name__}))\n    return 2\n```\n\nThis is the top-level CLI catch-all.\
+      \ Different exit codes (1 for expected, 2 for unexpected) is the right pattern.\
+      \ **Likely intentional** — boundary catch-all so the helper always emits structured\
+      \ json instead of a Python traceback. The audit-log captures the exception type+message\
+      \ so debugging is still possible. Recommend: leave OR add traceback.format_exc()\
+      \ into the audit event (not the printed JSON) for unexpected branch only.\n\n\
+      ## Excerpt 10: `_author_review_packet.py:160` — top-level CLI catch-all\n\n\
+      ```python\ntry:\n    path = author_review_packet(\n        iteration_dir=Path(ns.iteration_dir),\n\
+      \        files=files,\n        repo_root=repo_root,\n    )\nexcept FileNotFoundError\
+      \ as exc:\n    print(f\"error: {exc}\", file=sys.stderr)\n    return 1\nexcept\
+      \ Exception as exc:  # pragma: no cover — defensive\n    print(f\"error: unexpected\
+      \ failure: {type(exc).__name__}: {exc}\", file=sys.stderr)\n    return 2\n```\n\
+      \n`pragma: no cover` comment acknowledges it's a defensive top-level. Same structure\
+      \ as Excerpt 9. **Likely intentional CLI boundary**.\n\n## Excerpt 11: `_validate_closure_invariant.py:77`\
+      \ — review-yaml read\n\n```python\nif not path.exists():\n    return None\n\
+      try:\n    data = yaml.safe_load(path.read_text(encoding=\"utf-8\")) or {}\n\
+      except Exception:\n    return None\n```\n\nShould be `(OSError, yaml.YAMLError,\
+      \ UnicodeDecodeError)`. Returning `None` for any exception hides bugs in this\
+      \ function from callers.\n\n## Excerpt 12: `_validate_closure_invariant.py:180`\
+      \ — audit-yaml read\n\n```python\ntry:\n    audit_data = yaml.safe_load(audit_path.read_text(encoding=\"\
+      utf-8\")) or {}\nexcept Exception:\n    return {\n        \"iteration_id\":\
+      \ iteration_id,\n        \"has_apply_step_landed\": False,\n        \"last_mutation\"\
+      : None,\n        \"closing_verdict_present\": False,\n        \"invariant_check\"\
+      : None,\n        \"verdict\": \"n/a (no audit)\",\n    }\n```\n\nReturns the\
+      \ same fallback dict regardless of whether the audit was missing, malformed\
+      \ yaml, an unrelated OSError, or a real bug. Narrow + log distinction would\
+      \ matter for diagnostics.\n\n## Excerpt 13: `_release_gate_check.py:85, 103,\
+      \ 128, 141, 160, 300, 324, 357, 405, 435` — subprocess gates\n\nPattern (representative\
+      \ example from gate_smoke):\n\n```python\ndef gate_smoke(repo_root: Path, python:\
+      \ str) -> tuple[bool, str]:\n    \"\"\"G_smoke: in-tree smoke 60/60.\"\"\"\n\
+      \    try:\n        result = subprocess.run(\n            [python, str(repo_root\
+      \ / \"scripts\" / \"agent_loop_mcp\" / \"_smoke_test.py\")],\n            capture_output=True,\n\
+      \            text=True,\n            cwd=str(repo_root),\n            timeout=120,\n\
+      \        )\n    except Exception as exc:\n        return False, f\"exception:\
+      \ {exc}\"\n    tail = (result.stdout or \"\").strip().splitlines()[-1:] or [\"\
+      \"]\n    last = tail[0]\n    ok = result.returncode == 0 and \"60/60 tests passed\"\
+      \ in last\n    return ok, f\"exit={result.returncode} last={last!r}\"\n```\n\
+      \nRepeats across ~10 gate functions. Should be `(subprocess.TimeoutExpired,\
+      \ OSError, subprocess.SubprocessError)`. A TypeError caused by a stale arg passed\
+      \ to subprocess.run would silently be reported as \"gate failed: TypeError(...)\"\
+      \ rather than crashing the gate harness loud-enough to fix.\n\n## Excerpt 14:\
+      \ `_release_gate_check.py:128-129` — gate_frontmatter file-read catch\n\n```python\n\
+      for path in sorted(set(md_files)):\n    if not path.exists():\n        continue\n\
+      \    try:\n        text = path.read_text(encoding=\"utf-8\")\n    except Exception\
+      \ as exc:\n        bad.append(f\"{path.name}: read failed ({exc})\")\n     \
+      \   continue\n    if not text.startswith(\"---\"):\n        continue\n    end\
+      \ = text.find(\"\\n---\", 3)\n    if end == -1:\n        bad.append(f\"{path.name}:\
+      \ frontmatter unterminated\")\n        continue\n    block = text[3:end]\n \
+      \   try:\n        yaml.safe_load(block)\n    except Exception as exc:\n    \
+      \    bad.append(f\"{path.name}: yaml parse error ({exc})\")\n```\n\nTwo broad\
+      \ excepts. First should be `(OSError, UnicodeDecodeError)`; second should be\
+      \ `yaml.YAMLError`. As written, a regex-engine bug in `text.find` would be reported\
+      \ as \"yaml parse error\" — wrong attribution.\n\n## Excerpt 15: `server.py:230`\
+      \ and `server.py:284` — JSON-RPC boundary + boot-gate\n\n```python\ntry:\n \
+      \   result = handler(**arguments)\n    return {\n        \"jsonrpc\": \"2.0\"\
+      ,\n        \"id\": req_id,\n        \"result\": {\"content\": [{\"type\": \"\
+      text\", \"text\": json.dumps(result)}]},\n    }\nexcept Exception as exc:\n\
+      \    return {\n        \"jsonrpc\": \"2.0\",\n        \"id\": req_id,\n    \
+      \    \"error\": {\"code\": -32000, \"message\": str(exc)},\n    }\n```\n\nAnd:\n\
+      ```python\ntry:\n    findings = _run_disposition_check()\nexcept Exception as\
+      \ exc:\n    print(f\"ERROR: disposition check failed: {exc}\", file=sys.stderr)\n\
+      \    return 2\n```\n\nBoth are **MCP protocol boundary / top-level CLI catch-alls**\
+      \ — the JSON-RPC handler MUST return a structured error rather than crashing\
+      \ the server. **Likely intentional**. Recommend: log traceback to audit log\
+      \ (not protocol response) so debug data isn't lost.\n\n## What I expect codex\
+      \ to flag\n\nFindings I'd consider valid (priority order):\n1. `_self_drive._read_yaml_or_empty`\
+      \ line 296 — broad except, hot path used 10+ times per stop-rule check\n2. `_self_drive`\
+      \ line 539 `patch_size_exceeds_max` — broad except + bare `pass` with NO breadcrumb\n\
+      3. `_validate_closure_invariant.py` line 77 + 180 — broad except returning sentinel\
+      \ hides real bugs\n4. `_release_gate_check.py` subprocess gate pattern (~10\
+      \ callsites) — narrow to `(subprocess.TimeoutExpired, OSError, subprocess.SubprocessError)`\n\
+      5. `_self_drive._evaluate_one_gate` line 285 — same pattern as gates\n6. `_self_drive`\
+      \ line 438 `review_yaml_parse_failed` — narrow to `yaml.YAMLError`\n7. `_release_gate_check.gate_frontmatter`\
+      \ lines 128 + 141 — narrow file-read and yaml-parse excepts independently\n\
+      8. `_self_drive._check_drift` line 633 — narrow to `(OSError, yaml.YAMLError)`\n\
+      \n## Out of scope for this audit\n\n- **Security** (separate audit running in\
+      \ parallel)\n- **Performance** (separate audit running in parallel)\n- **Cross-platform**\
+      \ (separate audit running in parallel)\n- **Tests** (`tests/*.py`, `_smoke_test.py`)\
+      \ — these often catch + ignore intentionally for test-isolation reasons; not\
+      \ flagged here\n- **Top-level CLI boundary handlers** that are explicitly there\
+      \ to convert tracebacks into structured JSON / exit codes — Excerpts 9, 10,\
+      \ 15 above are noted but **likely intentional** and should be defended, not\
+      \ narrowed. Codex may confirm or contest the intent assessment.\n- Style / naming\
+      \ / docstrings\n- Adding traceback.format_exc() audit logging — out of scope\
+      \ (separate refactor)\n"
+schema_version: 1
+iteration_id: iteration-audit-2026-05-11-bare-except
