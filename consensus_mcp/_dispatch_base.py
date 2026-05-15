@@ -918,5 +918,15 @@ def _log_dispatch(log_path: Path, event: dict) -> None:
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     event_with_ts = {"timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **event}
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(event_with_ts) + "\n")
+    # v1.15.7 (A): the streaming dispatch path emits events from the main
+    # thread AND the stdout/stderr reader threads concurrently; an abrupt
+    # wall-time-ceiling teardown can interrupt a bare append mid-line. A
+    # plain open("a")+write is NOT line-atomic under that contention, so
+    # dispatch-log.jsonl could contain a torn/interleaved line in
+    # production (windows-py3.10 CI surfaced exactly this; a 2-AI audit
+    # premise that "writes are already locked" was refuted by this code).
+    # Use the same OS-exclusive-lock append the audit log uses. Deferred
+    # import: keeps module load light and side-steps any import-order
+    # coupling (acyclic, but the call site is already I/O-bound).
+    from consensus_mcp._visibility_watchdog import _locked_append
+    _locked_append(log_path, json.dumps(event_with_ts) + "\n")
