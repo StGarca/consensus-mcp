@@ -1,0 +1,45 @@
+iteration_id: iteration-0003-consensus-resume-implementation
+reviewer_id: codex-iter0003-6
+pass_id: codex-iter0003-6-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Explicit iteration_id can escape consensus-state/active
+  citation: consensus_mcp/_resume.py:737
+  risk: The MCP input is documented as an iteration directory name, but the code joins
+    it directly with active/. A caller can supply path separators or an absolute path
+    and make the read-only snapshot inspect YAML files outside the active iteration
+    area, leaking unrelated operating context and violating the resume tool's scope
+    boundary.
+  recommendation: Reject absolute paths, separators, and parent traversal in iteration_id;
+    resolve the candidate path and require it to remain under consensus-state/active
+    before reading any files.
+  patch_not_proposed_reason: Patch not proposed because the sealed review packet did
+    not embed the surrounding path-validation patterns or registry tests needed to
+    choose the repo-consistent error behavior.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The pass-2 functional requirements are mostly implemented,
+  but explicit iteration selection lacks path confinement, so the tool does not fully
+  meet the read-only scoped snapshot contract.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: fbd978cd1a549a2bea17f29438c7e3546133c107bd70c9fef0db7cea5dfe7e95
+  output_sha256: fba0f86baf854eae9da3a2c4dc62724836e5f5159fb3dd09b60e55fcc3d6142c
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: bc0c3ab981da72a771c2075bab4752e76cdf4f8fe982d081db23e50116149d2f
+  scope_signature: 7f3d7442de9161a7c9e43c96c2296d27660c59d885b30b6d503263d0e0e6caf3
+  review_target_path: consensus-state/active/iteration-0003-consensus-resume-implementation/review-packet.yaml
+  review_target_hash: 931769d08ff7efb4af021a84434a0705f53e86da2fec2283e44b2480a2f6a75b
+sealed_at_utc: '2026-05-11T20:32:29Z'
+packet_sha256: 4ae4a938876d9a4895b5ab37a4e1a900321a2932e1e538dbd12f51d65ea05bca

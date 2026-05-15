@@ -1,0 +1,42 @@
+iteration_id: iteration-0008-mcp-wire-format-fix
+reviewer_id: codex-iteration-0008-mcp-wire-format-fix-1
+pass_id: codex-iteration-0008-mcp-wire-format-fix-1-pass1
+findings:
+- id: codex-rev-001
+  severity: low
+  summary: ToolRegistry.list_tools() now emits the requested MCP tools/list wire shape
+    and tests pin the bootstrap regression.
+  citation: consensus_mcp/tool_registry.py:29
+  risk: The implementation translates internal snake_case input_schema to wire-level
+    inputSchema, keeps name and description flat, supplies MCP-safe defaults, and
+    omits internal output_schema. The five tests cover the observed zero-tool failure
+    mode plus the main defaulting and omission contracts. Residual risk is low because
+    this review is limited to the embedded allowed files and does not verify live
+    client behavior.
+  recommendation: 'Q1: accept; Q2: adequate; Q3: none'
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: true
+goal_satisfied_rationale: The embedded implementation and tests satisfy the requested
+  retroactive MCP wire-format hot-patch review with no blocking defects.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: d0b2b38d64bad670be8bfb03821593b197f223246473b73ca7a2568ba0e31817
+  output_sha256: 60f3137206bc4f1e013643e9d0e2c124a9740792d9e693331e51d05c4d5e7a65
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: e1fad866b181664be3e8f2794a713b375fbe3447daaa4cda7a90f957b7e2148e
+  scope_signature: eb9ba0f28430bbd348ccbe8f2a3937c77dc92dc04b44ed68e1d323ad5dacd5f6
+  review_target_path: consensus-state/active/iteration-0008-mcp-wire-format-fix/review-packet.yaml
+  review_target_hash: 3a19653f54011d6b7322fcc176ae040e54922cc634e308f4965404ecc4ed84ae
+sealed_at_utc: '2026-05-12T22:42:37Z'
+packet_sha256: f8b91aea39b86dfab99154e0898fca7c1962b50df33d2803cebe987bfc49a39c

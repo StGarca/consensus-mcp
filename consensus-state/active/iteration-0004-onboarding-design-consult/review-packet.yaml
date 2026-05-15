@@ -1,0 +1,74 @@
+defect_target:
+  files:
+  - docs/design-consults/onboarding-binary-resolution-and-output-contracts.md
+  base_sha: 0b9cf9980ed7fe9cfe5301fa0bbbeb6631baddb798605e1278fc6a34f2ddfb48
+  touched_files_contents:
+    docs/design-consults/onboarding-binary-resolution-and-output-contracts.md: "#\
+      \ Design consult: consensus-mcp onboarding adapter system\n\n**Context for reviewer:**\
+      \ consensus-mcp is adding a standalone `consensus` CLI for headless cross-AI\
+      \ review. Adapters declare how to invoke each AI (claude, codex, gemini, plugins).\
+      \ Two open design choices need a recommendation. The reviewer's job is to **pick\
+      \ a winner per question** and explain why.\n\nOutput format: emit ONE finding\
+      \ per question. The `recommendation` field holds the winning option; `risk`\
+      \ field holds the rationale (what could go wrong with the loser, or what cost\
+      \ the winner pays). Severity should be `low` for both — these are design choices,\
+      \ not bugs.\n\n---\n\n## Question 1 — Binary path resolution across platforms\n\
+      \nAdapters need to find their CLI binary (`claude`, `codex`, etc.) on disk.\
+      \ Two designs are on the table:\n\n### Option A — `windows_suffixes` array per\
+      \ adapter manifest\n\n```yaml\nbinary:\n  name: claude\n  windows_suffixes:\
+      \ [\".cmd\", \".exe\", \"\"]\n```\n\nResolution: `shutil.which(name)` → if not\
+      \ found on Windows, retry with each suffix appended.\n\n**Pros:** Explicit.\
+      \ Each adapter declares which suffixes its binary uses (some npm shims are `.cmd`,\
+      \ some compiled binaries are `.exe`). No hidden behavior.\n**Cons:** Platform-specific\
+      \ noise in every adapter manifest. Awkward when extending to macOS-specific\
+      \ or homebrew-specific quirks later.\n\n### Option B — `binary_resolution_strategy`\
+      \ enum\n\n```yaml\nbinary:\n  name: claude\n  resolution_strategy: npm     \
+      \      # one of: standard_path | npm | brew | custom\n```\n\nResolution: strategy-specific\
+      \ logic in Python registry (e.g., `npm` knows to check `.cmd` on Windows and\
+      \ look in `npm root -g`; `brew` knows to check `/opt/homebrew/bin` and `/usr/local/bin`).\n\
+      \n**Pros:** Hides platform quirks behind a single named strategy. Adding macOS\
+      \ or homebrew nuance later doesn't require touching every manifest. More declarative\
+      \ — manifest says *what the CLI is* (an npm package), not *how to find it*.\n\
+      **Cons:** Magic. Plugin authors need to read docs to know what each strategy\
+      \ does. Implementing `custom` requires a Python hook, breaking the YAML-only\
+      \ plugin promise. Wrong strategy gives confusing errors.\n\n### My current lean:\
+      \ **A**, but soft.\n\nReason: explicit-over-magic is consistent with the rest\
+      \ of consensus-mcp (the project leans heavily on declarative YAML, sealed packets,\
+      \ no eval). The cost of B's hidden behavior bites first-time plugin authors\
+      \ hardest — exactly the audience this redesign is for.\n\n---\n\n## Question\
+      \ 2 — Output contracts in v1\n\nThe `output_contract` field on an adapter declares\
+      \ how to parse the AI's stdout. Two known contracts will ship in v1:\n\n- `unified_diff_in_fenced_block`\
+      \ — extracts the first ```` ```diff ``` ```` block from stdout. Multi-block\
+      \ output fails. Validated with `git apply --check`.\n- `codex_review_schema_v1`\
+      \ — strict JSON matching `codex_review_schema.json` (the existing reviewer-output\
+      \ schema).\n\n**Question:** should v1 also include a third contract?\n\n###\
+      \ Option A — Just the two contracts above\n\nKeep v1 minimal. Adapters that\
+      \ emit bare diffs without fences fail. Authors must wrap their AI's output in\
+      \ fences (or pre-process via a custom Python parser).\n\n**Pros:** Smaller surface,\
+      \ less to test. Easier to reason about. Forces consistent output shape across\
+      \ adapters.\n**Cons:** Some AI CLIs (e.g., aider's pure-diff output mode) don't\
+      \ emit fences naturally. Plugin authors with such CLIs have to write a wrapper\
+      \ script or a custom Python parser, neither of which is YAML-friendly.\n\n###\
+      \ Option B — Add `unified_diff_only` (no fence requirement)\n\nThird contract:\
+      \ stdout IS the unified diff. No extraction step. Still validated with `git\
+      \ apply --check`.\n\n**Pros:** Lets adapters whose CLI is already diff-native\
+      \ plug in without wrapper code. Lower friction for plugin authors. Trivially\
+      \ parseable.\n**Cons:** Loosens the \"stdout has structure\" invariant. Adapters\
+      \ that accidentally print extra lines (e.g., a banner or version string) break\
+      \ in opaque ways. Adds another supported case to test.\n\n### My current lean:\
+      \ **B**, but soft.\n\nReason: the user's stated goal for this feature is \"\
+      smoother first-run\" and lower friction for plugin authors. `unified_diff_only`\
+      \ is a small addition (one more parser, ~30 lines) that materially lowers the\
+      \ bar to write a plugin. The \"extra banner\" failure mode is detectable at\
+      \ first-use during `consensus init`'s probe step.\n\n---\n\n## What we need\
+      \ from the reviewer\n\nTwo findings, one per question. Each:\n\n- `severity:\
+      \ low` (these are design choices, not defects)\n- `summary`: which option wins,\
+      \ in one sentence\n- `recommendation`: the winning option label (e.g., `Option\
+      \ A`)\n- `risk`: rationale — what cost or failure mode the loser carries, OR\
+      \ what the winner gives up\n- `citation`: `docs/design-consults/onboarding-binary-resolution-and-output-contracts.md:<line>`\
+      \ pointing at the question heading\n\nIf your verdict matches my lean, say so\
+      \ explicitly — confirmation is a valid finding. If it differs, the rationale\
+      \ must address why my lean is wrong.\n\nNo patches. No iteration. Single pass.\
+      \ Empty `findings` is NOT acceptable — we need a verdict on both questions.\n"
+schema_version: 1
+iteration_id: iteration-0004-onboarding-design-consult

@@ -1,0 +1,1396 @@
+defect_target:
+  files:
+  - consensus-state/active/iteration-converged-plan-machine-enforcement/implementation-summary.md
+  - consensus-state/active/iteration-converged-plan-machine-enforcement/converged-plan.yaml
+  - consensus_mcp/validators/validate_converged_plan.py
+  - consensus_mcp/schemas/converged_plan_convention.schema.json
+  - consensus_mcp/workflow_engine.py
+  - consensus_mcp/config.py
+  - consensus_mcp/tools/consensus_get_iteration_outcome.py
+  - consensus_mcp/tests/test_converged_plan_convention.py
+  base_sha: f3c04fd50ceb14b58111fd80855e75a4c54ccd17bd42c7b8936e38404bf1e385
+  touched_files_contents:
+    consensus-state/active/iteration-converged-plan-machine-enforcement/implementation-summary.md: "#\
+      \ Workflow B audit target — v1.15.1 converged-plan convention machine-enforcement\n\
+      \nThis is the IMPLEMENTATION of the converged plan\n`converged-plan.yaml` in\
+      \ this iteration dir (Workflow A\nweighted-synthesis: claude + codex + gemini;\
+      \ shared-prior self-check\nPASSED). Audit it against that converged plan's\n\
+      `deliverable.acceptance_gates_gating`.\n\n## What was implemented\n\n1. **First\
+      \ acceptance gate (codex external-refuting-observation) —\n   verified by code-reading,\
+      \ not assumed.** There is NO pre-existing\n   orchestrator/human-authored post-convergence\
+      \ intake into\n   `_seal_converged_plan`; it is fed only by `convergence_artifacts`\n\
+      \   (sealed contributor converge outputs) + `ConvergenceOutcome`\n   (fixed\
+      \ dataclass keys) + `iteration_dir`. The MCP tool's\n   `claude_proposal_yaml`\
+      \ flows to the ClaudeAdapter PROPOSE phase,\n   not post-convergence. The ONE\
+      \ channel that already reaches seal\n   time is `iteration_dir` itself (every\
+      \ artifact is a file there).\n   Therefore the wiring reuses that channel: `_seal_converged_plan`\n\
+      \   reads an optional `convention-input.yaml` from `iteration_dir` —\n   no\
+      \ new parameter threaded through `run_iteration` / the MCP tool.\n\n2. **Schema**\
+      \ `consensus_mcp/schemas/converged_plan_convention.schema.json`\n   (NEW; `schemas/`\
+      \ net-new). `empirical_status` enum\n   `proven|pending|refuted|n/a` verbatim\
+      \ from\n   docs/workflows/converged-plan-convention.md.\n\n3. **Validator**\
+      \ `consensus_mcp/validators/validate_converged_plan.py`\n   — structure + consequence\
+      \ ONLY. Enforces the consequence of the\n   orchestrator-attested `falsifiable_from_artifacts`\
+      \ bool; does NOT\n   classify the defect (no keyword heuristic). Result keys\
+      \ are\n   deliberately neutral (`presence_ok`, `violations`, `hard_reject`,\n\
+      \   `hard_reject_reasons`, `gate_scope`); NO field asserts the\n   hypothesis/safeguard\
+      \ is right.\n\n4. **Recursive-trap defense (HIGHEST-ORDER).** Structural, not\n\
+      \   cosmetic: `test_validator_source_sets_no_correctness_state` greps\n   the\
+      \ validator source for any `(is_)?(approved|correct|sound|ready\n   |valid_hypothesis|hypothesis_correct|safeguard_adequate)`\
+      \ followed\n   by `:`/`=` and fails if any exist. Every result carries the\n\
+      \   unconditional `GATE_SCOPE_DISCLAIMER`; `consensus_get_iteration_\n   outcome`\
+      \ surfaces it as `convention_gate_scope` adjacent to the\n   enforcement marker\
+      \ so a reader cannot see \"passed\" without it.\n\n5. **Engine** `_seal_converged_plan`\
+      \ — ingests + validates +\n   FAIL-CLOSED: a hard-reject raises `WorkflowError`\
+      \ BEFORE writing,\n   so no `converged-plan.yaml` is sealed. On accept, the\
+      \ convention is\n   sealed INTO `converged-plan.yaml` (same `write_text`, same\
+      \ hash)\n   with `convention_schema_version`, `convention_violations`,\n   `convention_gate`.\
+      \ Absent convention ⇒ `convention_schema_version:\n   0` + `convention_gate.enforcement_status:\
+      \ doctrine-only`.\n\n6. **Graduated strictness** `convergence.converged_plan_enforcement`\n\
+      \   (`off|warn|graduated|strict`, default `graduated`) in `config.py`\n   default\
+      \ + legacy-synth + `validate()`. Hard-reject ONLY (i)\n   declared safety/data-loss/bricking/irreversible\
+      \ risk class without\n   a conforming decoupled safeguard, (ii) `empirical_status:proven`\n\
+      \   with no recorded `experiment_result`.\n\n7. **Outcome reader** surfaces\
+      \ `enforcement` /\n   `convention_gate_scope` / `convention_violations`; legacy/absent\n\
+      \   ⇒ `enforcement: doctrine-only` (NOT silently valid, NOT rejected).\n\n##\
+      \ Verification evidence\n\n- `consensus_mcp/tests/test_converged_plan_convention.py`\
+      \ — 30 NEW\n  tests, all green; covers every `acceptance_gates_gating` item.\n\
+      - Full suite: **956 passed, 1 skipped, 0 regressions** (the 30 new\n  tests\
+      \ are in that count).\n\n## Audit questions\n\n- Q1 goal_satisfied: does the\
+      \ implementation satisfy the converged\n  plan's deliverable + every acceptance\
+      \ gate?\n- Q2: is the recursive-trap defense STRUCTURAL (the source-grep test\n\
+      \  + unconditional disclaimer surfaced adjacent to the pass marker),\n  not\
+      \ cosmetic? Try to find a code path that derives correctness/\n  approval state\
+      \ from the convention blocks.\n- Q3: any blocking objection? Verify the fail-closed\
+      \ claim (no\n  `converged-plan.yaml` on hard-reject) and the legacy-grandfather\n\
+      \  claim (iter-0043..v1.15.0 plans load, marked doctrine-only) against\n  the\
+      \ embedded code, not from memory.\n- State the differential/prior you reasoned\
+      \ from.\n"
+    consensus-state/active/iteration-converged-plan-machine-enforcement/converged-plan.yaml: "iteration_id:\
+      \ iteration-converged-plan-machine-enforcement\nconverged_at_utc: '2026-05-15T17:30:00Z'\n\
+      convergence_rule: weighted-synthesis\ncontributors_responsive: [claude, codex,\
+      \ gemini]\nblocking_objections: []\nall_substantive: true\n\nshared_prior_self_check:\n\
+      \  result: PASSED\n  reasoning: |\n    All three converged on engine-path +\
+      \ structure-not-soundness +\n    NOT consensus_gate.py — but grounded: codex\
+      \ explicitly\n    re-verified each VERIFIED-CODE-SURFACE fact rather than\n\
+      \    assuming, and the convergence follows from inspected code\n    (no schemas/\
+      \ dir; _seal_converged_plan fixed keys; zero block\n    occurrences), not a\
+      \ shared hunch. The REAL divergence (block\n    origin: claude sidecar / codex\
+      \ typed intake / gemini\n    extract-from-winning-proposal) was substantive\
+      \ and is\n    SYNTHESIZED, not collapsed: gemini's provenance argument\n   \
+      \ refuted the loose-sidecar idea; gemini's \"winning proposal\"\n    was refuted\
+      \ by the project-default weighted-synthesis (no\n    single winner). Each refutation\
+      \ changed the outcome.\n\nq1_block_origin:\n  claude: '(a) orchestrator-authored\
+      \ sidecar, engine merges at seal'\n  codex: 'typed ConvergedPlanConvention human-authored\
+      \ convergence INPUT, validated+persisted before sealing'\n  gemini: 'extract\
+      \ from the WINNING proposal''s deliverable_scope (provenance via sealed proposals)'\n\
+      \  weighted_synthesis: |\n    Synthesis pulling the strongest from each:\n \
+      \   - gemini's provenance concern is decisive against a LOOSE\n      hand-edited\
+      \ sidecar: blocks with no seal/hash provenance\n      break the chain of evidence.\
+      \ REJECT loose sidecar.\n    - gemini's \"extract from the winning proposal\"\
+      \ is REFUTED by\n      the project default convergence rule = weighted-synthesis:\n\
+      \      there is NO single winning proposal; the converged plan\n      INTEGRATES\
+      \ across all three. \"winning proposal's\n      deliverable_scope\" is ill-defined\
+      \ under the default. REJECT\n      mechanical single-winner extraction.\n  \
+      \  - ADOPT codex's typed convergence-input framing + claude's\n      orchestrator-authored\
+      \ synthesis, RECONCILED via provenance-\n      by-citation: the convention blocks\
+      \ are the ORCHESTRATOR's\n      post-convergence synthesis judgement, authored\
+      \ as a typed\n      object that is sealed AS PART OF converged-plan.yaml (same\n\
+      \      hash/seal as the rest of the artifact — satisfies gemini's\n      provenance\
+      \ requirement WITHOUT a loose untracked file), and\n      EACH block MUST cite\
+      \ the contributor pass_ids whose content\n      it synthesizes from (gemini's\
+      \ chain-of-evidence preserved\n      by explicit citation, not by mechanical\
+      \ winner-extraction).\n    - codex external-refuting-observation honored: implementation\n\
+      \      MUST first check whether an existing human-authored\n      convergence\
+      \ intake path can already carry these fields into\n      _seal_converged_plan;\
+      \ if so, wire that path instead of\n      adding a parallel object.\n\nq2_enforcing_component:\n\
+      \  unanimous_core: 'engine path; NOT consensus_gate.py (verified production\
+      \ gate)'\n  weighted_synthesis: |\n    NEW consensus_mcp/schemas/converged_plan_convention.schema.json\n\
+      \    (machine contract; schemas/ is net-new) + a SMALL validator\n    module\
+      \ (gemini's name: validators/validate_converged_plan.py)\n    invoked INSIDE\
+      \ workflow_engine._seal_converged_plan (claude:\n    closest to where the plan\
+      \ is written; codex: the only point\n    that can prevent a bad final artifact\
+      \ from sealing) + read-\n    time surfacing in consensus_get_iteration_outcome.\
+      \ Codex's\n    \"semantic shape\" checks ADOPTED but scoped as NON-TRIVIALITY\n\
+      \    PRESENCE checks (differential stated; refuting observation\n    named;\
+      \ safeguard text not a no-op/echo; decisive experiment\n    present) — these\
+      \ check the required substructure is filled\n    with non-empty distinct content,\
+      \ they DO NOT judge soundness.\n\nq3_classifier:\n  weighted_synthesis: |\n\
+      \    Unanimous in effect: the engine does NOT classify the defect\n    class\
+      \ (heuristics = the report's shared-prior trap). It\n    enforces only the CONSEQUENCES\
+      \ of the orchestrator-attested\n    falsification.falsifiable_from_artifacts\
+      \ bool:\n    false ⇒ discriminating_experiment & refutation_observation\n  \
+      \  non-empty AND empirical_status ∈ {pending, refuted} (never\n    proven/n/a)\
+      \ until a recorded experiment result exists.\n\nq4_strictness_backward_compat:\n\
+      \  weighted_synthesis: |\n    Graduated (claude) + codex's \"legacy not silently\
+      \ valid\":\n    - hard-reject ONLY: (i) safety/data-loss/bricking/\n      irreversible\
+      \ risk class missing a conforming\n      independent_safeguard; (ii) empirical_status:\
+      \ proven with\n      no recorded experiment.\n    - warn + annotate convention_violations\
+      \ otherwise.\n    - config knob converged_plan_enforcement:\n      off|warn|graduated|strict\
+      \ (default graduated) +.consensus\n      config; doctrine guidance.\n    - convention_schema_version\
+      \ on the plan. Legacy/absent ⇒\n      consensus_get_iteration_outcome STILL\
+      \ reads it, but the\n      outcome is explicitly marked enforcement: doctrine-only\n\
+      \      (codex: NOT silently valid). This session's own iter-0043\n      .. v1.15.0\
+      \ plans are the regression fixtures for this.\n\nq5_recursive_trap:\n  weighted_synthesis:\
+      \ |\n    HIGHEST-ORDER. Unanimous + structural:\n    - validator verbs are present/non-empty/consistent\
+      \ ONLY; it\n      has NO code path that sets/derives any\n      approved|correct|ready|sound\
+      \ state from the convention\n      blocks (acceptance gate: grep the module\
+      \ — zero such\n      tokens).\n    - every result stamps a mandatory, non-removable\n\
+      \      convention_gate.gate_scope: \"presence-and-consistency\n      only; NOT\
+      \ a soundness assertion. A passing gate is NOT\n      evidence the hypothesis\
+      \ is correct or the safeguard\n      adequate — only that the required thinking\
+      \ was RECORDED.\n      'Would this safeguard still work if the root cause were\n\
+      \      entirely different?' remains a HUMAN judgement.\"\n    - gemini's success-semantics\
+      \ adopted verbatim: a pass means\n      \"the formal argument is PRESENT\",\
+      \ never \"the argument is\n      TRUE\".\n    - codex: fail-closed for NEW Workflow\
+      \ A convergences when\n      required blocks are missing (subject to the q4\
+      \ graduated\n      rule — safety class hard, else warn).\n    - consensus_get_iteration_outcome\
+      \ surfaces gate_scope\n      ADJACENT to any pass marker (cannot be read without\
+      \ it).\n\nq6_minimal_slice_and_artifact_truth:\n  weighted_synthesis: |\n  \
+      \  Ship the slice NOW with real code-path tests (engine + module\n    + schema\
+      \ + config = meaningful regression signal; closes the\n    v1.15.0 doc-only\
+      \ loose end). codex's artifact-truth\n    correction ADOPTED as doctrine: docs/CHANGELOG\
+      \ MUST state\n    exactly that v1.15.0 tag 4e81f9e is DOCTRINE-ONLY and machine\n\
+      \    enforcement exists only from this new tag forward (artifact-\n    scoped-claims).\
+      \ Defer with a NEED-EVIDENCE blocker: operator\n    goal_packet defect_class/risk_class\
+      \ declaration UX + the\n    anti-gaming cross-check on falsifiable_from_artifacts\
+      \ — both\n    ill-posed until the shipped slice produces usage data.\n\n# ===\
+      \ THIS PLAN DOGFOODS THE CONVENTION IT ENFORCES ===\nfalsification:\n  hypothesis:\
+      \ \"Sealing convention blocks into converged-plan.yaml via an engine-invoked\
+      \ structural validator enforces the v1.15.0 doctrine without becoming a green-means-correct\
+      \ trap.\"\n  falsifiable_from_artifacts: true\n  discriminating_experiment:\
+      \ \"the shipped test_converged_plan_convention.py + the grep-no-correctness-tokens\
+      \ acceptance gate + the legacy-grandfather fixture test\"\n  refutation_observation:\
+      \ \"any test shows the validator setting/implying an approved|correct|ready|sound\
+      \ state from the blocks, OR a legacy iter-0043..v1.15.0 plan failing to load\
+      \ through consensus_get_iteration_outcome\"\n  empirical_status: n/a\n  reason_na:\
+      \ \"this is tooling code, falsifiable from artifacts; its proof is the test\
+      \ suite shipped WITH it — no external experiment required\"\nindependent_safeguard:\n\
+      \  applicable: false\n  why: \"this iteration is tooling, not a safety/data-loss/bricking/irreversible-risk\
+      \ defect; the risk class that mandates a root-cause-independent safeguard is\
+      \ not triggered. Stated explicitly rather than omitted (the convention requires\
+      \ the judgement to be recorded, not that a safeguard always exist).\"\ndecisive_experiment_before_next_iteration:\
+      \ null\n  # null is legitimate: falsifiable_from_artifacts:true and the\n  #\
+      \ proving tests ship in this iteration (empirical_status n/a).\ncited_pass_ids:\
+      \ [claude-cpme-1-pass1, codex-cpme-1-pass1, gemini-cpme-1-pass1]\n\ndeliverable:\n\
+      \  files_in_scope:\n    - consensus_mcp/schemas/converged_plan_convention.schema.json\
+      \  # NEW\n    - consensus_mcp/validators/validate_converged_plan.py  # NEW (small;\
+      \ structure/consequence only; gemini name)\n    - consensus_mcp/workflow_engine.py\
+      \  # _seal_converged_plan: ingest typed convention input via existing/closest\
+      \ path, validate, persist into the sealed plan, graduated strictness, stamp\
+      \ convention_gate.gate_scope + convention_schema_version\n    - consensus_mcp/tools/consensus_get_iteration_outcome.py\
+      \  # surface convention_violations + gate_scope adjacent to pass marker; legacy\
+      \ ⇒ enforcement: doctrine-only\n    - consensus_mcp/config.py  # converged_plan_enforcement\
+      \ knob (off|warn|graduated|strict; default graduated)\n    - consensus_mcp/tests/test_converged_plan_convention.py\
+      \  # NEW real code-path tests\n    - docs/workflows/converged-plan-convention.md\
+      \  # machine-enforced from THIS tag; artifact-truth statement; provenance-by-citation;\
+      \ gate_scope\n    - CHANGELOG.md ; README.md (install URL+Status) ; pyproject.toml\n\
+      \  files_out_of_scope:\n    - consensus_mcp/validators/consensus_gate.py  #\
+      \ production gate; explicitly NOT this (corrects recorded starting design)\n\
+      \    - consensus_mcp/_dispatch_codex.py\n    - consensus_mcp/_dispatch_gemini.py\n\
+      \  named_blockers_for_deferred_work:\n    - 'Operator goal_packet defect_class/risk_class\
+      \ declaration UX + anti-gaming cross-check on falsifiable_from_artifacts: ill-posed\
+      \ until the shipped slice produces real usage data. Need-evidence blocker, not\
+      \ a cop-out.'\n  acceptance_gates_gating:\n    - 'NEW schemas/converged_plan_convention.schema.json\
+      \ valid JSON Schema; empirical_status enum = proven|pending|refuted|n/a (matches\
+      \ v1.15.0)'\n    - 'implementation FIRST checks for an existing human-authored\
+      \ convergence intake path into _seal_converged_plan; reuses it if present (codex\
+      \ external-refuting-observation)'\n    - 'convention blocks are persisted INTO\
+      \ the sealed converged-plan.yaml (same hash/seal); each block cites contributor\
+      \ pass_ids (provenance-by-citation, no loose sidecar, no winner-extraction)'\n\
+      \    - 'consequence rule: falsifiable_from_artifacts==false ⇒ discriminating_experiment\
+      \ & refutation_observation non-empty & empirical_status∈{pending,refuted}'\n\
+      \    - 'safety risk-class missing conforming independent_safeguard ⇒ hard-reject;\
+      \ empirical_status:proven w/o recorded experiment ⇒ hard-reject; else warn+annotate\
+      \ (graduated); config knob respected'\n    - 'legacy plan (no convention_schema_version:\
+      \ this session iter-0043..v1.15.0) loads via consensus_get_iteration_outcome,\
+      \ marked enforcement: doctrine-only — NOT silently valid, NOT rejected'\n  \
+      \  - 'grep validate_converged_plan.py ⇒ ZERO approved/correct/ready/sound state-setting\
+      \ from convention blocks (recursive-trap structural check)'\n    - 'convention_gate.gate_scope\
+      \ non-soundness disclaimer stamped UNCONDITIONALLY + surfaced adjacent to pass\
+      \ marker in consensus_get_iteration_outcome'\n    - 'NEW test_converged_plan_convention.py\
+      \ covers all above; full suite green WITH meaningful code-path coverage (closes\
+      \ v1.15.0 doc-only loose end)'\n    - 'docs + CHANGELOG state exactly: v1.15.0\
+      \ tag 4e81f9e = doctrine-only; machine-enforcement exists only from this new\
+      \ tag forward (artifact-scoped truth)'\n    - 'Workflow B audit: codex + gemini\
+      \ goal_satisfied=true, no blocking objections; auditors confirm the recursive-trap\
+      \ defense is STRUCTURAL (the grep gate) not cosmetic'\n  estimated_complexity:\
+      \ medium\n\nnext_steps:\n  - 'Implement the slice now (no-deferral); FIRST verify\
+      \ the existing convergence intake path before adding new machinery.'\n  - 'Workflow\
+      \ B audit (codex + gemini).'\n  - 'Cut v1.15.1 (machine-enforcement of v1.15.0\
+      \ doctrine; patch/minor per scope) from the worktree → origin + tag.'\n"
+    consensus_mcp/validators/validate_converged_plan.py: "\"\"\"Structural + consequence\
+      \ validator for the converged-plan convention.\n\nv1.15.1 — machine-enforcement\
+      \ of the v1.15.0 doctrine\n(docs/workflows/converged-plan-convention.md). Converged\
+      \ plan:\niteration-converged-plan-machine-enforcement (Workflow A\nweighted-synthesis:\
+      \ claude + codex + gemini).\n\nHIGHEST-ORDER design constraint (the recursive\
+      \ trap, v1.15.0 lesson 1\napplied to our own gate): this module checks PRESENCE\
+      \ and STRUCTURE and\nthe declared CONSEQUENCES of an orchestrator-attested bool.\
+      \ It has NO\ncode path that derives any approval / readiness state from the\n\
+      convention blocks. A passing gate means \"the required thinking was\nRECORDED\"\
+      , never \"the thinking is true\". The auditable structural test\n`test_validator_source_sets_no_correctness_state`\
+      \ greps this file and\nmust find zero such state being set — keep it that way.\n\
+      \"\"\"\nfrom __future__ import annotations\n\n# Stamped on EVERY result, unconditionally,\
+      \ and surfaced adjacent to any\n# pass marker by consensus_get_iteration_outcome.\
+      \ It must never be\n# possible to read \"the gate passed\" without also reading\
+      \ this.\nGATE_SCOPE_DISCLAIMER = (\n    \"presence-and-consistency only; NOT\
+      \ a soundness assertion. A passing \"\n    \"gate is not evidence the hypothesis\
+      \ is true or the safeguard adequate \"\n    \"— only that the required thinking\
+      \ was recorded. 'Would this safeguard \"\n    \"still work if the root cause\
+      \ were entirely different?' remains a human \"\n    \"judgement.\"\n)\n\nCONVENTION_SCHEMA_VERSION\
+      \ = 1\n\n# Operator-DECLARED risk classes that mandate a root-cause-independent\n\
+      # safeguard. The engine does NOT infer the class from keywords (heuristics\n\
+      # are the shared-prior trap the v1.15.0 report documents); it only enforces\n\
+      # the consequence of a declared/attested value.\nRISK_CLASS_REQUIRING_SAFEGUARD\
+      \ = {\n    \"safety\",\n    \"safety-critical\",\n    \"data-loss\",\n    \"\
+      bricking\",\n    \"irreversible\",\n    \"irreversible-risk\",\n}\n\nENFORCEMENT_LEVELS\
+      \ = (\"off\", \"warn\", \"graduated\", \"strict\")\n\n\ndef _nonempty(v) ->\
+      \ bool:\n    return isinstance(v, str) and v.strip() != \"\"\n\n\ndef _norm(s:\
+      \ str | None) -> str:\n    return (s or \"\").strip().lower()\n\n\ndef _safeguard_conforms(sg:\
+      \ dict) -> bool:\n    \"\"\"A conforming safeguard is decoupled from the hypothesis\
+      \ by design.\n\n    Structural check only — this asks 'are the decoupling attestations\n\
+      \    present and set to the doctrine-required values', NOT 'is the\n    safeguard\
+      \ actually adequate' (that is the human judgement named in\n    GATE_SCOPE_DISCLAIMER).\n\
+      \    \"\"\"\n    if not isinstance(sg, dict):\n        return False\n    return\
+      \ (\n        sg.get(\"applicable\") is True\n        and sg.get(\"works_if_root_cause_wrong\"\
+      ) is True\n        and sg.get(\"ships_with_fix\") is True\n        and _nonempty(sg.get(\"\
+      why\"))\n        and _nonempty(sg.get(\"mechanism\"))\n    )\n\n\ndef validate_convention(\n\
+      \    convention: dict,\n    *,\n    risk_class: str | None,\n    enforcement:\
+      \ str,\n) -> dict:\n    \"\"\"Validate the orchestrator-authored convention\
+      \ object.\n\n    Returns a result dict whose keys are deliberately neutral:\n\
+      \      - presence_ok          : every required block is present + consistent\n\
+      \      - violations           : human-readable presence/consequence gaps\n \
+      \     - hard_reject          : iteration must NOT seal (per `enforcement`)\n\
+      \      - hard_reject_reasons  : the specific load-bearing reasons\n      - gate_scope\
+      \           : GATE_SCOPE_DISCLAIMER, unconditionally\n      - convention_schema_version\n\
+      \n    The result intentionally carries NO field asserting the hypothesis or\n\
+      \    safeguard is right. Enforcement levels: off | warn | graduated | strict.\n\
+      \    \"\"\"\n    if enforcement not in ENFORCEMENT_LEVELS:\n        enforcement\
+      \ = \"graduated\"\n\n    violations: list[str] = []\n    hard_reasons: list[str]\
+      \ = []\n\n    if not isinstance(convention, dict):\n        violations.append(\"\
+      convention must be a mapping\")\n        return _finish(False, violations, hard_reasons,\
+      \ enforcement, None)\n\n    schema_ver = convention.get(\"convention_schema_version\"\
+      )\n\n    # ---- falsification block ----\n    fal = convention.get(\"falsification\"\
+      )\n    if not isinstance(fal, dict):\n        violations.append(\"falsification\
+      \ block missing or not a mapping\")\n        fal = {}\n\n    hypothesis = fal.get(\"\
+      hypothesis\")\n    if not _nonempty(hypothesis):\n        violations.append(\"\
+      falsification.hypothesis must be a non-empty sentence\")\n\n    ffa = fal.get(\"\
+      falsifiable_from_artifacts\")\n    if not isinstance(ffa, bool):\n        violations.append(\"\
+      falsification.falsifiable_from_artifacts must be a bool\")\n\n    status = fal.get(\"\
+      empirical_status\")\n    if status not in {\"proven\", \"pending\", \"refuted\"\
+      , \"n/a\"}:\n        violations.append(\n            \"falsification.empirical_status\
+      \ must be one of \"\n            \"proven|pending|refuted|n/a\"\n        )\n\
+      \n    refute = fal.get(\"refutation_observation\")\n    if _nonempty(refute)\
+      \ and _nonempty(hypothesis) and (\n        refute.strip() == hypothesis.strip()\n\
+      \    ):\n        violations.append(\n            \"falsification.refutation_observation\
+      \ must be DISTINCT from the \"\n            \"hypothesis, not an echo of it\
+      \ (anti-theater)\"\n        )\n\n    # Defined-class consequence rule. The engine\
+      \ enforces only the\n    # consequence of the attested bool; it does not classify.\n\
+      \    if ffa is False:\n        if not _nonempty(fal.get(\"discriminating_experiment\"\
+      )):\n            violations.append(\n                \"falsifiable_from_artifacts=false\
+      \ ⇒ discriminating_experiment \"\n                \"must be non-empty\"\n  \
+      \          )\n        if not _nonempty(refute):\n            violations.append(\n\
+      \                \"falsifiable_from_artifacts=false ⇒ refutation_observation\
+      \ \"\n                \"must be non-empty\"\n            )\n        if status\
+      \ in {\"n/a\"}:\n            violations.append(\n                \"falsifiable_from_artifacts=false\
+      \ ⇒ empirical_status must be \"\n                \"pending|refuted|proven (never\
+      \ n/a) for the defined class\"\n            )\n\n    # proven requires a recorded\
+      \ experiment result (load-bearing reason ii).\n    if status == \"proven\" and\
+      \ not _nonempty(fal.get(\"experiment_result\")):\n        msg = (\n        \
+      \    \"empirical_status=proven without a recorded \"\n            \"falsification.experiment_result\"\
+      \n        )\n        violations.append(msg)\n        hard_reasons.append(msg)\n\
+      \n    # ---- independent_safeguard block ----\n    sg = convention.get(\"independent_safeguard\"\
+      )\n    if not isinstance(sg, dict) or \"applicable\" not in sg:\n        violations.append(\n\
+      \            \"independent_safeguard block missing — the judgement must be \"\
+      \n            \"RECORDED even when not applicable\"\n        )\n        sg =\
+      \ {}\n    elif sg.get(\"applicable\") is False:\n        if not _nonempty(sg.get(\"\
+      why\")):\n            violations.append(\n                \"independent_safeguard.applicable=false\
+      \ ⇒ why must record \"\n                \"the reason the risk class is not triggered\"\
+      \n            )\n    else:\n        if not _safeguard_conforms(sg):\n      \
+      \      violations.append(\n                \"independent_safeguard present but\
+      \ not decoupled: requires \"\n                \"works_if_root_cause_wrong=true,\
+      \ ships_with_fix=true, \"\n                \"non-empty mechanism and why\"\n\
+      \            )\n\n    # Risk-class consequence (load-bearing reason i): operator-DECLARED\n\
+      \    # safety/data-loss/bricking/irreversible class needs a conforming\n   \
+      \ # (decoupled) safeguard shipping with the fix.\n    if _norm(risk_class) in\
+      \ RISK_CLASS_REQUIRING_SAFEGUARD:\n        if not _safeguard_conforms(sg):\n\
+      \            msg = (\n                f\"risk_class={risk_class!r} requires\
+      \ a conforming \"\n                \"(root-cause-independent) independent_safeguard\"\
+      \n            )\n            violations.append(msg)\n            hard_reasons.append(msg)\n\
+      \n    # ---- provenance-by-citation ----\n    cited = convention.get(\"cited_pass_ids\"\
+      )\n    if not (isinstance(cited, list) and cited and all(_nonempty(c) for c\
+      \ in cited)):\n        violations.append(\n            \"cited_pass_ids must\
+      \ be a non-empty list (provenance-by-citation: \"\n            \"the convention\
+      \ is sealed INTO converged-plan.yaml, not a loose \"\n            \"sidecar,\
+      \ not a single-winner extraction)\"\n        )\n\n    presence_ok = not violations\n\
+      \    return _finish(presence_ok, violations, hard_reasons, enforcement, schema_ver)\n\
+      \n\ndef _finish(\n    presence_ok: bool,\n    violations: list[str],\n    hard_reasons:\
+      \ list[str],\n    enforcement: str,\n    schema_ver,\n) -> dict:\n    if enforcement\
+      \ == \"off\":\n        return {\n            \"presence_ok\": True,\n      \
+      \      \"violations\": [],\n            \"hard_reject\": False,\n          \
+      \  \"hard_reject_reasons\": [],\n            \"gate_scope\": GATE_SCOPE_DISCLAIMER,\n\
+      \            \"enforcement\": enforcement,\n            \"convention_schema_version\"\
+      : schema_ver,\n        }\n\n    if enforcement == \"warn\":\n        hard =\
+      \ False\n    elif enforcement == \"strict\":\n        hard = bool(violations)\n\
+      \    else:  # graduated (default): only the two load-bearing reasons block\n\
+      \        hard = bool(hard_reasons)\n\n    return {\n        \"presence_ok\"\
+      : presence_ok,\n        \"violations\": violations,\n        \"hard_reject\"\
+      : hard,\n        \"hard_reject_reasons\": hard_reasons,\n        \"gate_scope\"\
+      : GATE_SCOPE_DISCLAIMER,\n        \"enforcement\": enforcement,\n        \"\
+      convention_schema_version\": schema_ver,\n    }\n"
+    consensus_mcp/schemas/converged_plan_convention.schema.json: "{\n  \"$schema\"\
+      : \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://example.org/consensus-mcp/converged_plan_convention.schema.json\"\
+      ,\n  \"title\": \"Converged-plan convention block (v1.15.0 doctrine, machine-enforced\
+      \ from v1.15.1)\",\n  \"description\": \"Machine contract for the falsification\
+      \ / independent_safeguard / decisive_experiment_before_next_iteration blocks\
+      \ defined in docs/workflows/converged-plan-convention.md. The schema validates\
+      \ STRUCTURE and PRESENCE only. It does NOT and CANNOT assert the hypothesis\
+      \ is true or the safeguard adequate — that remains a human judgement (see validators/validate_converged_plan.py\
+      \ GATE_SCOPE_DISCLAIMER).\",\n  \"type\": \"object\",\n  \"required\": [\n \
+      \   \"convention_schema_version\",\n    \"falsification\",\n    \"independent_safeguard\"\
+      ,\n    \"cited_pass_ids\"\n  ],\n  \"additionalProperties\": true,\n  \"properties\"\
+      : {\n    \"convention_schema_version\": {\n      \"type\": \"integer\",\n  \
+      \    \"const\": 1,\n      \"description\": \"Bumped when the convention shape\
+      \ changes. Plans without this key are legacy/doctrine-only, never silently valid.\"\
+      \n    },\n    \"falsification\": {\n      \"type\": \"object\",\n      \"required\"\
+      : [\"hypothesis\", \"falsifiable_from_artifacts\", \"empirical_status\"],\n\
+      \      \"additionalProperties\": true,\n      \"properties\": {\n        \"\
+      hypothesis\": {\n          \"type\": \"string\",\n          \"minLength\": 1,\n\
+      \          \"description\": \"The converged root cause, one sentence.\"\n  \
+      \      },\n        \"falsifiable_from_artifacts\": {\n          \"type\": \"\
+      boolean\",\n          \"description\": \"true: refutable by reading evidence\
+      \ already in the packet (proof is a test shippable now). false: the DEFINED\
+      \ CLASS — refutable only by an external observation (hardware/firmware state,\
+      \ environment/toolchain, concurrency/timing).\"\n        },\n        \"discriminating_experiment\"\
+      : {\n          \"type\": \"string\",\n          \"description\": \"The single\
+      \ external test that would refute the hypothesis, concrete enough to run as-is.\
+      \ Required (non-empty) when falsifiable_from_artifacts is false.\"\n       \
+      \ },\n        \"refutation_observation\": {\n          \"type\": \"string\"\
+      ,\n          \"description\": \"The specific pre-specified observable that,\
+      \ if seen, proves the hypothesis WRONG. Must be distinct from `hypothesis`.\
+      \ Required (non-empty) when falsifiable_from_artifacts is false.\"\n       \
+      \ },\n        \"empirical_status\": {\n          \"type\": \"string\",\n   \
+      \       \"enum\": [\"proven\", \"pending\", \"refuted\", \"n/a\"],\n       \
+      \   \"description\": \"n/a: falsifiable_from_artifacts true and proving test\
+      \ ships here. pending: defined class, experiment named, not yet run ('fixed/shipped/root-cause-correct'\
+      \ FORBIDDEN). proven: experiment ran, refutation_observation did NOT occur (requires\
+      \ experiment_result). refuted: experiment ran, refutation_observation DID occur\
+      \ — load-bearing terminal state.\"\n        },\n        \"reason_na\": {\n \
+      \         \"type\": \"string\",\n          \"description\": \"Why empirical_status\
+      \ is n/a (the proving test is included in this iteration).\"\n        },\n \
+      \       \"experiment_result\": {\n          \"type\": \"string\",\n        \
+      \  \"description\": \"Recorded outcome of the discriminating_experiment. Required\
+      \ for empirical_status proven.\"\n        }\n      }\n    },\n    \"independent_safeguard\"\
+      : {\n      \"type\": \"object\",\n      \"required\": [\"applicable\"],\n  \
+      \    \"additionalProperties\": true,\n      \"properties\": {\n        \"applicable\"\
+      : {\n          \"type\": \"boolean\",\n          \"description\": \"false only\
+      \ when the defect is NOT safety-critical/data-loss/bricking/irreversible-risk.\
+      \ Recording the judgement is mandatory even when false.\"\n        },\n    \
+      \    \"mechanism\": {\"type\": \"string\", \"description\": \"What the safeguard\
+      \ does.\"},\n        \"works_if_root_cause_wrong\": {\n          \"type\": \"\
+      boolean\",\n          \"description\": \"MUST be true when applicable: the safeguard\
+      \ protects even if the hypothesis is 100% false.\"\n        },\n        \"why\"\
+      : {\n          \"type\": \"string\",\n          \"minLength\": 1,\n        \
+      \  \"description\": \"Why it still protects even if the hypothesis is wrong\
+      \ (answerable from the mechanism alone); or, when not applicable, why the risk\
+      \ class is not triggered.\"\n        },\n        \"ships_with_fix\": {\n   \
+      \       \"type\": \"boolean\",\n          \"description\": \"MUST be true when\
+      \ applicable: same change as the hypothesized fix, not later.\"\n        }\n\
+      \      }\n    },\n    \"decisive_experiment_before_next_iteration\": {\n   \
+      \   \"type\": [\"string\", \"null\"],\n      \"description\": \"The single test\
+      \ that most cleanly partitions the remaining hypothesis space, to run BEFORE\
+      \ the next iteration. null only when empirical_status is proven or n/a AND the\
+      \ fix is confirmed.\"\n    },\n    \"cited_pass_ids\": {\n      \"type\": \"\
+      array\",\n      \"minItems\": 1,\n      \"items\": {\"type\": \"string\", \"\
+      minLength\": 1},\n      \"description\": \"Provenance-by-citation: the contributor\
+      \ pass_ids whose content this orchestrator-authored synthesis draws from. Non-empty\
+      \ — the blocks are sealed INTO converged-plan.yaml (same hash), not a loose\
+      \ untracked sidecar, and not a mechanical single-winner extraction.\"\n    }\n\
+      \  }\n}\n"
+    consensus_mcp/workflow_engine.py: "\"\"\"Workflow engine — orchestrates contributors\
+      \ per `.consensus/config.yaml`.\n\nThird sub-component of iter-0016. Reads project\
+      \ config, validates, copies\neffective config to iteration dir, then dispatches\
+      \ enabled contributors per\nworkflow.mode (post-review, propose-converge, advisory)\
+      \ using the adapter\nlayer from consensus_mcp/contributors/.\n\nPer iter-0015\
+      \ converged-plan Section C, engine outputs:\n  - <iter_dir>/effective-config.yaml\
+      \ (copy of applied config)\n  - workflow-specific artifacts per phase\n  - workflow-specific\
+      \ final-decision artifact\n\nThe engine itself is sealed-artifact-aware: contributor\
+      \ outputs already go\nthrough T6 via their adapters; engine just orchestrates\
+      \ the sequence.\n\nConvergence evaluation:\n  - unanimous: ALL enabled responsive\
+      \ contributors must goal_satisfied=true\n    with no blocking_objections\n \
+      \ - strict-majority: > N/2 (strict; even-N ties refuse)\n  - inclusive-majority:\
+      \ >= N/2 (ties pass)\n  - advisory: claude (orchestrator) decides regardless\
+      \ of peer votes\n\"\"\"\nfrom __future__ import annotations\n\nimport hashlib\n\
+      import math\nfrom dataclasses import dataclass, field\nfrom pathlib import Path\n\
+      from typing import Callable\n\nimport yaml\n\nfrom consensus_mcp import config\
+      \ as cfg\nfrom consensus_mcp.contributors import (\n    PHASE_CONVERGE,\n  \
+      \  PHASE_PROPOSE,\n    PHASE_REVIEW,\n    ContributorAdapter,\n    DispatchError,\n\
+      \    SealedArtifact,\n)\nfrom consensus_mcp.contributors.base import DispatchPacket\n\
+      from consensus_mcp.validators import validate_converged_plan as vcp\n\n\nclass\
+      \ WorkflowError(RuntimeError):\n    \"\"\"Raised on engine-level failures (missing\
+      \ config, all contributors timed out, etc.).\"\"\"\n\n\n@dataclass\nclass ConvergenceOutcome:\n\
+      \    \"\"\"Result of evaluating a convergence rule against contributor outputs.\"\
+      \"\"\n    converged: bool                        # True if convergence rule\
+      \ passed\n    rule: str                              # rule applied (from config.convergence.rule)\n\
+      \    contributors_responsive: list[str]     # contributors that returned SealedArtifact\n\
+      \    contributors_timed_out: list[str]      # contributors that raised DispatchError\n\
+      \    approve_votes: list[str]               # contributors with goal_satisfied=True\
+      \ + no blocking\n    block_votes: list[str]                 # contributors with\
+      \ goal_satisfied=False or blocking\n    blocking_objection_ids: list[str]  \
+      \    # union of all blocking_objections across contributors\n    rationale:\
+      \ str\n\n\n@dataclass\nclass IterationOutcome:\n    \"\"\"Engine's final report\
+      \ on an iteration run.\"\"\"\n    iteration_id: str\n    workflow_mode: str\n\
+      \    effective_config_path: Path\n    contributor_artifacts: dict[str, list[SealedArtifact]]\
+      \ = field(default_factory=dict)\n    convergence: ConvergenceOutcome | None\
+      \ = None\n    final_artifact_path: Path | None = None\n    error: str | None\
+      \ = None\n\n\n# -------------------------------------------------------------------------\n\
+      # WorkflowEngine\n# -------------------------------------------------------------------------\n\
+      \n\nclass WorkflowEngine:\n    \"\"\"Orchestrates an iteration end-to-end per\
+      \ `.consensus/config.yaml`.\n\n    Construction:\n      - `adapters`: dict mapping\
+      \ contributor name → ContributorAdapter instance.\n        For tests, pass fake\
+      \ adapters. For real runtime, the engine factory\n        builds these from\
+      \ config.\n      - `config`: the normalized + validated config dict (use `cfg.load(...)`\n\
+      \        or `cfg.synthesize_legacy_config(...)` to produce).\n      - `repo_root`:\
+      \ repo root path (for goal_packet paths, archive root, etc.)\n\n    Use `run_iteration(iter_dir,\
+      \ problem_or_target_path, ...)` to execute.\n    \"\"\"\n\n    def __init__(\n\
+      \        self,\n        config: dict,\n        adapters: dict[str, ContributorAdapter],\n\
+      \        repo_root: Path,\n    ):\n        self.config = config\n        self.adapters\
+      \ = adapters\n        self.repo_root = Path(repo_root)\n        # Validate the\
+      \ adapter set matches contributors.enabled.\n        enabled = config.get(\"\
+      contributors\", {}).get(\"enabled\", [])\n        missing = [c for c in enabled\
+      \ if c not in adapters]\n        if missing:\n            raise WorkflowError(\n\
+      \                f\"adapters missing for enabled contributors: {missing}. \"\
+      \n                f\"Available: {sorted(adapters.keys())}\"\n            )\n\
+      \n    def write_effective_config(self, iteration_dir: Path) -> Path:\n     \
+      \   \"\"\"Copy normalized config to iter_dir/effective-config.yaml. Returns\
+      \ path.\"\"\"\n        out = Path(iteration_dir) / \"effective-config.yaml\"\
+      \n        out.write_text(\n            yaml.safe_dump(self.config, sort_keys=False,\
+      \ default_flow_style=False),\n            encoding=\"utf-8\",\n        )\n \
+      \       return out\n\n    def run_iteration(\n        self,\n        iteration_dir:\
+      \ Path,\n        goal_packet_path: Path,\n        target_path: Path,\n    )\
+      \ -> IterationOutcome:\n        \"\"\"Dispatch contributors per workflow.mode.\
+      \ Returns IterationOutcome.\n\n        `target_path` is:\n          - workflow\
+      \ #3: the patch/diff/file under review\n          - workflow #4: the problem\
+      \ statement (blind phase input)\n          - advisory:    the artifact contributors\
+      \ recommend on\n        \"\"\"\n        iteration_dir = Path(iteration_dir)\n\
+      \        iteration_dir.mkdir(parents=True, exist_ok=True)\n        effective_config_path\
+      \ = self.write_effective_config(iteration_dir)\n        mode = self.config[\"\
+      workflow\"][\"mode\"]\n        iter_id = iteration_dir.name\n        outcome\
+      \ = IterationOutcome(\n            iteration_id=iter_id,\n            workflow_mode=mode,\n\
+      \            effective_config_path=effective_config_path,\n        )\n\n   \
+      \     try:\n            if mode == cfg.WORKFLOW_POST_REVIEW:\n             \
+      \   self._run_workflow_3(iteration_dir, goal_packet_path, target_path, outcome)\n\
+      \            elif mode == cfg.WORKFLOW_PROPOSE_CONVERGE:\n                self._run_workflow_4(iteration_dir,\
+      \ goal_packet_path, target_path, outcome)\n            elif mode == cfg.WORKFLOW_ADVISORY:\n\
+      \                self._run_advisory(iteration_dir, goal_packet_path, target_path,\
+      \ outcome)\n            elif mode == cfg.WORKFLOW_AUTONOMOUS_EXECUTE:\n    \
+      \            # iter-workflow-abc-introduce: v1.14.4 ships the contract\n   \
+      \             # (alias, validators, scope_check helper, schema,\n          \
+      \      # autonomy_contract block) but NOT the multi-iteration\n            \
+      \    # auto-execution loop. Engine path lands in v1.15.0\n                #\
+      \ (named blocker: cross-platform interrupt-file watching\n                #\
+      \ validation + integration tests with real peer dispatches +\n             \
+      \   # autonomy-ledger replay design). Operators can write and\n            \
+      \    # validate Workflow C goal_packets in v1.14.4; running them\n         \
+      \       # surfaces this clear NotImplementedError.\n                raise NotImplementedError(\n\
+      \                    \"Workflow C (autonomous-execute) engine path is not \"\
+      \n                    \"implemented in v1.14.4; the contract (config alias,\
+      \ \"\n                    \"validators, scope_check, autonomy_contract schema)\
+      \ \"\n                    \"ships in v1.14.4 for staging only. Multi-iteration\
+      \ \"\n                    \"auto-execution lands in v1.15.0. See \"\n      \
+      \              \"docs/workflows/workflow-c-autonomous.md for status.\"\n   \
+      \             )\n            else:\n                raise WorkflowError(f\"\
+      unknown workflow.mode {mode!r}\")\n        except WorkflowError as exc:\n  \
+      \          outcome.error = str(exc)\n        except NotImplementedError as exc:\n\
+      \            outcome.error = f\"NotImplementedError: {exc}\"\n        return\
+      \ outcome\n\n    # ---- Workflow runners ----\n\n    def _run_workflow_3(\n\
+      \        self,\n        iteration_dir: Path,\n        goal_packet_path: Path,\n\
+      \        target_path: Path,\n        outcome: IterationOutcome,\n    ) -> None:\n\
+      \        \"\"\"Post-review: claude is assumed to have already produced target;\n\
+      \        non-claude contributors review it in parallel (conceptually — the\n\
+      \        engine dispatches them sequentially within this synchronous loop,\n\
+      \        but they're independent of each other).\"\"\"\n        enabled = self.config[\"\
+      contributors\"][\"enabled\"]\n        # Dispatch all non-claude contributors\
+      \ with review packets.\n        review_artifacts: list[SealedArtifact] = []\n\
+      \        for c in enabled:\n            if c == cfg.CLAUDE:\n              \
+      \  # Claude's \"implementation\" is the target_path; engine doesn't\n      \
+      \          # re-emit it. (Real runtime: claude wrote target_path before\n  \
+      \              # calling the engine.)\n                continue\n          \
+      \  adapter = self.adapters[c]\n            try:\n                art = adapter.review(iteration_dir,\
+      \ goal_packet_path, target_path)\n            except DispatchError as exc:\n\
+      \                outcome.contributor_artifacts.setdefault(c, [])\n         \
+      \       # Record timeout per workflow.timeout_policy.\n                self._record_timed_out(c,\
+      \ exc, outcome)\n                continue\n            review_artifacts.append(art)\n\
+      \            outcome.contributor_artifacts.setdefault(c, []).append(art)\n \
+      \       # codex-rev-001 round-1 BLOCKING fix: workflow #3 dispatches only the\n\
+      \        # non-claude reviewers; claude is the orchestrator/author, not a voter.\n\
+      \        # Pass the dispatched set as eligible_voters so claude isn't falsely\n\
+      \        # reported as timed-out (which would break unanimous + treat-as-blocking).\n\
+      \        post_review_voters = [c for c in enabled if c != cfg.CLAUDE]\n    \
+      \    outcome.convergence = self._evaluate_convergence(\n            review_artifacts,\
+      \ outcome, eligible_voters=post_review_voters\n        )\n        # Final artifact\
+      \ for workflow #3 is the target itself (already written\n        # by claude\
+      \ pre-engine); engine doesn't synthesize.\n        outcome.final_artifact_path\
+      \ = target_path\n\n    def _run_workflow_4(\n        self,\n        iteration_dir:\
+      \ Path,\n        goal_packet_path: Path,\n        problem_statement_path: Path,\n\
+      \        outcome: IterationOutcome,\n    ) -> None:\n        \"\"\"Propose-converge\
+      \ with blind-first-reveal independence.\n\n        Phases:\n          1. BLIND\
+      \ PROPOSAL: all enabled contributors propose against the\n             problem\
+      \ statement; none see each other's outputs.\n          2. REVEAL + CONVERGE\
+      \ round N: bundle all blind proposals into a\n             convergence packet;\
+      \ dispatch each contributor in converge phase.\n             Each contributor\
+      \ proposes the synthesized plan based on full\n             visibility.\n  \
+      \        3. Evaluate convergence rule; if passed → seal final converged_plan;\n\
+      \             else loop to step 2 up to max_convergence_rounds.\n        \"\"\
+      \"\n        enabled = self.config[\"contributors\"][\"enabled\"]\n        max_rounds\
+      \ = self.config[\"workflow\"][\"max_convergence_rounds\"]\n\n        # Phase\
+      \ 1: blind proposals (sequential dispatch in engine; the\n        # contributors\
+      \ themselves don't see each other's outputs because\n        # the input to\
+      \ each is just the problem statement).\n        proposals: list[SealedArtifact]\
+      \ = []\n        for c in enabled:\n            adapter = self.adapters[c]\n\
+      \            try:\n                art = adapter.propose(iteration_dir, goal_packet_path,\
+      \ problem_statement_path)\n            except DispatchError as exc:\n      \
+      \          self._record_timed_out(c, exc, outcome)\n                continue\n\
+      \            proposals.append(art)\n            outcome.contributor_artifacts.setdefault(c,\
+      \ []).append(art)\n\n        if not proposals:\n            raise WorkflowError(\n\
+      \                \"workflow #4: no contributors produced blind proposals; \"\
+      \n                \"cannot proceed to convergence\"\n            )\n\n     \
+      \   # Phase 2-3: convergence rounds.\n        proposal_paths = [str(p.sealed_path)\
+      \ for p in proposals]\n        last_convergence_artifacts: list[SealedArtifact]\
+      \ = []\n        for round_n in range(1, max_rounds + 1):\n            convergence_packet_path\
+      \ = self._build_convergence_packet(\n                iteration_dir, proposal_paths,\
+      \ round_n\n            )\n            convergence_artifacts: list[SealedArtifact]\
+      \ = []\n            for c in enabled:\n                if c not in self.adapters:\n\
+      \                    continue\n                adapter = self.adapters[c]\n\
+      \                try:\n                    art = adapter.converge(\n       \
+      \                 iteration_dir, goal_packet_path,\n                       \
+      \ convergence_packet_path, round_number=round_n,\n                    )\n  \
+      \              except DispatchError as exc:\n                    self._record_timed_out(c,\
+      \ exc, outcome)\n                    continue\n                convergence_artifacts.append(art)\n\
+      \                outcome.contributor_artifacts.setdefault(c, []).append(art)\n\
+      \            last_convergence_artifacts = convergence_artifacts\n          \
+      \  conv = self._evaluate_convergence(convergence_artifacts, outcome)\n     \
+      \       if conv.converged:\n                outcome.convergence = conv\n   \
+      \             # Seal final converged plan.\n                final_path = self._seal_converged_plan(\n\
+      \                    iteration_dir, convergence_artifacts, conv, round_n,\n\
+      \                    goal_packet_path,\n                )\n                outcome.final_artifact_path\
+      \ = final_path\n                return\n            # gemini-rev-001 round-1\
+      \ BLOCKING fix: EXTEND not replace.\n            # Subsequent rounds must see\
+      \ ALL prior artifacts (original blind\n            # proposals + each round's\
+      \ convergence views) to avoid losing\n            # historical context. Replacing\
+      \ the list discards the blind\n            # proposals after round 1, defeating\
+      \ workflow #4's purpose.\n            proposal_paths.extend(str(a.sealed_path)\
+      \ for a in convergence_artifacts)\n\n        # max rounds reached without convergence;\
+      \ outcome records final state.\n        outcome.convergence = self._evaluate_convergence(last_convergence_artifacts,\
+      \ outcome)\n        outcome.error = (\n            f\"workflow #4: convergence\
+      \ not reached after {max_rounds} rounds\"\n        )\n\n    def _run_advisory(\n\
+      \        self,\n        iteration_dir: Path,\n        goal_packet_path: Path,\n\
+      \        target_path: Path,\n        outcome: IterationOutcome,\n    ) -> None:\n\
+      \        \"\"\"Advisory: all contributors produce recommendations; claude decides.\n\
+      \n        For this engine, \"claude decides\" means: collect everyone's outputs,\n\
+      \        evaluate convergence rule (always 'advisory' here), and surface the\n\
+      \        contributor artifacts to the outcome. The orchestrator (real claude)\n\
+      \        consumes the outcome and makes the final call externally.\n       \
+      \ \"\"\"\n        enabled = self.config[\"contributors\"][\"enabled\"]\n   \
+      \     artifacts: list[SealedArtifact] = []\n        for c in enabled:\n    \
+      \        adapter = self.adapters[c]\n            try:\n                art =\
+      \ adapter.review(iteration_dir, goal_packet_path, target_path)\n           \
+      \ except DispatchError as exc:\n                self._record_timed_out(c, exc,\
+      \ outcome)\n                continue\n            artifacts.append(art)\n  \
+      \          outcome.contributor_artifacts.setdefault(c, []).append(art)\n   \
+      \     # codex-rev-002 round-1 fix: use _artifact_contributor_key for\n     \
+      \   # advisory reporting too (prior version used adapter.name which\n      \
+      \  # breaks for fake adapters or any wrapper with mismatched names).\n     \
+      \   artifact_keys = [self._artifact_contributor_key(a, outcome) for a in artifacts]\n\
+      \        responsive = list(dict.fromkeys(artifact_keys))\n        timed_out\
+      \ = [c for c in enabled if c not in responsive]\n        approve = [k for a,\
+      \ k in zip(artifacts, artifact_keys) if a.parsed.get(\"goal_satisfied\")]\n\
+      \        block = [k for a, k in zip(artifacts, artifact_keys) if not a.parsed.get(\"\
+      goal_satisfied\")]\n        outcome.convergence = ConvergenceOutcome(\n    \
+      \        converged=True,\n            rule=cfg.CONVERGE_ADVISORY,\n        \
+      \    contributors_responsive=responsive,\n            contributors_timed_out=timed_out,\n\
+      \            approve_votes=approve,\n            block_votes=block,\n      \
+      \      blocking_objection_ids=self._collect_blocking_ids(artifacts),\n     \
+      \       rationale=\"advisory: claude decides regardless of peer votes\",\n \
+      \       )\n\n    # ---- Helpers ----\n\n    def _build_convergence_packet(\n\
+      \        self,\n        iteration_dir: Path,\n        proposal_paths: list[str],\n\
+      \        round_number: int,\n    ) -> Path:\n        \"\"\"Bundle blind proposals\
+      \ into a convergence review-packet.\"\"\"\n        touched: dict[str, str] =\
+      \ {}\n        for p in proposal_paths:\n            p_path = Path(p)\n     \
+      \       if p_path.exists():\n                # store as repo-relative posix\
+      \ path\n                try:\n                    rel = str(p_path.relative_to(self.repo_root)).replace(\"\
+      \\\\\", \"/\")\n                except ValueError:\n                    rel\
+      \ = p_path.name\n                touched[rel] = p_path.read_text(encoding=\"\
+      utf-8\")\n        packet = {\n            \"defect_target\": {\n           \
+      \     \"files\": list(touched.keys()),\n                \"base_sha\": \"HEAD\"\
+      ,\n                \"touched_files_contents\": touched,\n            },\n  \
+      \          \"schema_version\": 1,\n            \"iteration_id\": iteration_dir.name,\n\
+      \            \"convergence_round\": round_number,\n        }\n        out =\
+      \ iteration_dir / f\"convergence-packet-round-{round_number}.yaml\"\n      \
+      \  out.write_text(\n            yaml.safe_dump(packet, sort_keys=False, default_flow_style=False,\
+      \ allow_unicode=True, width=10000),\n            encoding=\"utf-8\",\n     \
+      \   )\n        return out\n\n    def _record_timed_out(self, contributor: str,\
+      \ exc: Exception, outcome: IterationOutcome) -> None:\n        \"\"\"Record\
+      \ that a contributor timed out by ensuring its key exists in\n        the outcome's\
+      \ artifacts dict but without adding an artifact. The\n        convergence evaluator\
+      \ later detects the timeout by comparing the set\n        of responsive contributors\
+      \ (artifacts present) against enabled\n        (configured) and applies workflow.timeout_policy\
+      \ accordingly.\"\"\"\n        outcome.contributor_artifacts.setdefault(contributor,\
+      \ [])\n\n    def _artifact_contributor_key(self, art: SealedArtifact, outcome:\
+      \ IterationOutcome) -> str:\n        \"\"\"Return the contributor_KEY (from\
+      \ config.contributors.enabled) for an\n        artifact, falling back to art.contributor.\
+      \ Engine tracks artifacts under\n        their config key (e.g., 'codex') even\
+      \ when the adapter's internal name\n        differs (e.g., 'fake-block').\"\"\
+      \"\n        for key, arts in outcome.contributor_artifacts.items():\n      \
+      \      if art in arts:\n                return key\n        return art.contributor\n\
+      \n    def _evaluate_convergence(\n        self,\n        artifacts: list[SealedArtifact],\n\
+      \        outcome: IterationOutcome,\n        eligible_voters: list[str] | None\
+      \ = None,\n    ) -> ConvergenceOutcome:\n        \"\"\"Evaluate convergence\
+      \ rule against the contributor outputs.\n\n        `eligible_voters` is the\
+      \ set of contributors expected to produce\n        artifacts for this convergence\
+      \ evaluation. Defaults to\n        `config.contributors.enabled` for workflow\
+      \ #4 (all contributors\n        participate). Workflow #3 passes [non-claude...]\
+      \ because the\n        orchestrator (claude) doesn't dispatch in post-review\
+      \ (codex-rev-001\n        round-1 fix).\n\n        Per workflow.timeout_policy:\n\
+      \          - treat-as-no-vote: timed-out contributors are absent from the vote\
+      \ count\n          - treat-as-blocking: timed-out contributors count as block\
+      \ votes\n          - shrink-quorum: timed-out contributors reduce N (the denominator)\n\
+      \        \"\"\"\n        rule = self.config[\"convergence\"][\"rule\"]\n   \
+      \     timeout_policy = self.config[\"workflow\"][\"timeout_policy\"]\n     \
+      \   enabled = eligible_voters if eligible_voters is not None else self.config[\"\
+      contributors\"][\"enabled\"]\n\n        # Map each artifact to its config contributor\
+      \ KEY (not adapter.name).\n        artifact_keys = [self._artifact_contributor_key(a,\
+      \ outcome) for a in artifacts]\n        responsive = list(dict.fromkeys(artifact_keys))\
+      \  # preserve order, dedupe\n        timed_out = [c for c in enabled if c not\
+      \ in responsive]\n\n        # Per-contributor vote evaluation, indexed by contributor\
+      \ KEY.\n        approve_votes: list[str] = []\n        block_votes: list[str]\
+      \ = []\n        blocking_ids: list[str] = []\n        for art, key in zip(artifacts,\
+      \ artifact_keys):\n            p = art.parsed\n            if p.get(\"goal_satisfied\"\
+      ) and not p.get(\"blocking_objections\"):\n                approve_votes.append(key)\n\
+      \            else:\n                block_votes.append(key)\n            for\
+      \ bid in (p.get(\"blocking_objections\") or []):\n                blocking_ids.append(bid)\n\
+      \n        # Apply timeout policy to the effective denominator + extra block\
+      \ votes.\n        if timeout_policy == cfg.TIMEOUT_BLOCKING:\n            block_votes.extend(timed_out)\n\
+      \            n = len(enabled)\n        elif timeout_policy == cfg.TIMEOUT_SHRINK:\n\
+      \            n = len(responsive)\n        else:  # TIMEOUT_NO_VOTE\n       \
+      \     n = len(enabled)\n\n        # Apply convergence rule.\n        n_approve\
+      \ = len(approve_votes)\n        n_block = len(block_votes)\n        converged:\
+      \ bool\n        rationale: str\n        if rule == cfg.CONVERGE_UNANIMOUS:\n\
+      \            converged = n_block == 0 and n_approve == n and n > 0\n       \
+      \     rationale = f\"unanimous: need all {n} approve; got {n_approve} approve,\
+      \ {n_block} block\"\n        elif rule == cfg.CONVERGE_STRICT_MAJ:\n       \
+      \     threshold = (n // 2) + 1\n            converged = n_approve >= threshold\
+      \ and not blocking_ids\n            rationale = f\"strict-majority: need >={threshold}/{n}\
+      \ approve and no blocking; got {n_approve} approve, {len(blocking_ids)} blocking-id(s)\"\
+      \n        elif rule == cfg.CONVERGE_INCL_MAJ:\n            threshold = math.ceil(n\
+      \ / 2)\n            converged = n_approve >= threshold and not blocking_ids\n\
+      \            rationale = f\"inclusive-majority: need >={threshold}/{n} approve\
+      \ and no blocking; got {n_approve} approve, {len(blocking_ids)} blocking-id(s)\"\
+      \n        elif rule == cfg.CONVERGE_ADVISORY:\n            converged = True\n\
+      \            rationale = \"advisory: claude decides regardless\"\n        else:\n\
+      \            converged = False\n            rationale = f\"unknown convergence\
+      \ rule {rule!r}\"\n\n        return ConvergenceOutcome(\n            converged=converged,\n\
+      \            rule=rule,\n            contributors_responsive=responsive,\n \
+      \           contributors_timed_out=timed_out,\n            approve_votes=approve_votes,\n\
+      \            block_votes=block_votes,\n            blocking_objection_ids=blocking_ids,\n\
+      \            rationale=rationale,\n        )\n\n    def _collect_blocking_ids(self,\
+      \ artifacts: list[SealedArtifact]) -> list[str]:\n        ids: list[str] = []\n\
+      \        for a in artifacts:\n            for bid in (a.parsed.get(\"blocking_objections\"\
+      ) or []):\n                ids.append(bid)\n        return ids\n\n    def _read_convention_input(self,\
+      \ iteration_dir: Path) -> dict | None:\n        \"\"\"Read the OPTIONAL orchestrator-authored\
+      \ convention.\n\n        v1.15.1 / converged plan Q1: the convention blocks\
+      \ enter through\n        the ONE channel that already reaches seal time — a\
+      \ file in\n        `iteration_dir` (every artifact already lives here; no new\n\
+      \        parameter is threaded through run_iteration / the MCP tool). The\n\
+      \        validated blocks are then sealed INTO converged-plan.yaml (same\n \
+      \       write, same hash) — not a loose untracked sidecar.\n        \"\"\"\n\
+      \        path = iteration_dir / \"convention-input.yaml\"\n        if not path.exists():\n\
+      \            return None\n        try:\n            doc = yaml.safe_load(path.read_text(encoding=\"\
+      utf-8\"))\n        except yaml.YAMLError as exc:\n            raise WorkflowError(\n\
+      \                f\"convention-input.yaml is not valid YAML: {exc}\"\n     \
+      \       ) from exc\n        if isinstance(doc, dict) and isinstance(doc.get(\"\
+      convention\"), dict):\n            return doc[\"convention\"]\n        if isinstance(doc,\
+      \ dict) and \"falsification\" in doc:\n            return doc\n        raise\
+      \ WorkflowError(\n            \"convention-input.yaml must contain a `convention:`\
+      \ mapping \"\n            \"(or be the convention mapping itself)\"\n      \
+      \  )\n\n    def _goal_risk_class(self, goal_packet_path: Path) -> str | None:\n\
+      \        \"\"\"Operator-DECLARED risk class. No inference (heuristics are the\n\
+      \        shared-prior trap the v1.15.0 report documents).\"\"\"\n        try:\n\
+      \            gp = yaml.safe_load(Path(goal_packet_path).read_text(encoding=\"\
+      utf-8\"))\n        except (OSError, yaml.YAMLError):\n            return None\n\
+      \        if not isinstance(gp, dict):\n            return None\n        rc =\
+      \ gp.get(\"risk_class\") or gp.get(\"defect_class\")\n        if rc is None\
+      \ and isinstance(gp.get(\"goal\"), dict):\n            rc = gp[\"goal\"].get(\"\
+      risk_class\") or gp[\"goal\"].get(\"defect_class\")\n        return rc if isinstance(rc,\
+      \ str) else None\n\n    def _seal_converged_plan(\n        self,\n        iteration_dir:\
+      \ Path,\n        convergence_artifacts: list[SealedArtifact],\n        conv:\
+      \ ConvergenceOutcome,\n        round_number: int,\n        goal_packet_path:\
+      \ Path,\n    ) -> Path:\n        \"\"\"Write converged-plan.yaml summarizing\
+      \ the converged round.\n\n        v1.15.1: ingests the optional orchestrator-authored\
+      \ convention,\n        runs the structural/consequence validator, and — fail-closed\
+      \ —\n        does NOT write converged-plan.yaml when enforcement hard-rejects.\n\
+      \        \"\"\"\n        plan = {\n            \"iteration_id\": iteration_dir.name,\n\
+      \            \"workflow_mode\": self.config[\"workflow\"][\"mode\"],\n     \
+      \       \"convergence_rule\": conv.rule,\n            \"converged_at_round\"\
+      : round_number,\n            \"contributors_responsive\": conv.contributors_responsive,\n\
+      \            \"contributors_timed_out\": conv.contributors_timed_out,\n    \
+      \        \"approve_votes\": conv.approve_votes,\n            \"rationale\":\
+      \ conv.rationale,\n            \"convergence_round_artifacts\": [\n        \
+      \        {\n                    \"contributor\": a.contributor,\n          \
+      \          \"pass_id\": a.pass_id,\n                    \"sealed_path\": str(a.sealed_path),\n\
+      \                    \"packet_sha256\": a.packet_sha256,\n                }\n\
+      \                for a in convergence_artifacts\n            ],\n        }\n\
+      \n        enforcement = (\n            self.config.get(\"convergence\", {})\n\
+      \            .get(\"converged_plan_enforcement\", cfg.ENFORCEMENT_GRADUATED)\n\
+      \        )\n        convention = self._read_convention_input(iteration_dir)\n\
+      \n        if convention is None:\n            # Legacy / absent ⇒ NOT silently\
+      \ valid, NOT rejected. The\n            # outcome reader marks this enforcement:\
+      \ doctrine-only.\n            plan[\"convention_schema_version\"] = 0\n    \
+      \        plan[\"convention_gate\"] = {\n                \"enforcement_status\"\
+      : \"doctrine-only\",\n                \"enforcement\": enforcement,\n      \
+      \          \"gate_scope\": vcp.GATE_SCOPE_DISCLAIMER,\n            }\n     \
+      \   else:\n            risk_class = self._goal_risk_class(goal_packet_path)\n\
+      \            result = vcp.validate_convention(\n                convention,\
+      \ risk_class=risk_class, enforcement=enforcement\n            )\n          \
+      \  if result[\"hard_reject\"]:\n                # Fail-closed: surface the reasons;\
+      \ do NOT seal.\n                raise WorkflowError(\n                    \"\
+      converged-plan convention enforcement hard-rejected this \"\n              \
+      \      f\"iteration (enforcement={enforcement}): \"\n                    + \"\
+      ; \".join(result[\"hard_reject_reasons\"])\n                )\n            sv\
+      \ = convention.get(\n                \"convention_schema_version\", vcp.CONVENTION_SCHEMA_VERSION\n\
+      \            )\n            plan[\"convention_schema_version\"] = sv\n     \
+      \       plan[\"convention\"] = convention\n            plan[\"convention_violations\"\
+      ] = result[\"violations\"]\n            plan[\"convention_gate\"] = {\n    \
+      \            \"enforcement\": enforcement,\n                \"hard_reject\"\
+      : False,\n                \"presence_ok\": result[\"presence_ok\"],\n      \
+      \          \"gate_scope\": vcp.GATE_SCOPE_DISCLAIMER,\n            }\n\n   \
+      \     out = iteration_dir / \"converged-plan.yaml\"\n        out.write_text(\n\
+      \            yaml.safe_dump(plan, sort_keys=False, default_flow_style=False,\
+      \ allow_unicode=True),\n            encoding=\"utf-8\",\n        )\n       \
+      \ return out\n"
+    consensus_mcp/config.py: "\"\"\"Per-project `.consensus/config.yaml` schema +\
+      \ loader + validator.\n\nPer iter-0015 converged design (workflow #4, all three\
+      \ contributors agreed):\nthis module is the FIRST sub-component of the iter-0016\
+      \ implementation\ndelivering the configurable workflow engine. It provides:\n\
+      \n  * Schema constants (workflow modes, independence models, convergence rules,\n\
+      \    finding dispositions, snapshot triggers, patch authoring, timeout policies)\n\
+      \  * `ConfigValidationError` — raised on illegal config or invalid combinations\n\
+      \  * `load(path)` — parse YAML, normalize aliases + defaults, validate, return\n\
+      \    the effective config dict\n  * `validate(config)` — pure check on an already-loaded\
+      \ dict\n  * `normalize(config)` — apply default values + alias resolution (e.g.\n\
+      \    `workflow.mode: 3` → `workflow.mode: post-review`)\n  * `default_config()`\
+      \ — return the canonical default config dict\n  * `effective_config_sha256(config)`\
+      \ — deterministic hash for sealed provenance\n\nThis module does NOT load files\
+      \ into the engine, does NOT dispatch\ncontributors, does NOT run the wizard.\
+      \ Those land in iter-0016b/c/d.\n\nSchema version 1 lifecycle: schema_version=0\
+      \ is the synthetic legacy mode\n(no `.consensus/config.yaml`); schema_version=1\
+      \ is what iter-0016 ships.\nFuture bumps add an in-place migration command.\n\
+      \"\"\"\nfrom __future__ import annotations\n\nimport hashlib\nfrom copy import\
+      \ deepcopy\nfrom pathlib import Path\nfrom typing import Any\n\nimport yaml\n\
+      \n\nSCHEMA_VERSION = 1\n\n# === Workflow modes (semantic strings; CLI accepts\
+      \ numeric aliases 3/4) ===\nWORKFLOW_POST_REVIEW = \"post-review\"\nWORKFLOW_PROPOSE_CONVERGE\
+      \ = \"propose-converge\"\nWORKFLOW_ADVISORY = \"advisory\"\n# iter-workflow-abc-introduce:\
+      \ Workflow C — autonomous-execute. v1.14.4\n# ships the contract (alias, validators,\
+      \ scope_check helper, schema);\n# multi-iteration engine path is named-blocker\
+      \ for v1.15.0.\nWORKFLOW_AUTONOMOUS_EXECUTE = \"autonomous-execute\"\nVALID_WORKFLOWS\
+      \ = {\n    WORKFLOW_POST_REVIEW,\n    WORKFLOW_PROPOSE_CONVERGE,\n    WORKFLOW_ADVISORY,\n\
+      \    WORKFLOW_AUTONOMOUS_EXECUTE,\n}\n\n# Operator-facing aliases. iter-workflow-abc-introduce:\
+      \ letter aliases\n# replace numeric as the canonical operator vocabulary; numeric\
+      \ aliases\n# (3, 4) stay accepted for one release cycle with DeprecationWarning,\n\
+      # then removed in a future minor.\nWORKFLOW_ALIASES = {\n    # Letter aliases\
+      \ (canonical operator vocabulary as of v1.14.4)\n    \"A\": WORKFLOW_PROPOSE_CONVERGE,\n\
+      \    \"B\": WORKFLOW_POST_REVIEW,\n    \"C\": WORKFLOW_AUTONOMOUS_EXECUTE,\n\
+      \    \"a\": WORKFLOW_PROPOSE_CONVERGE,\n    \"b\": WORKFLOW_POST_REVIEW,\n \
+      \   \"c\": WORKFLOW_AUTONOMOUS_EXECUTE,\n    # Numeric aliases (deprecated;\
+      \ emit DeprecationWarning when resolved)\n    \"3\": WORKFLOW_POST_REVIEW,\n\
+      \    \"4\": WORKFLOW_PROPOSE_CONVERGE,\n    3: WORKFLOW_POST_REVIEW,\n    4:\
+      \ WORKFLOW_PROPOSE_CONVERGE,\n    # Semantic strings pass through unchanged\
+      \ in normalize.\n}\n_DEPRECATED_NUMERIC_WORKFLOW_ALIASES = {\"3\", \"4\", 3,\
+      \ 4}\n\n# === Independence models ===\nINDEPENDENCE_BLIND = \"blind-first-reveal\"\
+      \nINDEPENDENCE_VISIBLE = \"visible-from-start\"\nINDEPENDENCE_SEQUENTIAL = \"\
+      sequential\"\nVALID_INDEPENDENCE = {INDEPENDENCE_BLIND, INDEPENDENCE_VISIBLE,\
+      \ INDEPENDENCE_SEQUENTIAL}\n\n# === Convergence rules ===\nCONVERGE_UNANIMOUS\
+      \ = \"unanimous\"\nCONVERGE_STRICT_MAJ = \"strict-majority\"\nCONVERGE_INCL_MAJ\
+      \ = \"inclusive-majority\"\nCONVERGE_ADVISORY = \"advisory\"\nVALID_CONVERGENCE\
+      \ = {CONVERGE_UNANIMOUS, CONVERGE_STRICT_MAJ, CONVERGE_INCL_MAJ, CONVERGE_ADVISORY}\n\
+      \n# === Finding disposition ===\nDISPOSITION_ALL_OR_NOTHING = \"all-or-nothing\"\
+      \nDISPOSITION_PER_FINDING = \"per-finding\"\nDISPOSITION_WEIGHTED_SYNTHESIS\
+      \ = \"weighted-synthesis\"\nVALID_DISPOSITION = {\n    DISPOSITION_ALL_OR_NOTHING,\n\
+      \    DISPOSITION_PER_FINDING,\n    DISPOSITION_WEIGHTED_SYNTHESIS,\n}\n# iter-three-gaps:\
+      \ workflow #4 (propose-converge) accepts only the two\n# plan-shaped dispositions.\
+      \ per-finding is post-review semantics.\nVALID_DISPOSITION_FOR_PROPOSE_CONVERGE\
+      \ = {\n    DISPOSITION_ALL_OR_NOTHING,\n    DISPOSITION_WEIGHTED_SYNTHESIS,\n\
+      }\n\n# === Converged-plan convention enforcement (v1.15.1) ===\n# Machine-enforcement\
+      \ level for the v1.15.0 converged-plan convention\n# blocks (falsification /\
+      \ independent_safeguard /\n# decisive_experiment_before_next_iteration). Default\
+      \ `graduated`:\n# hard-reject ONLY (i) operator-declared safety/data-loss/bricking/\n\
+      # irreversible risk class missing a conforming independent_safeguard\n# and\
+      \ (ii) empirical_status:proven with no recorded experiment; warn +\n# annotate\
+      \ otherwise. See consensus_mcp.validators.validate_converged_plan\n# and docs/workflows/converged-plan-convention.md.\n\
+      ENFORCEMENT_OFF = \"off\"\nENFORCEMENT_WARN = \"warn\"\nENFORCEMENT_GRADUATED\
+      \ = \"graduated\"\nENFORCEMENT_STRICT = \"strict\"\nVALID_CONVERGED_PLAN_ENFORCEMENT\
+      \ = {\n    ENFORCEMENT_OFF,\n    ENFORCEMENT_WARN,\n    ENFORCEMENT_GRADUATED,\n\
+      \    ENFORCEMENT_STRICT,\n}\n\n# === Snapshot triggers ===\nSNAPSHOT_MANUAL\
+      \ = \"manual-only\"\nSNAPSHOT_ON_CLOSE = \"on-iteration-close\"\nSNAPSHOT_PERIODIC\
+      \ = \"periodic\"\nVALID_SNAPSHOT_TRIGGER = {SNAPSHOT_MANUAL, SNAPSHOT_ON_CLOSE,\
+      \ SNAPSHOT_PERIODIC}\n\n# === Patch authoring ===\nPATCH_CLAUDE_ONLY = \"claude-only\"\
+      \nPATCH_ANY = \"any-contributor\"\nPATCH_NONE = \"none\"\nVALID_PATCH_AUTHORING\
+      \ = {PATCH_CLAUDE_ONLY, PATCH_ANY, PATCH_NONE}\n\n# === Timeout policy ===\n\
+      TIMEOUT_NO_VOTE = \"treat-as-no-vote\"\nTIMEOUT_BLOCKING = \"treat-as-blocking\"\
+      \nTIMEOUT_SHRINK = \"shrink-quorum\"\nVALID_TIMEOUT_POLICY = {TIMEOUT_NO_VOTE,\
+      \ TIMEOUT_BLOCKING, TIMEOUT_SHRINK}\n\n# === Allowed contributor identities\
+      \ (v1 closed enum per converged plan SO-5) ===\nKNOWN_CONTRIBUTORS = (\"claude\"\
+      , \"codex\", \"gemini\")\nCLAUDE = \"claude\"\n\n\nclass ConfigValidationError(ValueError):\n\
+      \    \"\"\"Raised on schema violation or illegal config combination.\"\"\"\n\
+      \n\ndef default_config() -> dict:\n    \"\"\"Return the canonical default `.consensus/config.yaml`\
+      \ structure.\n\n    Defaults assume the canonical 3-contributor setup. Operators\
+      \ with smaller\n    pools must override via init wizard or flags.\n    \"\"\"\
+      \n    return {\n        \"schema_version\": SCHEMA_VERSION,\n        \"project\"\
+      : {\n            \"name\": None,\n            \"config_created_at_utc\": None,\n\
+      \        },\n        \"workflow\": {\n            \"mode\": WORKFLOW_PROPOSE_CONVERGE,\n\
+      \            \"independence\": INDEPENDENCE_BLIND,\n            \"max_convergence_rounds\"\
+      : 3,\n            \"timeout_policy\": TIMEOUT_NO_VOTE,\n        },\n       \
+      \ \"contributors\": {\n            \"enabled\": [\"claude\", \"codex\", \"gemini\"\
+      ],\n            \"adapters\": {\n                \"claude\": {\n           \
+      \         \"role\": \"orchestrator\",\n                    \"can_propose\":\
+      \ True,\n                    \"can_review\": True,\n                    \"can_converge\"\
+      : True,\n                },\n                \"codex\": {\n                \
+      \    \"command\": \"codex\",\n                    \"model\": \"gpt-5.5\",\n\
+      \                    \"sandbox_mode\": \"read-only\",\n                    \"\
+      can_propose\": True,\n                    \"can_review\": True,\n          \
+      \          \"can_converge\": True,\n                },\n                \"gemini\"\
+      : {\n                    \"command\": \"gemini\",\n                    \"model\"\
+      : \"gemini-2.5-pro\",\n                    \"approval_mode\": \"plan\",\n  \
+      \                  \"can_propose\": True,\n                    \"can_review\"\
+      : True,\n                    \"can_converge\": True,\n                },\n \
+      \           },\n        },\n        \"convergence\": {\n            \"rule\"\
+      : CONVERGE_STRICT_MAJ,\n            \"finding_disposition\": DISPOSITION_WEIGHTED_SYNTHESIS,\n\
+      \            \"converged_plan_enforcement\": ENFORCEMENT_GRADUATED,\n      \
+      \  },\n        \"patches\": {\n            \"authoring\": PATCH_CLAUDE_ONLY,\n\
+      \            \"max_patch_lines\": 600,\n        },\n        \"snapshots\": {\n\
+      \            \"trigger\": SNAPSHOT_ON_CLOSE,\n            \"periodic\": {\n\
+      \                \"every_iterations\": None,\n                \"every_minutes\"\
+      : None,\n            },\n            \"branch\": \"consensus-state-snapshots\"\
+      ,\n            \"retention\": \"unbounded\",\n        },\n        \"artifacts\"\
+      : {\n            \"root\": \"consensus-state\",\n            \"seal_outputs\"\
+      : True,\n        },\n        \"defaults\": {\n            \"iteration_timeout_seconds\"\
+      : 600,\n            \"stall_silence_seconds\": 180,\n            \"pre_first_byte_silence_seconds\"\
+      : 600,\n        },\n    }\n\n\ndef _deep_merge_defaults(base: dict, overrides:\
+      \ dict) -> dict:\n    \"\"\"Merge overrides into base (deep, override wins for\
+      \ scalars; lists replaced).\"\"\"\n    out = deepcopy(base)\n    for k, v in\
+      \ overrides.items():\n        if k in out and isinstance(out[k], dict) and isinstance(v,\
+      \ dict):\n            out[k] = _deep_merge_defaults(out[k], v)\n        else:\n\
+      \            out[k] = deepcopy(v)\n    return out\n\n\ndef normalize(config:\
+      \ dict) -> dict:\n    \"\"\"Apply defaults + alias resolution. Returns a NEW\
+      \ dict; does not mutate input.\n\n    Currently handles:\n      - `workflow.mode`\
+      \ aliases (A → propose-converge, B → post-review,\n        C → autonomous-execute;\
+      \ numeric 3/4 deprecated but still resolved)\n      - Filling unspecified keys\
+      \ with defaults from `default_config()`\n\n    Does NOT validate — see `validate()`\
+      \ for that.\n    \"\"\"\n    import warnings\n    if not isinstance(config,\
+      \ dict):\n        raise ConfigValidationError(\n            f\"config root must\
+      \ be a mapping, got {type(config).__name__}\"\n        )\n    normalized = _deep_merge_defaults(default_config(),\
+      \ config)\n    # Resolve workflow.mode aliases. Emit DeprecationWarning for\
+      \ numeric\n    # aliases (kept for backward compat for one release cycle per\n\
+      \    # iter-workflow-abc-introduce convergence; will be removed in a\n    #\
+      \ future minor).\n    mode = normalized.get(\"workflow\", {}).get(\"mode\")\n\
+      \    if mode in WORKFLOW_ALIASES:\n        if mode in _DEPRECATED_NUMERIC_WORKFLOW_ALIASES:\n\
+      \            warnings.warn(\n                f\"workflow.mode numeric alias\
+      \ {mode!r} is deprecated; \"\n                f\"use letter alias 'A' (propose-converge),\
+      \ 'B' (post-review), \"\n                f\"or 'C' (autonomous-execute) instead.\
+      \ Numeric aliases will \"\n                f\"be removed in a future minor release.\"\
+      ,\n                DeprecationWarning,\n                stacklevel=2,\n    \
+      \        )\n        normalized[\"workflow\"][\"mode\"] = WORKFLOW_ALIASES[mode]\n\
+      \    return normalized\n\n\ndef validate(config: dict) -> None:\n    \"\"\"\
+      Validate a (preferably normalized) config dict. Raises ConfigValidationError.\n\
+      \n    Per converged-plan.yaml Section B validation rules.\n    \"\"\"\n    if\
+      \ not isinstance(config, dict):\n        raise ConfigValidationError(\n    \
+      \        f\"config root must be a mapping, got {type(config).__name__}\"\n \
+      \       )\n\n    # === schema_version ===\n    sv = config.get(\"schema_version\"\
+      )\n    if sv != SCHEMA_VERSION:\n        raise ConfigValidationError(\n    \
+      \        f\"schema_version must be {SCHEMA_VERSION}, got {sv!r}\"\n        )\n\
+      \n    # === workflow ===\n    workflow = config.get(\"workflow\", {})\n    if\
+      \ not isinstance(workflow, dict):\n        raise ConfigValidationError(\"'workflow'\
+      \ must be a mapping\")\n    mode = workflow.get(\"mode\")\n    if mode not in\
+      \ VALID_WORKFLOWS:\n        raise ConfigValidationError(\n            f\"workflow.mode={mode!r}\
+      \ not in {sorted(VALID_WORKFLOWS)}\"\n        )\n    independence = workflow.get(\"\
+      independence\")\n    if independence not in VALID_INDEPENDENCE:\n        raise\
+      \ ConfigValidationError(\n            f\"workflow.independence={independence!r}\
+      \ not in {sorted(VALID_INDEPENDENCE)}\"\n        )\n    timeout_policy = workflow.get(\"\
+      timeout_policy\", TIMEOUT_NO_VOTE)\n    if timeout_policy not in VALID_TIMEOUT_POLICY:\n\
+      \        raise ConfigValidationError(\n            f\"workflow.timeout_policy={timeout_policy!r}\
+      \ not in {sorted(VALID_TIMEOUT_POLICY)}\"\n        )\n    max_rounds = workflow.get(\"\
+      max_convergence_rounds\", 3)\n    if not isinstance(max_rounds, int) or max_rounds\
+      \ < 1:\n        raise ConfigValidationError(\n            f\"workflow.max_convergence_rounds\
+      \ must be positive int, got {max_rounds!r}\"\n        )\n\n    # === contributors\
+      \ ===\n    contributors = config.get(\"contributors\", {})\n    if not isinstance(contributors,\
+      \ dict):\n        raise ConfigValidationError(\"'contributors' must be a mapping\"\
+      )\n    enabled = contributors.get(\"enabled\", [])\n    if not isinstance(enabled,\
+      \ list) or not enabled:\n        raise ConfigValidationError(\n            \"\
+      contributors.enabled must be a non-empty list\"\n        )\n    if len(set(enabled))\
+      \ != len(enabled):\n        raise ConfigValidationError(\n            f\"contributors.enabled\
+      \ must be unique; got {enabled!r}\"\n        )\n    for c in enabled:\n    \
+      \    if c not in KNOWN_CONTRIBUTORS:\n            raise ConfigValidationError(\n\
+      \                f\"contributors.enabled contains unknown identifier {c!r};\
+      \ \"\n                f\"v1 supports {KNOWN_CONTRIBUTORS}\"\n            )\n\
+      \    if CLAUDE not in enabled:\n        raise ConfigValidationError(\n     \
+      \       f\"contributors.enabled must contain 'claude' (orchestrator); got {enabled!r}\"\
+      \n        )\n    adapters = contributors.get(\"adapters\", {})\n    if not isinstance(adapters,\
+      \ dict):\n        raise ConfigValidationError(\"contributors.adapters must be\
+      \ a mapping\")\n    for c in enabled:\n        if c not in adapters:\n     \
+      \       raise ConfigValidationError(\n                f\"contributors.enabled\
+      \ contains {c!r} but contributors.adapters.{c} is missing\"\n            )\n\
+      \n    # === convergence ===\n    convergence = config.get(\"convergence\", {})\n\
+      \    if not isinstance(convergence, dict):\n        raise ConfigValidationError(\"\
+      'convergence' must be a mapping\")\n    rule = convergence.get(\"rule\")\n \
+      \   if rule not in VALID_CONVERGENCE:\n        raise ConfigValidationError(\n\
+      \            f\"convergence.rule={rule!r} not in {sorted(VALID_CONVERGENCE)}\"\
+      \n        )\n    disposition = convergence.get(\"finding_disposition\")\n  \
+      \  if disposition not in VALID_DISPOSITION:\n        raise ConfigValidationError(\n\
+      \            f\"convergence.finding_disposition={disposition!r} not in {sorted(VALID_DISPOSITION)}\"\
+      \n        )\n    # v1.15.1: converged-plan convention machine-enforcement level.\n\
+      \    cpe = convergence.get(\"converged_plan_enforcement\", ENFORCEMENT_GRADUATED)\n\
+      \    if cpe not in VALID_CONVERGED_PLAN_ENFORCEMENT:\n        raise ConfigValidationError(\n\
+      \            f\"convergence.converged_plan_enforcement={cpe!r} not in \"\n \
+      \           f\"{sorted(VALID_CONVERGED_PLAN_ENFORCEMENT)}\"\n        )\n\n \
+      \   # === Cross-validation rules per converged-plan.yaml ===\n    n_contributors\
+      \ = len(enabled)\n\n    # Rule: workflow.mode=propose-converge requires N>=2\n\
+      \    if mode == WORKFLOW_PROPOSE_CONVERGE and n_contributors < 2:\n        raise\
+      \ ConfigValidationError(\n            f\"workflow.mode=propose-converge requires\
+      \ at least 2 contributors; \"\n            f\"got {n_contributors} ({enabled!r}).\
+      \ Use post-review or advisory for solo setups.\"\n        )\n\n    # Rule: workflow.mode=autonomous-execute\
+      \ requires N==3 contributors\n    # (iter-workflow-abc-introduce safety floor:\
+      \ autonomous mode runs\n    # without operator-in-the-loop, so the wide cross-AI\
+      \ safety net is\n    # mandatory; v1.15.0+ may relax with explicit operator\
+      \ opt-in).\n    if mode == WORKFLOW_AUTONOMOUS_EXECUTE and n_contributors !=\
+      \ 3:\n        raise ConfigValidationError(\n            f\"workflow.mode=autonomous-execute\
+      \ requires exactly 3 contributors \"\n            f\"(claude + codex + gemini)\
+      \ for the wide cross-AI safety net \"\n            f\"required by autonomous\
+      \ runs; got {n_contributors} ({enabled!r}). \"\n            f\"Use propose-converge\
+      \ for 2-AI setups.\"\n        )\n\n    # Rule: workflow.mode=propose-converge\
+      \ accepts the two plan-shaped\n    # dispositions only (iter-three-gaps doctrine:\
+      \ weighted-synthesis is the\n    # default for workflow #4; all-or-nothing remains\
+      \ valid as explicit opt-in\n    # for binary scope decisions / safety gates\
+      \ / compliance verdicts).\n    # per-finding stays post-review-only (its semantics\
+      \ fit defect lists, not\n    # plan synthesis).\n    if mode == WORKFLOW_PROPOSE_CONVERGE\
+      \ and disposition not in VALID_DISPOSITION_FOR_PROPOSE_CONVERGE:\n        raise\
+      \ ConfigValidationError(\n            f\"workflow.mode=propose-converge accepts\
+      \ \"\n            f\"convergence.finding_disposition in \"\n            f\"\
+      {sorted(VALID_DISPOSITION_FOR_PROPOSE_CONVERGE)!r}; \"\n            f\"got {disposition!r}.\
+      \ per-finding is post-review semantics; \"\n            f\"use weighted-synthesis\
+      \ (default) or all-or-nothing for workflow #4.\"\n        )\n\n    # Rule: advisory\
+      \ mode requires advisory convergence rule\n    if mode == WORKFLOW_ADVISORY\
+      \ and rule != CONVERGE_ADVISORY:\n        raise ConfigValidationError(\n   \
+      \         f\"workflow.mode=advisory requires convergence.rule=advisory; got\
+      \ {rule!r}\"\n        )\n    # And vice versa: advisory rule only valid in advisory\
+      \ mode\n    if rule == CONVERGE_ADVISORY and mode != WORKFLOW_ADVISORY:\n  \
+      \      raise ConfigValidationError(\n            f\"convergence.rule=advisory\
+      \ valid only when workflow.mode=advisory; \"\n            f\"got workflow.mode={mode!r}\"\
+      \n        )\n\n    # Rule: strict-majority with N=1 is invalid\n    if rule\
+      \ == CONVERGE_STRICT_MAJ and n_contributors == 1:\n        raise ConfigValidationError(\n\
+      \            \"convergence.rule=strict-majority is invalid with only 1 contributor;\
+      \ \"\n            \"use unanimous or advisory\"\n        )\n\n    # Rule: sequential\
+      \ independence requires N>=2\n    if independence == INDEPENDENCE_SEQUENTIAL\
+      \ and n_contributors < 2:\n        raise ConfigValidationError(\n          \
+      \  f\"workflow.independence=sequential requires at least 2 contributors; \"\n\
+      \            f\"got {n_contributors}\"\n        )\n\n    # === patches ===\n\
+      \    patches = config.get(\"patches\", {})\n    if not isinstance(patches, dict):\n\
+      \        raise ConfigValidationError(\"'patches' must be a mapping\")\n    authoring\
+      \ = patches.get(\"authoring\")\n    if authoring not in VALID_PATCH_AUTHORING:\n\
+      \        raise ConfigValidationError(\n            f\"patches.authoring={authoring!r}\
+      \ not in {sorted(VALID_PATCH_AUTHORING)}\"\n        )\n    max_patch_lines =\
+      \ patches.get(\"max_patch_lines\", 600)\n    if not isinstance(max_patch_lines,\
+      \ int) or max_patch_lines < 0:\n        raise ConfigValidationError(\n     \
+      \       f\"patches.max_patch_lines must be non-negative int, got {max_patch_lines!r}\"\
+      \n        )\n\n    # === snapshots ===\n    snapshots = config.get(\"snapshots\"\
+      , {})\n    if not isinstance(snapshots, dict):\n        raise ConfigValidationError(\"\
+      'snapshots' must be a mapping\")\n    trigger = snapshots.get(\"trigger\")\n\
+      \    if trigger not in VALID_SNAPSHOT_TRIGGER:\n        raise ConfigValidationError(\n\
+      \            f\"snapshots.trigger={trigger!r} not in {sorted(VALID_SNAPSHOT_TRIGGER)}\"\
+      \n        )\n    periodic = snapshots.get(\"periodic\", {})\n    if not isinstance(periodic,\
+      \ dict):\n        raise ConfigValidationError(\"snapshots.periodic must be a\
+      \ mapping\")\n    every_iters = periodic.get(\"every_iterations\")\n    every_mins\
+      \ = periodic.get(\"every_minutes\")\n    if trigger == SNAPSHOT_PERIODIC:\n\
+      \        if every_iters is None and every_mins is None:\n            raise ConfigValidationError(\n\
+      \                \"snapshots.trigger=periodic requires at least one of \"\n\
+      \                \"snapshots.periodic.every_iterations or every_minutes\"\n\
+      \            )\n        if every_iters is not None and (not isinstance(every_iters,\
+      \ int) or every_iters < 1):\n            raise ConfigValidationError(\n    \
+      \            f\"snapshots.periodic.every_iterations must be positive int, got\
+      \ {every_iters!r}\"\n            )\n        if every_mins is not None and (not\
+      \ isinstance(every_mins, int) or every_mins < 1):\n            raise ConfigValidationError(\n\
+      \                f\"snapshots.periodic.every_minutes must be positive int, got\
+      \ {every_mins!r}\"\n            )\n    else:\n        # Non-periodic trigger:\
+      \ both periodic fields must be null\n        if every_iters is not None or every_mins\
+      \ is not None:\n            raise ConfigValidationError(\n                f\"\
+      snapshots.trigger={trigger!r} requires \"\n                f\"snapshots.periodic.every_iterations/every_minutes\
+      \ to be null; \"\n                f\"got every_iterations={every_iters!r}, every_minutes={every_mins!r}\"\
+      \n            )\n\n\ndef load(path: Path) -> dict:\n    \"\"\"Load `.consensus/config.yaml`\
+      \ from path. Returns normalized + validated dict.\n\n    Raises:\n      ConfigValidationError\
+      \ on malformed YAML, missing schema_version, or\n        illegal combination.\n\
+      \      OSError on file-read failure (caller decides legacy-mode fallback).\n\
+      \    \"\"\"\n    text = Path(path).read_text(encoding=\"utf-8\")\n    try:\n\
+      \        raw = yaml.safe_load(text)\n    except yaml.YAMLError as exc:\n   \
+      \     raise ConfigValidationError(f\"malformed YAML in {path}: {exc}\") from\
+      \ exc\n    normalized = normalize(raw)\n    validate(normalized)\n    return\
+      \ normalized\n\n\ndef effective_config_sha256(config: dict) -> str:\n    \"\"\
+      \"Deterministic sha256 of a config dict (canonical YAML form).\n\n    Used by\
+      \ the engine to stamp goal_packets with `config_sha256` so sealed\n    artifacts\
+      \ can prove which config governed dispatch.\n    \"\"\"\n    canonical = yaml.safe_dump(config,\
+      \ sort_keys=True, default_flow_style=False)\n    return hashlib.sha256(canonical.encode(\"\
+      utf-8\")).hexdigest()\n\n\ndef is_legacy_mode_repo(repo_root: Path) -> bool:\n\
+      \    \"\"\"True iff `.consensus/config.yaml` is absent at the repo root.\n\n\
+      \    Engine uses this to decide between loading config vs entering legacy mode.\n\
+      \    \"\"\"\n    return not (Path(repo_root) / \".consensus\" / \"config.yaml\"\
+      ).is_file()\n\n\ndef synthesize_legacy_config(repo_root: Path) -> dict:\n  \
+      \  \"\"\"Return the synthetic schema_version=0 'legacy mode' config.\n\n   \
+      \ Per converged-plan.yaml Section D: when `.consensus/config.yaml` is absent,\n\
+      \    the engine emulates pre-iter-0015 behavior. This helper returns the dict\n\
+      \    representing that behavior so the engine has a uniform config object to\n\
+      \    consume regardless of whether real config exists.\n\n    Schema_version=0\
+      \ is INTENTIONALLY not 1 — it's a sentinel marking legacy\n    synthesis. validate()\
+      \ rejects it; the engine uses a separate code path.\n    \"\"\"\n    return\
+      \ {\n        \"schema_version\": 0,  # sentinel: legacy synthesis\n        \"\
+      project\": {\"name\": Path(repo_root).name, \"config_created_at_utc\": None},\n\
+      \        \"workflow\": {\n            \"mode\": WORKFLOW_POST_REVIEW,\n    \
+      \        \"independence\": INDEPENDENCE_VISIBLE,\n            \"max_convergence_rounds\"\
+      : 1,\n            \"timeout_policy\": TIMEOUT_NO_VOTE,\n        },\n       \
+      \ \"contributors\": {\n            \"enabled\": [\"claude\", \"codex\"],\n \
+      \           \"adapters\": {\n                \"claude\": {\n               \
+      \     \"role\": \"orchestrator\",\n                    \"can_propose\": True,\n\
+      \                    \"can_review\": True,\n                    \"can_converge\"\
+      : False,\n                },\n                \"codex\": {\n               \
+      \     \"command\": \"codex\",\n                    \"model\": \"gpt-5.5\",\n\
+      \                    \"sandbox_mode\": \"read-only\",\n                    \"\
+      can_propose\": False,\n                    \"can_review\": True,\n         \
+      \           \"can_converge\": False,\n                },\n            },\n \
+      \       },\n        \"convergence\": {\n            \"rule\": CONVERGE_UNANIMOUS,\n\
+      \            \"finding_disposition\": DISPOSITION_ALL_OR_NOTHING,\n        \
+      \    \"converged_plan_enforcement\": ENFORCEMENT_GRADUATED,\n        },\n  \
+      \      \"patches\": {\"authoring\": PATCH_CLAUDE_ONLY, \"max_patch_lines\":\
+      \ 600},\n        \"snapshots\": {\n            \"trigger\": SNAPSHOT_MANUAL,\n\
+      \            \"periodic\": {\"every_iterations\": None, \"every_minutes\": None},\n\
+      \            \"branch\": \"consensus-state-snapshots\",\n            \"retention\"\
+      : \"unbounded\",\n        },\n        \"artifacts\": {\"root\": \"consensus-state\"\
+      , \"seal_outputs\": True},\n        \"defaults\": {\n            \"iteration_timeout_seconds\"\
+      : 600,\n            \"stall_silence_seconds\": 180,\n            \"pre_first_byte_silence_seconds\"\
+      : 600,\n        },\n        \"_legacy_mode_synthesis\": True,\n    }\n"
+    consensus_mcp/tools/consensus_get_iteration_outcome.py: "\"\"\"consensus.get_iteration_outcome\
+      \ MCP tool — read-only inspector for an\niteration's outcome.\n\nPer iter-0021\
+      \ converged plan (Section A): returns the parsed converged-plan\n(workflow #4)\
+      \ or the sealed contributor artifacts (workflow #3) for an\niteration_dir, so\
+      \ operators / downstream tools can introspect outcomes\nwithout re-running.\n\
+      \"\"\"\nfrom __future__ import annotations\n\nimport os\nfrom pathlib import\
+      \ Path\n\nimport yaml\n\n\ndef _resolve_repo_root(override: str | None) -> Path:\n\
+      \    if override:\n        return Path(override).resolve()\n    env = os.environ.get(\"\
+      CONSENSUS_MCP_REPO_ROOT\")\n    if env:\n        return Path(env).resolve()\n\
+      \    return Path.cwd().resolve()\n\n\ndef _resolve_path(p: str | Path, repo_root:\
+      \ Path) -> Path:\n    \"\"\"Resolve `p` against `repo_root` when relative. Mirrors\
+      \ consensus_run_iteration\n    (codex pass-2 rev-001 — fixes the inconsistency\
+      \ where this tool advertised\n    repo-relative paths in its schema but resolved\
+      \ against process cwd).\"\"\"\n    p = Path(p)\n    if not p.is_absolute():\n\
+      \        p = repo_root / p\n    return p.resolve()\n\n\nSCHEMA = {\n    \"name\"\
+      : \"consensus.get_iteration_outcome\",\n    \"description\": (\n        \"Read-only\
+      \ inspector for an iteration's outcome. Returns the parsed \"\n        \"converged-plan.yaml\
+      \ (workflow #4 propose-converge) if present, \"\n        \"otherwise lists the\
+      \ sealed contributor artifacts (workflow #3 \"\n        \"post-review or advisory).\
+      \ Does NOT re-run anything.\"\n    ),\n    \"input_schema\": {\n        \"type\"\
+      : \"object\",\n        \"properties\": {\n            \"iteration_dir\": {\n\
+      \                \"type\": \"string\",\n                \"description\": \"\
+      Absolute or repo-relative path to the iteration directory.\",\n            },\n\
+      \            \"repo_root\": {\n                \"type\": [\"string\", \"null\"\
+      ],\n                \"description\": (\n                    \"Override repo\
+      \ root. Defaults to CONSENSUS_MCP_REPO_ROOT \"\n                    \"env var\
+      \ or current working directory. Relative iteration_dir \"\n                \
+      \    \"paths are resolved against this root.\"\n                ),\n       \
+      \     },\n        },\n        \"required\": [\"iteration_dir\"],\n        \"\
+      additionalProperties\": False,\n    },\n    \"output_schema\": {\n        \"\
+      type\": \"object\",\n        \"properties\": {\n            \"ok\": {\"type\"\
+      : \"boolean\"},\n            \"iteration_id\": {\"type\": [\"string\", \"null\"\
+      ]},\n            \"converged_plan\": {\"type\": [\"object\", \"null\"]},\n \
+      \           \"contributor_artifacts\": {\n                \"type\": \"array\"\
+      ,\n                \"description\": \"List of {contributor, path, sealed_at}\
+      \ for each sealed artifact found in the iteration dir.\",\n            },\n\
+      \            \"effective_config_path\": {\"type\": [\"string\", \"null\"]},\n\
+      \            \"enforcement\": {\n                \"type\": [\"string\", \"null\"\
+      ],\n                \"description\": (\n                    \"v1.15.1 converged-plan\
+      \ convention enforcement level \"\n                    \"(off|warn|graduated|strict),\
+      \ or 'doctrine-only' for \"\n                    \"legacy/absent-convention\
+      \ plans (NOT silently valid).\"\n                ),\n            },\n      \
+      \      \"convention_gate_scope\": {\n                \"type\": [\"string\",\
+      \ \"null\"],\n                \"description\": (\n                    \"The\
+      \ mandatory non-soundness disclaimer, surfaced \"\n                    \"adjacent\
+      \ to any pass marker: a green gate is presence/\"\n                    \"structure\
+      \ only, never evidence the hypothesis is true.\"\n                ),\n     \
+      \       },\n            \"convention_violations\": {\"type\": [\"array\", \"\
+      null\"]},\n            \"error\": {\"type\": [\"string\", \"null\"]},\n    \
+      \        \"error_type\": {\"type\": [\"string\", \"null\"]},\n        },\n \
+      \   },\n}\n\n\n_KNOWN_CONTRIB_FILES = {\n    \"claude-review.yaml\": \"claude\"\
+      ,\n    \"claude-proposal.yaml\": \"claude\",\n    \"codex-review.yaml\": \"\
+      codex\",\n    \"gemini-review.yaml\": \"gemini\",\n}\n\n\ndef handle(iteration_dir:\
+      \ str, repo_root: str | None = None) -> dict:\n    \"\"\"Read iteration outcome\
+      \ from disk. Never re-runs the engine.\"\"\"\n    try:\n        rr = _resolve_repo_root(repo_root)\n\
+      \        iter_dir = _resolve_path(iteration_dir, rr)\n        if not iter_dir.exists():\n\
+      \            return {\n                \"ok\": False,\n                \"error\"\
+      : f\"iteration_dir does not exist: {iter_dir}\",\n                \"error_type\"\
+      : \"FileNotFoundError\",\n            }\n        if not iter_dir.is_dir():\n\
+      \            return {\n                \"ok\": False,\n                \"error\"\
+      : f\"iteration_dir is not a directory: {iter_dir}\",\n                \"error_type\"\
+      : \"NotADirectoryError\",\n            }\n\n        iteration_id = iter_dir.name\n\
+      \n        effective_config_path = iter_dir / \"effective-config.yaml\"\n   \
+      \     effective_config_str: str | None = (\n            str(effective_config_path)\
+      \ if effective_config_path.exists() else None\n        )\n\n        converged_plan_path\
+      \ = iter_dir / \"converged-plan.yaml\"\n        converged_plan = None\n    \
+      \    if converged_plan_path.exists():\n            try:\n                converged_plan\
+      \ = yaml.safe_load(converged_plan_path.read_text(encoding=\"utf-8\"))\n    \
+      \        except yaml.YAMLError as exc:\n                return {\n         \
+      \           \"ok\": False,\n                    \"iteration_id\": iteration_id,\n\
+      \                    \"error\": f\"converged-plan.yaml is not valid YAML: {exc}\"\
+      ,\n                    \"error_type\": \"YAMLError\",\n                }\n\n\
+      \        contributor_artifacts = []\n        for fname, contributor in _KNOWN_CONTRIB_FILES.items():\n\
+      \            fpath = iter_dir / fname\n            if not fpath.exists():\n\
+      \                continue\n            entry = {\n                \"contributor\"\
+      : contributor,\n                \"path\": str(fpath),\n            }\n     \
+      \       try:\n                parsed = yaml.safe_load(fpath.read_text(encoding=\"\
+      utf-8\"))\n                if isinstance(parsed, dict):\n                  \
+      \  if \"sealed_at_utc\" in parsed:\n                        entry[\"sealed_at\"\
+      ] = parsed[\"sealed_at_utc\"]\n                    if \"pass_id\" in parsed:\n\
+      \                        entry[\"pass_id\"] = parsed[\"pass_id\"]\n        \
+      \            if \"goal_satisfied\" in parsed:\n                        entry[\"\
+      goal_satisfied\"] = parsed[\"goal_satisfied\"]\n            except yaml.YAMLError:\n\
+      \                # Malformed artifact — still report its existence.\n      \
+      \          entry[\"parse_error\"] = True\n            contributor_artifacts.append(entry)\n\
+      \n        # v1.15.1: surface the converged-plan convention enforcement\n   \
+      \     # status. A reader must never be able to see a pass marker\n        #\
+      \ WITHOUT the gate-scope disclaimer next to it (the recursive\n        # trap\
+      \ defense — a green gate is not evidence of correctness).\n        enforcement\
+      \ = None\n        convention_gate_scope = None\n        convention_violations\
+      \ = None\n        if isinstance(converged_plan, dict):\n            gate = converged_plan.get(\"\
+      convention_gate\")\n            gate = gate if isinstance(gate, dict) else {}\n\
+      \            csv = converged_plan.get(\"convention_schema_version\")\n     \
+      \       if not csv:  # None or 0 → legacy/absent: NOT silently valid\n     \
+      \           enforcement = \"doctrine-only\"\n            else:\n           \
+      \     enforcement = gate.get(\"enforcement\")\n            convention_gate_scope\
+      \ = gate.get(\"gate_scope\")\n            convention_violations = converged_plan.get(\"\
+      convention_violations\")\n\n        return {\n            \"ok\": True,\n  \
+      \          \"iteration_id\": iteration_id,\n            \"converged_plan\":\
+      \ converged_plan,\n            \"contributor_artifacts\": contributor_artifacts,\n\
+      \            \"effective_config_path\": effective_config_str,\n            \"\
+      enforcement\": enforcement,\n            \"convention_gate_scope\": convention_gate_scope,\n\
+      \            \"convention_violations\": convention_violations,\n           \
+      \ \"error\": None,\n            \"error_type\": None,\n        }\n    except\
+      \ Exception as exc:  # noqa: BLE001 — boundary translation\n        return {\n\
+      \            \"ok\": False,\n            \"error\": str(exc),\n            \"\
+      error_type\": type(exc).__name__,\n        }\n\n\ndef register(registry) ->\
+      \ None:\n    registry.register(SCHEMA[\"name\"], SCHEMA, handle)\n"
+    consensus_mcp/tests/test_converged_plan_convention.py: "\"\"\"Tests for v1.15.1\
+      \ machine-enforcement of the converged-plan convention.\n\nConverged plan: iteration-converged-plan-machine-enforcement\n\
+      (Workflow A weighted-synthesis: claude + codex + gemini; shared-prior\nself-check\
+      \ PASSED; no blocking objections).\n\nThese tests are the discriminating experiment\
+      \ named in that converged\nplan's own `falsification` block (falsifiable_from_artifacts:\
+      \ true):\n\n  refutation_observation: \"any test shows the validator setting/implying\n\
+      \  an approved|correct|ready|sound state from the blocks, OR a legacy\n  iter-0043..v1.15.0\
+      \ plan failing to load through\n  consensus_get_iteration_outcome\"\n\nEvery\
+      \ acceptance gate in `deliverable.acceptance_gates_gating` has a\ntest here.\n\
+      \"\"\"\nfrom __future__ import annotations\n\nimport json\nimport re\nfrom copy\
+      \ import deepcopy\nfrom pathlib import Path\n\nimport pytest\nimport yaml\n\n\
+      from consensus_mcp import config as cfg\nfrom consensus_mcp.contributors.base\
+      \ import FakeAlwaysApprove\nfrom consensus_mcp.tools import consensus_get_iteration_outcome\
+      \ as cgio\nfrom consensus_mcp.validators import validate_converged_plan as vcp\n\
+      from consensus_mcp.workflow_engine import WorkflowEngine\n\n# --------------------------------------------------------------------------\n\
+      # Fixtures / helpers\n# --------------------------------------------------------------------------\n\
+      \n_SCHEMA_PATH = (\n    Path(vcp.__file__).resolve().parent.parent\n    / \"\
+      schemas\"\n    / \"converged_plan_convention.schema.json\"\n)\n\n\ndef _good_convention(**overrides)\
+      \ -> dict:\n    base = {\n        \"convention_schema_version\": vcp.CONVENTION_SCHEMA_VERSION,\n\
+      \        \"falsification\": {\n            \"hypothesis\": \"sdStorage_init\
+      \ shared-LDO disturbance perturbs the I2C rail\",\n            \"falsifiable_from_artifacts\"\
+      : False,\n            \"discriminating_experiment\": \"build flag skips sdStorage_init\
+      \ before display; capture boot-1 serial\",\n            \"refutation_observation\"\
+      : \"first i2c_master_transmit still returns ESP_ERR_INVALID_STATE at i2c.cpp:91\
+      \ with SD_MMC.begin() provably absent\",\n            \"empirical_status\":\
+      \ \"pending\",\n        },\n        \"independent_safeguard\": {\n         \
+      \   \"applicable\": True,\n            \"mechanism\": \"boot-loop breaker: on\
+      \ 2nd crashed boot, skip display, continue headless\",\n            \"works_if_root_cause_wrong\"\
+      : True,\n            \"why\": \"triggers on the crash symptom (reboot count),\
+      \ not on any I2C/LDO theory\",\n            \"ships_with_fix\": True,\n    \
+      \    },\n        \"decisive_experiment_before_next_iteration\": \"flash unmodified\
+      \ reference under our toolchain\",\n        \"cited_pass_ids\": [\"claude-cpme-1-pass1\"\
+      , \"codex-cpme-1-pass1\"],\n    }\n    base.update(overrides)\n    return base\n\
+      \n\ndef _three_contributor_config() -> dict:\n    c = deepcopy(cfg.default_config())\n\
+      \    c[\"workflow\"][\"mode\"] = cfg.WORKFLOW_PROPOSE_CONVERGE\n    c[\"convergence\"\
+      ][\"rule\"] = cfg.CONVERGE_STRICT_MAJ\n    c[\"convergence\"][\"finding_disposition\"\
+      ] = cfg.DISPOSITION_ALL_OR_NOTHING\n    cfg.validate(c)\n    return c\n\n\n\
+      def _iter_dir(tmp_path: Path, goal_extra: dict | None = None) -> tuple[Path,\
+      \ Path, Path]:\n    d = tmp_path / \"iter-cpme\"\n    d.mkdir()\n    goal =\
+      \ d / \"goal_packet.yaml\"\n    gp = {\"pilot_id\": \"iter-cpme\", \"type\"\
+      : \"design_consult\"}\n    if goal_extra:\n        gp.update(goal_extra)\n \
+      \   goal.write_text(yaml.safe_dump(gp), encoding=\"utf-8\")\n    target = d\
+      \ / \"problem.md\"\n    target.write_text(\"problem statement\\n\", encoding=\"\
+      utf-8\")\n    return d, goal, target\n\n\n# --------------------------------------------------------------------------\n\
+      # Gate: schema file is valid JSON Schema; empirical_status enum matches v1.15.0\n\
+      # --------------------------------------------------------------------------\n\
+      \ndef test_schema_file_is_valid_json_and_enum_matches_v1150():\n    assert _SCHEMA_PATH.exists(),\
+      \ f\"schema missing: {_SCHEMA_PATH}\"\n    schema = json.loads(_SCHEMA_PATH.read_text(encoding=\"\
+      utf-8\"))\n    assert schema.get(\"$schema\"), \"must declare a JSON Schema\
+      \ dialect\"\n    enum = schema[\"properties\"][\"falsification\"][\"properties\"\
+      ][\"empirical_status\"][\"enum\"]\n    # v1.15.0 docs/workflows/converged-plan-convention.md\
+      \ enum, verbatim.\n    assert set(enum) == {\"proven\", \"pending\", \"refuted\"\
+      , \"n/a\"}\n\n\n# --------------------------------------------------------------------------\n\
+      # Gate: consequence rule\n#   falsifiable_from_artifacts==False ⇒ discriminating_experiment\
+      \ &\n#   refutation_observation non-empty & empirical_status∈{pending,refuted}\n\
+      # --------------------------------------------------------------------------\n\
+      \ndef test_consequence_rule_satisfied_passes_presence():\n    r = vcp.validate_convention(_good_convention(),\
+      \ risk_class=None, enforcement=\"graduated\")\n    assert r[\"presence_ok\"\
+      ] is True\n    assert r[\"violations\"] == []\n    assert r[\"hard_reject\"\
+      ] is False\n\n\n@pytest.mark.parametrize(\"bad\", [\n    {\"discriminating_experiment\"\
+      : \"\"},\n    {\"refutation_observation\": \"  \"},\n    {\"empirical_status\"\
+      : \"proven\"},\n    {\"empirical_status\": \"n/a\"},\n])\ndef test_consequence_rule_violation_when_not_falsifiable_from_artifacts(bad):\n\
+      \    conv = _good_convention()\n    conv[\"falsification\"].update(bad)\n  \
+      \  r = vcp.validate_convention(conv, risk_class=None, enforcement=\"graduated\"\
+      )\n    assert r[\"presence_ok\"] is False\n    assert any(\"falsifiable_from_artifacts\"\
+      \ in v or \"empirical_status\" in v\n               or \"discriminating_experiment\"\
+      \ in v or \"refutation_observation\" in v\n               for v in r[\"violations\"\
+      ])\n\n\ndef test_falsifiable_from_artifacts_true_allows_na():\n    conv = _good_convention()\n\
+      \    conv[\"falsification\"] = {\n        \"hypothesis\": \"off-by-one in seal\
+      \ filename token count\",\n        \"falsifiable_from_artifacts\": True,\n \
+      \       \"empirical_status\": \"n/a\",\n        \"reason_na\": \"tooling defect;\
+      \ proving test ships in this iteration\",\n    }\n    r = vcp.validate_convention(conv,\
+      \ risk_class=None, enforcement=\"graduated\")\n    assert r[\"presence_ok\"\
+      ] is True\n    assert r[\"hard_reject\"] is False\n\n\ndef test_refutation_observation_must_not_echo_hypothesis():\n\
+      \    conv = _good_convention()\n    conv[\"falsification\"][\"refutation_observation\"\
+      ] = conv[\"falsification\"][\"hypothesis\"]\n    r = vcp.validate_convention(conv,\
+      \ risk_class=None, enforcement=\"graduated\")\n    assert r[\"presence_ok\"\
+      ] is False\n    assert any(\"echo\" in v.lower() or \"distinct\" in v.lower()\
+      \ for v in r[\"violations\"])\n\n\n# --------------------------------------------------------------------------\n\
+      # Gate: graduated strictness — hard-reject ONLY (i) safety-class missing a\n\
+      #   conforming independent_safeguard; (ii) empirical_status:proven w/o a\n#\
+      \   recorded experiment result. Else warn+annotate.\n# --------------------------------------------------------------------------\n\
+      \ndef test_safety_class_missing_safeguard_hard_rejects_under_graduated():\n\
+      \    conv = _good_convention()\n    conv[\"independent_safeguard\"] = {\"applicable\"\
+      : False, \"why\": \"n/a\"}\n    r = vcp.validate_convention(conv, risk_class=\"\
+      bricking\", enforcement=\"graduated\")\n    assert r[\"hard_reject\"] is True\n\
+      \    assert any(\"independent_safeguard\" in reason for reason in r[\"hard_reject_reasons\"\
+      ])\n\n\ndef test_safety_class_safeguard_not_decoupled_hard_rejects():\n    conv\
+      \ = _good_convention()\n    conv[\"independent_safeguard\"][\"works_if_root_cause_wrong\"\
+      ] = False\n    r = vcp.validate_convention(conv, risk_class=\"safety\", enforcement=\"\
+      graduated\")\n    assert r[\"hard_reject\"] is True\n\n\ndef test_proven_without_recorded_experiment_hard_rejects():\n\
+      \    conv = _good_convention()\n    conv[\"falsification\"] = {\n        \"\
+      hypothesis\": \"h\",\n        \"falsifiable_from_artifacts\": False,\n     \
+      \   \"discriminating_experiment\": \"exp\",\n        \"refutation_observation\"\
+      : \"obs distinct from h\",\n        \"empirical_status\": \"proven\",\n    }\n\
+      \    r = vcp.validate_convention(conv, risk_class=None, enforcement=\"graduated\"\
+      )\n    assert r[\"hard_reject\"] is True\n    assert any(\"proven\" in reason\
+      \ for reason in r[\"hard_reject_reasons\"])\n\n\ndef test_proven_with_recorded_experiment_does_not_hard_reject():\n\
+      \    conv = _good_convention()\n    conv[\"falsification\"] = {\n        \"\
+      hypothesis\": \"h\",\n        \"falsifiable_from_artifacts\": False,\n     \
+      \   \"discriminating_experiment\": \"exp\",\n        \"refutation_observation\"\
+      : \"obs distinct from h\",\n        \"empirical_status\": \"proven\",\n    \
+      \    \"experiment_result\": \"ran 2026-05-15; refutation observation did NOT\
+      \ occur\",\n    }\n    r = vcp.validate_convention(conv, risk_class=None, enforcement=\"\
+      graduated\")\n    assert r[\"hard_reject\"] is False\n\n\ndef test_non_safety_violation_warns_not_hard_rejects_under_graduated():\n\
+      \    conv = _good_convention()\n    conv[\"falsification\"][\"discriminating_experiment\"\
+      ] = \"\"\n    r = vcp.validate_convention(conv, risk_class=None, enforcement=\"\
+      graduated\")\n    assert r[\"violations\"]\n    assert r[\"hard_reject\"] is\
+      \ False  # graduated: non-safety ⇒ warn\n\n\ndef test_strict_hard_rejects_any_violation():\n\
+      \    conv = _good_convention()\n    conv[\"falsification\"][\"discriminating_experiment\"\
+      ] = \"\"\n    r = vcp.validate_convention(conv, risk_class=None, enforcement=\"\
+      strict\")\n    assert r[\"hard_reject\"] is True\n\n\ndef test_off_never_hard_rejects_and_suppresses_violations():\n\
+      \    conv = _good_convention()\n    conv[\"independent_safeguard\"] = {\"applicable\"\
+      : False, \"why\": \"n/a\"}\n    r = vcp.validate_convention(conv, risk_class=\"\
+      bricking\", enforcement=\"off\")\n    assert r[\"hard_reject\"] is False\n \
+      \   assert r[\"violations\"] == []\n\n\ndef test_warn_surfaces_violations_never_hard_rejects():\n\
+      \    conv = _good_convention()\n    conv[\"independent_safeguard\"] = {\"applicable\"\
+      : False, \"why\": \"n/a\"}\n    r = vcp.validate_convention(conv, risk_class=\"\
+      safety\", enforcement=\"warn\")\n    assert r[\"hard_reject\"] is False\n  \
+      \  assert r[\"violations\"]\n\n\n# --------------------------------------------------------------------------\n\
+      # Gate (HIGHEST-ORDER): recursive-trap structural defense.\n# grep validate_converged_plan.py\
+      \ ⇒ ZERO approved/correct/ready/sound\n# state-setting from convention blocks.\n\
+      # --------------------------------------------------------------------------\n\
+      \ndef test_validator_source_sets_no_correctness_state():\n    src = Path(vcp.__file__).read_text(encoding=\"\
+      utf-8\")\n    # No assignment / dict-key / return that derives an\n    # approved|correct|ready|sound\
+      \ *state* from the convention.\n    forbidden = re.compile(\n        r'[\"\\\
+      ']?\\b(is_)?(approved|correct|sound|ready|valid_hypothesis|'\n        r'hypothesis_correct|safeguard_adequate)\\\
+      b[\"\\']?\\s*[:=]',\n        re.IGNORECASE,\n    )\n    offenders = [ln for\
+      \ ln in src.splitlines() if forbidden.search(ln)]\n    assert not offenders,\
+      \ f\"validator must not set correctness state: {offenders}\"\n\n\ndef test_gate_scope_disclaimer_always_present_and_non_soundness():\n\
+      \    for enf in (\"off\", \"warn\", \"graduated\", \"strict\"):\n        r =\
+      \ vcp.validate_convention(_good_convention(), risk_class=None, enforcement=enf)\n\
+      \        gs = r[\"gate_scope\"]\n        assert gs == vcp.GATE_SCOPE_DISCLAIMER\n\
+      \        low = gs.lower()\n        assert \"presence\" in low and \"not\" in\
+      \ low and \"soundness\" in low\n        assert \"human judgement\" in low or\
+      \ \"human judgment\" in low\n    # The result must NOT carry any correctness\
+      \ boolean.\n    r = vcp.validate_convention(_good_convention(), risk_class=None,\
+      \ enforcement=\"graduated\")\n    for k in r:\n        assert k.lower() not\
+      \ in {\"approved\", \"correct\", \"sound\", \"ready\"}\n\n\n# --------------------------------------------------------------------------\n\
+      # Gate: blocks persisted INTO the sealed converged-plan.yaml (same write),\n\
+      # each block path requires cited_pass_ids; provenance-by-citation.\n# --------------------------------------------------------------------------\n\
+      \ndef test_cited_pass_ids_required():\n    conv = _good_convention(cited_pass_ids=[])\n\
+      \    r = vcp.validate_convention(conv, risk_class=None, enforcement=\"graduated\"\
+      )\n    assert r[\"presence_ok\"] is False\n    assert any(\"cited_pass_ids\"\
+      \ in v for v in r[\"violations\"])\n\n\ndef test_engine_seals_convention_into_converged_plan(tmp_path):\n\
+      \    config = _three_contributor_config()\n    adapters = {n: FakeAlwaysApprove()\
+      \ for n in (\"claude\", \"codex\", \"gemini\")}\n    engine = WorkflowEngine(config,\
+      \ adapters, tmp_path)\n    d, goal, target = _iter_dir(tmp_path)\n    (d / \"\
+      convention-input.yaml\").write_text(\n        yaml.safe_dump({\"convention\"\
+      : _good_convention()}), encoding=\"utf-8\"\n    )\n    outcome = engine.run_iteration(d,\
+      \ goal, target)\n    assert outcome.error is None\n    plan = yaml.safe_load((d\
+      \ / \"converged-plan.yaml\").read_text(encoding=\"utf-8\"))\n    assert plan[\"\
+      convention\"][\"falsification\"][\"hypothesis\"]\n    assert plan[\"convention_schema_version\"\
+      ] == vcp.CONVENTION_SCHEMA_VERSION\n    assert plan[\"convention_gate\"][\"\
+      gate_scope\"] == vcp.GATE_SCOPE_DISCLAIMER\n    assert plan[\"convention\"][\"\
+      cited_pass_ids\"]\n\n\ndef test_engine_hard_reject_fails_closed_no_seal(tmp_path):\n\
+      \    config = _three_contributor_config()\n    adapters = {n: FakeAlwaysApprove()\
+      \ for n in (\"claude\", \"codex\", \"gemini\")}\n    engine = WorkflowEngine(config,\
+      \ adapters, tmp_path)\n    d, goal, target = _iter_dir(tmp_path, goal_extra={\"\
+      risk_class\": \"bricking\"})\n    bad = _good_convention()\n    bad[\"independent_safeguard\"\
+      ] = {\"applicable\": False, \"why\": \"n/a\"}\n    (d / \"convention-input.yaml\"\
+      ).write_text(\n        yaml.safe_dump({\"convention\": bad}), encoding=\"utf-8\"\
+      \n    )\n    outcome = engine.run_iteration(d, goal, target)\n    assert outcome.error\
+      \ is not None\n    assert \"convention\" in outcome.error.lower()\n    # Fail-closed:\
+      \ no sealed converged-plan.yaml.\n    assert not (d / \"converged-plan.yaml\"\
+      ).exists()\n\n\ndef test_engine_absent_convention_seals_doctrine_only(tmp_path):\n\
+      \    config = _three_contributor_config()\n    adapters = {n: FakeAlwaysApprove()\
+      \ for n in (\"claude\", \"codex\", \"gemini\")}\n    engine = WorkflowEngine(config,\
+      \ adapters, tmp_path)\n    d, goal, target = _iter_dir(tmp_path)\n    outcome\
+      \ = engine.run_iteration(d, goal, target)\n    assert outcome.error is None\n\
+      \    plan = yaml.safe_load((d / \"converged-plan.yaml\").read_text(encoding=\"\
+      utf-8\"))\n    # Legacy/absent ⇒ NOT silently valid, NOT rejected.\n    assert\
+      \ plan[\"convention_schema_version\"] == 0\n    assert plan[\"convention_gate\"\
+      ][\"enforcement_status\"] == \"doctrine-only\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Gate: legacy plan (this session iter-0043..v1.15.0, no\n# convention_schema_version)\
+      \ loads via consensus_get_iteration_outcome,\n# marked enforcement: doctrine-only;\
+      \ gate_scope adjacent to pass marker.\n# --------------------------------------------------------------------------\n\
+      \ndef test_legacy_plan_loads_marked_doctrine_only(tmp_path):\n    d = tmp_path\
+      \ / \"iteration-0043-legacy\"\n    d.mkdir()\n    # Shape of a real pre-v1.15.1\
+      \ converged-plan.yaml (no convention keys).\n    legacy = {\n        \"iteration_id\"\
+      : \"iteration-0043-legacy\",\n        \"workflow_mode\": \"propose-converge\"\
+      ,\n        \"convergence_rule\": \"weighted-synthesis\",\n        \"converged_at_round\"\
+      : 1,\n        \"rationale\": \"legacy\",\n    }\n    (d / \"converged-plan.yaml\"\
+      ).write_text(yaml.safe_dump(legacy), encoding=\"utf-8\")\n    res = cgio.handle(str(d),\
+      \ repo_root=str(tmp_path))\n    assert res[\"ok\"] is True\n    assert res[\"\
+      converged_plan\"][\"iteration_id\"] == \"iteration-0043-legacy\"\n    # NOT\
+      \ silently valid, NOT rejected — explicitly doctrine-only.\n    assert res[\"\
+      enforcement\"] == \"doctrine-only\"\n\n\ndef test_outcome_surfaces_gate_scope_adjacent_to_pass_marker(tmp_path):\n\
+      \    d = tmp_path / \"iteration-cpme\"\n    d.mkdir()\n    plan = {\n      \
+      \  \"iteration_id\": \"iteration-cpme\",\n        \"convention_schema_version\"\
+      : vcp.CONVENTION_SCHEMA_VERSION,\n        \"convention\": _good_convention(),\n\
+      \        \"convention_gate\": {\n            \"gate_scope\": vcp.GATE_SCOPE_DISCLAIMER,\n\
+      \            \"enforcement\": \"graduated\",\n            \"hard_reject\": False,\n\
+      \        },\n        \"convention_violations\": [],\n    }\n    (d / \"converged-plan.yaml\"\
+      ).write_text(yaml.safe_dump(plan), encoding=\"utf-8\")\n    res = cgio.handle(str(d),\
+      \ repo_root=str(tmp_path))\n    assert res[\"ok\"] is True\n    # gate_scope\
+      \ must be surfaced so a reader cannot see \"passed\" without it.\n    assert\
+      \ res[\"convention_gate_scope\"] == vcp.GATE_SCOPE_DISCLAIMER\n    assert res[\"\
+      enforcement\"] == \"graduated\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Gate: config knob converged_plan_enforcement\n#   (off|warn|graduated|strict;\
+      \ default graduated)\n# --------------------------------------------------------------------------\n\
+      \ndef test_config_default_enforcement_is_graduated():\n    c = cfg.default_config()\n\
+      \    assert c[\"convergence\"][\"converged_plan_enforcement\"] == \"graduated\"\
+      \n    cfg.validate(c)\n\n\ndef test_config_rejects_invalid_enforcement():\n\
+      \    c = cfg.default_config()\n    c[\"convergence\"][\"converged_plan_enforcement\"\
+      ] = \"bogus\"\n    with pytest.raises(cfg.ConfigValidationError, match=\"converged_plan_enforcement\"\
+      ):\n        cfg.validate(c)\n\n\n@pytest.mark.parametrize(\"val\", [\"off\"\
+      , \"warn\", \"graduated\", \"strict\"])\ndef test_config_accepts_all_enforcement_levels(val):\n\
+      \    c = cfg.default_config()\n    c[\"convergence\"][\"converged_plan_enforcement\"\
+      ] = val\n    cfg.validate(c)\n"
+schema_version: 1
+iteration_id: iteration-converged-plan-machine-enforcement

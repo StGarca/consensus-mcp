@@ -1,0 +1,105 @@
+schema_version: 1
+pilot_id: iteration-0040-consensus-init-claude-bootstrap-impl
+workflow_mode: post-review
+independence: blind-first-reveal
+goal:
+  summary: |
+    iter-0040 — workflow #3 implementation of the iter-0039 converged
+    plan (Claude Code bootstrap pack discoverability). Implementation
+    landed; this packet drives the post-implementation review pass
+    by codex and gemini.
+  question: |
+    Review the iter-0040 changes against the iter-0039 converged plan
+    acceptance gates A1-A7:
+
+    A1: package ships `consensus_mcp/claude_extensions/skills/consensus/
+        SKILL.md` and `consensus_mcp/claude_extensions/commands/
+        consensus-init.md`. Verify both files exist, have YAML
+        frontmatter, and are listed in pyproject.toml package-data.
+
+    A2: `consensus-init --install-claude-code` copies the assets into
+        $CLAUDE_HOME (or ~/.claude) idempotently. Byte-identical
+        existing → no-op. Divergent existing → skip-with-warning.
+        `--force` overrides divergence. Verify
+        `_install_claude_extensions` matches this contract.
+
+    A3: $CLAUDE_HOME env var redirects install destination. Verify
+        `_resolve_claude_home` reads the env var first, falls back to
+        Path.home() / ".claude".
+
+    A4: `--from-claude-code` prints Claude-Code-specific restart
+        message ("reload" or "restart" + "Claude Code" or "/mcp" in
+        output). Default (without --from-claude-code) does NOT print
+        the Claude-Code-specific sentinel.
+
+    A5: `consensus init` (space form, via the new `consensus`
+        console-script alias) routes to the same `main()` entry as
+        `consensus-init` (hyphen form). Verify argv[0]=="init" is
+        stripped at the top of main().
+
+    A6: Skill + command Markdown content avoids consensus-mcp-internal
+        jargon (T6, seal, packet, etc.) — first-time-user audience.
+        Verify SKILL.md and consensus-init.md content reads as a
+        bootstrap instruction, not a contributor protocol spec.
+
+    A7: README documents the two-step setup. CHANGELOG documents the
+        iter-0039 → iter-0040 arc + the jsonschema hot-fix.
+
+    Findings should:
+      - Cite a specific line/path that violates a gate
+      - Propose a concrete patch (allowed_files in scope)
+      - Flag any iter-0039-converged decision the implementation
+        silently changed
+      - Flag any pre-existing regression in the full suite
+  desired_end_state: |
+    Both reviewers (codex + gemini) seal a review pass. Substantive
+    findings get auto-incorporated. Strict-majority of 2 reviewers
+    closes the iteration.
+  non_goals:
+    - shipping the version-alignment-check follow-up (deferred per
+      iter-0039 plan)
+    - shipping the TypeScript Claude Code extension path (deferred)
+    - publishing to a Claude Code plugin marketplace
+  type: code_review
+allowed_files:
+  - consensus_mcp/_init_wizard.py
+  - consensus_mcp/claude_extensions/skills/consensus/SKILL.md
+  - consensus_mcp/claude_extensions/commands/consensus-init.md
+  - consensus_mcp/tests/test_init_wizard_install_claude_code.py
+  - pyproject.toml
+  - README.md
+  - CHANGELOG.md
+allowed_sections: []
+forbidden_files:
+  - consensus-state/**
+  - consensus_mcp/server.py
+  - consensus_mcp/tools/**
+  - .github/**
+max_iterations: 2
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: claude_extensions assets ship with the package
+    check: 'py -3.11 -c "from pathlib import Path; import consensus_mcp; root=Path(consensus_mcp.__file__).parent; assert (root/''claude_extensions/skills/consensus/SKILL.md'').exists() and (root/''claude_extensions/commands/consensus-init.md'').exists(); print(''ok'')"'
+  - id: A2
+    description: install-claude-code is idempotent
+    check: 'py -3.11 -m pytest consensus_mcp/tests/test_init_wizard_install_claude_code.py -q'
+  - id: A3
+    description: full suite passes
+    check: 'py -3.11 -m pytest consensus_mcp/tests -q'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - reviewer_blocking_objection
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T18:20:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: '4e1a266843749bbd9b67a8121a4e34c18f4bec3dae7534fe9be0e8a3a4a8f611'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: strict-majority
+  finding_disposition: per-finding

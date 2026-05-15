@@ -1,0 +1,41 @@
+iteration_id: iteration-0007-v1.13.0-consolidated-design-consult
+reviewer_id: codex-iter0007-1
+pass_id: codex-iter0007-1-pass1
+findings:
+- id: codex-rev-001
+  severity: low
+  summary: Approve narrow v1.13.0 scope with dispatcher fix deferred to v1.14.0
+  citation: docs/design-consults/v1.13.0-consolidated-design.md:45
+  risk: 'Q1 should be Option A: F1 and F2 are the release-critical multi-project packaging
+    changes, while F3-F5 are dispatch reliability and visibility hardening that can
+    ship coherently in v1.14.0 without blocking end-user bootstrapping. F6 should
+    remain a separate audit/data correction, not release scope. The three-root split
+    is correct as stated, provided the required audit reassigns every REPO_ROOT consumer
+    to spec, state, or project-root semantics.'
+  recommendation: 'Q1: A; Q2: correct; Q3: none'
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: true
+goal_satisfied_rationale: The review emits the required single low-severity design
+  finding with explicit Q1, Q2, and Q3 verdicts and no blocking objections.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 7f9e038c12278fd83b2ce6c7befc0a96d7641cea39aae4573fd0b78c7d37298a
+  output_sha256: 3e463e701d57cec2823eed7871609eecb31c869915a832519f8533c4382a9195
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 38e520b85a3386efcf63ab1f9fd56c8dc6e02ba64c149321705f3c67674d1d73
+  scope_signature: 9354d11c2b8edbc9bf2f7d2096b9c7f9a31b6c619ca06fbb04bc22fa1f1e11df
+  review_target_path: consensus-state/active/iteration-0007-v1.13.0-consolidated-design-consult/review-packet.yaml
+  review_target_hash: cc899acba9d7ac3c49530813216b8fb4e3244589500a5f7a9dc872e37bb5476c
+sealed_at_utc: '2026-05-12T04:02:32Z'
+packet_sha256: 39f8b7a8be6e4d1998bfc4b43e00d6559bf1645a2cadb414ef7a486193c90c1b

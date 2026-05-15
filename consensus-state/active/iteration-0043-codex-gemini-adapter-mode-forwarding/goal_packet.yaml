@@ -1,0 +1,230 @@
+schema_version: 1
+pilot_id: iteration-0043-codex-gemini-adapter-mode-forwarding
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    iter-0043 — workflow #4 consult on how to fix the
+    propose-mode-not-forwarded defect that has been silently
+    propagating across every project that uses consensus-mcp's
+    engine adapter.
+
+    OBSERVED DEFECT (verified at HEAD on v1.14.0):
+      - Shell binaries `consensus-mcp-dispatch-codex` and
+        `consensus-mcp-dispatch-gemini` accept
+        `--mode {review,proposal}` (default `review`). Proposal
+        mode selects `codex_proposal_template.md` +
+        `codex_proposal_schema.json`; review mode selects the
+        review template/schema. Verified at
+        `consensus_mcp/_dispatch_codex.py:883` and
+        `consensus_mcp/_dispatch_gemini.py:806`.
+      - `CodexAdapter.dispatch` (`consensus_mcp/contributors/codex.py:39-47`)
+        builds argv with 5 fixed flags + optional `--review-target`
+        and passes to `_dispatch_codex.main`. NO `--mode` is
+        forwarded.
+      - `GeminiAdapter.dispatch` (`consensus_mcp/contributors/gemini.py:29-37`)
+        — same omission, no `--mode` forwarded.
+      - `DispatchPacket` already carries `phase`
+        (`consensus_mcp/contributors/base.py:66`), with constants
+        `PHASE_PROPOSE`, `PHASE_REVIEW`, `PHASE_CONVERGE`. The
+        information needed for the mapping is present; the
+        adapter just ignores it.
+      - The MCP wrapper `tools/reviewer_dispatch_codex.py:105-131`
+        (`_build_argv`) accepts no mode/phase parameter either,
+        so MCP-tool callers cannot request proposal mode at all.
+      - `tests/test_dispatch_codex_proposal_mode.py:58` constructs
+        its own `argparse.ArgumentParser` and parses `["--mode",
+        "proposal"]` directly. It never invokes `CodexAdapter`.
+        Result: CI is green while the integration boundary is
+        broken. `grep CodexAdapter|GeminiAdapter` against
+        `propos|mode` in the entire test tree returns zero
+        matches.
+      - The `consensus-workflow` skill (iter-0041) documents
+        "fall back to shell CLI for round-1 #4 dispatch" as
+        operating procedure. The defect was memorialized as a
+        workaround instead of fixed, and the skill propagates
+        the workaround to every downstream project that installs
+        the bootstrap pack.
+
+    NET IMPACT: every workflow #4 round-1 dispatched through the
+    engine (which is the production path for `loop_run_goal`,
+    `consensus_run_iteration`, and the orchestration pipelines
+    that downstream projects use) silently runs with the REVIEW
+    template + REVIEW schema, even when `packet.phase ==
+    PHASE_PROPOSE`. The schema mismatch causes proposals to fail
+    validation as review-shaped artifacts (or, worse, to seal
+    successfully against the wrong schema, producing structurally
+    valid but semantically wrong artifacts in the audit trail).
+
+  question: |
+    Each contributor: pick a stance on Q1-Q5, justify against the
+    alternatives, sketch the smallest deliverable scope. Honest
+    structural_abstention is acceptable if you lack context.
+
+    Q1 — **Phase-to-mode mapping for PHASE_CONVERGE.**
+    `PHASE_PROPOSE` → `--mode proposal` and `PHASE_REVIEW` →
+    `--mode review` are unambiguous. The dispatcher only exposes
+    two modes; convergence is neither pure authoring nor pure
+    audit but synthesis-across-peer-outputs.
+      (a) Map `PHASE_CONVERGE` → `--mode proposal` (synthesis
+          output is closer to a design proposal than to a review
+          verdict; goal_packet's `desired_end_state` text already
+          conveys "synthesize across peers" intent per
+          `contributors/codex.py:5-13` docstring).
+      (b) Map `PHASE_CONVERGE` → `--mode review` (synthesis is a
+          form of meta-audit on peer outputs; the review schema's
+          finding-disposition fields better fit the converge
+          verdict shape).
+      (c) Add a third mode `--mode converge` to the dispatcher
+          with its own template/schema before fixing the adapter
+          (avoids the false binary, but expands scope and breaks
+          backward compat).
+
+    Q2 — **MCP wrapper surface.** The MCP wrappers
+    (`reviewer_dispatch_codex`, `reviewer_dispatch_gemini`) need
+    to grow a way for callers to request proposal mode. Should
+    the parameter mirror the dispatcher (`mode: review|proposal`)
+    or the engine abstraction (`phase: propose|review|converge`)
+    with internal mapping?
+      (a) Expose `mode` directly. Caller specifies the
+          dispatcher's vocabulary. Pro: 1:1 with the shell
+          binary, smallest blast radius. Con: leaks
+          implementation detail; callers must know about the
+          template/schema split.
+      (b) Expose `phase` and translate internally. Hides the
+          implementation detail; matches the engine adapter's
+          abstraction. Pro: consistent with `DispatchPacket`.
+          Con: the wrapper now needs to know the mapping rule
+          decided in Q1; coupling between two surfaces.
+      (c) Expose BOTH: `mode` as the explicit override,
+          optional `phase` that defaults to the Q1 mapping.
+          Maximum flexibility, but two ways to do the same
+          thing.
+
+    Q3 — **Same patch for `GeminiAdapter`?** The bug is
+    symmetric — `consensus_mcp/contributors/gemini.py:29-37`
+    has the identical omission, and `_dispatch_gemini.py:806`
+    accepts the identical flag. Should the fix be:
+      (a) One PR fixing both adapters and both MCP wrappers
+          symmetrically (same release, same review pass).
+      (b) Codex first, gemini second in a separate iteration
+          (smaller per-PR diff, faster review cycle).
+      (c) Codex only this release, gemini deferred to v1.15.0
+          (gemini's 429-rate problems mean propose-mode usage
+          is lower in practice; can ship the bigger fix sooner).
+
+    Q4 — **Workaround removal in the same patch.** The
+    `consensus-workflow` skill (`consensus_mcp/claude_extensions/
+    skills/consensus-workflow/SKILL.md`) currently instructs
+    users: "MCP wrappers as of v1.14.0 don't expose this flag —
+    fall back to the shell CLI for round-1 #4 dispatch." After
+    the fix, that instruction is wrong AND actively misleading
+    (it teaches a workaround that no longer applies). Should:
+      (a) Remove the workaround paragraph in the same PR as
+          the fix; ship them as one atomic change so no
+          window exists where the skill contradicts the code.
+      (b) Remove the workaround in a follow-up PR after a
+          release boundary (lets users update the binary
+          before the skill changes; smaller per-PR scope).
+      (c) Replace the workaround with "as of vX.Y.Z, MCP
+          wrappers expose `mode`/`phase`. Older installs:
+          fall back to shell CLI." Documents the version
+          boundary explicitly for users straddling versions.
+
+    Q5 — **Test surface.** The reason this defect persisted
+    is that proposal-mode tests (`test_dispatch_codex_proposal_mode.py`)
+    only test the dispatcher in isolation, never through the
+    adapter. What is the minimum test coverage that would have
+    caught this and prevents regression?
+      (a) Unit test in `test_contributors.py` that asserts
+          `CodexAdapter.dispatch(packet with phase=PROPOSE)`
+          results in argv containing `["--mode", "proposal"]`
+          (mock the dispatcher; assert call args).
+      (b) Integration test that runs the adapter end-to-end
+          against a fake codex binary and verifies the
+          template chosen was `codex_proposal_template.md`
+          (no mocking; full subprocess flow).
+      (c) Both — unit test for the argv contract (cheap, fast,
+          regression-proof), integration test for the
+          template-selection contract (catches future
+          dispatcher refactors that move the mode→template
+          mapping).
+      (d) Just (b) — unit tests on argv shape are brittle to
+          legitimate refactors of the adapter argv builder;
+          integration tests catch the actual user-visible
+          behavior.
+
+    Required of each contributor:
+      (a) verdict on Q1 phase mapping (gate question — drives Q2)
+      (b) verdict on Q2 wrapper surface
+      (c) verdict on Q3 scope (one PR vs split)
+      (d) verdict on Q4 workaround removal sequencing
+      (e) verdict on Q5 test surface
+      (f) any missed dimension from Q6 below
+
+    Q6 — **Anything we missed?** Open-ended. Candidates: any
+    backward-compat concern for callers currently relying on the
+    default-review behavior with phase=PROPOSE (yes there is one
+    — the silent-wrong-template behavior is itself relied on by
+    the workaround pattern); whether the adapter should fail
+    loudly when a phase doesn't have a defined mapping; whether
+    the closure-invariant check should reject sealed artifacts
+    where `template_used` doesn't match the phase.
+
+    Plus: deliverable-scope sketch (files in scope, files out of
+    scope, key design decisions, acceptance gates, estimated
+    complexity).
+
+    Strict-majority of 3 contributors → 2 substantive votes
+    required. Codex/gemini may structurally abstain only with
+    explicit rationale.
+  non_goals:
+    - changing the `--mode` flag values themselves (review,
+      proposal are the canonical names per iter-0028;
+      renaming is out of scope)
+    - rewriting the dispatcher's template-selection logic
+      (this iteration plumbs an existing flag, does not
+      redesign the flag)
+    - touching `_engine_factory.py` or `workflow_engine.py`
+      orchestration (the bug is at the adapter boundary,
+      not in the engine itself)
+    - changing `DispatchPacket.phase` type or constants
+      (the data is already correct; the adapter just
+      ignores it)
+  type: design_consult
+allowed_files: []
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/_engine_factory.py
+  - consensus_mcp/workflow_engine.py
+  - consensus_mcp/config.py
+  - .github/
+  - .gitignore
+max_iterations: 3
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml at iteration_dir
+    check: 'py -3.11 -c "import os; assert os.path.exists(''consensus-state/active/iteration-0043-codex-gemini-adapter-mode-forwarding/converged-plan.yaml''); print(''ok'')"'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+operator_escalation_triggers:
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-14T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'a043c0deadbeef1eaffaceb000feedfacecafebabedeadbeef0043fedcba9876'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: strict-majority
+  finding_disposition: all-or-nothing

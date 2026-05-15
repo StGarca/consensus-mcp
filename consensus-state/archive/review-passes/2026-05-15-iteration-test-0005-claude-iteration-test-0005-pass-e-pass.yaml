@@ -1,0 +1,7 @@
+iteration_id: iteration-test-0005
+reviewer_id: claude
+pass_id: iteration-test-0005-pass-e
+findings:
+- dispatch-test-finding
+sealed_at_utc: '2026-05-15T16:31:39Z'
+packet_sha256: 1936a99857fee797dfb96909cb52b8f581ac5fc3ae79ecfec3964862763498d9

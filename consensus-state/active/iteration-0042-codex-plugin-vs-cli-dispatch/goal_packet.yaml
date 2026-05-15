@@ -1,0 +1,185 @@
+schema_version: 1
+pilot_id: iteration-0042-codex-plugin-vs-cli-dispatch
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    iter-0042 — workflow #4 consult on whether consensus-mcp should
+    migrate its codex dispatcher from invoking the `codex` shell CLI
+    (via subprocess in `_dispatch_codex.py`) to using the Claude Code
+    `codex@openai-codex` plugin that ships in Anthropic's plugin
+    marketplace.
+
+    Operator's question: "could the codex plugin be used INSIDE
+    consensus-mcp, instead of how we have been making calls to codex
+    CLI?"
+
+    Today: `consensus_mcp/_dispatch_codex.py` spawns `codex` as a
+    subprocess, manages its stdin/stdout/stderr + line-buffered
+    parsing + stall detection (180s threshold), captures the raw
+    output, runs JSON schema validation, computes provenance hashes
+    (prompt_sha256, output_sha256, schema_sha256, goal_packet_sha256),
+    seals the result through T6 + writes to
+    `consensus-state/archive/review-passes/`.
+
+    The codex Claude Code plugin (`/plugin install
+    codex@openai-codex`) registers MCP tools that Claude Code can
+    call from chat. Could consensus-mcp use that plugin INTERNALLY
+    instead of subprocess, gaining (potentially) better auth
+    handling, smoother install, and reliability?
+  question: |
+    Each contributor: pick a stance on Q1-Q5, justify against the
+    alternatives, sketch the smallest deliverable scope. Honest
+    structural_abstention is acceptable if you lack context on
+    Claude Code's MCP-from-MCP semantics.
+
+    Q1 — **Feasibility.** Can a Python MCP server (consensus-mcp,
+    running as a child process of Claude Code) invoke ANOTHER MCP
+    server (the codex plugin, also registered in the same Claude
+    Code session) from within its own tool handlers?
+      (a) Yes — there's a documented mechanism (MCP-client lib,
+          forwarding pattern, named bridge) by which our server
+          can dispatch tool calls to peer servers.
+      (b) No — MCP is one-way (host → server). Our Python process
+          has no path to call back into the host's other-server
+          tool registry.
+      (c) Possible only through a broker pattern: consensus-mcp
+          returns a "please call codex.foo with args" directive,
+          the operator's Claude Code orchestrator forwards it, the
+          response gets piped back via a second consensus-mcp call.
+          Adds round-trips but works without new MCP client
+          plumbing.
+
+    Q2 — **Provenance preservation.** Today our seal pipeline bakes
+    four sha256s into every sealed packet (prompt, output, schema,
+    goal_packet) plus the codex version string. If we migrated to
+    the plugin path, can we still produce a canonical audit trail?
+      (a) Yes, if the plugin returns the raw tool output as a
+          string we can hash; we lose direct access to the codex
+          version but can synthesize it from plugin manifest.
+      (b) Partial — output_sha256 survives, but prompt_sha256 +
+          schema_sha256 are lost because the plugin owns prompt
+          composition. We'd have to relax the closure invariant.
+      (c) No — the plugin abstracts too much; we'd need to ship
+          a "trust the plugin" attestation instead of the current
+          machine-verifiable hash chain.
+
+    Q3 — **Independence attestation.** The closure invariant
+    requires `reviewer_isolated_by_construction: true` and
+    `no_peer_review_visible_at_dispatch: true`. Today we control
+    the entire codex invocation environment (env vars, cwd, stdin
+    content) so we can attest this honestly. With a plugin, the
+    Claude Code host may inject context (system prompt additions,
+    prior chat turn awareness, tool-use history). Can we still
+    attest isolation?
+      (a) Yes — the plugin's tool calls are stateless if we pass
+          everything via arguments. Independence preserved.
+      (b) No — Claude Code's plugin runtime may add session
+          context invisible to us. Independence becomes
+          unverifiable; we'd have to drop the attestation or
+          weaken it to "best effort."
+      (c) Depends on plugin manifest: if codex@openai-codex
+          declares `stateless: true` (or equivalent) we're fine;
+          otherwise we're not.
+
+    Q4 — **Architectural pattern** (assuming Q1-Q3 don't veto):
+      (a) Replace the subprocess dispatcher entirely with plugin
+          calls. Delete ~600 LOC in `_dispatch_codex.py`.
+      (b) Add a SECOND dispatcher mode alongside the existing one;
+          operators choose via `--codex-mode {cli,plugin}`. Both
+          paths supported; default = cli.
+      (c) Keep subprocess as the canonical sealed-workflow path;
+          add plugin path only for ad-hoc operator queries
+          (a separate tool, not a dispatcher swap).
+      (d) Reject migration — subprocess dispatch is the
+          load-bearing pattern; plugin is for human use.
+
+    Q5 — **Cost/risk threshold.** What would need to be true for
+    migration to be worth doing?
+      (a) Plugin must demonstrably out-reliable subprocess on the
+          known pain points (45s/180s stall, Windows path handling,
+          AuthRequired hangs from secondary MCPs).
+      (b) Plugin must preserve enough provenance to keep the seal
+          pipeline machine-verifiable; OR we accept downgrading
+          the iteration mode to "advisory" (no T6 sealing) when
+          plugin path is used.
+      (c) Operator UX win must outweigh the architectural complexity:
+          consensus-mcp users today install codex CLI separately;
+          plugin path means they install via Claude Code's plugin
+          marketplace. Smoother for new users; redundant for
+          existing CLI users.
+      (d) Don't do this at all — the codex CLI is the right
+          dispatcher; the plugin is for a different use case
+          (human-in-chat questions).
+
+    Q6 (bonus): What did we miss?
+      Candidates: security/sandbox model differences between
+      subprocess-spawned codex (inherits consensus-mcp's env, cwd)
+      vs plugin-invoked codex (inherits Claude Code's env);
+      version-pinning (subprocess uses whatever `codex` is on
+      PATH; plugin pinned to marketplace version); offline/CI use
+      (subprocess works in headless CI; plugin requires Claude Code
+      running); concurrent dispatch (subprocess can spawn N
+      parallel codex processes; plugin MCP may serialize).
+  desired_end_state: |
+    converged-plan.yaml names:
+      (a) verdict on Q1 feasibility (the gate question — if NO,
+          everything else moot)
+      (b) verdict on Q2 provenance (the gate question for sealed
+          workflow path)
+      (c) verdict on Q3 independence attestation
+      (d) chosen architectural pattern from Q4
+      (e) cost/risk threshold from Q5 — when, if ever, this is
+          worth doing
+      (f) any missed dimension from Q6
+    Plus: deliverable-scope sketch (if recommendation is to
+    proceed) OR a "decision: do not pursue" rationale.
+
+    Strict-majority of 3 contributors → 2 substantive votes required.
+    Acceptable for codex itself to structurally abstain if it lacks
+    plugin-runtime context; gemini may abstain on Claude-Code
+    internals.
+  non_goals:
+    - implementing the migration in this iteration (this is design)
+    - exploring non-codex plugins (gemini plugin, others) in this
+      iteration — separate consult if codex migration validates
+    - changing the operator's choice of codex CLI vs codex plugin
+      for their OWN ad-hoc use
+  type: design_consult
+allowed_files: []
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - pyproject.toml
+  - README.md
+  - CHANGELOG.md
+  - .github/
+  - .gitignore
+  - docs/
+  - tests/
+max_iterations: 3
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml at iteration_dir
+    check: 'py -3.11 -c "import os; assert os.path.exists(''consensus-state/active/iteration-0042-codex-plugin-vs-cli-dispatch/converged-plan.yaml''); print(''ok'')"'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+operator_escalation_triggers:
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T18:50:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'b97a6017224f8ced78d55164f8acd26d0331dee260e0e46fc37e3b4c4bd24215'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: strict-majority
+  finding_disposition: all-or-nothing

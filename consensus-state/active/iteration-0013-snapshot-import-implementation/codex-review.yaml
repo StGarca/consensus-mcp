@@ -1,0 +1,54 @@
+iteration_id: iteration-0013-snapshot-import-implementation
+reviewer_id: codex-iteration-0013-snapshot-import-implementation-10
+pass_id: codex-iteration-0013-snapshot-import-implementation-10-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: restore --dry-run returns before missing-iteration validation and before
+    computing deletions
+  citation: consensus_mcp/_snapshot_state.py:401
+  risk: A dry run can report success for an iteration that the real restore rejects,
+    and it omits files that the real restore will delete during scope cleanup. Operators
+    lose the safety signal expected from --dry-run before a destructive restore.
+  recommendation: Run the same empty-scope validation for dry runs, compute both copied
+    and deleted paths, and report the complete restore plan before returning.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: parent-history import is not byte-for-byte idempotent despite the stated
+    idempotency requirement
+  citation: consensus_mcp/_import_parent_history.py:101
+  risk: Re-importing the same parent with --force rewrites source-manifest.yaml and
+    README.md with a new imported_at_utc value, so the target tree changes even when
+    the source tree did not. That undermines reproducible provenance and the documented
+    idempotency intent.
+  recommendation: Make repeated imports deterministic for the same source, or compare
+    the existing manifest/source hashes and skip rewriting timestamped files when
+    content is unchanged.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The core modules are present, but restore dry-run safety
+  semantics and documented import idempotency are not fully satisfied.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: a504b6f30f6851bc32bc9fb320f416a0c88a9299f7d7e89dc2903ed893da5179
+  output_sha256: 6f254a3eb89ea64d7240a47d25121e186dcab474ad01261c8675badb24560277
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 4b55ce3c5f0a93d4b884db79e8734a176f1b724951700e97241e4afd01a6e2b8
+  scope_signature: 4904672bca3de6d503e78bf16538f38e9bdba2d0e7bdb0fbcb5ac3c540b23738
+  review_target_path: consensus-state/active/iteration-0013-snapshot-import-implementation/review-packet.yaml
+  review_target_hash: 8cd6dd8c13a68b521fa2eb5ff335b8b857e1cd5812b1bc2ccdbb3d53774dcb77
+sealed_at_utc: '2026-05-13T02:38:18Z'
+packet_sha256: 4e2045674b9a9c62e8db3c42ec9c5bb1048adb0ba6a24e6c906d3a7095bf829a

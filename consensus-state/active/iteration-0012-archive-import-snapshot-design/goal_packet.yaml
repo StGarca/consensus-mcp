@@ -1,0 +1,76 @@
+schema_version: 1
+pilot_id: iteration-0012-archive-import-snapshot-design
+goal:
+  summary: "Cross-AI consult on archive-import + orphan-branch snapshot mechanism (Q1-Q9). Workflow A round 1 — design review before any code."
+  desired_end_state: |
+    Codex reviews docs/design-consults/iter-0012-archive-import-and-snapshot.md
+    and emits ONE finding answering nine questions:
+
+      Q1 layout: F1a (mirror subdirs under namespace root) or F1b (flat)
+      Q2 collision safety: namespace-isolation only OR additional parent- filename prefix
+      Q3 manifest: F3a (full source-manifest.yaml + per-entry sha256_tree) or F3b (README only)
+      Q4 snapshot commits: F4a (one tagged commit per snapshot) or F4b (incremental deltas)
+      Q5 CLI surface: F5a (snapshot+list+restore+diff) or F5b (snapshot+restore only)
+      Q6 restore safety: F6a (auto pre-restore snapshot, --force to skip),
+                         F6b (interactive confirm), or F6c (no safety)
+      Q7 trigger policy: F7a (manual only for iter-0013) or F7b (include iteration_closed auto-snapshot)
+      Q8 ordering: confirm iter-0012 ships before iter-0011 commit (agree) or reorder
+      Q9 missing findings: "none" or "added: <list>"
+
+    Recommendation field carries the verdict string per Q1..Q9.
+    Risk field carries ~4-sentence rationale for the highest-impact picks.
+
+    Context codex needs to weigh:
+      - This is workflow #4 (canonical propose-converge): the design doc is
+        reviewed BEFORE any code is written. Implementation lives in iter-0013
+        only after consensus on this verdict.
+      - Maintainer already chose namespace import + orphan-branch snapshot.
+        Codex should NOT re-litigate those two decisions — only F1..F8
+        sub-choices are open.
+      - Parent project at C:\\Users\\<you>\\Downloads\\upstream-26.4.16\\
+        is READ-ONLY source for the import; do not propose modifying it.
+      - The .gitignore line excluding consensus-state/active/iteration-*/ is
+        the structural data-loss risk this design addresses. Orphan branch
+        force-adds the gitignored tree (this is the intended pattern).
+  non_goals:
+    - implement snapshot/import code (this is design + scoping; iter-0013 implements)
+    - challenge maintainer's two governance decisions (namespace import, orphan-branch snapshot)
+    - touch parent project at C:\\Users\\<you>\\Downloads\\upstream-26.4.16\\
+    - propose schema changes to existing iter-0001..0011 YAML files
+allowed_files:
+  - docs/design-consults/iter-0012-archive-import-and-snapshot.md
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - consensus-state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - pyproject.toml
+  - .github/
+  - .gitignore
+  - docs/architecture/
+  - docs/workflows/
+  - docs/postmortems/
+  - docs/specs/
+  - docs/templates/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex emits one finding with recommendation containing Q1-Q9 verdicts
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T01:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: aa69cd4a5a6f7eb66f83790739c5842a1e9debb18e6b0ff009a0d545931fd94c

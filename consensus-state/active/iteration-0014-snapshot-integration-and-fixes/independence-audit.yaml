@@ -1,0 +1,154 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:08:12Z'
+  event_id: 2026-05-13T03:08:12Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-1
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-1-pass.yaml
+  sha256: 828c573199fd005734a8d5742f235648e33e3ea21aea4c3d781845921a526a11
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:14:33Z'
+  event_id: 2026-05-13T03:14:33Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-2
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-2
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-2-pass.yaml
+  sha256: 4329d19a6b5ef1e2997f90d93074c30ebf0bb6b20279f8e6a546266332543787
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:18:49Z'
+  event_id: 2026-05-13T03:18:49Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-3
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-3
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-3-pass.yaml
+  sha256: 1be1b8e24155de66f060b17ca83eb2beb704fc61f0e25bb3c1ff8c9e081236b5
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:28:15Z'
+  event_id: 2026-05-13T03:28:15Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-4
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-4
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-4-pass.yaml
+  sha256: 39671a61c949829933d7b032119f885bb723d04c61bd3e5c1f1a1026c1c408b7
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:32:07Z'
+  event_id: 2026-05-13T03:32:07Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-5
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-5
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-5-pass.yaml
+  sha256: 80214944076ee9628d90ea600624df1fde3e0ed0995205834b3cc2c9d56eba4f
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:33:33Z'
+  event_id: 2026-05-13T03:33:33Z_review_returned_and_sealed_gemini-iteration-0014-snapshot-integration-and-fixes-1
+  actor: gemini-iteration-0014-snapshot-integration-and-fixes-1
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-gemini-iteration-0014-snapshot-integration-and-fixes-1-pass.yaml
+  sha256: ff878b5706328d6a5070a2365078a7bbcf21bccbe4034ab00f652209b6e4f579
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:35:00Z'
+  event_id: 2026-05-13T03:35:00Z_review_returned_and_sealed_gemini-iteration-0014-snapshot-integration-and-fixes-2
+  actor: gemini-iteration-0014-snapshot-integration-and-fixes-2
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-gemini-iteration-0014-snapshot-integration-and-fixes-2-pass.yaml
+  sha256: 4b458c5dbdbe31ad8a2ce8bfe81ec4e15a2a795344f82c8099f4e130767708a5
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:39:02Z'
+  event_id: 2026-05-13T03:39:02Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-6
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-6
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-6-pass.yaml
+  sha256: f2769f951267c9ca424884e466afade8c30aeb249f27d2569cddfb40b16d7736
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:49:31Z'
+  event_id: 2026-05-13T03:49:31Z_review_returned_and_sealed_gemini-iteration-0014-snapshot-integration-and-fixes-3
+  actor: gemini-iteration-0014-snapshot-integration-and-fixes-3
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-gemini-iteration-0014-snapshot-integration-and-fixes-3-pass.yaml
+  sha256: 00ebcc0f9c3668c425700e80cd6f80e13901232f9e1ddb2962ced8f8406ea626
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-13T03:52:19Z'
+  event_id: 2026-05-13T03:52:19Z_review_returned_and_sealed_codex-iteration-0014-snapshot-integration-and-fixes-7
+  actor: codex-iteration-0014-snapshot-integration-and-fixes-7
+  artifact: consensus-state/archive/review-passes/2026-05-13-iteration-0014-snapshot-integration-and-fixes-codex-iteration-0014-snapshot-integration-and-fixes-7-pass.yaml
+  sha256: 1b5c67bfbe9add669d5ac949e9b2b50f61583a62653d7913f3ac2d2904118f78
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

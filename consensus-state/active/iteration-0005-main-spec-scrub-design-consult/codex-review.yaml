@@ -1,0 +1,43 @@
+iteration_id: iteration-0005-main-spec-scrub-design-consult
+reviewer_id: codex-iter0005-1
+pass_id: codex-iter0005-1-pass1
+findings:
+- id: codex-rev-001
+  severity: low
+  summary: 'Choose Option A: scrub the stale parent-project archive references from
+    main section 24.'
+  citation: docs/design-consults/main-spec-scrub-stale-archive-refs.md:1
+  risk: The 53 archive references are extraction leftovers targeting upstream-26.4.16
+    files that will never exist in standalone consensus-mcp; keeping them blocks the
+    boot gate with missing-file findings and cross-reference drift. Option B only
+    hides ARCHIVED_FILE_MISSING and leaves the two medium index/spec mismatch findings,
+    so it may not unblock boot. Preserve the 180 local resolved/deferred/dropped audit-trail
+    entries because they reference this spec's own sections.
+  recommendation: A
+  patch_not_proposed_reason: No touched-file contents were embedded for docs/design-consults/main-spec-scrub-stale-archive-refs.md,
+    so no exact hunk can be authored without hallucinating file content.
+  patch_proposal: null
+goal_satisfied: true
+goal_satisfied_rationale: Exactly one low-severity verdict finding is emitted, and
+  its recommendation names Option A as the winner with rationale in the risk field.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 74eb8e00ed9de06006379d31518fcdc3807791990f2ed29077e413be00c51c06
+  output_sha256: bbe6dece3e849e042aea2914f252af399d2ab34f98a763f45970bed1a7dbd0da
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: ea1dcbea0ec8fc110a4c6945e56ebe3ce5527e370fb3451fa859cec436e7d95d
+  scope_signature: d3644cbbe27035530106215b08b24a3597999d5d2b9f59ff65a8c22776853f01
+  review_target_path: docs/design-consults/main-spec-scrub-stale-archive-refs.md
+  review_target_hash: 6e52477a38369dd1da757ba43bdd06adb80bfbfa8c7f8a2d881ae6faeb219c2a
+sealed_at_utc: '2026-05-12T03:25:22Z'
+packet_sha256: ac8a82eb8549e2add718d3937d84488ec526b09b834798927886ac874f6eca74

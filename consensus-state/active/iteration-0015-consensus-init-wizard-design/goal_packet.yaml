@@ -1,0 +1,76 @@
+schema_version: 1
+pilot_id: iteration-0015-consensus-init-wizard-design
+goal:
+  summary: "BLIND PROPOSAL PHASE — workflow #4 design consult on consensus init wizard + .consensus/config.yaml schema. You are ONE of THREE independent contributors; the others are also writing their own proposals blind. After all three seal, convergence phase begins."
+  desired_end_state: |
+    Emit ONE finding with severity:low. The `recommendation` field must contain
+    a complete design proposal covering Sections A-E from
+    docs/design-consults/iter-0015-consensus-init-design-challenge.md:
+
+      A — consensus init CLI surface
+      B — .consensus/config.yaml schema
+      C — Workflow engine integration
+      D — Migration plan
+      E — Open questions for convergence phase
+
+    `patch_proposal` must be null — iter-0016 implements after convergence,
+    not this iteration.
+
+    BLIND-FIRST PROTOCOL: you are an independent designer authoring an original
+    proposal. You have no visibility into the other two contributors' proposals
+    (claude and the other AI). DO NOT critique any reference proposal — there
+    is none in your input. Just propose your best design for the problem.
+
+    The recommendation may use Markdown formatting inside the JSON string.
+    Be concrete with file paths, schema YAML, CLI flag names, exit codes,
+    validation rules, etc. Vagueness is the enemy of convergence.
+
+    Use a `<prefix>-rev-NNN` finding ID matching your adapter (codex → codex-rev-001;
+    gemini → gemini-rev-001). The `summary` field should clearly identify this
+    as a design proposal (e.g., "Design proposal for iter-0015 consensus init
+    wizard + config schema").
+  non_goals:
+    - implement code (iter-0016+ implements after convergence)
+    - critique a reference proposal (you have none; this is blind authoring)
+    - narrow the design to only one workflow mode (the operator picks at runtime per project_init_configurability memory)
+    - propose patches (patch_proposal must be null)
+allowed_files:
+  - docs/design-consults/iter-0015-consensus-init-design-challenge.md
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - consensus-state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - pyproject.toml
+  - .github/
+  - .gitignore
+  - docs/architecture/
+  - docs/workflows/
+  - docs/postmortems/
+  - docs/specs/
+  - docs/templates/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: contributor emits one low-severity finding with Sections A-E in recommendation
+    check: 'true'
+  - id: A2
+    description: no patch_proposal emitted (design phase only)
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T03:55:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 78f0f2acd138cb4d3ada84a721b35a395ff3b3920b360492f6f0ffdfd72c0530

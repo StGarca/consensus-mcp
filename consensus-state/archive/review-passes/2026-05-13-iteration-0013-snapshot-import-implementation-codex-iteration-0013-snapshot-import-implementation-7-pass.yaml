@@ -1,0 +1,47 @@
+iteration_id: iteration-0013-snapshot-import-implementation
+reviewer_id: codex-iteration-0013-snapshot-import-implementation-7
+pass_id: codex-iteration-0013-snapshot-import-implementation-7-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: snapshot creation records the new snapshot commit on a detached worktree,
+    then attempts to force-move a branch that is still checked out in another worktree
+  citation: consensus_mcp/_snapshot_state.py:177
+  risk: '`snapshot` can fail after creating the commit and tag because `consensus-state-snapshots`
+    remains checked out by the initial orphan worktree; Git refuses `git branch -f`
+    on a branch checked out elsewhere, so the branch may not advance and the snapshot
+    CLI does not reliably meet the orphan-branch durability requirement.'
+  recommendation: Do not leave `consensus-state-snapshots` checked out in a persistent
+    worktree. Create subsequent snapshots in a worktree checked out on the branch
+    itself, or detach/remove/prune the initial worktree state before force-updating
+    the branch.
+  patch_not_proposed_reason: The embedded file lacks the integration test file or
+    surrounding helper expectations needed to author and anchor a safe branch/worktree
+    lifecycle patch without risking a mismatched diff.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'The implementation has a blocking snapshot lifecycle defect:
+  after initialization, later snapshots can fail when advancing the orphan branch,
+  so the desired snapshot durability behavior is not fully met.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 5f319fb4bf94d730194f9070999b3200840cd24397eeae1fd81dc60b469923f9
+  output_sha256: 3ce934afe42927aece6a1b4794ac993f49046ce39d93cc507034708c09505b8c
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 4b55ce3c5f0a93d4b884db79e8734a176f1b724951700e97241e4afd01a6e2b8
+  scope_signature: 4904672bca3de6d503e78bf16538f38e9bdba2d0e7bdb0fbcb5ac3c540b23738
+  review_target_path: consensus-state/active/iteration-0013-snapshot-import-implementation/review-packet.yaml
+  review_target_hash: efd2faaaee1ffa78a4c3110d68f930cc55045ee60dadf050bddf41412519565d
+sealed_at_utc: '2026-05-13T02:10:24Z'
+packet_sha256: 12790c0f73b6c01d1b518c34959cf1435068ff8db708e8cf2a2dd23d86a38869

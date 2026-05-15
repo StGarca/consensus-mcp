@@ -1,0 +1,104 @@
+iteration_id: iteration-0039-consensus-init-discoverability-design
+reviewer_id: codex-iteration-0039-2
+pass_id: codex-iteration-0039-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: This fixes the actual chicken-and-egg gap because it is
+  loaded by Claude Code independently of `.mcp.json` and does not depend on the consensus-mcp
+  server. A shell alias alone still requires the operator to know `! consensus-init`
+  or leave Claude Code. MCP-based discovery cannot work before bootstrap. Documentation-only
+  reduces confusion but does not make the natural Claude Code path work. The wrapper
+  should be intentionally thin so the existing `consensus-init` remains the single
+  source of setup behavior while Claude Code gains a discoverable pre-MCP entry point.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: dd9cae8b77198b232577d66efd377b2e131f4c9c167ac883af5881c036c13ace
+  output_sha256: 512fe8d3da705eaff19e8af09e0b57e6d95a7a820b98e920690c4f99a68377b5
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: e96e8878b0bd54c544de25388317bb9780e61a2c9180671f9950bebc142723d8
+  scope_signature: fceaefea5fe4898516dbd2b4ed4b0bd05cad42e6749af6f9473b6b9d578e4506
+  review_target_path: null
+  review_target_hash: null
+  mode: proposal
+proposal:
+  selected_target: 'Ship a Claude Code user-level bootstrap pack: a thin skill/command
+    wrapper that recognizes the natural request "consensus init" and exposes an explicit
+    `/consensus-init` command, both delegating to the existing `consensus-init` shell
+    binary before any consensus-mcp MCP server exists.'
+  rationale_vs_alternatives: This fixes the actual chicken-and-egg gap because it
+    is loaded by Claude Code independently of `.mcp.json` and does not depend on the
+    consensus-mcp server. A shell alias alone still requires the operator to know
+    `! consensus-init` or leave Claude Code. MCP-based discovery cannot work before
+    bootstrap. Documentation-only reduces confusion but does not make the natural
+    Claude Code path work. The wrapper should be intentionally thin so the existing
+    `consensus-init` remains the single source of setup behavior while Claude Code
+    gains a discoverable pre-MCP entry point.
+  deliverable_scope:
+    next_iteration_id: iteration-0040-consensus-init-claude-bootstrap
+    files_in_scope:
+    - pyproject.toml
+    - README.md
+    - docs/claude-code-bootstrap.md
+    - consensus_mcp/**/consensus_init*.py
+    - consensus_mcp/**/claude_bootstrap/**
+    - tests/**/test_*consensus_init*claude*.py
+    files_out_of_scope:
+    - consensus-state/**
+    - consensus_mcp/server.py
+    - MCP runtime protocol changes
+    - agent dispatch/convergence workflow code
+    - publishing to any external Claude marketplace
+    key_design_decisions:
+    - 'Q1 primary mechanism: Claude Code bootstrap skill plus slash command; skill
+      handles the natural phrase `consensus init`, slash command gives explicit discoverability.'
+    - 'Q2 distribution: bundle bootstrap assets in the existing PyPI/pipx package
+      and add an explicit installer such as `consensus-init --install-claude-code`;
+      document later marketplace/plugin publication as follow-up, not iter-0040 scope.'
+    - 'Q3 wrapper scope: wrapper only checks `consensus-init` availability, runs it
+      in the current project root, passes through arguments, and reports next steps;
+      no reimplementation of `.mcp.json` generation.'
+    - 'Q4 restart UX: after successful init, tell the operator that Claude Code must
+      reload/restart before the new MCP server is available; do not pretend the current
+      session can use the server immediately.'
+    - 'Q5 operator-vs-Claude detection: use an explicit wrapper flag or command context
+      such as `--from-claude-code` for Claude-specific wording; avoid brittle environment-variable
+      heuristics.'
+    - 'Q6 bonus: add a low-risk `consensus init` shell alias or console-script group
+      later so `! consensus init` also matches the mental model, while preserving
+      `consensus-init` compatibility.'
+    acceptance_gates:
+    - Fresh-project Claude Code bootstrap asset contains no dependency on an already-running
+      consensus-mcp MCP server.
+    - Installer copies user-level Claude Code command/skill files into the expected
+      Claude config location, refuses overwrite unless forced, and has tests using
+      a temporary home/config directory.
+    - Generated command/skill text invokes `consensus-init`, not `consensus init`,
+      unless the optional shell alias is actually implemented.
+    - CLI success output clearly states `.mcp.json` was written and Claude Code must
+      reload/restart before MCP tools appear.
+    - Existing `consensus-init` shell behavior remains backward compatible.
+    - 'Docs show three paths: inside Claude Code via `consensus init` after bootstrap
+      install, explicit `/consensus-init`, and shell fallback `! consensus-init`.'
+  risks:
+  - Claude Code skill/command packaging details may differ by installed Claude Code
+    version; iter-0040 should verify current file locations before hard-coding paths.
+  - The first-time bootstrap still needs one distribution action before Claude can
+    recognize `consensus init`; external marketplace/plugin distribution would improve
+    this but is larger than the smallest safe implementation.
+  - Over-eager natural-language triggering could run setup when the user only asks
+    conceptual questions; skill wording should require clear init/setup intent before
+    shell execution.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-13T18:11:13Z'
+packet_sha256: b4ccf18f37be2cbea814a3f53195ed03c6304f8724eba92b13546989eccefee7

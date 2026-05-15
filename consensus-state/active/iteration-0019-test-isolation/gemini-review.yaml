@@ -1,0 +1,33 @@
+iteration_id: iteration-0019-test-isolation
+reviewer_id: gemini-iteration-0019-2
+pass_id: gemini-iteration-0019-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The change correctly isolates test file system operations,
+  fixing the root cause of the test failures. A new helper, `_isolate_archive_root`,
+  was introduced to monkeypatch cached module-level paths, and this helper is now
+  used by all end-to-end tests that write review or log files. The implementation
+  matches the desired end state, and the fix is confined to the test file as required.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 2faea6b02c568db8dcfb8167267807b3bb6e38fd74014619851c6b191896992e
+  output_sha256: 69a3e3858e1a03e45b5f897bec6ca00bf8f916bd839b15903b575eb6a54ef02b
+  goal_packet_sha256: 2339a681c83b97c6048937ab5daeeef849a149d5aa5ef333fa121e7a0380ce94
+  scope_signature: d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3
+  review_target_path: consensus-state/active/iteration-0019-test-isolation/review-packet.yaml
+  review_target_hash: 9ad27ac451bd388236425f567a1936b42413df68ed40bc48dc62679d4a7498a0
+  adapter: gemini
+sealed_at_utc: '2026-05-13T07:01:15Z'
+packet_sha256: 6eef59efcc87bacab7269a8422e7758835986a181c64d0a06a5f3e9ecb8a221a

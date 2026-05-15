@@ -1,0 +1,46 @@
+iteration_id: iteration-0010-extract-dispatch-base
+reviewer_id: codex-iteration-0010-extract-dispatch-base-1
+pass_id: codex-iteration-0010-extract-dispatch-base-1-pass6
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Extracted goal-packet loader is not used by the codex adapter
+  citation: consensus_mcp/_dispatch_codex.py:590
+  risk: The shared base now owns _load_goal_packet with root-type validation, but
+    main() still hand-parses YAML with yaml.safe_load. Future adapters using _load_goal_packet
+    will reject non-mapping goal packets while codex continues into later AttributeError-style
+    failures, so the extracted infrastructure is not actually the single reusable
+    behavior source for this helper.
+  recommendation: Load the goal packet through _load_goal_packet in main(), and compute
+    goal_packet_sha256 from the already-read text separately if provenance still needs
+    the raw hash.
+  patch_not_proposed_reason: A safe patch would need exact current line numbers and
+    surrounding context in the sealed diff target; the embedded review surface provides
+    file contents but not the original pre-extraction behavior or tests needed to
+    prove no behavior drift.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The base file exists and most generic helpers are extracted,
+  but codex still bypasses one of the extracted generic helpers, leaving reusable
+  infrastructure and codex behavior divergent for goal-packet validation.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 6044b72434efdd8c0ae5df40f4c8e8bd28aa44e58daaf8c96b26990d0e37f25c
+  output_sha256: 8454fc6ad3c417c701c669d680912b3247422d433ae618a6b8ee7d56b8bc5d59
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 0716e78e2e5d8485671753efe35f8be46273b8c12351576794127c2c3615f636
+  scope_signature: 03deae7b9c8fb59bc2330732a33d7dc65d7c39c08bee3297121301ba7e02dbea
+  review_target_path: consensus-state/active/iteration-0010-extract-dispatch-base/review-packet.yaml
+  review_target_hash: 5e60486fb582c7f9b0765acca87c31983163f294f33a2af5008f2a8dd7deebee
+sealed_at_utc: '2026-05-13T00:48:24Z'
+packet_sha256: d985101de4e2e9066dd886155fd4cb9d2c371650201c4da162d0759d32ddb5f2

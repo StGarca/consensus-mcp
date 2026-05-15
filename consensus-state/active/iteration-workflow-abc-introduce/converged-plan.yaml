@@ -1,0 +1,195 @@
+iteration_id: iteration-workflow-abc-introduce
+converged_at_utc: '2026-05-15T04:10:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+# === SYNTHESIS BY QUESTION ===
+
+q1_alias_mechanism:
+  unanimous: |
+    All three vote (a) — letter aliases replace numeric for
+    operator-facing surface; semantic strings unchanged;
+    numeric kept as deprecated for one cycle.
+
+q2_scope_boundary_declaration:
+  claude_position: '(d) layered — policy file + goal_packet override'
+  codex_position: 'goal_packet "autonomy contract" required'
+  gemini_position: 'goal_packet scope_boundaries key with allowed_file_patterns'
+  weighted_synthesis: |
+    Adopt codex+gemini consensus: ship the goal_packet block
+    only as "autonomy_contract" (codex framing) with field
+    set from gemini's globs + claude's halt_on. Defer policy
+    file to a later iteration with NAMED BLOCKER: needs
+    empirical evidence that operators want project-level
+    defaults across multiple Workflow C runs (we've never
+    run one yet; design now for hypothetical reuse is
+    premature).
+
+q3_halt_set:
+  weighted_synthesis: |
+    Wide-by-default per claude+codex consensus. Required
+    halt conditions in v1.14.4:
+      (a) blocking_objection raised
+      (b) test_suite_regression vs baseline
+      (c) schema_change_proposed
+      (d) max_iterations exceeded
+      (e) max_wall_clock_minutes exceeded
+      (f) convergence fails after N rounds
+      (g) reviewer_dispatch_permanent_failure
+      (h) files outside allowed patterns touched
+      (i) files in forbidden patterns touched
+      (j) operator_interrupt_file_present
+      (k) reviewer_explicit_recommend_operator_review
+
+    PLUS codex's autonomy ledger check: every executed scope
+    item must be predeclared OR auto-approved within bounds
+    OR explicitly operator-approved. No silent overrides.
+
+    Operator opts OUT of specific halt conditions per-run via
+    autonomy_contract.skip_halt_on (preserves control while
+    making safety the default).
+
+q4_loop_semantics:
+  claude_position: '(c) queue-based for safety'
+  codex_position: 'auto-approve emergent scope from convergence within bounds (closer to (a))'
+  gemini_position: 'auto-proceed when scope passes validation (closer to (a))'
+  weighted_synthesis: |
+    Codex+gemini consensus wins: Workflow C is
+    AUTO-EMERGENCE (new scope from convergence is auto-
+    approved if within bounds), not queue-based. Operator's
+    directive said "new scope is automatically approved if
+    within scope" — that IS the auto-emerge pattern.
+    Claude's queue-based proposal was overly cautious; the
+    no-deferral rule's "default to completion" applies here.
+
+    Out-of-bounds scope is PARKED (not silently rejected) per
+    codex; operator returns to a parked-items list they can
+    approve/reject.
+
+q5_scope_for_v1_14_4:
+  claude_position: '(b) contract + NotImplementedError engine'
+  codex_position: 'full bounded autonomy state machine'
+  gemini_position: 'full implementation including engine'
+  weighted_synthesis: |
+    Bundle as much as fits in this session per the no-
+    deferral rule's session-cost check; named blocker for
+    what genuinely doesn't fit.
+
+    SHIPS in v1.14.4:
+      - Alias rename (Q1) — complete
+      - WORKFLOW_AUTONOMOUS_EXECUTE constant + alias map
+      - Goal_packet `autonomy_contract` schema validation
+      - `consensus_mcp/validators/scope_check.py` NEW —
+        given a proposed scope item + autonomy_contract,
+        returns approved | parked | halt-on-violation
+      - Halt set defined in code (all of Q3 conditions)
+      - Audit ledger writer (writes to
+        `consensus-state/autonomous-runs/<run-id>/log.jsonl`)
+      - workflow_engine.py: recognize Workflow C; orchestrate
+        a SINGLE iteration in autonomous mode (validate
+        scope → run → audit → halt-or-continue check)
+      - Tests: alias resolution, scope_check unit, halt set
+        defaults, autonomy_contract schema, audit-log write,
+        single-iteration autonomous run
+      - docs/workflows/workflow-c-autonomous.md operator-
+        facing doc
+      - Skill section "Workflow C — autonomous-execute"
+      - Dispatch templates: brief A/B/C mention
+      - README + CHANGELOG
+
+    NAMED BLOCKER for v1.15.0+ (genuinely deferred work,
+    not "iter-XXXX candidate" cop-out):
+      - MULTI-ITERATION AUTONOMOUS LOOP: orchestrating N
+        iterations in sequence, with interrupt-file
+        watching between iterations, requires:
+        * cross-platform interrupt detection validation
+          (Windows file-watching != Unix select/poll)
+        * integration tests with real peer dispatches
+          (cost: dispatcher latency × N iterations per
+          test run)
+        * resume-after-halt semantics design
+        * autonomy ledger replay for failure recovery
+        Multi-session work; honestly does not fit in this
+        hot-patch's scope.
+      - PROJECT-LEVEL POLICY FILE
+        (.consensus/autonomous-policy.yaml as default
+        with goal_packet override): defer until empirical
+        evidence operators want it across multiple runs
+
+q6_missed_dimensions:
+  adopted: |
+    From all three:
+      - Workflow C inherits Workflow A's blind-first-reveal
+        independence model (codex)
+      - Out-of-bound scope items are PARKED, not silently
+        rejected (codex's strong addition; adopt)
+      - Autonomy ledger required: every executed scope item
+        must be predeclared/approved/operator-approved with
+        no silent overrides (codex; adopt)
+      - Glob patterns for file boundaries (gemini's specific
+        proposal; adopt — simpler than full path-matching)
+      - 3-AI required for Workflow C (claude; adopt as
+        validator rule)
+      - Operator interrupt = `.consensus/interrupt` file
+        marker (claude; adopt as v1.14.4 contract; engine
+        watching deferred to v1.15.0)
+      - Audit ledger location:
+        `consensus-state/autonomous-runs/<run-id>/log.jsonl`
+        (claude+codex; adopt)
+
+# === FINAL CONVERGED DELIVERABLE FOR v1.14.4 ===
+
+deliverable:
+  files_in_scope:
+    config_and_validators:
+      - consensus_mcp/config.py  # WORKFLOW_AUTONOMOUS_EXECUTE; alias map A/B/C; numeric deprecation; autonomy_contract schema validation; 3-AI requirement
+      - consensus_mcp/validators/scope_check.py  # NEW — emergent-scope validator
+      - consensus_mcp/_init_wizard.py  # accept letter aliases; default to A
+    engine_recognition:
+      - consensus_mcp/workflow_engine.py  # recognize Workflow C; single-iteration autonomous-mode orchestration
+      - consensus_mcp/_autonomous_run.py  # NEW — audit ledger writer + halt-set checker
+    tests:
+      - consensus_mcp/tests/test_config.py  # alias rename + autonomy_contract + 3-AI
+      - consensus_mcp/tests/test_scope_check.py  # NEW
+      - consensus_mcp/tests/test_autonomous_run.py  # NEW
+      - consensus_mcp/tests/test_init_wizard.py  # letter aliases
+    docs_and_skill:
+      - docs/workflows/workflow-c-autonomous.md  # NEW operator doc
+      - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # rename #3/#4 → A/B; new Workflow C section
+      - consensus_mcp/dispatch_templates/codex_proposal_template.md  # A/B/C mention
+      - consensus_mcp/dispatch_templates/gemini_proposal_template.md  # same
+      - README.md  # brief A/B/C mention
+      - CHANGELOG.md  # v1.14.4 entry
+  files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - consensus_mcp/contributors/  # iter-0044 separate
+    - .github/
+  named_blockers_for_deferred_work:
+    - 'v1.15.0 — Multi-iteration autonomous loop orchestration: requires cross-platform interrupt-file watching validation (Windows != Unix), integration tests with real peer dispatches (cost: latency × N iters), resume-after-halt semantics design, autonomy-ledger replay for failure recovery. Multi-session work; cannot fit hot-patch.'
+    - 'v1.16.0+ — Project-level autonomous-policy.yaml with goal_packet override: defer until empirical evidence operators want it across multiple Workflow C runs (we have zero runs today; designing for hypothetical reuse is premature).'
+  acceptance_gates_gating:
+    - 'config.py: WORKFLOW_AUTONOMOUS_EXECUTE = "autonomous-execute" constant exists'
+    - 'config.py WORKFLOW_ALIASES: "A" → propose-converge, "B" → post-review, "C" → autonomous-execute'
+    - 'config.py: numeric aliases 3, 4 still resolve but emit DeprecationWarning'
+    - 'config.py: workflow_mode=autonomous-execute requires 3-AI contributors (validator)'
+    - 'config.py: workflow_mode=autonomous-execute requires goal_packet.autonomy_contract block with required fields'
+    - 'scope_check.py: validates a proposed scope item against autonomy_contract; returns approved | parked | halt'
+    - 'workflow_engine.py: recognizes WORKFLOW_AUTONOMOUS_EXECUTE; runs single iteration with halt-set check + audit-ledger emission; raises NotImplementedError with v1.15.0 reference for multi-iteration loop'
+    - '_autonomous_run.py: writes to consensus-state/autonomous-runs/<run-id>/log.jsonl with one entry per halt-set check'
+    - 'tests: all alias mappings covered; deprecation warning emission covered; 3-AI validator covered; autonomy_contract schema covered; scope_check approved/parked/halt cases covered; halt set defaults covered; single-iteration audit-log emission covered'
+    - 'docs/workflows/workflow-c-autonomous.md: operator-facing usage doc with autonomy_contract example, halt set explanation, audit-log location, v1.15.0 multi-iter notice'
+    - 'skill: Workflow C section + A/B/C terminology throughout (3/4 marked deprecated)'
+    - 'README + dispatch templates: A/B/C terminology'
+    - 'CHANGELOG.md v1.14.4 entry comprehensive with named blockers'
+    - 'all existing tests pass (no regression)'
+    - 'v1.14.4 tagged + pushed; v1.14.5 dev branch opened'
+  combined_risks:
+    - 'Alias deprecation surprises legacy automation. Mitigation: DeprecationWarning + one-cycle preservation + CHANGELOG callout.'
+    - 'Operators may try to RUN multi-iteration Workflow C in v1.14.4. Mitigation: NotImplementedError message names v1.15.0 explicitly; docs gate clearly.'
+    - 'Halt set may produce false-positive halts during routine runs. Mitigation: skip_halt_on opt-out; safety-first default; tighten later based on evidence.'
+    - 'Glob pattern boundary matching may be too loose or too strict in practice. Mitigation: codex flag noted; first implementation is conservative; iterate based on real usage.'
+    - 'Autonomy ledger format may need schema evolution. Mitigation: include schema_version field from day 1; document upgrade path.'
+  estimated_complexity: medium

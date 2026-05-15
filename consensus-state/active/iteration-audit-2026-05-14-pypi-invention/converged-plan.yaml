@@ -1,0 +1,136 @@
+iteration_id: iteration-audit-2026-05-14-pypi-invention
+converged_at_utc: '2026-05-15T03:30:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+# === SYNTHESIS BY QUESTION ===
+
+q1_root_cause:
+  unanimous: |
+    All three converge on (d) layered orthogonal causes:
+      - Claude: verification gap + defaulting bias + sloppy framing
+      - Codex: channel inferred without evidence + partial fix
+        described with global language
+      - Gemini: assumption over verification + imprecise artifact
+        state claims
+    No single root; layered defenses required.
+
+q2_preventive_mechanism:
+  claude: 'layered project memory + bundled skill + general rule'
+  codex: 'compact Release Trust Gate checklist'
+  gemini: 'Verification-First invariant in dispatch templates'
+  weighted_synthesis: |
+    All three are additive at different layers. Adopt all:
+      - Claude's layered project-local memory (cheap, immediate,
+        catches this project's future sessions)
+      - Codex's compact checklist artifact (catches release/
+        distribute steps specifically with evidence rows)
+      - Gemini's dispatch-template invariant (catches the failure
+        mode for ALL 3 peer AIs in future consults, not just claude)
+      - Plus bundled-skill sections so downstream projects using
+        consensus-mcp inherit the doctrine
+
+q3_generalization_candidates:
+  adopted_from_claude: 'npm, pytest, MIT-license, version-bump→publish, Dockerfile→pushed, package-name→ownership'
+  adopted_from_codex_framing: 'class is "publish/install/distribution" specifically + any inferred capability'
+  adopted_from_gemini_framing: 'extends beyond distribution to "any inferred environmental fact" (DB schemas, dependency availability, tool presence)'
+  synthesis: |
+    Maintain claude's enumerated list (project-local reference
+    memory, append-only). Adopt gemini's broader framing for the
+    skill section's intro: "any inferred capability, channel, or
+    environmental fact" — not limited to distribution.
+
+q4_verification_citation_gate:
+  unanimous: |
+    All three vote (a) mandatory citation before any step that
+    touches an external system or channel. Claude: "verified via
+    <source>:<line>". Codex: "checked evidence for channel, version,
+    artifact contents, residual surface". Gemini: "verify execution
+    context BEFORE proposing action that depends on it".
+
+q5_partial_fix_rule:
+  claude: '(d) both fixed-and-unfixed enumeration'
+  codex: 'replace global status words with artifact-scoped claims naming version + commit/tag + install path + bundled content + known residual defects'
+  gemini: 'distinguish git tag from branch head when making state claims'
+  weighted_synthesis: |
+    Adopt codex's "artifact-scoped claims" framing as the named
+    rule (cleanest formulation). Supplement with claude's explicit
+    "and which do not" requirement. Use gemini's tag-vs-branch
+    example as the canonical scenario in the rule's prose.
+
+q6_missed_dimensions:
+  adopted: |
+    Claude:
+      - Bias-rationalizes-evidence (worse than bias-without-evidence)
+      - Framing locks in invented requirements ("I'll handle X and
+        hand you Y" makes invented step feel inevitable)
+      - Class-of-error name worth memorizing
+    Codex:
+      - "If only human docs change and agent-facing instructions
+        do not, recurrence risk remains high" — fix MUST be agent-
+        facing (templates, skill), not just human-facing docs
+      - Separate channel verification from artifact-content
+        verification (they're orthogonal failure surfaces)
+    Gemini:
+      - Over-correction risk (verifying obvious facts; pedantic);
+        scope verification to high-impact actions
+
+# === FINAL CONVERGED DELIVERABLE ===
+
+deliverable:
+  next_iteration_id: implement-immediately  # small enough; doctrine-only, no code
+  files_in_scope:
+    project_memory:
+      - feedback_verify_before_invent.md  # NEW (broad rule)
+      - feedback_partial_fix_surfacing.md  # NEW (Q5 rule, codex framing)
+      - feedback_disconfirming_evidence.md  # NEW (bias-rationalizes-evidence pattern)
+      - reference_default_priors_to_distrust.md  # NEW (Q3 enumeration)
+      - MEMORY.md  # index update
+    bundled_skill:
+      - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # add "Verify before invent" + "Artifact-scoped claims" sections
+    dispatch_templates:
+      - consensus_mcp/dispatch_templates/codex_proposal_template.md  # verification-first preamble
+      - consensus_mcp/dispatch_templates/gemini_proposal_template.md  # verification-first preamble
+    repo_docs:
+      - CHANGELOG.md  # iter-audit entry under v1.14.2
+  files_out_of_scope:
+    - consensus_mcp/_dispatch_*.py  # no code change
+    - consensus_mcp/contributors/  # no code change
+    - consensus_mcp/tools/  # no code change
+    - main system prompt (Anthropic-side concern)
+  key_design_decisions:
+    - 'Three orthogonal failure modes (verification gap + defaulting bias + sloppy framing) → three layered defenses'
+    - 'Codex framing wins for partial-fix rule: artifact-scoped claims naming version + commit/tag + install path + bundled content + known residual defects'
+    - 'Gemini framing wins for generalization: rule applies to any inferred capability/channel/environmental fact, not just distribution'
+    - 'Bundled-skill change MUST include dispatch-template preamble updates per codex+gemini (agent-facing, not just human-facing)'
+    - 'Bias-rationalizes-evidence is named as a distinct pattern (worse than verification-gap alone) per claude'
+    - 'Default-priors-to-distrust list lives in project-local memory (claude-personal, not project-shared) per claude'
+    - 'No code changes — pure doctrine fix; ship as v1.14.2 hot-patch per cadence rule'
+  acceptance_gates:
+    gating:
+      - 'memory: 3 new feedback memories + 1 reference memory exist with named rules'
+      - 'memory: MEMORY.md index has 4 new entries'
+      - 'skill: "Verify before invent" section exists with mandatory-citation rule + example'
+      - 'skill: "Artifact-scoped claims" section exists with explicit "and which do not" requirement + tag-vs-branch example'
+      - 'templates: codex_proposal_template.md has verification-first preamble'
+      - 'templates: gemini_proposal_template.md has verification-first preamble'
+      - 'CHANGELOG.md v1.14.2 section dated + references iter-audit'
+      - 'commit + push to v1.14.2; tag v1.14.2; push tag'
+      - 'open v1.14.3 dev branch for next work'
+    non_gating:
+      - 'gemini scenario test: when presented with v1.14.0 scenario, a contributor with the new doctrine identifies git-based distribution by citing README:40 BEFORE proposing distribution commands'
+      - 'gemini scenario test: when asked about v1.14.0 state after the v1.14.1 hotfix, contributor differentiates immutable tag (with bug) from dev branch (with fix), no global "fully shipped" claim'
+  combined_risks:
+    - 'Skill/template bloat: 2 new skill sections + 2 template preambles. Mitigation: keep each <= 15 lines, lead with rule + 1-line why + 1-line example.'
+    - 'Over-correction into pedantry per gemini: rule must scope verification to high-impact actions, not every trivial step.'
+    - 'Codex flag: if only docs change without agent-facing template updates, recurrence risk remains. ADDRESSED — dispatch templates are in scope.'
+    - 'Default-priors list goes stale. Mitigation: append-only, never delete; review quarterly.'
+    - 'Bias-rationalizes-evidence may not be fully addressable by procedure. Mitigation: name the pattern explicitly so future-me can recognize and abort it.'
+  estimated_complexity: small
+
+next_steps:
+  - 'Apply all doctrine fixes immediately on v1.14.2 branch.'
+  - 'Cut v1.14.2 as a hot-patch per cadence rule ("hot-patches between Fridays: cut whenever a hot-patch lands").'
+  - 'Branch v1.14.3 for iter-0044 (adapter --mode forwarding) + any further work.'

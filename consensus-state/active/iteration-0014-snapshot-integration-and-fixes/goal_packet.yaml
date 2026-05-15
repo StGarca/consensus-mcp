@@ -1,0 +1,78 @@
+schema_version: 1
+pilot_id: iteration-0014-snapshot-integration-and-fixes
+goal:
+  summary: "iter-0014: integration tests for snapshot/restore/diff/dirty paths + fix iter-0013 round-6 codex findings (dry-run safety + import idempotency)."
+  desired_end_state: |
+    consensus_mcp/tests/test_snapshot_state_integration.py contains 10 new
+    end-to-end tests using tmp_path + fresh git init:
+      - snapshot creates orphan branch + tag
+      - list shows snapshots
+      - full restore recovers deleted file
+      - full restore removes files not in snapshot (no hybrid state)
+      - --iteration filter doesn't match siblings (regression: codex-rev-003)
+      - dry-run reports BOTH copies and deletions (iter-0014 codex-rev-001 fix)
+      - dry-run rejects missing iteration (iter-0014 codex-rev-001 fix)
+      - dirty-state detection catches deletions (codex-rev-002 round-3)
+      - diff returns non-zero on changes (codex-rev-004 round-1)
+      - diff returns zero when unchanged
+
+    _restore_from_tag now returns {copied: [...], deleted: [...]} dict so the
+    restore plan includes scope-cleanup deletions, not just copies. dry-run
+    validates missing iteration the same way as a real restore.
+
+    _import_parent_history skips rewriting source-manifest.yaml and README.md
+    when re-import would produce identical per-entry content hashes
+    (imported_at_utc stops drifting on unchanged source — byte-for-byte
+    idempotency per the documented intent).
+
+    Full test suite: 523 passing, 1 skipped.
+  non_goals:
+    - modify _dispatch_codex.py / _dispatch_gemini.py / _dispatch_base.py
+    - add new snapshot subcommands (prune/retention deferred per iter-0012 F9b)
+    - rename or move existing tests
+allowed_files:
+  - consensus_mcp/_snapshot_state.py
+  - consensus_mcp/_import_parent_history.py
+  - consensus_mcp/tests/test_snapshot_state_integration.py
+  - consensus_mcp/tests/test_import_parent_history.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/_dispatch_base.py
+  - consensus_mcp/server.py
+  - consensus_mcp/tools/
+  - consensus-state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - pyproject.toml
+  - .github/
+  - .gitignore
+  - docs/
+max_iterations: 1
+max_patch_size: 1500
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: full test suite passes (>=523 green)
+    check: "py -3.11 -m pytest consensus_mcp/tests -q"
+  - id: A2
+    description: integration tests file exists
+    check: "test -s consensus_mcp/tests/test_snapshot_state_integration.py"
+  - id: A3
+    description: codex review of diff returns no blocking objections
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T03:10:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 17f678d7741405fa0be3ce60e853059bf169ad6a32701d30f826e9d85c89afed

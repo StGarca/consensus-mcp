@@ -1,0 +1,62 @@
+iteration_id: iteration-0027-next-direction-consult
+reviewer_id: gemini-iteration-0027-1
+pass_id: gemini-iteration-0027-1-blind-proposal
+findings:
+- id: gemini-rev-001
+  severity: low
+  summary: 'Proposal: Fix codex review-template friction to enable honest 3-AI consensus
+    (Candidate B).'
+  citation: consensus-state/active/iteration-0027-next-direction-consult/goal_packet.yaml:31
+  risk: The primary risk is that initial prompt engineering for the new Codex proposal
+    template may be insufficient, leading to continued low-quality or structural responses
+    from Codex. This would require a follow-up iteration to refine the prompt, delaying
+    other initiatives.
+  recommendation: "Justification: This is the highest-leverage next move because the\
+    \ project's core '3-AI consensus' premise is currently impaired for design-consult\
+    \ workflows, as noted in the goal packet ('iter-0021 and iter-0024 lost codex's\
+    \ substantive vote'). Fixing this process integrity issue is a prerequisite for\
+    \ making sound, fully-informed strategic decisions on other candidates like (c).\
+    \ It directly addresses the operator's request for 'real 3-AI consensus' and provides\
+    \ more foundational value than continuing mechanical migrations (a).\n\nImplementation\
+    \ Sketch for iter-0028:\n- **Goal:** Enable Codex to provide substantive input\
+    \ on `propose-converge` workflows by using a dedicated prompt template.\n- **Files\
+    \ Touched:**\n  - `consensus_mcp/_dispatch_codex.py`: Modify to detect the `propose-converge`\
+    \ workflow_mode from the goal packet and select a new proposal-oriented prompt\
+    \ template.\n  - `consensus_mcp/dispatch_templates/codex_proposal_template.md`\
+    \ (new): Create a new prompt that instructs Codex to analyze the `goal.question`\
+    \ and candidates, rather than look for code changes.\n  - `consensus_mcp/tests/test_dispatch_codex.py`:\
+    \ Enhance with a test case that mocks a `propose-converge` iteration and asserts\
+    \ the correct proposal prompt is selected and sent to the LLM backend.\n- **Scope\
+    \ Boundary:** This iteration is limited to implementing the Codex dispatcher logic\
+    \ and the new template. It does not include changes to other dispatchers or running\
+    \ a full 3-AI consult with the new capability."
+  patch_proposal: null
+  patch_not_proposed_reason: This is a proposal, not a code review. No patch is expected.
+goal_satisfied: true
+goal_satisfied_rationale: The proposal directly answers the question posed in the
+  goal packet by selecting one candidate, providing a concrete justification of its
+  relative value, and sketching a bounded, testable implementation plan for the next
+  iteration (iter-0028).
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 7c222bba4b12711fd4e3014099a7bbe12b9e49071065048998e5fee7a0f331ea
+  output_sha256: f4e29c57ae8244f978abb25f0de296f1873bfd184f4df26215bd80da5573976d
+  goal_packet_sha256: 7fa790a118bd1b028f1253d9dc22750cfbbff4d47b4e3cbc83916af27a0df4ec
+  scope_signature: 5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5
+  review_target_path: consensus-state/active/iteration-0027-next-direction-consult/blind-proposal-packet.yaml
+  review_target_hash: e07bc9bdaec3d4aa3e9072f4726421be5bd270b8e5e875d5dcdcbdc6ec1d0826
+  adapter: gemini
+sealed_at_utc: '2026-05-13T12:55:38Z'
+packet_sha256: 3c286a721ed821108e7f5bf1e478e89a5fc5e045bd6bd4519ccccf2a34fd92cd

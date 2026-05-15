@@ -1,0 +1,69 @@
+iteration_id: iteration-0028-codex-proposal-mode
+reviewer_id: codex-iteration-0028-2
+pass_id: codex-iteration-0028-2-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: Gemini proposal mode never loads or uses the new proposal schema
+  citation: consensus_mcp/_dispatch_gemini.py:478
+  risk: The goal requires proposal_template.md + proposal_schema.json pairs for both
+    dispatchers and says mode='proposal' switches the default template + schema names,
+    with schema overrides preserved. Gemini only switches the template and still has
+    no --schema path, so gemini_proposal_schema.json is dead artifact/provenance,
+    and operators cannot override it. The template also promises schema validation
+    the dispatcher does not perform.
+  recommendation: Add a --schema flag to the Gemini dispatcher, select gemini_proposal_schema.json
+    when --mode proposal and gemini_review_schema.json or the embedded review contract
+    equivalent when --mode review, hash/log the selected schema, and either validate
+    parsed proposal output with it or correct the design so the schema file is not
+    claimed as dispatcher-enforced.
+  patch_not_proposed_reason: A safe patch requires knowing whether Gemini review mode
+    already has or should gain a separate schema artifact, but that file is not embedded.
+    The review target only includes the new proposal schemas/templates and dispatcher
+    files.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Proposal parsers accept malformed nested proposal shapes that the schemas
+    reject
+  citation: consensus_mcp/_dispatch_codex.py:676
+  risk: Both proposal parsers check only the top-level fields plus a few scalar/list
+    types. They do not verify deliverable_scope is an object/null, require its five
+    fields, reject extra nested keys, ensure nested arrays contain strings, or ensure
+    selected_target is a string/null. As a result, dispatcher post-parse can seal
+    proposal payloads that do not actually match codex_proposal_schema.json or gemini_proposal_schema.json
+    despite the templates promising strict validation.
+  recommendation: Either run jsonschema validation against the selected proposal schema
+    after JSON parsing, or add equivalent defense-in-depth checks for selected_target,
+    deliverable_scope, nested required fields, nested additionalProperties:false,
+    and array item types in both proposal parsers.
+  patch_not_proposed_reason: Fix spans both parsers and should preferably reuse the
+    schema files, but dependency availability and the intended Gemini schema-loading
+    path are not established from the embedded files alone.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The codex side largely implements proposal mode, but the
+  Gemini schema pair is not integrated and both proposal parsers can seal outputs
+  that violate their advertised schemas.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 896b82fe3907e989cec54a0dfe7c2de48351b302954dca371db0549adc6d6d75
+  output_sha256: 150cb8ee347c7fd5ee5c904be44decf41fffa1d1957d7afe0c1eea6bc3cd2c98
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: fff079d61f9699cdb3f7b7b42e9db795547f4b8ad9fe56d632b6fb7279520ddc
+  scope_signature: 6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6
+  review_target_path: consensus-state/active/iteration-0028-codex-proposal-mode/review-packet.yaml
+  review_target_hash: 25e559e1c1da8dd40e1b96311617d3e23c9fcf5ccf04cf6ecb9b659076b81726
+sealed_at_utc: '2026-05-13T13:24:28Z'
+packet_sha256: 2dec76f6dbbe6bb1ec3ff6887d8376e94f50bcfd808dfb3436fd231cd6e97328

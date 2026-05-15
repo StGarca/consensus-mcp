@@ -1,0 +1,61 @@
+iteration_id: iteration-0013-snapshot-import-implementation
+reviewer_id: codex-iteration-0013-snapshot-import-implementation-6
+pass_id: codex-iteration-0013-snapshot-import-implementation-6-pass1
+findings:
+- id: codex-rev-001
+  severity: critical
+  summary: --iteration accepts path traversal and can recursively delete outside the
+    requested iteration scope
+  citation: consensus_mcp/_snapshot_state.py:357
+  risk: An operator typo or malicious value such as ../.. is interpolated into consensus-state/active/{iteration};
+    later cleanup calls shutil.rmtree on that derived path. This can expand restore
+    scope beyond one iteration and can target the repo root, violating the restore
+    scope and main-tree safety requirements.
+  recommendation: Validate --iteration as a single safe path component before any
+    dirty check or restore work, rejecting separators, drive/absolute paths, and dot
+    segments; add regression tests for ../.., ../archive, slash, and backslash inputs.
+  patch_not_proposed_reason: No patch proposed because the sealed packet does not
+    provide the full review-packet base_sha; recommend applying the validation change
+    in the allowed file with focused unit tests.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: restore skips the required safety snapshot for deletion-only dirty state
+  citation: consensus_mcp/_snapshot_state.py:471
+  risk: _detect_dirty_paths only walks files that currently exist. If a snapshotted
+    file was deleted locally and restore runs without --force, dirty is empty, so
+    no auto-pre-snapshot is created before restore repopulates the deleted file. That
+    loses the current deletion state and breaks the F6a default protection.
+  recommendation: Compare the current restore scope against snapshot contents including
+    missing paths, or otherwise detect deletions under consensus-state before allowing
+    restore to proceed without an auto-pre-snapshot.
+  patch_not_proposed_reason: Fix needs careful git-worktree regression coverage for
+    deletion-only dirty state and scope-limited restore behavior; not safe to propose
+    from the embedded excerpts alone.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The import and snapshot surfaces are mostly present, but
+  restore has a critical iteration path traversal issue and misses deletion-only dirty
+  state, so the approved safety requirements are not fully met.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 791ca80ca62f41e4ee672138bd1bf856671b0af0362279596d5d9b2cfaec3198
+  output_sha256: cd88e9ace4f1be74c47d7d194207d8d0889ce2524916e34d97cfd5089dbbe812
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 4b55ce3c5f0a93d4b884db79e8734a176f1b724951700e97241e4afd01a6e2b8
+  scope_signature: 4904672bca3de6d503e78bf16538f38e9bdba2d0e7bdb0fbcb5ac3c540b23738
+  review_target_path: consensus-state/active/iteration-0013-snapshot-import-implementation/review-packet.yaml
+  review_target_hash: 66eb3d232e0dcdcf83a24f06e42bb1bb069c9a2ec346411b042ced535b4d7ecf
+sealed_at_utc: '2026-05-13T02:08:35Z'
+packet_sha256: 399c5952b04d11a303271190c7a1d0a56e767180b5deadd9f2685f4c4dde369e

@@ -1,0 +1,57 @@
+iteration_id: iteration-0028-codex-proposal-mode
+reviewer_id: codex-iteration-0028-6
+pass_id: codex-iteration-0028-6-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Proposal parsers assume structural_abstention exists and is boolean after
+    custom-schema validation.
+  citation: consensus_mcp/_dispatch_codex.py:454; consensus_mcp/_dispatch_gemini.py:482
+  risk: An operator-supplied proposal schema that relaxes or omits structural_abstention
+    can pass jsonschema validation and then produce a KeyError or accept a non-boolean
+    truthy value. That breaks the documented schema-override contract with unclear
+    dispatch failures or incoherent sealed proposal state.
+  recommendation: Add parser-level invariants in both proposal parsers requiring structural_abstention
+    to be present and boolean before cross-field checks, independent of the active
+    schema.
+  patch_not_proposed_reason: No patch proposed because the paired fix needs symmetric
+    codex and gemini parser tests for custom-schema override behavior.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: low
+  summary: Codex proposal dispatch does not record the selected mode in sealed provenance.
+  citation: consensus_mcp/_dispatch_codex.py:696
+  risk: Codex review and proposal runs are distinguishable from the sealed packet
+    shape, but the dispatch_provenance block lacks the explicit mode field that gemini
+    records. This weakens audit readability for the new mode split, especially with
+    custom template or schema paths.
+  recommendation: 'Add mode: ns.mode to codex dispatch_provenance and dispatch log
+    events for parity with gemini.'
+  patch_not_proposed_reason: No patch proposed because this is an audit-readability
+    issue rather than a functional blocker.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The proposal mode implementation satisfies the core template
+  and schema split, but the custom-schema parser path has a real invariant gap and
+  codex provenance is missing explicit mode parity.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 9083e3dcf6f03d86ac5e270c6f862fb15d5f8963a13f63bdfe208de6b420a49d
+  output_sha256: 3a070f490108c1295b27e1f6806245718711626ccb6008f5a9210b7e1b7b57d9
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: fff079d61f9699cdb3f7b7b42e9db795547f4b8ad9fe56d632b6fb7279520ddc
+  scope_signature: 6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6
+  review_target_path: consensus-state/active/iteration-0028-codex-proposal-mode/review-packet.yaml
+  review_target_hash: b2774992a3da6fae63b012147e46122c77220ec2ecc3e20dcb798df1dc21738e
+sealed_at_utc: '2026-05-13T14:02:54Z'
+packet_sha256: 6b847a849483301fd4a4f33eaaf9cabc527481e7d3313499e994899252451252

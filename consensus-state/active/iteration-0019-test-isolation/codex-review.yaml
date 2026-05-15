@@ -1,0 +1,29 @@
+iteration_id: iteration-0019-test-isolation
+reviewer_id: codex-iteration-0019-2
+pass_id: codex-iteration-0019-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The embedded test change adds the isolated archive helper,
+  patches both cached tool modules, and threads it through the tmp_path-based dispatch
+  tests within the allowed test file scope.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 99cf4bc8bbd1219de686ddbd44add54be395ec575d159aa01a22ff1694d6d630
+  output_sha256: 8de0cde27a16a9bc81766ee1c7964eab58a0671099db29573ae1c2b74c96fc03
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 2339a681c83b97c6048937ab5daeeef849a149d5aa5ef333fa121e7a0380ce94
+  scope_signature: d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3
+  review_target_path: consensus-state/active/iteration-0019-test-isolation/review-packet.yaml
+  review_target_hash: 9ad27ac451bd388236425f567a1936b42413df68ed40bc48dc62679d4a7498a0
+sealed_at_utc: '2026-05-13T07:00:55Z'
+packet_sha256: 3abafbc1a8f09034e80050d69dd989d505068568d1b4bc2a18b89a99ed458225

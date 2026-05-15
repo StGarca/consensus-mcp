@@ -1,0 +1,42 @@
+iteration_id: iteration-0021-next-direction-consult
+reviewer_id: codex-iteration-0021-2
+pass_id: codex-iteration-0021-2-blind-proposal
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: review target content is not embedded, so the proposed change cannot be
+    reviewed
+  citation: consensus-state/active/iteration-0021-next-direction-consult/blind-proposal-packet.yaml:1
+  risk: The sealed review would have to infer the proposal instead of reviewing the
+    canonical review_target_path, so any approval could falsely satisfy the quorum
+    without evidence.
+  recommendation: Include the contents of blind-proposal-packet.yaml in the sealed
+    packet and rerun the review against that embedded target.
+  patch_not_proposed_reason: The needed review target file consensus-state/active/iteration-0021-next-direction-consult/blind-proposal-packet.yaml
+    was not embedded, and allowed_files is empty with max_patch_size 0.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The goal cannot be verified because the canonical review
+  target was not provided in the embedded authoritative contents.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 30f6dc7b78c36a27f9435efd17cb2693e6d25adeed66038b1102d68ab1333f16
+  output_sha256: dc0cab9d08b3052bb60aa86fba2d656183ce9ce3a4d267fd531a5f2e54148304
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 1ca63e2a0b9b4f0aa2d7e5fef4f1c2c2f98f1d410a9ff749fccb80cabfeac2b6
+  scope_signature: f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5
+  review_target_path: consensus-state/active/iteration-0021-next-direction-consult/blind-proposal-packet.yaml
+  review_target_hash: 189608143bf08cd6545b8acbca1419ce481c6604c40f39d017ac3da81a80f8e4
+sealed_at_utc: '2026-05-13T07:44:54Z'
+packet_sha256: 6c2405c548adcc1cfb6a2d00b728de0b8d943ca74361e924ff5e3bb0c95acc89

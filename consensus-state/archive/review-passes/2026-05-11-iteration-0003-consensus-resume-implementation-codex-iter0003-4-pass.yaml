@@ -1,0 +1,43 @@
+iteration_id: iteration-0003-consensus-resume-implementation
+reviewer_id: codex-iter0003-4
+pass_id: codex-iter0003-4-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Reviews remain classified as open when the current bundle hash is unknown.
+  citation: consensus_mcp/_resume.py:401
+  risk: A malformed bundle-mutation event without bundle_sha256/review_target_hash,
+    or a missing/unreadable review-packet fallback, leaves current_bundle_sha as None;
+    any review carrying a hash then falls through to open. That can make resume suggest
+    acting on stale review findings or patch proposals against an unverified bundle
+    state.
+  recommendation: Treat reviews as invalid or otherwise non-actionable when current_bundle_sha
+    cannot be established, and surface a warning when _compute_current_bundle_sha
+    returns mutation_event_missing_hash or none.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The tool covers the requested surfaces, but unknown bundle
+  provenance can still produce actionable open reviews, so the resume snapshot is
+  not safe enough to close as fully satisfying the spec.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 617ab7c863dce7851442c03e9a3084732e757d754d5bb71432ef8e45fa35f0c2
+  output_sha256: 8c2b4368cb24d57fb4b1812deef932a25231a4ceab5f0ad4e8ca8a198b93ef7a
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: bc0c3ab981da72a771c2075bab4752e76cdf4f8fe982d081db23e50116149d2f
+  scope_signature: 7f3d7442de9161a7c9e43c96c2296d27660c59d885b30b6d503263d0e0e6caf3
+  review_target_path: consensus-state/active/iteration-0003-consensus-resume-implementation/review-packet.yaml
+  review_target_hash: d8d4476acac1950e2a869cb024d54d885e2eabeeea38eef46bbc3df216d761a2
+sealed_at_utc: '2026-05-11T20:16:54Z'
+packet_sha256: e4031d595862fe1ce9b23c13ffc392aae71697d35d3691ee23629326a84248f0

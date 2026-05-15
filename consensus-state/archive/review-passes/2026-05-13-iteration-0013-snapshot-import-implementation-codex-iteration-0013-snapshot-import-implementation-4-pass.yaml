@@ -1,0 +1,87 @@
+iteration_id: iteration-0013-snapshot-import-implementation
+reviewer_id: codex-iteration-0013-snapshot-import-implementation-4
+pass_id: codex-iteration-0013-snapshot-import-implementation-4-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: restore writes snapshot files through the main repo index instead of an
+    isolated restore path
+  citation: consensus_mcp/_snapshot_state.py:276
+  risk: '`git checkout <tag> -- <paths>` updates the current branch index and can
+    stage/track gitignored `consensus-state` files, violating the worktree-isolation
+    design and polluting the operator''s main working tree.'
+  recommendation: Restore from a detached worktree or binary archive extraction into
+    a temporary directory, then copy files into `consensus-state` with filesystem
+    operations that do not touch the main repo index.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: full restore overlays snapshot files but never removes files absent from
+    the selected snapshot
+  citation: consensus_mcp/_snapshot_state.py:276
+  risk: A point-in-time restore can leave newer files behind, producing a hybrid state
+    rather than the snapshot state the operator requested.
+  recommendation: 'Before copying snapshot contents, clean the target restore scope:
+    the whole `consensus-state` tree for full restore, or the exact iteration subtree
+    for `--iteration`.'
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-003
+  severity: high
+  summary: '`--iteration` filtering uses a raw prefix match and can restore sibling
+    iterations'
+  citation: consensus_mcp/_snapshot_state.py:264
+  risk: Restoring `iteration-0001` also matches paths like `iteration-00010` or `iteration-0001-foo`,
+    so an operator can overwrite unintended iteration state.
+  recommendation: Filter on `p == sub` or `p.startswith(sub + '/')`, and validate
+    the iteration identifier against expected directory names.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-004
+  severity: blocking
+  summary: diff subcommand discards git diff output and always reports success
+  citation: consensus_mcp/_snapshot_state.py:504
+  risk: Operators get no visible diff and callers cannot detect differences, so the
+    required `diff --tag` command is effectively non-functional.
+  recommendation: Capture the `git diff --no-index` result, print stdout/stderr, and
+    return a documented nonzero status when differences or errors occur.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-005
+  severity: medium
+  summary: diff extracts `git archive` through text-mode stdout, corrupting tar data
+  citation: consensus_mcp/_snapshot_state.py:497
+  risk: Binary or non-UTF-8 files in `consensus-state` can make diff extraction fail
+    or compare corrupted contents because `_run_git` decodes archive bytes as text
+    before re-encoding.
+  recommendation: Use a binary subprocess path for `git archive`, or avoid tar streaming
+    by checking out the snapshot into a temporary worktree for comparison.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: Core restore and diff behavior does not meet the approved
+  snapshot/restore CLI design, even though the lightweight unit tests may pass.
+blocking_objections:
+- codex-rev-001
+- codex-rev-004
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 54c45527f1ec36854366d97ef95b4b47d592835e019e1cdf7b6413189099c15e
+  output_sha256: e5830cbad5959411dc0205dc9b2649a58bb0bc17f5e64c39fcbad32e7eae421e
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 4b55ce3c5f0a93d4b884db79e8734a176f1b724951700e97241e4afd01a6e2b8
+  scope_signature: 4904672bca3de6d503e78bf16538f38e9bdba2d0e7bdb0fbcb5ac3c540b23738
+  review_target_path: consensus-state/active/iteration-0013-snapshot-import-implementation/review-packet.yaml
+  review_target_hash: 44c4bf8f8176210f3feb3bcc110edb3ce14402f305c6758cf69e69e0bc80f114
+sealed_at_utc: '2026-05-13T01:59:07Z'
+packet_sha256: 9d2abf104d87b305ac06befc843d247b8e1977e4980741e97a0b87db365d2911

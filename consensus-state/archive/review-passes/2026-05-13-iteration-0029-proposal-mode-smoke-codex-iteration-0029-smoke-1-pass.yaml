@@ -1,0 +1,80 @@
+iteration_id: iteration-0029-proposal-mode-smoke
+reviewer_id: codex-iteration-0029-smoke-1
+pass_id: codex-iteration-0029-smoke-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Pick the narrow smoke target because it directly tests
+  the iter-0028 contract: Codex should emit proposal-shaped output rather than review-shaped
+  output or a missing-review-target error. Broader alternatives, such as refactoring
+  dispatcher internals, auditing Gemini parity, or judging proposal quality on a real
+  design problem, would add confounders. The value delta is a clean signal: schema-valid
+  proposal output proves the routing/prompt/schema path works for Codex; review keys
+  or abstention would identify mode leakage immediately.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 7ec7e6e9b4ef454e5a1c4546e42a176e8ea595ecf1dcc41a4c7b14706093618b
+  output_sha256: 2ed8148d53eeb878ac47d6038538afc7cf23ebd8e6631a764fa5a323fa5156e5
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: 0bf8617533f09474a8dcfdb14239b0c2b27b14faf5b757c26f05a2eaac135e9b
+  scope_signature: smoke-test-iter-0028-proposal-mode-no-real-scope-needed
+  review_target_path: consensus-state/active/iteration-0029-proposal-mode-smoke/smoke-goal-packet.yaml
+  review_target_hash: 0bf8617533f09474a8dcfdb14239b0c2b27b14faf5b757c26f05a2eaac135e9b
+  mode: proposal
+proposal:
+  selected_target: 'proposal-mode smoke acceptance for Codex: validate structured
+    proposal output under --mode proposal'
+  rationale_vs_alternatives: 'Pick the narrow smoke target because it directly tests
+    the iter-0028 contract: Codex should emit proposal-shaped output rather than review-shaped
+    output or a missing-review-target error. Broader alternatives, such as refactoring
+    dispatcher internals, auditing Gemini parity, or judging proposal quality on a
+    real design problem, would add confounders. The value delta is a clean signal:
+    schema-valid proposal output proves the routing/prompt/schema path works for Codex;
+    review keys or abstention would identify mode leakage immediately.'
+  deliverable_scope:
+    next_iteration_id: iteration-0029-proposal-mode-smoke
+    files_in_scope:
+    - consensus-state/active/iteration-0029-proposal-mode-smoke/smoke-goal-packet.yaml
+    - consensus-state/active/iteration-0029-proposal-mode-smoke/*codex*proposal*.yaml
+    - consensus-state/active/iteration-0029-proposal-mode-smoke/*dispatch*.jsonl
+    files_out_of_scope:
+    - consensus_mcp/dispatch_templates/* except diagnostic inspection if the smoke
+      fails
+    - consensus_mcp/dispatchers/* except diagnostic inspection if the smoke fails
+    - application code unrelated to proposal-mode dispatch
+    key_design_decisions:
+    - Treat this as a routing/schema smoke test, not a substantive design review.
+    - 'Require top-level proposal keys: selected_target, rationale_vs_alternatives,
+      deliverable_scope, risks, estimated_complexity, structural_abstention.'
+    - Reject review-mode keys such as findings, goal_satisfied, and blocking_objections
+      as evidence of mode leakage.
+    - Keep scope synthetic because no real implementation target is needed to validate
+      proposal-mode behavior.
+    acceptance_gates:
+    - Codex final output parses under the effective proposal schema.
+    - structural_abstention is false and selected_target is non-null.
+    - deliverable_scope is present with files_in_scope, files_out_of_scope, key_design_decisions,
+      and acceptance_gates.
+    - No review-shaped top-level keys are emitted.
+    - Dispatcher records completion without missing review target or fallback-to-review
+      errors.
+  risks:
+  - A passing synthetic smoke proves output shape and routing, not proposal quality
+    on ambiguous real design consults.
+  - If --schema is overridden without a matching prompt template, schema success may
+    still mask confusing contributor instructions.
+  - Exact sealed-output filenames may differ, so verification should key on dispatcher
+    records and schema validation rather than only glob names.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-13T14:31:11Z'
+packet_sha256: e14d8f985b24969cecb2b625b8a763902f268a628cb8f888ec3f55ebad1a5b96

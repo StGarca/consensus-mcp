@@ -1,0 +1,112 @@
+iteration_id: iteration-0030-consensus-init-mcp-bootstrap
+reviewer_id: codex-iteration-0030-1
+pass_id: codex-iteration-0030-1-blind-proposal
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'This best matches the stated goal: one command leaves Claude
+  Code able to see the pipx-installed consensus-mcp server. A no-write design preserves
+  the current two-step friction. Overwrite is too destructive because .mcp.json may
+  already contain other team MCP servers. Skip-on-existing is too weak because the
+  common real case is an existing config that only needs one server added. Marker-based
+  root detection plus explicit override is safer than assuming cwd or a literal dev
+  folder name. Binary discovery from the active install and PATH is more reliable
+  than hard-coding pipx paths, while still allowing an override for unusual installs.
+  Idempotent merge prevents consensus-init from becoming noisy in repeated project
+  setup or CI-style bootstrap scripts.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 09db261fca43cd12871aaec96902f970b4f44b3fea10cb068218bc5c7b44d7bc
+  output_sha256: c2c6d33fc92dbccef8adcea7f34dea0fed1f20f3309902a98e7d0631a13fb3dc
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: 09bc48b234896d936fe02cc98110afcdd5f84acb72a2f08045a9700d64b96764
+  scope_signature: 6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c
+  review_target_path: consensus-state/active/iteration-0030-consensus-init-mcp-bootstrap/goal_packet.yaml
+  review_target_hash: 09bc48b234896d936fe02cc98110afcdd5f84acb72a2f08045a9700d64b96764
+  mode: proposal
+proposal:
+  selected_target: Auto-write project .mcp.json from consensus-init by default, using
+    conservative merge, marker-based project-root detection, discovered consensus-mcp
+    command, and a no-diff idempotency contract.
+  rationale_vs_alternatives: 'This best matches the stated goal: one command leaves
+    Claude Code able to see the pipx-installed consensus-mcp server. A no-write design
+    preserves the current two-step friction. Overwrite is too destructive because
+    .mcp.json may already contain other team MCP servers. Skip-on-existing is too
+    weak because the common real case is an existing config that only needs one server
+    added. Marker-based root detection plus explicit override is safer than assuming
+    cwd or a literal dev folder name. Binary discovery from the active install and
+    PATH is more reliable than hard-coding pipx paths, while still allowing an override
+    for unusual installs. Idempotent merge prevents consensus-init from becoming noisy
+    in repeated project setup or CI-style bootstrap scripts.'
+  deliverable_scope:
+    next_iteration_id: iteration-0031-consensus-init-mcp-bootstrap
+    files_in_scope:
+    - converged-plan.yaml at iteration_dir root
+    - consensus-init CLI implementation module that owns project initialization
+    - tests covering consensus-init .mcp.json bootstrap behavior
+    - README/CLI help text for the new MCP bootstrap flags if such docs already exist
+    files_out_of_scope:
+    - MCP server protocol behavior
+    - Claude Code global/user-level MCP configuration
+    - pipx installation or upgrade mechanics
+    - workflow proposal/review template changes beyond recording the converged plan
+    key_design_decisions:
+    - '(a) Auto-write: yes, default-on for consensus-init, with an explicit --no-mcp
+      or equivalent opt-out.'
+    - '(b) Existing .mcp.json: merge by default. Preserve unrelated top-level keys
+      and other mcpServers entries. Never wholesale overwrite.'
+    - If mcpServers.consensus-mcp is absent, add it. If present and equivalent, leave
+      file unchanged. If present and materially different, leave user config unchanged
+      and print an actionable conflict message; optional force flag may replace only
+      that managed entry.
+    - '(c) Dev-folder/project-root detection: accept explicit project-root option
+      first; otherwise use git rev-parse --show-toplevel when available; otherwise
+      ascend from cwd to nearest strong marker such as existing .mcp.json, consensus-state,
+      .git, pyproject.toml, package.json, CLAUDE.md, or AGENTS.md; fallback to cwd.
+      Resolve paths and refuse writes outside the detected root.'
+    - '(d) Binary discovery: prefer an explicit --mcp-command override; otherwise
+      discover the sibling/current-install consensus-mcp console script and shutil.which(''consensus-mcp'');
+      on failure use sys.executable -m consensus_mcp only if the package exposes a
+      stable server module. Do not execute arbitrary discovered binaries during discovery.'
+    - '(e) Idempotency: after the first successful run, repeating consensus-init with
+      the same inputs produces no semantic change and ideally no file timestamp/content
+      change. Invalid JSON or conflicting user-owned consensus-mcp entries are non-mutating
+      failures/warnings.'
+    - '(f) Bonus: emit a short post-init status line naming the .mcp.json path and
+      whether it was created, merged, already current, skipped by opt-out, or blocked
+      by conflict.'
+    acceptance_gates:
+    - 'Fresh temp project with no .mcp.json: consensus-init creates valid JSON containing
+      mcpServers.consensus-mcp.'
+    - 'Existing .mcp.json with another server: consensus-init preserves that server
+      and adds consensus-mcp.'
+    - 'Existing equivalent consensus-mcp entry: second run produces no content diff.'
+    - 'Existing divergent consensus-mcp entry: command does not overwrite it by default
+      and reports the conflict.'
+    - 'Invalid .mcp.json: command does not mutate the file and reports parse failure
+      with path.'
+    - Project-root detection test covers nested cwd and explicit project-root override.
+    - Binary discovery tests cover explicit override, PATH-discovered command, and
+      no-command failure path.
+    - JSON output is stable, pretty-printed, and ends with a newline.
+  risks:
+  - Claude Code .mcp.json schema details may vary by version; implementation should
+    target the current documented project-level format before writing tests.
+  - Absolute binary paths improve local reliability but reduce portability if .mcp.json
+    is committed. The converged plan should decide whether default command value is
+    absolute discovered path or portable command name.
+  - Conflict handling can still leave a user needing a manual fix, but that is preferable
+    to silently replacing a custom MCP server entry.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-13T15:16:12Z'
+packet_sha256: 4806ae8117745d8eaa162f4f16a81c756f9639a64b6139260a98dacc4b7cd6d4

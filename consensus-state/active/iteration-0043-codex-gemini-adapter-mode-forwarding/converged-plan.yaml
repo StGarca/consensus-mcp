@@ -1,0 +1,189 @@
+iteration_id: iteration-0043-codex-gemini-adapter-mode-forwarding
+converged_at_utc: '2026-05-15T03:00:00Z'
+convergence_rule: weighted-synthesis
+convergence_note: |
+  This iteration was authored under `finding_disposition: all-or-nothing`
+  per goal_packet (the legacy default). It is converged under the new
+  `weighted-synthesis` model the operator specified mid-iteration:
+  "all ideas of all proposals are weighed for benefit to the project
+  as a whole. No good ideas are lost, no babies tossed with the
+  bathwater." The synthesis below pulls the strongest element from
+  each of the three proposals rather than picking a winner.
+
+  Codifying weighted-synthesis as the default (and changing
+  `config.py:295-308` which currently enforces all-or-nothing for
+  workflow #4) is a separate follow-up iteration; this iteration
+  applies the new model in spirit only.
+
+contributors_responsive: [claude, codex, gemini]
+contributors_timed_out: []
+all_substantive: true
+blocking_objections: []
+
+# === SYNTHESIS BY QUESTION ===
+
+q1_phase_to_mode_for_phase_converge:
+  claude_position: '(a) PHASE_CONVERGE → proposal — synthesis output is proposal-shaped per existing schema'
+  codex_position: 'PHASE_CONVERGE → review — pragmatic until a dedicated converge schema exists'
+  gemini_position: 'implicit review — only PHASE_PROPOSE gets the flag, everything else falls through to dispatcher default'
+  weighted_synthesis: |
+    PHASE_CONVERGE → review for the initial fix. Codex's pragmatic
+    framing wins on shipping risk (a converge-shaped schema does
+    not exist yet; introducing proposal-shape to converge dispatches
+    is an unverified design call that should not block the defect
+    fix). Claude's argument that synthesis output is proposal-shaped
+    is preserved as an EXPLICIT FOLLOW-UP: iter-0045 should evaluate
+    whether converge dispatches produce review-shaped output that
+    fits the synthesis task, and if not, ship `codex_converge_schema.json`
+    + `_phase_mode.PHASE_CONVERGE → "converge"` (a new third mode).
+    The good idea is not lost; it's sequenced.
+
+q2_mcp_wrapper_surface:
+  claude_position: '(b) expose `phase` only — match engine abstraction'
+  codex_position: 'accept explicit mode OR phase — both work'
+  gemini_position: 'accept `phase` parameter'
+  weighted_synthesis: |
+    MCP wrappers expose `phase` as the primary parameter (matches
+    engine adapter, hides dispatcher implementation detail per
+    claude+gemini consensus). Additionally accept an optional
+    `mode` override for callers who need explicit dispatcher-level
+    control (codex's flexibility argument preserved as an
+    escape-hatch). Default behavior when neither is passed:
+    `phase=PHASE_REVIEW` (preserves backward compat with current
+    callers).
+
+q3_same_patch_for_gemini:
+  claude_position: '(a) one PR fixing both'
+  codex_position: '(a) one PR covering both adapters'
+  gemini_position: '(a) one PR covering both adapters + both wrappers'
+  weighted_synthesis: |
+    Unanimous: one PR covering both adapters AND both MCP wrappers.
+    No splits — symmetric defect, symmetric fix.
+
+q4_workaround_removal:
+  claude_position: '(a) remove in same PR'
+  codex_position: '(a) update skill in same PR with deprecation note'
+  gemini_position: 'abstain — believed skill was external (incorrect; it is in consensus_mcp/claude_extensions/)'
+  weighted_synthesis: |
+    Remove the workaround paragraph in the same PR (claude+codex
+    agree). Replace with codex's nuance: a brief one-line
+    deprecation marker noting "as of v1.14.x iter-0044, MCP
+    wrappers expose `phase`; the former shell-CLI fallback for
+    proposal mode is no longer needed." This survives one release
+    cycle to help users straddling versions, then can be removed
+    in v1.15.0. Atomic with code change because the skill ships
+    in the wheel (per iter-0041).
+
+q5_test_surface:
+  claude_position: '(c) unit + integration tests'
+  codex_position: 'unit tests at adapter boundary required, regression search required'
+  gemini_position: '(a) unit tests at adapter boundary mocking subprocess'
+  weighted_synthesis: |
+    Required (all three converge):
+      - Unit tests asserting CodexAdapter and GeminiAdapter
+        forward the right --mode for each of PHASE_PROPOSE,
+        PHASE_REVIEW, PHASE_CONVERGE (mock _dispatch_*.main,
+        capture argv, assert).
+      - Unit test asserting unknown phase raises ValueError.
+      - Wrapper tests asserting MCP-tool `phase` parameter
+        propagates to dispatcher --mode argv.
+      - All existing dispatcher proposal-mode tests still pass.
+
+    Recommended (claude+codex; gemini did not exclude):
+      - One integration test running an adapter end-to-end against
+        a fake codex/gemini binary, verifying the actual template
+        loaded matches the phase. Not gating, but high value
+        insurance against the cousin-defect (mode→template mapping
+        moves and unit argv tests still pass with stale meaning).
+
+    Codex's added gate adopted: regression search confirms
+    CodexAdapter/GeminiAdapter are covered by mode/proposal tests
+    (not just raw argparse) — this is what would have caught the
+    original defect.
+
+q6_missed_dimensions:
+  weighted_synthesis: |
+    All three peers identified fail-closed-on-unknown-phase as a
+    requirement; adopted as a gating acceptance criterion.
+
+    Claude's existing-sealed-artifact audit script: adopted as a
+    NON-GATING follow-up tool. The blast radius (how many sealed
+    packets in consensus-state/archive/imported-from-parent/
+    sealed against wrong schema) is useful information but does
+    not block the fix. Ship the script alongside the fix; do not
+    require its output to be clean.
+
+    Codex's bundled-wheel-vs-source-skill consistency check:
+    adopted as a verification gate. The skill exists in two
+    places (source: consensus_mcp/claude_extensions/skills/,
+    and the wheel build copies it). The iter-0044 acceptance
+    test must verify both reflect the same content (grep should
+    return 0 hits for the workaround in both).
+
+    Gemini's broader call-site search: adopted as Phase 0 of
+    iter-0044 — do a `grep -rn "CodexAdapter\|GeminiAdapter"`
+    sweep before patching to confirm no unknown call-sites need
+    updates.
+
+# === FINAL CONVERGED DELIVERABLE FOR ITER-0044 ===
+
+deliverable:
+  next_iteration_id: iteration-0044-adapter-phase-mode-forwarding
+  files_in_scope:
+    - consensus_mcp/contributors/_phase_mode.py  # NEW — single source of truth
+    - consensus_mcp/contributors/codex.py  # forward --mode based on packet.phase
+    - consensus_mcp/contributors/gemini.py  # forward --mode based on packet.phase
+    - consensus_mcp/tools/reviewer_dispatch_codex.py  # add phase + mode params
+    - consensus_mcp/tools/reviewer_dispatch_gemini.py  # add phase + mode params
+    - consensus_mcp/tests/test_contributors.py  # adapter argv-forwarding tests
+    - consensus_mcp/tests/test_reviewer_dispatch_codex.py  # wrapper surface tests
+    - consensus_mcp/tests/test_reviewer_dispatch_gemini.py  # wrapper surface tests
+    - consensus_mcp/tests/test_phase_mode_mapping.py  # NEW — mapping unit tests
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # remove workaround, add deprecation marker
+    - CHANGELOG.md  # iter-0044 entry under v1.14.0 unreleased
+    - scripts/audit_template_phase_mismatch.py  # NEW (non-gating) — blast-radius scan
+  files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py  # already accepts --mode
+    - consensus_mcp/_dispatch_gemini.py  # already accepts --mode
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/workflow_engine.py
+    - consensus_mcp/config.py
+    - consensus_mcp/contributors/base.py  # phase constants are correct
+    - dispatch_templates/  # template content unchanged
+  key_design_decisions:
+    - 'PHASE_PROPOSE → "proposal", PHASE_REVIEW → "review", PHASE_CONVERGE → "review" (interim; iter-0045 will revisit converge mapping with empirical data)'
+    - 'MCP wrappers expose `phase` as primary param + optional `mode` override for explicit dispatcher control'
+    - 'Phase-to-mode mapping centralized in consensus_mcp/contributors/_phase_mode.py, imported by both adapters and both wrappers'
+    - 'Strict-dict lookup with ValueError on unmapped phase — no silent default'
+    - 'Skill workaround paragraph replaced with one-line deprecation marker pointing to iter-0044'
+    - 'Existing sealed artifacts NOT migrated; audit script reports blast radius non-gatingly'
+    - 'Closure-invariant template check deferred (own design surface)'
+    - 'iter-0045 follow-up: evaluate whether PHASE_CONVERGE → "proposal" or a new "converge" mode is warranted by empirical converge-dispatch quality'
+  acceptance_gates:
+    gating:
+      - 'unit: CodexAdapter.dispatch(packet with phase=PHASE_PROPOSE) → argv contains "--mode" "proposal"'
+      - 'unit: CodexAdapter.dispatch(packet with phase=PHASE_REVIEW) → argv contains "--mode" "review"'
+      - 'unit: CodexAdapter.dispatch(packet with phase=PHASE_CONVERGE) → argv contains "--mode" "review"'
+      - 'unit: GeminiAdapter mirrors all three above'
+      - 'unit: phase_to_mode("invalid_phase") raises ValueError with phase name in message'
+      - 'unit: reviewer_dispatch_codex MCP tool with phase="propose" → wrapper invokes _dispatch_codex.main with --mode proposal in argv'
+      - 'unit: reviewer_dispatch_codex MCP tool with explicit mode="proposal" override → same'
+      - 'unit: reviewer_dispatch_gemini mirrors above'
+      - 'doc: grep "fall back to shell CLI" returns zero hits in both source skill AND built wheel skill'
+      - 'all existing tests pass (regression check: pytest consensus_mcp/tests/)'
+      - 'CHANGELOG.md has iter-0044 entry under v1.14.0 unreleased section'
+    non_gating:
+      - 'integration: end-to-end adapter dispatch with phase=PHASE_PROPOSE loads codex_proposal_template.md (assertable via fake-codex-bin path recording)'
+      - 'audit script run against consensus-state/archive/imported-from-parent/ produces a report (any count is acceptable; informational only)'
+  estimated_complexity: small
+  combined_risks:
+    - 'Existing sealed artifacts may have been sealed against wrong schema during defect window. Audit script quantifies; no migration.'
+    - 'Tests bypassing adapter boundary (current pattern) need adapter-aware replacement. Some test infrastructure changes likely.'
+    - 'PHASE_CONVERGE → "review" interim mapping may produce lower-quality converge artifacts than a dedicated mode would; iter-0045 monitors and revisits.'
+    - 'MCP wrapper API gains optional `phase` and `mode` params. Schema-validating downstream clients should treat as additive (non-breaking) but verify before release.'
+    - 'Bundled-wheel-vs-source-skill drift: if the wheel build does not pull from consensus_mcp/claude_extensions/, the skill update may not propagate to installs. Verification gate covers this.'
+
+next_steps:
+  - 'Operator authorizes iter-0044 to begin implementation work (workflow #3 — execution per converged design).'
+  - 'Separate iteration (iter-0045 candidate): codify weighted-synthesis as default convergence model in config.py; remove all-or-nothing enforcement for workflow #4 unless explicitly opted in.'
+  - 'Separate iteration: evaluate whether PHASE_CONVERGE warrants its own template/schema (revisits q1 with empirical data from a few converge dispatches).'
