@@ -1,0 +1,82 @@
+iteration_id: iteration-audit-2026-05-14-three-followup-gaps
+reviewer_id: gemini-three-gaps-1
+pass_id: gemini-three-gaps-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: This approach triages the three gaps by urgency and complexity.
+  It prioritizes fixing the 'actively-bleeding wound' in the README (GAP 3) that affects
+  all new users, and bundles it with the straightforward doctrine-alignment fix for
+  config validation (GAP 1). This delivers maximum immediate value with minimal risk.
+  The alternative of addressing all three gaps in one iteration would unnecessarily
+  couple simple fixes to a complex, open-ended design problem (GAP 2), delaying the
+  urgent corrections. Deferring the abstract 'rationalization' pattern to its own
+  iteration allows for the focused design thought it requires without blocking tangible
+  improvements.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: f15c92dccbf73f3130cacaa44d9673058daef79e908ff3d79de856401204735b
+  output_sha256: 8dfa7f24df180078a0dd0855479dcfad3220561c9447c20a80b315709cf11a7c
+  goal_packet_sha256: 137dfd3d5724027c6395a139bcd230988149332500e8f7a7658efbfa8d1ad381
+  scope_signature: b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0
+  review_target_path: null
+  review_target_hash: null
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\pipx\venvs\consensus-mcp\Lib\site-packages\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Bundle immediate, low-risk fixes for README install instructions
+    (GAP 3) and config validation (GAP 1); defer the complex procedural design for
+    GAP 2 to a dedicated follow-on iteration.
+  rationale_vs_alternatives: This approach triages the three gaps by urgency and complexity.
+    It prioritizes fixing the 'actively-bleeding wound' in the README (GAP 3) that
+    affects all new users, and bundles it with the straightforward doctrine-alignment
+    fix for config validation (GAP 1). This delivers maximum immediate value with
+    minimal risk. The alternative of addressing all three gaps in one iteration would
+    unnecessarily couple simple fixes to a complex, open-ended design problem (GAP
+    2), delaying the urgent corrections. Deferring the abstract 'rationalization'
+    pattern to its own iteration allows for the focused design thought it requires
+    without blocking tangible improvements.
+  deliverable_scope:
+    next_iteration_id: iter-0044-doctrine-hotfix-followups
+    files_in_scope:
+    - README.md
+    - consensus_mcp/config.py
+    - consensus_mcp/tests/test_config.py
+    files_out_of_scope:
+    - consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+    - any files related to AI skill content or behavioral enforcement
+    key_design_decisions:
+    - Update all `pipx install` and `pip install` examples in README.md to reference
+      the `v1.14.2` tag instead of the buggy `v1.14.0`.
+    - Remove the validation rule in `config.py` that raises a `ConfigValidationError`
+      when `workflow.mode` is `propose-converge` and `convergence.finding_disposition`
+      is not `all-or-nothing`. This aligns the data layer with the iter-0043 doctrine,
+      making 'weighted-synthesis' a valid disposition.
+    - A follow-on design consult will be proposed for GAP 2, as its solution is non-trivial
+      and requires dedicated analysis.
+    acceptance_gates:
+    - A `grep` of `README.md` shows all `git+https` installation commands point to
+      tag `v1.14.2`.
+    - Unit tests for `consensus_mcp.config` pass when validating a configuration where
+      `workflow.mode` is `propose-converge` and `finding_disposition` is `weighted-synthesis`.
+  risks:
+  - The risk for the proposed scope is low, as the changes align documentation and
+    code with established doctrine. The primary risk is a test failure if the config
+    validation logic change is not correctly reflected in `test_config.py`.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T03:39:15Z'
+packet_sha256: cd5629042bef2345b730d03019cbd3f2f1149ad11be41d907d7dd92a6321e23d
