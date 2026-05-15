@@ -1,6 +1,6 @@
 ---
 name: consensus-workflow
-description: Operating procedures for working with consensus-mcp in any project. Trigger when the user asks to run a consensus consult, dispatch codex/gemini for review, evaluate a workflow #3 vs #4 decision, debug a stalled or failed reviewer dispatch, or any question about HOW the cross-AI consensus workflow runs (as opposed to "consensus init" which only bootstraps). Phrases include "consensus review", "consensus iteration", "consensus consult", "run a consult", "dispatch codex", "dispatch gemini", "workflow 3", "workflow 4", "propose-converge", "post-review".
+description: Operating procedures for working with consensus-mcp in any project. Trigger when the user asks to run a consensus consult, dispatch codex/gemini for review, evaluate a Workflow B vs #4 decision, debug a stalled or failed reviewer dispatch, or any question about HOW the cross-AI consensus workflow runs (as opposed to "consensus init" which only bootstraps). Phrases include "consensus review", "consensus iteration", "consensus consult", "run a consult", "dispatch codex", "dispatch gemini", "workflow 3", "workflow 4", "propose-converge", "post-review".
 ---
 
 # Consensus-mcp operating procedures
@@ -12,7 +12,7 @@ the operator explicitly says otherwise.
 
 ## Workflow selection
 
-**Default to workflow #4 (propose-converge with blind-first-reveal) for
+**Default to Workflow A (propose-converge with blind-first-reveal) for
 any decision with real design surface** — API shape, trade-off, novel
 mechanism, anything where reasonable people could disagree on the right
 approach. Workflow #3 (post-review: claude implements, codex+gemini
@@ -24,17 +24,30 @@ calling everything "execution." Test: did the converged plan specify
 the API shape, error contract, mechanism? If not, those choices are
 themselves design surface — go through #4.
 
-Listing 2+ design choices in a single response = workflow #4
+Listing 2+ design choices in a single response = Workflow A
 candidate. Stop and route to a consult.
 
-## Workflow #3 vs #4 in one line
+## Workflow A / B / C in one line each
 
-- **#3 (post-review)**: claude writes the patch first, codex + gemini
-  audit afterward. Used for clear execution work.
-- **#4 (propose-converge)**: all enabled contributors propose
-  independently in round 1 (blind), then converge across reviewed
-  rounds. Used for design questions.
-- **Advisory**: dispatches happen but no vote is load-bearing. Rare.
+**As of v1.14.4: letter aliases (A/B/C) replace numeric (3/4) as
+canonical operator vocabulary. Numeric aliases stay accepted for
+one cycle with `DeprecationWarning`.**
+
+- **Workflow A (propose-converge)** — DEFAULT. All enabled
+  contributors propose independently in round 1 (blind), then
+  converge across reviewed rounds. Used for design questions.
+  (Was numbered #4.)
+- **Workflow B (post-review)** — LIGHTWEIGHT/QUICK. Claude writes
+  the patch first, codex + gemini audit afterward. Used for clear
+  execution work and hot-patches. (Was numbered #3.)
+- **Workflow C (autonomous-execute)** — LONG-FORM/OVERNIGHT. Runs
+  to completion without operator-in-the-loop, auto-approves
+  emergent scope items within operator-pre-declared
+  `autonomy_contract` boundaries. v1.14.4 ships the contract
+  (config alias, validators, scope_check helper, schema); the
+  multi-iteration engine ships in v1.15.0. See
+  `docs/workflows/workflow-c-autonomous.md`.
+- **Advisory** — dispatches happen but no vote is load-bearing. Rare.
 
 ## Maximize parallelism — always
 
@@ -61,7 +74,7 @@ choose serial, the reason must be a real data dependency
 (operation B needs operation A's output), not "felt simpler" or
 "easier to reason about."
 
-### Round-1 dispatch order (workflow #4) — specific case
+### Round-1 dispatch order (Workflow A) — specific case
 
 Dispatch peer contributors FIRST in background, then author your
 own proposal in parallel while they run. Independence (blind-
@@ -160,7 +173,7 @@ When writing a `converged-plan.yaml`:
   as an integration, not a vote winner.
 
 `all-or-nothing` finding-disposition (the legacy default in
-`config.py:295-308` for workflow #4) is **edge-case opt-in only.**
+`config.py:295-308` for Workflow A) is **edge-case opt-in only.**
 Reserve it for binary scope decisions ("ship X or not"), security/
 safety gates ("approve patch or reject"), or legal/compliance
 verdicts where partial acceptance is incoherent. Operator must
@@ -327,7 +340,7 @@ Required claim form when announcing a fix or completion:
 ## Non-trivial changes go through peer review
 
 Any **non-trivial change to consensus-mcp itself** must go through
-peer review (workflow #4 if design surface, workflow #3 if pure
+peer review (Workflow A if design surface, Workflow B if pure
 execution). The threshold for "trivial" is small: typo fixes, doc
 formatting, individual log-line tweaks. Anything touching
 contributor adapters, dispatchers, tool registration, sealing, or
@@ -341,7 +354,7 @@ non-trivial in their codebase.
 
 When the user says "consensus" in a sentence about reviewing,
 deciding, or analyzing — **use the consensus-mcp tools (workflow
-#4 or workflow #3 as appropriate), NOT the older /council skill.**
+#4 or Workflow B as appropriate), NOT the older /council skill.**
 Council was a single-Claude multi-persona simulation; consensus-mcp
 is a real cross-AI workflow with sealed-provenance peer reviewers.
 
@@ -427,7 +440,7 @@ decision and not subject to peer consensus.
 
 ## When in doubt
 
-The conservative move is **workflow #4 with all enabled contributors**.
+The conservative move is **Workflow A with all enabled contributors**.
 The extra wall-clock is bounded; the cost of ratifying a flawed
 design via 2-AI audit is not.
 

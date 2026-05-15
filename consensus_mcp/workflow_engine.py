@@ -148,10 +148,30 @@ class WorkflowEngine:
                 self._run_workflow_4(iteration_dir, goal_packet_path, target_path, outcome)
             elif mode == cfg.WORKFLOW_ADVISORY:
                 self._run_advisory(iteration_dir, goal_packet_path, target_path, outcome)
+            elif mode == cfg.WORKFLOW_AUTONOMOUS_EXECUTE:
+                # iter-workflow-abc-introduce: v1.14.4 ships the contract
+                # (alias, validators, scope_check helper, schema,
+                # autonomy_contract block) but NOT the multi-iteration
+                # auto-execution loop. Engine path lands in v1.15.0
+                # (named blocker: cross-platform interrupt-file watching
+                # validation + integration tests with real peer dispatches +
+                # autonomy-ledger replay design). Operators can write and
+                # validate Workflow C goal_packets in v1.14.4; running them
+                # surfaces this clear NotImplementedError.
+                raise NotImplementedError(
+                    "Workflow C (autonomous-execute) engine path is not "
+                    "implemented in v1.14.4; the contract (config alias, "
+                    "validators, scope_check, autonomy_contract schema) "
+                    "ships in v1.14.4 for staging only. Multi-iteration "
+                    "auto-execution lands in v1.15.0. See "
+                    "docs/workflows/workflow-c-autonomous.md for status."
+                )
             else:
                 raise WorkflowError(f"unknown workflow.mode {mode!r}")
         except WorkflowError as exc:
             outcome.error = str(exc)
+        except NotImplementedError as exc:
+            outcome.error = f"NotImplementedError: {exc}"
         return outcome
 
     # ---- Workflow runners ----

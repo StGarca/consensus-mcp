@@ -1,15 +1,99 @@
 # Changelog
 
-## 1.14.4 - unreleased
+## 1.14.4 - 2026-05-14
 
-Open scope:
+Workflow A/B/C rename + Workflow C contract from
+iter-workflow-abc-introduce (workflow A weighted-synthesis
+convergence across claude + codex + gemini; no blocking objections).
 
-- iter-0044: implement adapter `--mode` forwarding fix per
-  iter-0043 converged plan (CodexAdapter + GeminiAdapter forward
-  `packet.phase` → dispatcher `--mode`; centralized phase-to-mode
-  helper; MCP wrappers expose `phase` parameter; skill workaround
-  removed). Named blocker noted in v1.14.3 CHANGELOG: requires
-  test infrastructure for adapter-boundary fixtures.
+**Operator-facing vocabulary: numeric → letter aliases.**
+
+- Workflow A = propose-converge (was numbered #4) — DEFAULT
+- Workflow B = post-review (was numbered #3) — LIGHTWEIGHT
+- Workflow C = autonomous-execute (NEW) — LONG-FORM/OVERNIGHT
+- Numeric aliases (3, 4) still resolve but emit `DeprecationWarning`;
+  scheduled for removal in a future minor release.
+
+**Workflow C — autonomous-execute (CONTRACT shipped, engine deferred).**
+
+`consensus init` operators can configure a project for Workflow C;
+goal_packet authors can declare an `autonomy_contract` block with
+file boundaries, halt conditions, and iteration/wall-clock caps.
+The validator and `check_autonomy_scope` helper are fully
+implemented and tested. The actual multi-iteration auto-execution
+loop is the named blocker for v1.15.0 (requires cross-platform
+interrupt-file watching validation, integration tests with real
+peer dispatches, autonomy-ledger replay design — multi-session
+work that does not fit a hot-patch).
+
+Workflow C requires exactly 3 contributors (claude + codex + gemini)
+enforced at config-load — the wide cross-AI safety net is mandatory
+for autonomous mode by default; v1.15.0+ may relax with explicit
+operator opt-in.
+
+When an operator runs a Workflow C goal_packet in v1.14.4, the
+engine raises `NotImplementedError` with a clear message naming
+v1.15.0 as the engine ship target and pointing at
+`docs/workflows/workflow-c-autonomous.md`.
+
+**Files in scope:**
+
+- `consensus_mcp/config.py`: `WORKFLOW_AUTONOMOUS_EXECUTE` constant +
+  alias map (A/B/C primary; numeric deprecated) + 3-AI requirement
+  validator + DeprecationWarning emission for numeric aliases.
+- `consensus_mcp/validators/scope_check.py`: new
+  `validate_autonomy_contract` + `check_autonomy_scope` functions
+  (approve/park/halt decisions); `DEFAULT_HALT_ON` constant lists
+  the wide-by-default halt conditions; `AUTONOMY_CONTRACT_REQUIRED_FIELDS`
+  documents required schema.
+- `consensus_mcp/workflow_engine.py`: recognizes
+  `WORKFLOW_AUTONOMOUS_EXECUTE`; raises `NotImplementedError` with
+  v1.15.0 reference.
+- `consensus_mcp/_init_wizard.py`: workflow prompt accepts letter
+  aliases (A/B/C); resolves to canonical semantic string before
+  storing.
+- `consensus_mcp/tests/test_config.py`: 11 new tests covering alias
+  rename, deprecation warning, 3-AI requirement, and Workflow C
+  validation.
+- `consensus_mcp/tests/test_scope_check_autonomy.py` (NEW): 17 tests
+  covering autonomy_contract validation + check_autonomy_scope
+  decision logic + glob matching edge cases.
+- `consensus_mcp/dispatch_templates/codex_proposal_template.md`,
+  `gemini_proposal_template.md`: A/B reference instead of #3/#4.
+- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`:
+  new "Workflow A / B / C in one line each" section; #3/#4 references
+  bumped to A/B throughout.
+- `docs/workflows/workflow-c-autonomous.md` (NEW): operator-facing
+  doc on Workflow C usage (autonomy_contract example, halt set table,
+  scope-check decisions, interrupt mechanism, audit log location,
+  v1.15.0 status note).
+
+**Test summary:**
+
+- 675 tests pass (full suite excluding pre-existing
+  `test_dispatch_codex.py` ordering flake and `jsonschema`-missing
+  environmental issue in the proposal-mode tests; both predate this
+  release per `docs/known-issues/pytest-ordering-flake.md`).
+- New: 11 in `test_config.py` for alias + Workflow C; 17 in
+  `test_scope_check_autonomy.py` for the validator and decision
+  logic.
+
+**Named blockers for deferred work:**
+
+- v1.15.0 — Workflow C multi-iteration auto-execution loop:
+  requires cross-platform interrupt-file watching validation
+  (Windows ReadDirectoryChangesW vs Unix select/poll), integration
+  tests with real peer dispatches (cost: dispatcher latency × N
+  iterations per test run), resume-after-halt semantics design,
+  autonomy-ledger replay for failure recovery. Multi-session work.
+- v1.16.0+ — project-level `.consensus/autonomous-policy.yaml` as
+  default with goal_packet override: deferred until empirical
+  evidence operators want it across multiple Workflow C runs (we
+  have zero runs today; designing for hypothetical reuse is
+  premature per the no-deferral rule's "real blocker" requirement).
+- iter-0044 (adapter `--mode` forwarding fix) deferred to v1.14.5
+  with named blocker (still requires adapter-boundary test
+  infrastructure).
 
 ## 1.14.3 - 2026-05-14
 

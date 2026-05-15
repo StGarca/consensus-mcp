@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-version = "1.14.4.dev0"
+version = "1.14.4"
 description = "MCP server enforcing G1-G5 consensus gates (sealed-review provenance, canonical-006 dry-run, intra-file scope, production-scope match, mediated ledger updates)"
 authors = [{name = "stgarciaarca"}]
 requires-python = ">=3.10"
