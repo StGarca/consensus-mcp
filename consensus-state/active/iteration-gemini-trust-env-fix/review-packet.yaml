@@ -1,0 +1,1663 @@
+defect_target:
+  files:
+  - consensus-state/active/iteration-gemini-trust-env-fix/implementation-summary.md
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/tests/test_dispatch_gemini.py
+  - CHANGELOG.md
+  - docs/advisories.md
+  base_sha: d9cc4332447087cf66f072caa784fd5cc05d68e5b2a89f13f9873df665afccb5
+  touched_files_contents:
+    consensus-state/active/iteration-gemini-trust-env-fix/implementation-summary.md: "#\
+      \ Workflow B audit target — v1.15.2 gemini workspace-trust fix\n\nCloses the\
+      \ v1.15.1 named blocker (advisory 2026-05-15). Branch\n`v1.15.2`. This is a\
+      \ clear-root-cause execution bugfix → Workflow B.\n\n## Root cause (empirically\
+      \ verified 2026-05-15, not inferred)\n\ngemini CLI `0.43.0-preview.0`+ refuses\
+      \ headless runs in an\n\"untrusted\" directory: trust error → stderr, **empty\
+      \ stdout** →\ndispatcher fails `GeminiOutputParseError` (\"Expecting value:\
+      \ line\n1 column 1\"). The dispatcher already passed `--skip-trust` but no\n\
+      `env=` to Popen.\n\nControlled comparison on this host (gemini 0.43.0-preview.0):\n\
+      - **`--skip-trust` only, no env:** bypassed trust BUT gemini went\n  autonomous\
+      \ (ignored the JSON directive, started planning a repo\n  refactor) and hit\
+      \ 429. Non-deterministic, unusable.\n- **`GEMINI_CLI_TRUST_WORKSPACE=true`,\
+      \ no flag:** clean `OK`,\n  exit 0. Deterministic.\n- Corroborated by the v1.15.1\
+      \ audit: env var → 2 clean gemini\n  approvals (pass-2, pass-3); without → 2\
+      \ empty failures (pass-1 +\n  auto-retry).\n\nConclusion: `--skip-trust` is\
+      \ NOT load-bearing on this version;\n`GEMINI_CLI_TRUST_WORKSPACE` is. `--skip-trust`\
+      \ retained\ndefense-in-depth (harmless, accepted by the CLI).\n\n## Change\n\
+      \n`consensus_mcp/_dispatch_gemini.py`:\n- NEW `_gemini_subprocess_env()`: returns\
+      \ `os.environ.copy()` with\n  `GEMINI_CLI_TRUST_WORKSPACE` forced to `\"true\"\
+      ` (an inherited\n  `false` from operator/CI must not defeat the fix); never\
+      \ mutates\n  `os.environ`.\n- `_invoke_gemini` Popen call now passes\n  `env=_gemini_subprocess_env()`.\n\
+      - Docstring updated: `--skip-trust` is defense-in-depth, not\n  load-bearing;\
+      \ the env var is the fix.\n\n`consensus_mcp/tests/test_dispatch_gemini.py`:\
+      \ 4 new unit tests\n(sets the var; preserves PATH + full inheritance; no os.environ\n\
+      mutation; overrides an inherited `false`).\n\n`CHANGELOG.md`: 1.15.2 entry.\
+      \ `docs/advisories.md`: advisory\n2026-05-15 marked RESOLVED in v1.15.2.\n\n\
+      ## Verification\n\n- `pytest -k subprocess_env`: 4 green.\n- `test_dispatch_gemini.py`:\
+      \ 41 green.\n- Full suite: **968 passed, 1 skipped, 0 regressions**.\n- **End-to-end:**\
+      \ this iteration's own gemini audit pass is\n  dispatched from source WITHOUT\
+      \ the manual env-var workaround. If\n  gemini-review.yaml seals with a verdict,\
+      \ the fix is proven in\n  vivo (acceptance gate A4).\n\n## Audit questions\n\
+      \n- Q1 goal_satisfied: does the fix correctly + minimally close the\n  blocker\
+      \ without regressing gemini review semantics?\n- Q2: is forcing the var over\
+      \ an inherited value correct (vs.\n  `setdefault`)? Consider an operator who\
+      \ deliberately set\n  `GEMINI_CLI_TRUST_WORKSPACE=false`.\n- Q3: any blocking\
+      \ objection? State the differential/prior you\n  reasoned from.\n"
+    consensus_mcp/_dispatch_gemini.py: "\"\"\"Phase 4 v1.14.0 — auto-gemini-dispatch\
+      \ helper (gemini adapter).\n\nSibling of _dispatch_codex.py. Reuses generic\
+      \ dispatch infrastructure from\n_dispatch_base.py (extracted in iter-0010);\
+      \ supplies gemini-specific code:\nCLI invocation shape, binary resolution, output\
+      \ JSON parsing with\nvalidator-retry on schemaless parse fail (per iter-0009\
+      \ verdict Q2: F2b).\n\nScope (iter-0011): REVIEW-ONLY for patch authoring. Gemini\
+      \ does NOT author\npatch_proposal blocks in v1.14.0; codex remains the only\
+      \ patch-authoring\nadapter. Patch authoring across adapters is deferred to iter-0013\
+      \ capability\nmetadata.\n\niter-0028 extension: dispatcher gained `--mode {review,proposal}`\
+      \ (default\n'review') per the iter-0027 converged plan. Proposal mode uses\n\
+      `gemini_proposal_template.md` + `gemini_proposal_schema.json` and accepts a\n\
+      `--schema` flag to override the proposal schema (proposal-mode only;\nignored\
+      \ in review mode, where validation is template-embedded).\n\nUSAGE\n-----\n\
+      \  python -m consensus_mcp._dispatch_gemini \\\\\n      --goal-packet <path/to/goal_packet.yaml>\
+      \ \\\\\n      --iteration-dir <path/to/iteration-XXXX/> \\\\\n      [--reviewer-id\
+      \ gemini-iterXXXX-N] \\\\\n      [--pass-id gemini-iterXXXX-N-passN] \\\\\n\
+      \      [--prompt-template <path>] \\\\\n      [--mode {review,proposal}] \\\\\
+      \n      [--schema <path>]                    # proposal-mode only \\\\\n   \
+      \   [--gemini-bin <path>] \\\\\n      [--model gemini-2.5-pro] \\\\\n      [--timeout-seconds\
+      \ 600] \\\\\n      [--review-target <path>] \\\\\n      [--smoke]\n\nReview-mode\
+      \ output schema: embedded in\ndispatch_templates/gemini_review_template.md (under\
+      \ \"Schema reference\"),\nauthoritative — review mode has no separate --schema\
+      \ flag.\n\nProposal-mode output schema: dispatch_templates/gemini_proposal_schema.json\n\
+      by default; --schema overrides. The helper validates parsed output against\n\
+      the effective schema and records its path + sha256 in dispatch_provenance.\n\
+      \nExit 0 = sealed pass produced; non-zero = failure (gemini error, parse fail,\n\
+      seal fail). JSON to stdout on success.\n\"\"\"\nfrom __future__ import annotations\n\
+      \nimport argparse\nimport json\nimport os\nimport re\nimport shutil\nimport\
+      \ subprocess\nimport sys\nimport tempfile\nimport threading\nimport time\nfrom\
+      \ pathlib import Path\n\nimport yaml\n\nfrom consensus_mcp._dispatch_base import\
+      \ (\n    _REPO_ROOT_MARKERS,\n    RepoRootResolutionError,\n    _has_repo_markers,\n\
+      \    _resolve_repo_root,\n    OutsideRepoPathError,\n    _normalize_for_compare,\n\
+      \    _normalize_relative_to_repo,\n    _load_goal_packet,\n    _load_template,\n\
+      \    _FENCE_LANG_BY_EXT,\n    _format_touched_files_contents,\n    _build_prompt,\n\
+      \    _terminate_process_tree,\n    _sha256_str,\n    _build_sealed_packet,\n\
+      \    _seal_via_t6,\n    _log_dispatch,\n)\n\n\n# Adapter-specific finding patterns.\
+      \ Gemini emits gemini-rev-N IDs; the\n# codex_review_schema.json id pattern\
+      \ is codex-rev-N, so we cannot share\n# the validator directly. Mirror codex's\
+      \ enum + allowed-key set since the\n# semantic contract (severity values, required\
+      \ fields) is identical.\n_GEMINI_FINDING_ID_PATTERN = re.compile(r\"^gemini-rev-\\\
+      d+$\")\n_VALID_SEVERITIES = {\"low\", \"medium\", \"high\", \"blocking\", \"\
+      critical\"}\n_REQUIRED_FINDING_FIELDS = (\"id\", \"severity\", \"summary\",\
+      \ \"citation\", \"risk\", \"recommendation\")\n# iter-0011 scope: gemini does\
+      \ NOT emit patch_proposal in v1.14.0. Both\n# patch_proposal and patch_not_proposed_reason\
+      \ are still in the allowed set\n# (must be null per schema) but the parser enforces\
+      \ patch_proposal IS null\n# (since the codex-rev- pattern wouldn't match gemini-rev-\
+      \ patch IDs anyway).\n_ALLOWED_FINDING_KEYS = set(_REQUIRED_FINDING_FIELDS)\
+      \ | {\"patch_proposal\", \"patch_not_proposed_reason\"}\n_ALLOWED_TOP_LEVEL_KEYS\
+      \ = {\"findings\", \"goal_satisfied\", \"blocking_objections\", \"goal_satisfied_rationale\"\
+      }\n_BLOCKING_SEVERITIES = {\"blocking\", \"critical\"}\n\n# Default gemini model.\
+      \ Operator can override via --model.\n_DEFAULT_GEMINI_MODEL = \"gemini-2.5-pro\"\
+      \n\n\nclass GeminiInvocationError(RuntimeError):\n    \"\"\"Raised when the\
+      \ gemini CLI exits non-zero, times out, or is not found.\"\"\"\n\n\nclass GeminiOutputParseError(ValueError):\n\
+      \    \"\"\"Raised when gemini output is not parseable JSON or lacks the expected\
+      \ top-level shape.\"\"\"\n\n\ndef _gemini_subprocess_env() -> dict:\n    \"\"\
+      \"Environment for the gemini subprocess.\n\n    v1.15.2 load-bearing fix (advisory\
+      \ 2026-05-15): gemini CLI\n    `0.43.0-preview.0`+ refuses headless/automated\
+      \ runs in an\n    \"untrusted\" directory — it writes the trust error to stderr\
+      \ and\n    produces EMPTY stdout, which the dispatcher then fails as\n    `GeminiOutputParseError`.\
+      \ The `--skip-trust` flag (still passed,\n    defense-in-depth) is NOT load-bearing\
+      \ on this version: empirically\n    verified 2026-05-15 — with `--skip-trust`\
+      \ only, gemini bypassed\n    trust but went autonomous and 429'd; with\n   \
+      \ `GEMINI_CLI_TRUST_WORKSPACE=true` it produced clean deterministic\n    output\
+      \ (and the two clean v1.15.1 Workflow B audit approvals).\n\n    Returns a COPY\
+      \ of the parent environment with the trust var forced\n    to \"true\" (an inherited\
+      \ \"false\" must not defeat the fix). Never\n    mutates `os.environ`.\n   \
+      \ \"\"\"\n    env = os.environ.copy()\n    env[\"GEMINI_CLI_TRUST_WORKSPACE\"\
+      ] = \"true\"\n    return env\n\n\ndef _resolve_gemini_bin(gemini_bin: str) ->\
+      \ str:\n    \"\"\"Resolve a gemini binary spec to an actual executable file\
+      \ path.\n\n    Mirrors _resolve_codex_bin's Windows hardening: PATHEXT-aware\
+      \ lookup,\n    .cmd preference over .ps1, App Execution Alias rejection, MSYS-path\n\
+      \    conversion. Independent of codex's implementation because the npm\n   \
+      \ install layout / executable shape is the same for gemini-cli.\n    \"\"\"\n\
+      \    if (\n        sys.platform == \"win32\"\n        and len(gemini_bin) >=\
+      \ 3\n        and gemini_bin[0] == \"/\"\n        and gemini_bin[1].isalpha()\n\
+      \        and gemini_bin[2] == \"/\"\n    ):\n        drive = gemini_bin[1].upper()\n\
+      \        rest = gemini_bin[3:].replace(\"/\", \"\\\\\")\n        gemini_bin\
+      \ = f\"{drive}:\\\\{rest}\"\n\n    if os.path.sep in gemini_bin or (len(gemini_bin)\
+      \ > 1 and gemini_bin[1] == \":\"):\n        if sys.platform == \"win32\":\n\
+      \            p = Path(gemini_bin)\n            try:\n                if p.exists()\
+      \ and p.stat().st_size == 0:\n                    windows_apps = (\n       \
+      \                 os.environ.get(\"LOCALAPPDATA\", \"\")\n                 \
+      \       + r\"\\Microsoft\\WindowsApps\"\n                    )\n           \
+      \         if windows_apps and str(p).lower().startswith(windows_apps.lower()):\n\
+      \                        raise GeminiInvocationError(\n                    \
+      \        f\"gemini binary {gemini_bin!r} is a Windows App Execution \"\n   \
+      \                         f\"Alias stub (0-byte file in WindowsApps). subprocess\
+      \ cannot \"\n                            f\"exec App Aliases — install the real\
+      \ gemini CLI binary or \"\n                            f\"adjust PATH so a non-stub\
+      \ variant is preferred.\"\n                        )\n            except OSError:\n\
+      \                pass\n        return gemini_bin\n\n    if sys.platform == \"\
+      win32\" and \".\" not in Path(gemini_bin).name:\n        for ext in (\".exe\"\
+      , \".cmd\", \".bat\", \".ps1\"):\n            cand = shutil.which(gemini_bin\
+      \ + ext)\n            if cand:\n                return _resolve_gemini_bin(cand)\n\
+      \n    resolved = shutil.which(gemini_bin)\n    if resolved is None:\n      \
+      \  return gemini_bin\n    if sys.platform == \"win32\" and resolved.lower().endswith(\"\
+      .ps1\"):\n        cmd_alt = shutil.which(gemini_bin + \".cmd\")\n        if\
+      \ cmd_alt:\n            resolved = cmd_alt\n    if sys.platform == \"win32\"\
+      :\n        p = Path(resolved)\n        try:\n            if p.exists() and p.stat().st_size\
+      \ == 0:\n                windows_apps = (\n                    os.environ.get(\"\
+      LOCALAPPDATA\", \"\")\n                    + r\"\\Microsoft\\WindowsApps\"\n\
+      \                )\n                if windows_apps and str(p).lower().startswith(windows_apps.lower()):\n\
+      \                    raise GeminiInvocationError(\n                        f\"\
+      gemini binary resolved to {resolved!r} which is a Windows \"\n             \
+      \           f\"App Execution Alias stub (0-byte file in WindowsApps). \"\n \
+      \                       f\"subprocess cannot exec App Aliases — install the\
+      \ real \"\n                        f\"gemini CLI binary or adjust PATH so a\
+      \ non-stub variant is \"\n                        f\"preferred.\"\n        \
+      \            )\n        except OSError:\n            pass\n    return resolved\n\
+      \n\ndef _get_gemini_version(gemini_bin: str) -> str:\n    \"\"\"Best-effort:\
+      \ shell out to `<gemini> --version` and return the version string.\n\n    Returns\
+      \ 'unknown' on any failure. Used for audit-log provenance only.\n    \"\"\"\n\
+      \    try:\n        result = subprocess.run(\n            [_resolve_gemini_bin(gemini_bin),\
+      \ \"--version\"],\n            capture_output=True,\n            text=True,\n\
+      \            encoding=\"utf-8\",\n            errors=\"replace\",\n        \
+      \    timeout=10,\n        )\n        if result.returncode == 0:\n          \
+      \  return result.stdout.strip() or \"unknown\"\n    except (FileNotFoundError,\
+      \ subprocess.TimeoutExpired, OSError):\n        pass\n    return \"unknown\"\
+      \n\n\ndef _invoke_gemini(\n    prompt: str,\n    gemini_bin: str,\n    model:\
+      \ str,\n    timeout_seconds: int,\n    repo_root: Path,\n    log_path=None,\n\
+      \    anchors=None,\n    heartbeat_interval: float = 30.0,\n    stall_silence_seconds:\
+      \ float = 180.0,\n    poll_interval: float = 0.5,\n    time_fn=None,\n    popen_factory=None,\n\
+      ) -> str:\n    \"\"\"Shell out to gemini CLI via Popen + reader threads.\n\n\
+      \    Pattern mirrors _invoke_codex's stream-and-watchdog loop (iter-0037):\n\
+      \      - Popen with stdout + stderr reader threads (prevents pipe-buffer deadlock)\n\
+      \      - dispatch_streamed_line per stdout line + dispatch_heartbeat at interval\n\
+      \      - Auto-abort on heartbeat-silence\n      - log_path + anchors optional\
+      \ (None disables streaming events for tests)\n\n    Gemini-specific CLI shape:\n\
+      \      gemini -p \"<short directive>\" -m <model> --approval-mode plan --skip-trust\n\
+      \    The actual prompt body is piped via stdin (gemini appends -p text after\n\
+      \    stdin). -p is required to trigger headless mode. --approval-mode plan is\n\
+      \    gemini's read-only mode (no file writes, no shell exec) — the parallel\n\
+      \    to codex's --sandbox read-only. --skip-trust is passed defense-in-depth\n\
+      \    but is NOT load-bearing on gemini CLI ≥0.43.0-preview.0; the\n    workspace-trust\
+      \ gate is suppressed via GEMINI_CLI_TRUST_WORKSPACE=true\n    injected into\
+      \ the subprocess env (see _gemini_subprocess_env / advisory\n    2026-05-15).\
+      \ Without it gemini emits the trust error to stderr with\n    empty stdout and\
+      \ the dispatch fails GeminiOutputParseError.\n\n    stall_silence_seconds defaults\
+      \ to 180s (gemini cold-start can exceed 45s\n    on large prompts; matches the\
+      \ codex adapter's iter-0010 default bump).\n    \"\"\"\n    if time_fn is None:\n\
+      \        time_fn = time.time\n    if popen_factory is None:\n        popen_factory\
+      \ = subprocess.Popen\n    can_log = log_path is not None and anchors is not\
+      \ None\n\n    cmd = [\n        _resolve_gemini_bin(gemini_bin),\n        \"\
+      -p\", \"Now respond. Output ONLY the JSON described above; no prose, no markdown\
+      \ fences.\",\n        \"-m\", model,\n        \"--approval-mode\", \"plan\"\
+      ,\n        \"--skip-trust\",\n    ]\n    if sys.platform == \"win32\":\n   \
+      \     popen_kwargs = {\"creationflags\": subprocess.CREATE_NEW_PROCESS_GROUP}\n\
+      \    else:\n        popen_kwargs = {\"start_new_session\": True}\n    try:\n\
+      \        proc = popen_factory(\n            cmd,\n            stdin=subprocess.PIPE,\n\
+      \            stdout=subprocess.PIPE,\n            stderr=subprocess.PIPE,\n\
+      \            bufsize=0,\n            cwd=str(repo_root),\n            env=_gemini_subprocess_env(),\n\
+      \            **popen_kwargs,\n        )\n    except FileNotFoundError:\n   \
+      \     raise GeminiInvocationError(f\"gemini binary not found: {gemini_bin}\"\
+      ) from None\n\n    # codex-rev-001 round-1 fix: start readers + watchdog BEFORE\
+      \ writing stdin.\n    # Gemini may emit output (or refuse to drain its stdin)\
+      \ before we finish\n    # sending the prompt; without readers running, that\
+      \ deadlocks.\n    state_lock = threading.Lock()\n    stdout_buf: list = []\n\
+      \    stderr_buf: list = []\n    last_streamed_ts: list = [None]\n    streamed_seq:\
+      \ list = [0]\n\n    abort_path = None\n    if can_log:\n        abort_path =\
+      \ repo_root / \"consensus-state\" / \"state\" / f\"abort-dispatch-{anchors['pass_id']}.signal\"\
+      \n\n    def stdout_reader():\n        try:\n            for raw_line in iter(proc.stdout.readline,\
+      \ b\"\"):\n                if not raw_line:\n                    break\n   \
+      \             with state_lock:\n                    stdout_buf.append(raw_line)\n\
+      \                    seq = streamed_seq[0]\n                    streamed_seq[0]\
+      \ = seq + 1\n                    last_streamed_ts[0] = time_fn()\n         \
+      \       if can_log:\n                    line_str = raw_line.decode(\"utf-8\"\
+      , errors=\"replace\").rstrip(\"\\r\\n\")\n                    full_len = len(line_str)\n\
+      \                    _log_dispatch(log_path, {\n                        \"event\"\
+      : \"dispatch_streamed_line\",\n                        **anchors,\n        \
+      \                \"stream\": \"stdout\",\n                        \"line_truncated\"\
+      : line_str[:200],\n                        \"line_full_length\": full_len,\n\
+      \                        \"truncated\": full_len > 200,\n                  \
+      \      \"seq\": seq,\n                    })\n        except Exception:\n  \
+      \          pass\n\n    def stderr_reader():\n        try:\n            for raw_line\
+      \ in iter(proc.stderr.readline, b\"\"):\n                if not raw_line:\n\
+      \                    break\n                with state_lock:\n             \
+      \       stderr_buf.append(raw_line)\n        except Exception:\n           \
+      \ pass\n\n    t_stdout = threading.Thread(target=stdout_reader, daemon=True,\
+      \ name=\"gemini-stdout-reader\")\n    t_stderr = threading.Thread(target=stderr_reader,\
+      \ daemon=True, name=\"gemini-stderr-reader\")\n    t_stdout.start()\n    t_stderr.start()\n\
+      \n    # codex-rev-001 round-1 fix: write stdin AFTER readers are running so\n\
+      \    # gemini-side stdout/stderr pressure can't deadlock us before drain begins.\n\
+      \    # Use a writer thread (daemon) so a slow-to-drain stdin doesn't block the\n\
+      \    # watchdog loop; the watchdog will still abort if the process stalls.\n\
+      \    def stdin_writer():\n        try:\n            proc.stdin.write(prompt.encode(\"\
+      utf-8\"))\n            proc.stdin.close()\n        except (BrokenPipeError,\
+      \ OSError):\n            pass\n    t_stdin = threading.Thread(target=stdin_writer,\
+      \ daemon=True, name=\"gemini-stdin-writer\")\n    t_stdin.start()\n\n    start_ts\
+      \ = time_fn()\n    last_heartbeat = start_ts\n\n    while proc.poll() is None:\n\
+      \        now = time_fn()\n\n        if abort_path is not None and abort_path.exists():\n\
+      \            try:\n                abort_reason = abort_path.read_text(encoding=\"\
+      utf-8\").strip() or \"operator_signal_file\"\n            except OSError:\n\
+      \                abort_reason = \"operator_signal_file (unreadable)\"\n    \
+      \        _terminate_process_tree(proc)\n            with state_lock:\n     \
+      \           silence_age = (now - last_streamed_ts[0]) if last_streamed_ts[0]\
+      \ is not None else None\n            if can_log:\n                _log_dispatch(log_path,\
+      \ {\n                    \"event\": \"dispatch_aborted\",\n                \
+      \    **anchors,\n                    \"abort_source\": \"operator_signal_file\"\
+      ,\n                    \"abort_reason\": abort_reason,\n                   \
+      \ \"age_seconds\": now - start_ts,\n                    \"last_streamed_line_age_seconds\"\
+      : silence_age,\n                })\n            try:\n                abort_path.unlink()\n\
+      \            except OSError:\n                pass\n            raise GeminiInvocationError(f\"\
+      dispatch aborted by operator: {abort_reason}\")\n\n        with state_lock:\n\
+      \            lst = last_streamed_ts[0]\n            seq_snap = streamed_seq[0]\n\
+      \        if lst is not None:\n            # Inter-line silence: gemini already\
+      \ started emitting; use the\n            # configured stall_silence threshold.\n\
+      \            silence_age = now - lst\n            silence_trigger_threshold\
+      \ = stall_silence_seconds\n        else:\n            # codex-rev-001 round-2\
+      \ fix: pre-first-byte silence. Gemini may\n            # process a long prompt\
+      \ without emitting anything for an extended\n            # period (50KB+ prompts\
+      \ can take 200s+ before first token). Use\n            # the operator-visible\
+      \ timeout_seconds budget as the threshold\n            # here, not stall_silence_seconds\
+      \ — otherwise the watchdog aborts\n            # a valid in-progress review.\n\
+      \            silence_age = now - start_ts\n            silence_trigger_threshold\
+      \ = float(timeout_seconds)\n\n        if silence_age >= silence_trigger_threshold:\n\
+      \            _terminate_process_tree(proc)\n            if can_log:\n      \
+      \          _log_dispatch(log_path, {\n                    \"event\": \"dispatch_aborted\"\
+      ,\n                    **anchors,\n                    \"abort_source\": \"\
+      watchdog_silence\",\n                    \"abort_reason\": f\"no gemini stdout\
+      \ for {silence_age:.0f}s (threshold {silence_trigger_threshold:.0f}s)\",\n \
+      \                   \"age_seconds\": now - start_ts,\n                    \"\
+      last_streamed_line_age_seconds\": silence_age if lst is not None else None,\n\
+      \                })\n            raise GeminiInvocationError(\n            \
+      \    f\"gemini stuck: no output for {silence_age:.0f}s\"\n            )\n\n\
+      \        if now - last_heartbeat >= heartbeat_interval:\n            if can_log:\n\
+      \                _log_dispatch(log_path, {\n                    \"event\": \"\
+      dispatch_heartbeat\",\n                    **anchors,\n                    \"\
+      age_seconds\": now - start_ts,\n                    \"last_streamed_line_age_seconds\"\
+      : silence_age if lst is not None else None,\n                    \"last_streamed_line_seq\"\
+      : seq_snap - 1 if seq_snap > 0 else None,\n                })\n            last_heartbeat\
+      \ = now\n\n        if now - start_ts >= timeout_seconds + stall_silence_seconds:\n\
+      \            _terminate_process_tree(proc)\n            if can_log:\n      \
+      \          _log_dispatch(log_path, {\n                    \"event\": \"dispatch_aborted\"\
+      ,\n                    **anchors,\n                    \"abort_source\": \"\
+      wall_time_hard_ceiling\",\n                    \"abort_reason\": f\"wall_time={now\
+      \ - start_ts:.0f}s exceeded timeout_seconds={timeout_seconds}s + grace={stall_silence_seconds}s\"\
+      ,\n                    \"age_seconds\": now - start_ts,\n                  \
+      \  \"last_streamed_line_age_seconds\": silence_age if lst is not None else None,\n\
+      \                })\n            raise GeminiInvocationError(\n            \
+      \    f\"gemini exceeded {timeout_seconds}s wall timeout + {stall_silence_seconds}s\
+      \ grace\"\n            )\n\n        time.sleep(poll_interval)\n\n    t_stdout.join(timeout=5)\n\
+      \    t_stderr.join(timeout=5)\n    if t_stdout.is_alive() or t_stderr.is_alive():\n\
+      \        raise GeminiInvocationError(\n            \"gemini exited but reader\
+      \ thread did not drain within 5s; \"\n            \"possible partial output\
+      \ or pipe-handling defect\"\n        )\n\n    with state_lock:\n        stdout_bytes\
+      \ = b\"\".join(stdout_buf)\n        stderr_bytes = b\"\".join(stderr_buf)\n\n\
+      \    if proc.returncode != 0:\n        stderr_str = stderr_bytes.decode(\"utf-8\"\
+      , errors=\"replace\")\n        stdout_str = stdout_bytes.decode(\"utf-8\", errors=\"\
+      replace\")\n        stderr_tail = stderr_str.strip()[-4000:]\n        stdout_hint\
+      \ = (\n            f\"; stdout_tail={stdout_str.strip()[-500:]!r}\"\n      \
+      \      if stdout_str.strip()\n            else \"\"\n        )\n        raise\
+      \ GeminiInvocationError(\n            f\"gemini exit={proc.returncode}; stderr_tail={stderr_tail!r}{stdout_hint}\"\
+      \n        )\n\n    return stdout_bytes.decode(\"utf-8\", errors=\"replace\"\
+      )\n\n\n_JSON_FENCE_RE = re.compile(r\"```(?:json)?\\s*(\\{.*?\\})\\s*```\",\
+      \ re.DOTALL)\n\n\ndef _extract_json_from_text(text: str) -> str:\n    \"\"\"\
+      Extract a JSON object substring from gemini's free-form output.\n\n    Gemini\
+      \ lacks codex's --output-schema enforcement, so its response may\n    include\
+      \ leading prose, markdown fences, or trailing commentary even\n    when explicitly\
+      \ told to emit JSON only. This helper applies a small\n    ladder of recoveries:\n\
+      \n      1. Whole-string trim — if the trimmed text starts with `{` and ends\n\
+      \         with `}`, return as-is.\n      2. Fenced-code-block extraction — first\
+      \ ```json ... ``` (or bare\n         ``` ... ```) containing a `{...}` block.\n\
+      \      3. Greedy outermost-brace match — first `{` to last `}`. Fragile\n  \
+      \       (won't handle nested unbalanced braces), but a final fallback.\n\n \
+      \   Returns the candidate JSON string. Does NOT validate that it parses;\n \
+      \   the caller does. If nothing matches, returns the original text so the\n\
+      \    JSONDecodeError downstream carries the actual gemini output as diagnostic.\n\
+      \    \"\"\"\n    stripped = text.strip()\n    if stripped.startswith(\"{\")\
+      \ and stripped.endswith(\"}\"):\n        return stripped\n    fenced = _JSON_FENCE_RE.search(text)\n\
+      \    if fenced:\n        return fenced.group(1)\n    first_brace = text.find(\"\
+      {\")\n    last_brace = text.rfind(\"}\")\n    if first_brace != -1 and last_brace\
+      \ > first_brace:\n        return text[first_brace:last_brace + 1]\n    return\
+      \ text\n\n\ndef _parse_gemini_output(\n    text: str,\n    goal_packet: dict\
+      \ | None = None,\n) -> dict:\n    \"\"\"Parse gemini's JSON response + locally\
+      \ validate shape.\n\n    Gemini lacks codex's --output-schema, so this parser\
+      \ is intentionally\n    more lenient on extraction (handles fenced/wrapped JSON\
+      \ via\n    _extract_json_from_text) but equally strict on the parsed shape.\n\
+      \n    Rules (mirrors codex's _parse_codex_output minus patch_proposal):\n  \
+      \    - root is a JSON object\n      - top-level keys exactly {findings, goal_satisfied,\
+      \ blocking_objections,\n        goal_satisfied_rationale}\n      - findings\
+      \ is a list; each finding has all 6 required fields\n        (id, severity,\
+      \ summary, citation, risk, recommendation)\n      - id matches ^gemini-rev-\\\
+      \\d+$ (NOT codex-rev-)\n      - severity in the canonical enum\n      - patch_proposal/patch_not_proposed_reason\
+      \ MUST be null in v1.14.0\n        (iter-0011 scope: gemini is review-only)\n\
+      \      - blocking_objections invariant: set equals blocking/critical finding\
+      \ IDs\n      - goal_satisfied is bool; goal_satisfied_rationale is non-empty\
+      \ string\n\n    Raises GeminiOutputParseError on any violation.\n    \"\"\"\n\
+      \    candidate = _extract_json_from_text(text)\n    try:\n        parsed = json.loads(candidate)\n\
+      \    except json.JSONDecodeError as exc:\n        raise GeminiOutputParseError(\n\
+      \            f\"gemini output is not valid JSON: {exc}; first 500 chars of raw:\
+      \ {text[:500]!r}\"\n        ) from exc\n\n    if not isinstance(parsed, dict):\n\
+      \        raise GeminiOutputParseError(\n            f\"gemini output JSON root\
+      \ must be an object, got {type(parsed).__name__}\"\n        )\n\n    unknown_top\
+      \ = set(parsed.keys()) - _ALLOWED_TOP_LEVEL_KEYS\n    if unknown_top:\n    \
+      \    raise GeminiOutputParseError(\n            f\"gemini output JSON has unexpected\
+      \ top-level keys: {sorted(unknown_top)}\"\n        )\n\n    for required in\
+      \ (\"findings\", \"goal_satisfied\", \"blocking_objections\", \"goal_satisfied_rationale\"\
+      ):\n        if required not in parsed:\n            raise GeminiOutputParseError(f\"\
+      gemini output JSON missing required key: {required!r}\")\n\n    if not isinstance(parsed[\"\
+      findings\"], list):\n        raise GeminiOutputParseError(\"'findings' must\
+      \ be an array\")\n    if not isinstance(parsed[\"goal_satisfied\"], bool):\n\
+      \        raise GeminiOutputParseError(\n            f\"'goal_satisfied' must\
+      \ be boolean, got {type(parsed['goal_satisfied']).__name__}\"\n        )\n \
+      \   if not isinstance(parsed[\"blocking_objections\"], list):\n        raise\
+      \ GeminiOutputParseError(\n            f\"'blocking_objections' must be an array,\
+      \ got {type(parsed['blocking_objections']).__name__}\"\n        )\n    if not\
+      \ isinstance(parsed[\"goal_satisfied_rationale\"], str):\n        raise GeminiOutputParseError(\n\
+      \            f\"'goal_satisfied_rationale' must be string, got \"\n        \
+      \    f\"{type(parsed['goal_satisfied_rationale']).__name__}\"\n        )\n \
+      \   # codex-rev-002 round-2 fix: enforce non-empty rationale per the prompt\n\
+      \    # contract. Empty/whitespace-only is incoherent with \"always populate\"\
+      .\n    if not parsed[\"goal_satisfied_rationale\"].strip():\n        raise GeminiOutputParseError(\n\
+      \            \"'goal_satisfied_rationale' must be a non-empty string (prompt\
+      \ contract)\"\n        )\n\n    for i, item in enumerate(parsed[\"blocking_objections\"\
+      ]):\n        if not isinstance(item, str):\n            raise GeminiOutputParseError(\n\
+      \                f\"blocking_objections[{i}] must be string, got {type(item).__name__}\"\
+      \n            )\n\n    blocking_finding_ids = []\n    for i, finding in enumerate(parsed[\"\
+      findings\"]):\n        if not isinstance(finding, dict):\n            raise\
+      \ GeminiOutputParseError(\n                f\"findings[{i}] must be an object,\
+      \ got {type(finding).__name__}\"\n            )\n        unknown_keys = set(finding.keys())\
+      \ - _ALLOWED_FINDING_KEYS\n        if unknown_keys:\n            raise GeminiOutputParseError(\n\
+      \                f\"findings[{i}] has unexpected keys: {sorted(unknown_keys)}\"\
+      \n            )\n        for required in _REQUIRED_FINDING_FIELDS:\n       \
+      \     if required not in finding:\n                raise GeminiOutputParseError(\n\
+      \                    f\"findings[{i}] missing required field: {required!r}\"\
+      \n                )\n        for str_field in (\"id\", \"severity\", \"summary\"\
+      , \"citation\", \"risk\", \"recommendation\"):\n            if not isinstance(finding[str_field],\
+      \ str):\n                raise GeminiOutputParseError(\n                   \
+      \ f\"findings[{i}].{str_field} must be string, got \"\n                    f\"\
+      {type(finding[str_field]).__name__}\"\n                )\n        # codex-rev-002\
+      \ round-2 fix: schema requires summary minLength=1.\n        # Enforce non-empty\
+      \ on the parser side too (gemini has no --schema).\n        if not finding[\"\
+      summary\"].strip():\n            raise GeminiOutputParseError(\n           \
+      \     f\"findings[{i}].summary must be a non-empty string (schema contract)\"\
+      \n            )\n        if finding[\"severity\"] not in _VALID_SEVERITIES:\n\
+      \            raise GeminiOutputParseError(\n                f\"findings[{i}]\
+      \ has invalid severity {finding['severity']!r}; \"\n                f\"must\
+      \ be one of {sorted(_VALID_SEVERITIES)}\"\n            )\n        if not _GEMINI_FINDING_ID_PATTERN.match(finding[\"\
+      id\"]):\n            raise GeminiOutputParseError(\n                f\"findings[{i}]\
+      \ id {finding['id']!r} does not match pattern \"\n                f\"^gemini-rev-\\\
+      \\d+$\"\n            )\n        # iter-0011 scope: gemini is review-only; patch_proposal\
+      \ and\n        # patch_not_proposed_reason must both be null (if present).\n\
+      \        pp = finding.get(\"patch_proposal\")\n        if pp is not None:\n\
+      \            raise GeminiOutputParseError(\n                f\"findings[{i}].patch_proposal\
+      \ must be null in v1.14.0 — gemini is \"\n                f\"review-only (patch\
+      \ authoring deferred to iter-0013)\"\n            )\n        reason = finding.get(\"\
+      patch_not_proposed_reason\")\n        if reason is not None and not isinstance(reason,\
+      \ str):\n            raise GeminiOutputParseError(\n                f\"findings[{i}].patch_not_proposed_reason\
+      \ must be string or null, \"\n                f\"got {type(reason).__name__}\"\
+      \n            )\n        if finding[\"severity\"] in _BLOCKING_SEVERITIES:\n\
+      \            blocking_finding_ids.append(finding[\"id\"])\n\n    expected_blocking\
+      \ = set(blocking_finding_ids)\n    actual_blocking = set(parsed[\"blocking_objections\"\
+      ])\n    if expected_blocking != actual_blocking:\n        missing = expected_blocking\
+      \ - actual_blocking\n        extra = actual_blocking - expected_blocking\n \
+      \       msg_parts = [\"blocking_objections invariant violated:\"]\n        if\
+      \ missing:\n            msg_parts.append(f\"missing finding ids: {sorted(missing)}\"\
+      )\n        if extra:\n            msg_parts.append(f\"unexpected ids (not blocking/critical\
+      \ findings): {sorted(extra)}\")\n        msg_parts.append(\n            f\"\
+      expected = {{f.id : f.severity in {{blocking, critical}}}} = {sorted(expected_blocking)}\"\
+      \n        )\n        msg_parts.append(f\"actual = {sorted(actual_blocking)}\"\
+      )\n        raise GeminiOutputParseError(\"; \".join(msg_parts))\n\n    # codex-rev-002\
+      \ round-1 fix: goal_satisfied=true with non-empty\n    # blocking_objections\
+      \ is incoherent — reject so a malformed gemini\n    # response can't be sealed\
+      \ as a successful review.\n    if parsed[\"goal_satisfied\"] is True and actual_blocking:\n\
+      \        raise GeminiOutputParseError(\n            f\"goal_satisfied=true is\
+      \ incoherent with non-empty blocking_objections \"\n            f\"{sorted(actual_blocking)};\
+      \ a successful review cannot have blocking findings\"\n        )\n\n    return\
+      \ parsed\n\n\n_GEMINI_PROPOSAL_SCHEMA_PATH = (\n    Path(__file__).parent /\
+      \ \"dispatch_templates\" / \"gemini_proposal_schema.json\"\n)\n\n\ndef _parse_gemini_proposal_output(text:\
+      \ str, schema_path: Path | None = None) -> dict:\n    \"\"\"Parse + validate\
+      \ gemini proposal-mode output (iter-0028).\n\n    Validates against `schema_path`\
+      \ (operator --schema override) when\n    provided, else against the built-in\
+      \ `gemini_proposal_schema.json`.\n    The override path is required for symmetry\
+      \ with the codex dispatcher\n    and to honor the schema-override contract from\
+      \ the goal_packet\n    (codex pass-3 rev-002).\n\n    Uses `_extract_json_from_text`\
+      \ for JSON extraction (gemini-rev-001\n    pass-2: previously hand-rolled fence\
+      \ stripping was brittle).\n\n    Raises GeminiOutputParseError on shape mismatch.\n\
+      \    \"\"\"\n    try:\n        cleaned = _extract_json_from_text(text)\n   \
+      \ except ValueError as exc:\n        raise GeminiOutputParseError(\n       \
+      \     f\"gemini proposal output: could not extract JSON: {exc}\"\n        )\
+      \ from exc\n\n    try:\n        parsed = json.loads(cleaned)\n    except json.JSONDecodeError\
+      \ as exc:\n        raise GeminiOutputParseError(\n            f\"gemini proposal\
+      \ output is not valid JSON: {exc}\"\n        ) from exc\n\n    if not isinstance(parsed,\
+      \ dict):\n        raise GeminiOutputParseError(\n            f\"gemini proposal\
+      \ output root must be a JSON object; got {type(parsed).__name__}\"\n       \
+      \ )\n\n    effective_schema_path = schema_path or _GEMINI_PROPOSAL_SCHEMA_PATH\n\
+      \    try:\n        import jsonschema\n    except ImportError as exc:\n     \
+      \   raise GeminiOutputParseError(\n            f\"jsonschema package required\
+      \ for proposal-mode validation; \"\n            f\"install with `pip install\
+      \ jsonschema` or reinstall consensus-mcp: {exc}\"\n        ) from exc\n    try:\n\
+      \        schema = json.loads(Path(effective_schema_path).read_text(encoding=\"\
+      utf-8\"))\n        jsonschema.validate(parsed, schema)\n    except jsonschema.ValidationError\
+      \ as exc:\n        raise GeminiOutputParseError(\n            f\"gemini proposal\
+      \ output failed schema validation at \"\n            f\"{'/'.join(str(p) for\
+      \ p in exc.absolute_path) or '<root>'}: {exc.message}\"\n        ) from exc\n\
+      \    except FileNotFoundError as exc:\n        raise GeminiOutputParseError(\n\
+      \            f\"proposal schema not found at {effective_schema_path}: {exc}\"\
+      \n        ) from exc\n\n    # Parser-level invariants (codex pass-4 rev-002\
+      \ + pass-6 rev-001):\n    # defense-in-depth against operator-supplied schemas\
+      \ that relax these.\n    if not isinstance(parsed.get(\"rationale_vs_alternatives\"\
+      ), str) or not parsed[\"rationale_vs_alternatives\"].strip():\n        raise\
+      \ GeminiOutputParseError(\n            \"rationale_vs_alternatives must be a\
+      \ non-empty string (parser invariant)\"\n        )\n    if \"structural_abstention\"\
+      \ not in parsed or not isinstance(parsed[\"structural_abstention\"], bool):\n\
+      \        raise GeminiOutputParseError(\n            \"structural_abstention\
+      \ must be present and boolean (parser invariant)\"\n        )\n\n    if not\
+      \ parsed[\"structural_abstention\"]:\n        if parsed[\"selected_target\"\
+      ] is None:\n            raise GeminiOutputParseError(\n                \"selected_target\
+      \ is required when structural_abstention is false\"\n            )\n       \
+      \ if parsed[\"deliverable_scope\"] is None:\n            raise GeminiOutputParseError(\n\
+      \                \"deliverable_scope is required when structural_abstention\
+      \ is false\"\n            )\n\n    return parsed\n\n\ndef _invoke_gemini_with_retry(\n\
+      \    prompt: str,\n    gemini_bin: str,\n    model: str,\n    timeout_seconds:\
+      \ int,\n    repo_root: Path,\n    goal_packet: dict | None = None,\n    log_path=None,\n\
+      \    anchors=None,\n    mode: str = \"review\",\n    proposal_schema_path: Path\
+      \ | None = None,\n) -> tuple[str, dict]:\n    \"\"\"Per iter-0009 verdict Q2:\
+      \ F2b — validator-retry on schemaless parse fail.\n\n    Runs gemini once. If\
+      \ output parses cleanly, return (raw_output, parsed).\n    If parse fails, re-prompt\
+      \ gemini ONCE with the parse error appended,\n    re-parse, and return. Second\
+      \ parse failure raises.\n\n    Returns (raw_output_of_last_attempt, parsed_dict).\
+      \ The raw output is what\n    the seal records; the parsed dict feeds into _build_sealed_packet.\n\
+      \    \"\"\"\n    raw = _invoke_gemini(\n        prompt=prompt,\n        gemini_bin=gemini_bin,\n\
+      \        model=model,\n        timeout_seconds=timeout_seconds,\n        repo_root=repo_root,\n\
+      \        log_path=log_path,\n        anchors=anchors,\n    )\n    try:\n   \
+      \     if mode == \"proposal\":\n            parsed = _parse_gemini_proposal_output(raw,\
+      \ schema_path=proposal_schema_path)\n        else:\n            parsed = _parse_gemini_output(raw,\
+      \ goal_packet=goal_packet)\n        return raw, parsed\n    except GeminiOutputParseError\
+      \ as first_err:\n        # Retry once with the parse error in the prompt.\n\
+      \        if log_path is not None and anchors is not None:\n            _log_dispatch(log_path,\
+      \ {\n                \"event\": \"dispatch_retry_for_parse_fail\",\n       \
+      \         **anchors,\n                \"first_parse_error\": str(first_err)[:1000],\n\
+      \            })\n        retry_prompt = (\n            prompt\n            +\
+      \ \"\\n\\n# Retry — your previous response failed JSON validation\\n\\n\"\n\
+      \            + f\"Parse error: {first_err}\\n\\n\"\n            + \"Re-emit\
+      \ ONLY valid JSON conforming to the schema in the prompt above. \"\n       \
+      \     + \"No prose, no markdown fences, no commentary — JSON only, starting\
+      \ with `{` \"\n            + \"and ending with `}`.\"\n        )\n        raw_retry\
+      \ = _invoke_gemini(\n            prompt=retry_prompt,\n            gemini_bin=gemini_bin,\n\
+      \            model=model,\n            timeout_seconds=timeout_seconds,\n  \
+      \          repo_root=repo_root,\n            log_path=log_path,\n          \
+      \  anchors=anchors,\n        )\n        if mode == \"proposal\":\n         \
+      \   parsed_retry = _parse_gemini_proposal_output(raw_retry, schema_path=proposal_schema_path)\n\
+      \        else:\n            parsed_retry = _parse_gemini_output(raw_retry, goal_packet=goal_packet)\n\
+      \        return raw_retry, parsed_retry\n\n\ndef main(argv: list[str] | None\
+      \ = None) -> int:\n    p = argparse.ArgumentParser(\n        prog=\"consensus_mcp._dispatch_gemini\"\
+      ,\n        description=\"Auto-dispatch gemini CLI as a reviewer; auto-seal via\
+      \ T6.\",\n    )\n    p.add_argument(\"--goal-packet\", required=True)\n    p.add_argument(\"\
+      --iteration-dir\", required=True)\n    p.add_argument(\"--reviewer-id\", default=None)\n\
+      \    p.add_argument(\"--pass-id\", default=None)\n    p.add_argument(\"--prompt-template\"\
+      , default=None)\n    p.add_argument(\"--mode\", default=\"review\", choices=[\"\
+      review\", \"proposal\"],\n                   help=(\"Dispatch mode (iter-0028\
+      \ per iter-0027 converged plan). \"\n                         \"'review' (default):\
+      \ use gemini_review_template.md for \"\n                         \"code-review\
+      \ tasks. 'proposal': use gemini_proposal_template.md \"\n                  \
+      \       \"for design-consult / workflow #4 proposal tasks. \"\n            \
+      \             \"--prompt-template override takes precedence over --mode.\"))\n\
+      \    p.add_argument(\"--schema\", default=None,\n                   help=(\"\
+      Optional path to a JSON schema for validating PROPOSAL-mode \"\n           \
+      \              \"output (iter-0028 codex pass-3 rev-002). Ignored in review\
+      \ \"\n                         \"mode (review-mode validation is template-embedded\
+      \ per the \"\n                         \"existing gemini contract). When unset\
+      \ in proposal mode, \"\n                         \"defaults to dispatch_templates/gemini_proposal_schema.json.\"\
+      ))\n    p.add_argument(\"--gemini-bin\", default=\"gemini\")\n    p.add_argument(\"\
+      --model\", default=_DEFAULT_GEMINI_MODEL)\n    p.add_argument(\"--timeout-seconds\"\
+      , type=int, default=600)\n    p.add_argument(\"--review-target\", default=None)\n\
+      \    p.add_argument(\"--smoke\", action=\"store_true\",\n                  \
+      \ help=\"Smoke mode: gated by CONSENSUS_MCP_RUN_REAL_GEMINI_SMOKE=1 env var\"\
+      )\n\n    ns = p.parse_args(argv)\n\n    try:\n        repo_root = _resolve_repo_root()\n\
+      \    except RepoRootResolutionError as exc:\n        print(json.dumps({\"ok\"\
+      : False, \"error\": str(exc), \"error_type\": \"RepoRootResolutionError\"}))\n\
+      \        return 4\n\n    log_path = repo_root / \"consensus-state\" / \"state\"\
+      \ / \"dispatch-log.jsonl\"\n    _pre_iter_id = Path(ns.iteration_dir).name or\
+      \ \"unknown-iteration\"\n    _pre_reviewer_id = ns.reviewer_id or f\"gemini-{_pre_iter_id}-1\"\
+      \n    _pre_pass_id = ns.pass_id or f\"{_pre_reviewer_id}-pass1\"\n\n    try:\n\
+      \        iter_dir = _normalize_relative_to_repo(ns.iteration_dir, repo_root)\n\
+      \        iter_dir.mkdir(parents=True, exist_ok=True)\n        iteration_id =\
+      \ iter_dir.name\n\n        # iter-0028: mode selects the default template when\
+      \ no --prompt-template\n        # override is passed. Override still wins, preserving\
+      \ backward compat.\n        _default_template_name = (\n            \"gemini_proposal_template.md\"\
+      \ if ns.mode == \"proposal\"\n            else \"gemini_review_template.md\"\
+      \n        )\n        template_path = (\n            _normalize_relative_to_repo(ns.prompt_template,\
+      \ repo_root)\n            if ns.prompt_template\n            else (Path(__file__).parent\
+      \ / \"dispatch_templates\" / _default_template_name)\n        )\n        # iter-0028\
+      \ codex pass-3 rev-002: in proposal mode, --schema (if\n        # supplied)\
+      \ overrides the built-in gemini_proposal_schema.json. In\n        # review mode\
+      \ the schema is template-embedded (per the historical\n        # codex-rev-003\
+      \ round-1 decision) so --schema is ignored there.\n        proposal_schema_path\
+      \ = None\n        if ns.mode == \"proposal\":\n            proposal_schema_path\
+      \ = (\n                _normalize_relative_to_repo(ns.schema, repo_root)\n \
+      \               if ns.schema\n                else (Path(__file__).parent /\
+      \ \"dispatch_templates\" / \"gemini_proposal_schema.json\")\n            )\n\
+      \        # codex-rev-003 round-1 fix: schema is part of the prompt template\n\
+      \        # (embedded under \"Schema reference\" header), NOT a separate file\
+      \ the\n        # helper passes to gemini. The prior `--schema` flag computed\n\
+      \        # schema_sha256 but never embedded the file's content in the prompt,\n\
+      \        # so operators thought it mattered when it didn't. Removed entirely;\n\
+      \        # the schema contract lives in dispatch_templates/gemini_review_template.md.\n\
+      \        goal_packet_path = _normalize_relative_to_repo(ns.goal_packet, repo_root)\n\
+      \        review_target_normalized = _normalize_relative_to_repo(ns.review_target,\
+      \ repo_root)\n    except (OutsideRepoPathError, OSError) as exc:\n        error_type\
+      \ = type(exc).__name__\n        _log_dispatch(log_path, {\n            \"event\"\
+      : \"dispatch_failed\",\n            \"error_type\": error_type,\n          \
+      \  \"error\": str(exc),\n            \"reviewer_id\": _pre_reviewer_id,\n  \
+      \          \"pass_id\": _pre_pass_id,\n            \"iteration_id\": _pre_iter_id,\n\
+      \            \"timeout_seconds\": ns.timeout_seconds,\n        })\n        print(json.dumps({\"\
+      ok\": False, \"error\": str(exc), \"error_type\": error_type}))\n        return\
+      \ 5\n\n    review_target_path_str: str | None = None\n    if review_target_normalized\
+      \ is not None:\n        try:\n            review_target_path_str = str(\n  \
+      \              review_target_normalized.relative_to(repo_root.resolve())\n \
+      \           ).replace(\"\\\\\", \"/\")\n        except ValueError:\n       \
+      \     review_target_path_str = str(review_target_normalized)\n\n    reviewer_id\
+      \ = ns.reviewer_id or f\"gemini-{iteration_id}-1\"\n    pass_id = ns.pass_id\
+      \ or f\"{reviewer_id}-pass1\"\n\n    if ns.smoke and os.environ.get(\"CONSENSUS_MCP_RUN_REAL_GEMINI_SMOKE\"\
+      ) != \"1\":\n        refuse_msg = (\n            \"--smoke requires CONSENSUS_MCP_RUN_REAL_GEMINI_SMOKE=1\
+      \ in the environment. \"\n            \"This gate prevents accidental real-gemini\
+      \ invocation under cost/auth/session \"\n            \"side effects. Set the\
+      \ env var explicitly to opt in, or drop --smoke for \"\n            \"normal\
+      \ (non-smoke) usage.\"\n        )\n        _log_dispatch(log_path, {\n     \
+      \       \"event\": \"dispatch_refused\",\n            \"error_type\": \"smoke_env_gate\"\
+      ,\n            \"error\": refuse_msg,\n            \"reviewer_id\": reviewer_id,\n\
+      \            \"pass_id\": pass_id,\n        })\n        print(json.dumps({\"\
+      ok\": False, \"error\": refuse_msg, \"error_type\": \"smoke_env_gate\"}))\n\
+      \        return 3\n\n    _log_dispatch(log_path, {\n        \"event\": \"dispatch_start\"\
+      ,\n        \"iteration_id\": iteration_id,\n        \"reviewer_id\": reviewer_id,\n\
+      \        \"pass_id\": pass_id,\n        \"smoke\": ns.smoke,\n        \"timeout_seconds\"\
+      : ns.timeout_seconds,\n        \"gemini_bin\": ns.gemini_bin,\n        \"model\"\
+      : ns.model,\n        # schema_path removed per codex-rev-003 round-1: was misleading\
+      \ provenance.\n        \"review_target_path\": review_target_path_str,\n   \
+      \     \"adapter\": \"gemini\",\n    })\n\n    prompt_sha: str | None = None\n\
+      \    goal_packet_sha: str | None = None\n    scope_sig: str | None = None\n\
+      \    gemini_version: str | None = None\n    output_sha: str | None = None\n\
+      \    review_target_hash: str | None = None\n\n    def _failed_event(error_type:\
+      \ str, error: str) -> dict:\n        ev = {\n            \"event\": \"dispatch_failed\"\
+      ,\n            \"error_type\": error_type,\n            \"error\": error,\n\
+      \            \"reviewer_id\": reviewer_id,\n            \"pass_id\": pass_id,\n\
+      \            \"iteration_id\": iteration_id,\n            \"timeout_seconds\"\
+      : ns.timeout_seconds,\n            \"adapter\": \"gemini\",\n        }\n   \
+      \     for k, v in (\n            (\"gemini_version\", gemini_version),\n   \
+      \         (\"model\", ns.model),\n            (\"prompt_sha256\", prompt_sha),\n\
+      \            (\"output_sha256\", output_sha),\n            (\"goal_packet_sha256\"\
+      , goal_packet_sha),\n            (\"scope_signature\", scope_sig),\n       \
+      \     (\"review_target_path\", review_target_path_str),\n            (\"review_target_hash\"\
+      , review_target_hash),\n        ):\n            if v is not None:\n        \
+      \        ev[k] = v\n        return ev\n\n    try:\n        goal_packet_text\
+      \ = goal_packet_path.read_text(encoding=\"utf-8\")\n        goal_packet = _load_goal_packet(goal_packet_path)\n\
+      \        template_text = _load_template(template_path)\n\n        review_packet_data:\
+      \ dict | None = None\n        if review_target_normalized is not None:\n   \
+      \         review_target_text = review_target_normalized.read_text(encoding=\"\
+      utf-8\")\n            review_target_hash = _sha256_str(review_target_text)\n\
+      \            if review_target_normalized.suffix.lower() in (\".yaml\", \".yml\"\
+      ):\n                try:\n                    candidate = yaml.safe_load(review_target_text)\n\
+      \                    if isinstance(candidate, dict):\n                     \
+      \   review_packet_data = candidate\n                except yaml.YAMLError:\n\
+      \                    review_packet_data = None\n\n        prompt = _build_prompt(\n\
+      \            goal_packet,\n            template_text,\n            iteration_dir=str(iter_dir),\n\
+      \            review_packet_path=str(goal_packet_path),\n            review_target_path=str(review_target_normalized)\
+      \ if review_target_normalized else None,\n            review_target_hash=review_target_hash,\n\
+      \            review_packet=review_packet_data,\n        )\n        prompt_sha\
+      \ = _sha256_str(prompt)\n        goal_packet_sha = _sha256_str(goal_packet_text)\n\
+      \        scope_sig = ((goal_packet or {}).get(\"authorization\", {}) or {}).get(\"\
+      scope_signature\", \"\")\n\n        gemini_version = _get_gemini_version(ns.gemini_bin)\n\
+      \        raw_output, extracted = _invoke_gemini_with_retry(\n            prompt=prompt,\n\
+      \            gemini_bin=ns.gemini_bin,\n            model=ns.model,\n      \
+      \      timeout_seconds=ns.timeout_seconds,\n            repo_root=repo_root,\n\
+      \            goal_packet=goal_packet,\n            log_path=log_path,\n    \
+      \        anchors={\n                \"iteration_id\": iteration_id,\n      \
+      \          \"reviewer_id\": reviewer_id,\n                \"pass_id\": pass_id,\n\
+      \            },\n            mode=ns.mode,  # iter-0028\n            proposal_schema_path=proposal_schema_path,\
+      \  # iter-0028 codex pass-3 rev-002\n        )\n        output_sha = _sha256_str(raw_output)\n\
+      \n        # iter-0028 codex pass-4 rev-001: in proposal mode, include the\n\
+      \        # effective proposal_schema_path + its sha256 in provenance so the\n\
+      \        # sealed packet records which schema constrained the output.\n    \
+      \    # Auditors can distinguish built-in vs overridden schema without\n    \
+      \    # consulting external state.\n        proposal_schema_sha = None\n    \
+      \    proposal_schema_path_str = None\n        if ns.mode == \"proposal\" and\
+      \ proposal_schema_path is not None:\n            proposal_schema_path_str =\
+      \ str(proposal_schema_path)\n            try:\n                proposal_schema_sha\
+      \ = _sha256_str(\n                    Path(proposal_schema_path).read_text(encoding=\"\
+      utf-8\")\n                )\n            except FileNotFoundError:\n       \
+      \         proposal_schema_sha = None\n\n        provenance = {\n           \
+      \ \"gemini_version\": gemini_version,\n            \"model\": ns.model,\n  \
+      \          \"prompt_sha256\": prompt_sha,\n            \"output_sha256\": output_sha,\n\
+      \            \"goal_packet_sha256\": goal_packet_sha,\n            \"scope_signature\"\
+      : scope_sig,\n            \"review_target_path\": review_target_path_str,\n\
+      \            \"review_target_hash\": review_target_hash,\n            \"adapter\"\
+      : \"gemini\",\n            \"mode\": ns.mode,\n            \"proposal_schema_path\"\
+      : proposal_schema_path_str,\n            \"proposal_schema_sha256\": proposal_schema_sha,\n\
+      \        }\n        packet = _build_sealed_packet(\n            extracted, iteration_id,\
+      \ reviewer_id, pass_id,\n            provenance=provenance,\n            attestation_method=\"\
+      auto_gemini_dispatch\",\n            attestation_input_sources=[\n         \
+      \       \"goal_packet (path passed via --goal-packet)\",\n                \"\
+      prompt_template (substituted by _build_prompt)\",\n                \"review_target\
+      \ (path passed via --review-target; may be unspecified)\",\n               \
+      \ \"model (gemini CLI --model flag; no --output-schema enforcement)\",\n   \
+      \         ],\n        )\n        result = _seal_via_t6(packet, iter_dir, sealed_filename=\"\
+      gemini-review.yaml\")\n    except (GeminiInvocationError, GeminiOutputParseError)\
+      \ as exc:\n        _log_dispatch(log_path, _failed_event(type(exc).__name__,\
+      \ str(exc)))\n        print(json.dumps({\"ok\": False, \"error\": str(exc),\
+      \ \"error_type\": type(exc).__name__}))\n        return 1\n    except Exception\
+      \ as exc:\n        _log_dispatch(log_path, _failed_event(type(exc).__name__,\
+      \ str(exc)))\n        print(json.dumps({\"ok\": False, \"error\": str(exc),\
+      \ \"error_type\": type(exc).__name__}))\n        return 2\n\n    _log_dispatch(log_path,\
+      \ {\n        \"event\": \"dispatch_done\",\n        \"iteration_id\": iteration_id,\n\
+      \        \"reviewer_id\": reviewer_id,\n        \"pass_id\": pass_id,\n    \
+      \    \"gemini_version\": gemini_version,\n        \"model\": ns.model,\n   \
+      \     \"timeout_seconds\": ns.timeout_seconds,\n        \"exit_code\": 0,\n\
+      \        \"prompt_sha256\": prompt_sha,\n        \"output_sha256\": output_sha,\n\
+      \        \"goal_packet_sha256\": goal_packet_sha,\n        \"scope_signature\"\
+      : scope_sig,\n        \"review_target_path\": review_target_path_str,\n    \
+      \    \"review_target_hash\": review_target_hash,\n        \"packet_sha256\"\
+      : result.get(\"packet_sha256\"),\n        \"archive_sealed_path\": result.get(\"\
+      archive_sealed_path\"),\n        \"local_mirror_path\": result.get(\"sealed_path\"\
+      ),\n        \"sealed_path\": result.get(\"sealed_path\"),\n        \"t6_audit_event_id\"\
+      : result.get(\"audit_event_id\"),\n        \"adapter\": \"gemini\",\n    })\n\
+      \    print(json.dumps({\"ok\": True, \"pass_id\": pass_id, **result}))\n   \
+      \ return 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
+    consensus_mcp/tests/test_dispatch_gemini.py: "\"\"\"Unit tests for consensus_mcp._dispatch_gemini.\n\
+      \nFocused on gemini-specific behavior:\n  - _extract_json_from_text (free-form\
+      \ output → JSON substring)\n  - _parse_gemini_output (validates JSON shape;\
+      \ gemini-rev-N IDs; patch_proposal MUST be null)\n  - _invoke_gemini_with_retry\
+      \ (validator-retry on first-pass parse fail)\n  - _resolve_gemini_bin (Windows-aware\
+      \ lookup)\n  - MCP wrapper (argv translation, rc reconciliation)\n\nDoes NOT\
+      \ re-test base helpers (covered by test_dispatch_codex.py); does NOT\nrun real\
+      \ gemini CLI (smoke env-gated to CONSENSUS_MCP_RUN_REAL_GEMINI_SMOKE=1).\n\"\
+      \"\"\nfrom __future__ import annotations\n\nimport json\nimport os\nimport sys\n\
+      from pathlib import Path\n\nimport pytest\n\n# Allow imports of consensus_mcp\
+      \ from the repo root without install.\nROOT = Path(__file__).resolve().parent.parent.parent\n\
+      if str(ROOT) not in sys.path:\n    sys.path.insert(0, str(ROOT))\n\nfrom consensus_mcp\
+      \ import _dispatch_gemini  # noqa: E402\nfrom consensus_mcp.tools import reviewer_dispatch_gemini\
+      \  # noqa: E402\n\n\n# ---------- _gemini_subprocess_env (v1.15.2: gemini CLI\
+      \ ≥0.43 trust) ----------\n# gemini 0.43.0-preview.0+ refuses headless runs\
+      \ in an \"untrusted\" dir,\n# emitting the trust error to stderr with EMPTY\
+      \ stdout. --skip-trust\n# (already passed) is NOT load-bearing on this version\
+      \ — empirically\n# verified 2026-05-15: with --skip-trust only, gemini bypassed\
+      \ trust but\n# went autonomous + 429; with GEMINI_CLI_TRUST_WORKSPACE=true it\
+      \ produced\n# clean deterministic output (and 2 clean v1.15.1 audit approvals).\n\
+      \ndef test_gemini_subprocess_env_sets_trust_workspace():\n    env = _dispatch_gemini._gemini_subprocess_env()\n\
+      \    assert env[\"GEMINI_CLI_TRUST_WORKSPACE\"] == \"true\"\n\n\ndef test_gemini_subprocess_env_preserves_parent_env(monkeypatch):\n\
+      \    monkeypatch.setenv(\"PATH\", \"/sentinel/path\")\n    monkeypatch.setenv(\"\
+      SOME_UNRELATED_VAR\", \"keepme\")\n    env = _dispatch_gemini._gemini_subprocess_env()\n\
+      \    assert env[\"PATH\"] == \"/sentinel/path\"          # PATH not clobbered\n\
+      \    assert env[\"SOME_UNRELATED_VAR\"] == \"keepme\"     # full inheritance\n\
+      \n\ndef test_gemini_subprocess_env_does_not_mutate_os_environ():\n    before\
+      \ = \"GEMINI_CLI_TRUST_WORKSPACE\" in os.environ\n    _dispatch_gemini._gemini_subprocess_env()\n\
+      \    after = \"GEMINI_CLI_TRUST_WORKSPACE\" in os.environ\n    assert before\
+      \ == after  # helper returns a copy; never touches os.environ\n\n\ndef test_gemini_subprocess_env_overrides_falsey_inherited_value(monkeypatch):\n\
+      \    # An operator/CI env that set it to 'false' must not defeat the fix.\n\
+      \    monkeypatch.setenv(\"GEMINI_CLI_TRUST_WORKSPACE\", \"false\")\n    env\
+      \ = _dispatch_gemini._gemini_subprocess_env()\n    assert env[\"GEMINI_CLI_TRUST_WORKSPACE\"\
+      ] == \"true\"\n\n\n# ---------- _extract_json_from_text ----------\n\ndef test_extract_pure_json_passes_through():\n\
+      \    text = '{\"findings\": [], \"goal_satisfied\": true}'\n    assert _dispatch_gemini._extract_json_from_text(text)\
+      \ == text\n\n\ndef test_extract_strips_leading_trailing_whitespace():\n    text\
+      \ = '  \\n  {\"k\": 1}\\n   '\n    assert _dispatch_gemini._extract_json_from_text(text)\
+      \ == '{\"k\": 1}'\n\n\ndef test_extract_handles_json_markdown_fence():\n   \
+      \ text = 'Sure thing:\\n```json\\n{\"findings\": []}\\n```\\nhope that helps'\n\
+      \    out = _dispatch_gemini._extract_json_from_text(text)\n    assert out ==\
+      \ '{\"findings\": []}'\n\n\ndef test_extract_handles_bare_markdown_fence():\n\
+      \    text = '```\\n{\"k\": \"v\"}\\n```'\n    out = _dispatch_gemini._extract_json_from_text(text)\n\
+      \    assert out == '{\"k\": \"v\"}'\n\n\ndef test_extract_falls_back_to_brace_scan():\n\
+      \    text = 'Here is what I found: {\"findings\": [], \"goal_satisfied\": true}.\
+      \ Done.'\n    out = _dispatch_gemini._extract_json_from_text(text)\n    assert\
+      \ out == '{\"findings\": [], \"goal_satisfied\": true}'\n\n\ndef test_extract_returns_raw_when_no_braces():\n\
+      \    text = \"no json here at all\"\n    assert _dispatch_gemini._extract_json_from_text(text)\
+      \ == text\n\n\n# ---------- _parse_gemini_output ----------\n\ndef _minimal_valid():\n\
+      \    return {\n        \"findings\": [],\n        \"goal_satisfied\": True,\n\
+      \        \"goal_satisfied_rationale\": \"No issues found.\",\n        \"blocking_objections\"\
+      : [],\n    }\n\n\ndef test_parse_minimal_valid():\n    parsed = _dispatch_gemini._parse_gemini_output(json.dumps(_minimal_valid()))\n\
+      \    assert parsed[\"goal_satisfied\"] is True\n    assert parsed[\"findings\"\
+      ] == []\n\n\ndef test_parse_rejects_invalid_json():\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"not valid JSON\"):\n        _dispatch_gemini._parse_gemini_output(\"\
+      {not json\")\n\n\ndef test_parse_rejects_non_object_root():\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"must be an object\"):\n        _dispatch_gemini._parse_gemini_output(\"\
+      [1,2,3]\")\n\n\ndef test_parse_rejects_unknown_top_level_key():\n    payload\
+      \ = _minimal_valid()\n    payload[\"unexpected\"] = \"field\"\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"unexpected top-level\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_parse_rejects_missing_required():\n    payload = _minimal_valid()\n\
+      \    del payload[\"goal_satisfied\"]\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"missing required\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_parse_rejects_finding_with_codex_id_prefix():\n    payload = _minimal_valid()\n\
+      \    payload[\"findings\"] = [{\n        \"id\": \"codex-rev-001\",\n      \
+      \  \"severity\": \"low\",\n        \"summary\": \"wrong adapter prefix\",\n\
+      \        \"citation\": \"x:1\",\n        \"risk\": \"r\",\n        \"recommendation\"\
+      : \"use gemini-rev-N\",\n    }]\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=r\"\\^gemini-rev\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_parse_accepts_gemini_rev_id():\n    payload = _minimal_valid()\n\
+      \    payload[\"findings\"] = [{\n        \"id\": \"gemini-rev-001\",\n     \
+      \   \"severity\": \"low\",\n        \"summary\": \"minor stylistic suggestion\"\
+      ,\n        \"citation\": \"consensus_mcp/foo.py:1\",\n        \"risk\": \"very\
+      \ low\",\n        \"recommendation\": \"consider renaming\",\n    }]\n    parsed\
+      \ = _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n    assert parsed[\"\
+      findings\"][0][\"id\"] == \"gemini-rev-001\"\n\n\ndef test_parse_rejects_non_null_patch_proposal():\n\
+      \    payload = _minimal_valid()\n    payload[\"findings\"] = [{\n        \"\
+      id\": \"gemini-rev-001\",\n        \"severity\": \"low\",\n        \"summary\"\
+      : \"x\",\n        \"citation\": \"x:1\",\n        \"risk\": \"r\",\n       \
+      \ \"recommendation\": \"rec\",\n        \"patch_proposal\": {\"patch_id\": \"\
+      gemini-rev-001-patch\"},\n    }]\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"patch_proposal must be null\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_parse_allows_null_patch_proposal():\n    payload = _minimal_valid()\n\
+      \    payload[\"findings\"] = [{\n        \"id\": \"gemini-rev-001\",\n     \
+      \   \"severity\": \"low\",\n        \"summary\": \"x\",\n        \"citation\"\
+      : \"x:1\",\n        \"risk\": \"r\",\n        \"recommendation\": \"rec\",\n\
+      \        \"patch_proposal\": None,\n        \"patch_not_proposed_reason\": None,\n\
+      \    }]\n    parsed = _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \    assert parsed[\"findings\"][0][\"patch_proposal\"] is None\n\n\ndef test_parse_blocking_invariant_violated():\n\
+      \    payload = _minimal_valid()\n    payload[\"findings\"] = [{\n        \"\
+      id\": \"gemini-rev-001\",\n        \"severity\": \"blocking\",\n        \"summary\"\
+      : \"x\",\n        \"citation\": \"x:1\",\n        \"risk\": \"r\",\n       \
+      \ \"recommendation\": \"rec\",\n    }]\n    # blocking_objections is empty but\
+      \ a blocking-severity finding exists.\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"blocking_objections invariant\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_parse_rejects_goal_satisfied_true_with_blocking_objections():\n\
+      \    \"\"\"codex-rev-002 round-1 fix: goal_satisfied=true is incoherent with\
+      \ any blocking finding.\"\"\"\n    payload = _minimal_valid()\n    payload[\"\
+      findings\"] = [{\n        \"id\": \"gemini-rev-001\",\n        \"severity\"\
+      : \"blocking\",\n        \"summary\": \"x\",\n        \"citation\": \"x:1\"\
+      ,\n        \"risk\": \"r\",\n        \"recommendation\": \"rec\",\n    }]\n\
+      \    payload[\"blocking_objections\"] = [\"gemini-rev-001\"]\n    payload[\"\
+      goal_satisfied\"] = True  # incoherent\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"incoherent\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_parse_blocking_invariant_satisfied():\n    payload = _minimal_valid()\n\
+      \    payload[\"findings\"] = [{\n        \"id\": \"gemini-rev-001\",\n     \
+      \   \"severity\": \"critical\",\n        \"summary\": \"x\",\n        \"citation\"\
+      : \"x:1\",\n        \"risk\": \"r\",\n        \"recommendation\": \"rec\",\n\
+      \    }]\n    payload[\"blocking_objections\"] = [\"gemini-rev-001\"]\n    payload[\"\
+      goal_satisfied\"] = False\n    parsed = _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \    assert parsed[\"blocking_objections\"] == [\"gemini-rev-001\"]\n\n\ndef\
+      \ test_parse_extracts_from_wrapped_output():\n    # Simulates gemini emitting\
+      \ prose around the JSON.\n    payload_str = json.dumps(_minimal_valid())\n \
+      \   wrapped = f\"Sure, here's the review:\\n```json\\n{payload_str}\\n```\\\
+      nDone.\"\n    parsed = _dispatch_gemini._parse_gemini_output(wrapped)\n    assert\
+      \ parsed[\"goal_satisfied\"] is True\n\n\n# ---------- _invoke_gemini_with_retry\
+      \ ----------\n\nclass _FakeInvokeFactory:\n    \"\"\"Captures the sequence of\
+      \ prompts _invoke_gemini receives + returns scripted outputs.\"\"\"\n    def\
+      \ __init__(self, outputs: list[str]):\n        self.outputs = list(outputs)\n\
+      \        self.prompts: list[str] = []\n\n    def __call__(self, *, prompt, **_kwargs):\n\
+      \        self.prompts.append(prompt)\n        return self.outputs.pop(0)\n\n\
+      \ndef test_retry_succeeds_on_first_attempt(monkeypatch):\n    factory = _FakeInvokeFactory([json.dumps(_minimal_valid())])\n\
+      \    monkeypatch.setattr(_dispatch_gemini, \"_invoke_gemini\", factory)\n  \
+      \  raw, parsed = _dispatch_gemini._invoke_gemini_with_retry(\n        prompt=\"\
+      initial\",\n        gemini_bin=\"gemini\",\n        model=\"gemini-2.5-pro\"\
+      ,\n        timeout_seconds=60,\n        repo_root=Path(\".\"),\n    )\n    assert\
+      \ parsed[\"goal_satisfied\"] is True\n    assert len(factory.prompts) == 1\n\
+      \    assert factory.prompts[0] == \"initial\"\n\n\ndef test_retry_succeeds_on_second_attempt(monkeypatch):\n\
+      \    \"\"\"First call returns junk, second returns valid JSON. Retry succeeds.\"\
+      \"\"\n    factory = _FakeInvokeFactory([\n        \"not json at all{\",    \
+      \                   # parse will fail\n        json.dumps(_minimal_valid()),\
+      \             # valid\n    ])\n    monkeypatch.setattr(_dispatch_gemini, \"\
+      _invoke_gemini\", factory)\n    raw, parsed = _dispatch_gemini._invoke_gemini_with_retry(\n\
+      \        prompt=\"initial\",\n        gemini_bin=\"gemini\",\n        model=\"\
+      gemini-2.5-pro\",\n        timeout_seconds=60,\n        repo_root=Path(\".\"\
+      ),\n    )\n    assert parsed[\"goal_satisfied\"] is True\n    assert len(factory.prompts)\
+      \ == 2\n    # Retry prompt should include the parse error feedback.\n    assert\
+      \ \"Retry\" in factory.prompts[1]\n    assert \"Parse error\" in factory.prompts[1]\n\
+      \n\ndef test_retry_fails_when_both_attempts_invalid(monkeypatch):\n    factory\
+      \ = _FakeInvokeFactory([\"garbage 1\", \"garbage 2\"])\n    monkeypatch.setattr(_dispatch_gemini,\
+      \ \"_invoke_gemini\", factory)\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError):\n\
+      \        _dispatch_gemini._invoke_gemini_with_retry(\n            prompt=\"\
+      initial\",\n            gemini_bin=\"gemini\",\n            model=\"gemini-2.5-pro\"\
+      ,\n            timeout_seconds=60,\n            repo_root=Path(\".\"),\n   \
+      \     )\n    assert len(factory.prompts) == 2  # exactly one retry; no further\
+      \ attempts\n\n\n# ---------- _resolve_gemini_bin ----------\n\ndef test_resolve_returns_input_when_path_separator_present():\n\
+      \    # Caller-supplied full path with separator should pass through.\n    if\
+      \ sys.platform == \"win32\":\n        # On Windows the function checks for App\
+      \ Alias zero-byte stubs but\n        # otherwise returns the input. Pass a non-existent\
+      \ path that has a\n        # separator; the function returns it unchanged.\n\
+      \        out = _dispatch_gemini._resolve_gemini_bin(r\"C:\\nonexistent\\gemini.exe\"\
+      )\n        assert out == r\"C:\\nonexistent\\gemini.exe\"\n    else:\n     \
+      \   out = _dispatch_gemini._resolve_gemini_bin(\"/nonexistent/gemini\")\n  \
+      \      assert out == \"/nonexistent/gemini\"\n\n\ndef test_resolve_returns_input_when_which_misses(monkeypatch):\n\
+      \    monkeypatch.setattr(_dispatch_gemini.shutil, \"which\", lambda _: None)\n\
+      \    out = _dispatch_gemini._resolve_gemini_bin(\"definitely-not-gemini\")\n\
+      \    assert out == \"definitely-not-gemini\"\n\n\n# ---------- reviewer_dispatch_gemini\
+      \ wrapper ----------\n\ndef test_wrapper_argv_required_args_only():\n    argv\
+      \ = reviewer_dispatch_gemini._build_argv(\n        goal_packet_path=\"goal.yaml\"\
+      ,\n        iteration_dir=\"iter-dir\",\n        reviewer_id=None,\n        pass_id=None,\n\
+      \        timeout_seconds=None,\n        review_target_path=None,\n        model=None,\n\
+      \        smoke=None,\n    )\n    assert argv == [\"--goal-packet\", \"goal.yaml\"\
+      , \"--iteration-dir\", \"iter-dir\"]\n\n\ndef test_wrapper_argv_all_args():\n\
+      \    argv = reviewer_dispatch_gemini._build_argv(\n        goal_packet_path=\"\
+      g.yaml\",\n        iteration_dir=\"iter\",\n        reviewer_id=\"gemini-x-1\"\
+      ,\n        pass_id=\"gemini-x-1-pass1\",\n        timeout_seconds=600,\n   \
+      \     review_target_path=\"rp.yaml\",\n        model=\"gemini-2.5-pro\",\n \
+      \       smoke=True,\n    )\n    assert \"--reviewer-id\" in argv and \"gemini-x-1\"\
+      \ in argv\n    assert \"--pass-id\" in argv and \"gemini-x-1-pass1\" in argv\n\
+      \    assert \"--timeout-seconds\" in argv and \"600\" in argv\n    assert \"\
+      --review-target\" in argv and \"rp.yaml\" in argv\n    assert \"--model\" in\
+      \ argv and \"gemini-2.5-pro\" in argv\n    assert \"--smoke\" in argv\n\n\n\
+      def test_wrapper_argv_smoke_false_omits_flag():\n    argv = reviewer_dispatch_gemini._build_argv(\n\
+      \        goal_packet_path=\"g.yaml\",\n        iteration_dir=\"iter\",\n   \
+      \     reviewer_id=None,\n        pass_id=None,\n        timeout_seconds=None,\n\
+      \        review_target_path=None,\n        model=None,\n        smoke=False,\n\
+      \    )\n    assert \"--smoke\" not in argv\n\n\ndef test_wrapper_handle_helper_exception_returns_error_dict(monkeypatch):\n\
+      \    def boom(*_args, **_kwargs):\n        raise RuntimeError(\"simulated helper\
+      \ crash\")\n    monkeypatch.setattr(_dispatch_gemini, \"main\", boom)\n    result\
+      \ = reviewer_dispatch_gemini.handle(\n        goal_packet_path=\"g.yaml\",\n\
+      \        iteration_dir=\"iter\",\n    )\n    assert result[\"ok\"] is False\n\
+      \    assert result[\"error_type\"] == \"RuntimeError\"\n    assert \"simulated\
+      \ helper crash\" in result[\"error\"]\n\n\ndef test_wrapper_handle_rc_nonzero_forces_ok_false(monkeypatch):\n\
+      \    \"\"\"If main() returns non-zero but stdout JSON claims ok=True, wrapper\
+      \ forces ok=False.\"\"\"\n    def fake_main(_argv):\n        # Print a payload\
+      \ that claims ok=True\n        print('{\"ok\": true, \"pass_id\": \"x\"}')\n\
+      \        return 1\n    monkeypatch.setattr(_dispatch_gemini, \"main\", fake_main)\n\
+      \    result = reviewer_dispatch_gemini.handle(\n        goal_packet_path=\"\
+      g.yaml\",\n        iteration_dir=\"iter\",\n    )\n    assert result[\"ok\"\
+      ] is False\n    assert result.get(\"wrapper_forced_ok_false_due_to_nonzero_rc\"\
+      ) is True\n\n\ndef test_wrapper_handle_rc_zero_passes_through(monkeypatch):\n\
+      \    def fake_main(_argv):\n        print('{\"ok\": true, \"pass_id\": \"x\"\
+      }')\n        return 0\n    monkeypatch.setattr(_dispatch_gemini, \"main\", fake_main)\n\
+      \    result = reviewer_dispatch_gemini.handle(\n        goal_packet_path=\"\
+      g.yaml\",\n        iteration_dir=\"iter\",\n    )\n    assert result[\"ok\"\
+      ] is True\n    assert \"wrapper_forced_ok_false_due_to_nonzero_rc\" not in result\n\
+      \n\ndef test_parse_rejects_empty_summary():\n    \"\"\"codex-rev-002 round-2\
+      \ fix: summary must be non-empty (matches schema minLength=1).\"\"\"\n    payload\
+      \ = _minimal_valid()\n    payload[\"findings\"] = [{\n        \"id\": \"gemini-rev-001\"\
+      ,\n        \"severity\": \"low\",\n        \"summary\": \"\",  # empty\n   \
+      \     \"citation\": \"x:1\",\n        \"risk\": \"r\",\n        \"recommendation\"\
+      : \"rec\",\n    }]\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"non-empty\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_parse_rejects_empty_rationale():\n    \"\"\"codex-rev-002 round-2\
+      \ fix: empty/whitespace rationale must be rejected.\"\"\"\n    payload = _minimal_valid()\n\
+      \    payload[\"goal_satisfied_rationale\"] = \"\"\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"non-empty\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \    payload[\"goal_satisfied_rationale\"] = \"   \\n\\t  \"\n    with pytest.raises(_dispatch_gemini.GeminiOutputParseError,\
+      \ match=\"non-empty\"):\n        _dispatch_gemini._parse_gemini_output(json.dumps(payload))\n\
+      \n\ndef test_wrapper_catches_systemexit(monkeypatch):\n    \"\"\"codex-rev-001\
+      \ round-2 fix: SystemExit (e.g., bad argparse input) must\n    not escape and\
+      \ kill the MCP server.\"\"\"\n    def fake_main(_argv):\n        raise SystemExit(2)\n\
+      \    monkeypatch.setattr(_dispatch_gemini, \"main\", fake_main)\n    result\
+      \ = reviewer_dispatch_gemini.handle(\n        goal_packet_path=\"g.yaml\",\n\
+      \        iteration_dir=\"iter\",\n    )\n    assert result[\"ok\"] is False\n\
+      \    assert result[\"error_type\"] == \"ArgparseSystemExit\"\n\n\ndef test_wrapper_handle_malformed_stdout(monkeypatch):\n\
+      \    def fake_main(_argv):\n        print(\"not json\")\n        return 0\n\
+      \    monkeypatch.setattr(_dispatch_gemini, \"main\", fake_main)\n    result\
+      \ = reviewer_dispatch_gemini.handle(\n        goal_packet_path=\"g.yaml\",\n\
+      \        iteration_dir=\"iter\",\n    )\n    assert result[\"ok\"] is False\n\
+      \    assert result[\"error_type\"] == \"WrapperJsonDecodeError\"\n\n\n# ----------\
+      \ registry registration ----------\n\ndef test_registry_can_register_gemini_tool():\n\
+      \    class FakeRegistry:\n        def __init__(self):\n            self.registered:\
+      \ list[tuple] = []\n        def register(self, name, schema, handler):\n   \
+      \         self.registered.append((name, schema, handler))\n\n    reg = FakeRegistry()\n\
+      \    reviewer_dispatch_gemini.register(reg)\n    assert len(reg.registered)\
+      \ == 1\n    name, schema, handler = reg.registered[0]\n    assert name == \"\
+      reviewer.dispatch_gemini\"\n    assert schema[\"name\"] == \"reviewer.dispatch_gemini\"\
+      \n    assert handler is reviewer_dispatch_gemini.handle\n\n\ndef test_schema_required_args():\n\
+      \    assert reviewer_dispatch_gemini.SCHEMA[\"input_schema\"][\"required\"]\
+      \ == [\"goal_packet_path\", \"iteration_dir\"]\n    props = reviewer_dispatch_gemini.SCHEMA[\"\
+      input_schema\"][\"properties\"]\n    assert \"model\" in props  # gemini-specific\
+      \ addition vs codex\n\n\ndef test_server_registers_gemini():\n    \"\"\"Verify\
+      \ server.py wires up the gemini tool alongside codex.\"\"\"\n    from consensus_mcp.server\
+      \ import registry\n    names = [t[\"name\"] for t in registry.list_tools()]\n\
+      \    assert \"reviewer.dispatch_gemini\" in names\n"
+    CHANGELOG.md: "# Changelog\n\n## 1.15.2 - 2026-05-15\n\n**gemini-dispatch workspace-trust\
+      \ fix** — closes the v1.15.1\nnamed blocker (advisory 2026-05-15, now **resolved**).\n\
+      \n`consensus_mcp/_dispatch_gemini.py` now injects\n`GEMINI_CLI_TRUST_WORKSPACE=true`\
+      \ into the gemini subprocess env\nvia a new `_gemini_subprocess_env()` helper\
+      \ (returns a COPY of the\nparent env; forces the var to `true` even if an inherited\
+      \ value is\n`false`; never mutates `os.environ`). gemini CLI\n`0.43.0-preview.0`+\
+      \ refuses headless runs in an \"untrusted\"\ndirectory — it writes the trust\
+      \ error to stderr and produces\n**empty stdout**, which the dispatcher then\
+      \ fails as\n`GeminiOutputParseError`.\n\n**Empirically verified 2026-05-15**\
+      \ (the v1.15.1 audit diagnosed\nthis first-hand; gemini pass-1 failed twice\
+      \ for exactly this):\n- `--skip-trust` alone (still passed, defense-in-depth)\
+      \ is NOT\n  load-bearing on this version — gemini bypassed trust but went\n\
+      \  autonomous and 429'd.\n- `GEMINI_CLI_TRUST_WORKSPACE=true` produced clean\
+      \ deterministic\n  output, and the two clean v1.15.1 Workflow B audit approvals.\n\
+      \n`_dispatch_gemini.py` was in the v1.15.1 iteration's\n`forbidden_files`, so\
+      \ the dispatcher-level fix was correctly\ndeferred to this version rather than\
+      \ patched out-of-scope.\n\nWorkflow B audit: codex + gemini (gemini dispatched\
+      \ via the\ndocumented env-var workaround, since the fix is not yet in the\n\
+      installed path). Full suite green; 4 new unit tests for\n`_gemini_subprocess_env`\
+      \ in `test_dispatch_gemini.py`.\n\n## 1.15.1 - 2026-05-15\n\n**Machine-enforcement\
+      \ of the converged-plan convention** — closes the\nv1.15.0 NAMED BLOCKER. From\
+      \ `iteration-converged-plan-machine-\nenforcement` (Workflow A weighted-synthesis:\
+      \ claude + codex + gemini;\nshared-prior self-check PASSED; no blocking objections;\
+      \ the consult\ndogfooded the very convention it enforces). The recorded v1.15.0\n\
+      \"starting design\" (gemini's `severity` field + `consensus_gate.py`\nmechanism)\
+      \ was **partially refuted by first-hand code-reading** during\nthe consult:\
+      \ `consensus_mcp/validators/consensus_gate.py` is the\nPhase-0 production-readiness\
+      \ gate (P0-V6) and is the WRONG component —\nthe v1.15.0 doctrine working correctly\
+      \ on its own audit trail.\n\n**Artifact truth (scoped claim):** the **v1.15.0\
+      \ tag `4e81f9e` is\nDOCTRINE-ONLY** — it shipped the convention as an authoring\
+      \ convention\nenforced by the bundled skill + Workflow B audit, with **zero\
+      \ engine\ncode**. Machine enforcement exists **only from the v1.15.1 tag\nforward**.\
+      \ Users on v1.15.0 get doctrine; they must upgrade to v1.15.1\nto get the gate.\n\
+      \nShipped (real code paths — meaningful regression signal, unlike\nv1.15.0's\
+      \ doc-only change):\n\n- **`consensus_mcp/schemas/converged_plan_convention.schema.json`**\n\
+      \  (NEW; `schemas/` is net-new) — JSON Schema for the convention\n  object;\
+      \ `empirical_status` enum `proven|pending|refuted|n/a` matches\n  v1.15.0 verbatim.\n\
+      - **`consensus_mcp/validators/validate_converged_plan.py`** (NEW;\n  small;\
+      \ structure + consequence ONLY). Enforces the consequence of\n  the orchestrator-attested\
+      \ `falsifiable_from_artifacts` bool — the\n  engine does **not** classify the\
+      \ defect (keyword heuristics are the\n  shared-prior trap the v1.15.0 report\
+      \ documents). **Recursive-trap\n  defense (highest-order constraint):** the\
+      \ validator has zero code\n  path deriving any approved/correct/ready/sound\
+      \ state from the\n  blocks (pinned by `test_validator_source_sets_no_correctness_state`\n\
+      \  grepping the module), and every result carries an unconditional\n  `gate_scope`\
+      \ disclaimer: *\"presence-and-consistency only; NOT a\n  soundness assertion\
+      \ … remains a human judgement.\"* A pass means the\n  required thinking was\
+      \ **recorded**, never that it is **true**.\n- **`workflow_engine._seal_converged_plan`**\
+      \ — ingests the optional\n  orchestrator-authored `convention-input.yaml` via\
+      \ the ONE channel\n  that already reaches seal time (a file in `iteration_dir`;\
+      \ no new\n  parameter threaded through `run_iteration`/the MCP tool — codex's\n\
+      \  external-refuting-observation honored), validates it, and seals the\n  blocks\
+      \ **INTO** `converged-plan.yaml` (same write, same hash) with\n  required `cited_pass_ids`\
+      \ (provenance-by-citation: not a loose\n  untracked sidecar, not a single-winner\
+      \ extraction — gemini's\n  chain-of-evidence requirement). **Fail-closed:**\
+      \ a hard-reject does\n  NOT write `converged-plan.yaml`.\n- **Graduated strictness**\
+      \ (`convergence.converged_plan_enforcement`:\n  `off|warn|graduated|strict`,\
+      \ default `graduated`). Hard-reject ONLY\n  (i) operator-declared safety/data-loss/bricking/irreversible\
+      \ risk\n  class missing a conforming root-cause-independent\n  `independent_safeguard`,\
+      \ and (ii) `empirical_status:proven` with no\n  recorded `experiment_result`;\
+      \ warn + annotate `convention_violations`\n  otherwise.\n- **`consensus_get_iteration_outcome`**\
+      \ surfaces `enforcement` +\n  `convention_gate_scope` + `convention_violations`;\
+      \ a reader can\n  never see a pass marker without the non-soundness disclaimer\
+      \ next\n  to it. Legacy / absent-convention plans (this session's iter-0043\n\
+      \  .. v1.15.0) still load, explicitly marked `enforcement:\n  doctrine-only`\
+      \ — **NOT silently valid, NOT rejected**.\n\n**Named blocker (need-evidence,\
+      \ deferred — not a cop-out):** operator\ngoal_packet `defect_class`/`risk_class`\
+      \ declaration UX + an\nanti-gaming cross-check on `falsifiable_from_artifacts`.\
+      \ Both are\nill-posed until the shipped slice produces real usage data.\n\n\
+      **Workflow B audit chain** (codex + gemini, post-implementation):\ngemini APPROVED\
+      \ (`goal_satisfied=true`, no blocking). codex pass-1\nraised 2 blocking + 2\
+      \ high — all verified against real code (no\nhallucinations; all correctly caught\
+      \ the slice under-implementing\nthe converged plan) and integrated TDD-first:\
+      \ the third named block\n(`decisive_experiment_before_next_iteration`) is now\
+      \ schema-required\n+ validated; `doctrine-only` is a READ-time legacy classification\n\
+      only (a new convergence missing blocks is validated under the\nconfigured level,\
+      \ not bypassed); `convention_schema_version` is\npinned exactly (never defaulted/rewritten);\
+      \ a hard-reject removes any\nstale `converged-plan.yaml` (fail-closed truly\
+      \ closed). **Design\nnote (intentional, peer-converged):** under the default\
+      \ `graduated`\nlevel a new *non-safety* convergence missing blocks is sealed\
+      \ as\n**warn + annotate** (loudly marked via `convention_gate.\nenforcement_note`,\
+      \ never a silent pass), NOT hard-rejected — this is\nthe converged plan's deliberate\
+      \ q4/q5 decision (incl. codex's own\nconsult position) to avoid the rejected-goal_packet\
+      \ papercut. Strict\nenforcement is opt-in via `converged_plan_enforcement: strict`.\n\
+      \nFull suite green: 964 passed, 1 skipped, 0 regressions (38 new\ncode-path\
+      \ tests in `test_converged_plan_convention.py`, including\nall audit-integration\
+      \ fixes — they close the v1.15.0 doc-only loose\nend with a meaningful regression\
+      \ signal).\n\n## 1.15.0 - 2026-05-15\n\n**Convergence-correctness doctrine**\
+      \ — minor bump (cross-project\ndoctrine evolution, not a hot-patch). From\n\
+      `iteration-convergence-correctness-doctrine` (Workflow A\nweighted-synthesis:\
+      \ claude + codex + gemini, no blocking\nobjections; gemini dissented substantively\
+      \ on prominence +\nmachine-enforcement and that dissent was incorporated, not\n\
+      outvoted — the shared-prior self-check passed), derived from a\nreal downstream\
+      \ failure: the ChilipadScreen ESP32-P4 i2c\nboot-loop consensus-failure report\
+      \ (2026-05-15) where two clean\nstrict-majority convergences (one round-1 *unanimous*)\
+      \ were both\nrefuted on-device.\n\nDoctrine added to the bundled `consensus-workflow`\
+      \ skill + both\ndispatch-template preambles + a new\n`docs/workflows/converged-plan-convention.md`:\n\
+      \n- **Safety interlock first (headline rule).** Safety-critical /\n  data-loss\
+      \ / bricking / irreversible-risk defects MUST ship a\n  root-cause-INDEPENDENT\
+      \ safeguard with the hypothesized fix,\n  valuable even if the hypothesis is\
+      \ 100% false. Auditable bar:\n  \"would it still work if the root cause were\
+      \ entirely\n  different?\" Field-proven: an independent boot-loop breaker\n\
+      \  un-bricked a medical-safety device across two failed\n  root-cause iterations\
+      \ (\"the single highest-value decision\").\n- **Convergence is agreement, not\
+      \ truth.** Fast independent\n  unanimity is a verify-harder flag — a shared-prior\
+      \ artifact is\n  the multi-agent analog of single-agent rationalize-away.\n\
+      \  Dispatch templates now require each contributor to state the\n  differential/prior\
+      \ it reasoned from (shared prior exposed at\n  reveal instead of laundered as\
+      \ \"independent agreement\").\n- **Provisional-until-proven** for the defined\
+      \ not-falsifiable-\n  from-artifacts class (hardware/firmware state, environment/\n\
+      \  toolchain, concurrency/timing): converged root cause is\n  PROVISIONAL; \"\
+      fixed/shipped/root-cause-correct\" language\n  forbidden until a pre-specified\
+      \ EXTERNAL discriminating\n  experiment runs.\n- **Anti-theater property:**\
+      \ a falsification is real only if its\n  refuting observation is pre-specified,\
+      \ a specific observable,\n  and (for that class) external to the reasoning that\
+      \ produced\n  the hypothesis.\n- **Converged-plan convention:** `falsification`,\n\
+      \  `independent_safeguard`, and\n  `decisive_experiment_before_next_iteration`\
+      \ blocks documented\n  as an authoring standard, doctrine-enforced now.\n\n\
+      **Named blocker (sequenced follow-up):** engine/validator\nMACHINE-enforcement\
+      \ of the converged-plan blocks (gemini's\n`severity` field + `consensus_gate.py`\
+      \ mechanism is the recorded\nstarting design). Concrete blocker, file-verified:\
+      \ no standalone\nconverged-plan schema exists; `workflow_engine.py:505-525`\
+      \ reads\ngeneric YAML keys. Needs its own schema-design consult + a\nnot-falsifiable-from-artifacts\
+      \ classifier first.\n\n**Field validation of v1.14.9:** the same report independently\n\
+      confirmed the v1.14.9 void-seal preservation working correctly —\nvoid rounds\
+      \ from the v1.14.0 path-only review bug were preserved\nas honest audit history\
+      \ and correctly not counted toward\nconvergence. No new tooling; cited as regression\
+      \ evidence.\n\nDoc/skill/template/memory only — no engine, config, or code\n\
+      paths touched. Full test suite green, 0 regressions.\n\n## 1.14.9 - 2026-05-15\n\
+      \nSeal-pipeline defect fix from iteration-seal-archive-collision-fix\n(workflow\
+      \ A weighted-synthesis convergence; codex + gemini + claude;\nno blocking objections).\
+      \ Workflow B audit of the implementation by\ncodex + gemini.\n\n**Defect:**\
+      \ `review_write_and_seal.handle` built the archive filename\nfrom `reviewer_id`\
+      \ only (`{date}-{iteration_id}-{reviewer_id}-pass.yaml`),\nwhile the index keys\
+      \ uniqueness on `pass_id`. Re-using a reviewer_id\nacross passes (e.g. `gemini-iteration-0012-2`\
+      \ for pass1 AND pass2)\nproduced a hard `packet_path_collision` at the path-exists\
+      \ guard\n*before* the pass_id-aware index logic ever ran — forcing operators\n\
+      to mint throwaway reviewer-ids per attempt. `test_contributors.py:135`'s\ndocstring\
+      \ (\"filename must contain iteration_id + reviewer_id + pass_id\ntokens\") documented\
+      \ the intended 4-token contract; the implementation\nhad silently regressed\
+      \ to 3 tokens at/before extraction.\n\n**Fix (`consensus_mcp/tools/review_write_and_seal.py`):**\n\
+      \n- Archive filename is now 4-token:\n  `{date}-{iteration_id}-{reviewer_id}-{safe_pass_id}-pass.yaml`.\n\
+      \  Filename uniqueness key == index uniqueness key (pass_id).\n- New `_sanitize_for_filename`:\
+      \ maps `[^A-Za-z0-9._-]`→`-`, collapses\n  runs, strips, falls back to `pass`.\
+      \ Applied to the FILENAME only —\n  the raw `pass_id` is preserved verbatim\
+      \ in the index entry and\n  packet body.\n- The index `pass_id` lookup is REORDERED\
+      \ ahead of the path-exists\n  guard, and idempotency is judged on **content\
+      \ identity** — the\n  canonical hash of the packet with the volatile seal-provenance\n\
+      \  fields (`sealed_at_utc`, `packet_sha256`) stripped — compared\n  against\
+      \ the actual ON-DISK archived packet. An exact re-seal is\n  an idempotent SUCCESS\
+      \ (`idempotent: true`, `index_updated:\n  false`, existing recorded path; scheme-agnostic\
+      \ so old-scheme\n  archives still resolve) **regardless of seal time**. This\n\
+      \  matters because a dispatch retry builds a fresh packet with no\n  `sealed_at_utc`;\
+      \ a sha-based check would see a new timestamped\n  hash and mis-classify the\
+      \ retry as a collision — defeating the\n  whole feature for its primary use\
+      \ case (caught by codex Workflow\n  B audit, HIGH).\n- Integrity guard on the\
+      \ idempotent path: a tampered archive that\n  no longer matches the incoming\
+      \ content identity yields\n  `index_collision`; one that parses as valid **non-mapping**\
+      \ YAML\n  (list/scalar) yields `idempotent_target_integrity_mismatch`\n  without\
+      \ crashing; a deleted/unreadable archive yields\n  `idempotent_target_missing`\
+      \ / `_unreadable`. The idempotent\n  success return reports the **authoritative\
+      \ on-disk artifact\n  hash** (the file's own `packet_sha256`, or a reconstruction\
+      \ if\n  absent), never a missing/stale value copied from the index.\n- The sealed\
+      \ body now always self-records the canonical `pass_id`\n  (`packet.setdefault`),\
+      \ including for pass-label-only packets,\n  and a parameter-vs-body `pass_id`\
+      \ consistency guard mirrors the\n  existing `iteration_id` / `reviewer_id` guards.\n\
+      - `index_collision` (same pass_id, substantively *different*\n  content) preserved\
+      \ with a content-identity-based detail string.\n- path-exists guard retained\
+      \ as a defense-in-depth backstop with a\n  distinct detail string (unreachable\
+      \ in normal flow).\n- `output_schema` + the `handle()` docstring updated to\
+      \ document\n  the new `idempotent` success field and all new error codes; a\n\
+      \  schema-contract test pins every `handle()` error code to the\n  schema enum\
+      \ so this drift cannot silently regress.\n\n**Workflow B audit chain** (post-review;\
+      \ codex iterated, gemini\napproved the core design): gemini APPROVED with no\
+      \ findings; codex\nsurfaced and drove resolution of 6 distinct real gaps across\
+      \ 4\naudit passes — output-schema drift, missing pass_id consistency\nguard,\
+      \ a HIGH timestamp-dependent-idempotency defect, a\nnon-mapping-archive crash,\
+      \ pass-label body identity, and a\nstale/missing idempotent-return hash — before\
+      \ reaching\n`goal_satisfied: true` with no blocking objections. The HIGH\nfinding\
+      \ (idempotency silently broken by the pre-existing\n`sealed_at_utc`-in-hash\
+      \ stamp) would have shipped a dead feature\nwithout this audit.\n\n**Backward\
+      \ compat:** the 162 existing archives are NOT migrated.\n`review_read_post_seal`\
+      \ resolves via the index's stored relative\npath and never parses the filename,\
+      \ so old-scheme archives remain\nfully readable. Mixed-scheme archive directory\
+      \ across the v1.14.x\nboundary is expected; the index is the resolution source\
+      \ of truth.\n\n**Tests:** new `consensus_mcp/tests/test_seal_collision_fix.py`\n\
+      (19 cases: the exact `gemini-iteration-0012-2` same-reviewer-\ndistinct-pass\
+      \ scenario; timestamp-independent idempotent success;\nnon-mapping-archive integrity\
+      \ guard; target-missing; pass_id\nparameter/body consistency; pass-label body\
+      \ identity stamping;\nauthoritative-hash return when the index sha is blank;\n\
+      hostile-pass_id sanitization; schema-contract pinning of every\n`handle()` error\
+      \ code); `test_contributors.py` fake_t6 helpers\nupdated to the 4-token scheme.\
+      \ Full suite **723 pass, 0\nregressions** (excluding the pre-existing `test_dispatch_codex`\n\
+      ordering flake + `jsonschema`-missing environmental issue, both\npredating this\
+      \ work).\n\n**Deferred with stated reasons** (recorded, not silently dropped):\n\
+      \n- `superseded_by` index annotation for void seals — 2/3\n  contributors scoped\
+      \ it out as beyond the minimal defect; file\n  preservation alone already satisfies\
+      \ the audit-history\n  requirement. Own small consult if causal supersession\
+      \ tracking\n  is wanted.\n- Forensic scan of the 162 existing archives for latent\
+      \ mis-seals\n  — blocked on an undefined remediation model for immutable sealed\n\
+      \  history.\n- `index.yaml` non-atomic read-modify-write race — pre-existing,\n\
+      \  orthogonal; separate hardening consult.\n\nCarried forward from the overnight\
+      \ run (still open, unchanged):\nWorkflow C multi-iteration engine (v1.15.0 named\
+      \ blocker); iter-0045\nPHASE_CONVERGE mapping empirical evaluation; project-level\n\
+      `.consensus/autonomous-policy.yaml`.\n\n## 1.14.8 - 2026-05-14\n\niter-5 of\
+      \ autonomous run-2026-05-15-overnight. Bundled\n`consensus_mcp/claude_extensions/skills/consensus/SKILL.md`\
+      \ (the\nbootstrap skill that triggers on \"consensus init\") gains a\n\"Workflow\
+      \ modes the operator can pick (v1.14.4+)\" section:\n\n- Documents Workflow\
+      \ A (propose-converge, default), Workflow B\n  (post-review, lightweight), Workflow\
+      \ C (autonomous-execute,\n  v1.14.4 contract / v1.15.0 engine), and advisory.\n\
+      - Notes the numeric-alias deprecation cycle.\n- Cross-references the operating-procedure\
+      \ skill\n  (`~/.claude/skills/consensus-workflow/SKILL.md`) as the\n  load-bearing\
+      \ reference for dispatch rules and halt conditions.\n\nOperators running `consensus\
+      \ init` for the first time will now see\nthe workflow-mode vocabulary at bootstrap\
+      \ time instead of having to\ndiscover it from the `--help` output.\n\nNo code\
+      \ changes; doc only. 704 tests pass.\n\n## 1.14.7 - 2026-05-14\n\nDoc hot-patch\
+      \ from autonomous run-2026-05-15-overnight iter-4. Two\nstale references that\
+      \ user-facing surfaces still showed:\n\n- `README.md` \"Status\" section bumped\
+      \ from \"1.14.0 — multi-AI\n  contributor pool, blind-first-reveal workflow\
+      \ #4 ...\" to a\n  \"v1.14.6 (current)\" header + per-release train summary\
+      \ covering\n  v1.14.0 → v1.14.6. Includes pointer to `docs/advisories.md` for\n\
+      \  known-defect-release upgrade guidance.\n- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`\n\
+      \  one stale \"Workflow #3\" reference in the \"Workflow A/B in one line\"\n\
+      \  section body (the global rename in v1.14.4 missed this hyphenated\n  form).\
+      \ Bumped to \"Workflow B\".\n\nNo code changes; docs only. 704 tests pass (no\
+      \ regression).\n\n## 1.14.6 - 2026-05-14\n\nHot-patch from autonomous run-2026-05-15-overnight\
+      \ iter-3.\n\n**Defect fixed:** `consensus-init --workflow A` (and B, C, lowercase\n\
+      variants, and the new `autonomous-execute` semantic string) was\nrejected at\
+      \ argparse parse-time before alias resolution could run.\nv1.14.4 added letter\
+      \ aliases to `WORKFLOW_ALIASES` + the interactive\nwizard prompt but missed\
+      \ the CLI `--workflow` argparse `choices` list,\nwhich still hardcoded the pre-rename\
+      \ set\n`[\"3\",\"4\",\"post-review\",\"propose-converge\",\"advisory\"]`.\n\n\
+      **Fix:** `consensus_mcp/_init_wizard.py` argparse `--workflow` choices\nlist\
+      \ expanded to include `[\"A\",\"B\",\"C\",\"a\",\"b\",\"c\",\"3\",\"4\",\n\"\
+      post-review\",\"propose-converge\",\"advisory\",\"autonomous-execute\"]`.\n\
+      Help text updated to document A/B/C semantics inline so\n`consensus-init --help`\
+      \ is self-documenting. Numeric aliases (3, 4)\nstill accepted at parse-time;\
+      \ deprecation warning fires at\n`normalize()` time per the v1.14.4 contract\
+      \ (unchanged).\n\n**Tests:** 8 new in `consensus_mcp/tests/test_init_wizard_workflow_choices.py`\n\
+      asserting argparse acceptance for each new alias variant + sanity\ntest that\
+      \ letter parses through `WORKFLOW_ALIASES` to the canonical\nsemantic string.\
+      \ Total suite: 704 pass (was 696; +8 for iter-3).\n\n## 1.14.5 - 2026-05-14\n\
+      \nBundled hot-patch from autonomous-mode `run-2026-05-15-overnight`\n(operator-initiated;\
+      \ running per the v1.14.4 Workflow C contract,\nmanually-orchestrated since\
+      \ the v1.15.0 engine path is the named\nblocker). Two completed iterations bundled\
+      \ per the no-deferral rule:\n\n**iter-0044 — adapter `--mode` forwarding fix**\
+      \ (Workflow B audit;\ncodex + gemini both `goal_satisfied=true, blocking_objections=[]`).\n\
+      \nThe original defect: `CodexAdapter.dispatch` and\n`GeminiAdapter.dispatch`\
+      \ built argv without `--mode`, causing every\nworkflow A round-1 dispatch through\
+      \ the engine to silently use the\nreview template + review schema even when\
+      \ `packet.phase ==\nPHASE_PROPOSE`. The shell binaries (`consensus-mcp-dispatch-codex`,\n\
+      `consensus-mcp-dispatch-gemini`) already accepted `--mode {review,\nproposal}`\
+      \ per iter-0028; the adapter just wasn't forwarding it.\nTest coverage didn't\
+      \ catch this because\n`test_dispatch_codex_proposal_mode.py` only tested the\
+      \ dispatcher's\nown argparse in isolation, never the adapter boundary.\n\nImplementation\
+      \ per iter-0043 converged plan:\n\n- `consensus_mcp/contributors/_phase_mode.py`\
+      \ NEW — single source\n  of truth: `PHASE_PROPOSE → \"proposal\"`, `PHASE_REVIEW\
+      \ → \"review\"`,\n  `PHASE_CONVERGE → \"review\"` (interim per iter-0043 q1\n\
+      \  weighted-synthesis; iter-0045 candidate revisits with empirical\n  data).\
+      \ Strict-dict lookup; raises `ValueError` on unmapped phase\n  (no silent default\
+      \ — that's exactly what allowed the original\n  defect).\n- `consensus_mcp/contributors/codex.py`\
+      \ — append `--mode` to argv\n  via `phase_to_mode(packet.phase)`.\n- `consensus_mcp/contributors/gemini.py`\
+      \ — same.\n- `consensus_mcp/tools/reviewer_dispatch_codex.py` — schema gains\n\
+      \  `phase` (engine abstraction, primary) + `mode` (dispatcher escape\n  hatch,\
+      \ optional). `_resolve_mode(phase, mode)` helper: explicit\n  mode wins; otherwise\
+      \ translate phase via `_phase_mode`; otherwise\n  None (caller omits `--mode`\
+      \ for backward compat).\n- `consensus_mcp/tools/reviewer_dispatch_gemini.py`\
+      \ — mirrors codex\n  wrapper exactly.\n- `consensus_mcp/tests/test_phase_mode_forwarding.py`\
+      \ NEW — 21 tests\n  covering: phase_to_mode mapping (all 3 phases + ValueError\
+      \ on\n  unknown); CodexAdapter + GeminiAdapter argv forwarding for all 3\n \
+      \ phases (mock-based); MCP wrapper `_resolve_mode` + `_build_argv`\n  (phase-to-mode\
+      \ mapping + mode-wins-over-phase + neither =\n  backward-compat omission).\n\
+      \nTest results: 696 pass (was 675; +21 for iter-0044). Adapter\nboundary now\
+      \ covered by tests that would have caught the original\ndefect.\n\n**README\
+      \ staleness sweep** (doc-only; no peer audit needed).\n\n- `README.md`: \"What\
+      \ it does\" section updated to Workflow A/B/C\n  vocabulary + Workflow C mention;\
+      \ install URLs already at\n  `@v1.14.4`; \"Pre-commit vs post-commit catch\"\
+      \ section + table-of-\n  contents reference Workflow A / Workflow B with \"\
+      (was workflow\n  #4 / #3 prior to v1.14.4)\" historical note.\n- `docs/workflows/workflow-4-preferred.md`:\
+      \ filename preserved for\n  stable cross-references; frontmatter + body updated\
+      \ to Workflow A\n  vocabulary; transition note at top.\n\nAudit log: `consensus-state/autonomous-runs/run-2026-05-15-overnight/log.jsonl`\n\
+      records both iterations + halt-set checks + scope-check decisions\nper the v1.14.4\
+      \ Workflow C contract schema.\n\n## 1.14.4 - 2026-05-14\n\n## 1.14.4 - 2026-05-14\n\
+      \nWorkflow A/B/C rename + Workflow C contract from\niter-workflow-abc-introduce\
+      \ (workflow A weighted-synthesis\nconvergence across claude + codex + gemini;\
+      \ no blocking objections).\n\n**Operator-facing vocabulary: numeric → letter\
+      \ aliases.**\n\n- Workflow A = propose-converge (was numbered #4) — DEFAULT\n\
+      - Workflow B = post-review (was numbered #3) — LIGHTWEIGHT\n- Workflow C = autonomous-execute\
+      \ (NEW) — LONG-FORM/OVERNIGHT\n- Numeric aliases (3, 4) still resolve but emit\
+      \ `DeprecationWarning`;\n  scheduled for removal in a future minor release.\n\
+      \n**Workflow C — autonomous-execute (CONTRACT shipped, engine deferred).**\n\
+      \n`consensus init` operators can configure a project for Workflow C;\ngoal_packet\
+      \ authors can declare an `autonomy_contract` block with\nfile boundaries, halt\
+      \ conditions, and iteration/wall-clock caps.\nThe validator and `check_autonomy_scope`\
+      \ helper are fully\nimplemented and tested. The actual multi-iteration auto-execution\n\
+      loop is the named blocker for v1.15.0 (requires cross-platform\ninterrupt-file\
+      \ watching validation, integration tests with real\npeer dispatches, autonomy-ledger\
+      \ replay design — multi-session\nwork that does not fit a hot-patch).\n\nWorkflow\
+      \ C requires exactly 3 contributors (claude + codex + gemini)\nenforced at config-load\
+      \ — the wide cross-AI safety net is mandatory\nfor autonomous mode by default;\
+      \ v1.15.0+ may relax with explicit\noperator opt-in.\n\nWhen an operator runs\
+      \ a Workflow C goal_packet in v1.14.4, the\nengine raises `NotImplementedError`\
+      \ with a clear message naming\nv1.15.0 as the engine ship target and pointing\
+      \ at\n`docs/workflows/workflow-c-autonomous.md`.\n\n**Files in scope:**\n\n\
+      - `consensus_mcp/config.py`: `WORKFLOW_AUTONOMOUS_EXECUTE` constant +\n  alias\
+      \ map (A/B/C primary; numeric deprecated) + 3-AI requirement\n  validator +\
+      \ DeprecationWarning emission for numeric aliases.\n- `consensus_mcp/validators/scope_check.py`:\
+      \ new\n  `validate_autonomy_contract` + `check_autonomy_scope` functions\n \
+      \ (approve/park/halt decisions); `DEFAULT_HALT_ON` constant lists\n  the wide-by-default\
+      \ halt conditions; `AUTONOMY_CONTRACT_REQUIRED_FIELDS`\n  documents required\
+      \ schema.\n- `consensus_mcp/workflow_engine.py`: recognizes\n  `WORKFLOW_AUTONOMOUS_EXECUTE`;\
+      \ raises `NotImplementedError` with\n  v1.15.0 reference.\n- `consensus_mcp/_init_wizard.py`:\
+      \ workflow prompt accepts letter\n  aliases (A/B/C); resolves to canonical semantic\
+      \ string before\n  storing.\n- `consensus_mcp/tests/test_config.py`: 11 new\
+      \ tests covering alias\n  rename, deprecation warning, 3-AI requirement, and\
+      \ Workflow C\n  validation.\n- `consensus_mcp/tests/test_scope_check_autonomy.py`\
+      \ (NEW): 17 tests\n  covering autonomy_contract validation + check_autonomy_scope\n\
+      \  decision logic + glob matching edge cases.\n- `consensus_mcp/dispatch_templates/codex_proposal_template.md`,\n\
+      \  `gemini_proposal_template.md`: A/B reference instead of #3/#4.\n- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`:\n\
+      \  new \"Workflow A / B / C in one line each\" section; #3/#4 references\n \
+      \ bumped to A/B throughout.\n- `docs/workflows/workflow-c-autonomous.md` (NEW):\
+      \ operator-facing\n  doc on Workflow C usage (autonomy_contract example, halt\
+      \ set table,\n  scope-check decisions, interrupt mechanism, audit log location,\n\
+      \  v1.15.0 status note).\n\n**Test summary:**\n\n- 675 tests pass (full suite\
+      \ excluding pre-existing\n  `test_dispatch_codex.py` ordering flake and `jsonschema`-missing\n\
+      \  environmental issue in the proposal-mode tests; both predate this\n  release\
+      \ per `docs/known-issues/pytest-ordering-flake.md`).\n- New: 11 in `test_config.py`\
+      \ for alias + Workflow C; 17 in\n  `test_scope_check_autonomy.py` for the validator\
+      \ and decision\n  logic.\n\n**Named blockers for deferred work:**\n\n- v1.15.0\
+      \ — Workflow C multi-iteration auto-execution loop:\n  requires cross-platform\
+      \ interrupt-file watching validation\n  (Windows ReadDirectoryChangesW vs Unix\
+      \ select/poll), integration\n  tests with real peer dispatches (cost: dispatcher\
+      \ latency × N\n  iterations per test run), resume-after-halt semantics design,\n\
+      \  autonomy-ledger replay for failure recovery. Multi-session work.\n- v1.16.0+\
+      \ — project-level `.consensus/autonomous-policy.yaml` as\n  default with goal_packet\
+      \ override: deferred until empirical\n  evidence operators want it across multiple\
+      \ Workflow C runs (we\n  have zero runs today; designing for hypothetical reuse\
+      \ is\n  premature per the no-deferral rule's \"real blocker\" requirement).\n\
+      - iter-0044 (adapter `--mode` forwarding fix) deferred to v1.14.5\n  with named\
+      \ blocker (still requires adapter-boundary test\n  infrastructure).\n\n## 1.14.3\
+      \ - 2026-05-14\n\nStabilization hot-patch from iter-audit-2026-05-14-three-followup-gaps\n\
+      (workflow #4 weighted-synthesis convergence; codex + gemini + claude;\nno blocking\
+      \ objections). Bundles all converged scope into one tag per\nthe no-deferral\
+      \ doctrine (operator directive: \"consensus runs to\ncompletion when goals +\
+      \ acceptance gates are clear\").\n\n**Doctrine: consensus runs to completion\
+      \ (no gratuitous deferral).**\n\nNew bundled-skill section \"Consensus runs\
+      \ to COMPLETION\" + dispatch-\ntemplate completion mandate codify the rule:\
+      \ deferring well-defined\nwork to \"future iterations\" without naming a specific\
+      \ blocker is an\nanti-pattern. Includes the completion test (acceptance gates\
+      \ concrete?\nopen design surface? implementation cost small enough?) and explicit\n\
+      anti-patterns (\"iter-XXXX candidate\" with no blocker, \"Phase B\" when\nphases\
+      \ share a doctrine boundary, splitting hot-patches across tags\nwhen fixes share\
+      \ a single failure mode).\n\n**Doctrine in the data layer (Q1 — config.py):**\n\
+      \n- `DISPOSITION_WEIGHTED_SYNTHESIS = \"weighted-synthesis\"` constant\n  added\
+      \ to `consensus_mcp/config.py`.\n- `VALID_DISPOSITION` now includes the new\
+      \ value.\n- `VALID_DISPOSITION_FOR_PROPOSE_CONVERGE = {all-or-nothing,\n  weighted-synthesis}`\
+      \ — workflow #4 accepts these two only;\n  `per-finding` stays post-review-only\
+      \ (its semantics fit defect\n  lists, not plan synthesis).\n- `default_config()`\
+      \ workflow #4 default flips from `all-or-nothing`\n  to `weighted-synthesis`\
+      \ (matches the iter-0043 doctrine).\n- Validator at `config.py:303-309` updated\
+      \ to allow either valid\n  workflow #4 disposition; rejects `per-finding` with\
+      \ actionable\n  error message.\n- `_init_wizard.py` defaults updated: workflow\
+      \ #4 setup now lands\n  in `weighted-synthesis` by default; workflow #3 / advisory\
+      \ keep\n  `all-or-nothing` as their default.\n- 4 new tests in `test_config.py`\
+      \ cover both valid dispositions for\n  workflow #4 + reject `per-finding` with\
+      \ regex-matched message.\n  Pre-existing `test_default_disposition_all_or_nothing`\
+      \ renamed\n  to `test_default_disposition_weighted_synthesis` and updated.\n\
+      - All 107 tests in `test_config.py` + `test_init_wizard.py` pass.\n\n**Procedural\
+      \ enforcement of disconfirming-evidence pattern (Q2):**\n\n- Bundled skill:\
+      \ completion mandate in templates + skill (also\n  lands the no-deferral rule\
+      \ above as the structural sibling).\n- Dispatch templates (`codex_proposal_template.md`,\n\
+      \  `gemini_proposal_template.md`): completion mandate preamble so\n  peer AIs\
+      \ default to in-scope completion, not deferral.\n\n**Stale-tag mitigation (Q3):**\n\
+      \n- `README.md` install URLs bumped from `@v1.14.0` to `@v1.14.3`\n  (both pipx\
+      \ and pip-in-venv examples). Stops the bleeding wound\n  where new installs\
+      \ were getting the v1.14.0 buggy bundled skill.\n- `docs/advisories.md` NEW\
+      \ — standing channel for \"shipped artifact\n  has known doctrine drift\" notices.\
+      \ First entry covers v1.14.0\n  and v1.14.1 with explicit upgrade instructions\
+      \ (`pipx install\n  --force` + re-run `consensus init --install-claude-code`).\n\
+      - Bundled skill cut sequence (steps 8 + 10) gains explicit \"bump\n  README\
+      \ install URL on the new dev branch\" + \"add advisory entry\n  if applicable\"\
+      \ steps so this drift cannot recur structurally.\n\niter-0044 (adapter `--mode`\
+      \ forwarding fix per iter-0043 converged\nplan) deferred to v1.14.4 with named\
+      \ blocker: still requires test\ninfrastructure setup for adapter-boundary fixtures\
+      \ that does not\nfit in this hot-patch's scope.\n\n## 1.14.2 - 2026-05-14\n\n\
+      ## 1.14.2 - 2026-05-14\n\nDoctrine hot-patch from iter-audit-2026-05-14-pypi-invention\n\
+      (workflow #4 postmortem consult; weighted-synthesis convergence\nacross claude\
+      \ + codex + gemini, no blocking objections).\n\nThe audit examined two compounding\
+      \ errors observed in the v1.14.0\nrelease cycle: (1) inventing a \"publish to\
+      \ PyPI\" step in the cut\nsequence based on the inference \"Python project +\
+      \ pipx → PyPI\"\nwithout verifying the actual install URL form (the package\
+      \ is\nnot registered on PyPI; ships via git tags), and (2) gluing two\ncorrect\
+      \ statements (\"v1.14.0 tag is on origin\" + \"git tags are\nthe only channel\"\
+      ) into a misleading composite (\"v1.14.0 is\nfully shipped via the only channel\
+      \ that exists\") that masked\nthe artifact defect (the v1.14.0 tag at commit\
+      \ 8e0dab2 still\nships the buggy skill in its wheel).\n\nThree orthogonal failure\
+      \ modes converged: verification gap +\ndefaulting bias + sloppy framing. Layered\
+      \ defenses applied:\n\n- **Bundled skill: \"Verify before invent\"** section\
+      \ requires\n  positive citation of the source for any step touching an\n  external\
+      \ system / channel. Disconfirming evidence (missing\n  creds, missing workflow,\
+      \ registry 404) is treated as the\n  SIGNAL, not as a credential gap to fill.\n\
+      - **Bundled skill: \"Artifact-scoped claims\"** section forbids\n  global \"\
+      fixed\" / \"shipped\" claims when the surface is broader\n  than what was changed.\
+      \ Required form names version + commit/\n  tag + install path + bundled content\
+      \ + residual defects;\n  immutable tag and dev branch are NOT the same artifact.\n\
+      - **Dispatch templates** (codex_proposal_template,\n  gemini_proposal_template)\
+      \ gain a verification-first mandate\n  preamble so all peer AIs in future consults\
+      \ apply the rule,\n  not just claude.\n- **Project-local memories** (gitignored,\
+      \ claude-personal):\n  feedback_verify_before_invent, feedback_partial_fix_surfacing,\n\
+      \  feedback_disconfirming_evidence (names the\n  bias-rationalizes-evidence\
+      \ pattern explicitly), and\n  reference_default_priors_to_distrust (enumerated\
+      \ list of\n  high-risk inferences: PyPI/npm/Docker/MIT/pytest/etc.,\n  append-only).\n\
+      \nNo code changes; doctrine-only. Scope unchanged for v1.14.3\n(iter-0044 adapter\
+      \ `--mode` forwarding fix per iter-0043\nconverged plan).\n\n## 1.14.1 - 2026-05-14\n\
+      \n## 1.14.1 - 2026-05-14\n\nHot-patch: corrects the bundled `consensus-workflow`\
+      \ skill so it\nno longer documents a PyPI publish step in the release cut\n\
+      sequence. consensus-mcp ships via git tags + pipx (`pipx install\ngit+https://github.com/.../@vX.Y.Z`);\
+      \ the package is not\nregistered on PyPI. The v1.14.0 skill incorrectly added\
+      \ a PyPI\nstep that does not match the project's actual distribution model;\n\
+      v1.14.1 removes it and adds an explicit \"if you catch yourself\nproposing PyPI,\
+      \ stop\" warning so future sessions don't repeat\nthe mistake.\n\niter-0044\
+      \ (adapter `--mode` forwarding fix per iter-0043 converged\nplan) is open scope\
+      \ on v1.14.2 — not in this hot-patch.\n\n## 1.14.0 - 2026-05-14\n\nMulti-AI\
+      \ contributor pool, blind-first-reveal workflow #4, configurable\ngovernance,\
+      \ snapshot/restore, Claude Code bootstrap pack, bundled\noperating-procedure\
+      \ skill, and codified operator-directive defaults\n(parallelism, weighted-synthesis\
+      \ convergence, Friday release cadence).\nAdds gemini-cli as a third peer alongside\
+      \ codex-cli; introduces a\nworkflow engine that orchestrates N contributors\
+      \ per project-chosen\nrules; ships an interactive `consensus init` wizard for\
+      \ operator-\nconfigurable workflow/independence/convergence/disposition/snapshot/\n\
+      patch-authoring/timeout dimensions.\n\n**Claude Code integration + skill bundling\
+      \ (iter-0040, iter-0041):**\n\n- `consensus init --install-claude-code` standalone\
+      \ global op installs\n  the Claude Code bootstrap pack (skill + slash command)\
+      \ for any\n  Claude Code project that uses consensus-mcp.\n- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`\n\
+      \  ships in the wheel: load-bearing operating procedures (workflow\n  selection,\
+      \ dispatch, gemini 429 handling, codex auth, iteration-\n  state persistence,\
+      \ peer-cited content verification, peer-review\n  thresholds, \"consensus\"\
+      \ trigger word) automatically present in\n  every project that runs the bootstrap\
+      \ pack.\n\n**Operator-directive defaults codified (iter-0043):**\n\n- Maximize\
+      \ parallelism — always. Default to parallel; serial is the\n  choice that needs\
+      \ justification. Applies to round-1 peer dispatch,\n  round-2+ batches, multi-file\
+      \ investigation, background long-running\n  ops, and cross-iteration parallelism.\n\
+      - Weighted-synthesis convergence as default. All ideas of all\n  proposals weighed\
+      \ for benefit to the project as a whole. No good\n  ideas lost; no babies tossed\
+      \ with bathwater. `all-or-nothing`\n  finding-disposition is now edge-case opt-in\
+      \ only (binary scope\n  decisions, safety gates, compliance verdicts). Engine-level\n\
+      \  follow-up flagged: `config.py:295-308` still enforces all-or-\n  nothing\
+      \ for workflow #4 — separate iteration will lift that\n  constraint so the data\
+      \ layer matches doctrine.\n- Friday release-cadence rule. Cut a release tag\
+      \ every Friday if at\n  least one iteration closed that week. Release-cut is\
+      \ a procedure\n  with a trigger, not an ad-hoc decision. 10-step cut sequence\n\
+      \  documented in skill (CHANGELOG date stamp, version verify, test\n  suite,\
+      \ tag, build, smoke, publish, push, branch next). This\n  release is the first\
+      \ cut under the new cadence rule and clears\n  3 days of accumulated work (iter-0009..iter-0043).\n\
+      \n**Known issue carried forward:**\n\n- 5 tests in `consensus_mcp/tests/test_dispatch_codex.py`\
+      \ flake when\n  the full pytest suite runs (pass in isolation). Documented in\n\
+      \  `docs/known-issues/pytest-ordering-flake.md`. Predates v1.13.0;\n  not a\
+      \ v1.14.0 regression. Tracked for a future fix iteration.\n\n**New contributors\
+      \ + dispatch (iter-0009 through iter-0011):**\n\n- `_dispatch_base.py` extracted\
+      \ shared dispatcher helpers (`_resolve_repo_root`,\n  `_load_goal_packet`, `_build_prompt`,\
+      \ `_terminate_process_tree`,\n  `_compute_per_patch_base_sha`, `_validate_patch_proposal`,\n\
+      \  `_build_sealed_packet`, `_seal_via_t6`, `_log_dispatch`).\n- `_dispatch_gemini.py`\
+      \ wraps `gemini -p '<JSON directive>' -m <model>\n  --approval-mode plan --skip-trust`\
+      \ with validator-retry semantics.\n- `reviewer_dispatch_gemini` MCP tool surfaces\
+      \ the gemini adapter in the\n  pool.\n- Reader threads start before stdin write\
+      \ to avoid the codex-rev-001\n  deadlock pattern.\n- Codex stall-silence threshold\
+      \ now overridable via\n  `CONSENSUS_MCP_STALL_SILENCE_SECONDS` env var (default\
+      \ 180s, was 45s).\n- `reviewer_dispatch_codex` MCP wrapper catches `argparse.SystemExit`\
+      \ so\n  bad CLI args surface as MCP errors instead of hangs.\n\n**Snapshot/restore\
+      \ + parent history (iter-0012 through iter-0014):**\n\n- Orphan git branch `consensus-state-snapshots`\
+      \ stores point-in-time\n  snapshots of the gitignored `consensus-state/active/`\
+      \ tree, providing a\n  recovery path against `git clean -fdX` accidents.\n-\
+      \ `_snapshot_state.py` exposes `snapshot`, `list`, `restore`, `diff`\n  subcommands;\
+      \ ISO-timestamped `snapshot-<TS>-<label>` tags;\n  `^[A-Za-z0-9_-]{1,64}$` label\
+      \ regex; path-traversal validation; tag\n  uniqueness with retry-suffix; temp-worktree\
+      \ extraction + filesystem\n  copy on restore (no risky `git checkout`).\n- `_import_parent_history.py`\
+      \ performs a one-time mirror of the parent\n  agent-loop project's iter-0000..0042\
+      \ (41 directories, 53 review passes)\n  into `consensus-state/archive/imported-from-parent/`\
+      \ with byte-for-byte\n  idempotency checks.\n- Integration tests cover restore-after-dirty-state,\
+      \ restore-into-detached-\n  HEAD, and concurrent-snapshot race handling.\n\n\
+      **Configurable governance + workflow engine (iter-0015 through iter-0016d):**\n\
+      \nPer iter-0015 converged design (the canonical workflow #4 reference run\n\
+      across claude/codex/gemini), v1.14.0 introduces 9 operator-configurable\ndimensions\
+      \ surfaced through `.consensus/config.yaml`:\n\n- `workflow.mode`: `post-review`\
+      \ (#3), `propose-converge` (#4), `advisory`\n- `workflow.independence`: `blind-first-reveal`,\
+      \ `visible`, `sequential`\n- `convergence.rule`: `unanimous`, `strict-majority`,\
+      \ `inclusive-majority`,\n  `advisory`\n- `convergence.finding_disposition`:\
+      \ `all-or-nothing`, `per-finding`\n- `snapshots.trigger`: `manual-only`, `on-iteration-close`,\
+      \ `periodic`\n- `snapshots.periodic.every_iterations`: integer cadence\n- `patches.authoring`:\
+      \ `claude-only`, `any-contributor`, `none`\n- `workflow.timeout_policy`: `treat-as-no-vote`,\
+      \ `treat-as-blocking`,\n  `shrink-quorum`\n- `contributors.enabled`: ordered\
+      \ list (claude orchestrator always present;\n  codex/gemini optional)\n\nComponents\
+      \ shipped:\n\n- `config.py` — schema constants, defaults, normalize, validate,\
+      \ load,\n  effective-config sha256, legacy-mode synthesis. Cross-validation\n\
+      \  enforces (e.g.) workflow #4 with N≥2 contributors, strict-majority\n  with\
+      \ N≥2, manual-only snapshots requiring null cadence.\n- `contributors/` package\
+      \ — `ContributorAdapter` ABC + `DispatchPacket`,\n  `SealedArtifact`, phase\
+      \ constants. Concrete `ClaudeAdapter` (in-process\n  orchestrator self), `CodexAdapter`\
+      \ (subprocess wrapper),\n  `GeminiAdapter` (subprocess wrapper). All seal via\
+      \ T6 with confinement\n  checks. Fake adapters (`FakeAlwaysApprove`/`FakeAlwaysBlock`/\n\
+      \  `FakeRaisesDispatchError`) for hermetic tests.\n- `workflow_engine.py` —\
+      \ `WorkflowEngine.run_iteration()` routes per\n  `workflow.mode` to one of three\
+      \ runners. Workflow #3 dispatches non-\n  claude contributors as post-review\
+      \ reviewers. Workflow #4 runs blind-\n  proposal phase then reveal-and-converge\
+      \ rounds with all contributors\n  seeing the full set of prior round artifacts.\
+      \ Convergence evaluation\n  applies the rule across responsive contributors,\
+      \ mapped to config\n  contributor keys (not adapter names). Timeout policies\
+      \ adjust the\n  effective denominator and block-vote set.\n- `_init_wizard.py`\
+      \ — `consensus init` CLI. Interactive (default) +\n  `--non-interactive` + `--accept-defaults`\
+      \ + `--reconfigure` + `--check`\n  + `--print-defaults` + `--dry-run` + `--force`\
+      \ + `--config <path>` +\n  `--no-update-gitignore`. Exit codes 0/1/2/3/4 per\
+      \ converged-plan\n  Section A. Atomic temp+rename writes. `.gitignore` managed-block\
+      \ with\n  bracketed markers (`# >>> consensus-mcp managed <<<` /\n  `# <<< consensus-mcp\
+      \ managed >>>`), idempotent across reruns even with\n  malformed (orphan, reversed,\
+      \ nested) user-supplied markers — orphan\n  markers are preserved untouched.\
+      \ Repo-root detection walks upward for\n  `.git`.\n\n**Packaging (iter-0017):**\n\
+      \n- `[tool.setuptools].packages` includes `consensus_mcp.contributors`.\n- `[project.scripts]`\
+      \ adds `consensus-init` and\n  `consensus-mcp-dispatch-gemini` alongside existing\
+      \ entries.\n\n**Workflow + provenance discipline:**\n\nEvery non-trivial change\
+      \ shipped on v1.14.0 went through workflow #3 with\ncodex + gemini reviewing\
+      \ in parallel. iter-0015 was the canonical\nworkflow #4 design consult (blind\
+      \ proposals from claude + codex + gemini,\nthen convergence rounds). iter-0016d\
+      \ converged after 6 review rounds\n(both reviewers goal_satisfied=true, zero\
+      \ findings). iter-0017 converged\non first pass.\n\n**Test isolation (iter-0019):**\n\
+      \n- The 5 long-standing test_dispatch_codex.py full-suite failures are\n  fixed.\
+      \ Root cause: `review_write_and_seal.py` and `audit_append_event.py`\n  cache\
+      \ `REPO_ROOT` / `ARCHIVE_DIR` / `INDEX_PATH` / `ACTIVE_DIR` at module\n  import\
+      \ time, so `monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\", str(tmp_path))`\n\
+      \  in tests had no effect — sealed packets landed in the real archive index,\n\
+      \  polluting subsequent test runs. iter-0019 adds an `_isolate_archive_root`\n\
+      \  test helper that monkeypatches the cached module attributes directly, so\n\
+      \  every dispatch test now seals into a tmp_path-isolated archive. Full\n  suite:\
+      \ 658 pass + 1 skipped + 0 fail under any ordering.\n\n**Lazy path resolution\
+      \ (iter-0024 design consult → iter-0025 Phase A\n→ iter-0026 first per-tool\
+      \ migration):**\n\n- iter-0024 ran the workflow #4 consult on whether to refactor\
+      \ the\n  module-level `REPO_ROOT` caches into lazy resolvers. Converged on\n\
+      \  SHIP-PHASED: introduce `_paths.py` first (Phase A), then migrate\n  tools\
+      \ one at a time (Phase B).\n- iter-0025 (Phase A): introduced `consensus_mcp/_paths.py`\
+      \ with 9\n  lazy-resolver functions (`repo_root`, `state_root`, `project_root`,\n\
+      \  `spec_path`, `archive_dir`, `index_path`, `active_dir`,\n  `audit_log_path`,\
+      \ `dispatch_log_path`). Each reads env state on\n  every call. Backward compatible\
+      \ — no existing tool touched.\n- iter-0026 (Phase B step 1): migrated `state_read_decision_ledger`\n\
+      \  to use `_paths.state_root()`. First test coverage for that tool\n  (5 new\
+      \ tests including the lazy-resolution regression demo).\n- iter-0034 (Phase\
+      \ B step 2): migrated `repo_get_section` to\n  `_paths.project_root()`. Removed\
+      \ local `_resolve_repo_root`.\n- iter-0035 (Phase B steps 3-8): batched 6 LOW-impact\
+      \ tools onto\n  the lazy resolvers in one commit — `repo_set_section`,\n  `state_update_decision_ledger`,\
+      \ `patch_stage_and_dry_run`,\n  `patch_apply_consensus_patch`,\n  `gate_evaluate_production_with_scope_match`,\
+      \ `review_read_post_seal`.\n  PEP 562 `__getattr__` hooks added per-tool for\
+      \ external\n  `module.REPO_ROOT` back-compat.\n- iter-0036 (Phase B step 9,\
+      \ HIGH-impact audit-trail tool): migrated\n  `audit_append_event` from cached\
+      \ `REPO_ROOT/ACTIVE_DIR` to lazy\n  `project_root()`/`active_dir()`. Cleaned\
+      \ up 3 closure_invariant\n  tests that used unsafe `monkeypatch.setattr(audit_append_event,\n\
+      \  \"ACTIVE_DIR\", tmp_path)` — pytest's monkeypatch captures the\n  `__getattr__`-synthesized\
+      \ value at setattr time and restores it\n  into `__dict__` at teardown, permanently\
+      \ poisoning subsequent\n  tests. Switched to `monkeypatch.setenv(\"CONSENSUS_MCP_STATE_ROOT\"\
+      ,\n  ...)` matching the iter_0018 pattern.\n- iter-0037 (Phase B step 10, final\
+      \ + HIGHEST-impact seal-pipeline\n  tool): migrated `review_write_and_seal`\
+      \ from cached\n  `REPO_ROOT/ARCHIVE_DIR/INDEX_PATH` plus the in-handle\n  `from\
+      \ consensus_mcp.tools.audit_append_event import ACTIVE_DIR`\n  capture to lazy\
+      \ `project_root()`/`archive_dir()`/`index_path()`/\n  `active_dir()` resolvers.\
+      \ `_isolate_archive_root` test helper in\n  `test_dispatch_codex.py` simplified\
+      \ — only `monkeypatch.setenv(\n  \"CONSENSUS_MCP_REPO_ROOT\", ...)` remains;\
+      \ the previously-required\n  5 `setattr` calls (now unsafe against `__getattr__`\
+      \ attributes)\n  are gone.\n\n**Claude Code bootstrap pack (iter-0039 design\
+      \ → iter-0040 implementation):**\n\n- iter-0039 ran a workflow #4 consult (claude\
+      \ + codex + gemini, all\n  proposal-mode, strict-majority convergence) on the\
+      \ discoverability\n  gap reported by the operator after iter-0033: in a fresh\
+      \ project,\n  typing \"consensus init\" into Claude Code chat returned \"I don't\n\
+      \  recognize this command\" because the pipx install registers a\n  shell binary\
+      \ (`consensus-init`) not a Claude Code surface. All\n  three contributors converged\
+      \ on shipping a Claude-Code-native entry\n  point that wraps the existing shell\
+      \ binary.\n- iter-0040 implemented the converged plan. New shipped assets:\n\
+      \  - `consensus_mcp/claude_extensions/skills/consensus/SKILL.md`\n    triggers\
+      \ on \"consensus init\", \"bootstrap consensus\", \"set up\n    consensus\"\
+      \ and runs the shell binary via Bash.\n  - `consensus_mcp/claude_extensions/commands/consensus-init.md`\n\
+      \    gives explicit `/consensus-init` slash-command discoverability.\n- New\
+      \ `consensus-init --install-claude-code` flag copies both into\n  `$CLAUDE_HOME`\
+      \ (default `~/.claude`) using a managed idempotent\n  pattern: byte-identical\
+      \ = no-op; divergent = skip-with-warning;\n  `--force` overwrites. Honors `CLAUDE_HOME`\
+      \ env override for\n  non-default installs (CI, devcontainers, multi-user systems).\n\
+      - New `consensus-init --from-claude-code` flag prints contextual\n  reload guidance\
+      \ after a successful init (\"restart Claude Code or\n  run `/mcp` to activate\
+      \ the consensus-mcp server\"). Used by both\n  the skill and slash command bodies;\
+      \ deterministic so we don't\n  rely on env-var sniffing (codex's preferred convergence\n\
+      \  resolution per iter-0039 Q4).\n- Bonus from iter-0039 Q6: added `consensus`\
+      \ console-script alias\n  to pyproject.toml so `consensus init` (with a SPACE)\
+      \ at the\n  shell works alongside the hyphenated `consensus-init`. The\n  `init`\
+      \ subcommand is stripped from argv[0] inside `main()`;\n  everything else flows\
+      \ through the same argparse setup.\n- Side-effect hot-fix landed in the same\
+      \ release: the proposal-mode\n  validation path in `_dispatch_codex.py` / `_dispatch_gemini.py`\n\
+      \  did `try: import jsonschema; ...; except jsonschema.ValidationError`\n  —\
+      \ when the import failed (because `jsonschema` wasn't a declared\n  dep), the\
+      \ except clause's reference to `jsonschema.ValidationError`\n  surfaced as `UnboundLocalError`,\
+      \ masking the real problem and\n  blocking iter-0039 from running in the pipx\
+      \ venv. Added\n  `jsonschema>=4.0` to deps + split the try/except so `ImportError`\n\
+      \  surfaces with actionable wording. (workflow #3 hot-patch because\n  it blocked\
+      \ iter-0039 progress.)\n\n**Phase B closed.** All 10 tool migrations landed\
+      \ (iter-0026..0037).\nNo tool now holds a cached module-level `REPO_ROOT`/`ACTIVE_DIR`/\n\
+      `ARCHIVE_DIR`/`INDEX_PATH`/etc. — every path read is lazy and honors\nenv-var\
+      \ redirection at call time. Suite green at 773 passed,\n1 skipped. The cross-project\
+      \ pipx install pattern from iter-0030\nnow works in any project: `pipx install\
+      \ consensus-mcp` once, then\n`consensus-init` in any project writes a working\
+      \ `.mcp.json` and\nthe lazy resolvers pick up the per-project state root automatically.\n\
+      \n**Codex proposal mode (iter-0027 → iter-0028):**\n\n- iter-0021 and iter-0024\
+      \ design consults discovered that codex\n  structurally-abstained on every workflow\
+      \ #4 dispatch because the\n  codex review template is hard-coded for code-review\
+      \ tasks: codex\n  kept returning \"missing review target\" errors instead of\
+      \ engaging\n  with design questions. Documented as \"structural-abstention\"\
+      \ in\n  prior converged plans.\n- iter-0027 ran the workflow #4 consult on what\
+      \ to do about it.\n  Claude and gemini independently picked \"fix codex template\
+      \ friction\"\n  as the highest-leverage move. Codex itself structurally-abstained\n\
+      \  on this very consult (proving the problem).\n- iter-0028 shipped `--mode\
+      \ {review,proposal}` on both codex and\n  gemini dispatchers. New `codex_proposal_template.md`\
+      \ and\n  `codex_proposal_schema.json` (plus gemini equivalents) frame the\n\
+      \  task as proposal generation, not code review. Proposal schema\n  enforces\
+      \ `selected_target`, `rationale_vs_alternatives`,\n  `deliverable_scope`, `risks`,\
+      \ `estimated_complexity`,\n  `structural_abstention`. The seal pipeline detects\
+      \ proposal-shape\n  payloads and embeds them under a top-level `proposal` block\
+      \ in the\n  sealed YAML while keeping outer review-shape fields valid (empty\n\
+      \  findings, computed goal_satisfied) for audit-event compatibility.\n- iter-0029:\
+      \ smoke test of proposal mode on a synthetic design\n  question — codex returned\
+      \ a proper proposal-shape sealed YAML.\n- iter-0030: **first real workflow #4\
+      \ consult where codex engaged\n  substantively as a peer.** The meta-arc iter-0021\
+      \ → iter-0024 →\n  iter-0027 → iter-0028 → iter-0030 closed: the project that\
+      \ proves\n  cross-AI consensus works now genuinely produces three-AI consensus\n\
+      \  on its own design questions (gemini env-abstaining due to upstream\n  capacity\
+      \ issues notwithstanding).\n\n**`consensus-init` auto-bootstraps `.mcp.json`\
+      \ (iter-0030 design →\niter-0031 implementation):**\n\n- iter-0030 converged\
+      \ on extending `consensus-init` to write\n  `.mcp.json` automatically. Two substantive\
+      \ votes (claude + codex)\n  agreed on merge-mode for existing files + opt-out\
+      \ flag +\n  marker-based project-root detection + PATH-portable command\n  discovery\
+      \ + byte-for-byte idempotency.\n- iter-0031 implemented the converged design.\
+      \ New flags: `--no-mcp-json`\n  (opt out), `--mcp-command STR` (override), `--mcp-force`\
+      \ (replace\n  existing consensus-mcp entry on divergence). Merge mode preserves\n\
+      \  other MCP servers; conflict detection skip+warns instead of\n  clobbering;\
+      \ malformed JSON skip+warns instead of mutating.\n- `_detect_repo_root` extended\
+      \ from `.git`-only to marker-based:\n  `git rev-parse --show-toplevel` → strong\
+      \ markers (.git,\n  pyproject.toml, package.json, CLAUDE.md, .mcp.json, consensus-state)\n\
+      \  → cwd fallback.\n- Operator UX is now one command: `pipx install consensus-mcp`,\
+      \ then\n  `cd <any-project>; consensus-init`. The wizard writes\n  `.consensus/config.yaml`\
+      \ + `.gitignore` managed block + `.mcp.json`\n  (with correct PATH-portable\
+      \ command + per-project env vars).\n\n**Defaulting to workflow #4 for design\
+      \ questions** (operator policy\ncorrection mid-v1.14.0):\n\nThe original heuristic\
+      \ \"workflow #3 for execution; workflow #4 for\nexplicit design questions\"\
+      \ was systematically biased toward #3\nbecause of cost asymmetry. Corrected\
+      \ mid-cycle: default to workflow\n#4 for any decision with real design surface;\
+      \ require an explicit\nreason to fall back to #3. iter-0027 onward applies this\
+      \ rule. Saved\nto operator memory as\n[[feedback-default-workflow-4-for-design]].\n\
+      \n**Operator memories saved during v1.14.0 cycle:**\n\n- `feedback_no_phantom_proceed.md`\
+      \ — never end a turn with \"proceeding\n  with X\" unless the tool call is in\
+      \ the same turn\n- `feedback_gemini_429_skip.md` — priority-tiered handling\
+      \ of upstream\n  Gemini 429 errors: low-priority iterations skip gemini on first\n\
+      \  failure; high-priority iterations allow one retry\n\n**Deferred to a follow-up\
+      \ iteration:**\n\n- 20 stale `iter-9999-*` fixture entries remain in\n  `consensus-state/archive/review-passes/index.yaml`.\
+      \ Cosmetic only;\n  separate cleanup iteration if desired.\n- Phase C cleanup\
+      \ of `_isolate_archive_root`-style fixtures that are\n  now no-ops or simplifiable;\
+      \ the test helpers still work but most of\n  the `monkeypatch.setattr` calls\
+      \ inside them became redundant once\n  Phase B finished. Pure refactor, no behavior\
+      \ change.\n\n## 1.13.0 - 2026-05-12\n\nMulti-project resolution: consensus-mcp\
+      \ now boots in any project without a\nlocal checkout. The frozen wheel ships\
+      \ a spec template, and state auto-\ninitializes in CWD.\n\n**Changes (per iter-0007\
+      \ codex consult, sealed packet 39f8b7a8b...):**\n\n- New resolvers in `server.py`\
+      \ split the legacy `REPO_ROOT` into three\n  concerns: `_resolve_spec_path`\
+      \ (spec source), `_resolve_state_root`\n  (`consensus-state/` location), `_resolve_project_root`\
+      \ (reviewable-file\n  root for goal_packet `allowed_files`).\n- Resolution order\
+      \ for each:\n  - Spec: `CONSENSUS_MCP_SPEC_PATH` > legacy `CONSENSUS_MCP_REPO_ROOT`\
+      \ >\n    walked-up checkout > shipped `consensus_mcp/spec_template.md`\n  -\
+      \ State: `CONSENSUS_MCP_STATE_ROOT` > legacy `CONSENSUS_MCP_REPO_ROOT` >\n \
+      \   `Path.cwd() / \"consensus-state\"`\n  - Project: `CONSENSUS_MCP_PROJECT_ROOT`\
+      \ > legacy `CONSENSUS_MCP_REPO_ROOT`\n    > `Path.cwd()`\n- `consensus_mcp/spec_template.md`\
+      \ shipped in the wheel (added to\n  `pyproject.toml [tool.setuptools.package-data]`).\
+      \ Frozen-wheel users get a\n  bootable spec without cloning.\n- `_resolve_repo_root`\
+      \ kept for back-compat; no longer load-bearing for\n  spec/state/project-root\
+      \ in v1.13.0.\n\n**Deferred to v1.14.0** (per codex Q1 scoping):\n\n- Dispatcher\
+      \ auto-discovery of `iteration_dir/review-packet.yaml` when\n  `--review-target`\
+      \ is non-yaml (currently silent-failure, prompt ships\n  without embedded touched-file\
+      \ contents).\n- Cold-start grace period for the watchdog (pre-first-byte vs.\n\
+      \  post-first-byte silence thresholds; 45s is too aggressive for bigger\n  prompts).\n\
+      - Visibility upgrade: dispatch_heartbeat events should expose a `status`\n \
+      \ field (loading / streaming / stalled) for operator clarity.\n\n**Known pre-existing\
+      \ pytest flake** (predates v1.13.0; **fixed in v1.14.0\niter-0019**): 5 tests\
+      \ in `test_dispatch_codex.py` that pass in isolation\nbut fail in the full suite\
+      \ due to test-ordering pollution. Not introduced\nby v1.13.0; tracked separately.\
+      \ See the v1.14.0 \"Test isolation\" section\nabove for the resolution.\n\n\
+      ## 1.12.0 - 2026-05-11\n\nStandalone release. Extracted from upstream-26.4.16\
+      \ source\nproject. See `docs/architecture/codex-fix-author-roadmap.md` for the\
+      \ work\nhistory that led here.\n\nRenames vs the prior internal-only releases\
+      \ (1.0.0 - 1.11.0):\n\n- Python package `agent_loop_mcp` -> `consensus_mcp`\n\
+      - Python package `agent_loop` (validators) -> `consensus_mcp.validators`\n-\
+      \ State directory `agent-loop/` -> `consensus-state/`\n- Env var `AGENT_LOOP_MCP_REPO_ROOT`\
+      \ -> `CONSENSUS_MCP_REPO_ROOT`\n- MCP server name `agent-loop-mcp` -> `consensus-mcp`\n\
+      - Repo-root markers updated to `(\"consensus-state\", \"consensus_mcp\")`\n\
+      - Flat layout (no `scripts/` prefix)\n"
+    docs/advisories.md: "# Advisories\n\nStanding channel for \"shipped artifact has\
+      \ known doctrine drift\"\nnotices. Each advisory names the affected versions,\
+      \ the issue, the\ncorrect version to upgrade to, and any user action required.\n\
+      \nFormat: append-only, newest first. Older advisories may be marked\n**resolved**\
+      \ when no users remain on the affected versions, but\nthe entry stays for the\
+      \ historical record.\n\n---\n\n## Advisory 2026-05-15: gemini dispatch fails\
+      \ on gemini CLI ≥ 0.43.0-preview.0\n\n**RESOLVED in `v1.15.2`** — `_dispatch_gemini.py`\
+      \ now injects\n`GEMINI_CLI_TRUST_WORKSPACE=true` into the gemini subprocess\
+      \ env\n(`_gemini_subprocess_env()`). Users on `v1.15.1` or earlier with\ngemini\
+      \ CLI ≥ 0.43.0-preview.0 must upgrade to `v1.15.2` (or apply\nthe env-var workaround\
+      \ below until they do). Entry retained for the\nhistorical record.\n\n**Affected\
+      \ versions:** all consensus-mcp versions through `v1.15.1`\n(the gemini dispatcher\
+      \ behavior is unchanged across this range).\n\n**Severity:** Functional — gemini\
+      \ peer reviews silently fail to\nseal when the installed `gemini` CLI enforces\
+      \ workspace trust.\ncodex + claude consensus is unaffected; the cross-AI safety\
+      \ net\ndegrades from 3-AI to 2-AI until worked around.\n\n**Issue:**\n- `gemini`\
+      \ CLI `0.43.0-preview.0`+ refuses headless/automated runs\n  in an \"untrusted\"\
+      \ directory, emitting the trust error to stderr\n  and **empty stdout**. `consensus_mcp/_dispatch_gemini.py`\
+      \ does\n  not set `GEMINI_CLI_TRUST_WORKSPACE` (or pass `--skip-trust`),\n \
+      \ so the dispatcher sees empty output and fails with\n  `GeminiOutputParseError`\
+      \ (\"Expecting value: line 1 column 1\").\n- Observed first-hand 2026-05-15\
+      \ during the v1.15.1 Workflow B\n  audit: gemini pass-1 failed twice (initial\
+      \ + dispatcher\n  auto-retry) for exactly this reason.\n\n**Workaround (no upgrade\
+      \ needed):** export\n`GEMINI_CLI_TRUST_WORKSPACE=true` in the environment that\
+      \ runs the\ndispatcher (or the MCP server). The v1.15.1 audit was completed\n\
+      this way; gemini returned clean approvals once the env var was set.\n\n**Correct\
+      \ upgrade target:** none yet — the dispatcher fix is the\nnamed v1.15.2 follow-up\
+      \ (`_dispatch_gemini.py` was in the v1.15.1\niteration's `forbidden_files`,\
+      \ so it was correctly NOT patched\nunder that scope). This advisory is the standing\
+      \ record until\nv1.15.2 ships the dispatcher-level fix.\n\n**Provenance:**\n\
+      - Diagnosed during `iteration-converged-plan-machine-enforcement`\n  (v1.15.1\
+      \ Workflow B audit). Recorded as a v1.15.2 named blocker\n  in that iteration's\
+      \ `fix-response-pass2.md`.\n\n---\n\n## Advisory 2026-05-15: v1.15.0 converged-plan\
+      \ convention is doctrine-only\n\n**Affected versions:** `v1.15.0`\n\n**Severity:**\
+      \ Scope clarification (no regression). The v1.15.0 tag\n`4e81f9e` shipped the\
+      \ converged-plan convention\n(`falsification` / `independent_safeguard` /\n\
+      `decisive_experiment_before_next_iteration`) as an **authoring\nconvention enforced\
+      \ by doctrine only** — bundled skill + Workflow\nB audit, **zero engine code**.\n\
+      \n**Issue:** users on `v1.15.0` may assume the convention is\nmachine-validated.\
+      \ It is not. There is no schema, no validator, no\nseal-time gate on `v1.15.0`.\n\
+      \n**Correct upgrade target:** `v1.15.1` — adds the JSON Schema, the\nstructure/consequence\
+      \ validator, the fail-closed seal-time gate,\nthe `convergence.converged_plan_enforcement`\
+      \ knob (default\n`graduated`), and read-time surfacing. Machine enforcement\
+      \ exists\nonly from the `v1.15.1` tag forward.\n\n**Provenance:**\n- `iteration-converged-plan-machine-enforcement`\
+      \ (Workflow A\n  weighted-synthesis: claude + codex + gemini; shared-prior\n\
+      \  self-check PASSED; Workflow B audit clean: gemini ×2, codex\n  pass-4b goal_satisfied=true,\
+      \ 0 blocking, 0 findings).\n\n---\n\n## Advisory 2026-05-14: v1.14.0 + v1.14.1\
+      \ bundled-skill drift\n\n**Affected versions:** `v1.14.0`, `v1.14.1`\n\n**Severity:**\
+      \ Doctrine drift (no functional regression in\nconsensus-mcp itself). Affects\
+      \ the bundled `consensus-workflow`\nSKILL.md content shipped in the wheel and\
+      \ installed by the\nClaude Code bootstrap pack.\n\n**Issue:**\n- `v1.14.0` ships\
+      \ a bundled skill that incorrectly documents a\n  PyPI publish step in the release\
+      \ cut sequence. consensus-mcp\n  is NOT registered on PyPI; releases are git-tag-only\
+      \ via\n  `pipx install git+https://github.com/.../@vX.Y.Z`. The PyPI\n  step\
+      \ in the skill was added in error during the v1.14.0 cut\n  and propagates misleading\
+      \ release-procedure documentation to\n  every project that runs `consensus init\
+      \ --install-claude-code`\n  against this version.\n- `v1.14.1` ships a partially-corrected\
+      \ skill (PyPI step\n  removed) but is missing the \"Verify before invent\" and\n\
+      \  \"Artifact-scoped claims\" doctrine sections that landed in\n  v1.14.2.\n\
+      \n**Correct version:** `v1.14.3` (or any later release).\n\n**User action required:**\
+      \ Upgrade installs that pulled\n`@v1.14.0` or `@v1.14.1`:\n\n```\npipx install\
+      \ --force git+https://github.com/stgarca/consensus-mcp.git@v1.14.3\n```\n\
+      \nIf you have run `consensus init --install-claude-code` against\nv1.14.0 or\
+      \ v1.14.1, re-run it against v1.14.3 to refresh the\nproject-local skill copy\
+      \ (the bootstrap pack copies the bundled\nskill into the project's `.claude/skills/`\
+      \ directory at install\ntime; old installs retain the stale copy).\n\n**Provenance:**\n\
+      - Originating audit: `iter-audit-2026-05-14-pypi-invention`\n  (workflow #4\
+      \ weighted-synthesis convergence; codex + gemini +\n  claude all approved with\
+      \ no blocking objections).\n- Doctrine fix landed: `v1.14.2` tag, commit `12eca6c`.\n\
+      - Follow-up audit: `iter-audit-2026-05-14-three-followup-gaps`\n  shipped this\
+      \ advisory mechanism + README install-URL bump in\n  `v1.14.3`.\n\n---\n"
+schema_version: 1
+iteration_id: iteration-gemini-trust-env-fix
