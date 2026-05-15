@@ -1,0 +1,98 @@
+iteration_id: iteration-seal-archive-collision-fix
+reviewer_id: codex-sealfix-1
+pass_id: codex-sealfix-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Best move is to align archive-path uniqueness with the
+  existing canonical index key. Verified via prompt: review_write_and_seal.py at v1.14.9
+  commit 301bbbb line 244 builds filenames from date_str, iteration_id, reviewer_id;
+  lines 250-251 reject path collisions before index handling; lines 262-271 key index
+  entries on pass_id. Adding pass_id to the filename fixes the root mismatch directly
+  and matches the verified test docstring expectation that filenames contain iteration_id,
+  reviewer_id, and pass_id. It is better than requiring fresh reviewer_ids because
+  that keeps identity overloaded with pass sequence state. It is better than auto-suffixing
+  collisions because suffixes make archives nondeterministic and hide the canonical
+  key. It is better than rewriting old archives because the prompt verifies readers
+  resolve via index full relative path or direct path, so old archives remain readable
+  without migration. It is better than changing the index key to reviewer_id because
+  pass_id is already the canonical uniqueness contract.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: ec5756c6ab13bbdef447ffd99557de4ad9091a87600fed9346d486fa5b3f1f7e
+  output_sha256: b5f2737579e683c33c5a6c2e5c13892c8567ee4a7fc7044a51cc14f0bf14b1d3
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: e070047d571e42931360c1c9ffc71bcafc815e08ef6c38cea8ed7235cd70ac74
+  scope_signature: 5ea1c0111510a14ab0a1144b00b5104face70a075b00b5104faceabba110a14a
+  review_target_path: null
+  review_target_hash: null
+  mode: proposal
+proposal:
+  selected_target: Fix new T6 seal archive filenames by including pass_id as the canonical
+    collision discriminator while preserving reviewer_id for human readability.
+  rationale_vs_alternatives: 'Best move is to align archive-path uniqueness with the
+    existing canonical index key. Verified via prompt: review_write_and_seal.py at
+    v1.14.9 commit 301bbbb line 244 builds filenames from date_str, iteration_id,
+    reviewer_id; lines 250-251 reject path collisions before index handling; lines
+    262-271 key index entries on pass_id. Adding pass_id to the filename fixes the
+    root mismatch directly and matches the verified test docstring expectation that
+    filenames contain iteration_id, reviewer_id, and pass_id. It is better than requiring
+    fresh reviewer_ids because that keeps identity overloaded with pass sequence state.
+    It is better than auto-suffixing collisions because suffixes make archives nondeterministic
+    and hide the canonical key. It is better than rewriting old archives because the
+    prompt verifies readers resolve via index full relative path or direct path, so
+    old archives remain readable without migration. It is better than changing the
+    index key to reviewer_id because pass_id is already the canonical uniqueness contract.'
+  deliverable_scope:
+    next_iteration_id: iteration-seal-archive-filename-pass-id
+    files_in_scope:
+    - consensus_mcp/tools/review_write_and_seal.py
+    - tests/test_contributors.py
+    files_out_of_scope:
+    - existing consensus-state archive packet files
+    - consensus_mcp/tools/review_read_post_seal.py
+    - index.yaml schema changes
+    - release, package, registry, or distribution artifacts
+    key_design_decisions:
+    - New seals use a deterministic filename containing date_str, iteration_id, reviewer_id,
+      and pass_id, with pass_id providing uniqueness for multiple passes by the same
+      reviewer.
+    - Keep reviewer_id in the filename for operator browsing, but stop requiring reviewer_id
+      to encode pass ordinal.
+    - Preserve existing archive files exactly; no migration or deletion of void seals.
+    - Keep index.yaml pass_id semantics and stored relative packet paths unchanged.
+    - Do not make shipped or fixed release claims in this iteration; scope is local
+      source and tests only, with no verified external distribution channel involved.
+    acceptance_gates:
+    - A regression test creates two seals in the same iteration with the same reviewer_id
+      and different pass_id values; both seal successfully and produce different packet
+      paths.
+    - index.yaml contains distinct entries keyed by each pass_id, and each entry points
+      to the correct new packet path.
+    - Updated filename assertions in tests/test_contributors.py require iteration_id,
+      reviewer_id, and pass_id tokens in the new archive filename.
+    - Existing read-by-index and direct-path behavior continues to pass for old archive
+      paths because readers consume stored relative paths rather than reconstructing
+      identity from filenames, as verified in the prompt.
+    - Full relevant local test target for contributor seal/read behavior passes.
+  risks:
+  - Undiscovered tooling outside the verified reader may glob or parse old filename
+    shape; mitigate with a focused rg check before implementation.
+  - pass_id may contain filesystem-hostile or very long characters if existing sanitization
+    is incomplete; reuse the same slugging policy applied to other filename tokens.
+  - Same pass_id plus same reviewer_id reruns still collide on the exact packet path
+    unless idempotent overwrite semantics are separately redesigned; that is outside
+    this small root-cause fix.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T14:43:39Z'
+packet_sha256: 3f61aa0a2ca046ea0eadcfaae0d588884a60c97fbbfe17d480a382288a3bb1f4

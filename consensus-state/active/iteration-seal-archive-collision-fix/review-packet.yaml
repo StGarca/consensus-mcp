@@ -1,0 +1,726 @@
+defect_target:
+  files:
+  - consensus_mcp/tools/review_write_and_seal.py
+  - consensus_mcp/tests/test_seal_collision_fix.py
+  - consensus_mcp/tests/test_contributors.py
+  base_sha: 94cfc2aaa15d4b4913b6c6c044b01195667aaf01bdb0b6872f30b9fcf68cdbc9
+  touched_files_contents:
+    consensus_mcp/tools/review_write_and_seal.py: "\"\"\"review.write_and_seal MCP\
+      \ tool. Phase 1 G1 (sealed-review provenance).\n\nThe only authorized writer\
+      \ for review packets under\nconsensus-state/archive/review-passes/. After Phase\
+      \ 0 sealing, no review may land\nin that directory except through this tool.\n\
+      \nSealing contract:\n  1. Validate required pre-seal fields.\n  2. Compute canonical_yaml_sha256\
+      \ of the packet sans packet_sha256 field\n     (self-hash exception -- the field\
+      \ cannot affect its own hash).\n  3. Insert packet_sha256 into the packet dict.\n\
+      \  4. Compute deterministic file path from inputs + current UTC date.\n  5.\
+      \ Refuse if path already exists (idempotent only at hash level, never\n    \
+      \ overwrites).\n  6. Atomic write (tmp + os.replace) of the sealed packet.\n\
+      \  7. Atomic read-modify-write of index.yaml (append new entry).\n  8. Append\
+      \ review_returned_and_sealed audit event.\n\nCONCURRENCY (v1.0 limitation):\
+      \ This tool is single-writer for both the packet\nfile and index.yaml. Concurrent\
+      \ invocations can race on index.yaml\nread-modify-write -- the audit_log read-modify-write\
+      \ is also non-locked.\nDo not invoke concurrently. Phase 1.x will add per-file\
+      \ filelock.\n\"\"\"\nfrom __future__ import annotations\n\nimport copy\nimport\
+      \ hashlib\nimport os\nfrom datetime import datetime, timezone\nfrom pathlib\
+      \ import Path\n\nimport yaml\n\nfrom consensus_mcp._paths import project_root,\
+      \ archive_dir, index_path, active_dir\n\n# iter-0037 (Phase B step 10 per iter-0024\
+      \ plan, HIGHEST-impact seal-pipeline\n# tool): migrated from cached REPO_ROOT/ARCHIVE_DIR/INDEX_PATH\
+      \ module-level\n# constants to lazy `_paths` resolvers. Tests redirect paths\
+      \ via\n# `monkeypatch.setenv(\"CONSENSUS_MCP_STATE_ROOT\", ...)` /\n# `CONSENSUS_MCP_REPO_ROOT`,\
+      \ NOT `monkeypatch.setattr` on this module —\n# the latter is unsafe against\
+      \ __getattr__-only attributes (pytest captures\n# the lazy-synthesized value\
+      \ at setattr time and restores it into __dict__\n# at teardown, permanently\
+      \ shadowing the resolver for subsequent tests).\n# PEP 562 `__getattr__` retained\
+      \ for external `module.REPO_ROOT` etc.\n# reads.\n\n\ndef __getattr__(name:\
+      \ str):\n    \"\"\"PEP 562 backward compat for external `module.REPO_ROOT` /\n\
+      \    `module.ARCHIVE_DIR` / `module.INDEX_PATH` reads. Internal code should\n\
+      \    call the `_paths` resolvers directly.\"\"\"\n    if name == \"REPO_ROOT\"\
+      :\n        return project_root()\n    if name == \"ARCHIVE_DIR\":\n        return\
+      \ archive_dir()\n    if name == \"INDEX_PATH\":\n        return index_path()\n\
+      \    raise AttributeError(f\"module {__name__!r} has no attribute {name!r}\"\
+      )\n\n# canonical_yaml_sha256 formula (see also: state_read_decision_ledger.py,\
+      \ audit_append_event.py)\n# Double round-trip: yaml.safe_dump -> yaml.safe_load\
+      \ -> yaml.safe_dump ensures\n# any Python-object quirks (ordered vs unordered\
+      \ dicts, aliases) are normalized\n# before hashing. sort_keys=True makes hash\
+      \ order-independent.\ndef _canonical_yaml_sha256(obj) -> str:\n    \"\"\"Canonical\
+      \ SHA-256 of a Python object per spec section 7.\"\"\"\n    canonical = yaml.safe_dump(yaml.safe_load(yaml.safe_dump(obj)),\
+      \ sort_keys=True)\n    return hashlib.sha256(canonical.encode(\"utf-8\")).hexdigest()\n\
+      \n\n# iteration-seal-archive-collision-fix (codex-sealfix-audit-4 HIGH\n# finding):\
+      \ idempotency must NOT depend on packet_sha256, because that\n# hash includes\
+      \ the volatile `sealed_at_utc` stamp. A re-dispatch\n# builds a fresh packet\
+      \ with no sealed_at_utc; Step 3 then stamps a\n# NEW timestamp, so the recomputed\
+      \ packet_sha256 differs from the\n# originally-sealed one even though the substantive\
+      \ content is\n# identical — which used to be misclassified as `index_collision`,\n\
+      # defeating the whole idempotency feature for the primary\n# (dispatch-retry)\
+      \ use case. Idempotency is therefore judged on\n# CONTENT IDENTITY: the canonical\
+      \ hash of the packet with the volatile\n# seal-provenance fields removed.\n\
+      _VOLATILE_SEAL_FIELDS = (\"sealed_at_utc\", \"packet_sha256\")\n\n\ndef _content_identity_sha256(obj)\
+      \ -> str:\n    \"\"\"Canonical hash of a packet mapping with volatile seal-provenance\n\
+      \    fields (`sealed_at_utc`, `packet_sha256`) removed, so two seals of\n  \
+      \  the same substantive content compare equal regardless of seal time\n    or\
+      \ the timestamped self-hash. Non-mapping input returns a sentinel\n    that\
+      \ cannot collide with any real packet's identity (used by the\n    integrity\
+      \ guard to treat a tampered non-mapping archive as a\n    mismatch rather than\
+      \ crashing).\"\"\"\n    if not isinstance(obj, dict):\n        return \"non-mapping:\"\
+      \ + hashlib.sha256(\n            repr(obj).encode(\"utf-8\", \"replace\")\n\
+      \        ).hexdigest()\n    stripped = copy.deepcopy(obj)\n    for f in _VOLATILE_SEAL_FIELDS:\n\
+      \        stripped.pop(f, None)\n    return _canonical_yaml_sha256(stripped)\n\
+      \n\n# Required pre-seal fields (keys that must exist in the packet).\n_REQUIRED_FIELDS\
+      \ = (\"iteration_id\", \"reviewer_id\", \"findings\")\n# pass_id or pass_label\
+      \ -- at least one must be present.\n_PASS_LABEL_FIELDS = (\"pass_id\", \"pass_label\"\
+      )\n\n\ndef _now_utc() -> str:\n    return (\n        datetime.now(timezone.utc)\n\
+      \        .replace(microsecond=0)\n        .isoformat()\n        .replace(\"\
+      +00:00\", \"Z\")\n    )\n\n\ndef _now_utc_date() -> str:\n    return datetime.now(timezone.utc).strftime(\"\
+      %Y-%m-%d\")\n\n\ndef _sanitize_for_filename(value: str) -> str:\n    \"\"\"\
+      iteration-seal-archive-collision-fix: make a pass_id safe to embed\n    in an\
+      \ archive filename without changing the raw pass_id used in the\n    index entry\
+      \ or packet body.\n\n    Replaces every character outside [A-Za-z0-9._-] with\
+      \ '-' and\n    collapses runs of '-'. Empty / all-hostile input falls back to\n\
+      \    'pass' so the filename never degenerates to just the suffix.\n    pass_id\
+      \ values are conventionally already filesystem-safe\n    (e.g. 'codex-iter0044-2-pass1');\
+      \ this guard only matters for\n    pathological ids containing slashes, colons,\
+      \ spaces, etc.\n    \"\"\"\n    import re\n    cleaned = re.sub(r\"[^A-Za-z0-9._-]\"\
+      , \"-\", value or \"\")\n    cleaned = re.sub(r\"-{2,}\", \"-\", cleaned).strip(\"\
+      -\")\n    return cleaned or \"pass\"\n\n\nSCHEMA = {\n    \"name\": \"review.write_and_seal\"\
+      ,\n    \"description\": (\n        \"Seal a review packet and register it in\
+      \ the archive index. \"\n        \"Computes packet_sha256 (self-hash exception:\
+      \ hashes packet sans that field), \"\n        \"writes atomically to \"\n  \
+      \      \"consensus-state/archive/review-passes/<date>-<iter>-<reviewer>-<pass_id>-pass.yaml\
+      \ \"\n        \"(iteration-seal-archive-collision-fix: pass_id added so multi-pass\
+      \ \"\n        \"same-reviewer seals do not collide; pass_id sanitized for the\
+      \ \"\n        \"filename, raw value preserved in index/body), \"\n        \"\
+      updates index.yaml, and appends a review_returned_and_sealed audit event. \"\
+      \n        \"An exact re-seal (same pass_id + same packet_sha256) is an idempotent\
+      \ \"\n        \"success ({idempotent: true, index_updated: false}) with an on-disk\
+      \ \"\n        \"integrity guard. Only authorized writer for review packets \"\
+      \n        \"post-Phase-0 sealing.\"\n    ),\n    \"input_schema\": {\n     \
+      \   \"type\": \"object\",\n        \"properties\": {\n            \"iteration_id\"\
+      : {\n                \"type\": \"string\",\n                \"description\"\
+      : \"Iteration identifier (e.g. 'iteration-0006').\",\n            },\n     \
+      \       \"reviewer_id\": {\n                \"type\": \"string\",\n        \
+      \        \"description\": \"'codex' | 'claude' or other free string.\",\n  \
+      \          },\n            \"pass_id\": {\n                \"type\": \"string\"\
+      ,\n                \"description\": \"Unique pass identifier (e.g. 'iteration-0006-pass-a');\
+      \ enforced via index.\",\n            },\n            \"packet\": {\n      \
+      \          \"type\": \"object\",\n                \"description\": \"Full review\
+      \ packet dict, YAML-serializable.\",\n            },\n        },\n        \"\
+      required\": [\"iteration_id\", \"reviewer_id\", \"pass_id\", \"packet\"],\n\
+      \        \"additionalProperties\": False,\n    },\n    \"output_schema\": {\n\
+      \        \"type\": \"object\",\n        \"description\": (\n            \"Success:\
+      \ {sealed_path, packet_sha256, index_updated, \"\n            \"audit_event_id,\
+      \ [idempotent]}. On an exact idempotent re-seal, \"\n            \"index_updated\
+      \ is false, audit_event_id is \"\n            \"'skipped_idempotent_reseal',\
+      \ and idempotent is true. \"\n            \"Failure: {error, ...} where error\
+      \ is one of: \"\n            \"packet_path_collision | index_collision | missing_required_field\
+      \ | \"\n            \"invalid_yaml | audit_write_failed | idempotent_target_missing\
+      \ | \"\n            \"idempotent_target_unreadable | idempotent_target_integrity_mismatch.\"\
+      \n        ),\n        \"oneOf\": [\n            {\n                \"title\"\
+      : \"success\",\n                \"type\": \"object\",\n                \"properties\"\
+      : {\n                    \"sealed_path\": {\"type\": \"string\"},\n        \
+      \            \"packet_sha256\": {\"type\": \"string\"},\n                  \
+      \  \"index_updated\": {\"type\": \"boolean\"},\n                    \"audit_event_id\"\
+      : {\"type\": \"string\"},\n                    # iteration-seal-archive-collision-fix:\
+      \ present and true\n                    # only on an exact idempotent re-seal.\n\
+      \                    \"idempotent\": {\"type\": \"boolean\"},\n            \
+      \    },\n                \"required\": [\"sealed_path\", \"packet_sha256\",\
+      \ \"index_updated\", \"audit_event_id\"],\n            },\n            {\n \
+      \               \"title\": \"failure\",\n                \"type\": \"object\"\
+      ,\n                \"properties\": {\n                    \"error\": {\n   \
+      \                     \"type\": \"string\",\n                        \"enum\"\
+      : [\n                            \"packet_path_collision\",\n              \
+      \              \"index_collision\",\n                            \"missing_required_field\"\
+      ,\n                            \"invalid_yaml\",\n                         \
+      \   \"audit_write_failed\",\n                            # iteration-seal-archive-collision-fix:\n\
+      \                            # idempotent-path integrity guard errors.\n   \
+      \                         \"idempotent_target_missing\",\n                 \
+      \           \"idempotent_target_unreadable\",\n                            \"\
+      idempotent_target_integrity_mismatch\",\n                        ],\n      \
+      \              },\n                    \"field\": {\"type\": [\"string\", \"\
+      null\"]},\n                    \"detail\": {\"type\": [\"string\", \"null\"\
+      ]},\n                },\n                \"required\": [\"error\"],\n      \
+      \      },\n        ],\n    },\n}\n\n\ndef handle(\n    iteration_id: str,\n\
+      \    reviewer_id: str,\n    pass_id: str,\n    packet: dict,\n) -> dict:\n \
+      \   \"\"\"Seal a review packet, write it to the archive, update the index.\n\
+      \n    Returns:\n      Success: {sealed_path, packet_sha256, index_updated, audit_event_id}\n\
+      \        plus, on an exact idempotent re-seal (same pass_id + same\n       \
+      \ packet_sha256): index_updated=False,\n        audit_event_id='skipped_idempotent_reseal',\
+      \ idempotent=True,\n        and sealed_path is the EXISTING recorded archive\
+      \ path (which\n        may use the pre-iteration-seal-archive-collision-fix\
+      \ 3-token\n        scheme — the index is the resolution source of truth).\n\
+      \      Failure: {error: <code>, ...}\n\n    Failure codes:\n      missing_required_field:\
+      \ packet lacks a required pre-seal field; field: <name>\n      packet_path_collision:\
+      \ deterministic target path already exists with\n        no matching pass_id\
+      \ in the index (defense-in-depth backstop;\n        unreachable in normal flow\
+      \ now that the filename carries pass_id)\n      index_collision: pass_id already\
+      \ exists in index with a different packet_sha256\n      invalid_yaml: packet\
+      \ is not YAML-serializable\n      audit_write_failed: packet+index written but\
+      \ audit event failed; requires operator\n      idempotent_target_missing: pass_id+sha\
+      \ match the index but the\n        recorded archive file is gone (iteration-seal-archive-collision-fix)\n\
+      \      idempotent_target_unreadable: recorded archive file exists but\n    \
+      \    cannot be parsed (iteration-seal-archive-collision-fix)\n      idempotent_target_integrity_mismatch:\
+      \ index sha matches the new\n        packet but the on-disk archive hashes differently\
+      \ — the sealed\n        file may be tampered (iteration-seal-archive-collision-fix)\n\
+      \    \"\"\"\n    # --- Step 1: validate YAML serializability ---\n    try:\n\
+      \        yaml.safe_dump(packet)\n    except Exception as exc:\n        return\
+      \ {\"error\": \"invalid_yaml\", \"detail\": str(exc)}\n\n    # --- Step 2: validate\
+      \ required pre-seal fields ---\n    for field in _REQUIRED_FIELDS:\n       \
+      \ if field not in packet:\n            return {\"error\": \"missing_required_field\"\
+      , \"field\": field}\n\n    # pass_id OR pass_label must be present\n    if not\
+      \ any(f in packet for f in _PASS_LABEL_FIELDS):\n        return {\"error\":\
+      \ \"missing_required_field\", \"field\": \"pass_id or pass_label\"}\n\n    #\
+      \ packet.iteration_id must match the parameter\n    if packet.get(\"iteration_id\"\
+      ) != iteration_id:\n        return {\n            \"error\": \"missing_required_field\"\
+      ,\n            \"field\": \"iteration_id\",\n            \"detail\": (\n   \
+      \             f\"packet.iteration_id={packet.get('iteration_id')!r} \"\n   \
+      \             f\"does not match parameter iteration_id={iteration_id!r}\"\n\
+      \            ),\n        }\n\n    # packet.reviewer_id must match the parameter\n\
+      \    if packet.get(\"reviewer_id\") != reviewer_id:\n        return {\n    \
+      \        \"error\": \"missing_required_field\",\n            \"field\": \"reviewer_id\"\
+      ,\n            \"detail\": (\n                f\"packet.reviewer_id={packet.get('reviewer_id')!r}\
+      \ \"\n                f\"does not match parameter reviewer_id={reviewer_id!r}\"\
+      \n            ),\n        }\n\n    # packet.pass_id (if present) must match\
+      \ the parameter\n    # (iteration-seal-archive-collision-fix, codex-sealfix-audit-3\n\
+      \    # finding): symmetric with the iteration_id / reviewer_id guards\n    #\
+      \ above. Now that pass_id determines the archive FILENAME, the\n    # index\
+      \ `id`, AND is recorded in the sealed body, a divergence\n    # between the\
+      \ embedded pass_id and the parameter would make the\n    # sealed artifact's\
+      \ self-described identity disagree with its\n    # filename + index entry —\
+      \ a provenance inconsistency. The packet\n    # may legitimately carry only\
+      \ `pass_label` (no `pass_id`); only\n    # enforce when an explicit packet.pass_id\
+      \ is present.\n    if \"pass_id\" in packet and packet.get(\"pass_id\") != pass_id:\n\
+      \        return {\n            \"error\": \"missing_required_field\",\n    \
+      \        \"field\": \"pass_id\",\n            \"detail\": (\n              \
+      \  f\"packet.pass_id={packet.get('pass_id')!r} \"\n                f\"does not\
+      \ match parameter pass_id={pass_id!r}\"\n            ),\n        }\n\n    #\
+      \ --- Step 3: stamp seal provenance ---\n    # Note: pre_canonical_pin_marker\
+      \ (spec sec ~1517) is for HISTORICAL pre-v1.7.4\n    # packets only -- it documents\
+      \ that an older hash predates the canonical-yaml\n    # convention. Modern T6\
+      \ packets use sealed_at_utc instead. If a caller passed\n    # in a historical\
+      \ packet that already has pre_canonical_pin_marker, preserve it;\n    # we never\
+      \ add it to new packets.\n    packet = dict(packet)  # shallow copy\n    # iteration-seal-archive-collision-fix\
+      \ (codex-sealfix-audit-4 medium\n    # finding): a pass-label-only packet carried\
+      \ no pass_id in its body,\n    # so the sealed artifact did not self-record\
+      \ the canonical pass\n    # identity that now determines its filename + index\
+      \ entry. Stamp the\n    # pass_id parameter into the body so the sealed packet\
+      \ always\n    # self-describes its pass identity. The Step-2 guard above already\n\
+      \    # rejected a body pass_id that DISAGREES with the parameter, so this\n\
+      \    # only fills an absent value (never overwrites a conflicting one).\n  \
+      \  packet.setdefault(\"pass_id\", pass_id)\n    if \"sealed_at_utc\" not in\
+      \ packet:\n        packet[\"sealed_at_utc\"] = _now_utc()\n\n    # --- Step\
+      \ 4: self-hash exception ---\n    # Hash the packet WITHOUT the packet_sha256\
+      \ field (circular dependency prevention).\n    packet_for_hash = copy.deepcopy(packet)\n\
+      \    packet_for_hash.pop(\"packet_sha256\", None)\n    packet_sha256 = _canonical_yaml_sha256(packet_for_hash)\n\
+      \n    # Insert computed hash into the working packet dict.\n    packet = dict(packet)\n\
+      \    packet[\"packet_sha256\"] = packet_sha256\n\n    # --- Step 5: deterministic\
+      \ path ---\n    # iteration-seal-archive-collision-fix (workflow A converged\
+      \ plan,\n    # weighted-synthesis; codex+gemini majority on the 4-token scheme):\n\
+      \    # the archive filename now includes pass_id, the SAME canonical\n    #\
+      \ uniqueness key the index keys on (Step 6 below). Before this fix\n    # the\
+      \ filename keyed on reviewer_id only, so re-using a reviewer_id\n    # across\
+      \ passes produced a hard packet_path_collision BEFORE the\n    # pass_id-aware\
+      \ index logic ever ran. test_contributors.py:135's\n    # docstring (\"filename\
+      \ must contain iteration_id + reviewer_id +\n    # pass_id tokens\") documents\
+      \ this 4-token scheme as the intended\n    # contract; the implementation had\
+      \ silently regressed to 3 tokens\n    # at/before extraction. pass_id is sanitized\
+      \ for filesystem-hostile\n    # characters in the FILENAME only; the raw pass_id\
+      \ is preserved\n    # verbatim in the index entry and packet body.\n    date_str\
+      \ = _now_utc_date()\n    safe_pass_id = _sanitize_for_filename(pass_id)\n  \
+      \  filename = f\"{date_str}-{iteration_id}-{reviewer_id}-{safe_pass_id}-pass.yaml\"\
+      \n    _archive = archive_dir()\n    _index = index_path()\n    sealed_path =\
+      \ _archive / filename\n    _repo = project_root()\n\n    # --- Step 6: index\
+      \ lookup FIRST (reordered ahead of the path guard) ---\n    # Per the converged\
+      \ plan: the pass_id-aware idempotency check must\n    # run BEFORE the path-exists\
+      \ guard so an exact re-seal (same pass_id,\n    # same content hash) is an idempotent\
+      \ SUCCESS rather than a hard\n    # packet_path_collision. This is what the\
+      \ prior line-272 comment\n    # always intended (\"Same hash -- idempotent\"\
+      ) but the old ordering\n    # defeated it.\n    _archive.mkdir(parents=True,\
+      \ exist_ok=True)\n    if _index.exists():\n        index_raw = _index.read_bytes()\n\
+      \        index_data = yaml.safe_load(index_raw) or {}\n    else:\n        index_data\
+      \ = {}\n\n    # iteration-seal-archive-collision-fix (codex-sealfix-audit-4\
+      \ HIGH\n    # finding): idempotency is judged on CONTENT IDENTITY, not on the\n\
+      \    # timestamped packet_sha256. A re-dispatch builds a fresh packet\n    #\
+      \ with no sealed_at_utc; Step 3 stamps a new timestamp, so its\n    # packet_sha256\
+      \ necessarily differs from the originally-sealed one\n    # even when the substantive\
+      \ content is identical. Comparing\n    # content-identity (volatile seal-provenance\
+      \ stripped) of the\n    # INCOMING packet against the actual ON-DISK archived\
+      \ packet makes\n    # an exact re-seal an idempotent success regardless of seal\
+      \ time,\n    # and a genuine different-content reuse of the pass_id a real\n\
+      \    # index_collision. We read the on-disk file (not the possibly-stale\n \
+      \   # index sha) so the decision reflects the true archived artifact.\n    incoming_identity\
+      \ = _content_identity_sha256(packet)\n    passes_list: list = index_data.get(\"\
+      passes\", [])\n    for entry in passes_list:\n        if entry.get(\"id\") ==\
+      \ pass_id:\n            existing_rel = entry.get(\"path\")\n            existing_abs\
+      \ = (_repo / existing_rel) if existing_rel else None\n            if existing_abs\
+      \ is None or not existing_abs.exists():\n                return {\n        \
+      \            \"error\": \"idempotent_target_missing\",\n                   \
+      \ \"detail\": (\n                        f\"pass_id={pass_id!r} is in the index\
+      \ but its recorded \"\n                        f\"archive file is missing: {existing_rel!r}\"\
+      \n                    ),\n                }\n            try:\n            \
+      \    on_disk = yaml.safe_load(existing_abs.read_text(encoding=\"utf-8\"))\n\
+      \            except Exception as exc:\n                return {\n          \
+      \          \"error\": \"idempotent_target_unreadable\",\n                  \
+      \  \"detail\": f\"{existing_rel!r}: {type(exc).__name__}: {exc}\",\n       \
+      \         }\n            # _content_identity_sha256 handles a non-mapping on_disk\n\
+      \            # (tampered archive that still parses as valid YAML) via a\n  \
+      \          # sentinel that cannot equal a real packet's identity —\n       \
+      \     # so this neither crashes (codex-sealfix-audit-4 medium\n            #\
+      \ finding) nor falsely reports idempotent success.\n            on_disk_identity\
+      \ = _content_identity_sha256(on_disk)\n            if on_disk_identity != incoming_identity:\n\
+      \                # Same pass_id, substantively different content. If the\n \
+      \               # on-disk archive is a non-mapping it is corrupt/tampered\n\
+      \                # rather than a legitimate prior pass — report that\n     \
+      \           # distinctly so an operator can tell a re-use conflict\n       \
+      \         # from a damaged archive.\n                if not isinstance(on_disk,\
+      \ dict):\n                    return {\n                        \"error\": \"\
+      idempotent_target_integrity_mismatch\",\n                        \"detail\"\
+      : (\n                            f\"pass_id={pass_id!r}: the recorded archive\
+      \ \"\n                            f\"{existing_rel!r} is not a YAML mapping\
+      \ \"\n                            f\"({type(on_disk).__name__}) — the sealed\
+      \ file \"\n                            f\"may be tampered or truncated.\"\n\
+      \                        ),\n                    }\n                return {\n\
+      \                    \"error\": \"index_collision\",\n                    \"\
+      detail\": (\n                        f\"pass_id={pass_id!r} already sealed with\
+      \ substantively \"\n                        f\"different content (content-identity\
+      \ \"\n                        f\"{on_disk_identity[:12]}… vs incoming \"\n \
+      \                       f\"{incoming_identity[:12]}…) at {existing_rel!r}\"\n\
+      \                    ),\n                }\n            # Content-identical\
+      \ → idempotent re-seal. Return SUCCESS\n            # describing the ACTUAL\
+      \ archived artifact: the existing\n            # recorded path + the originally-sealed\
+      \ packet_sha256 from\n            # the index entry (NOT the freshly-recomputed\
+      \ incoming hash,\n            # which carries a new sealed_at_utc and would\
+      \ not match what\n            # is on disk). sealed_path + packet_sha256 therefore\
+      \ stay\n            # mutually consistent.\n            return {\n         \
+      \       \"sealed_path\": str(existing_abs),\n                \"packet_sha256\"\
+      : entry.get(\"packet_sha256\", \"\"),\n                \"index_updated\": False,\n\
+      \                \"audit_event_id\": \"skipped_idempotent_reseal\",\n      \
+      \          \"idempotent\": True,\n            }\n\n    # --- Step 7: path collision\
+      \ guard (defense-in-depth backstop) ---\n    # With the pass_id now in the filename\
+      \ AND the index check above,\n    # this should be unreachable for legitimate\
+      \ flows. It remains as a\n    # last-resort guard against a genuine filename\
+      \ collision (e.g. a\n    # hand-placed file or a pass_id that sanitizes to a\
+      \ name already\n    # present without a matching index entry). Distinct detail\
+      \ string\n    # so this case is diagnosable separately from the old behavior.\n\
+      \    if sealed_path.exists():\n        return {\n            \"error\": \"packet_path_collision\"\
+      ,\n            \"detail\": (\n                f\"{sealed_path} exists but no\
+      \ matching pass_id in the index — \"\n                f\"likely a hand-placed\
+      \ file or a sanitized-pass_id name clash.\"\n            ),\n        }\n\n \
+      \   # --- Step 8: atomic write of the sealed packet ---\n    sealed_yaml = yaml.safe_dump(packet,\
+      \ sort_keys=False)\n    tmp_packet = sealed_path.with_suffix(\".yaml.tmp\")\n\
+      \    tmp_packet.write_text(sealed_yaml, encoding=\"utf-8\")\n    os.replace(str(tmp_packet),\
+      \ str(sealed_path))\n\n    # --- Step 9: atomic update of index.yaml ---\n \
+      \   sealed_at = _now_utc()\n    # _repo already resolved in Step 6.\n    new_entry\
+      \ = {\n        \"id\": pass_id,\n        \"path\": str(sealed_path.relative_to(_repo)).replace(\"\
+      \\\\\", \"/\"),\n        \"sealed_at\": sealed_at,\n        \"packet_sha256\"\
+      : packet_sha256,\n        \"iteration_id\": iteration_id,\n        \"reviewer_id\"\
+      : reviewer_id,\n    }\n    passes_list.append(new_entry)\n    index_data[\"\
+      passes\"] = passes_list\n    index_data[\"last_updated_utc\"] = sealed_at\n\n\
+      \    index_yaml = yaml.safe_dump(index_data, sort_keys=False)\n    tmp_index\
+      \ = _index.with_suffix(\".yaml.tmp\")\n    tmp_index.write_text(index_yaml,\
+      \ encoding=\"utf-8\")\n    os.replace(str(tmp_index), str(_index))\n\n    #\
+      \ --- Step 10: audit event ---\n    # Use review_returned_and_sealed (closest\
+      \ semantic match in CANONICAL_EVENT_TYPES).\n    # Required fields for that\
+      \ type: actor, artifact, sha256, independence_attestation.\n    from consensus_mcp.tools.audit_append_event\
+      \ import handle as audit_handle\n\n    # Only write audit event if the iteration\
+      \ dir exists; otherwise skip silently\n    # (review packets may be sealed for\
+      \ iterations whose active dir was cleaned up).\n    iteration_dir = active_dir()\
+      \ / iteration_id\n    if iteration_dir.is_dir():\n        audit_result = audit_handle(\n\
+      \            iteration_id=iteration_id,\n            event_type=\"review_returned_and_sealed\"\
+      ,\n            actor=reviewer_id,\n            artifact=str(sealed_path.relative_to(_repo)).replace(\"\
+      \\\\\", \"/\"),\n            sha256=packet_sha256,\n            independence_attestation=packet.get(\"\
+      independence_attestation\"),\n        )\n        if \"error\" in audit_result:\n\
+      \            return {\n                \"error\": \"audit_write_failed\",\n\
+      \                \"detail\": audit_result[\"error\"],\n            }\n     \
+      \   audit_event_id = audit_result[\"event_id\"]\n    else:\n        # No active\
+      \ iteration dir -- skip audit (not an error; packet+index landed fine).\n  \
+      \      audit_event_id = \"skipped_no_iteration_dir\"\n\n    return {\n     \
+      \   \"sealed_path\": str(sealed_path),\n        \"packet_sha256\": packet_sha256,\n\
+      \        \"index_updated\": True,\n        \"audit_event_id\": audit_event_id,\n\
+      \    }\n\n\ndef register(registry) -> None:\n    \"\"\"Register this tool with\
+      \ the server's ToolRegistry.\"\"\"\n    registry.register(SCHEMA[\"name\"],\
+      \ SCHEMA, handle)\n"
+    consensus_mcp/tests/test_seal_collision_fix.py: "\"\"\"iteration-seal-archive-collision-fix:\
+      \ tests for the T6 seal\narchive-filename collision fix.\n\nDefect: `review_write_and_seal.handle`\
+      \ built the archive filename from\n`reviewer_id` only, so re-using a reviewer_id\
+      \ across passes produced a\nhard `packet_path_collision` BEFORE the pass_id-aware\
+      \ index logic ran.\nConverged fix (workflow A, weighted-synthesis; codex+gemini\
+      \ majority):\n4-token filename including pass_id; index pass_id+sha check reordered\n\
+      ahead of the path-exists guard; exact re-seal is an idempotent success\nwith\
+      \ an on-disk integrity guard.\n\"\"\"\nfrom __future__ import annotations\n\n\
+      import yaml\nimport pytest\n\nfrom consensus_mcp.tools import review_write_and_seal\
+      \ as t6\nfrom consensus_mcp.tools.review_write_and_seal import SCHEMA, _sanitize_for_filename\n\
+      \n\n# ---------- output_schema contract (codex-sealfix-audit-2 finding) ----------\n\
+      # Workflow B post-review caught that the new idempotent integrity error\n# codes\
+      \ + the `idempotent` success field were returned by handle() but\n# missing\
+      \ from the registered output_schema. This test pins the contract\n# so the drift\
+      \ cannot silently regress.\n\ndef _failure_enum():\n    for branch in SCHEMA[\"\
+      output_schema\"][\"oneOf\"]:\n        if branch.get(\"title\") == \"failure\"\
+      :\n            return set(branch[\"properties\"][\"error\"][\"enum\"])\n   \
+      \ raise AssertionError(\"no failure branch in output_schema\")\n\n\ndef _success_props():\n\
+      \    for branch in SCHEMA[\"output_schema\"][\"oneOf\"]:\n        if branch.get(\"\
+      title\") == \"success\":\n            return branch[\"properties\"]\n    raise\
+      \ AssertionError(\"no success branch in output_schema\")\n\n\ndef test_schema_failure_enum_includes_idempotent_error_codes():\n\
+      \    enum = _failure_enum()\n    for code in (\n        \"idempotent_target_missing\"\
+      ,\n        \"idempotent_target_unreadable\",\n        \"idempotent_target_integrity_mismatch\"\
+      ,\n    ):\n        assert code in enum, f\"{code!r} missing from output_schema\
+      \ failure enum\"\n\n\ndef test_schema_success_branch_documents_idempotent_field():\n\
+      \    assert \"idempotent\" in _success_props(), (\n        \"output_schema success\
+      \ branch must document the `idempotent` field\"\n    )\n\n\ndef test_every_handle_error_code_is_in_schema_enum():\n\
+      \    \"\"\"Every error code the implementation can return must be in the\n \
+      \   schema enum (prevents the exact drift codex flagged).\"\"\"\n    import\
+      \ inspect\n    src = inspect.getsource(t6.handle)\n    import re\n    returned\
+      \ = set(re.findall(r'\"error\":\\s*\"([a-z_]+)\"', src))\n    enum = _failure_enum()\n\
+      \    missing = returned - enum\n    assert not missing, f\"handle() returns\
+      \ error codes absent from schema enum: {missing}\"\n\n\ndef _packet(iteration_id,\
+      \ reviewer_id, pass_id, findings=None):\n    return {\n        \"iteration_id\"\
+      : iteration_id,\n        \"reviewer_id\": reviewer_id,\n        \"pass_id\"\
+      : pass_id,\n        \"findings\": findings if findings is not None else [],\n\
+      \        \"goal_satisfied\": True,\n        \"blocking_objections\": [],\n \
+      \   }\n\n\n@pytest.fixture\ndef repo(tmp_path, monkeypatch):\n    # _paths re-reads\
+      \ env on every call (lazy resolvers) — see memory\n    # feedback_monkeypatch_getattr_pollution:\
+      \ use setenv, not setattr.\n    monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\"\
+      , str(tmp_path))\n    return tmp_path\n\n\n# ---------- _sanitize_for_filename\
+      \ ----------\n\ndef test_sanitize_passthrough_for_safe_id():\n    assert _sanitize_for_filename(\"\
+      codex-iter0044-2-pass1\") == \"codex-iter0044-2-pass1\"\n\n\ndef test_sanitize_replaces_hostile_chars():\n\
+      \    assert _sanitize_for_filename(\"gemini/iter:0012 pass2\") == \"gemini-iter-0012-pass2\"\
+      \n\n\ndef test_sanitize_collapses_runs_and_strips():\n    assert _sanitize_for_filename(\"\
+      --a///b--\") == \"a-b\"\n\n\ndef test_sanitize_all_hostile_falls_back():\n \
+      \   assert _sanitize_for_filename(\"///\") == \"pass\"\n    assert _sanitize_for_filename(\"\
+      \") == \"pass\"\n\n\n# ---------- pass_id body/param consistency (codex-sealfix-audit-3)\
+      \ ----------\n\ndef test_packet_pass_id_must_match_parameter(repo):\n    \"\"\
+      \"Symmetric with the iteration_id/reviewer_id guards: an embedded\n    packet.pass_id\
+      \ that disagrees with the pass_id parameter is rejected\n    so the sealed body\
+      \ cannot contradict the filename + index identity.\"\"\"\n    p = _packet(\"\
+      iter-id\", \"rev\", \"rev-pass1\")\n    p[\"pass_id\"] = \"rev-pass-DIFFERENT\"\
+      \n    r = t6.handle(\"iter-id\", \"rev\", \"rev-pass1\", p)\n    assert r.get(\"\
+      error\") == \"missing_required_field\", r\n    assert r.get(\"field\") == \"\
+      pass_id\", r\n\n\ndef test_packet_without_pass_id_but_with_pass_label_is_allowed(repo):\n\
+      \    \"\"\"The packet may legitimately carry only pass_label; the guard must\n\
+      \    NOT fire when packet.pass_id is absent.\"\"\"\n    p = {\n        \"iteration_id\"\
+      : \"iter-id\",\n        \"reviewer_id\": \"rev\",\n        \"pass_label\": \"\
+      round-2\",  # no pass_id key in the body\n        \"findings\": [],\n      \
+      \  \"goal_satisfied\": True,\n        \"blocking_objections\": [],\n    }\n\
+      \    r = t6.handle(\"iter-id\", \"rev\", \"rev-pass1\", p)\n    assert \"error\"\
+      \ not in r, r\n    # codex-sealfix-audit-4 medium finding: the sealed body must\
+      \ now\n    # self-record the canonical pass_id even for pass-label-only input.\n\
+      \    import yaml as _yaml\n    from pathlib import Path\n    sealed = _yaml.safe_load(Path(r[\"\
+      sealed_path\"]).read_text(encoding=\"utf-8\"))\n    assert sealed.get(\"pass_id\"\
+      ) == \"rev-pass1\", sealed\n\n\ndef test_matching_packet_pass_id_passes(repo):\n\
+      \    p = _packet(\"iter-id\", \"rev\", \"rev-pass1\")  # _packet sets pass_id\
+      \ == param\n    r = t6.handle(\"iter-id\", \"rev\", \"rev-pass1\", p)\n    assert\
+      \ \"error\" not in r, r\n\n\n# ---------- filename scheme (Q1-b: 4 tokens incl\
+      \ pass_id) ----------\n\ndef test_filename_contains_all_four_tokens(repo):\n\
+      \    r = t6.handle(\"iter-x\", \"codex-rev\", \"codex-rev-pass1\", _packet(\"\
+      iter-x\", \"codex-rev\", \"codex-rev-pass1\"))\n    assert \"error\" not in\
+      \ r, r\n    name = r[\"sealed_path\"].replace(\"\\\\\", \"/\").split(\"/\")[-1]\n\
+      \    assert \"iter-x\" in name\n    assert \"codex-rev\" in name\n    assert\
+      \ \"codex-rev-pass1\" in name\n    assert name.endswith(\"-pass.yaml\")\n\n\n\
+      # ---------- the actual defect: same reviewer_id, distinct pass_ids ----------\n\
+      \ndef test_same_reviewer_distinct_pass_ids_no_collision(repo):\n    \"\"\"The\
+      \ triggering scenario: same reviewer_id re-used across passes\n    must NOT\
+      \ collide (this is exactly gemini-iteration-0012-2 pass1 vs\n    pass2 from\
+      \ the report).\"\"\"\n    rid = \"gemini-iteration-0012-2\"\n    r1 = t6.handle(\"\
+      iter-0012\", rid, f\"{rid}-pass1\", _packet(\"iter-0012\", rid, f\"{rid}-pass1\"\
+      , findings=[{\"a\": 1}]))\n    r2 = t6.handle(\"iter-0012\", rid, f\"{rid}-pass2\"\
+      , _packet(\"iter-0012\", rid, f\"{rid}-pass2\", findings=[{\"b\": 2}]))\n  \
+      \  assert \"error\" not in r1, r1\n    assert \"error\" not in r2, r2\n    assert\
+      \ r1[\"sealed_path\"] != r2[\"sealed_path\"]\n\n\n# ---------- idempotency (Q2-a)\
+      \ ----------\n\ndef test_exact_reseal_is_idempotent_success(repo):\n    p =\
+      \ _packet(\"iter-id\", \"rev\", \"rev-pass1\")\n    r1 = t6.handle(\"iter-id\"\
+      , \"rev\", \"rev-pass1\", p)\n    assert \"error\" not in r1, r1\n    r2 = t6.handle(\"\
+      iter-id\", \"rev\", \"rev-pass1\", _packet(\"iter-id\", \"rev\", \"rev-pass1\"\
+      ))\n    assert \"error\" not in r2, r2\n    assert r2.get(\"idempotent\") is\
+      \ True\n    assert r2[\"index_updated\"] is False\n    assert r2[\"sealed_path\"\
+      ] == r1[\"sealed_path\"]\n    assert r2[\"packet_sha256\"] == r1[\"packet_sha256\"\
+      ]\n\n\ndef test_idempotent_reseal_is_timestamp_independent(repo):\n    \"\"\"\
+      codex-sealfix-audit-4 HIGH finding: a re-dispatch builds a fresh\n    packet\
+      \ (no sealed_at_utc) → Step 3 stamps a NEW timestamp → its\n    packet_sha256\
+      \ differs from the original. Idempotency must STILL be\n    detected (content\
+      \ identity), not misclassified as index_collision.\n    Simulate the timestamp/hash\
+      \ divergence by rewriting the on-disk\n    archive's volatile seal-provenance\
+      \ to clearly different values; the\n    content-identity comparison must ignore\
+      \ them.\"\"\"\n    import yaml as _yaml\n    from pathlib import Path\n    r1\
+      \ = t6.handle(\"iter-id\", \"rev\", \"rev-pass1\", _packet(\"iter-id\", \"rev\"\
+      , \"rev-pass1\"))\n    assert \"error\" not in r1, r1\n    archived = _yaml.safe_load(Path(r1[\"\
+      sealed_path\"]).read_text(encoding=\"utf-8\"))\n    archived[\"sealed_at_utc\"\
+      ] = \"1999-01-01T00:00:00Z\"        # clearly different seal time\n    archived[\"\
+      packet_sha256\"] = \"deadbeef\" * 8                # clearly different self-hash\n\
+      \    Path(r1[\"sealed_path\"]).write_text(_yaml.safe_dump(archived), encoding=\"\
+      utf-8\")\n    r2 = t6.handle(\"iter-id\", \"rev\", \"rev-pass1\", _packet(\"\
+      iter-id\", \"rev\", \"rev-pass1\"))\n    assert \"error\" not in r2, r2\n  \
+      \  assert r2.get(\"idempotent\") is True, r2\n    assert r2[\"index_updated\"\
+      ] is False\n\n\ndef test_idempotent_integrity_guard_detects_non_mapping_archive(repo):\n\
+      \    \"\"\"codex-sealfix-audit-4 medium finding: a tampered archive that\n \
+      \   still parses as valid non-mapping YAML (a list/scalar) must NOT\n    crash\
+      \ the integrity path and must report a distinct integrity\n    error rather\
+      \ than a false success.\"\"\"\n    from pathlib import Path\n    r1 = t6.handle(\"\
+      iter-id\", \"rev\", \"rev-pass1\", _packet(\"iter-id\", \"rev\", \"rev-pass1\"\
+      ))\n    assert \"error\" not in r1, r1\n    Path(r1[\"sealed_path\"]).write_text(\"\
+      - just\\n- a\\n- list\\n\", encoding=\"utf-8\")\n    r2 = t6.handle(\"iter-id\"\
+      , \"rev\", \"rev-pass1\", _packet(\"iter-id\", \"rev\", \"rev-pass1\"))\n  \
+      \  assert r2.get(\"error\") == \"idempotent_target_integrity_mismatch\", r2\n\
+      \n\ndef test_idempotent_target_missing_when_archive_deleted(repo):\n    from\
+      \ pathlib import Path\n    r1 = t6.handle(\"iter-id\", \"rev\", \"rev-pass1\"\
+      , _packet(\"iter-id\", \"rev\", \"rev-pass1\"))\n    assert \"error\" not in\
+      \ r1, r1\n    Path(r1[\"sealed_path\"]).unlink()\n    r2 = t6.handle(\"iter-id\"\
+      , \"rev\", \"rev-pass1\", _packet(\"iter-id\", \"rev\", \"rev-pass1\"))\n  \
+      \  assert r2.get(\"error\") == \"idempotent_target_missing\", r2\n\n\n# ----------\
+      \ index_collision unchanged (Q2: same pass_id, diff content) ----------\n\n\
+      def test_same_pass_id_different_content_is_index_collision(repo):\n    t6.handle(\"\
+      iter-id\", \"rev\", \"rev-pass1\", _packet(\"iter-id\", \"rev\", \"rev-pass1\"\
+      , findings=[{\"x\": 1}]))\n    r2 = t6.handle(\"iter-id\", \"rev\", \"rev-pass1\"\
+      , _packet(\"iter-id\", \"rev\", \"rev-pass1\", findings=[{\"y\": 2}]))\n   \
+      \ assert r2.get(\"error\") == \"index_collision\", r2\n\n\n# ---------- hostile\
+      \ pass_id sanitization ----------\n\ndef test_hostile_pass_id_sanitized_in_filename_raw_in_index(repo,\
+      \ tmp_path):\n    hostile = \"rev/iter:99 pass1\"\n    r = t6.handle(\"iter-h\"\
+      , \"rev\", hostile, _packet(\"iter-h\", \"rev\", hostile))\n    assert \"error\"\
+      \ not in r, r\n    name = r[\"sealed_path\"].replace(\"\\\\\", \"/\").split(\"\
+      /\")[-1]\n    assert \"/\" not in name and \":\" not in name and \" \" not in\
+      \ name\n    # Raw pass_id preserved verbatim in the index entry.\n    index_yaml\
+      \ = (tmp_path / \"consensus-state\" / \"archive\" / \"review-passes\" / \"index.yaml\"\
+      )\n    if not index_yaml.exists():\n        # _paths may locate the index elsewhere\
+      \ under repo root; find it.\n        matches = list(tmp_path.rglob(\"index.yaml\"\
+      ))\n        assert matches, \"index.yaml not written\"\n        index_yaml =\
+      \ matches[0]\n    idx = yaml.safe_load(index_yaml.read_text(encoding=\"utf-8\"\
+      ))\n    ids = [e.get(\"id\") for e in idx.get(\"passes\", [])]\n    assert hostile\
+      \ in ids, f\"raw pass_id not preserved in index: {ids}\"\n"
+    consensus_mcp/tests/test_contributors.py: "\"\"\"Unit tests for consensus_mcp.contributors.*\
+      \ — adapter layer.\n\nPer iter-0016b: test the abstract interface + fake adapters\
+      \ + ClaudeAdapter's\ncallback contract + codex/gemini adapter argv translation\
+      \ (without spawning\nreal subprocesses).\n\"\"\"\nfrom __future__ import annotations\n\
+      \nfrom pathlib import Path\nfrom unittest.mock import patch\n\nimport pytest\n\
+      import yaml\n\nfrom consensus_mcp.contributors import (\n    PHASE_CONVERGE,\n\
+      \    PHASE_PROPOSE,\n    PHASE_REVIEW,\n    ContributorAdapter,\n    DispatchError,\n\
+      \    SealedArtifact,\n)\nfrom consensus_mcp.contributors.base import (\n   \
+      \ DispatchPacket,\n    FakeAlwaysApprove,\n    FakeAlwaysBlock,\n    FakeRaisesDispatchError,\n\
+      )\nfrom consensus_mcp.contributors.claude import ClaudeAdapter\nfrom consensus_mcp.contributors.codex\
+      \ import CodexAdapter\nfrom consensus_mcp.contributors.gemini import GeminiAdapter\n\
+      \n\n# ---------- Phase constants ----------\n\ndef test_phase_constants():\n\
+      \    assert PHASE_PROPOSE == \"propose\"\n    assert PHASE_REVIEW == \"review\"\
+      \n    assert PHASE_CONVERGE == \"converge\"\n\n\n# ---------- FakeAlwaysApprove\
+      \ / FakeAlwaysBlock ----------\n\ndef _make_packet(tmp_path: Path, phase: str\
+      \ = PHASE_REVIEW) -> DispatchPacket:\n    iter_dir = tmp_path / \"iter-test\"\
+      \n    iter_dir.mkdir(parents=True, exist_ok=True)\n    goal = iter_dir / \"\
+      goal_packet.yaml\"\n    goal.write_text(\"pilot_id: iter-test\\n\", encoding=\"\
+      utf-8\")\n    return DispatchPacket(\n        phase=phase,\n        contributor=\"\
+      <test>\",\n        iteration_dir=iter_dir,\n        goal_packet_path=goal,\n\
+      \        review_target_path=None,\n        reviewer_id=None,\n        pass_id=None,\n\
+      \        timeout_seconds=60,\n        adapter_options=None,\n    )\n\n\ndef\
+      \ test_fake_approve_returns_clean(tmp_path):\n    adapter = FakeAlwaysApprove()\n\
+      \    packet = _make_packet(tmp_path, PHASE_REVIEW)\n    art = adapter.dispatch(packet)\n\
+      \    assert art.contributor == \"fake-approve\"\n    assert art.phase == PHASE_REVIEW\n\
+      \    assert art.parsed[\"goal_satisfied\"] is True\n    assert art.parsed[\"\
+      blocking_objections\"] == []\n    assert art.sealed_path.exists()\n\n\ndef test_fake_block_returns_blocking_finding(tmp_path):\n\
+      \    adapter = FakeAlwaysBlock()\n    packet = _make_packet(tmp_path, PHASE_REVIEW)\n\
+      \    art = adapter.dispatch(packet)\n    assert art.parsed[\"goal_satisfied\"\
+      ] is False\n    assert art.parsed[\"blocking_objections\"] == [\"fake-block-rev-001\"\
+      ]\n\n\ndef test_fake_raise_raises_dispatch_error(tmp_path):\n    adapter = FakeRaisesDispatchError()\n\
+      \    packet = _make_packet(tmp_path)\n    with pytest.raises(DispatchError):\n\
+      \        adapter.dispatch(packet)\n\n\n# ---------- ContributorAdapter convenience\
+      \ methods ----------\n\ndef test_propose_calls_dispatch_with_propose_phase(tmp_path):\n\
+      \    adapter = FakeAlwaysApprove()\n    iter_dir = tmp_path / \"iter\"\n   \
+      \ iter_dir.mkdir()\n    (iter_dir / \"goal.yaml\").write_text(\"pilot: x\\n\"\
+      , encoding=\"utf-8\")\n    problem = tmp_path / \"problem.md\"\n    problem.write_text(\"\
+      # challenge\\n\", encoding=\"utf-8\")\n    art = adapter.propose(iter_dir, iter_dir\
+      \ / \"goal.yaml\", problem)\n    assert art.phase == PHASE_PROPOSE\n\n\ndef\
+      \ test_review_calls_dispatch_with_review_phase(tmp_path):\n    adapter = FakeAlwaysApprove()\n\
+      \    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    (iter_dir / \"\
+      goal.yaml\").write_text(\"pilot: x\\n\", encoding=\"utf-8\")\n    target = tmp_path\
+      \ / \"target.yaml\"\n    target.write_text(\"k: v\\n\", encoding=\"utf-8\")\n\
+      \    art = adapter.review(iter_dir, iter_dir / \"goal.yaml\", target)\n    assert\
+      \ art.phase == PHASE_REVIEW\n\n\ndef test_converge_calls_dispatch_with_converge_phase(tmp_path):\n\
+      \    adapter = FakeAlwaysApprove()\n    iter_dir = tmp_path / \"iter\"\n   \
+      \ iter_dir.mkdir()\n    (iter_dir / \"goal.yaml\").write_text(\"pilot: x\\n\"\
+      , encoding=\"utf-8\")\n    conv = tmp_path / \"convergence-packet.yaml\"\n \
+      \   conv.write_text(\"k: v\\n\", encoding=\"utf-8\")\n    art = adapter.converge(iter_dir,\
+      \ iter_dir / \"goal.yaml\", conv, round_number=1)\n    assert art.phase == PHASE_CONVERGE\n\
+      \n\n# ---------- ClaudeAdapter ----------\n\ndef test_claude_without_callback_raises(tmp_path):\n\
+      \    adapter = ClaudeAdapter()\n    packet = _make_packet(tmp_path)\n    with\
+      \ pytest.raises(DispatchError, match=\"artifact_callback\"):\n        adapter.dispatch(packet)\n\
+      \n\ndef test_claude_with_callback_seals_artifact(tmp_path):\n    \"\"\"ClaudeAdapter\
+      \ now routes through T6 (codex-rev-001 round-1 fix); mock T6 in tests.\n\n \
+      \   Archive filename must contain iteration_id + reviewer_id + pass_id tokens\n\
+      \    (codex-rev-001 round-2 confinement check).\n    \"\"\"\n    def cb(packet):\n\
+      \        return {\n            \"findings\": [],\n            \"goal_satisfied\"\
+      : True,\n            \"goal_satisfied_rationale\": \"claude approves\",\n  \
+      \          \"blocking_objections\": [],\n        }\n    def fake_t6(iteration_id,\
+      \ reviewer_id, pass_id, packet):\n        # iteration-seal-archive-collision-fix:\
+      \ 4-token filename\n        # (date, iteration_id, reviewer_id, pass_id) per\
+      \ converged plan\n        # + this test's own docstring contract.\n        archive_path\
+      \ = tmp_path / f\"2026-05-13-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml\"\
+      \n        archive_path.write_text(yaml.safe_dump(packet), encoding=\"utf-8\"\
+      )\n        return {\"sealed_path\": str(archive_path), \"packet_sha256\": \"\
+      fakehash\"}\n    with patch(\"consensus_mcp.tools.review_write_and_seal.handle\"\
+      , side_effect=fake_t6):\n        adapter = ClaudeAdapter(artifact_callback=cb)\n\
+      \        packet = _make_packet(tmp_path, PHASE_PROPOSE)\n        art = adapter.dispatch(packet)\n\
+      \    assert art.contributor == \"claude\"\n    assert art.sealed_path.name ==\
+      \ \"claude-propose.yaml\"\n    assert art.parsed[\"goal_satisfied\"] is True\n\
+      \n\ndef test_claude_rejects_t6_sealed_path_missing_tokens(tmp_path):\n    \"\
+      \"\"codex-rev-001 round-2 fix: confinement check rejects archive paths whose\n\
+      \    filenames don't encode the expected iteration/reviewer/pass tokens.\"\"\
+      \"\n    def cb(packet):\n        return {\"findings\": [], \"goal_satisfied\"\
+      : True, \"blocking_objections\": []}\n    # T6 returns an archive path that\
+      \ DOESN'T contain the iteration_id token.\n    rogue_path = tmp_path / \"unrelated-file.yaml\"\
+      \n    rogue_path.write_text(\"secret: data\\n\", encoding=\"utf-8\")\n    def\
+      \ fake_t6(iteration_id, reviewer_id, pass_id, packet):\n        return {\"sealed_path\"\
+      : str(rogue_path), \"packet_sha256\": \"x\"}\n    with patch(\"consensus_mcp.tools.review_write_and_seal.handle\"\
+      , side_effect=fake_t6):\n        adapter = ClaudeAdapter(artifact_callback=cb)\n\
+      \        packet = _make_packet(tmp_path, PHASE_PROPOSE)\n        with pytest.raises(DispatchError,\
+      \ match=\"confinement\"):\n            adapter.dispatch(packet)\n\n\ndef test_claude_rejects_t6_returning_non_file(tmp_path):\n\
+      \    \"\"\"codex-rev-001 round-2 fix: T6 returning a directory path is rejected.\"\
+      \"\"\n    def cb(packet):\n        return {\"findings\": [], \"goal_satisfied\"\
+      : True, \"blocking_objections\": []}\n    # Return a directory instead of a\
+      \ file.\n    rogue_dir = tmp_path / \"iter-test-claude-something-pass\"\n  \
+      \  rogue_dir.mkdir(exist_ok=True)\n    def fake_t6(iteration_id, reviewer_id,\
+      \ pass_id, packet):\n        return {\"sealed_path\": str(rogue_dir), \"packet_sha256\"\
+      : \"x\"}\n    with patch(\"consensus_mcp.tools.review_write_and_seal.handle\"\
+      , side_effect=fake_t6):\n        adapter = ClaudeAdapter(artifact_callback=cb)\n\
+      \        packet = _make_packet(tmp_path, PHASE_PROPOSE)\n        with pytest.raises(DispatchError,\
+      \ match=\"non-file\"):\n            adapter.dispatch(packet)\n\n\ndef test_claude_rejects_callback_missing_required_field(tmp_path):\n\
+      \    def cb(packet):\n        # missing 'blocking_objections'\n        return\
+      \ {\"findings\": [], \"goal_satisfied\": True}\n    adapter = ClaudeAdapter(artifact_callback=cb)\n\
+      \    packet = _make_packet(tmp_path)\n    with pytest.raises(DispatchError,\
+      \ match=\"blocking_objections\"):\n        adapter.dispatch(packet)\n\n\ndef\
+      \ test_claude_rejects_non_dict_callback_return(tmp_path):\n    adapter = ClaudeAdapter(artifact_callback=lambda\
+      \ p: \"not a dict\")\n    packet = _make_packet(tmp_path)\n    with pytest.raises(DispatchError,\
+      \ match=\"must return dict\"):\n        adapter.dispatch(packet)\n\n\ndef test_claude_wraps_callback_exception(tmp_path):\n\
+      \    def cb(packet):\n        raise ValueError(\"test failure\")\n    adapter\
+      \ = ClaudeAdapter(artifact_callback=cb)\n    packet = _make_packet(tmp_path)\n\
+      \    with pytest.raises(DispatchError, match=\"ValueError\"):\n        adapter.dispatch(packet)\n\
+      \n\ndef test_claude_artifact_filename_per_phase(tmp_path):\n    def cb(packet):\n\
+      \        return {\"findings\": [], \"goal_satisfied\": True, \"blocking_objections\"\
+      : []}\n    def fake_t6(iteration_id, reviewer_id, pass_id, packet):\n      \
+      \  # iteration-seal-archive-collision-fix: 4-token filename.\n        archive\
+      \ = tmp_path / f\"2026-05-13-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml\"\
+      \n        archive.write_text(yaml.safe_dump(packet), encoding=\"utf-8\")\n \
+      \       return {\"sealed_path\": str(archive), \"packet_sha256\": \"h\"}\n \
+      \   with patch(\"consensus_mcp.tools.review_write_and_seal.handle\", side_effect=fake_t6):\n\
+      \        adapter = ClaudeAdapter(artifact_callback=cb)\n        for phase in\
+      \ (PHASE_PROPOSE, PHASE_REVIEW, PHASE_CONVERGE):\n            packet = _make_packet(tmp_path\
+      \ / phase, phase)\n            packet.iteration_dir.mkdir(parents=True, exist_ok=True)\n\
+      \            art = adapter.dispatch(packet)\n            assert art.sealed_path.name\
+      \ == f\"claude-{phase}.yaml\"\n\n\n# ---------- CodexAdapter / GeminiAdapter\
+      \ argv translation ----------\n\ndef test_codex_adapter_constructs_argv(tmp_path):\n\
+      \    \"\"\"Mock _dispatch_codex.main to capture argv without spawning subprocess.\"\
+      \"\"\n    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    goal = iter_dir\
+      \ / \"goal_packet.yaml\"\n    goal.write_text(\"pilot_id: iter\\n\", encoding=\"\
+      utf-8\")\n    target = iter_dir / \"review-packet.yaml\"\n    target.write_text(\"\
+      k: v\\n\", encoding=\"utf-8\")\n\n    # Fake sealed YAML the dispatch would\
+      \ have written.\n    sealed = iter_dir / \"codex-review.yaml\"\n    sealed.write_text(yaml.safe_dump({\"\
+      iteration_id\": \"iter\", \"findings\": []}), encoding=\"utf-8\")\n\n    captured_argv\
+      \ = []\n    def fake_main(argv):\n        captured_argv.extend(argv)\n     \
+      \   import json\n        print(json.dumps({\n            \"ok\": True,\n   \
+      \         \"pass_id\": \"codex-iter-review-1-pass1\",\n            \"sealed_path\"\
+      : str(sealed),\n            \"archive_sealed_path\": None,\n            \"packet_sha256\"\
+      : \"deadbeef\",\n        }))\n        return 0\n\n    packet = DispatchPacket(\n\
+      \        phase=PHASE_REVIEW,\n        contributor=\"codex\",\n        iteration_dir=iter_dir,\n\
+      \        goal_packet_path=goal,\n        review_target_path=target,\n      \
+      \  reviewer_id=None,\n        pass_id=None,\n        timeout_seconds=600,\n\
+      \        adapter_options=None,\n    )\n    with patch(\"consensus_mcp._dispatch_codex.main\"\
+      , side_effect=fake_main):\n        art = CodexAdapter().dispatch(packet)\n \
+      \   assert \"--goal-packet\" in captured_argv\n    assert \"--review-target\"\
+      \ in captured_argv\n    assert \"--timeout-seconds\" in captured_argv\n    assert\
+      \ \"600\" in captured_argv\n    assert art.contributor == \"codex\"\n    assert\
+      \ art.parsed[\"iteration_id\"] == \"iter\"\n\n\ndef test_codex_adapter_raises_on_failure(tmp_path):\n\
+      \    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    (iter_dir / \"\
+      goal_packet.yaml\").write_text(\"pilot: x\\n\", encoding=\"utf-8\")\n\n    def\
+      \ fake_main(argv):\n        import json\n        print(json.dumps({\"ok\": False,\
+      \ \"error\": \"simulated\", \"error_type\": \"CodexInvocationError\"}))\n  \
+      \      return 1\n\n    packet = DispatchPacket(\n        phase=PHASE_REVIEW,\
+      \ contributor=\"codex\",\n        iteration_dir=iter_dir, goal_packet_path=iter_dir\
+      \ / \"goal_packet.yaml\",\n        review_target_path=None, reviewer_id=None,\
+      \ pass_id=None,\n        timeout_seconds=60, adapter_options=None,\n    )\n\
+      \    with patch(\"consensus_mcp._dispatch_codex.main\", side_effect=fake_main):\n\
+      \        with pytest.raises(DispatchError, match=\"simulated\"):\n         \
+      \   CodexAdapter().dispatch(packet)\n\n\ndef test_codex_adapter_wraps_systemexit(tmp_path):\n\
+      \    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    (iter_dir / \"\
+      goal_packet.yaml\").write_text(\"pilot: x\\n\", encoding=\"utf-8\")\n\n    def\
+      \ fake_main(argv):\n        raise SystemExit(2)\n\n    packet = DispatchPacket(\n\
+      \        phase=PHASE_REVIEW, contributor=\"codex\",\n        iteration_dir=iter_dir,\
+      \ goal_packet_path=iter_dir / \"goal_packet.yaml\",\n        review_target_path=None,\
+      \ reviewer_id=None, pass_id=None,\n        timeout_seconds=60, adapter_options=None,\n\
+      \    )\n    with patch(\"consensus_mcp._dispatch_codex.main\", side_effect=fake_main):\n\
+      \        with pytest.raises(DispatchError, match=\"SystemExit\"):\n        \
+      \    CodexAdapter().dispatch(packet)\n\n\ndef test_gemini_adapter_packet_options_override_config(tmp_path):\n\
+      \    \"\"\"codex-rev-003 round-1 fix: packet.adapter_options.model overrides\
+      \ adapter_config.model.\"\"\"\n    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n\
+      \    (iter_dir / \"goal_packet.yaml\").write_text(\"pilot: x\\n\", encoding=\"\
+      utf-8\")\n    sealed = iter_dir / \"gemini-review.yaml\"\n    sealed.write_text(yaml.safe_dump({\"\
+      iteration_id\": \"iter\", \"findings\": []}), encoding=\"utf-8\")\n\n    captured_argv\
+      \ = []\n    def fake_main(argv):\n        captured_argv.extend(argv)\n     \
+      \   import json\n        print(json.dumps({\"ok\": True, \"pass_id\": \"p1\"\
+      , \"sealed_path\": str(sealed),\n                          \"archive_sealed_path\"\
+      : None, \"packet_sha256\": \"deadbeef\"}))\n        return 0\n\n    packet =\
+      \ DispatchPacket(\n        phase=PHASE_REVIEW, contributor=\"gemini\",\n   \
+      \     iteration_dir=iter_dir, goal_packet_path=iter_dir / \"goal_packet.yaml\"\
+      ,\n        review_target_path=None, reviewer_id=None, pass_id=None,\n      \
+      \  timeout_seconds=60,\n        adapter_options={\"model\": \"gemini-2.5-flash\"\
+      },  # per-packet override\n    )\n    adapter = GeminiAdapter(adapter_config={\"\
+      model\": \"gemini-2.5-pro\"})  # static config\n    with patch(\"consensus_mcp._dispatch_gemini.main\"\
+      , side_effect=fake_main):\n        adapter.dispatch(packet)\n    # packet's\
+      \ option wins.\n    assert \"--model\" in captured_argv\n    assert \"gemini-2.5-flash\"\
+      \ in captured_argv\n    assert \"gemini-2.5-pro\" not in captured_argv\n\n\n\
+      def test_codex_adapter_raises_on_missing_sealed_path(tmp_path):\n    \"\"\"\
+      codex-rev-002 round-1 fix: missing sealed_path becomes DispatchError.\"\"\"\n\
+      \    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    (iter_dir / \"\
+      goal_packet.yaml\").write_text(\"pilot: x\\n\", encoding=\"utf-8\")\n    def\
+      \ fake_main(argv):\n        import json\n        # ok=True but no sealed_path\
+      \ (shouldn't happen but defensive)\n        print(json.dumps({\"ok\": True,\
+      \ \"pass_id\": \"p1\"}))\n        return 0\n    packet = DispatchPacket(\n \
+      \       phase=PHASE_REVIEW, contributor=\"codex\",\n        iteration_dir=iter_dir,\
+      \ goal_packet_path=iter_dir / \"goal_packet.yaml\",\n        review_target_path=None,\
+      \ reviewer_id=None, pass_id=None,\n        timeout_seconds=60, adapter_options=None,\n\
+      \    )\n    with patch(\"consensus_mcp._dispatch_codex.main\", side_effect=fake_main):\n\
+      \        with pytest.raises(DispatchError, match=\"sealed_path\"):\n       \
+      \     CodexAdapter().dispatch(packet)\n\n\ndef test_codex_adapter_raises_on_unreadable_sealed_path(tmp_path):\n\
+      \    \"\"\"codex-rev-002 round-1 fix: unreadable sealed YAML becomes DispatchError.\"\
+      \"\"\n    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    (iter_dir\
+      \ / \"goal_packet.yaml\").write_text(\"pilot: x\\n\", encoding=\"utf-8\")\n\
+      \    def fake_main(argv):\n        import json\n        # Point at a nonexistent\
+      \ sealed_path.\n        print(json.dumps({\"ok\": True, \"pass_id\": \"p1\"\
+      ,\n                          \"sealed_path\": str(tmp_path / \"does-not-exist.yaml\"\
+      ),\n                          \"archive_sealed_path\": None, \"packet_sha256\"\
+      : \"deadbeef\"}))\n        return 0\n    packet = DispatchPacket(\n        phase=PHASE_REVIEW,\
+      \ contributor=\"codex\",\n        iteration_dir=iter_dir, goal_packet_path=iter_dir\
+      \ / \"goal_packet.yaml\",\n        review_target_path=None, reviewer_id=None,\
+      \ pass_id=None,\n        timeout_seconds=60, adapter_options=None,\n    )\n\
+      \    with patch(\"consensus_mcp._dispatch_codex.main\", side_effect=fake_main):\n\
+      \        with pytest.raises(DispatchError, match=\"unreadable\"):\n        \
+      \    CodexAdapter().dispatch(packet)\n\n\ndef test_gemini_adapter_includes_model_when_configured(tmp_path):\n\
+      \    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    (iter_dir / \"\
+      goal_packet.yaml\").write_text(\"pilot: x\\n\", encoding=\"utf-8\")\n    sealed\
+      \ = iter_dir / \"gemini-review.yaml\"\n    sealed.write_text(yaml.safe_dump({\"\
+      iteration_id\": \"iter\", \"findings\": []}), encoding=\"utf-8\")\n\n    captured_argv\
+      \ = []\n    def fake_main(argv):\n        captured_argv.extend(argv)\n     \
+      \   import json\n        print(json.dumps({\n            \"ok\": True, \"pass_id\"\
+      : \"gemini-iter-review-1-pass1\",\n            \"sealed_path\": str(sealed),\
+      \ \"archive_sealed_path\": None,\n            \"packet_sha256\": \"deadbeef\"\
+      ,\n        }))\n        return 0\n\n    packet = DispatchPacket(\n        phase=PHASE_REVIEW,\
+      \ contributor=\"gemini\",\n        iteration_dir=iter_dir, goal_packet_path=iter_dir\
+      \ / \"goal_packet.yaml\",\n        review_target_path=None, reviewer_id=None,\
+      \ pass_id=None,\n        timeout_seconds=60, adapter_options=None,\n    )\n\
+      \    adapter = GeminiAdapter(adapter_config={\"model\": \"gemini-2.5-pro\"})\n\
+      \    with patch(\"consensus_mcp._dispatch_gemini.main\", side_effect=fake_main):\n\
+      \        art = adapter.dispatch(packet)\n    assert \"--model\" in captured_argv\n\
+      \    assert \"gemini-2.5-pro\" in captured_argv\n    assert art.contributor\
+      \ == \"gemini\"\n\n\ndef test_gemini_adapter_omits_model_when_not_configured(tmp_path):\n\
+      \    iter_dir = tmp_path / \"iter\"\n    iter_dir.mkdir()\n    (iter_dir / \"\
+      goal_packet.yaml\").write_text(\"pilot: x\\n\", encoding=\"utf-8\")\n    sealed\
+      \ = iter_dir / \"gemini-review.yaml\"\n    sealed.write_text(yaml.safe_dump({\"\
+      iteration_id\": \"iter\", \"findings\": []}), encoding=\"utf-8\")\n\n    captured_argv\
+      \ = []\n    def fake_main(argv):\n        captured_argv.extend(argv)\n     \
+      \   import json\n        print(json.dumps({\n            \"ok\": True, \"pass_id\"\
+      : \"p1\",\n            \"sealed_path\": str(sealed), \"archive_sealed_path\"\
+      : None,\n            \"packet_sha256\": \"deadbeef\",\n        }))\n       \
+      \ return 0\n\n    packet = DispatchPacket(\n        phase=PHASE_REVIEW, contributor=\"\
+      gemini\",\n        iteration_dir=iter_dir, goal_packet_path=iter_dir / \"goal_packet.yaml\"\
+      ,\n        review_target_path=None, reviewer_id=None, pass_id=None,\n      \
+      \  timeout_seconds=60, adapter_options=None,\n    )\n    with patch(\"consensus_mcp._dispatch_gemini.main\"\
+      , side_effect=fake_main):\n        GeminiAdapter().dispatch(packet)\n    assert\
+      \ \"--model\" not in captured_argv\n\n\n# ---------- Adapter names ----------\n\
+      \ndef test_adapter_names():\n    assert CodexAdapter.name == \"codex\"\n   \
+      \ assert GeminiAdapter.name == \"gemini\"\n    assert ClaudeAdapter.name ==\
+      \ \"claude\"\n    assert FakeAlwaysApprove.name == \"fake-approve\"\n    assert\
+      \ FakeAlwaysBlock.name == \"fake-block\"\n    assert FakeRaisesDispatchError.name\
+      \ == \"fake-raise\"\n"
+schema_version: 1
+iteration_id: iteration-seal-archive-collision-fix
