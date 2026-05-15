@@ -18,6 +18,7 @@ real time for thread scheduling.
 from __future__ import annotations
 
 import json as _json
+import os
 import sys
 import threading
 import time
@@ -31,6 +32,29 @@ from consensus_mcp import _dispatch_codex  # noqa: E402
 
 
 SCHEMA_PATH = REPO_ROOT / "consensus_mcp" / "dispatch_templates" / "codex_review_schema.json"
+
+
+# v1.15.8 Q2(c) interim (Workflow A converged:
+# iteration-v1158-flaky-ci-and-locked-append). These tests drive the
+# `_invoke_codex` runner in a daemon thread and advance a controllable
+# clock with real `time.sleep` ticks, then `join` and assert the thread
+# finished/aborted. On loaded Windows GitHub-Actions runners the runner
+# thread is not scheduled enough within the wall-clock budget → "runner
+# did not finish" (same commit green on Linux CI + local; the logic is
+# driven by the INJECTED time_fn, so it is NOT a Windows product path —
+# purely runner scheduling). Skipped ONLY on Windows + GitHub Actions:
+# Linux CI runs them every push and local Windows dev still runs them,
+# so the regression coverage is retained. NAMED FOLLOW-UP: rework
+# `_ControllableClock` into a deterministic synchronizing clock
+# (test↔runner handshake, no real sleeps) so these run everywhere and
+# this skip can be dropped. Tracked: docs/advisories.md 2026-05-15.
+_FLAKY_WINDOWS_CI = pytest.mark.skipif(
+    sys.platform == "win32" and os.environ.get("GITHUB_ACTIONS") == "true",
+    reason="v1.15.8 Q2(c): clock.advance + real time.sleep + thread-join "
+    "timing race on loaded Windows GitHub runners (not a product defect; "
+    "green on Linux CI + local). Named follow-up: deterministic "
+    "synchronizing _ControllableClock.",
+)
 
 
 # --------------------------------------------------------------------------
@@ -411,6 +435,7 @@ def test_long_lines_are_truncated_to_200_chars(tmp_path):
 # --------------------------------------------------------------------------
 
 
+@_FLAKY_WINDOWS_CI
 def test_heartbeat_fires_at_interval(tmp_path):
     """Advance time so codex appears to run for ~95s with no stdout; with
     stall_silence_seconds=200 we don't trip silence-abort; with
@@ -467,6 +492,7 @@ def test_heartbeat_fires_at_interval(tmp_path):
 # --------------------------------------------------------------------------
 
 
+@_FLAKY_WINDOWS_CI
 def test_heartbeat_silence_triggers_abort(tmp_path):
     """Codex emits 2 lines at t=0, then goes silent; advance clock past
     stall_silence_seconds → expect `dispatch_aborted` with
@@ -528,6 +554,7 @@ def test_heartbeat_silence_triggers_abort(tmp_path):
 # --------------------------------------------------------------------------
 
 
+@_FLAKY_WINDOWS_CI
 def test_operator_abort_signal_file_triggers_abort(tmp_path):
     """Mid-run, write `consensus-state/state/abort-dispatch-<pass_id>.signal`;
     expect wrapper to SIGTERM codex, emit `dispatch_aborted` with
@@ -588,6 +615,7 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
 # --------------------------------------------------------------------------
 
 
+@_FLAKY_WINDOWS_CI
 def test_wall_time_hard_ceiling(tmp_path):
     """Codex streams continuously (so silence-abort never fires) but runs
     past `timeout_seconds + stall_silence_seconds` → expect dispatch_aborted
