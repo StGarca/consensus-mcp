@@ -429,18 +429,36 @@ def _drive(clock: _SyncClock, th: threading.Thread, *, until=None, chunk: float 
     rounds = 0
     while th.is_alive() and rounds < max_rounds:
         e = clock.advance(chunk)
-        clock.wait_for(
+        # codex-v1159-wfb-2 codex-rev-001 (BLOCKING, integrated): the
+        # per-round wait return MUST be acted on. A False return means
+        # _CEILING elapsed with neither runner re-park (epoch>=e) nor
+        # thread death — under correct notify-driven operation that
+        # never happens (wakeups are sub-ms), so False == a genuine
+        # wedge. Fire the release_all() safeguard and fail FAST/LOUD
+        # here, not after max_rounds×_CEILING. This is what makes the
+        # claimed deadlock-free invariant actually true.
+        if not clock.wait_for(
             lambda e=e: (not th.is_alive())
             or (clock._sleepers > 0 and clock._park_epoch >= e)
-        )
+        ):
+            clock.release_all()
+            th.join(timeout=5)
+            raise AssertionError(
+                "_drive: per-round wait hit _CEILING with no runner "
+                "progress — release_all fired. Deadlock/handshake or "
+                "product logic broken; NOT a timing flake."
+            )
         rounds += 1
 
+    exhausted = th.is_alive() and rounds >= max_rounds
     clock.release_all()
     th.join(timeout=5)
-    if th.is_alive():
+    if th.is_alive() or exhausted:
         raise AssertionError(
-            "_drive: runner did not finish (release_all fired — handshake "
-            "or product logic broken; NOT a timing flake)"
+            f"_drive: runner did not finish within max_rounds={max_rounds} "
+            "(release_all fired — deterministic handshake broke; NOT a "
+            "timing flake). max_rounds exhaustion is a HARD fail even if "
+            "release_all later lets the thread limp out."
         )
 
 
@@ -501,19 +519,34 @@ def _drive_streaming(
     while th.is_alive() and not until() and steps < max_steps:
         prev = len(_events(log_path, "dispatch_streamed_line"))
         clock.advance(step)
-        clock.wait_for(
+        # codex-v1159-wfb-2 codex-rev-001 (BLOCKING, integrated):
+        # act on the per-step wait return — False == _CEILING elapsed
+        # with no new processed line / abort / death = a genuine wedge;
+        # fire release_all() and fail FAST/LOUD, not after
+        # max_steps×_CEILING.
+        if not clock.wait_for(
             lambda prev=prev: (not th.is_alive())
             or until()
             or len(_events(log_path, "dispatch_streamed_line")) > prev
-        )
+        ):
+            clock.release_all()
+            th.join(timeout=5)
+            raise AssertionError(
+                "_drive_streaming: per-step wait hit _CEILING with no "
+                "progress — release_all fired. Deadlock/handshake or "
+                "product logic broken; NOT a timing flake."
+            )
         steps += 1
 
+    exhausted = th.is_alive() and not until() and steps >= max_steps
     clock.release_all()
     th.join(timeout=5)
-    if th.is_alive():
+    if th.is_alive() or exhausted:
         raise AssertionError(
-            "_drive_streaming: runner did not finish (release_all fired — "
-            "handshake or product logic broken; NOT a timing flake)"
+            f"_drive_streaming: did not reach terminal within "
+            f"max_steps={max_steps} (release_all fired — deterministic "
+            "handshake broke; NOT a timing flake). max_steps exhaustion "
+            "is a HARD fail even if release_all later frees the thread."
         )
 
 
