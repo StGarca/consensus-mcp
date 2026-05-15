@@ -1,18 +1,40 @@
 # Changelog
 
-## 1.15.2 - unreleased
+## 1.15.2 - 2026-05-15
 
-**Named blocker (carried from v1.15.1 Workflow B audit):**
-`consensus_mcp/_dispatch_gemini.py` must set
-`GEMINI_CLI_TRUST_WORKSPACE` (or pass `--skip-trust`). gemini CLI
-≥ `0.43.0-preview.0` refuses headless runs in an untrusted
-directory, emitting the trust error to stderr with empty stdout →
-the dispatcher fails `GeminiOutputParseError`. Diagnosed first-hand
-during the v1.15.1 audit (gemini pass-1 failed twice for exactly
-this); worked around there via the env var. `_dispatch_gemini.py`
-was in the v1.15.1 iteration's `forbidden_files`, so the
-dispatcher-level fix is correctly scoped here. See
-`docs/advisories.md` (Advisory 2026-05-15).
+**gemini-dispatch workspace-trust fix** — closes the v1.15.1
+named blocker (advisory 2026-05-15, now **resolved**).
+
+`consensus_mcp/_dispatch_gemini.py` now injects
+`GEMINI_CLI_TRUST_WORKSPACE=true` into the gemini subprocess env
+via a new `_gemini_subprocess_env()` helper (returns a COPY of the
+parent env; forces the var to `true` even if an inherited value is
+`false`; never mutates `os.environ`). gemini CLI
+`0.43.0-preview.0`+ refuses headless runs in an "untrusted"
+directory — it writes the trust error to stderr and produces
+**empty stdout**, which the dispatcher then fails as
+`GeminiOutputParseError`.
+
+**Empirically verified 2026-05-15** (the v1.15.1 audit diagnosed
+this first-hand; gemini pass-1 failed twice for exactly this):
+- `--skip-trust` alone (still passed, defense-in-depth) is NOT
+  load-bearing on this version — gemini bypassed trust but went
+  autonomous and 429'd.
+- `GEMINI_CLI_TRUST_WORKSPACE=true` produced clean deterministic
+  output, and the two clean v1.15.1 Workflow B audit approvals.
+
+`_dispatch_gemini.py` was in the v1.15.1 iteration's
+`forbidden_files`, so the dispatcher-level fix was correctly
+deferred to this version rather than patched out-of-scope.
+
+Workflow B audit clean: gemini `goal_satisfied=true`, 0 blocking,
+0 findings — **dispatched from source with
+`GEMINI_CLI_TRUST_WORKSPACE` explicitly unset**, so the audit pass
+of this fix was made possible BY this fix (end-to-end in-vivo
+proof; acceptance gate A4). codex: 0 blocking; doc-accuracy
+findings on the advisory/changelog wording integrated. Full suite
+green: 968 passed, 1 skipped, 0 regressions; 4 new unit tests for
+`_gemini_subprocess_env` in `test_dispatch_gemini.py`.
 
 ## 1.15.1 - 2026-05-15
 

@@ -37,7 +37,7 @@ The end result: changes that pass three independent model families aren't "looks
 ```bash
 # Install via pipx — isolated venv, console scripts on PATH, no
 # polluting individual project venvs:
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.1
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.2
 
 # (Optional but recommended) install the Claude Code bootstrap pack —
 # a tiny skill + slash command so you can run `consensus init` from
@@ -45,7 +45,7 @@ pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.1
 consensus-init --install-claude-code
 ```
 
-(If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.15.1` — but pipx is the recommended pattern for cross-project use.)
+(If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.15.2` — but pipx is the recommended pattern for cross-project use.)
 
 `--install-claude-code` is a **standalone global operation** — it copies three files into your Claude Code config and exits:
 
@@ -280,7 +280,14 @@ Earlier workflow taxonomy (#1 codex-fix-author, #2 Flavor B subsystem review) is
 
 ## Status
 
-**1.15.1** (current) — machine-enforcement of the converged-plan
+**1.15.2** (current) — gemini-dispatch workspace-trust fix:
+`_dispatch_gemini.py` injects `GEMINI_CLI_TRUST_WORKSPACE=true`
+(gemini CLI ≥0.43.0-preview.0 otherwise refuses headless runs with
+empty stdout). Closes the v1.15.1 named blocker; advisory
+2026-05-15 resolved. Workflow B audit clean — gemini approved
+end-to-end with the workaround unset (the fix enabled its own
+audit).
+**1.15.1** — machine-enforcement of the converged-plan
 convention (schema + structural/consequence validator + fail-closed
 seal-time gate + graduated strictness knob + doctrine-only legacy
 surfacing). Closes the v1.15.0 NAMED BLOCKER. The recursive-trap
