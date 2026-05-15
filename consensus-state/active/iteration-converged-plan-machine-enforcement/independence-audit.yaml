@@ -61,3 +61,34 @@ audit_log:
     - review_target (path passed via --review-target; may be unspecified)
     - model (gemini CLI --model flag; no --output-schema enforcement)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T16:49:18Z'
+  event_id: 2026-05-15T16:49:18Z_review_returned_and_sealed_codex-cpme-wfb-2
+  actor: codex-cpme-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-codex-cpme-wfb-2-codex-cpme-wfb-2-pass1-pass.yaml
+  sha256: 59d3fdd0d1ca117cc36e030389bddbcb1646f132e1943adfec784ceab509967d
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T16:50:57Z'
+  event_id: 2026-05-15T16:50:57Z_review_returned_and_sealed_gemini-cpme-wfb-3
+  actor: gemini-cpme-wfb-3
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-gemini-cpme-wfb-3-gemini-cpme-wfb-3-pass1-pass.yaml
+  sha256: cedcb174ba01dd850ec6828d18bf2782468ea298bff2af8f471b8252d647d008
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true

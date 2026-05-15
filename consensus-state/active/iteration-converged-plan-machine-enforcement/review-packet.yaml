@@ -1,18 +1,85 @@
 defect_target:
   files:
+  - consensus-state/active/iteration-converged-plan-machine-enforcement/fix-response-pass3.md
   - consensus-state/active/iteration-converged-plan-machine-enforcement/fix-response-pass2.md
   - consensus-state/active/iteration-converged-plan-machine-enforcement/converged-plan.yaml
+  - consensus_mcp/workflow_engine.py
   - consensus_mcp/validators/validate_converged_plan.py
   - consensus_mcp/schemas/converged_plan_convention.schema.json
-  - consensus_mcp/workflow_engine.py
   - consensus_mcp/tools/consensus_get_iteration_outcome.py
   - consensus_mcp/config.py
   - consensus_mcp/tests/test_converged_plan_convention.py
   - docs/workflows/converged-plan-convention.md
   - CHANGELOG.md
   - README.md
-  base_sha: cd16b4b8c16d381a23d809c335edb83cd9eda4a124820de8c65375703f6aa9a6
+  base_sha: bbab294e37f7f4893839f5d2fcff84ef34550b813c6d69bd0ea191628be1c126
   touched_files_contents:
+    consensus-state/active/iteration-converged-plan-machine-enforcement/fix-response-pass3.md: "#\
+      \ Fix response — Workflow B pass-3 (codex pass-2 disposition)\n\ngemini pass-3\
+      \ (complete packet): **goal_satisfied=True, 0 blocking,\n0 findings** — gemini-rev-001\
+      \ (packet completeness) resolved.\n\ncodex pass-2: 1 blocking + 1 high + 1 medium.\
+      \ Dispositions below;\neach verified against the converged-plan design authority\
+      \ before\nacting (receiving-code-review: technical rigor, not performative\n\
+      agreement, not blind dismissal).\n\n## codex-rev-002 (high) — ACCEPTED, RESOLVED\n\
+      \nEngine fallback `(...) or CONVENTION_SCHEMA_VERSION` rewrote a\npresent-but-invalid\
+      \ `convention_schema_version` to 1 at seal,\npartially undoing pass-1 codex-rev-003.\
+      \ Correct catch.\n\nFix (`_seal_converged_plan`): when a convention IS present,\
+      \ stamp\nits `convention_schema_version` VERBATIM (no fallback) — the\nvalidator\
+      \ already records the version violation; the top-level field\nis now honest.\
+      \ The current-version default applies ONLY to the\nabsent-convention case (a\
+      \ legitimate v1.15.1 engine seal with no\ninput). Test: `test_engine_present_invalid_version_not_rewritten_\n\
+      to_current`.\n\n## codex-rev-003 (medium) — ACCEPTED, RESOLVED\n\nREADME \"\
+      operator-configurable dimensions\" table omitted\n`convergence.converged_plan_enforcement`\
+      \ and Workflow C. Fixed:\nadded the new dimension row (count 9→10), corrected\
+      \ `workflow.mode`\nto include `autonomous-execute` (C) + the canonical A/B/C\
+      \ aliases,\nadded `weighted-synthesis` (the project default) to\n`finding_disposition`.\n\
+      \n## codex-rev-001 (blocking) — PARTIALLY ACCEPTED (transparency),\n## hard-reject\
+      \ demand DISMISSED with design-authority evidence\n\n**Claim:** a new non-safety\
+      \ Workflow A convergence with no\n`convention-input.yaml` still seals under\
+      \ `graduated`; codex demands\nit hard-reject (or the v1.15.0 named blocker cannot\
+      \ be called\nclosed).\n\n**Why the hard-reject demand is dismissed (evidence,\
+      \ not opinion):**\nthe demand directly contradicts the ratified converged-plan\n\
+      (`converged-plan.yaml`, Workflow A weighted-synthesis: claude +\ncodex + gemini;\
+      \ shared-prior self-check PASSED) — including codex's\nOWN position in that\
+      \ consult:\n\n- `q4_strictness_backward_compat`: *\"hard-reject ONLY: (i) safety/\n\
+      \  data-loss/bricking/irreversible … (ii) empirical_status: proven\n  with no\
+      \ recorded experiment. warn + annotate convention_violations\n  otherwise.\"\
+      *\n- `q5_recursive_trap`: *\"codex: fail-closed for NEW Workflow A\n  convergences\
+      \ when required blocks are missing **(subject to the q4\n  graduated rule —\
+      \ safety class hard, else warn)**.\"*\n- The consult `non_goals` + the v1.15.0\
+      \ doctrine explicitly name the\n  **\"rejected-goal_packet papercut\"** as a\
+      \ risk graduated-default is\n  designed to avoid.\n\nSo graduated-default =\
+      \ warn-for-non-safety is the DELIBERATE,\npeer-converged design, with codex\
+      \ itself on record for it. A pass-2\nreviewer unilaterally re-litigating a 3-AI\
+      \ ratified decision is not\na code defect; per the project doctrine *\"convergence\
+      \ is agreement,\nnot truth\"* cuts both ways — a single later pass does not\
+      \ override\nthe sealed weighted-synthesis. Implementing codex-rev-001's\nhard-reject\
+      \ would CONTRADICT the design this iteration is mandated\nto execute (operator\
+      \ instruction: \"implement 1.15.1 planned\nchanges\"; the plan IS converged-plan.yaml).\n\
+      \n**What WAS accepted (codex's legitimate transparency concern):** an\nannotated\
+      \ incomplete seal must not be mistakable for a clean pass.\n`_seal_converged_plan`\
+      \ now stamps `convention_gate.enforcement_note`\non any `presence_ok==False`\
+      \ seal, stating explicitly it is\nwarn+annotate \"NOT a clean pass\", citing\
+      \ the q4/q5 rationale, and\npointing at `convention_violations`. `consensus_get_iteration_\n\
+      outcome` already surfaces `convention_gate` + `convention_violations`\n+ the\
+      \ unconditional `gate_scope` disclaimer adjacent to the\nenforcement marker.\
+      \ Test: `test_engine_warn_seal_carries_explicit_\nenforcement_note`. Docs/CHANGELOG\
+      \ state the graduated-default\nbehavior as an intentional design choice (not\
+      \ a silent bypass).\n\n**\"Named blocker closed\" claim — scoped honestly:**\
+      \ v1.15.1 closes\nthe v1.15.0 blocker by shipping the machine ENFORCEMENT MECHANISM\n\
+      (schema + validator + fail-closed seal-time gate + graduated knob +\nread-time\
+      \ surfacing). It does NOT, and per the converged design must\nNOT, force every\
+      \ convergence to carry blocks under the default —\nthat strictness is opt-in\
+      \ via `converged_plan_enforcement: strict`.\nThis is the artifact-scoped truth,\
+      \ stated in CHANGELOG.\n\n## Verification\n\n- `test_converged_plan_convention.py`:\
+      \ 38 tests green.\n- Full suite: re-run in progress (pass-2 result was 962/1-skip/0-reg;\n\
+      \  +2 new tests).\n\n## Recursion guard\n\nThis is codex round 2. Round 3 (codex-cpme-wfb-3)\
+      \ verifies rev-002 +\nrev-003 fixed. If round 3 still blocks SOLELY on rev-001\
+      \ as a\ndesign disagreement (no new code defect), that is design\nre-litigation\
+      \ against the sealed 3-AI converged plan — it will be\nrecorded as a documented\
+      \ disposition (this file) and escalated to\nthe operator per goal_packet stop-condition\n\
+      `non_convergence_after_3_rounds`, NOT resolved by overriding the\nconverged\
+      \ design.\n"
     consensus-state/active/iteration-converged-plan-machine-enforcement/fix-response-pass2.md: "#\
       \ Fix response — Workflow B pass-2 (codex pass-1 + gemini pass-2 integrated)\n\
       \nAll findings verified against actual code first (peer-citation\ndoctrine:\
@@ -211,216 +278,6 @@ defect_target:
       \ the existing convergence intake path before adding new machinery.'\n  - 'Workflow\
       \ B audit (codex + gemini).'\n  - 'Cut v1.15.1 (machine-enforcement of v1.15.0\
       \ doctrine; patch/minor per scope) from the worktree → origin + tag.'\n"
-    consensus_mcp/validators/validate_converged_plan.py: "\"\"\"Structural + consequence\
-      \ validator for the converged-plan convention.\n\nv1.15.1 — machine-enforcement\
-      \ of the v1.15.0 doctrine\n(docs/workflows/converged-plan-convention.md). Converged\
-      \ plan:\niteration-converged-plan-machine-enforcement (Workflow A\nweighted-synthesis:\
-      \ claude + codex + gemini).\n\nHIGHEST-ORDER design constraint (the recursive\
-      \ trap, v1.15.0 lesson 1\napplied to our own gate): this module checks PRESENCE\
-      \ and STRUCTURE and\nthe declared CONSEQUENCES of an orchestrator-attested bool.\
-      \ It has NO\ncode path that derives any approval / readiness state from the\n\
-      convention blocks. A passing gate means \"the required thinking was\nRECORDED\"\
-      , never \"the thinking is true\". The auditable structural test\n`test_validator_source_sets_no_correctness_state`\
-      \ greps this file and\nmust find zero such state being set — keep it that way.\n\
-      \"\"\"\nfrom __future__ import annotations\n\n# Stamped on EVERY result, unconditionally,\
-      \ and surfaced adjacent to any\n# pass marker by consensus_get_iteration_outcome.\
-      \ It must never be\n# possible to read \"the gate passed\" without also reading\
-      \ this.\nGATE_SCOPE_DISCLAIMER = (\n    \"presence-and-consistency only; NOT\
-      \ a soundness assertion. A passing \"\n    \"gate is not evidence the hypothesis\
-      \ is true or the safeguard adequate \"\n    \"— only that the required thinking\
-      \ was recorded. 'Would this safeguard \"\n    \"still work if the root cause\
-      \ were entirely different?' remains a human \"\n    \"judgement.\"\n)\n\nCONVENTION_SCHEMA_VERSION\
-      \ = 1\n\n# Operator-DECLARED risk classes that mandate a root-cause-independent\n\
-      # safeguard. The engine does NOT infer the class from keywords (heuristics\n\
-      # are the shared-prior trap the v1.15.0 report documents); it only enforces\n\
-      # the consequence of a declared/attested value.\nRISK_CLASS_REQUIRING_SAFEGUARD\
-      \ = {\n    \"safety\",\n    \"safety-critical\",\n    \"data-loss\",\n    \"\
-      bricking\",\n    \"irreversible\",\n    \"irreversible-risk\",\n}\n\nENFORCEMENT_LEVELS\
-      \ = (\"off\", \"warn\", \"graduated\", \"strict\")\n\n\ndef _nonempty(v) ->\
-      \ bool:\n    return isinstance(v, str) and v.strip() != \"\"\n\n\ndef _norm(s:\
-      \ str | None) -> str:\n    return (s or \"\").strip().lower()\n\n\ndef _safeguard_conforms(sg:\
-      \ dict) -> bool:\n    \"\"\"A conforming safeguard is decoupled from the hypothesis\
-      \ by design.\n\n    Structural check only — this asks 'are the decoupling attestations\n\
-      \    present and set to the doctrine-required values', NOT 'is the\n    safeguard\
-      \ actually adequate' (that is the human judgement named in\n    GATE_SCOPE_DISCLAIMER).\n\
-      \    \"\"\"\n    if not isinstance(sg, dict):\n        return False\n    return\
-      \ (\n        sg.get(\"applicable\") is True\n        and sg.get(\"works_if_root_cause_wrong\"\
-      ) is True\n        and sg.get(\"ships_with_fix\") is True\n        and _nonempty(sg.get(\"\
-      why\"))\n        and _nonempty(sg.get(\"mechanism\"))\n    )\n\n\ndef validate_convention(\n\
-      \    convention: dict,\n    *,\n    risk_class: str | None,\n    enforcement:\
-      \ str,\n) -> dict:\n    \"\"\"Validate the orchestrator-authored convention\
-      \ object.\n\n    Returns a result dict whose keys are deliberately neutral:\n\
-      \      - presence_ok          : every required block is present + consistent\n\
-      \      - violations           : human-readable presence/consequence gaps\n \
-      \     - hard_reject          : iteration must NOT seal (per `enforcement`)\n\
-      \      - hard_reject_reasons  : the specific load-bearing reasons\n      - gate_scope\
-      \           : GATE_SCOPE_DISCLAIMER, unconditionally\n      - convention_schema_version\n\
-      \n    The result intentionally carries NO field asserting the hypothesis or\n\
-      \    safeguard is right. Enforcement levels: off | warn | graduated | strict.\n\
-      \    \"\"\"\n    if enforcement not in ENFORCEMENT_LEVELS:\n        enforcement\
-      \ = \"graduated\"\n\n    violations: list[str] = []\n    hard_reasons: list[str]\
-      \ = []\n\n    if not isinstance(convention, dict):\n        violations.append(\"\
-      convention must be a mapping\")\n        return _finish(False, violations, hard_reasons,\
-      \ enforcement, None)\n\n    schema_ver = convention.get(\"convention_schema_version\"\
-      )\n    # codex-rev-003: a present convention must pin the schema version\n \
-      \   # exactly. Never default a present-but-unversioned/foreign-version\n   \
-      \ # convention to the current version at seal time.\n    if schema_ver != CONVENTION_SCHEMA_VERSION:\n\
-      \        violations.append(\n            \"convention_schema_version must be\
-      \ exactly \"\n            f\"{CONVENTION_SCHEMA_VERSION} for a present convention\
-      \ \"\n            f\"(got {schema_ver!r}) — not defaulted, not grandfathered\"\
-      \n        )\n\n    # ---- falsification block ----\n    fal = convention.get(\"\
-      falsification\")\n    if not isinstance(fal, dict):\n        violations.append(\"\
-      falsification block missing or not a mapping\")\n        fal = {}\n\n    hypothesis\
-      \ = fal.get(\"hypothesis\")\n    if not _nonempty(hypothesis):\n        violations.append(\"\
-      falsification.hypothesis must be a non-empty sentence\")\n\n    ffa = fal.get(\"\
-      falsifiable_from_artifacts\")\n    if not isinstance(ffa, bool):\n        violations.append(\"\
-      falsification.falsifiable_from_artifacts must be a bool\")\n\n    status = fal.get(\"\
-      empirical_status\")\n    if status not in {\"proven\", \"pending\", \"refuted\"\
-      , \"n/a\"}:\n        violations.append(\n            \"falsification.empirical_status\
-      \ must be one of \"\n            \"proven|pending|refuted|n/a\"\n        )\n\
-      \n    refute = fal.get(\"refutation_observation\")\n    if _nonempty(refute)\
-      \ and _nonempty(hypothesis) and (\n        refute.strip() == hypothesis.strip()\n\
-      \    ):\n        violations.append(\n            \"falsification.refutation_observation\
-      \ must be DISTINCT from the \"\n            \"hypothesis, not an echo of it\
-      \ (anti-theater)\"\n        )\n\n    # Defined-class consequence rule. The engine\
-      \ enforces only the\n    # consequence of the attested bool; it does not classify.\n\
-      \    if ffa is False:\n        if not _nonempty(fal.get(\"discriminating_experiment\"\
-      )):\n            violations.append(\n                \"falsifiable_from_artifacts=false\
-      \ ⇒ discriminating_experiment \"\n                \"must be non-empty\"\n  \
-      \          )\n        if not _nonempty(refute):\n            violations.append(\n\
-      \                \"falsifiable_from_artifacts=false ⇒ refutation_observation\
-      \ \"\n                \"must be non-empty\"\n            )\n        if status\
-      \ in {\"n/a\"}:\n            violations.append(\n                \"falsifiable_from_artifacts=false\
-      \ ⇒ empirical_status must be \"\n                \"pending|refuted|proven (never\
-      \ n/a) for the defined class\"\n            )\n\n    # proven requires a recorded\
-      \ experiment result (load-bearing reason ii).\n    if status == \"proven\" and\
-      \ not _nonempty(fal.get(\"experiment_result\")):\n        msg = (\n        \
-      \    \"empirical_status=proven without a recorded \"\n            \"falsification.experiment_result\"\
-      \n        )\n        violations.append(msg)\n        hard_reasons.append(msg)\n\
-      \n    # ---- independent_safeguard block ----\n    sg = convention.get(\"independent_safeguard\"\
-      )\n    if not isinstance(sg, dict) or \"applicable\" not in sg:\n        violations.append(\n\
-      \            \"independent_safeguard block missing — the judgement must be \"\
-      \n            \"RECORDED even when not applicable\"\n        )\n        sg =\
-      \ {}\n    elif sg.get(\"applicable\") is False:\n        if not _nonempty(sg.get(\"\
-      why\")):\n            violations.append(\n                \"independent_safeguard.applicable=false\
-      \ ⇒ why must record \"\n                \"the reason the risk class is not triggered\"\
-      \n            )\n    else:\n        if not _safeguard_conforms(sg):\n      \
-      \      violations.append(\n                \"independent_safeguard present but\
-      \ not decoupled: requires \"\n                \"works_if_root_cause_wrong=true,\
-      \ ships_with_fix=true, \"\n                \"non-empty mechanism and why\"\n\
-      \            )\n\n    # Risk-class consequence (load-bearing reason i): operator-DECLARED\n\
-      \    # safety/data-loss/bricking/irreversible class needs a conforming\n   \
-      \ # (decoupled) safeguard shipping with the fix.\n    if _norm(risk_class) in\
-      \ RISK_CLASS_REQUIRING_SAFEGUARD:\n        if not _safeguard_conforms(sg):\n\
-      \            msg = (\n                f\"risk_class={risk_class!r} requires\
-      \ a conforming \"\n                \"(root-cause-independent) independent_safeguard\"\
-      \n            )\n            violations.append(msg)\n            hard_reasons.append(msg)\n\
-      \n    # ---- decisive_experiment_before_next_iteration (codex-rev-002) ----\n\
-      \    # The THIRD named block. The key must be present. null is legitimate\n\
-      \    # ONLY when empirical_status is proven or n/a (convention doc §3);\n  \
-      \  # otherwise it must name a non-empty experiment.\n    if \"decisive_experiment_before_next_iteration\"\
-      \ not in convention:\n        violations.append(\n            \"decisive_experiment_before_next_iteration\
-      \ is one of the three \"\n            \"named convention blocks and must be\
-      \ present (value may be null \"\n            \"only when empirical_status is\
-      \ proven or n/a)\"\n        )\n    else:\n        dexp = convention.get(\"decisive_experiment_before_next_iteration\"\
-      )\n        if dexp is None:\n            if status not in {\"proven\", \"n/a\"\
-      }:\n                violations.append(\n                    \"decisive_experiment_before_next_iteration:\
-      \ null is \"\n                    \"allowed only when empirical_status is proven\
-      \ or n/a; \"\n                    f\"status={status!r} must carry a decisive\
-      \ experiment \"\n                    \"forward\"\n                )\n      \
-      \  elif not _nonempty(dexp):\n            violations.append(\n             \
-      \   \"decisive_experiment_before_next_iteration must be a \"\n             \
-      \   \"non-empty string or null\"\n            )\n\n    # ---- provenance-by-citation\
-      \ ----\n    cited = convention.get(\"cited_pass_ids\")\n    if not (isinstance(cited,\
-      \ list) and cited and all(_nonempty(c) for c in cited)):\n        violations.append(\n\
-      \            \"cited_pass_ids must be a non-empty list (provenance-by-citation:\
-      \ \"\n            \"the convention is sealed INTO converged-plan.yaml, not a\
-      \ loose \"\n            \"sidecar, not a single-winner extraction)\"\n     \
-      \   )\n\n    presence_ok = not violations\n    return _finish(presence_ok, violations,\
-      \ hard_reasons, enforcement, schema_ver)\n\n\ndef _finish(\n    presence_ok:\
-      \ bool,\n    violations: list[str],\n    hard_reasons: list[str],\n    enforcement:\
-      \ str,\n    schema_ver,\n) -> dict:\n    if enforcement == \"off\":\n      \
-      \  return {\n            \"presence_ok\": True,\n            \"violations\"\
-      : [],\n            \"hard_reject\": False,\n            \"hard_reject_reasons\"\
-      : [],\n            \"gate_scope\": GATE_SCOPE_DISCLAIMER,\n            \"enforcement\"\
-      : enforcement,\n            \"convention_schema_version\": schema_ver,\n   \
-      \     }\n\n    if enforcement == \"warn\":\n        hard = False\n    elif enforcement\
-      \ == \"strict\":\n        hard = bool(violations)\n    else:  # graduated (default):\
-      \ only the two load-bearing reasons block\n        hard = bool(hard_reasons)\n\
-      \n    return {\n        \"presence_ok\": presence_ok,\n        \"violations\"\
-      : violations,\n        \"hard_reject\": hard,\n        \"hard_reject_reasons\"\
-      : hard_reasons,\n        \"gate_scope\": GATE_SCOPE_DISCLAIMER,\n        \"\
-      enforcement\": enforcement,\n        \"convention_schema_version\": schema_ver,\n\
-      \    }\n"
-    consensus_mcp/schemas/converged_plan_convention.schema.json: "{\n  \"$schema\"\
-      : \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://example.org/consensus-mcp/converged_plan_convention.schema.json\"\
-      ,\n  \"title\": \"Converged-plan convention block (v1.15.0 doctrine, machine-enforced\
-      \ from v1.15.1)\",\n  \"description\": \"Machine contract for the falsification\
-      \ / independent_safeguard / decisive_experiment_before_next_iteration blocks\
-      \ defined in docs/workflows/converged-plan-convention.md. The schema validates\
-      \ STRUCTURE and PRESENCE only. It does NOT and CANNOT assert the hypothesis\
-      \ is true or the safeguard adequate — that remains a human judgement (see validators/validate_converged_plan.py\
-      \ GATE_SCOPE_DISCLAIMER).\",\n  \"type\": \"object\",\n  \"required\": [\n \
-      \   \"convention_schema_version\",\n    \"falsification\",\n    \"independent_safeguard\"\
-      ,\n    \"decisive_experiment_before_next_iteration\",\n    \"cited_pass_ids\"\
-      \n  ],\n  \"additionalProperties\": true,\n  \"properties\": {\n    \"convention_schema_version\"\
-      : {\n      \"type\": \"integer\",\n      \"const\": 1,\n      \"description\"\
-      : \"Bumped when the convention shape changes. Plans without this key are legacy/doctrine-only,\
-      \ never silently valid.\"\n    },\n    \"falsification\": {\n      \"type\"\
-      : \"object\",\n      \"required\": [\"hypothesis\", \"falsifiable_from_artifacts\"\
-      , \"empirical_status\"],\n      \"additionalProperties\": true,\n      \"properties\"\
-      : {\n        \"hypothesis\": {\n          \"type\": \"string\",\n          \"\
-      minLength\": 1,\n          \"description\": \"The converged root cause, one\
-      \ sentence.\"\n        },\n        \"falsifiable_from_artifacts\": {\n     \
-      \     \"type\": \"boolean\",\n          \"description\": \"true: refutable by\
-      \ reading evidence already in the packet (proof is a test shippable now). false:\
-      \ the DEFINED CLASS — refutable only by an external observation (hardware/firmware\
-      \ state, environment/toolchain, concurrency/timing).\"\n        },\n       \
-      \ \"discriminating_experiment\": {\n          \"type\": \"string\",\n      \
-      \    \"description\": \"The single external test that would refute the hypothesis,\
-      \ concrete enough to run as-is. Required (non-empty) when falsifiable_from_artifacts\
-      \ is false.\"\n        },\n        \"refutation_observation\": {\n         \
-      \ \"type\": \"string\",\n          \"description\": \"The specific pre-specified\
-      \ observable that, if seen, proves the hypothesis WRONG. Must be distinct from\
-      \ `hypothesis`. Required (non-empty) when falsifiable_from_artifacts is false.\"\
-      \n        },\n        \"empirical_status\": {\n          \"type\": \"string\"\
-      ,\n          \"enum\": [\"proven\", \"pending\", \"refuted\", \"n/a\"],\n  \
-      \        \"description\": \"n/a: falsifiable_from_artifacts true and proving\
-      \ test ships here. pending: defined class, experiment named, not yet run ('fixed/shipped/root-cause-correct'\
-      \ FORBIDDEN). proven: experiment ran, refutation_observation did NOT occur (requires\
-      \ experiment_result). refuted: experiment ran, refutation_observation DID occur\
-      \ — load-bearing terminal state.\"\n        },\n        \"reason_na\": {\n \
-      \         \"type\": \"string\",\n          \"description\": \"Why empirical_status\
-      \ is n/a (the proving test is included in this iteration).\"\n        },\n \
-      \       \"experiment_result\": {\n          \"type\": \"string\",\n        \
-      \  \"description\": \"Recorded outcome of the discriminating_experiment. Required\
-      \ for empirical_status proven.\"\n        }\n      }\n    },\n    \"independent_safeguard\"\
-      : {\n      \"type\": \"object\",\n      \"required\": [\"applicable\"],\n  \
-      \    \"additionalProperties\": true,\n      \"properties\": {\n        \"applicable\"\
-      : {\n          \"type\": \"boolean\",\n          \"description\": \"false only\
-      \ when the defect is NOT safety-critical/data-loss/bricking/irreversible-risk.\
-      \ Recording the judgement is mandatory even when false.\"\n        },\n    \
-      \    \"mechanism\": {\"type\": \"string\", \"description\": \"What the safeguard\
-      \ does.\"},\n        \"works_if_root_cause_wrong\": {\n          \"type\": \"\
-      boolean\",\n          \"description\": \"MUST be true when applicable: the safeguard\
-      \ protects even if the hypothesis is 100% false.\"\n        },\n        \"why\"\
-      : {\n          \"type\": \"string\",\n          \"minLength\": 1,\n        \
-      \  \"description\": \"Why it still protects even if the hypothesis is wrong\
-      \ (answerable from the mechanism alone); or, when not applicable, why the risk\
-      \ class is not triggered.\"\n        },\n        \"ships_with_fix\": {\n   \
-      \       \"type\": \"boolean\",\n          \"description\": \"MUST be true when\
-      \ applicable: same change as the hypothesized fix, not later.\"\n        }\n\
-      \      }\n    },\n    \"decisive_experiment_before_next_iteration\": {\n   \
-      \   \"type\": [\"string\", \"null\"],\n      \"description\": \"The single test\
-      \ that most cleanly partitions the remaining hypothesis space, to run BEFORE\
-      \ the next iteration. null only when empirical_status is proven or n/a AND the\
-      \ fix is confirmed.\"\n    },\n    \"cited_pass_ids\": {\n      \"type\": \"\
-      array\",\n      \"minItems\": 1,\n      \"items\": {\"type\": \"string\", \"\
-      minLength\": 1},\n      \"description\": \"Provenance-by-citation: the contributor\
-      \ pass_ids whose content this orchestrator-authored synthesis draws from. Non-empty\
-      \ — the blocks are sealed INTO converged-plan.yaml (same hash), not a loose\
-      \ untracked sidecar, and not a mechanical single-winner extraction.\"\n    }\n\
-      \  }\n}\n"
     consensus_mcp/workflow_engine.py: "\"\"\"Workflow engine — orchestrates contributors\
       \ per `.consensus/config.yaml`.\n\nThird sub-component of iter-0016. Reads project\
       \ config, validates, copies\neffective config to iteration dir, then dispatches\
@@ -777,18 +634,246 @@ defect_target:
       \ enforcement hard-rejected this \"\n                f\"iteration (enforcement={enforcement}):\
       \ {reasons}\"\n            )\n\n        # Always stamp a v1.15.1 convention_gate\
       \ (so the outcome reader can\n        # distinguish a v1.15.1 seal from a true\
-      \ pre-v1.15.1 legacy plan).\n        plan[\"convention_schema_version\"] = (\n\
-      \            convention.get(\"convention_schema_version\")\n            if isinstance(convention,\
-      \ dict)\n            else None\n        ) or vcp.CONVENTION_SCHEMA_VERSION\n\
-      \        if convention is not None:\n            plan[\"convention\"] = convention\n\
-      \        plan[\"convention_violations\"] = result[\"violations\"]\n        plan[\"\
-      convention_gate\"] = {\n            \"enforcement\": enforcement,\n        \
-      \    \"hard_reject\": False,\n            \"presence_ok\": result[\"presence_ok\"\
-      ],\n            \"convention_present\": convention is not None,\n          \
-      \  \"gate_scope\": vcp.GATE_SCOPE_DISCLAIMER,\n        }\n\n        out.write_text(\n\
-      \            yaml.safe_dump(plan, sort_keys=False, default_flow_style=False,\
-      \ allow_unicode=True),\n            encoding=\"utf-8\",\n        )\n       \
-      \ return out\n"
+      \ pre-v1.15.1 legacy plan).\n        # codex-rev-002 (pass-2): when a convention\
+      \ IS present, stamp its\n        # version VERBATIM (never rewrite an invalid/foreign\
+      \ version to the\n        # current one — the validator already flagged it;\
+      \ a misleading\n        # top-level field would undo pass-1 codex-rev-003).\
+      \ The\n        # current-version default applies ONLY to the absent-convention\n\
+      \        # case, which is a legitimate v1.15.1 engine seal with no input.\n\
+      \        if convention is not None:\n            plan[\"convention_schema_version\"\
+      ] = convention.get(\n                \"convention_schema_version\"\n       \
+      \     )\n            plan[\"convention\"] = convention\n        else:\n    \
+      \        plan[\"convention_schema_version\"] = vcp.CONVENTION_SCHEMA_VERSION\n\
+      \        plan[\"convention_violations\"] = result[\"violations\"]\n        gate\
+      \ = {\n            \"enforcement\": enforcement,\n            \"hard_reject\"\
+      : False,\n            \"presence_ok\": result[\"presence_ok\"],\n          \
+      \  \"convention_present\": convention is not None,\n            \"gate_scope\"\
+      : vcp.GATE_SCOPE_DISCLAIMER,\n        }\n        # codex-rev-001 (pass-2) transparency:\
+      \ the converged plan's q4/q5\n        # DELIBERATELY makes graduated default\
+      \ = warn+annotate for a new\n        # non-safety convergence missing blocks\
+      \ (papercut-avoidance — an\n        # explicit named risk in the consult). That\
+      \ is NOT a silent bypass:\n        # surface it loudly so an operator/outcome-reader\
+      \ cannot mistake an\n        # annotated incomplete seal for a complete one.\n\
+      \        if not result[\"presence_ok\"]:\n            gate[\"enforcement_note\"\
+      ] = (\n                \"convention incomplete/absent and sealed under \"\n\
+      \                f\"'{enforcement}' as warn+annotate (NOT a clean pass). \"\n\
+      \                \"Per converged-plan q4/q5 only safety-class / proven-without-\"\
+      \n                \"experiment hard-reject; non-safety is intentionally \"\n\
+      \                \"non-blocking to avoid the rejected-goal_packet papercut.\
+      \ \"\n                \"See convention_violations.\"\n            )\n      \
+      \  plan[\"convention_gate\"] = gate\n\n        out.write_text(\n           \
+      \ yaml.safe_dump(plan, sort_keys=False, default_flow_style=False, allow_unicode=True),\n\
+      \            encoding=\"utf-8\",\n        )\n        return out\n"
+    consensus_mcp/validators/validate_converged_plan.py: "\"\"\"Structural + consequence\
+      \ validator for the converged-plan convention.\n\nv1.15.1 — machine-enforcement\
+      \ of the v1.15.0 doctrine\n(docs/workflows/converged-plan-convention.md). Converged\
+      \ plan:\niteration-converged-plan-machine-enforcement (Workflow A\nweighted-synthesis:\
+      \ claude + codex + gemini).\n\nHIGHEST-ORDER design constraint (the recursive\
+      \ trap, v1.15.0 lesson 1\napplied to our own gate): this module checks PRESENCE\
+      \ and STRUCTURE and\nthe declared CONSEQUENCES of an orchestrator-attested bool.\
+      \ It has NO\ncode path that derives any approval / readiness state from the\n\
+      convention blocks. A passing gate means \"the required thinking was\nRECORDED\"\
+      , never \"the thinking is true\". The auditable structural test\n`test_validator_source_sets_no_correctness_state`\
+      \ greps this file and\nmust find zero such state being set — keep it that way.\n\
+      \"\"\"\nfrom __future__ import annotations\n\n# Stamped on EVERY result, unconditionally,\
+      \ and surfaced adjacent to any\n# pass marker by consensus_get_iteration_outcome.\
+      \ It must never be\n# possible to read \"the gate passed\" without also reading\
+      \ this.\nGATE_SCOPE_DISCLAIMER = (\n    \"presence-and-consistency only; NOT\
+      \ a soundness assertion. A passing \"\n    \"gate is not evidence the hypothesis\
+      \ is true or the safeguard adequate \"\n    \"— only that the required thinking\
+      \ was recorded. 'Would this safeguard \"\n    \"still work if the root cause\
+      \ were entirely different?' remains a human \"\n    \"judgement.\"\n)\n\nCONVENTION_SCHEMA_VERSION\
+      \ = 1\n\n# Operator-DECLARED risk classes that mandate a root-cause-independent\n\
+      # safeguard. The engine does NOT infer the class from keywords (heuristics\n\
+      # are the shared-prior trap the v1.15.0 report documents); it only enforces\n\
+      # the consequence of a declared/attested value.\nRISK_CLASS_REQUIRING_SAFEGUARD\
+      \ = {\n    \"safety\",\n    \"safety-critical\",\n    \"data-loss\",\n    \"\
+      bricking\",\n    \"irreversible\",\n    \"irreversible-risk\",\n}\n\nENFORCEMENT_LEVELS\
+      \ = (\"off\", \"warn\", \"graduated\", \"strict\")\n\n\ndef _nonempty(v) ->\
+      \ bool:\n    return isinstance(v, str) and v.strip() != \"\"\n\n\ndef _norm(s:\
+      \ str | None) -> str:\n    return (s or \"\").strip().lower()\n\n\ndef _safeguard_conforms(sg:\
+      \ dict) -> bool:\n    \"\"\"A conforming safeguard is decoupled from the hypothesis\
+      \ by design.\n\n    Structural check only — this asks 'are the decoupling attestations\n\
+      \    present and set to the doctrine-required values', NOT 'is the\n    safeguard\
+      \ actually adequate' (that is the human judgement named in\n    GATE_SCOPE_DISCLAIMER).\n\
+      \    \"\"\"\n    if not isinstance(sg, dict):\n        return False\n    return\
+      \ (\n        sg.get(\"applicable\") is True\n        and sg.get(\"works_if_root_cause_wrong\"\
+      ) is True\n        and sg.get(\"ships_with_fix\") is True\n        and _nonempty(sg.get(\"\
+      why\"))\n        and _nonempty(sg.get(\"mechanism\"))\n    )\n\n\ndef validate_convention(\n\
+      \    convention: dict,\n    *,\n    risk_class: str | None,\n    enforcement:\
+      \ str,\n) -> dict:\n    \"\"\"Validate the orchestrator-authored convention\
+      \ object.\n\n    Returns a result dict whose keys are deliberately neutral:\n\
+      \      - presence_ok          : every required block is present + consistent\n\
+      \      - violations           : human-readable presence/consequence gaps\n \
+      \     - hard_reject          : iteration must NOT seal (per `enforcement`)\n\
+      \      - hard_reject_reasons  : the specific load-bearing reasons\n      - gate_scope\
+      \           : GATE_SCOPE_DISCLAIMER, unconditionally\n      - convention_schema_version\n\
+      \n    The result intentionally carries NO field asserting the hypothesis or\n\
+      \    safeguard is right. Enforcement levels: off | warn | graduated | strict.\n\
+      \    \"\"\"\n    if enforcement not in ENFORCEMENT_LEVELS:\n        enforcement\
+      \ = \"graduated\"\n\n    violations: list[str] = []\n    hard_reasons: list[str]\
+      \ = []\n\n    if not isinstance(convention, dict):\n        violations.append(\"\
+      convention must be a mapping\")\n        return _finish(False, violations, hard_reasons,\
+      \ enforcement, None)\n\n    schema_ver = convention.get(\"convention_schema_version\"\
+      )\n    # codex-rev-003: a present convention must pin the schema version\n \
+      \   # exactly. Never default a present-but-unversioned/foreign-version\n   \
+      \ # convention to the current version at seal time.\n    if schema_ver != CONVENTION_SCHEMA_VERSION:\n\
+      \        violations.append(\n            \"convention_schema_version must be\
+      \ exactly \"\n            f\"{CONVENTION_SCHEMA_VERSION} for a present convention\
+      \ \"\n            f\"(got {schema_ver!r}) — not defaulted, not grandfathered\"\
+      \n        )\n\n    # ---- falsification block ----\n    fal = convention.get(\"\
+      falsification\")\n    if not isinstance(fal, dict):\n        violations.append(\"\
+      falsification block missing or not a mapping\")\n        fal = {}\n\n    hypothesis\
+      \ = fal.get(\"hypothesis\")\n    if not _nonempty(hypothesis):\n        violations.append(\"\
+      falsification.hypothesis must be a non-empty sentence\")\n\n    ffa = fal.get(\"\
+      falsifiable_from_artifacts\")\n    if not isinstance(ffa, bool):\n        violations.append(\"\
+      falsification.falsifiable_from_artifacts must be a bool\")\n\n    status = fal.get(\"\
+      empirical_status\")\n    if status not in {\"proven\", \"pending\", \"refuted\"\
+      , \"n/a\"}:\n        violations.append(\n            \"falsification.empirical_status\
+      \ must be one of \"\n            \"proven|pending|refuted|n/a\"\n        )\n\
+      \n    refute = fal.get(\"refutation_observation\")\n    if _nonempty(refute)\
+      \ and _nonempty(hypothesis) and (\n        refute.strip() == hypothesis.strip()\n\
+      \    ):\n        violations.append(\n            \"falsification.refutation_observation\
+      \ must be DISTINCT from the \"\n            \"hypothesis, not an echo of it\
+      \ (anti-theater)\"\n        )\n\n    # Defined-class consequence rule. The engine\
+      \ enforces only the\n    # consequence of the attested bool; it does not classify.\n\
+      \    if ffa is False:\n        if not _nonempty(fal.get(\"discriminating_experiment\"\
+      )):\n            violations.append(\n                \"falsifiable_from_artifacts=false\
+      \ ⇒ discriminating_experiment \"\n                \"must be non-empty\"\n  \
+      \          )\n        if not _nonempty(refute):\n            violations.append(\n\
+      \                \"falsifiable_from_artifacts=false ⇒ refutation_observation\
+      \ \"\n                \"must be non-empty\"\n            )\n        if status\
+      \ in {\"n/a\"}:\n            violations.append(\n                \"falsifiable_from_artifacts=false\
+      \ ⇒ empirical_status must be \"\n                \"pending|refuted|proven (never\
+      \ n/a) for the defined class\"\n            )\n\n    # proven requires a recorded\
+      \ experiment result (load-bearing reason ii).\n    if status == \"proven\" and\
+      \ not _nonempty(fal.get(\"experiment_result\")):\n        msg = (\n        \
+      \    \"empirical_status=proven without a recorded \"\n            \"falsification.experiment_result\"\
+      \n        )\n        violations.append(msg)\n        hard_reasons.append(msg)\n\
+      \n    # ---- independent_safeguard block ----\n    sg = convention.get(\"independent_safeguard\"\
+      )\n    if not isinstance(sg, dict) or \"applicable\" not in sg:\n        violations.append(\n\
+      \            \"independent_safeguard block missing — the judgement must be \"\
+      \n            \"RECORDED even when not applicable\"\n        )\n        sg =\
+      \ {}\n    elif sg.get(\"applicable\") is False:\n        if not _nonempty(sg.get(\"\
+      why\")):\n            violations.append(\n                \"independent_safeguard.applicable=false\
+      \ ⇒ why must record \"\n                \"the reason the risk class is not triggered\"\
+      \n            )\n    else:\n        if not _safeguard_conforms(sg):\n      \
+      \      violations.append(\n                \"independent_safeguard present but\
+      \ not decoupled: requires \"\n                \"works_if_root_cause_wrong=true,\
+      \ ships_with_fix=true, \"\n                \"non-empty mechanism and why\"\n\
+      \            )\n\n    # Risk-class consequence (load-bearing reason i): operator-DECLARED\n\
+      \    # safety/data-loss/bricking/irreversible class needs a conforming\n   \
+      \ # (decoupled) safeguard shipping with the fix.\n    if _norm(risk_class) in\
+      \ RISK_CLASS_REQUIRING_SAFEGUARD:\n        if not _safeguard_conforms(sg):\n\
+      \            msg = (\n                f\"risk_class={risk_class!r} requires\
+      \ a conforming \"\n                \"(root-cause-independent) independent_safeguard\"\
+      \n            )\n            violations.append(msg)\n            hard_reasons.append(msg)\n\
+      \n    # ---- decisive_experiment_before_next_iteration (codex-rev-002) ----\n\
+      \    # The THIRD named block. The key must be present. null is legitimate\n\
+      \    # ONLY when empirical_status is proven or n/a (convention doc §3);\n  \
+      \  # otherwise it must name a non-empty experiment.\n    if \"decisive_experiment_before_next_iteration\"\
+      \ not in convention:\n        violations.append(\n            \"decisive_experiment_before_next_iteration\
+      \ is one of the three \"\n            \"named convention blocks and must be\
+      \ present (value may be null \"\n            \"only when empirical_status is\
+      \ proven or n/a)\"\n        )\n    else:\n        dexp = convention.get(\"decisive_experiment_before_next_iteration\"\
+      )\n        if dexp is None:\n            if status not in {\"proven\", \"n/a\"\
+      }:\n                violations.append(\n                    \"decisive_experiment_before_next_iteration:\
+      \ null is \"\n                    \"allowed only when empirical_status is proven\
+      \ or n/a; \"\n                    f\"status={status!r} must carry a decisive\
+      \ experiment \"\n                    \"forward\"\n                )\n      \
+      \  elif not _nonempty(dexp):\n            violations.append(\n             \
+      \   \"decisive_experiment_before_next_iteration must be a \"\n             \
+      \   \"non-empty string or null\"\n            )\n\n    # ---- provenance-by-citation\
+      \ ----\n    cited = convention.get(\"cited_pass_ids\")\n    if not (isinstance(cited,\
+      \ list) and cited and all(_nonempty(c) for c in cited)):\n        violations.append(\n\
+      \            \"cited_pass_ids must be a non-empty list (provenance-by-citation:\
+      \ \"\n            \"the convention is sealed INTO converged-plan.yaml, not a\
+      \ loose \"\n            \"sidecar, not a single-winner extraction)\"\n     \
+      \   )\n\n    presence_ok = not violations\n    return _finish(presence_ok, violations,\
+      \ hard_reasons, enforcement, schema_ver)\n\n\ndef _finish(\n    presence_ok:\
+      \ bool,\n    violations: list[str],\n    hard_reasons: list[str],\n    enforcement:\
+      \ str,\n    schema_ver,\n) -> dict:\n    if enforcement == \"off\":\n      \
+      \  return {\n            \"presence_ok\": True,\n            \"violations\"\
+      : [],\n            \"hard_reject\": False,\n            \"hard_reject_reasons\"\
+      : [],\n            \"gate_scope\": GATE_SCOPE_DISCLAIMER,\n            \"enforcement\"\
+      : enforcement,\n            \"convention_schema_version\": schema_ver,\n   \
+      \     }\n\n    if enforcement == \"warn\":\n        hard = False\n    elif enforcement\
+      \ == \"strict\":\n        hard = bool(violations)\n    else:  # graduated (default):\
+      \ only the two load-bearing reasons block\n        hard = bool(hard_reasons)\n\
+      \n    return {\n        \"presence_ok\": presence_ok,\n        \"violations\"\
+      : violations,\n        \"hard_reject\": hard,\n        \"hard_reject_reasons\"\
+      : hard_reasons,\n        \"gate_scope\": GATE_SCOPE_DISCLAIMER,\n        \"\
+      enforcement\": enforcement,\n        \"convention_schema_version\": schema_ver,\n\
+      \    }\n"
+    consensus_mcp/schemas/converged_plan_convention.schema.json: "{\n  \"$schema\"\
+      : \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://example.org/consensus-mcp/converged_plan_convention.schema.json\"\
+      ,\n  \"title\": \"Converged-plan convention block (v1.15.0 doctrine, machine-enforced\
+      \ from v1.15.1)\",\n  \"description\": \"Machine contract for the falsification\
+      \ / independent_safeguard / decisive_experiment_before_next_iteration blocks\
+      \ defined in docs/workflows/converged-plan-convention.md. The schema validates\
+      \ STRUCTURE and PRESENCE only. It does NOT and CANNOT assert the hypothesis\
+      \ is true or the safeguard adequate — that remains a human judgement (see validators/validate_converged_plan.py\
+      \ GATE_SCOPE_DISCLAIMER).\",\n  \"type\": \"object\",\n  \"required\": [\n \
+      \   \"convention_schema_version\",\n    \"falsification\",\n    \"independent_safeguard\"\
+      ,\n    \"decisive_experiment_before_next_iteration\",\n    \"cited_pass_ids\"\
+      \n  ],\n  \"additionalProperties\": true,\n  \"properties\": {\n    \"convention_schema_version\"\
+      : {\n      \"type\": \"integer\",\n      \"const\": 1,\n      \"description\"\
+      : \"Bumped when the convention shape changes. Plans without this key are legacy/doctrine-only,\
+      \ never silently valid.\"\n    },\n    \"falsification\": {\n      \"type\"\
+      : \"object\",\n      \"required\": [\"hypothesis\", \"falsifiable_from_artifacts\"\
+      , \"empirical_status\"],\n      \"additionalProperties\": true,\n      \"properties\"\
+      : {\n        \"hypothesis\": {\n          \"type\": \"string\",\n          \"\
+      minLength\": 1,\n          \"description\": \"The converged root cause, one\
+      \ sentence.\"\n        },\n        \"falsifiable_from_artifacts\": {\n     \
+      \     \"type\": \"boolean\",\n          \"description\": \"true: refutable by\
+      \ reading evidence already in the packet (proof is a test shippable now). false:\
+      \ the DEFINED CLASS — refutable only by an external observation (hardware/firmware\
+      \ state, environment/toolchain, concurrency/timing).\"\n        },\n       \
+      \ \"discriminating_experiment\": {\n          \"type\": \"string\",\n      \
+      \    \"description\": \"The single external test that would refute the hypothesis,\
+      \ concrete enough to run as-is. Required (non-empty) when falsifiable_from_artifacts\
+      \ is false.\"\n        },\n        \"refutation_observation\": {\n         \
+      \ \"type\": \"string\",\n          \"description\": \"The specific pre-specified\
+      \ observable that, if seen, proves the hypothesis WRONG. Must be distinct from\
+      \ `hypothesis`. Required (non-empty) when falsifiable_from_artifacts is false.\"\
+      \n        },\n        \"empirical_status\": {\n          \"type\": \"string\"\
+      ,\n          \"enum\": [\"proven\", \"pending\", \"refuted\", \"n/a\"],\n  \
+      \        \"description\": \"n/a: falsifiable_from_artifacts true and proving\
+      \ test ships here. pending: defined class, experiment named, not yet run ('fixed/shipped/root-cause-correct'\
+      \ FORBIDDEN). proven: experiment ran, refutation_observation did NOT occur (requires\
+      \ experiment_result). refuted: experiment ran, refutation_observation DID occur\
+      \ — load-bearing terminal state.\"\n        },\n        \"reason_na\": {\n \
+      \         \"type\": \"string\",\n          \"description\": \"Why empirical_status\
+      \ is n/a (the proving test is included in this iteration).\"\n        },\n \
+      \       \"experiment_result\": {\n          \"type\": \"string\",\n        \
+      \  \"description\": \"Recorded outcome of the discriminating_experiment. Required\
+      \ for empirical_status proven.\"\n        }\n      }\n    },\n    \"independent_safeguard\"\
+      : {\n      \"type\": \"object\",\n      \"required\": [\"applicable\"],\n  \
+      \    \"additionalProperties\": true,\n      \"properties\": {\n        \"applicable\"\
+      : {\n          \"type\": \"boolean\",\n          \"description\": \"false only\
+      \ when the defect is NOT safety-critical/data-loss/bricking/irreversible-risk.\
+      \ Recording the judgement is mandatory even when false.\"\n        },\n    \
+      \    \"mechanism\": {\"type\": \"string\", \"description\": \"What the safeguard\
+      \ does.\"},\n        \"works_if_root_cause_wrong\": {\n          \"type\": \"\
+      boolean\",\n          \"description\": \"MUST be true when applicable: the safeguard\
+      \ protects even if the hypothesis is 100% false.\"\n        },\n        \"why\"\
+      : {\n          \"type\": \"string\",\n          \"minLength\": 1,\n        \
+      \  \"description\": \"Why it still protects even if the hypothesis is wrong\
+      \ (answerable from the mechanism alone); or, when not applicable, why the risk\
+      \ class is not triggered.\"\n        },\n        \"ships_with_fix\": {\n   \
+      \       \"type\": \"boolean\",\n          \"description\": \"MUST be true when\
+      \ applicable: same change as the hypothesized fix, not later.\"\n        }\n\
+      \      }\n    },\n    \"decisive_experiment_before_next_iteration\": {\n   \
+      \   \"type\": [\"string\", \"null\"],\n      \"description\": \"The single test\
+      \ that most cleanly partitions the remaining hypothesis space, to run BEFORE\
+      \ the next iteration. null only when empirical_status is proven or n/a AND the\
+      \ fix is confirmed.\"\n    },\n    \"cited_pass_ids\": {\n      \"type\": \"\
+      array\",\n      \"minItems\": 1,\n      \"items\": {\"type\": \"string\", \"\
+      minLength\": 1},\n      \"description\": \"Provenance-by-citation: the contributor\
+      \ pass_ids whose content this orchestrator-authored synthesis draws from. Non-empty\
+      \ — the blocks are sealed INTO converged-plan.yaml (same hash), not a loose\
+      \ untracked sidecar, and not a mechanical single-winner extraction.\"\n    }\n\
+      \  }\n}\n"
     consensus_mcp/tools/consensus_get_iteration_outcome.py: "\"\"\"consensus.get_iteration_outcome\
       \ MCP tool — read-only inspector for an\niteration's outcome.\n\nPer iter-0021\
       \ converged plan (Section A): returns the parsed converged-plan\n(workflow #4)\
@@ -1394,7 +1479,32 @@ defect_target:
       \ adapters, tmp_path)\n    d, goal, target = _iter_dir(tmp_path, goal_extra={\"\
       risk_class\": \"bricking\"})\n    outcome = engine.run_iteration(d, goal, target)\n\
       \    assert outcome.error is not None\n    assert \"convention\" in outcome.error.lower()\n\
-      \    assert not (d / \"converged-plan.yaml\").exists()\n\n\ndef test_decisive_experiment_block_required(tmp_path):\n\
+      \    assert not (d / \"converged-plan.yaml\").exists()\n\n\ndef test_engine_present_invalid_version_not_rewritten_to_current(tmp_path):\n\
+      \    \"\"\"codex-rev-002 (pass-2): a present convention with a bad/missing\n\
+      \    schema version must be stamped VERBATIM, never silently rewritten\n   \
+      \ to the current version (that would undo the pass-1 rev-003 fix).\"\"\"\n \
+      \   config = _three_contributor_config()\n    adapters = {n: FakeAlwaysApprove()\
+      \ for n in (\"claude\", \"codex\", \"gemini\")}\n    engine = WorkflowEngine(config,\
+      \ adapters, tmp_path)\n    d, goal, target = _iter_dir(tmp_path)  # non-safety\
+      \ ⇒ graduated warn ⇒ seals\n    conv = _good_convention(convention_schema_version=999)\n\
+      \    (d / \"convention-input.yaml\").write_text(\n        yaml.safe_dump({\"\
+      convention\": conv}), encoding=\"utf-8\"\n    )\n    outcome = engine.run_iteration(d,\
+      \ goal, target)\n    assert outcome.error is None\n    plan = yaml.safe_load((d\
+      \ / \"converged-plan.yaml\").read_text(encoding=\"utf-8\"))\n    assert plan[\"\
+      convention_schema_version\"] == 999  # verbatim, NOT 1\n    assert any(\"convention_schema_version\"\
+      \ in v for v in plan[\"convention_violations\"])\n\n\ndef test_engine_warn_seal_carries_explicit_enforcement_note(tmp_path):\n\
+      \    \"\"\"codex-rev-001 (pass-2) transparency: a graduated warn seal of an\n\
+      \    incomplete/absent convention must be loudly marked, never a silent\n  \
+      \  clean pass.\"\"\"\n    config = _three_contributor_config()\n    adapters\
+      \ = {n: FakeAlwaysApprove() for n in (\"claude\", \"codex\", \"gemini\")}\n\
+      \    engine = WorkflowEngine(config, adapters, tmp_path)\n    d, goal, target\
+      \ = _iter_dir(tmp_path)\n    outcome = engine.run_iteration(d, goal, target)\n\
+      \    assert outcome.error is None\n    plan = yaml.safe_load((d / \"converged-plan.yaml\"\
+      ).read_text(encoding=\"utf-8\"))\n    gate = plan[\"convention_gate\"]\n   \
+      \ assert gate[\"convention_present\"] is False\n    assert gate[\"presence_ok\"\
+      ] is False\n    note = gate[\"enforcement_note\"].lower()\n    assert \"not\
+      \ a clean pass\" in note\n    assert \"papercut\" in note  # cites the deliberate\
+      \ converged-plan q4/q5 rationale\n\n\ndef test_decisive_experiment_block_required(tmp_path):\n\
       \    \"\"\"codex-rev-002: decisive_experiment_before_next_iteration is one of\n\
       \    the three named blocks — omitting it is a violation. null is allowed\n\
       \    only for the documented proven/n-a case.\"\"\"\n    conv = _good_convention()\n\
@@ -1648,29 +1758,44 @@ defect_target:
       \ deferred — not a cop-out):** operator\ngoal_packet `defect_class`/`risk_class`\
       \ declaration UX + an\nanti-gaming cross-check on `falsifiable_from_artifacts`.\
       \ Both are\nill-posed until the shipped slice produces real usage data.\n\n\
-      Full suite green: 956 passed, 1 skipped, 0 regressions (the 30 new\ncode-path\
-      \ tests in `test_converged_plan_convention.py` are included\nin that count —\
-      \ they close the v1.15.0 doc-only loose end with a\nmeaningful regression signal).\n\
-      \n## 1.15.0 - 2026-05-15\n\n**Convergence-correctness doctrine** — minor bump\
-      \ (cross-project\ndoctrine evolution, not a hot-patch). From\n`iteration-convergence-correctness-doctrine`\
-      \ (Workflow A\nweighted-synthesis: claude + codex + gemini, no blocking\nobjections;\
-      \ gemini dissented substantively on prominence +\nmachine-enforcement and that\
-      \ dissent was incorporated, not\noutvoted — the shared-prior self-check passed),\
-      \ derived from a\nreal downstream failure: the ChilipadScreen ESP32-P4 i2c\n\
-      boot-loop consensus-failure report (2026-05-15) where two clean\nstrict-majority\
-      \ convergences (one round-1 *unanimous*) were both\nrefuted on-device.\n\nDoctrine\
-      \ added to the bundled `consensus-workflow` skill + both\ndispatch-template\
-      \ preambles + a new\n`docs/workflows/converged-plan-convention.md`:\n\n- **Safety\
-      \ interlock first (headline rule).** Safety-critical /\n  data-loss / bricking\
-      \ / irreversible-risk defects MUST ship a\n  root-cause-INDEPENDENT safeguard\
-      \ with the hypothesized fix,\n  valuable even if the hypothesis is 100% false.\
-      \ Auditable bar:\n  \"would it still work if the root cause were entirely\n\
-      \  different?\" Field-proven: an independent boot-loop breaker\n  un-bricked\
-      \ a medical-safety device across two failed\n  root-cause iterations (\"the\
-      \ single highest-value decision\").\n- **Convergence is agreement, not truth.**\
-      \ Fast independent\n  unanimity is a verify-harder flag — a shared-prior artifact\
-      \ is\n  the multi-agent analog of single-agent rationalize-away.\n  Dispatch\
-      \ templates now require each contributor to state the\n  differential/prior\
+      **Workflow B audit chain** (codex + gemini, post-implementation):\ngemini APPROVED\
+      \ (`goal_satisfied=true`, no blocking). codex pass-1\nraised 2 blocking + 2\
+      \ high — all verified against real code (no\nhallucinations; all correctly caught\
+      \ the slice under-implementing\nthe converged plan) and integrated TDD-first:\
+      \ the third named block\n(`decisive_experiment_before_next_iteration`) is now\
+      \ schema-required\n+ validated; `doctrine-only` is a READ-time legacy classification\n\
+      only (a new convergence missing blocks is validated under the\nconfigured level,\
+      \ not bypassed); `convention_schema_version` is\npinned exactly (never defaulted/rewritten);\
+      \ a hard-reject removes any\nstale `converged-plan.yaml` (fail-closed truly\
+      \ closed). **Design\nnote (intentional, peer-converged):** under the default\
+      \ `graduated`\nlevel a new *non-safety* convergence missing blocks is sealed\
+      \ as\n**warn + annotate** (loudly marked via `convention_gate.\nenforcement_note`,\
+      \ never a silent pass), NOT hard-rejected — this is\nthe converged plan's deliberate\
+      \ q4/q5 decision (incl. codex's own\nconsult position) to avoid the rejected-goal_packet\
+      \ papercut. Strict\nenforcement is opt-in via `converged_plan_enforcement: strict`.\n\
+      \nFull suite green: 964 passed, 1 skipped, 0 regressions (38 new\ncode-path\
+      \ tests in `test_converged_plan_convention.py`, including\nall audit-integration\
+      \ fixes — they close the v1.15.0 doc-only loose\nend with a meaningful regression\
+      \ signal).\n\n## 1.15.0 - 2026-05-15\n\n**Convergence-correctness doctrine**\
+      \ — minor bump (cross-project\ndoctrine evolution, not a hot-patch). From\n\
+      `iteration-convergence-correctness-doctrine` (Workflow A\nweighted-synthesis:\
+      \ claude + codex + gemini, no blocking\nobjections; gemini dissented substantively\
+      \ on prominence +\nmachine-enforcement and that dissent was incorporated, not\n\
+      outvoted — the shared-prior self-check passed), derived from a\nreal downstream\
+      \ failure: the ChilipadScreen ESP32-P4 i2c\nboot-loop consensus-failure report\
+      \ (2026-05-15) where two clean\nstrict-majority convergences (one round-1 *unanimous*)\
+      \ were both\nrefuted on-device.\n\nDoctrine added to the bundled `consensus-workflow`\
+      \ skill + both\ndispatch-template preambles + a new\n`docs/workflows/converged-plan-convention.md`:\n\
+      \n- **Safety interlock first (headline rule).** Safety-critical /\n  data-loss\
+      \ / bricking / irreversible-risk defects MUST ship a\n  root-cause-INDEPENDENT\
+      \ safeguard with the hypothesized fix,\n  valuable even if the hypothesis is\
+      \ 100% false. Auditable bar:\n  \"would it still work if the root cause were\
+      \ entirely\n  different?\" Field-proven: an independent boot-loop breaker\n\
+      \  un-bricked a medical-safety device across two failed\n  root-cause iterations\
+      \ (\"the single highest-value decision\").\n- **Convergence is agreement, not\
+      \ truth.** Fast independent\n  unanimity is a verify-harder flag — a shared-prior\
+      \ artifact is\n  the multi-agent analog of single-agent rationalize-away.\n\
+      \  Dispatch templates now require each contributor to state the\n  differential/prior\
       \ it reasoned from (shared prior exposed at\n  reveal instead of laundered as\
       \ \"independent agreement\").\n- **Provisional-until-proven** for the defined\
       \ not-falsifiable-\n  from-artifacts class (hardware/firmware state, environment/\n\
@@ -2373,14 +2498,17 @@ defect_target:
       \ heartbeats. If the model stalls past `CONSENSUS_MCP_STALL_SILENCE_SECONDS`\
       \ (default 180), the wrapper kills the process group and records `dispatch_aborted`.\
       \ The operator can also write `consensus-state/abort-dispatch-<pass_id>.signal`\
-      \ to force an abort within 500ms.\n\n## The 9 operator-configurable dimensions\n\
+      \ to force an abort within 500ms.\n\n## The 10 operator-configurable dimensions\n\
       \n`.consensus/config.yaml` (generated by `consensus-init`) is the single source\
       \ of truth for project governance. Every dimension is a project-level choice,\
       \ not a hardcoded default:\n\n| Dimension | Choices |\n|---|---|\n| `workflow.mode`\
-      \ | `post-review` (#3), `propose-converge` (#4), `advisory` |\n| `workflow.independence`\
+      \ | `post-review` (B), `propose-converge` (A), `advisory`, `autonomous-execute`\
+      \ (C) — letter aliases A/B/C canonical since v1.14.4 |\n| `workflow.independence`\
       \ | `blind-first-reveal`, `visible`, `sequential` |\n| `convergence.rule` |\
       \ `unanimous`, `strict-majority`, `inclusive-majority`, `advisory` |\n| `convergence.finding_disposition`\
-      \ | `all-or-nothing`, `per-finding` |\n| `contributors.enabled` | ordered list\
+      \ | `weighted-synthesis` (default), `all-or-nothing`, `per-finding` |\n| `convergence.converged_plan_enforcement`\
+      \ | `off`, `warn`, `graduated` (default), `strict` — v1.15.1 converged-plan\
+      \ convention machine-enforcement |\n| `contributors.enabled` | ordered list\
       \ (claude always present; codex/gemini optional; future adapters pluggable)\
       \ |\n| `snapshots.trigger` | `manual-only`, `on-iteration-close`, `periodic`\
       \ |\n| `snapshots.periodic.every_iterations` | integer cadence |\n| `patches.authoring`\
