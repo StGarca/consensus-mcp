@@ -2,9 +2,13 @@ name: tests
 
 on:
   push:
-    branches: [main]
+    # main is the latest-released state; v* are the active release/dev
+    # branches where all development lands (pre-v1.15.4 the trigger was
+    # main-only, so CI was dormant from v1.13.0→v1.15.3 while every
+    # release happened on a v* branch — fixed in v1.15.4).
+    branches: [main, 'v*']
   pull_request:
-    branches: [main]
+    branches: [main, 'v*']
 
 jobs:
   test:
