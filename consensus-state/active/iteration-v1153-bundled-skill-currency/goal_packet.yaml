@@ -1,0 +1,146 @@
+schema_version: 1
+pilot_id: iteration-v1153-bundled-skill-currency
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    Scope + content consult for a v1.15.3 hot-patch. Operator
+    question that triggered this: "on a new install, will the 2-AI
+    config follow all the upgraded workflow lessons-learned, same as
+    3-AI?" Investigation answer (verified): YES — doctrine + v1.15.1
+    machine-enforcement are AI-count-AGNOSTIC, scoped by WORKFLOW
+    MODE not contributor count. But the investigation surfaced real
+    CURRENCY DRIFT in shipped v1.15.2 artifacts that misleads every
+    new installer (2-AI and 3-AI identically).
+
+    VERIFIED FACTS (read first-hand at v1.15.3 branch tip; reason
+    from THESE, and state the differential/prior you used — fast
+    unanimity on a shared prior is a verify-harder flag, not
+    confidence):
+
+    F1. consensus_mcp/claude_extensions/skills/consensus-workflow/
+        SKILL.md:262-263 says the converged-plan convention is
+        "an authoring convention enforced by this doctrine now;
+        machine validation is a sequenced follow-up." This is the
+        v1.15.0 wording. v1.15.1 (tag bef618cf) SHIPPED machine
+        enforcement (validate_converged_plan.py + seal-time gate in
+        workflow_engine._seal_converged_plan + config knob
+        convergence.converged_plan_enforcement default `graduated`).
+        => bundled skill is STALE vs shipped reality.
+    F2. Same SKILL.md "Gemini 429 handling" section (~285) has no
+        mention of GEMINI_CLI_TRUST_WORKSPACE. v1.15.2 (tag
+        fb60f3cf) fixed _dispatch_gemini to inject it; gemini CLI
+        >=0.43.0-preview.0 otherwise fails EMPTY-OUTPUT, which
+        masquerades as a 429 and would waste the 429 retry budget.
+        Manual workaround only needed on <=v1.15.1.
+    F3. SKILL.md:46-48 (consensus-workflow) AND consensus/SKILL.md:
+        44-48 (bootstrap) both say the Workflow C multi-iteration
+        engine "ships in v1.15.0". v1.15.0/1/2 ALL shipped; the
+        engine is STILL NotImplementedError. The forward-reference
+        target version has already passed without the feature.
+    F4. workflow_engine.py:162-168 raises NotImplementedError for
+        Workflow C with message "Multi-iteration auto-execution
+        lands in v1.15.0." Same already-passed-target drift, but in
+        a CODE path (a string), not a doc.
+    F5. No test pins the SKILL.md text or the NotImplementedError
+        message string (grep of consensus_mcp/tests/ = empty).
+    F6. The bundled skill IS installed for every new user via
+        consensus-init --install-claude-code through a FIXED list
+        (_init_wizard.py:128,135), NOT gated on contributor count.
+        Fresh wizard defaults n>=2 to Workflow A (full enforcement);
+        only the zero-config legacy-synth fallback defaults to
+        post-review, identically for 2-AI and 3-AI.
+
+  question: |
+    Each contributor: STATE THE DIFFERENTIAL/PRIOR YOU REASONED
+    FROM. Stances on Q1-Q5 + the observation that would show your
+    recommendation WRONG. structural_abstention OK per question.
+
+    Q1 — SCOPE of v1.15.3. Which of F1-F4 ship in this one
+    hot-patch?
+      (a) F1 only (the exact thing that answered the operator;
+          minimal blast radius).
+      (b) F1 + F2 (both are bundled-skill currency vs shipped
+          v1.15.1/v1.15.2; same file, same failure mode).
+      (c) F1 + F2 + F3 (all bundled-skill currency drift; +
+          consensus/SKILL.md).
+      (d) F1 + F2 + F3 + F4 (also correct the engine
+          NotImplementedError string — same "already-passed
+          forward-reference" failure mode, but mixes a code path
+          into a doc hot-patch).
+      Apply the no-deferral doctrine ("bundle when items share a
+      doctrine boundary") vs. release-hygiene ("don't mix code +
+      doc in a doc hot-patch; small blast radius"). Which wins
+      here and WHY?
+
+    Q2 — Content for the F3/F4 Workflow-C correction (IF in scope).
+    There is NO valid target version to name (v1.15.0/1/2 passed;
+    no v-number is committed for the engine). Artifact-scoped-truth
+    forbids inventing one. What should the corrected text say?
+      (a) "remains UNIMPLEMENTED as of v1.15.2; no target version
+          committed; tracked as a named blocker — see
+          docs/workflows/workflow-c-autonomous.md."
+      (b) Same, but ALSO state running Workflow C raises a clear
+          NotImplementedError (set expectation before the operator
+          hits it).
+      (c) Drop all version forward-references entirely; point only
+          at the status doc as the single source of truth.
+
+    Q3 — Does correcting workflow_engine.py:162-168 (F4, a code
+    string) belong in THIS doc-currency hot-patch, or is mixing
+    code+doc a release-hygiene anti-pattern that should be its own
+    patch even though it shares the failure mode? (The workflow
+    doctrine says hot-patches that share a single failure-mode
+    should bundle; weigh against the doc-only blast-radius
+    convention.)
+
+    Q4 — Should the bundled skill EXPLICITLY state the
+    consistency property the operator asked about — i.e. add a
+    short normative line that the doctrine + machine-enforcement
+    are scoped by WORKFLOW MODE, never by contributor count, so 2-AI
+    and 3-AI installs are governed identically (only the
+    convergence-rule DEFAULT differs: unanimous@2 vs
+    strict-majority@3)? Or is that scope-creep beyond a currency
+    fix?
+
+    Q5 — Minimal shippable slice + any named blocker with a
+    CONCRETE reason (not "complex"). Is there any reason F1 (at
+    least) should NOT ship now as v1.15.3?
+
+  non_goals:
+    - re-litigating v1.15.1/v1.15.2 (shipped, audited, clean)
+    - implementing the Workflow C engine itself
+    - touching _dispatch_gemini / _dispatch_codex behavior
+    - the operator's separate projects
+  type: design_consult
+allowed_files: []
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - .github/
+max_iterations: 3
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml with per-question synthesis Q1-Q5
+    check: 'true'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+operator_escalation_triggers:
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T17:45:00Z'
+  scope_signature: 'v1153-bundled-skill-currency-scope-consult'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis

@@ -1,0 +1,162 @@
+iteration_id: iteration-v1153-bundled-skill-currency
+reviewer_id: codex-v1153-1
+pass_id: codex-v1153-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential/prior: this is a user-facing currency-drift
+  hot-patch, not a behavior-change patch. The root failure is not one stale paragraph
+  but new installers receiving stale doctrine/status text that contradicts already-shipped
+  artifacts. From that prior, option (d) wins because F1, F2, F3, and F4 all share
+  the same failure mode: already-passed or already-resolved forward references in
+  installer-facing guidance/runtime status. F1-only answers the triggering operator
+  question too narrowly and leaves the same new installer misled later. F1+F2 fixes
+  shipped-reality drift in one file but leaves Workflow C''s passed target version
+  in two installed skills and the runtime error. F1+F2+F3 fixes bundled docs but leaves
+  the first operator who runs Workflow C seeing the same false v1.15.0 promise from
+  code. The F4 blast radius is only a NotImplementedError message string and nearby
+  comment, with no engine semantics changed, so release hygiene does not justify splitting
+  it. Verification-first citations used for install/distribution claims: bundled install
+  path verified via goal_packet F6 and consensus/SKILL.md bootstrap text; git-tag/pipx
+  distribution verified via consensus-workflow/SKILL.md Release cadence step 6. Artifact-scope:
+  v1.15.1 tag bef618cf contains converged-plan machine enforcement per CHANGELOG.md
+  1.15.1; v1.15.2 tag fb60f3cf contains GEMINI_CLI_TRUST_WORKSPACE dispatcher injection
+  per CHANGELOG.md 1.15.2; v1.15.0/1/2 do not contain this proposed v1.15.3 text correction.
+  Q2: use option (b): state Workflow C remains unimplemented as of v1.15.2, no target
+  version is committed, it is a named blocker documented in docs/workflows/workflow-c-autonomous.md,
+  and running it raises NotImplementedError. Q3: include F4 now; this is code-string
+  currency, not behavior code. Q4: include one normative line because it directly
+  closes the operator''s actual question and prevents 2-AI/3-AI false distinctions
+  from recurring. Q5: F1 should ship now; no blocker exists because facts, scope,
+  and acceptance gates are already concrete. Observation that would show this recommendation
+  wrong: a current-tree check proving workflow_engine.py''s Workflow C branch now
+  implements multi-iteration execution, or proving the installed bootstrap no longer
+  copies consensus-workflow to new users, would sever the shared failure-mode rationale
+  for bundling F3/F4 or Q4 respectively.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 7f6314421d17c4281afe55dfa672dfc22e9fbccde1fcbd5112163b050eb9ea72
+  output_sha256: 92585f12c35ab18b396bbcf75ed6d68398f41fda791bf6e9bd9ce5d9e169c96f
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: 2f57c9b87ab01ab8cb912a690ed8474e0d39acfa8e45fe65b0bf099874ede433
+  scope_signature: v1153-bundled-skill-currency-scope-consult
+  review_target_path: consensus-state/active/iteration-v1153-bundled-skill-currency/review-packet.yaml
+  review_target_hash: 3a5ca3013c3cc7cbe3e59459a7b159e60c88d4d89469fdf9fdccf4d6228a9cae
+  mode: proposal
+proposal:
+  selected_target: 'Q1 option (d): ship F1 + F2 + F3 + F4 in v1.15.3, plus Q4''s short
+    AI-count-agnostic consistency line'
+  rationale_vs_alternatives: 'Differential/prior: this is a user-facing currency-drift
+    hot-patch, not a behavior-change patch. The root failure is not one stale paragraph
+    but new installers receiving stale doctrine/status text that contradicts already-shipped
+    artifacts. From that prior, option (d) wins because F1, F2, F3, and F4 all share
+    the same failure mode: already-passed or already-resolved forward references in
+    installer-facing guidance/runtime status. F1-only answers the triggering operator
+    question too narrowly and leaves the same new installer misled later. F1+F2 fixes
+    shipped-reality drift in one file but leaves Workflow C''s passed target version
+    in two installed skills and the runtime error. F1+F2+F3 fixes bundled docs but
+    leaves the first operator who runs Workflow C seeing the same false v1.15.0 promise
+    from code. The F4 blast radius is only a NotImplementedError message string and
+    nearby comment, with no engine semantics changed, so release hygiene does not
+    justify splitting it. Verification-first citations used for install/distribution
+    claims: bundled install path verified via goal_packet F6 and consensus/SKILL.md
+    bootstrap text; git-tag/pipx distribution verified via consensus-workflow/SKILL.md
+    Release cadence step 6. Artifact-scope: v1.15.1 tag bef618cf contains converged-plan
+    machine enforcement per CHANGELOG.md 1.15.1; v1.15.2 tag fb60f3cf contains GEMINI_CLI_TRUST_WORKSPACE
+    dispatcher injection per CHANGELOG.md 1.15.2; v1.15.0/1/2 do not contain this
+    proposed v1.15.3 text correction. Q2: use option (b): state Workflow C remains
+    unimplemented as of v1.15.2, no target version is committed, it is a named blocker
+    documented in docs/workflows/workflow-c-autonomous.md, and running it raises NotImplementedError.
+    Q3: include F4 now; this is code-string currency, not behavior code. Q4: include
+    one normative line because it directly closes the operator''s actual question
+    and prevents 2-AI/3-AI false distinctions from recurring. Q5: F1 should ship now;
+    no blocker exists because facts, scope, and acceptance gates are already concrete.
+    Observation that would show this recommendation wrong: a current-tree check proving
+    workflow_engine.py''s Workflow C branch now implements multi-iteration execution,
+    or proving the installed bootstrap no longer copies consensus-workflow to new
+    users, would sever the shared failure-mode rationale for bundling F3/F4 or Q4
+    respectively.'
+  deliverable_scope:
+    next_iteration_id: iteration-v1153-bundled-skill-currency-hotpatch
+    files_in_scope:
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+    - consensus_mcp/claude_extensions/skills/consensus/SKILL.md
+    - consensus_mcp/workflow_engine.py
+    - consensus_mcp/tests/test_bundled_skill_currency.py
+    - consensus_mcp/tests/test_workflow_c_unimplemented_message.py
+    - CHANGELOG.md
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - .github/
+    - docs/workflows/workflow-c-autonomous.md unless a current-tree check shows it
+      contains the same stale v1.15.0 target wording
+    - pyproject.toml except normal release-version/date mechanics if v1.15.3 is cut
+    key_design_decisions:
+    - 'Update converged-plan convention wording in consensus-workflow from doctrine-only/follow-up
+      to artifact-scoped reality: doctrine introduced in v1.15.0; machine enforcement
+      exists from v1.15.1 tag bef618cf forward via validate_converged_plan.py, workflow_engine._seal_converged_plan,
+      and convergence.converged_plan_enforcement default graduated; older tags remain
+      doctrine-only.'
+    - Update Gemini 429 handling text to distinguish true Gemini 429s from the <=v1.15.1
+      workspace-trust EMPTY-OUTPUT failure; state v1.15.2 tag fb60f3cf injects GEMINI_CLI_TRUST_WORKSPACE=true
+      and manual workspace-trust workaround is only for <=v1.15.1 or non-upgraded
+      installs.
+    - 'Correct Workflow C text in both bundled skills to: contract/validators/staging
+      exist; multi-iteration engine remains unimplemented as of v1.15.2; no target
+      version is committed; running Workflow C raises NotImplementedError; status
+      source is docs/workflows/workflow-c-autonomous.md.'
+    - Correct workflow_engine.py Workflow C comment and NotImplementedError string
+      to remove the passed v1.15.0 target and avoid naming an invented future version.
+    - 'Add a short normative line in consensus-workflow: doctrine and converged-plan
+      machine enforcement are scoped by workflow mode, not contributor count; 2-AI
+      and 3-AI Workflow A installs are governed by the same rules, while default convergence
+      rule may differ: unanimous for 2, strict-majority for 3.'
+    - 'Add regression tests that pin the absence of stale phrases: no ''machine validation
+      is a sequenced follow-up'' in the bundled workflow skill, no Workflow C ''ships/lands
+      in v1.15.0'' in bundled skills or NotImplementedError string, and GEMINI_CLI_TRUST_WORKSPACE
+      is mentioned in Gemini handling.'
+    - 'Document v1.15.3 in CHANGELOG as a currency hot-patch with explicit artifact
+      scope: fixes proposed v1.15.3 artifacts only; v1.15.0/1/2 tags remain immutable
+      with prior wording where applicable.'
+    acceptance_gates:
+    - Skill text states converged-plan machine enforcement accurately and artifact-scoped
+      to v1.15.1+; no stale doctrine-only follow-up sentence remains.
+    - Gemini 429 section names GEMINI_CLI_TRUST_WORKSPACE and clearly scopes manual
+      workaround to <=v1.15.1 or non-upgraded installs, without implying _dispatch_gemini
+      behavior changes in v1.15.3.
+    - Both bundled skills remove the passed v1.15.0 Workflow C engine target and state
+      no committed target version.
+    - workflow_engine.py Workflow C NotImplementedError string removes the passed
+      v1.15.0 target while preserving NotImplementedError behavior.
+    - A regression test fails on the current stale F1-F4 text and passes after edits.
+    - Full relevant test slice passes; full suite run is preferred before tag if time
+      permits.
+    - CHANGELOG 1.15.3 entry names the exact changed artifacts and explicitly distinguishes
+      v1.15.3 from immutable v1.15.0/1/2 tags.
+  risks:
+  - Over-tight wording could accidentally imply v1.15.3 changes dispatcher behavior;
+    avoid by saying v1.15.2 already fixed _dispatch_gemini and this patch updates
+    guidance only.
+  - A test that pins exact prose may become brittle; prefer stale-phrase absence plus
+    required-keyword presence over full paragraph equality.
+  - If docs/workflows/workflow-c-autonomous.md has drift not in the provided facts,
+    leaving it untouched could preserve another stale status surface; run a targeted
+    current-tree grep before implementation and include it only if the same passed-target
+    wording is present.
+  - No safety-critical/data-loss/bricking defect is in scope, so no root-cause-independent
+    safeguard is required; this is reversible documentation/runtime-message currency
+    work.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T17:44:29Z'
+packet_sha256: 35b433cd085a78a6747b6b9eefc4398aff7f895c9398632e630026c63a549b34
