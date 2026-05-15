@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.3 - unreleased
+
+Open scope:
+
+- iter-0044: implement adapter `--mode` forwarding fix per iter-0043
+  converged plan (CodexAdapter + GeminiAdapter forward `packet.phase`
+  → dispatcher `--mode`; centralized phase-to-mode helper; MCP
+  wrappers expose `phase` parameter; skill workaround removed).
+
 ## 1.14.2 - 2026-05-14
 
 Doctrine hot-patch from iter-audit-2026-05-14-pypi-invention
