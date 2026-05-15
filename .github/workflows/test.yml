@@ -34,10 +34,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pytest
+          pip install pytest pytest-timeout
 
       - name: Run pytest
-        run: python -m pytest consensus_mcp/tests/ -q
+        # --timeout converts a hung test (e.g. a real-subprocess test
+        # with no codex/gemini on the runner) into a NAMED failure with
+        # a traceback, instead of GitHub SIGTERM-killing the whole job
+        # (the historical ubuntu "exit code 143" mystery). pytest-timeout
+        # uses the signal method on POSIX and thread on Windows.
+        run: python -m pytest consensus_mcp/tests/ -q --timeout=120
 
       - name: Run validator self-tests
         run: python consensus_mcp/validators/run_validator_tests.py
