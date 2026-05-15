@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.3 - unreleased
+
+_No changes yet. Branched from v1.15.2 tip._
+
 ## 1.15.2 - 2026-05-15
 
 **gemini-dispatch workspace-trust fix** — closes the v1.15.1
