@@ -1,6 +1,6 @@
 ---
 name: consensus-workflow
-description: Operating procedures for working with consensus-mcp in any project. Trigger when the user asks to run a consensus consult, dispatch codex/gemini for review, evaluate a Workflow B vs #4 decision, debug a stalled or failed reviewer dispatch, or any question about HOW the cross-AI consensus workflow runs (as opposed to "consensus init" which only bootstraps). Phrases include "consensus review", "consensus iteration", "consensus consult", "run a consult", "dispatch codex", "dispatch gemini", "workflow 3", "workflow 4", "propose-converge", "post-review".
+description: Operating procedures for working with consensus-mcp in any project. Trigger when the user asks to run a consensus consult, dispatch codex/gemini for review, evaluate a Workflow B vs Workflow A decision, debug a stalled or failed reviewer dispatch, or any question about HOW the cross-AI consensus workflow runs (as opposed to "consensus init" which only bootstraps). Phrases include "consensus review", "consensus iteration", "consensus consult", "run a consult", "dispatch codex", "dispatch gemini", "workflow 3", "workflow 4", "propose-converge", "post-review".
 ---
 
 # Consensus-mcp operating procedures
@@ -22,7 +22,7 @@ that block in-flight work.
 The mistake to avoid is defaulting to B because it's faster and
 calling everything "execution." Test: did the converged plan specify
 the API shape, error contract, mechanism? If not, those choices are
-themselves design surface — go through #4.
+themselves design surface — go through Workflow A.
 
 Listing 2+ design choices in a single response = Workflow A
 candidate. Stop and route to a consult.
@@ -302,7 +302,7 @@ fallback when the MCP wrapper times out.
 
 **Proposal-mode dispatch requires `--mode proposal`** on the shell
 binaries. The MCP wrappers as of v1.14.0 don't expose this flag —
-fall back to the shell CLI for round-1 #4 dispatch.
+fall back to the shell CLI for round-1 Workflow A dispatch.
 
 ## Gemini 429 handling (priority-tiered)
 
@@ -464,8 +464,8 @@ non-trivial in their codebase.
 ## "Consensus" trigger word
 
 When the user says "consensus" in a sentence about reviewing,
-deciding, or analyzing — **use the consensus-mcp tools (workflow
-#4 or Workflow B as appropriate), NOT the older /council skill.**
+deciding, or analyzing — **use the consensus-mcp tools (Workflow A
+or Workflow B as appropriate), NOT the older /council skill.**
 Council was a single-Claude multi-persona simulation; consensus-mcp
 is a real cross-AI workflow with sealed-provenance peer reviewers.
 
@@ -566,6 +566,28 @@ GitHub Actions CI dormant from v1.13.0→v1.15.3 (CI triggered only
 on `main`). `main` = newest tag; `v<next>` = where work lands;
 release = the moment a tag is pushed AND `main` is fast-forwarded
 onto it.
+
+**Sanctioned-exception carve-out (added v1.15.5):** "never a
+force-push" governs ROUTINE operation. A **full-history rewrite**
+(`git filter-repo`) — e.g., an account migration or a
+provenance/secret scrub that must reach immutable commit/tag
+messages — is the ONE sanctioned reason to force-push `main` and
+re-create every tag. It is NOT routine and requires ALL of:
+(1) explicit operator authorization of the rewrite specifically
+(not implied by any other task); (2) a verified full backup
+bundle (`git bundle --all`) stored OUTSIDE the repo before
+running; (3) post-rewrite verification BEFORE pushing —
+`git grep`/`git log --all` show zero target strings across all
+refs, all release tags + branches still present, full suite green
+on the rewritten tip (token replacements must stay internally
+consistent); (4) force-push all branches + all tags together, then
+re-verify `origin/main` == local. Precedent: 2026-05-15
+`stgarca`→`stgarca` account migration + `upstream`
+provenance purge (127 commits, 18 branches, 66 tags rewritten;
+backup `consensus-mcp-prefilter-backup-20260515-125935.bundle`).
+Consequence to state plainly when it happens: every published tag
+SHA changed; tag-pinned `pipx install @vX.Y.Z` URLs keep working
+(tags moved) but any raw-SHA pin or old clone is dead.
 
 **Variations:**
 
