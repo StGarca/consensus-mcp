@@ -107,6 +107,29 @@ class GeminiOutputParseError(ValueError):
     """Raised when gemini output is not parseable JSON or lacks the expected top-level shape."""
 
 
+def _gemini_subprocess_env() -> dict:
+    """Environment for the gemini subprocess.
+
+    v1.15.2 load-bearing fix (advisory 2026-05-15): gemini CLI
+    `0.43.0-preview.0`+ refuses headless/automated runs in an
+    "untrusted" directory — it writes the trust error to stderr and
+    produces EMPTY stdout, which the dispatcher then fails as
+    `GeminiOutputParseError`. The `--skip-trust` flag (still passed,
+    defense-in-depth) is NOT load-bearing on this version: empirically
+    verified 2026-05-15 — with `--skip-trust` only, gemini bypassed
+    trust but went autonomous and 429'd; with
+    `GEMINI_CLI_TRUST_WORKSPACE=true` it produced clean deterministic
+    output (and the two clean v1.15.1 Workflow B audit approvals).
+
+    Returns a COPY of the parent environment with the trust var forced
+    to "true" (an inherited "false" must not defeat the fix). Never
+    mutates `os.environ`.
+    """
+    env = os.environ.copy()
+    env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+    return env
+
+
 def _resolve_gemini_bin(gemini_bin: str) -> str:
     """Resolve a gemini binary spec to an actual executable file path.
 
@@ -228,8 +251,12 @@ def _invoke_gemini(
     The actual prompt body is piped via stdin (gemini appends -p text after
     stdin). -p is required to trigger headless mode. --approval-mode plan is
     gemini's read-only mode (no file writes, no shell exec) — the parallel
-    to codex's --sandbox read-only. --skip-trust suppresses the workspace-trust
-    interactive prompt.
+    to codex's --sandbox read-only. --skip-trust is passed defense-in-depth
+    but is NOT load-bearing on gemini CLI ≥0.43.0-preview.0; the
+    workspace-trust gate is suppressed via GEMINI_CLI_TRUST_WORKSPACE=true
+    injected into the subprocess env (see _gemini_subprocess_env / advisory
+    2026-05-15). Without it gemini emits the trust error to stderr with
+    empty stdout and the dispatch fails GeminiOutputParseError.
 
     stall_silence_seconds defaults to 180s (gemini cold-start can exceed 45s
     on large prompts; matches the codex adapter's iter-0010 default bump).
@@ -259,6 +286,7 @@ def _invoke_gemini(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=str(repo_root),
+            env=_gemini_subprocess_env(),
             **popen_kwargs,
         )
     except FileNotFoundError:
