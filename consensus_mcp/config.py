@@ -38,16 +38,37 @@ SCHEMA_VERSION = 1
 WORKFLOW_POST_REVIEW = "post-review"
 WORKFLOW_PROPOSE_CONVERGE = "propose-converge"
 WORKFLOW_ADVISORY = "advisory"
-VALID_WORKFLOWS = {WORKFLOW_POST_REVIEW, WORKFLOW_PROPOSE_CONVERGE, WORKFLOW_ADVISORY}
+# iter-workflow-abc-introduce: Workflow C — autonomous-execute. v1.14.4
+# ships the contract (alias, validators, scope_check helper, schema);
+# multi-iteration engine path is named-blocker for v1.15.0.
+WORKFLOW_AUTONOMOUS_EXECUTE = "autonomous-execute"
+VALID_WORKFLOWS = {
+    WORKFLOW_POST_REVIEW,
+    WORKFLOW_PROPOSE_CONVERGE,
+    WORKFLOW_ADVISORY,
+    WORKFLOW_AUTONOMOUS_EXECUTE,
+}
 
-# CLI numeric aliases (3 → post-review, 4 → propose-converge)
+# Operator-facing aliases. iter-workflow-abc-introduce: letter aliases
+# replace numeric as the canonical operator vocabulary; numeric aliases
+# (3, 4) stay accepted for one release cycle with DeprecationWarning,
+# then removed in a future minor.
 WORKFLOW_ALIASES = {
+    # Letter aliases (canonical operator vocabulary as of v1.14.4)
+    "A": WORKFLOW_PROPOSE_CONVERGE,
+    "B": WORKFLOW_POST_REVIEW,
+    "C": WORKFLOW_AUTONOMOUS_EXECUTE,
+    "a": WORKFLOW_PROPOSE_CONVERGE,
+    "b": WORKFLOW_POST_REVIEW,
+    "c": WORKFLOW_AUTONOMOUS_EXECUTE,
+    # Numeric aliases (deprecated; emit DeprecationWarning when resolved)
     "3": WORKFLOW_POST_REVIEW,
     "4": WORKFLOW_PROPOSE_CONVERGE,
     3: WORKFLOW_POST_REVIEW,
     4: WORKFLOW_PROPOSE_CONVERGE,
     # Semantic strings pass through unchanged in normalize.
 }
+_DEPRECATED_NUMERIC_WORKFLOW_ALIASES = {"3", "4", 3, 4}
 
 # === Independence models ===
 INDEPENDENCE_BLIND = "blind-first-reveal"
@@ -194,19 +215,33 @@ def normalize(config: dict) -> dict:
     """Apply defaults + alias resolution. Returns a NEW dict; does not mutate input.
 
     Currently handles:
-      - `workflow.mode` numeric aliases (3 → post-review, 4 → propose-converge)
+      - `workflow.mode` aliases (A → propose-converge, B → post-review,
+        C → autonomous-execute; numeric 3/4 deprecated but still resolved)
       - Filling unspecified keys with defaults from `default_config()`
 
     Does NOT validate — see `validate()` for that.
     """
+    import warnings
     if not isinstance(config, dict):
         raise ConfigValidationError(
             f"config root must be a mapping, got {type(config).__name__}"
         )
     normalized = _deep_merge_defaults(default_config(), config)
-    # Resolve workflow.mode aliases.
+    # Resolve workflow.mode aliases. Emit DeprecationWarning for numeric
+    # aliases (kept for backward compat for one release cycle per
+    # iter-workflow-abc-introduce convergence; will be removed in a
+    # future minor).
     mode = normalized.get("workflow", {}).get("mode")
     if mode in WORKFLOW_ALIASES:
+        if mode in _DEPRECATED_NUMERIC_WORKFLOW_ALIASES:
+            warnings.warn(
+                f"workflow.mode numeric alias {mode!r} is deprecated; "
+                f"use letter alias 'A' (propose-converge), 'B' (post-review), "
+                f"or 'C' (autonomous-execute) instead. Numeric aliases will "
+                f"be removed in a future minor release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         normalized["workflow"]["mode"] = WORKFLOW_ALIASES[mode]
     return normalized
 
@@ -308,6 +343,18 @@ def validate(config: dict) -> None:
         raise ConfigValidationError(
             f"workflow.mode=propose-converge requires at least 2 contributors; "
             f"got {n_contributors} ({enabled!r}). Use post-review or advisory for solo setups."
+        )
+
+    # Rule: workflow.mode=autonomous-execute requires N==3 contributors
+    # (iter-workflow-abc-introduce safety floor: autonomous mode runs
+    # without operator-in-the-loop, so the wide cross-AI safety net is
+    # mandatory; v1.15.0+ may relax with explicit operator opt-in).
+    if mode == WORKFLOW_AUTONOMOUS_EXECUTE and n_contributors != 3:
+        raise ConfigValidationError(
+            f"workflow.mode=autonomous-execute requires exactly 3 contributors "
+            f"(claude + codex + gemini) for the wide cross-AI safety net "
+            f"required by autonomous runs; got {n_contributors} ({enabled!r}). "
+            f"Use propose-converge for 2-AI setups."
         )
 
     # Rule: workflow.mode=propose-converge accepts the two plan-shaped
