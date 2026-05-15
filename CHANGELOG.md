@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.14.8 - 2026-05-14
+
+iter-5 of autonomous run-2026-05-15-overnight. Bundled
+`consensus_mcp/claude_extensions/skills/consensus/SKILL.md` (the
+bootstrap skill that triggers on "consensus init") gains a
+"Workflow modes the operator can pick (v1.14.4+)" section:
+
+- Documents Workflow A (propose-converge, default), Workflow B
+  (post-review, lightweight), Workflow C (autonomous-execute,
+  v1.14.4 contract / v1.15.0 engine), and advisory.
+- Notes the numeric-alias deprecation cycle.
+- Cross-references the operating-procedure skill
+  (`~/.claude/skills/consensus-workflow/SKILL.md`) as the
+  load-bearing reference for dispatch rules and halt conditions.
+
+Operators running `consensus init` for the first time will now see
+the workflow-mode vocabulary at bootstrap time instead of having to
+discover it from the `--help` output.
+
+No code changes; doc only. 704 tests pass.
+
 ## 1.14.7 - 2026-05-14
 
 Doc hot-patch from autonomous run-2026-05-15-overnight iter-4. Two
