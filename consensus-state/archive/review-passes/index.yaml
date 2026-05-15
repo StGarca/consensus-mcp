@@ -1109,4 +1109,16 @@ passes:
   packet_sha256: 08cea3adb6239a555885b8f585a4f043249b5869f9601238f9f8cd4ec481ce77
   iteration_id: iteration-v1153-bundled-skill-currency
   reviewer_id: gemini-v1153-wfb-3
-last_updated_utc: '2026-05-15T17:59:57Z'
+- id: gemini-v1154-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1154-repo-presentation-ci-gemini-v1154-1-gemini-v1154-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T18:34:47Z'
+  packet_sha256: 877ce6b2a425573edaf94f2e8f0f35520e5e72ec2140bc10c782648907fdd964
+  iteration_id: iteration-v1154-repo-presentation-ci
+  reviewer_id: gemini-v1154-1
+- id: codex-v1154-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1154-repo-presentation-ci-codex-v1154-1-codex-v1154-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T18:38:07Z'
+  packet_sha256: f883afae22f6a29de6d92981a01308ffde8e838cd476bf9cc926dc090327b686
+  iteration_id: iteration-v1154-repo-presentation-ci
+  reviewer_id: codex-v1154-1
+last_updated_utc: '2026-05-15T18:38:07Z'
