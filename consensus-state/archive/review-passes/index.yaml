@@ -953,4 +953,16 @@ passes:
   packet_sha256: 4c89917df54bf37cf7297b3bdad774db6e63bddaf15365f0a8aa0f43bbc79f64
   iteration_id: iteration-workflow-abc-introduce
   reviewer_id: codex-workflow-abc-1
-last_updated_utc: '2026-05-15T04:05:12Z'
+- id: gemini-iter0044-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-0044-adapter-mode-forwarding-gemini-iter0044-1-pass.yaml
+  sealed_at: '2026-05-15T04:31:32Z'
+  packet_sha256: 85075adfdb3482af272b39dd02264208cd764a32791e486c553144e533023f19
+  iteration_id: iteration-0044-adapter-mode-forwarding
+  reviewer_id: gemini-iter0044-1
+- id: codex-iter0044-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-0044-adapter-mode-forwarding-codex-iter0044-2-pass.yaml
+  sealed_at: '2026-05-15T04:32:13Z'
+  packet_sha256: 12824c40a47cd8474f36626341c3662366d7d618e5723e26af92b67fa0e3ae79
+  iteration_id: iteration-0044-adapter-mode-forwarding
+  reviewer_id: codex-iter0044-2
+last_updated_utc: '2026-05-15T04:32:13Z'
