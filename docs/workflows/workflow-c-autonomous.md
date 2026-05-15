@@ -1,7 +1,14 @@
 # Workflow C — autonomous-execute
 
-**Status (v1.14.4):** Contract shipped. Multi-iteration engine is the
-named blocker for v1.15.0.
+**Status (as of v1.15.2):** Contract shipped (v1.14.4). The
+multi-iteration engine is **UNIMPLEMENTED as of v1.15.2; no
+committed target version.** The earlier "v1.15.0" forward-reference
+came due
+unfulfilled (v1.15.0 = convergence-correctness doctrine; v1.15.1 =
+converged-plan machine-enforcement; v1.15.2 = gemini-dispatch fix —
+none shipped the Workflow C engine) and was corrected in v1.15.3
+rather than re-promised against another version. This doc is the
+single source of truth for status.
 
 Workflow C runs consensus iterations to completion **without
 operator-in-the-loop**, auto-approving emergent scope items if they
@@ -20,13 +27,13 @@ for overnight runs and operator-unavailable windows.
   for use by the engine (and by operators authoring contracts).
 - Workflow C requires exactly 3 contributors (claude + codex + gemini)
   enforced at config-load.
-- `workflow_engine.py` recognizes Workflow C and raises
-  `NotImplementedError` with a clear v1.15.0 reference when an
-  operator tries to RUN one. Operators can stage and validate
-  Workflow C goal_packets; execution is gated until the engine
-  ships.
+- `workflow_engine.py` recognizes Workflow C and raises a clear
+  `NotImplementedError` (stating it is unimplemented as of v1.15.2,
+  no committed target) when an operator tries to RUN one. Operators
+  can stage and validate Workflow C goal_packets; execution is
+  gated until the engine ships.
 
-## What v1.15.0 will add (named blocker)
+## What the engine will add (named blocker)
 
 The multi-iteration auto-execution loop. Specifically:
 
@@ -38,12 +45,15 @@ The multi-iteration auto-execution loop. Specifically:
   approves it; how does the loop pick up?).
 - Autonomy-ledger replay for failure recovery.
 
-## What's deferred to v1.16.0+
+## What's deferred (no committed version)
 
 Project-level `.consensus/autonomous-policy.yaml` as a default that
 goal_packets can override per-run. Deferred until empirical evidence
 operators want it across multiple Workflow C runs (we have zero runs
-today; designing for hypothetical reuse is premature).
+today; designing for hypothetical reuse is premature). No target
+version is committed — status tracked here, not promised against a
+version number (the v1.15.3 currency hot-patch removed all such
+forward-references).
 
 ## Authoring a Workflow C goal_packet
 
@@ -109,8 +119,9 @@ via `autonomy_contract.skip_halt_on`.
 ## Operator interrupt mechanism
 
 To halt a running Workflow C from outside the session, create the
-file `.consensus/interrupt` in the repo root. The engine (when it
-ships in v1.15.0) checks for this file at every iteration boundary
+file `.consensus/interrupt` in the repo root. The engine (once
+implemented — see Status above) checks for this file at every
+iteration boundary
 and halts cleanly if present, deletes the file, and surfaces a
 "halted by operator interrupt" status in the audit log.
 
@@ -140,9 +151,11 @@ parked.
 ## Why ONLY 3-AI contributors?
 
 Autonomous mode means "no operator-in-the-loop." The wide cross-AI
-safety net is mandatory by default. v1.15.0+ may relax this with
-explicit operator opt-in (e.g., 2-AI Workflow C with a brief safety
-warning), but v1.14.4 ships safety-first.
+safety net is mandatory by default (Workflow C requires exactly 3
+contributors, enforced at config-load). A future relaxation
+(explicit operator opt-in, e.g. 2-AI Workflow C with a brief safety
+warning) is possible but is NOT committed to any version — when the
+engine lands it ships safety-first.
 
 ## Provenance
 
