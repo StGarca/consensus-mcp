@@ -222,21 +222,30 @@ and no tag.
 
 **Cut sequence (apply in order on the v<X.Y.Z> branch tip):**
 
-1. Update `CHANGELOG.md` date stamp to the cut date.
+1. Update `CHANGELOG.md` date stamp to the cut date; add an
+   addendum for any iterations that landed after the section was
+   first authored.
 2. Verify `pyproject.toml` `version` matches the branch.
 3. Run the full test suite; surface regressions before tagging.
+   Document any pre-existing known-issue flakes in CHANGELOG so
+   they aren't mistaken for v<X.Y.Z> regressions.
 4. `git tag -a v<X.Y.Z> -m "..."` on the branch tip.
-5. Build wheel + sdist. Smoke-test with `pipx install` from local
-   dist before publishing to PyPI.
+5. Build wheel + sdist (`python -m build`). Smoke-test with
+   `pipx install` from local dist before publishing to PyPI.
 6. Publish to PyPI (operator action — confirm before running the
    publish command since it is irreversible).
 7. `git push origin v<X.Y.Z>` (push the tag).
-8. Merge `v<X.Y.Z>` into `main` with `--no-ff` (preserves branch
-   history per the release-branching convention).
-9. Bump `pyproject.toml` on `main` to the next dev version
-   (e.g., `1.14.1.dev0`), commit.
-10. Branch the next release: `v<X.Y.Z+1>` for hot-patches, OR
-    `v<X.(Y+1).0>` for the next minor.
+8. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`
+   for hot-patches, OR `v<X.(Y+1).0>` for the next minor. Bump
+   `pyproject.toml` on the new branch to the new version.
+9. Push the new branch: `git push -u origin v<X.Y.Z+1>`.
+
+**Convention note:** Release branches are SELF-CONTAINED. `main`
+is NOT progressed by release cuts — it stays at whatever its tip
+was before the v<X.Y.Z> branch was cut. Each new release branches
+from the previous release's tip. `main` is essentially a stable
+pointer to "the divergence point of the most recently cut release."
+Do NOT merge release branches back into main.
 
 **Variations:**
 

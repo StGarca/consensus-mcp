@@ -1,13 +1,57 @@
 # Changelog
 
-## 1.14.0 - 2026-05-13
+## 1.14.0 - 2026-05-14
 
 Multi-AI contributor pool, blind-first-reveal workflow #4, configurable
-governance, and snapshot/restore. Adds gemini-cli as a third peer alongside
-codex-cli; introduces a workflow engine that orchestrates N contributors
-per project-chosen rules; ships an interactive `consensus init` wizard for
-operator-configurable workflow/independence/convergence/disposition/snapshot/
+governance, snapshot/restore, Claude Code bootstrap pack, bundled
+operating-procedure skill, and codified operator-directive defaults
+(parallelism, weighted-synthesis convergence, Friday release cadence).
+Adds gemini-cli as a third peer alongside codex-cli; introduces a
+workflow engine that orchestrates N contributors per project-chosen
+rules; ships an interactive `consensus init` wizard for operator-
+configurable workflow/independence/convergence/disposition/snapshot/
 patch-authoring/timeout dimensions.
+
+**Claude Code integration + skill bundling (iter-0040, iter-0041):**
+
+- `consensus init --install-claude-code` standalone global op installs
+  the Claude Code bootstrap pack (skill + slash command) for any
+  Claude Code project that uses consensus-mcp.
+- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`
+  ships in the wheel: load-bearing operating procedures (workflow
+  selection, dispatch, gemini 429 handling, codex auth, iteration-
+  state persistence, peer-cited content verification, peer-review
+  thresholds, "consensus" trigger word) automatically present in
+  every project that runs the bootstrap pack.
+
+**Operator-directive defaults codified (iter-0043):**
+
+- Maximize parallelism — always. Default to parallel; serial is the
+  choice that needs justification. Applies to round-1 peer dispatch,
+  round-2+ batches, multi-file investigation, background long-running
+  ops, and cross-iteration parallelism.
+- Weighted-synthesis convergence as default. All ideas of all
+  proposals weighed for benefit to the project as a whole. No good
+  ideas lost; no babies tossed with bathwater. `all-or-nothing`
+  finding-disposition is now edge-case opt-in only (binary scope
+  decisions, safety gates, compliance verdicts). Engine-level
+  follow-up flagged: `config.py:295-308` still enforces all-or-
+  nothing for workflow #4 — separate iteration will lift that
+  constraint so the data layer matches doctrine.
+- Friday release-cadence rule. Cut a release tag every Friday if at
+  least one iteration closed that week. Release-cut is a procedure
+  with a trigger, not an ad-hoc decision. 10-step cut sequence
+  documented in skill (CHANGELOG date stamp, version verify, test
+  suite, tag, build, smoke, publish, push, branch next). This
+  release is the first cut under the new cadence rule and clears
+  3 days of accumulated work (iter-0009..iter-0043).
+
+**Known issue carried forward:**
+
+- 5 tests in `consensus_mcp/tests/test_dispatch_codex.py` flake when
+  the full pytest suite runs (pass in isolation). Documented in
+  `docs/known-issues/pytest-ordering-flake.md`. Predates v1.13.0;
+  not a v1.14.0 regression. Tracked for a future fix iteration.
 
 **New contributors + dispatch (iter-0009 through iter-0011):**
 
