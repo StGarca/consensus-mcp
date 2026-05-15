@@ -1,0 +1,55 @@
+schema_version: 1
+pilot_id: iteration-v1154-repo-presentation-ci
+workflow_mode: post-review
+goal:
+  summary: |
+    v1.15.4: fix GitHub repo presentation + dormant CI + evolve the
+    release-branching doctrine. Operator-directed policy decision
+    (chose "fast-forward main to latest + fix CI" over a consult);
+    Workflow B audits the IMPLEMENTATION of that decision.
+  desired_end_state: |
+    CI triggers on main + v* branches; branch doctrine in the
+    bundled skill says main=latest-released-state with a
+    fast-forward step + ancestor-check guard; main fast-forwards
+    cleanly to the v1.15.4 tag (no history rewrite); README is the
+    accessible rewrite; no residual stale "main frozen" language.
+  non_goals:
+    - changing engine/config/behavior (none touched)
+    - PyPI/any new distribution channel (none — git-tag+pipx only)
+    - rewriting main history (must be a clean fast-forward ONLY)
+  type: bugfix
+risk_class: none
+allowed_files:
+  - .github/workflows/test.yml
+  - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+  - CHANGELOG.md
+  - README.md
+  - pyproject.toml
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/workflow_engine.py
+acceptance_gates:
+  - id: A1
+    description: test.yml triggers push+PR on main AND v* (was main-only)
+    check: 'grep "v\\*" .github/workflows/test.yml'
+  - id: A2
+    description: branch doctrine evolved; NO residual "main frozen/never merge back" language anywhere in skills/docs
+    check: 'grep -r "main is NOT progressed" consensus_mcp/claude_extensions docs | wc -l == 0'
+  - id: A3
+    description: main→v1.15.4 is a verified clean fast-forward (ancestor check true; zero dropped commits)
+    check: 'git merge-base --is-ancestor origin/main <v1.15.4 tip>'
+  - id: A4
+    description: full suite green, 0 regressions (no code touched — config/doc/version only)
+    check: pytest -q
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T18:20:00Z'
+  scope_signature: 'v1154-repo-presentation-ci-operator-directed'
+stop_conditions:
+  - max_iteration_count_reached
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: unanimous
+  finding_disposition: weighted-synthesis
