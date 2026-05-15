@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.14.2 - unreleased
+
+Open scope:
+
+- iter-0044: implement adapter `--mode` forwarding fix per iter-0043
+  converged plan (CodexAdapter + GeminiAdapter forward `packet.phase`
+  → dispatcher `--mode`; centralized phase-to-mode helper; MCP
+  wrappers expose `phase` parameter; skill workaround removed).
+- iter-audit-2026-05-14-pypi-invention: postmortem consult outcomes
+  (preventing assumption-driven invention of requirements that don't
+  exist in the project).
+
 ## 1.14.1 - 2026-05-14
 
 Hot-patch: corrects the bundled `consensus-workflow` skill so it
