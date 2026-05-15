@@ -600,6 +600,141 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+# === Workflow C autonomy_scope check (iter-workflow-abc-introduce) ===
+#
+# Workflow C (autonomous-execute) auto-approves emergent scope items if
+# they fall within an operator-pre-declared autonomy_contract block in
+# the goal_packet. Out-of-bound items are PARKED (not silently rejected)
+# per converged-plan; halt-conditions short-circuit to operator review.
+#
+# Reused utilities: _glob_match, _matches_any, _normalize_path.
+
+# Halt set defaults (iter-workflow-abc-introduce convergence — wide-by-
+# default; operator opts OUT per-run via autonomy_contract.skip_halt_on).
+DEFAULT_HALT_ON = (
+    "blocking_objection",
+    "test_suite_regression",
+    "schema_change_proposed",
+    "max_iterations_exceeded",
+    "max_wall_clock_minutes_exceeded",
+    "convergence_failure_after_n_rounds",
+    "reviewer_dispatch_permanent_failure",
+    "files_outside_allowed_patterns",
+    "files_in_forbidden_patterns",
+    "operator_interrupt_file_present",
+    "reviewer_explicit_recommend_operator_review",
+)
+
+# Required fields in autonomy_contract block (per converged-plan deliverable).
+AUTONOMY_CONTRACT_REQUIRED_FIELDS = (
+    "max_iterations",
+    "max_wall_clock_minutes",
+    "allowed_file_patterns",
+)
+
+
+def validate_autonomy_contract(contract: dict) -> list[str]:
+    """Validate the structure of an autonomy_contract block.
+
+    Returns a list of error messages (empty list = valid).
+    """
+    errors: list[str] = []
+    if not isinstance(contract, dict):
+        return [f"autonomy_contract must be a mapping, got {type(contract).__name__}"]
+    for field in AUTONOMY_CONTRACT_REQUIRED_FIELDS:
+        if field not in contract:
+            errors.append(f"autonomy_contract missing required field {field!r}")
+    if "max_iterations" in contract:
+        v = contract["max_iterations"]
+        if not isinstance(v, int) or v <= 0:
+            errors.append(f"autonomy_contract.max_iterations must be positive int, got {v!r}")
+    if "max_wall_clock_minutes" in contract:
+        v = contract["max_wall_clock_minutes"]
+        if not isinstance(v, (int, float)) or v <= 0:
+            errors.append(f"autonomy_contract.max_wall_clock_minutes must be positive number, got {v!r}")
+    if "allowed_file_patterns" in contract:
+        v = contract["allowed_file_patterns"]
+        if not isinstance(v, list) or not all(isinstance(p, str) for p in v):
+            errors.append("autonomy_contract.allowed_file_patterns must be a list of strings")
+    if "forbidden_file_patterns" in contract:
+        v = contract["forbidden_file_patterns"]
+        if not isinstance(v, list) or not all(isinstance(p, str) for p in v):
+            errors.append("autonomy_contract.forbidden_file_patterns must be a list of strings")
+    if "skip_halt_on" in contract:
+        v = contract["skip_halt_on"]
+        if not isinstance(v, list) or not all(isinstance(s, str) for s in v):
+            errors.append("autonomy_contract.skip_halt_on must be a list of strings")
+        else:
+            for s in v:
+                if s not in DEFAULT_HALT_ON:
+                    errors.append(
+                        f"autonomy_contract.skip_halt_on contains unknown halt condition {s!r}; "
+                        f"valid: {sorted(DEFAULT_HALT_ON)}"
+                    )
+    return errors
+
+
+def check_autonomy_scope(proposed_files: list[str], contract: dict) -> dict:
+    """Decide whether a proposed scope item is auto-approvable under the
+    autonomy_contract.
+
+    Args:
+        proposed_files: list of file paths the proposed scope item would touch
+        contract: the autonomy_contract block from the goal_packet
+
+    Returns:
+        dict with:
+          decision: "approved" | "parked" | "halt"
+          reason: human-readable explanation
+          violations: list of file paths that violated boundaries (if any)
+
+    "approved" — every file is within allowed_file_patterns AND none are in
+        forbidden_file_patterns. Auto-approve.
+    "parked" — at least one file is OUTSIDE allowed_file_patterns but NONE are
+        forbidden. Park for operator review when they return.
+    "halt" — at least one file is in forbidden_file_patterns. Hard stop;
+        operator must review before any further autonomous action.
+    """
+    errors = validate_autonomy_contract(contract)
+    if errors:
+        return {
+            "decision": "halt",
+            "reason": "autonomy_contract is invalid",
+            "violations": errors,
+        }
+
+    allowed = contract.get("allowed_file_patterns", [])
+    forbidden = contract.get("forbidden_file_patterns", [])
+
+    forbidden_hits = [
+        f for f in proposed_files
+        if _matches_any(forbidden, _normalize_path(f))
+    ]
+    if forbidden_hits:
+        return {
+            "decision": "halt",
+            "reason": "proposed scope touches forbidden file(s)",
+            "violations": forbidden_hits,
+        }
+
+    out_of_scope = [
+        f for f in proposed_files
+        if not _matches_any(allowed, _normalize_path(f))
+    ]
+    if out_of_scope:
+        return {
+            "decision": "parked",
+            "reason": "proposed scope touches files outside allowed patterns",
+            "violations": out_of_scope,
+        }
+
+    return {
+        "decision": "approved",
+        "reason": "all proposed files within autonomy_contract bounds",
+        "violations": [],
+    }
+
+
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
         sys.exit(_run_self_test())

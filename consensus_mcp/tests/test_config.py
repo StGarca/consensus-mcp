@@ -68,6 +68,93 @@ def test_validate_propose_converge_rejects_per_finding():
         cfg.validate(config)
 
 
+# ---------- iter-workflow-abc-introduce: Workflow A/B/C aliases ----------
+
+def test_alias_A_resolves_to_propose_converge():
+    """Letter alias A → propose-converge (Workflow A)."""
+    assert cfg.WORKFLOW_ALIASES["A"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+    assert cfg.WORKFLOW_ALIASES["a"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_alias_B_resolves_to_post_review():
+    """Letter alias B → post-review (Workflow B)."""
+    assert cfg.WORKFLOW_ALIASES["B"] == cfg.WORKFLOW_POST_REVIEW
+    assert cfg.WORKFLOW_ALIASES["b"] == cfg.WORKFLOW_POST_REVIEW
+
+
+def test_alias_C_resolves_to_autonomous_execute():
+    """Letter alias C → autonomous-execute (Workflow C)."""
+    assert cfg.WORKFLOW_ALIASES["C"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+    assert cfg.WORKFLOW_ALIASES["c"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+
+
+def test_workflow_autonomous_execute_constant_exists():
+    """Workflow C semantic string defined."""
+    assert cfg.WORKFLOW_AUTONOMOUS_EXECUTE == "autonomous-execute"
+    assert cfg.WORKFLOW_AUTONOMOUS_EXECUTE in cfg.VALID_WORKFLOWS
+
+
+def test_normalize_resolves_letter_alias_A():
+    """normalize() converts 'A' to canonical semantic string."""
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "A"
+    out = cfg.normalize(config)
+    assert out["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_normalize_resolves_letter_alias_C():
+    """normalize() converts 'C' to canonical autonomous-execute."""
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "C"
+    out = cfg.normalize(config)
+    assert out["workflow"]["mode"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+
+
+def test_normalize_numeric_alias_emits_deprecation_warning():
+    """Numeric aliases (3, 4) still resolve but emit DeprecationWarning."""
+    import warnings
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "4"
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        out = cfg.normalize(config)
+        assert out["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(deprecation_warnings) >= 1
+        assert "numeric alias" in str(deprecation_warnings[0].message)
+
+
+def test_normalize_letter_alias_no_deprecation_warning():
+    """Letter aliases (A, B, C) do NOT emit DeprecationWarning."""
+    import warnings
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "A"
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        cfg.normalize(config)
+        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(deprecation_warnings) == 0
+
+
+def test_validate_autonomous_execute_requires_3_contributors():
+    """Workflow C requires exactly 3 contributors (autonomous safety floor)."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+    config["contributors"]["enabled"] = ["claude", "codex"]  # only 2
+    with pytest.raises(cfg.ConfigValidationError, match="requires exactly 3 contributors"):
+        cfg.validate(config)
+
+
+def test_validate_autonomous_execute_accepts_3_contributors():
+    """Workflow C with 3 contributors validates."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+    # default_config() already enables claude + codex + gemini
+    cfg.validate(config)  # must not raise
+
+
 def test_default_timeout_policy_no_vote():
     assert cfg.default_config()["workflow"]["timeout_policy"] == cfg.TIMEOUT_NO_VOTE
 
