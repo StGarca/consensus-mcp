@@ -33,9 +33,39 @@ def test_default_convergence_strict_majority():
     assert cfg.default_config()["convergence"]["rule"] == cfg.CONVERGE_STRICT_MAJ
 
 
-def test_default_disposition_all_or_nothing():
-    """Per D5 majority: workflow #4 forces all-or-nothing in v1."""
-    assert cfg.default_config()["convergence"]["finding_disposition"] == cfg.DISPOSITION_ALL_OR_NOTHING
+def test_default_disposition_weighted_synthesis():
+    """iter-three-gaps: workflow #4 default is weighted-synthesis (per doctrine).
+    all-or-nothing remains valid as explicit opt-in.
+    """
+    assert cfg.default_config()["convergence"]["finding_disposition"] == cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+
+
+def test_validate_propose_converge_accepts_weighted_synthesis():
+    """Workflow #4 + weighted-synthesis disposition validates."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    config["convergence"]["finding_disposition"] = cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+    cfg.validate(config)  # must not raise
+
+
+def test_validate_propose_converge_accepts_all_or_nothing():
+    """Workflow #4 + all-or-nothing disposition still validates (backward compat)."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    config["convergence"]["finding_disposition"] = cfg.DISPOSITION_ALL_OR_NOTHING
+    cfg.validate(config)  # must not raise
+
+
+def test_validate_propose_converge_rejects_per_finding():
+    """Workflow #4 rejects per-finding disposition (post-review semantics only)."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    config["convergence"]["finding_disposition"] = cfg.DISPOSITION_PER_FINDING
+    with pytest.raises(cfg.ConfigValidationError, match="per-finding is post-review semantics"):
+        cfg.validate(config)
 
 
 def test_default_timeout_policy_no_vote():

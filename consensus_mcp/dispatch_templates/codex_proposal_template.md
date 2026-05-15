@@ -30,6 +30,20 @@ together.
 This mandate is a converged outcome of iter-audit-2026-05-14-
 pypi-invention. Apply it to every step you propose.
 
+## Completion mandate (load-bearing)
+
+When sketching deliverable scope: default to COMPLETION in the
+current iteration when goals + acceptance gates are clear and
+implementation cost is small. Do NOT defer well-defined work
+to "future iterations" without naming a specific blocker
+(missing data, real dependency, open design question). "Will
+be addressed in iter-XXXX" / "deferred to follow-up" /
+"Phase B" without a concrete reason is an anti-pattern that
+builds backlog faster than work completes. If you can name
+acceptance gates that pass the completion test (concrete +
+verifiable + small implementation cost), put the work IN
+your current proposal's scope.
+
 # Goal
 
 {goal_summary}

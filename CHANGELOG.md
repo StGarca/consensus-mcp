@@ -1,13 +1,74 @@
 # Changelog
 
-## 1.14.3 - unreleased
+## 1.14.3 - 2026-05-14
 
-Open scope:
+Stabilization hot-patch from iter-audit-2026-05-14-three-followup-gaps
+(workflow #4 weighted-synthesis convergence; codex + gemini + claude;
+no blocking objections). Bundles all converged scope into one tag per
+the no-deferral doctrine (operator directive: "consensus runs to
+completion when goals + acceptance gates are clear").
 
-- iter-0044: implement adapter `--mode` forwarding fix per iter-0043
-  converged plan (CodexAdapter + GeminiAdapter forward `packet.phase`
-  → dispatcher `--mode`; centralized phase-to-mode helper; MCP
-  wrappers expose `phase` parameter; skill workaround removed).
+**Doctrine: consensus runs to completion (no gratuitous deferral).**
+
+New bundled-skill section "Consensus runs to COMPLETION" + dispatch-
+template completion mandate codify the rule: deferring well-defined
+work to "future iterations" without naming a specific blocker is an
+anti-pattern. Includes the completion test (acceptance gates concrete?
+open design surface? implementation cost small enough?) and explicit
+anti-patterns ("iter-XXXX candidate" with no blocker, "Phase B" when
+phases share a doctrine boundary, splitting hot-patches across tags
+when fixes share a single failure mode).
+
+**Doctrine in the data layer (Q1 — config.py):**
+
+- `DISPOSITION_WEIGHTED_SYNTHESIS = "weighted-synthesis"` constant
+  added to `consensus_mcp/config.py`.
+- `VALID_DISPOSITION` now includes the new value.
+- `VALID_DISPOSITION_FOR_PROPOSE_CONVERGE = {all-or-nothing,
+  weighted-synthesis}` — workflow #4 accepts these two only;
+  `per-finding` stays post-review-only (its semantics fit defect
+  lists, not plan synthesis).
+- `default_config()` workflow #4 default flips from `all-or-nothing`
+  to `weighted-synthesis` (matches the iter-0043 doctrine).
+- Validator at `config.py:303-309` updated to allow either valid
+  workflow #4 disposition; rejects `per-finding` with actionable
+  error message.
+- `_init_wizard.py` defaults updated: workflow #4 setup now lands
+  in `weighted-synthesis` by default; workflow #3 / advisory keep
+  `all-or-nothing` as their default.
+- 4 new tests in `test_config.py` cover both valid dispositions for
+  workflow #4 + reject `per-finding` with regex-matched message.
+  Pre-existing `test_default_disposition_all_or_nothing` renamed
+  to `test_default_disposition_weighted_synthesis` and updated.
+- All 107 tests in `test_config.py` + `test_init_wizard.py` pass.
+
+**Procedural enforcement of disconfirming-evidence pattern (Q2):**
+
+- Bundled skill: completion mandate in templates + skill (also
+  lands the no-deferral rule above as the structural sibling).
+- Dispatch templates (`codex_proposal_template.md`,
+  `gemini_proposal_template.md`): completion mandate preamble so
+  peer AIs default to in-scope completion, not deferral.
+
+**Stale-tag mitigation (Q3):**
+
+- `README.md` install URLs bumped from `@v1.14.0` to `@v1.14.3`
+  (both pipx and pip-in-venv examples). Stops the bleeding wound
+  where new installs were getting the v1.14.0 buggy bundled skill.
+- `docs/advisories.md` NEW — standing channel for "shipped artifact
+  has known doctrine drift" notices. First entry covers v1.14.0
+  and v1.14.1 with explicit upgrade instructions (`pipx install
+  --force` + re-run `consensus init --install-claude-code`).
+- Bundled skill cut sequence (steps 8 + 10) gains explicit "bump
+  README install URL on the new dev branch" + "add advisory entry
+  if applicable" steps so this drift cannot recur structurally.
+
+iter-0044 (adapter `--mode` forwarding fix per iter-0043 converged
+plan) deferred to v1.14.4 with named blocker: still requires test
+infrastructure setup for adapter-boundary fixtures that does not
+fit in this hot-patch's scope.
+
+## 1.14.2 - 2026-05-14
 
 ## 1.14.2 - 2026-05-14
 
