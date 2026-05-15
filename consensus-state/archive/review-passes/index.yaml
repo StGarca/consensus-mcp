@@ -1013,4 +1013,16 @@ passes:
   packet_sha256: e259079e3ea509ef033ab8b83efd46009f777ee1e496073de5a70f32e72514f6
   iteration_id: iteration-t33
   reviewer_id: claude
-last_updated_utc: '2026-05-15T16:31:39Z'
+- id: codex-cpme-wfb-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-codex-cpme-wfb-1-codex-cpme-wfb-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T16:41:49Z'
+  packet_sha256: fe48064a36c29a72a567566555a53f8dcfee2a711069d9a7a3437a232af474cf
+  iteration_id: iteration-converged-plan-machine-enforcement
+  reviewer_id: codex-cpme-wfb-1
+- id: gemini-cpme-wfb-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-gemini-cpme-wfb-2-gemini-cpme-wfb-2-pass1-pass.yaml
+  sealed_at: '2026-05-15T16:44:31Z'
+  packet_sha256: d27d11077aaa71b941a35d817bfb88e3ee9eb916c94313ff60d5eb578ece898f
+  iteration_id: iteration-converged-plan-machine-enforcement
+  reviewer_id: gemini-cpme-wfb-2
+last_updated_utc: '2026-05-15T16:44:31Z'
