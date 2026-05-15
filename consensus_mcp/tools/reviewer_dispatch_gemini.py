@@ -72,6 +72,27 @@ SCHEMA = {
                     "or the helper refuses (exit 3)."
                 ),
             },
+            "phase": {
+                "type": ["string", "null"],
+                "enum": ["propose", "review", "converge", None],
+                "description": (
+                    "iter-0044: dispatch phase, mapped internally to --mode "
+                    "via consensus_mcp.contributors._phase_mode. 'propose' → "
+                    "--mode proposal; 'review' / 'converge' → --mode review. "
+                    "Hides dispatcher template/schema split from MCP callers; "
+                    "matches engine adapter abstraction. If both phase and "
+                    "mode are set, mode wins."
+                ),
+            },
+            "mode": {
+                "type": ["string", "null"],
+                "enum": ["review", "proposal", None],
+                "description": (
+                    "iter-0044 escape hatch: explicit --mode override for "
+                    "callers needing dispatcher-level control. Wins over "
+                    "phase when both are set."
+                ),
+            },
         },
         "required": ["goal_packet_path", "iteration_dir"],
         "additionalProperties": False,
@@ -94,6 +115,16 @@ SCHEMA = {
 }
 
 
+def _resolve_mode(phase: str | None, mode: str | None) -> str | None:
+    """iter-0044: resolve effective --mode argv value (mirror of codex wrapper)."""
+    if mode is not None:
+        return mode
+    if phase is not None:
+        from consensus_mcp.contributors._phase_mode import phase_to_mode
+        return phase_to_mode(phase)
+    return None
+
+
 def _build_argv(
     goal_packet_path: str,
     iteration_dir: str,
@@ -103,6 +134,8 @@ def _build_argv(
     review_target_path: str | None,
     model: str | None,
     smoke: bool | None,
+    phase: str | None = None,
+    mode: str | None = None,
 ) -> list[str]:
     argv: list[str] = [
         "--goal-packet", goal_packet_path,
@@ -118,6 +151,10 @@ def _build_argv(
         argv += ["--review-target", review_target_path]
     if model is not None:
         argv += ["--model", model]
+    # iter-0044: append --mode based on phase/mode (omitted entirely if neither set).
+    resolved_mode = _resolve_mode(phase, mode)
+    if resolved_mode is not None:
+        argv += ["--mode", resolved_mode]
     if smoke:
         argv += ["--smoke"]
     return argv
@@ -132,8 +169,13 @@ def handle(
     review_target_path: str | None = None,
     model: str | None = None,
     smoke: bool | None = None,
+    phase: str | None = None,
+    mode: str | None = None,
 ) -> dict:
     """Dispatch gemini via _dispatch_gemini.main; return parsed JSON dict.
+
+    iter-0044: phase + mode parameters added (per iter-0043 converged plan).
+    See reviewer_dispatch_codex.handle docstring for semantics; identical.
 
     Same rc-vs-stdout reconciliation as reviewer_dispatch_codex (iter-0028 F3):
     if main() returns a non-zero exit code but stdout JSON claims ok=True,
@@ -148,6 +190,8 @@ def handle(
         review_target_path=review_target_path,
         model=model,
         smoke=smoke,
+        phase=phase,
+        mode=mode,
     )
     buf = io.StringIO()
     rc: int = 0

@@ -36,12 +36,20 @@ class CodexAdapter(ContributorAdapter):
         # Build argv mirroring reviewer.dispatch_codex MCP wrapper.
         reviewer_id = packet.reviewer_id or f"codex-{packet.iteration_dir.name}-{packet.phase}-1"
         pass_id = packet.pass_id or f"{reviewer_id}-pass1"
+        # iter-0044 per iter-0043 converged plan: forward packet.phase as
+        # --mode to the dispatcher. Previously omitted, causing every
+        # workflow #4 round-1 dispatch through the engine to silently
+        # use review-mode templates/schemas. Strict mapping via
+        # _phase_mode.phase_to_mode (raises ValueError on unknown phase).
+        from consensus_mcp.contributors._phase_mode import phase_to_mode
+        mode = phase_to_mode(packet.phase)
         argv = [
             "--goal-packet", str(packet.goal_packet_path),
             "--iteration-dir", str(packet.iteration_dir),
             "--reviewer-id", reviewer_id,
             "--pass-id", pass_id,
             "--timeout-seconds", str(packet.timeout_seconds),
+            "--mode", mode,
         ]
         if packet.review_target_path is not None:
             argv += ["--review-target", str(packet.review_target_path)]
