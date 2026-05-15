@@ -490,32 +490,54 @@ and no tag.
    addendum for any iterations that landed after the section was
    first authored.
 2. Verify `pyproject.toml` `version` matches the branch.
-3. Run the full test suite; surface regressions before tagging.
+3. **Bump README install URLs + `## Status` to `@v<X.Y.Z>` on the
+   release branch tip — BEFORE tagging.** Since v1.15.4 `main`
+   fast-forwards to the just-cut tag, the README *inside the tag*
+   IS the GitHub landing page. If it still says the previous
+   version, the landing page tells users to install the old
+   release the moment `main` advances — the exact bleeding-wound
+   this is meant to prevent. Grep `@v<old-prefix>` + the Status
+   line; fix all in one commit on the release branch before step 5.
+   (Pre-v1.15.4 this was a post-tag dev-branch step; under
+   main=tag it MUST be pre-tag.)
+4. Run the full test suite; surface regressions before tagging.
    Document any pre-existing known-issue flakes in CHANGELOG so
    they aren't mistaken for v<X.Y.Z> regressions.
-4. `git tag -a v<X.Y.Z> -m "..."` on the branch tip.
-5. `git push origin refs/heads/v<X.Y.Z> refs/tags/v<X.Y.Z>` (use
+5. `git tag -a v<X.Y.Z> -m "..."` on the branch tip.
+6. `git push origin refs/heads/v<X.Y.Z> refs/tags/v<X.Y.Z>` (use
    explicit `refs/heads/` and `refs/tags/` to disambiguate; the
    branch and tag now share a name).
-6. **Release is complete.** Distribution is git-tag-based — users
+7. **Release is complete.** Distribution is git-tag-based — users
    install via `pipx install git+https://github.com/stgarca/
    consensus-mcp.git@v<X.Y.Z>`. There is NO PyPI publish step;
    the package is not registered on PyPI. Optional: build wheel
    + sdist locally (`python -m build`) for local smoke-testing
    only, not for upload.
-7. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`
+8. **Fast-forward `main` to the just-cut tag**
+   (`git push origin refs/tags/v<X.Y.Z>^{}:refs/heads/main`, or
+   `git push origin v<X.Y.Z>-tip:main`). This is ALWAYS a clean
+   fast-forward because each release branch descends linearly from
+   the previous release tip, which descends from `main`. `main` is
+   the GitHub default branch, so this keeps the landing page +
+   GitHub Actions CI on the latest released state. Verify with
+   `git merge-base --is-ancestor origin/main <tag>` first; if it is
+   NOT an ancestor, STOP — that means history diverged and a
+   force-update would rewrite public `main` (escalate, do not
+   force).
+9. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`
    for hot-patches, OR `v<X.(Y+1).0>` for the next minor. Bump
    `pyproject.toml` on the new branch to the new dev version
    (e.g., `1.14.1.dev0`); add a `## X.Y.Z+1 - unreleased` stub
    to CHANGELOG.md.
-8. **Bump README install URLs to `@v<X.Y.Z>` (the just-cut tag,
-   NOT the dev version) on the new dev branch.** This step
-   prevents the bleeding-wound failure mode where the README
-   continues to point users at an older defective tag after a
-   fix is published. Grep `@v<old-prefix>` to catch all stale
-   refs; bump them all in one commit.
-9. Push the new branch: `git push -u origin v<X.Y.Z+1>`.
-10. **If the just-cut tag has a known issue worth flagging to
+10. **Verify** the README on the new dev branch still shows
+    `@v<X.Y.Z>` (the just-cut tag) — it should already, because
+    step 3 bumped it pre-tag and the dev branch descends from the
+    tag. This is now a no-op verification, NOT a bump (the bump
+    moved to pre-tag step 3 in v1.15.4 so the tag's README — which
+    `main` fast-forwards onto — is correct at tag time). If it is
+    somehow stale, that is a bug in step 3, not a routine bump.
+11. Push the new branch: `git push -u origin v<X.Y.Z+1>`.
+12. **If the just-cut tag has a known issue worth flagging to
     users on older versions** — add an entry to
     `docs/advisories.md` naming the affected versions, the
     issue, the correct upgrade target, and the user action
@@ -529,12 +551,21 @@ git+https://github.com/.../consensus-mcp.git@vX.Y.Z`. No
 catch yourself proposing a PyPI step, stop — you're adding a
 channel that is not part of this project's release flow.
 
-**Branch convention:** Release branches are SELF-CONTAINED. `main`
-is NOT progressed by release cuts — it stays at whatever its tip
-was before the v<X.Y.Z> branch was cut. Each new release branches
-from the previous release's tip. `main` is essentially a stable
-pointer to "the divergence point of the most recently cut release."
-Do NOT merge release branches back into main.
+**Branch convention (evolved in v1.15.4):** `main` is the GitHub
+default branch and tracks **the latest released state**. After
+every release cut, `main` is **fast-forwarded to the just-cut tag**
+(cut-sequence step 8) — never a merge, never a force-push (the
+fast-forward is always clean because each release branch descends
+linearly from the prior release tip, which descends from `main`).
+Active development happens on the `v<X.Y.Z>` branches, which are
+self-contained and branch from the previous release's tip; they are
+NOT merged into `main` — `main` only ever *fast-forwards* to a
+released tag. Rationale: the pre-v1.15.4 "main frozen forever"
+convention left the GitHub landing page stuck at v1.13.0 and
+GitHub Actions CI dormant from v1.13.0→v1.15.3 (CI triggered only
+on `main`). `main` = newest tag; `v<next>` = where work lands;
+release = the moment a tag is pushed AND `main` is fast-forwarded
+onto it.
 
 **Variations:**
 
