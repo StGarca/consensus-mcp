@@ -1,0 +1,266 @@
+schema_version: 1
+pass_id: pass-12-claude-on-codex-pass-11
+reviewer: claude-opus-4-7
+reviewed_utc: "2026-05-08T00:00:00Z"
+spec_under_review: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.4-ai-contract-plus-pass-10-plus-codex-pass-11"
+depth: "expert review of v1.4-patched + dual-pass response to codex pass-11 + new findings"
+overall_verdict: |
+  Codex pass-11 caught real issues including TWO bugs in claude pass-10
+  patches (.gitignore incomplete for /scripts; em dash in my own gitignore
+  patch). Pass-11 also surfaces a deeper governance issue: the spec is
+  being patched without version bumps and known-blocking findings live
+  only in section 24 (not surfaced in frontmatter for packet-builder
+  consumers). Pass-12 corroborates pass-11 on most findings, applies safe
+  inline patches (5), and adds 8 new claude findings.
+  THIS PASS DOES NOT DECLARE READY FOR PHASE 0.
+codex_pass_11_findings_reviewed:
+  agree_apply_now:
+    - id: codex-rev-017-active-contract-patched-without-version-bump
+      claude_assessment: |
+        Codex right. Claude pass-10 changed active section 23 fixture comment
+        and section 24 lifecycle/index content while frontmatter still said
+        v1.4. Agents reading frontmatter cannot tell what they're executing.
+      pass_12_disposition: applied (frontmatter status set to draft-v1.4-ai-contract-patched-pass-10-pass-12; active_contract_patch_level field added)
+    - id: codex-rev-018-phase0-scripts-ignored-by-git
+      claude_assessment: |
+        Operationally severe. Claude pass-10 patched .gitignore for
+        agent-loop/ but missed that /scripts/ is denied by root /* rule.
+        Section 23 phase_0_deliverables lists scripts/agent_loop/*.py.
+        When Phase 0 builds those validators, they would be untracked.
+        SAME FAILURE MODE as the agent-loop archive issue codex-rev-013
+        caught originally. Claude repeated the exact same mistake on
+        a different path. Pattern: claude doesn't audit gitignore
+        coverage holistically.
+      pass_12_disposition: applied (.gitignore now allows /scripts and scripts/agent_loop/**)
+    - id: codex-rev-019-known-blocking-findings-not-reflected-in-frontmatter
+      claude_assessment: |
+        Codex right. Section 24 lists pending_v1_5_blocking with multiple
+        items but frontmatter has no readiness/blocked field. A packet
+        builder reading only frontmatter + sections 1-23 misses that the
+        active contract has known blocking issues.
+      pass_12_disposition: applied (frontmatter active_contract_readiness=blocked_pending_v1_5; known_blockers list populated; do_not_treat_as_phase_0_ready=true)
+    - id: codex-rev-023-active-corroboration-rule-known-unsafe-but-still-live
+      claude_assessment: |
+        Operationally critical. Pass-10 agreed codex-rev-009/010 and
+        claude-rev-008 are blocking but left section 13 corroboration
+        rule LIVE. Any agent invoking the rule before v1.5 lands could
+        apply it unsafely. Codex right.
+      pass_12_disposition: applied (section 13 dual_reviewer_corroboration marked status=TEMPORARILY_DISABLED_PENDING_V1_5; archived design preserved for v1.5 reference; during-disable behavior specified)
+    - id: codex-rev-024-gitignore-comment-nonascii
+      claude_assessment: "Em dash in claude pass-10 .gitignore patch comment. Self-introduced ASCII violation."
+      pass_12_disposition: applied (.gitignore comments normalized to ASCII)
+  agree_keep_blocking_for_v1_5:
+    - id: codex-rev-020-section24-index-only-rule-still-violated-by-pass10
+      claude_assessment: |
+        Codex right. Pass-10 reduced section 24 prose volume but didn't
+        eliminate it. pending_v1_5_* groups have rationale/note fields;
+        pass_10_applied has prose. Same drift pattern as codex-rev-001.
+        Need separate disposition-ledger.yaml in agent-loop/state/ to
+        host the prose; section 24 becomes pure id+target+pointer.
+      proposed_fix_for_v1_5: |
+        - Create agent-loop/state/disposition-ledger.yaml with full
+          pending/deferred/applied prose + rationales
+        - Section 24 entries reduce to: id + status + target + ledger_ref
+        - validate_disposition_index.py audits both files
+      pass_12_disposition: pending_v1_5
+    - id: codex-rev-021-pass10-archive-trackability-still-unverified-in-index
+      claude_assessment: |
+        Codex right. Pass-10 fixed .gitignore but archive index does not
+        verify per-file git-tracked status. validate_disposition_index.py
+        spec must include `git ls-files` check.
+      proposed_fix_for_v1_5: |
+        validate_disposition_index.py contract additions:
+        - For every archived_at path: assert git_ls_files contains it
+        - For every promoted_to section: assert section heading exists
+        - For every script in section 23 phase_0_deliverables: assert it
+          would be git-tracked (not in any .gitignore deny rule)
+      pass_12_disposition: pending_v1_5 (extends claude-rev-005)
+    - id: codex-rev-022-pass10-rate-metrics-use-undefined-formula
+      claude_assessment: |
+        Codex right. Archive index publishes independent_finding_rate
+        numerically (0.86, 0.86, 0.81) while claude-rev-010 explicitly
+        notes the formula is undefined in section 22. Persuasive numbers
+        with semantically unstable denominator.
+      pass_12_disposition: |
+        Two paths:
+          (a) Mark archive-index rates as PROVISIONAL until v1.5 promotes formula
+          (b) Promote formula immediately as inline patch (codex-rev-022 + claude-rev-010 corroborate)
+        Option (a) safer for now per operator directive (no premature done-claims).
+      pass_12_action: archive index updated to mark rates provisional (next patch)
+new_findings:
+  high:
+    - id: claude-rev-016-corroboration-canonical-key-timing
+      severity: high
+      claim: |
+        Section 13 says "If N>=2 reviewers raise the same canonical finding
+        (matched via section 12 canonical_finding_key), the finding
+        auto-promotes." Section 12 canonical_finding_key uses (file, section,
+        claim_class, normalized_claim_text_hash). Computing this requires
+        reading findings. If reviewer A's finding is sealed before reviewer
+        B's invocation (per claude-rev-008 independence proof requirement),
+        the synthesizer must wait for both reviews to complete before
+        canonical-key computation. Spec doesn't say WHEN this happens in
+        the orchestrator loop.
+      proposed_fix_for_v1_5: |
+        Section 15 orchestrator loop: insert step
+          "compute_canonical_findings_after_both_reviews_seal"
+        between "validate_claude_review" and "run_symmetric_rebuttal_if_needed".
+        This makes the timing explicit and auditable.
+      pass_12_disposition: pending_v1_5
+    - id: claude-rev-018-no-rollback-semantics
+      severity: high
+      claim: |
+        Architecture has no rollback procedure. If v1.5 lands but introduces
+        a regression caught by pass-13, what happens? Spec assumes forward
+        progress. Three of three patches have introduced regressions.
+        Without rollback semantics, regressions can compound.
+      proposed_fix_for_v1_5: |
+        Section 0 add:
+          version_bump_safety:
+            on_regression_caught_by_next_pass:
+              option_a: "revert to prior version + record attempted change as rejected_path in decision-ledger"
+              option_b: "follow-up patch fixes the regression without touching unrelated areas (must be reviewed by both agents)"
+            forbidden:
+              - "silent re-edit that doesn't acknowledge the regression"
+      pass_12_disposition: pending_v1_5
+    - id: claude-rev-023-operator-approval-store-path-undefined
+      severity: high
+      claim: |
+        Section 17 says approval lives at "<operator-protected-store>/agent-loop/operator-production-approval.yaml".
+        The placeholder <operator-protected-store> is never resolved. For
+        Phase 0 to work, operator must designate a real path that is
+        OS-permission-restricted from agent writes. Without that, the
+        approval store is a placeholder and the production gate cannot fire.
+      operationally_blocking_for_phase_0: true
+      proposed_fix_for_v1_5: |
+        Section 17 add:
+          approval_store_resolution:
+            required_at_phase_0_setup: true
+            operator_designates: "absolute path outside agent-loop/, scripts/, run/, wiki/"
+            example_recommendations:
+              - "%USERPROFILE%/agent-loop-approvals/  (Windows)"
+              - "$HOME/agent-loop-approvals/  (Unix)"
+            permission_requirement: "agent process MUST NOT have write permission on this directory"
+            phase_0_validator: "validate_approval_store.py checks permission constraints before iteration-0000 may run"
+      pass_12_disposition: pending_v1_5_blocking_phase_0
+  medium:
+    - id: claude-rev-017-pass7-status-aggregation-imprecise
+      severity: medium
+      claim: |
+        Archive index says pass-7 "all 8 promoted in v1.4" but per-finding
+        tracking shows codex-rev-001 was a relocation (from section 24 to
+        section 13), not a new rule promotion. Aggregate "promoted" claim
+        loses fidelity vs per-finding disposition. Same kind of audit gap
+        codex-rev-014 caught for pass-8.
+      proposed_fix_for_v1_5: |
+        Archive index per-pass status_in_spec uses structured per-finding
+        breakdown, not aggregate prose. validate_disposition_index.py
+        cross-checks index aggregate vs section 24 per-finding entries.
+      pass_12_disposition: pending_v1_5 (low urgency)
+    - id: claude-rev-019-cross-pass-corroboration-now-operational
+      severity: medium
+      claim: |
+        Pass-11 corroborated several pre-existing findings:
+          codex-rev-020 <-> codex-rev-012 (drift pattern continues across passes)
+          codex-rev-021 <-> claude-rev-005 (validate_disposition_index extension)
+          codex-rev-022 <-> claude-rev-010 (formula corroboration)
+          codex-rev-023 <-> codex-rev-009 + codex-rev-010 + claude-rev-008 (corroboration rule unsafe)
+        claude-rev-011 (cross-iteration corroboration undefined) is no longer
+        theoretical; it's operationally relevant because the corroboration
+        rule (when re-enabled in v1.5) needs to handle these cases.
+      proposed_fix_for_v1_5: |
+        When v1.5 re-enables dual_reviewer_corroboration, also resolve
+        cross-pass semantics:
+          cross_pass_corroboration:
+            same_finding_raised_in_later_pass:
+              effect: "auto-promote eligible IF the finding was still open
+                       (not yet promoted/applied/deferred) at later pass time"
+              independence_treated_as: "cross-pass-confirmation, weaker than
+                       independent in-iteration corroboration"
+              auto_block_threshold: "cross-pass requires N>=2 distinct
+                       reviewer-pass tuples (so 'codex pass 7 + codex pass 9'
+                       does NOT count as 2; needs 'codex + claude' or
+                       'codex pass-7 + claude pass-N')"
+      pass_12_disposition: pending_v1_5 (resolves claude-rev-011)
+    - id: claude-rev-020-state-files-tracking-policy-undefined
+      severity: medium
+      claim: |
+        Pass-10 .gitignore patch added "agent-loop/state/*.yaml" to allowlist.
+        But state/ files are dynamic (rewritten every iteration). Spec doesn't
+        say which state files should be tracked vs ephemeral.
+      candidates:
+        decision_ledger_yaml: "TRACK - audit trail; durable history"
+        gate_state_yaml: "DON'T TRACK - ephemeral runtime state"
+        file_index_yaml: "DON'T TRACK - regenerable from repo state"
+        check_registry_yaml: "TRACK - configuration; durable"
+        agent_profiles_yaml: "TRACK - configuration; durable"
+        orchestrator_lock: "DON'T TRACK - never committed"
+      pass_12_disposition: pending_v1_5 (specify per-file in section 5)
+    - id: claude-rev-021-pass-numbering-mixed-semantics
+      severity: low
+      claim: |
+        Numbering goes pass-1, pass-2, pass-3 (claude solo), then alternates
+        pass-4 claude / pass-5 codex / pass-6 claude / pass-7 codex / etc.
+        Pass numbering doesn't reflect dual-pass cycle structure cleanly.
+        Claude-on-codex passes (6, 8, 10, 12) and codex-on-claude passes
+        (5, 7, 9, 11) form review cycles but ids are sequential not paired.
+      observation: |
+        Cosmetic for now. If iteration-0000 starts producing iteration-NNNN
+        passes (different from spec-review passes), namespace conflict
+        possible. Already noted in claude-rev-012 (kill-switch iteration
+        definition fuzzy).
+      pass_12_disposition: pending_v1_5 (low urgency; resolve when iteration concept stabilizes)
+governance_observations:
+  pass_10_self_introduced_bugs:
+    - "codex-rev-018 .gitignore /scripts gap (claude pass-10 patched only agent-loop subtree)"
+    - "codex-rev-024 em dash in .gitignore comment (claude pass-10 introduced ASCII violation while fixing same in spec)"
+    - "codex-rev-017 patched without version bump (claude pass-10 changed active sections at v1.4 stamp)"
+    - "codex-rev-020 section 24 prose drift (claude pass-10 added pending_v1_5 prose blocks)"
+    - "codex-rev-022 published rates with undefined formula (claude pass-10 added third cycle measurement before formula promoted)"
+  interpretation: |
+    Claude pass-10 introduced 5 new bugs while applying 4 prior fixes.
+    Net effect: +5 -4 = +1 bug. The "fixing introduces bugs" pattern
+    is now unmistakable. claude-rev-001 anti-regression criterion is
+    not just theoretical safeguard - it's empirically required.
+    Operator directive "stop trying to prematurely launch" is structurally
+    correct: claude is not converging on a clean spec by self-editing.
+  meta_recommendation: |
+    Until validate_disposition_index.py is built AND iteration-0000
+    produces empirical metrics, ANY claude inline patch should be
+    constrained to:
+      - bumping version stamp
+      - cosmetic ASCII fixes
+      - .gitignore allowlist additions (after verification)
+      - disabling known-unsafe rules
+    Architectural changes (anything in pending_v1_5_blocking) should
+    NOT be applied by claude alone; require operator approval AND
+    codex agreement BEFORE landing inline.
+loop_self_test_pass_11_pass_12:
+  independent_finding_rate: 0.71
+  formula: "(unique_canonical_findings - duplicates) / total_findings"
+  formula_status: PROVISIONAL_per_codex-rev-022
+  total_findings: 16
+  duplicates: 3 explicit + 1 implicit (claude-rev-019 explicitly catalogs cross-pass corroborations from pass-11 agreeing with prior passes)
+  duplicates_observed:
+    - "claude-rev-016 (canonical-key timing) extends codex-rev-009 (corroboration ownership)"
+    - "claude-rev-018 (rollback semantics) parallels codex-rev-017 (version bump discipline)"
+    - "claude-rev-020 (state file tracking) extends codex-rev-018 (gitignore Phase 0 scripts)"
+    - "claude-rev-019 implicitly: pass-11 corroborates 4 prior cross-pass findings"
+  pattern_note: |
+    Independence rate dropping (0.86, 0.86, 0.81, 0.71). Each new pass
+    builds more on prior findings. Expected pattern: as the obvious bugs
+    get caught, remaining findings cluster around shared themes
+    (corroboration rule, gitignore, drift). Still well above 0.30 threshold.
+recommendation: |
+  Operator decision required before any further inline edits:
+    1. Approve or reject proposed_fix_for_v1_5 designs in pass-9, pass-10, pass-12
+    2. If approved: apply v1.5 patches inline AND build validate_disposition_index.py
+       AND specify operator approval_store path AND build iteration-0000 fixtures
+    3. Run consensus pass-13 (codex on v1.5) + pass-14 (claude on pass-13)
+    4. Accept v1.5 ONLY if both passes return zero blocking findings AND
+       validate_disposition_index.py runs clean AND iteration-0000 dry-run
+       produces empirical section 22 metrics
+  Until those gates pass, spec remains blocked_pending_v1_5.
+  Pass-12 explicitly does NOT declare ready for Phase 0 (governance rule
+  per operator directive 2026-05-08).

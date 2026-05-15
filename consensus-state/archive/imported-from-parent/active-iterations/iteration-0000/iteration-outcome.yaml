@@ -1,0 +1,117 @@
+schema_version: 1
+iteration_id: iteration-0000
+outcome: completed_observational_run
+completed_utc: '2026-05-08T00:00:00Z'
+review_consensus: true
+implementation_ready: false
+production_ready: false
+production_allowed: false
+orchestration_health:
+  artifact_well_formedness: passed
+  process_well_formedness: passed
+  metrics_captured: true
+  validator_clean_post_run: true
+  spec_unmutated: true
+  ledger_unmutated: true
+  archive_unmutated: true
+artifacts:
+  input: agent-loop/active/iteration-0000/input.yaml
+  review_packet: agent-loop/active/iteration-0000/review-packet.yaml (sha256 385d9589...)
+  codex_review: agent-loop/active/iteration-0000/codex-review.yaml (sha256 b0595ca4...)
+  claude_review: agent-loop/active/iteration-0000/claude-review.yaml (sha256 69f1a463...)
+  independence_audit: agent-loop/active/iteration-0000/independence-audit.yaml
+  consensus: agent-loop/active/iteration-0000/consensus.yaml (sha256 03487c21...)
+  verification: agent-loop/active/iteration-0000/verification.yaml
+independent_finding_rate: 0.818
+finding_count_total: 11
+finding_count_blocking: 6
+finding_count_non_blocking: 2
+finding_count_implementation_risks: 3
+corroborations_detected: 2
+next_required_action:
+  recommendation: "Operator decides between v1.7 patch cycle and iteration-0001:\n\
+    \  Path X (apply iteration-0000 findings to v1.7):\n    - The 6 blocking canonical_findings\
+    \ (cf-001, cf-003, cf-004, cf-005,\n      cf-007, cf-008) all merit applying.\
+    \ Per claude-rev-018 rollback\n      semantics, single coherent v1.7 patch is\
+    \ the right shape.\n    - cf-007 (done_claim asymmetry) and cf-008 (dangling section\
+    \ ref)\n      are easy. cf-001 (independence_proof schema + enforcement),\n  \
+    \    cf-003 (rebuttal canonical recompute), cf-004 (preflight check\n      method),\
+    \ cf-005 (consensus_change_after_approval trigger)\n      are architectural; per\
+    \ claude-rev-028 self-patch constraint,\n      these need operator ratification\
+    \ before claude applies them.\n  Path Y (run iteration-0001 first to get more\
+    \ empirical data):\n    - iteration-0001 on a different objective (project decision\
+    \ rather\n      than spec self-review) tests whether independent_finding_rate\n\
+    \      generalizes outside self-review framing.\n    - Defers v1.7 work until\
+    \ two iterations of data exist.\nRecommend Path X: blocking findings should not\
+    \ accumulate; iteration-0000\nsurfaced concrete actionable items.\n"
+  active_contract_readiness_recommendation: 'HOLD at pending_phase_0_empirical_validation.
+    Do NOT advance to ready
+
+    until v1.7 incorporates iteration-0000 blocking findings. Per cf-007
+
+    (deferred), the readiness flip itself requires gates that aren''t
+
+    yet in spec.
+
+    '
+key_findings_to_promote_in_v1_7:
+  must_apply:
+  - cf-001: section 13 independence_proof needs schema (audit log path/format) AND
+      enforcement notes (Phase 0 is honor-system; Phase 1+ MCP enforces). Corroborated
+      by codex+claude.
+  - cf-003: section 20 needs recompute_canonical_findings step after rebuttal (or
+      explicit "rebuttal blockers are corroboration-ineligible" rule).
+  - cf-004: section 23 preflight must specify "parse report.findings list, do NOT
+      use exit code".
+  - cf-005: section 17 consensus_change_after_approval needs detection trigger in
+      section 20 step list (e.g. recheck_approval_binds at iteration boot).
+  should_apply:
+  - cf-007: section 0 done_claim_rule extends to active_contract_readiness frontmatter
+      transitions.
+  - 'cf-008: section 13 dangling reference: "section_15_step" -> "section_20_step".'
+  can_defer:
+  - cf-002: kill-switch sample composition ambiguity (low operational risk pre-iteration-0010).
+  - cf-006: iteration-0000 self-reference resolution (philosophical; no immediate
+      failure).
+summary_of_loop_self_test:
+  pattern_break_confirmed_for_v1_5_v1_6: true
+  iteration_0000_produced_actionable_findings: true
+  artifacts_well_formed_per_spec_schemas: true
+  independence_proof_held_throughout: true
+  observational_mode_respected: true
+  zero_validator_regressions_introduced: true
+  conclusions:
+  - The loop produces useful signal when run on itself.
+  - Severity_gate appears to over-promote process-class findings; v1.7 should tighten.
+  - Single-agent-as-orchestrator pattern (claude wearing both hats) is workable in
+    Phase 0 but motivates Phase 1 MCP enforcement.
+  - Six iteration-0000 findings are concrete v1.7 work.
+tokens_per_iteration:
+  codex_input_estimate: null
+  claude_input_estimate: null
+  codex_output_estimate: null
+  claude_output_estimate: null
+  note: iteration-0000 was observational; tokens not measured at boot
+context_reuse:
+  sections_sent: null
+  unchanged_sections_omitted: null
+  context_requests_served: 0
+review_quality:
+  blockers_found: 6
+  blockers_confirmed_by_other_agent: 2
+  blockers_rejected: 0
+  assumptions_challenged: null
+  self_resolved_questions: 0
+  operator_escalated_questions: 0
+  independent_finding_rate: 0.818
+  note: values derived from legacy top-level fields where available
+outcome_quality:
+  decision_reversal_rate: null
+  operator_override_rate: null
+  time_to_correct_error_iterations: null
+implementation_quality:
+  accepted_changes: 11
+  implemented_changes: 0
+  out_of_scope_changes: 0
+  checks_passed: false
+  note: iteration-0000 observational; no patches applied

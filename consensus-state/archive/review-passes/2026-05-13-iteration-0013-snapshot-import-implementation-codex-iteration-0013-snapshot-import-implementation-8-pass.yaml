@@ -1,0 +1,54 @@
+iteration_id: iteration-0013-snapshot-import-implementation
+reviewer_id: codex-iteration-0013-snapshot-import-implementation-8
+pass_id: codex-iteration-0013-snapshot-import-implementation-8-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Restore reports success without clearing a scope that is absent from the
+    snapshot
+  citation: consensus_mcp/_snapshot_state.py:401
+  risk: If the selected snapshot contains no files for the requested scope, restore
+    returns zero files and leaves the current consensus-state subtree in place, producing
+    a stale hybrid state instead of matching the snapshot.
+  recommendation: Clean the requested restore scope before the empty-path early return,
+    or raise an explicit error for a missing iteration while still allowing full restores
+    to remove an absent consensus-state tree.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Restore can auto-snapshot dirty state before confirming the requested tag
+    exists
+  citation: consensus_mcp/_snapshot_state.py:603
+  risk: A typo or nonexistent tag can create an unnecessary pre-restore snapshot,
+    then fail later with tag-not-found, polluting snapshot history and giving misleading
+    operator feedback.
+  recommendation: Verify args.tag exists immediately after argument validation and
+    before dirty detection or auto-pre-snapshot work.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The proposed files implement most of the requested snapshot/import
+  surface, but restore has correctness gaps that can leave stale state or create safety
+  snapshots for invalid tags.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 4a728982411138d890ea5eb2a1496626e5adafad8cd62614b41659dbc736ffdf
+  output_sha256: 5f2c0f546dc840e2cfdabd2429ff27004a0d602a20c819b6b0aafdbcf0f3ecb5
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 4b55ce3c5f0a93d4b884db79e8734a176f1b724951700e97241e4afd01a6e2b8
+  scope_signature: 4904672bca3de6d503e78bf16538f38e9bdba2d0e7bdb0fbcb5ac3c540b23738
+  review_target_path: consensus-state/active/iteration-0013-snapshot-import-implementation/review-packet.yaml
+  review_target_hash: e134cb5b98066098aba9c491b1c777e4d9b1d328a5ae30b9f7f3f0d41a4f65ad
+sealed_at_utc: '2026-05-13T02:20:22Z'
+packet_sha256: 092436722963b4a9980366da12d49165ddc37d8a97667d50f17842b1956465c6

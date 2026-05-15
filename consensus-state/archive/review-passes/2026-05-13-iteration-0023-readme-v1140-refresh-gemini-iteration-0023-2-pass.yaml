@@ -1,0 +1,32 @@
+iteration_id: iteration-0023-readme-v1140-refresh
+reviewer_id: gemini-iteration-0023-2
+pass_id: gemini-iteration-0023-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The README.md has been comprehensively updated to reflect
+  the v1.14.0 feature set and architecture. All stale references have been removed,
+  and the new quick start, configurable dimensions, workflow modes, and architecture
+  components are documented as specified in the goal.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: a6580967c0fc894592a69457fc532467a807bf3460b3f7dc21f52da77ca56a03
+  output_sha256: 0201c603722dff133654213b2957c605317e7589dacad4a2e820022525c95f0b
+  goal_packet_sha256: f68e54c31a572e626d0748af207ded40616c1f5072c73cbca7045ea55edb370a
+  scope_signature: 18293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f607
+  review_target_path: consensus-state/active/iteration-0023-readme-v1140-refresh/review-packet.yaml
+  review_target_hash: ece15c7e60f7cda2565a405c33aa4dfab5498f666b971e5f3b4ee19e6a153c32
+  adapter: gemini
+sealed_at_utc: '2026-05-13T08:41:34Z'
+packet_sha256: 6c94e636aec3f8b537129b50f53532bee08b3709045f4e678f4a3c6eda45678c

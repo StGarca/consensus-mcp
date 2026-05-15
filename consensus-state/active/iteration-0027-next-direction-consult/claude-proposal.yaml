@@ -1,0 +1,152 @@
+iteration_id: iteration-0027-next-direction-consult
+reviewer_id: claude-iteration-0027-1
+pass_id: claude-iteration-0027-1-blind-proposal
+phase: blind_proposal
+authored_at_utc: '2026-05-13T12:00:00Z'
+authored_before_peer_visibility: true
+
+selected_target: (b) Fix codex review-template friction so 3-AI consensus is HONEST
+
+rationale_vs_alternatives: |
+  This is the highest-leverage move because it's the ONE thing that
+  unblocks every future consensus consult. Let me argue each:
+
+  vs (a) Continue Phase B migrations:
+  Phase B is 9 mechanical iterations each of which already has a 1-round
+  convergence pattern (iter-0026 proved it). They will get done. But
+  they're chipping wood. None of them changes what consensus-mcp CAN
+  DO. Worse: until (b) is fixed, every Phase B iteration that involves
+  a real design choice (the API shape of any helper, the trade-off
+  between inline vs. extracted function, etc.) silently falls back to
+  workflow #3 because workflow #4 only has 2 substantive votes. The
+  operator's call to "use consensus more" is structurally blocked.
+
+  vs (c) Use consensus-mcp on another project:
+  THIS IS THE REAL TEST and I'd put it #2. But it has a hard
+  dependency on (b). If we bring consensus-mcp to upstream and
+  the first workflow #4 consult there gets 2/3 substantive votes due
+  to codex template friction, we re-experience the bootstrap problem
+  IN FRONT of an external user (the operator's other project). Fix (b)
+  first, then (c) is a real demonstration. Do (c) before (b) and we
+  ship a known broken UX.
+
+  vs (d) Audit-trail hygiene:
+  Cosmetic. 20 stale lines in a YAML file. Lowest leverage. Defer.
+
+  (b) is the unblocker. Everything else is downstream.
+
+selected_call: SHIP
+
+proposed_iter_id: iteration-0028-codex-proposal-mode
+
+deliverable_scope:
+  problem_statement: |
+    The codex dispatcher (`_dispatch_codex.py`) builds prompts from
+    `dispatch_templates/codex_review_template.md` and validates output
+    against `dispatch_templates/codex_review_schema.json`. The schema
+    forces output into {findings: [], goal_satisfied: bool,
+    blocking_objections: []} shape. This shape is correct for REVIEW
+    tasks. It is wrong for PROPOSAL tasks where the contributor needs
+    to generate a design (target selection + rationale + scope sketch).
+
+    Empirically: in iter-0021 and iter-0024 (both workflow #4 design
+    consults), codex returned blocking findings about "no files to
+    review" 100% of the time on first dispatch. We documented this as
+    "structural abstention" but it's actually a tool defect.
+
+  proposed_design:
+    new_files:
+      - consensus_mcp/dispatch_templates/codex_proposal_template.md
+        (new prompt template: "you are one of several AI contributors
+        proposing solutions to a design question. Return a structured
+        proposal with selected_target, rationale, deliverable_scope.")
+      - consensus_mcp/dispatch_templates/codex_proposal_schema.json
+        (new JSON schema: {selected_target: string, rationale: string,
+        deliverable_scope: object, risks: [string]})
+    modified_files:
+      - consensus_mcp/_dispatch_codex.py: add `--mode {review,proposal}`
+        flag (default 'review' for backward-compat); when `proposal`,
+        load the proposal template + schema instead of the review pair.
+      - consensus_mcp/tools/reviewer_dispatch_codex.py: surface the
+        mode through the MCP tool surface (new input field `mode`).
+      - consensus_mcp/_dispatch_gemini.py: same `--mode` flag + new
+        templates for gemini (gemini's template friction is milder but
+        the asymmetry is worth fixing for consistency).
+
+  key_design_decisions:
+    - mode='review' is default to preserve backward compatibility with
+      every existing call site
+    - mode='proposal' loads alternative template + schema pair
+    - The proposal schema MUST be strict enough to validate but loose
+      enough that codex can express any reasonable proposal shape — the
+      review schema is too strict for this use case
+    - Backward-compatibility test: existing review tests must still
+      pass without modification (mode defaults to 'review')
+
+  out_of_scope:
+    - changing the engine's workflow_engine.py phase semantics (the
+      engine already supports proposal phase per
+      DispatchPacket.phase==PHASE_PROPOSE; we're fixing the dispatcher,
+      not the engine)
+    - migrating existing consults (iter-0021, iter-0024 stand as the
+      historical record; future consults benefit from the fix)
+    - claude in-process proposal mode (ClaudeAdapter already supports
+      it via artifact_callback; no change needed)
+
+  acceptance_gates_for_iter_0028:
+    - A1: full suite still >=711 + new tests for mode='proposal' path
+    - A2: integration test — dispatch codex in mode='proposal' against
+      a fake design-consult goal_packet, verify the output validates
+      against the proposal schema and is NOT shaped like a review
+      findings array
+    - A3: backward-compat — dispatching without --mode (default
+      'review') produces identical output shape to today's behavior
+    - A4: same fix landed for gemini dispatcher for symmetry
+
+  smallest_iteration:
+    - in_scope:
+        - dispatch_templates/codex_proposal_template.md (new)
+        - dispatch_templates/codex_proposal_schema.json (new)
+        - dispatch_templates/gemini_proposal_template.md (new)
+        - dispatch_templates/gemini_proposal_schema.json (new)
+        - _dispatch_codex.py (add --mode)
+        - _dispatch_gemini.py (add --mode)
+        - tests/test_dispatch_codex_proposal_mode.py (new)
+        - tests/test_dispatch_gemini_proposal_mode.py (new)
+    - out_of_scope:
+        - MCP tool wrapper changes (deferred to iter-0029 if
+          operator wants the mode surfaced through the MCP server)
+        - regenerating iter-0021 / iter-0024 (those stand as historical)
+
+risks:
+  - Designing the proposal schema is itself a design question — what
+    fields does a good proposal have? My sketch (selected_target,
+    rationale, deliverable_scope, risks) draws from how iter-0021 +
+    iter-0024 claude proposals were structured. The consult might
+    surface a better schema.
+  - The proposal template wording matters a lot. Codex was previously
+    interpreting EVERY packet as a code review; we need to convince
+    it that "review the design question and propose a solution" is a
+    different kind of task. Iteration likely needed.
+  - Gemini's proposal mode is less broken in practice (gemini gracefully
+    adapts to the review schema for design tasks) — but inconsistency
+    between dispatchers is its own bug.
+
+estimated_complexity: medium
+estimated_review_rounds: 2-3
+recommended_workflow_for_iter_0028: workflow #4 (propose-converge)
+  reasoning: |
+    This is itself a design question (what should the proposal schema
+    look like? how should the prompt frame the task?). Worth running
+    through 3-AI consensus once we have the codex-proposal-mode fix
+    available — meta-bootstrap moment. Alternatively, if we're stuck
+    in chicken-and-egg until (b) ships, run iter-0028 as workflow #3
+    and use the FIRST true 3-AI consensus consult (iter-0029) to
+    validate that (b) actually fixed the problem.
+
+confidence_this_is_right_answer: high
+  reasoning: |
+    The other candidates are not in dispute with this one — they're
+    just downstream. (a), (c), and (d) all become more valuable AFTER
+    (b) ships. (b) doesn't become more valuable after any of them.
+    Asymmetric dependency = unblock first.

@@ -1,0 +1,64 @@
+schema_version: 1
+iteration_id: iteration-0040-self-drive-audit-fixes
+created_utc: '2026-05-11T05:05:00Z'
+closing_state: quorum_close_passed
+ceremony_flavor: parallel_audit_fix_agent_dispatch
+parent_iteration: null
+subsystem: self_drive_audit_fixes
+closing_reason: |
+  Landed 12 of 13 audit findings in scripts/agent_loop_mcp/_self_drive.py
+  from 3 parallel codex audit dispatches (security, performance, cross-
+  platform, bare-except, all 2026-05-11). One agent (A-selfdrive) handled
+  all _self_drive.py findings as a single coherent change.
+
+  FINDINGS ADDRESSED:
+    Bare-except (6/6):
+      bareexc-rev-001 HIGH: _read_yaml_or_empty narrowed to
+        (OSError, UnicodeDecodeError, yaml.YAMLError)
+      bareexc-rev-002 HIGH: patch_size_exceeds_max bare-pass replaced by
+        narrowed except + patch_size_check_failed stop_rule with exception
+        type
+      bareexc-rev-005 MEDIUM: _evaluate_one_gate narrowed; result dict
+        includes exception_type
+      bareexc-rev-006 MEDIUM: review YAML errors split into
+        review_yaml_read_failed vs review_yaml_parse_failed
+      bareexc-rev-008 LOW: drift sha compute narrowed; reason includes
+        exception type
+      bareexc-rev-009 LOW: _collect_changed_files narrowed; aggregates
+        last_failures diagnostic
+    Performance (3/4):
+      perf-rev-001 HIGH: _cached_changed_files closure caches union view
+        within one cmd_check_stop_rules invocation
+      perf-rev-002 MEDIUM: _memo_read_yaml keyed by (Path, mtime_ns, size);
+        all stop-rule YAML reads route through it
+      perf-rev-003 MEDIUM: _partition_patterns + _match_partitioned;
+        forbidden_files matching now exact-set + dir-prefix + glob
+      perf-rev-004 MEDIUM: _memo_canonical_sha for drift hash caching
+    Cross-platform (3/3):
+      xplat-rev-003 MEDIUM: encoding="utf-8", errors="replace" on all
+        git subprocesses in this file
+      xplat-rev-004 MEDIUM: audit_path reads unified on read_text(utf-8)
+      xplat-rev-005 MEDIUM: _to_posix() normalizer; fnmatchcase for
+        deterministic case-sensitive git path matching
+
+  DEFERRED (1/13):
+    perf-rev-001 cross-command piece (gate re-evaluation across
+    cmd_check_stop_rules + cmd_evaluate_gates in cmd_close). Would
+    require coupling two CLI commands through shared state — out of
+    surgical scope. Tracked for future cleanup.
+
+  VERIFICATION:
+    pytest scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py -q
+      → 58 passed (baseline was 58 — no test count change since fixes
+      are exception-narrowing + memoization + posix normalization, not
+      behavior additions)
+    Full suite: 417 passed
+
+  LOC DELTA: +287 / -52 (net +235); growth is memoization closures +
+  partition helpers + comments documenting each fix.
+
+artifacts:
+  audit_sources:
+    - agent-loop/active/iteration-audit-2026-05-11-performance/codex-review.yaml
+    - agent-loop/active/iteration-audit-2026-05-11-cross-platform/codex-review.yaml
+    - agent-loop/active/iteration-audit-2026-05-11-bare-except/codex-review.yaml

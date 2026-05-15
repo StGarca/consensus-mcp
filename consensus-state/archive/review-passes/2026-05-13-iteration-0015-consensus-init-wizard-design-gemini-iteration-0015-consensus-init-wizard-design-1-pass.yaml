@@ -1,0 +1,148 @@
+iteration_id: iteration-0015-consensus-init-wizard-design
+reviewer_id: gemini-iteration-0015-consensus-init-wizard-design-1
+pass_id: gemini-iteration-0015-consensus-init-wizard-design-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: low
+  summary: Design proposal for iter-0015 consensus init wizard + config schema
+  citation: docs/design-consults/iter-0015-consensus-init-design-challenge.md:0
+  risk: 'The highest-impact design choices are: 1. Establishing a versioned, declarative
+    YAML schema as the source of truth, which moves away from hardcoded logic but
+    requires careful migration planning. 2. Introducing a new workflow engine to abstract
+    dispatch logic, which improves modularity but adds a layer of complexity that
+    must be rigorously tested. 3. Defining a non-disruptive migration path where existing
+    repositories default to a legacy mode, ensuring backward compatibility while encouraging
+    adoption of the new configuration.'
+  recommendation: "### Section A \u2014 `consensus init` CLI surface\n\n**1. Subcommand\
+    \ structure:**\n- `consensus init`: The primary command for one-time setup. It\
+    \ will be idempotent.\n- If `.consensus/config.yaml` exists, `init` will load\
+    \ it and use its values as defaults in an interactive 'reconfiguration' session.\
+    \ It will ask for confirmation before overwriting.\n- A `--force` flag will allow\
+    \ overwriting without a prompt.\n\n**2. Flag set:**\n- `--non-interactive`: Run\
+    \ without interactive prompts. Requires all necessary dimension flags to be set.\n\
+    - `--accept-defaults`: Run non-interactively, accepting all default values. Can\
+    \ be combined with other flags to override specific defaults.\n- `--workflow <3|4|advisory>`:\
+    \ Sets the workflow mode.\n- `--contributors <claude,codex,gemini>`: Comma-separated\
+    \ list of enabled contributors.\n- `--independence <blind-first-reveal|visible-from-start|sequential>`:\
+    \ Sets the independence model.\n- `--convergence <unanimous|strict-majority|inclusive-majority|advisory>`:\
+    \ Sets the convergence rule.\n- `--disposition-granularity <all-or-nothing|per-finding>`:\
+    \ Sets the finding disposition granularity.\n- `--snapshot-trigger <manual-only|on-iteration-close|periodic>`\n\
+    - `--snapshot-period <N>`: Integer. Used with `--snapshot-trigger periodic` to\
+    \ specify 'every N iterations'.\n- `--patch-authoring <claude-only|any-contributor|none>`\n\
+    \n**3. Interactive prompt flow:**\n1.  Check for existing `.consensus/config.yaml`.\
+    \ If found, inform the user they are reconfiguring.\n2.  Prompt for **Workflow\
+    \ mode** (default: 4).\n3.  Prompt for **Contributor pool** (multiselect, default:\
+    \ claude, codex, gemini).\n4.  If workflow is `#4`, prompt for **Independence\
+    \ model** (default: `blind-first-reveal`).\n5.  If more than one contributor,\
+    \ prompt for **Convergence rule** (default: `strict-majority`).\n6.  Prompt for\
+    \ **Finding disposition granularity** (default: `all-or-nothing`).\n7.  Prompt\
+    \ for **Snapshot trigger** (default: `on-iteration-close`). If `periodic`, ask\
+    \ for the iteration period.\n8.  Prompt for **Patch authoring permissions** (default:\
+    \ `claude-only`).\n9.  Display a summary of the selected configuration.\n10. Ask\
+    \ for confirmation to write to `.consensus/config.yaml`.\n11. After writing, ask\
+    \ if `.consensus/` should be added to `.gitignore` (it should not, as this config\
+    \ is per-repo).\n\n**4. Non-interactive invocation form:**\n```sh\nconsensus init\
+    \ --non-interactive --workflow 4 --contributors claude,codex,gemini --independence\
+    \ blind-first-reveal --convergence strict-majority\n```\n\n**5. Idempotency semantics:**\n\
+    - Re-running `consensus init` on a repo with an existing config will load the\
+    \ current settings and use them as defaults in the prompts. It acts as a `reconfigure`\
+    \ command. It will require confirmation via prompt or `--force` to overwrite.\n\
+    \n### Section B \u2014 `.consensus/config.yaml` schema\n\n**1. Schema Definition\
+    \ (`.consensus/config.yaml`):**\n```yaml\nschema_version: 1\n\n# Workflow mode\
+    \ and contributor settings\nworkflow:\n  # One of: 3 (post-review), 4 (propose-converge),\
+    \ advisory\n  mode: 4\n\n  # List of enabled contributors. Any subset of {claude,\
+    \ codex, gemini}\n  pool:\n    - claude\n    - codex\n    - gemini\n\n  # Independence\
+    \ model. One of: blind-first-reveal, visible-from-start, sequential\n  independence_model:\
+    \ blind-first-reveal\n\n# Rules for reaching agreement\nconvergence:\n  # One\
+    \ of: unanimous, strict-majority, inclusive-majority, advisory\n  rule: strict-majority\n\
+    \n  # Granularity for handling findings. One of: all-or-nothing, per-finding\n\
+    \  disposition_granularity: all-or-nothing\n\n# Automated state snapshots\nsnapshots:\n\
+    \  # One of: manual-only, on-iteration-close, periodic\n  trigger: on-iteration-close\n\
+    \n  # Optional: defines period for 'periodic' trigger\n  # period_iterations:\
+    \ 5\n\n# Permissions for who can author patches\npatch_authoring:\n  # One of:\
+    \ claude-only, any-contributor, none\n  permission: claude-only\n```\n\n**2. Defaults\
+    \ Document:**\n- `workflow.mode`: `4`\n- `workflow.pool`: `[claude, codex, gemini]`\n\
+    - `workflow.independence_model`: `blind-first-reveal`\n- `convergence.rule`: `strict-majority`\n\
+    - `convergence.disposition_granularity`: `all-or-nothing`\n- `snapshots.trigger`:\
+    \ `on-iteration-close`\n- `patch_authoring.permission`: `claude-only`\n\n**3.\
+    \ Validation Rules:**\n- If `workflow.mode` is `4`, `workflow.pool` must contain\
+    \ at least 2 contributors.\n- If `workflow.pool` has only 1 contributor, `convergence.rule`\
+    \ must be `advisory`.\n- The `snapshots.period_iterations` key is only valid if\
+    \ `snapshots.trigger` is `periodic`.\n\n### Section C \u2014 Workflow engine integration\n\
+    \n**1. Location:**\n- A new module `consensus_mcp._workflow_engine.py` will be\
+    \ created.\n- It will define a `WorkflowEngine` class responsible for managing\
+    \ the iteration lifecycle based on the config.\n\n**2. Config Loading:**\n- At\
+    \ the start of an iteration, `_self_drive.py` (or its equivalent) will instantiate\
+    \ the `WorkflowEngine`.\n- The engine's constructor will search for `.consensus/config.yaml`.\
+    \ If found, it loads and validates it. If not, it loads the backward-compatible\
+    \ default configuration.\n\n**3. Adapter Dispatch:**\n- The engine will have a\
+    \ main `run_iteration()` method.\n- This method will read the `workflow.mode`\
+    \ and dispatch to helper methods (e.g., `_run_workflow_4()`).\n- These methods\
+    \ will orchestrate the calls to contributor adapters. The existing `reviewer_dispatch_codex`\
+    \ and `reviewer_dispatch_gemini` tools will become adapters called by the engine.\
+    \ The engine will handle the logic for blind proposals, convergence, etc.\n\n\
+    **4. Backward Compatibility:**\n- If `.consensus/config.yaml` is missing, the\
+    \ engine will use a 'legacy' configuration object that hardcodes the previous\
+    \ behavior (Workflow #3, claude orchestrates, codex/gemini review). It will log\
+    \ a warning encouraging the user to run `consensus init`.\n\n**5. New Artifact\
+    \ Types:**\n- For Workflow #4's blind phase, artifacts will be named `<iteration_dir>/<contributor_name>-proposal.json`.\
+    \ These are standard review packets.\n- After the reveal phase, the orchestrator\
+    \ (claude) will produce a `synthesis-and-plan.md` artifact summarizing the converged\
+    \ design and next steps.\n\n### Section D \u2014 Migration plan\n\n**1. Existing\
+    \ Repos:**\n- Do not refuse to run. When `.consensus/config.yaml` is not found,\
+    \ operate in 'legacy mode' (emulating the old, hardcoded workflow) and print a\
+    \ one-time warning to the console suggesting that the user run `consensus init`.\n\
+    \n**2. Renaming:**\n- The concept of 'reviewer' is too narrow. The new, more general\
+    \ term is 'contributor'.\n- We will introduce a new set of tools with `contributor_`\
+    \ prefixes, e.g., `contributor.propose()`, `contributor.review()`.\n- The old\
+    \ `reviewer_dispatch_*` tools will be marked as deprecated and internally aliased\
+    \ to the new `contributor.*` tools for backward compatibility with old iterations.\
+    \ A warning will be logged when the old tools are used.\n\n**3. Tests:**\n- **Unit\
+    \ tests:** For the YAML schema validation and config loading logic.\n- **Integration\
+    \ tests:** Create a test fixture with multiple mock 'contributor' adapters that\
+    \ return canned data.\n- Test the `WorkflowEngine` against various `config.yaml`\
+    \ files (one for each workflow, different convergence rules) and assert that the\
+    \ mock adapters are called in the correct order and that the final outcome (pass/fail/converged)\
+    \ is correct.\n\n### Section E \u2014 Open questions you flag\n\n1.  **Sequential\
+    \ Independence Model:** For `independence_model: sequential`, how should the sequence\
+    \ be defined? Is the order of contributors in the `workflow.pool` list significant,\
+    \ or should we introduce a separate `workflow.sequence` list?\n2.  **Periodic\
+    \ Snapshots:** The `periodic` snapshot trigger based on time (`every M minutes`)\
+    \ implies a long-running daemon, which contrasts with `consensus-mcp`'s current\
+    \ transactional, per-invocation model. Should we limit the initial implementation\
+    \ of 'periodic' to 'every N iterations' to avoid this architectural shift?\n3.\
+    \  **Complex Interactions:** How does `disposition_granularity: per-finding` interact\
+    \ with `workflow: 4`? Does each finding require its own proposal-convergence cycle?\
+    \ I propose to initially restrict `per-finding` to Workflow #3 and `advisory`\
+    \ modes to limit complexity.\n4.  **CLI Flag Naming:** Is there a risk of collision\
+    \ with other tools? Should we prefix flags, e.g., `--consensus-workflow` instead\
+    \ of `--workflow`?"
+  patch_proposal: null
+  patch_not_proposed_reason: Design phase only. Implementation will follow in a subsequent
+    iteration after the design is converged.
+goal_satisfied: true
+goal_satisfied_rationale: The design proposal comprehensively addresses all requirements
+  from the design challenge, covering the CLI, schema, engine, and migration.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 92218feb2f070555ecfde35e2033f478d0c7d5be9e715c8eacc1c6a657b69ef1
+  output_sha256: 78231ead30c3388447fa7d63c2ee9d69837533fe25f658553eac2931e6417fb0
+  goal_packet_sha256: 2fb13d94dc6a4ec4ceeecc76b4068ce6fa37f41723abc0b1190d24fbfcd97ee1
+  scope_signature: 78f0f2acd138cb4d3ada84a721b35a395ff3b3920b360492f6f0ffdfd72c0530
+  review_target_path: consensus-state/active/iteration-0015-consensus-init-wizard-design/review-packet.yaml
+  review_target_hash: 8697025e43579038b850f41545e40f138bfb25a9f790cd9f1970b35fe00082cf
+  adapter: gemini
+sealed_at_utc: '2026-05-13T03:57:58Z'
+packet_sha256: 603752da5e4ec3e4dbfca404d423df0f6178d86dc251787c83e70d0f9b040fbc

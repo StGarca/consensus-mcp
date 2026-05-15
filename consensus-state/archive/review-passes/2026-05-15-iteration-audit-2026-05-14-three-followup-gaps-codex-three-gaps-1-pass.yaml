@@ -1,0 +1,99 @@
+iteration_id: iteration-audit-2026-05-14-three-followup-gaps
+reviewer_id: codex-three-gaps-1
+pass_id: codex-three-gaps-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Addressing only README stops the active bleed for new installs
+  but leaves workflow #4 internally contradictory. Addressing only config fixes doctrine/data
+  alignment but leaves users installing v1.14.0 from documented commands. Addressing
+  only the disconfirmation pattern improves process but does not remove either concrete
+  release hazard. A single narrow stabilization iteration has the best value delta
+  because the gaps share one failure mode: shipped doctrine, validation, and install
+  guidance disagree. Keep it scoped to compatibility, procedural enforcement, and
+  install safety; do not mutate historical tags or redesign the workflow engine.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: f3eb21a9391169f1880b78a870682fd27da8e2df54421b2c8dd0cadc6c7f6450
+  output_sha256: 9d57ff77b012b7f585d25ca101216689b23f427c68771fcf7630497276940576
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: 137dfd3d5724027c6395a139bcd230988149332500e8f7a7658efbfa8d1ad381
+  scope_signature: b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0
+  review_target_path: null
+  review_target_hash: null
+  mode: proposal
+proposal:
+  selected_target: 'ship a v1.14.3 stabilization iteration covering all three gaps:
+    unblock weighted-synthesis for workflow #4, add an interpretation-layer disconfirmation
+    gate, and update install docs away from defective tags'
+  rationale_vs_alternatives: 'Addressing only README stops the active bleed for new
+    installs but leaves workflow #4 internally contradictory. Addressing only config
+    fixes doctrine/data alignment but leaves users installing v1.14.0 from documented
+    commands. Addressing only the disconfirmation pattern improves process but does
+    not remove either concrete release hazard. A single narrow stabilization iteration
+    has the best value delta because the gaps share one failure mode: shipped doctrine,
+    validation, and install guidance disagree. Keep it scoped to compatibility, procedural
+    enforcement, and install safety; do not mutate historical tags or redesign the
+    workflow engine.'
+  deliverable_scope:
+    next_iteration_id: iteration-0044-workflow4-doctrine-install-stabilization
+    files_in_scope:
+    - consensus_mcp/config.py
+    - consensus_mcp/defaults.py
+    - consensus_mcp/schemas/goal_packet.schema.json
+    - consensus_mcp/dispatch_templates/*
+    - 'bundled skill doctrine file containing workflow #4 guidance'
+    - feedback_disconfirming_evidence.md
+    - README.md
+    - tests/test_config.py
+    - tests/test_goal_packet_validation.py
+    - tests/test_dispatch_templates.py
+    files_out_of_scope:
+    - rewriting or moving v1.14.0 and v1.14.1 tags
+    - system prompt changes
+    - broad workflow redesign
+    - unrelated reviewer/advisory workflow behavior
+    - retrofitting every historical artifact
+    key_design_decisions:
+    - Make weighted-synthesis the default accepted convergence model for propose-converge;
+      keep all-or-nothing as explicit opt-in only.
+    - Preserve backward compatibility for existing all-or-nothing goal packets.
+    - 'Add an interpretation-layer gate: disconfirming evidence must produce claim
+      revision, unresolved status, or an explicit alternate-interpretation record.'
+    - Require evidence reconciliation before global claims; verification alone is
+      insufficient if interpretation contradicts gathered evidence.
+    - Update README install examples to the current safe tag after the fix release,
+      or at minimum v1.14.2 until v1.14.3 exists.
+    - Treat v1.14.0 and v1.14.1 as immutable superseded tags, mitigated through docs/release
+      notes rather than tag mutation.
+    acceptance_gates:
+    - 'Workflow #4 goal packet using weighted-synthesis passes validation.'
+    - 'Workflow #4 all-or-nothing packet still passes as opt-in behavior.'
+    - README no longer references v1.14.0 or v1.14.1 in install commands.
+    - Skill/template text contains a procedural disconfirming-evidence reconciliation
+      step, not only a pattern name.
+    - 'Tests cover contradiction handling: conflicting evidence cannot be converted
+      into an unqualified success claim.'
+    - Release notes or README warn that v1.14.0 and v1.14.1 bundled skills are superseded.
+  risks:
+  - Config loosening can surprise consumers that assumed propose-converge always implied
+    all-or-nothing.
+  - The interpretation gate may become ceremonial unless required fields are concrete
+    and testable.
+  - README can point to v1.14.3 only after the stabilization tag exists; before that,
+    v1.14.2 is the safest available target.
+  - Template/schema/doc changes must land together to avoid another doctrine-versus-validation
+    split.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T03:39:34Z'
+packet_sha256: d178c025fd571ff1fb7390adfbcc5f1a2c46b70bfda4260ea236fddee817769d

@@ -1,0 +1,156 @@
+schema_version: 1
+iteration_id: iteration-0007-release-candidate-hardening
+created_utc: "2026-05-09T00:00:00Z"
+operator_directive_received: "2026-05-09"
+operator_directive_quote: |
+  "I recommend the next phase be Release Candidate Hardening, not another feature
+  phase. The goal should be: stop adding capability, freeze G1-G5, prove the tool
+  can survive real use, then package only the stable core."
+
+iteration_class: phase_3_release_candidate_hardening
+not_a_routine_iteration_because: |
+  Phase 3 = Release Candidate Hardening. Operator-locked scope (per directive
+  quote): NO new feature work; freeze G1-G5; close open review rounds via single
+  external pass; run ONE real G1-G5 iteration (this iteration IS that one); create
+  shippable boundary; package + clean-env install test; verify operator-defined
+  release gate. iteration-0007 is itself the real-iteration evidence the operator
+  asked for; it uses the MCP toolchain (T3 audit, T4+T5 apply, T6+T7 seal+verify,
+  T8 ledger update, T9+T10 spec section read/write where applicable, T11 production
+  scope gate if production_scope declared).
+
+objective: |
+  Ratify (or block) the Phase 3 RC hardening proposal:
+    1. FREEZE: scope frozen at G1-G5; no G6; no new review-round mechanics; no new
+       doc architecture; only fix open correctness, packaging, and release blockers
+    2. CLOSE: single external re-review pass over Source-MD + CFU + MD-set + R6 + R7
+       self-applied rounds (29 findings); verify self-applied fixes did not create
+       new drift; do NOT expand into another architecture phase unless real blocker
+    3. ITERATE: this iteration IS the real G1-G5 ceremony (use MCP tools end-to-end)
+    4. BOUND: write SHIPS / DOES-NOT-SHIP manifest (boundary spec)
+    5. PACKAGE: pyproject.toml + console entry + clean-env install test
+    6. GATE: verify all 7 operator-defined release gates simultaneously
+  If reviewers ratify: apply iteration ceremonial files via T5; record v1.9.3
+  revision_history entry post-Phase-3-close. If reviewers block: surface as
+  consensus.unresolved_disagreement; iteration closes implementation_ready=false.
+
+mode: implementation_with_real_g1_g5_self_test_via_mcp_toolchain
+
+# ---- Operator guardrails (carried; lean per claude-iter0006-005 lesson) ----
+
+operator_guardrails:
+  - {id: G1, rule: "Target only unresolved real defects."}
+  - {id: G2, rule: "Input packet must include defect list + current validator results."}
+  - {id: G3, rule: "Iteration may apply fixes only if Phase 0 mutating gates are satisfied."}
+  - {id: G4, rule: "Independence audit must mark prior exposure."}
+  - {id: G5, rule: "Success metric: defects resolved, validators clean, no new drift."}
+
+# ---- Operator's explicit Phase 3 anti-scope ----
+
+what_phase_3_does_NOT_do:
+  - "no G6 design or implementation"
+  - "no new review-round mechanics beyond what already exists"
+  - "no new doc architecture"
+  - "no wiki-perfect-synchronization sweeps"
+  - "no recursive review rounds (single external pass; if it finds blockers, fix; if it finds drift, record but do not iterate)"
+
+what_phase_3_DOES_do:
+  - "freeze G1-G5 scope"
+  - "single external re-review pass on self-applied rounds"
+  - "iteration-0007 ceremony via MCP toolchain end-to-end"
+  - "shippable-boundary manifest"
+  - "pyproject.toml + clean-env install test"
+  - "verify 7-gate release checklist"
+
+# ---- Release gate criteria (operator-defined; this iteration's success bar) ----
+
+release_gate_criteria:
+  - {id: G_smoke, rule: "scripts/agent_loop_mcp/_smoke_test.py = 51/51 (current); must remain clean"}
+  - {id: G_validators, rule: "scripts/agent_loop/run_validator_tests.py = 21/21; must remain clean"}
+  - {id: G_frontmatter, rule: "frontmatter parse clean for all shipped docs (yaml.safe_load)"}
+  - {id: G_unstaged, rule: "no unstaged required files (operator: 'no unstaged required files')"}
+  - {id: G_untracked_pkg, rule: "no untracked source files in shipped package boundary"}
+  - {id: G_install, rule: "package install works from clean checkout (clean temp venv; smoke from installed package, NOT source-tree)"}
+  - {id: G_real_iter, rule: "one real G1-G5 iteration completed without manual contract bypass (this iteration; verify in iteration-outcome)"}
+
+success_condition: |
+  Operator quote: "Installable MCP tool passes clean gates and completes one real
+  project iteration without manual contract bypass." iteration-0007 closes
+  implementation_ready iff all 7 release gates pass.
+
+# ---- Implementation scope (uses v1.9.2 allowed_sections + production_scope schema) ----
+
+implementation_scope:
+  allowed_files:
+    - agent-loop/active/iteration-0007-release-candidate-hardening/**
+    - pyproject.toml   # NEW; created by P3 T5
+    - agent-loop/state/disposition-ledger.yaml   # via T8
+  allowed_sections:
+    - "spec_md/section_0"   # potentially: add a "Release boundary + shippable manifest" pointer
+    - "spec_md/frontmatter"   # potentially: add v1.9.3 revision_history entry post-close
+  forbidden_files:
+    - "wiki sources outside agent-loop/"
+    - "production audio outputs"
+    - "scripts/agent_loop_mcp/tools/* MCP tool source"   # FROZEN per Phase 3 scope
+    - "scripts/agent_loop_mcp/_smoke_test.py"   # frozen at 51/51 unless gate-test additions are required
+    - "spec sections 1-23 architectural changes"   # bookkeeping-only iteration
+  forbidden_actions:
+    - "introduce G6 design or any feature beyond G1-G5"
+    - "introduce new review-round mechanics"
+    - "render production audio"
+    - "merge to main"
+    - "apply patches without canonical-006 dry-run gate"
+    - "expand external re-review pass into recursive rounds"
+
+production_scope:
+  type: deploy   # the artifact being released is a Python package
+  target: "agent-loop-mcp-rc-package-v1.9.3"   # canonical scope identifier; G4 gate.evaluate compares this against approval.production_scope.target if approval is generated
+  scope_match_mode: exact
+
+# ---- Reviewer task ----
+
+reviewer_decision_required:
+  question: "Should the Phase 3 RC hardening plan be ratified for execution?"
+  must_consider:
+    - "Is freezing G1-G5 the right call (operator says yes; reviewer should ratify or block)?"
+    - "Is single-external-pass on self-applied rounds adequate (operator anti-recursion)?"
+    - "Is the SHIPS manifest scope right (excludes wiki narrative + historical archives + log.md + generated reports)?"
+    - "Is the 7-gate release checklist sufficient as the shippable bar?"
+    - "Are there any RC-blocking defects the plan misses?"
+  reviewers_must_emit:
+    - rc_plan_approved: bool
+    - rc_blocking_defects_if_any: list (must be empty if rc_plan_approved=true)
+    - non_blocking_suggestions: list
+    - rationale: string
+
+# ---- Gate state ----
+
+gate_state:
+  consensus_state: implementation_ready
+  observational_mode: false
+  production_state: not_ready
+  production_ready: false
+  production_allowed: false
+
+# ---- Prior review references ----
+
+prior_review_refs:
+  - {path: agent-loop/active/iteration-0006/, role: "Phase 1 G1+G2 + iteration-0006 first real G1+G2 ceremony"}
+  - {path: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md, role: "v1.9.2 active spec; G1-G5 all implemented"}
+  - {path: wiki/audiobook-project/agent-loop/2026-05-08-phase-1-mcp-server-design.md, role: "Phase 1 design at g1-through-g5-implemented status"}
+  - {path: wiki/audiobook-project/agent-loop/2026-05-09-v1.9.x-third-party-review-findings.md, role: "44 findings across 7 rounds; Round 1+2 closed; Source-MD/CFU/MD-set/R6/R7 self-applied/re-review-pending"}
+  - {path: agent-loop/state/disposition-ledger.yaml, role: "v1.9.2 spec_version; v1_9_2_application_log primary"}
+  - {path: scripts/agent_loop_mcp/, role: "10 MCP tools shipped; 51/51 smoke; the toolchain under shippability test"}
+
+reviewer_stance_assignments:
+  codex: implementation_realist
+  claude: methodology_critic
+
+# ---- Closure ----
+
+closure_artifact: agent-loop/active/iteration-0007-release-candidate-hardening/iteration-outcome.yaml
+success_criteria_per_G5:
+  - "BOTH reviewers rc_plan_approved=true: iteration proceeds to T2-T6 sub-tasks"
+  - OR "ANY reviewer rc_plan_approved=false: iteration closes implementation_ready=false; document blocker; Phase 3 plan revised before re-attempt"
+  - "All 7 release gates pass at iteration close (G_smoke, G_validators, G_frontmatter, G_unstaged, G_untracked_pkg, G_install, G_real_iter)"
+  - "External re-review pass on self-applied rounds completes single-pass without expanding into another architecture phase"
+  - "Shippable boundary manifest documents what ships vs not (no ambiguity for the operator's `git copy out` move)"

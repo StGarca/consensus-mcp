@@ -1,0 +1,143 @@
+schema_version: 1
+pilot_id: iteration-0044-adapter-mode-forwarding
+workflow_mode: post-review
+independence: visible-from-start
+goal:
+  summary: |
+    iter-0044 — Workflow B (post-review) audit of the adapter `--mode`
+    forwarding fix. Implementation per iter-0043 converged plan
+    (workflow A weighted-synthesis convergence; codex + gemini + claude
+    all approved with no blocking objections).
+
+    DEFECT FIXED:
+    `CodexAdapter.dispatch` (consensus_mcp/contributors/codex.py:39-47
+    pre-fix) and `GeminiAdapter.dispatch`
+    (consensus_mcp/contributors/gemini.py:29-37 pre-fix) built argv
+    with 5 fixed flags + optional `--review-target` and passed to
+    `_dispatch_*.main`. NO `--mode` was forwarded. Every workflow #4
+    round-1 dispatch through the engine silently used the review
+    template + review schema even when `packet.phase == PHASE_PROPOSE`.
+
+    IMPLEMENTATION (per iter-0043 converged plan):
+      1. `consensus_mcp/contributors/_phase_mode.py` NEW — single
+         source of truth: PHASE_PROPOSE → "proposal", PHASE_REVIEW →
+         "review", PHASE_CONVERGE → "review" (interim per iter-0043
+         q1 weighted-synthesis; iter-0045 candidate revisits with
+         empirical data). Strict-dict lookup; raises ValueError on
+         unmapped phase (no silent default — that's what allowed the
+         original defect).
+      2. `consensus_mcp/contributors/codex.py` — append `--mode` to
+         argv via `phase_to_mode(packet.phase)` import.
+      3. `consensus_mcp/contributors/gemini.py` — same.
+      4. `consensus_mcp/tools/reviewer_dispatch_codex.py` — schema
+         gains `phase` (engine abstraction, primary) + `mode`
+         (dispatcher escape hatch, optional). `_resolve_mode(phase,
+         mode)` helper: explicit mode wins; otherwise translate phase
+         via _phase_mode; otherwise None (caller omits --mode for
+         backward compat).
+      5. `consensus_mcp/tools/reviewer_dispatch_gemini.py` — mirrors
+         the codex wrapper exactly.
+      6. `consensus_mcp/tests/test_phase_mode_forwarding.py` NEW —
+         21 tests covering: phase_to_mode mapping (all 3 phases +
+         ValueError on unknown); CodexAdapter + GeminiAdapter argv
+         forwarding for all 3 phases (mock-based); MCP wrapper
+         _resolve_mode + _build_argv (phase-to-mode mapping +
+         mode-wins-over-phase + neither = backward-compat omission).
+
+    TEST RESULTS:
+      - 21/21 new tests pass.
+      - Full suite: 696 pass (up from 675; +21 for iter-0044).
+      - No regressions in pre-existing tests (excluding well-known
+        test_dispatch_codex.py ordering flake + jsonschema-missing
+        environmental issue in proposal-mode tests; both predate
+        this release per docs/known-issues/pytest-ordering-flake.md).
+
+  question: |
+    Each contributor: audit this implementation against the iter-0043
+    converged plan. Does it match the converged design? Are there
+    defects (correctness, edge cases, schema/test gaps, security,
+    cross-platform)?
+
+    Q1 — **Does the implementation match the iter-0043 q1 mapping?**
+    iter-0043 weighted_synthesis: "PHASE_PROPOSE → 'proposal',
+    PHASE_REVIEW → 'review', PHASE_CONVERGE → 'review' (interim;
+    iter-0045 candidate revisits)." Verify _phase_mode.py reflects
+    this exactly.
+
+    Q2 — **Does the MCP wrapper surface match iter-0043 q2?**
+    iter-0043 weighted_synthesis: "MCP wrappers expose `phase` as
+    primary parameter; additionally accept an optional `mode`
+    override; default behavior when neither is passed: phase=PHASE_REVIEW
+    (preserves backward compat)." Verify the schema + handle()
+    signatures + _resolve_mode precedence rules match.
+
+    Q3 — **Are the unit tests sufficient to prevent regression?**
+    iter-0043 q5 weighted_synthesis required: "unit tests asserting
+    CodexAdapter and GeminiAdapter forward the right --mode for each
+    of PHASE_PROPOSE, PHASE_REVIEW, PHASE_CONVERGE; unit test
+    asserting unknown phase raises ValueError; wrapper tests
+    asserting MCP-tool `phase` parameter propagates to dispatcher
+    --mode argv." Verify test_phase_mode_forwarding.py covers all
+    of these.
+
+    Q4 — **Edge cases I may have missed.** Open-ended:
+      - Concurrency: phase_to_mode is pure (no shared state) but
+        the lazy import inside dispatch() — any deadlock risk?
+      - Backward compat: existing _dispatch_codex and _dispatch_gemini
+        callers that pass --mode explicitly — do they still work?
+      - Schema validation: does the new `phase` enum accept null
+        properly in MCP clients that strictly validate? (Schema
+        says `enum: ["propose", "review", "converge", null]`.)
+      - Are there OTHER call sites I missed that build dispatcher
+        argv? grep CodexAdapter|GeminiAdapter|_dispatch_codex.main|
+        _dispatch_gemini.main showed only the changed files but
+        sanity-check.
+
+    Q5 — **Is the skill workaround paragraph actually removed?**
+    The `consensus-workflow` SKILL.md previously said "MCP wrappers
+    as of v1.14.0 don't expose this flag — fall back to the shell
+    CLI for round-1 #4 dispatch." Verify the bundled skill no
+    longer instructs users to bypass the engine. (NOTE: this was
+    already removed in v1.14.2 doctrine hot-patch; just verify the
+    current state.)
+
+    Required from each reviewer: stance on Q1-Q5 + any
+    blocking_objections + any non-blocking findings. Approval
+    means convergence reached; this iteration ships.
+  type: implementation_audit
+allowed_files:
+  - consensus_mcp/contributors/_phase_mode.py
+  - consensus_mcp/contributors/codex.py
+  - consensus_mcp/contributors/gemini.py
+  - consensus_mcp/tools/reviewer_dispatch_codex.py
+  - consensus_mcp/tools/reviewer_dispatch_gemini.py
+  - consensus_mcp/tests/test_phase_mode_forwarding.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - .github/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: 21/21 new tests pass + 696 total
+    check: 'true'
+  - id: A2
+    description: No blocking_objections from peers
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers: []
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T04:30:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: '0044a01244ab0a1144b00b5104face70a075b00b5104faceabba110a14abc012'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: strict-majority
+  finding_disposition: weighted-synthesis

@@ -1,0 +1,29 @@
+iteration_id: iteration-0019-test-isolation
+reviewer_id: codex-iteration-0019-1
+pass_id: codex-iteration-0019-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: Embedded test file already defines _isolate_archive_root
+  and threads it through the tmp_path-scaffolded codex dispatch tests, with no source
+  files outside the allowed test file touched.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: acff3454296c11e5e3ca9ca283731dd99bf0242fd815ab6d475a79bcae74a930
+  output_sha256: ebd0d21750c12398dbf50af18356f6a9c6c03756b3c150a142bb2073b62d72d5
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 2339a681c83b97c6048937ab5daeeef849a149d5aa5ef333fa121e7a0380ce94
+  scope_signature: d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3
+  review_target_path: consensus-state/active/iteration-0019-test-isolation/review-packet.yaml
+  review_target_hash: af124df2bf135b42715dc8a9d9bf6d06e7f550cb1023494ce55fae46004f3597
+sealed_at_utc: '2026-05-13T06:56:40Z'
+packet_sha256: 6c31b619051fd238da361c8c6a3a848cff9ed4d3ff264ab7f8965b6ee59eaa9c

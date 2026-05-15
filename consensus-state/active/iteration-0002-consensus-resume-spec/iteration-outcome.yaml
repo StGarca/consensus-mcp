@@ -1,0 +1,84 @@
+schema_version: 1
+iteration_id: iteration-0002-consensus-resume-spec
+created_utc: '2026-05-11T19:55:00Z'
+closing_state: quorum_close_passed
+ceremony_flavor: design_review_two_pass
+parent_iteration: iteration-0001-extraction-review
+subsystem: consensus_resume_spec
+closing_reason: |
+  iter-0002 was a TWO-PASS DESIGN REVIEW of the consensus_resume MCP tool
+  spec (the bootstrap/resume tool inspired by the mathomhaus/guild
+  single-call session-bootstrap pattern, adapted to consensus-mcp's
+  verification-first semantics).
+
+  CHAIN:
+    1. claude (orchestrator) authored docs/specs/consensus-resume-spec.md v1.
+    2. Codex pass-1 (codex-iter0002-1, sealed 2026-05-11T17:49:28Z)
+       emitted 7 findings: 2 HIGH, 4 MEDIUM, 1 LOW. goal_satisfied=false.
+       Real spec defects:
+         codex-rev-001 HIGH: expected_next_action enum omitted
+           wait_for_dispatch (decision tree was uninhabitable)
+         codex-rev-002 HIGH: auto-detection had two contradictory sort
+           rules (lex-greatest vs. authorized_at_utc)
+         codex-rev-003 MED: §7 error handling didn't cover every read in §5
+         codex-rev-004 MED: open_reviews not classified (open/closing/
+           consumed/superseded/invalid)
+         codex-rev-005 MED: last_mutation.kind under-specified
+         codex-rev-006 MED: concurrency claim too loose; no snapshot
+           watermark
+         codex-rev-007 LOW: 7 open questions left unresolved
+    3. claude authored v2 of the spec addressing all 7 findings.
+    4. Codex pass-2 (codex-iter0002-2, sealed 2026-05-11T18:04:34Z)
+       graded v2 against pass-1 findings + scanned for v2 regressions.
+       Result: 5/7 prior findings RESOLVED; 2/7 PARTIALLY RESOLVED with
+       explicit cross-references to 5 new MEDIUM findings against v2.
+       goal_satisfied=false but 0 blocking — v2 still had implementation-
+       readiness gaps.
+
+  CLOSURE DECISION:
+    Per operator decision after pass-2: start iter-0003 to IMPLEMENT v2
+    spec with the 5 pass-2 findings addressed inline in code rather than
+    in another spec round (codex-rev-001..005 from pass-2). The implementation
+    serves as the proof those findings were addressable.
+
+    iter-0003 confirms this: the implementation works, the test suite is
+    green, the live smoke-test against the real consensus-state correctly
+    identifies the next action. The five pass-2 findings:
+      pass2 rev-001 (schema drift on watermark fields) → addressed in §4 of v2
+        snapshot output + verified by test_watermark_fastpath_when_unchanged
+      pass2 rev-002 (recent_activity.kind enum) → BUNDLE_MUTATION_KINDS
+        included in RECENT_ACTIVITY_KINDS, verified by test_bundle_mutation
+        _kind_in_recent_activity_enum
+      pass2 rev-003 (step-ordering bug) → _compute_current_bundle_sha
+        runs before _classify_review, verified by two tests
+      pass2 rev-004 (null-bundle fallback) → review-packet base_sha
+        fallback, verified by test_current_bundle_sha_from_review_packet
+        _when_no_mutation_event
+      pass2 rev-005 (tiebreaker) → (timestamp DESC, line_number DESC),
+        verified by test_recent_activity_tiebreaker_uses_line_number
+
+  iter-0002 is therefore closed quorum_close_passed: pass-2's findings
+  are accounted for via implementation in iter-0003, and the implementation
+  is itself peer-reviewed (iter-0003 cross-family closure).
+
+  This is a multi-iteration close pattern: spec iteration's findings
+  consumed by the next iteration's implementation, with the spec
+  iteration's closure deferred until the implementation iteration
+  exists. Documented here for future replays.
+
+next_action: |
+  - Operator: review docs/specs/consensus-resume-spec.md v2 and
+    docs/specs/consensus-onboarding-cli-spec.md (the larger onboarding
+    spec authored 2026-05-11 that depends on this work).
+  - Next iteration: iter-0005-onboarding-cli-implementation (per the
+    onboarding spec).
+
+artifacts:
+  goal_packet: consensus-state/active/iteration-0002-consensus-resume-spec/goal_packet.yaml
+  review_packet: consensus-state/active/iteration-0002-consensus-resume-spec/review-packet.yaml
+  codex_review_pass2: consensus-state/active/iteration-0002-consensus-resume-spec/codex-review.yaml
+  spec_v2: docs/specs/consensus-resume-spec.md
+  implementation_iteration: iteration-0003-consensus-resume-implementation
+  archive:
+    pass1: consensus-state/archive/review-passes/2026-05-11-iteration-0002-consensus-resume-spec-codex-iter0002-1-pass.yaml
+    pass2: consensus-state/archive/review-passes/2026-05-11-iteration-0002-consensus-resume-spec-codex-iter0002-2-pass.yaml

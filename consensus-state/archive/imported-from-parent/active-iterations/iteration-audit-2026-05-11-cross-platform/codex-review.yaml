@@ -1,0 +1,144 @@
+iteration_id: iteration-audit-2026-05-11-cross-platform
+reviewer_id: codex-audit-crossplat-1
+pass_id: codex-audit-crossplat-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Windows containment fallback relies on lossy string lowercasing instead
+    of canonical path normalization.
+  citation: scripts/agent_loop_mcp/_dispatch_codex.py:185
+  risk: Mixed-case drives, long-path prefixes, UNC spelling, short names, junctions,
+    and Unicode case variants can cause false inside/outside decisions across Windows
+    and Linux, either rejecting valid in-repo paths or accepting paths that should
+    remain outside the repo boundary.
+  recommendation: Replace the manual lower/replace fallback with a single canonical
+    path routine for Windows that normalizes separators, strips equivalent long-path
+    prefixes, applies os.path.normcase/normpath, and uses the same canonical representation
+    for containment checks.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_dispatch_codex.py contents
+    are not embedded; only an excerpt is available, so a safe unified diff against
+    the authoritative file cannot be authored.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: Codex timeout path can orphan child processes and leak the output temp
+    file on Windows.
+  citation: scripts/agent_loop_mcp/_dispatch_codex.py:453
+  risk: subprocess.run(timeout=...) kills only the immediate process; on Windows TerminateProcess
+    does not propagate to Node-created descendants, and the swallowed unlink failure
+    can leave locked temp JSON files behind after timeouts.
+  recommendation: Create a Windows process group/job-object based runner for codex
+    invocation, terminate the whole process tree on timeout, wait for handle release,
+    and retry or log temp-file cleanup failures instead of silently swallowing them.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_dispatch_codex.py contents
+    are not embedded; process-management helpers and imports cannot be patched safely
+    from the excerpt alone.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: Git subprocess reads use locale decoding on Windows.
+  citation: scripts/agent_loop_mcp/_self_drive.py:204
+  risk: text=True without encoding= uses the active Windows code page, so non-ASCII
+    file paths from git can decode differently from UTF-8 goal-packet paths and make
+    allow/forbid comparisons diverge by platform.
+  recommendation: Pass encoding="utf-8" and errors="surrogateescape" or errors="replace"
+    to every git subprocess text read, including changed-file collection and patch-size
+    checks.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_self_drive.py contents are
+    not embedded; the second affected subprocess block and imports cannot be patched
+    safely from the excerpt alone.
+  patch_proposal: null
+- id: codex-rev-004
+  severity: medium
+  summary: Audit YAML is loaded inconsistently as text in one path and bytes in another.
+  citation: scripts/agent_loop_mcp/_self_drive.py:403
+  risk: On Windows, text reads normalize CRLF while byte reads do not; YAML values
+    and canonical hashes can diverge from Linux or from other helpers when quoted
+    strings or claimed hashes were produced with the opposite mode.
+  recommendation: Use one canonical UTF-8 text-loading path for YAML files and compute
+    canonical hashes from normalized parsed YAML rather than raw platform-dependent
+    file reads.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_self_drive.py contents are
+    not embedded, including _canonical_sha256_of_yaml_file, so the canonicalization
+    fix cannot be safely authored.
+  patch_proposal: null
+- id: codex-rev-005
+  severity: medium
+  summary: Forbidden-file matching inherits platform-dependent fnmatch case and separator
+    behavior.
+  citation: scripts/agent_loop_mcp/_self_drive.py:412
+  risk: The same forbidden pattern can match on Windows but not Linux because fnmatch
+    normalizes case via os.path.normcase, and hand-written backslash patterns may
+    fail against git's slash-separated paths.
+  recommendation: Normalize git paths and patterns to POSIX separators and choose
+    explicit case-sensitive or case-insensitive matching semantics with fnmatchcase.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_self_drive.py contents are
+    not embedded; _path_matches_pattern implementation is only described, so a safe
+    diff cannot be produced.
+  patch_proposal: null
+- id: codex-rev-006
+  severity: medium
+  summary: Default repo-root discovery points at site-packages after non-editable
+    installs.
+  citation: scripts/agent_loop_mcp/_visibility_watchdog.py:70
+  risk: A packaged install on Windows or Linux can resolve the repo root to the installation
+    directory instead of the working repository, causing watchdog reads and writes
+    to target the wrong tree unless AGENT_LOOP_MCP_REPO_ROOT is set.
+  recommendation: Require an explicit repo root when not running from a source checkout,
+    or detect a real repo marker while walking parents and fail loudly if none is
+    found.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_visibility_watchdog.py contents
+    are not embedded; related TUI/root-resolution code is not available for a consistent
+    patch.
+  patch_proposal: null
+- id: codex-rev-007
+  severity: medium
+  summary: JSONL append has no cross-process serialization on Windows.
+  citation: scripts/agent_loop_mcp/_visibility_watchdog.py:190
+  risk: Concurrent appenders can interleave bytes on Windows, producing torn JSONL
+    records that downstream readers cannot parse reliably.
+  recommendation: Route log appends through a shared file-locking helper or use an
+    atomic append strategy validated on Windows for the specific log path.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_visibility_watchdog.py and
+    the other append callers are not embedded; a shared locking fix cannot be safely
+    authored from the excerpt alone.
+  patch_proposal: null
+- id: codex-rev-008
+  severity: low
+  summary: Codex binary resolution only special-cases .ps1 and misses other Windows
+    executable-resolution edge cases.
+  citation: scripts/agent_loop_mcp/_dispatch_codex.py:395
+  risk: Bare command lookup can still select unsuitable Windows shims or miss POSIX/MSYS-style
+    absolute paths, producing platform-specific launch failures that are hard to diagnose.
+  recommendation: Treat both os.path.sep and os.path.altsep as path separators, recognize
+    rooted/MSYS-style paths intentionally, prefer directly executable .cmd/.bat over
+    .ps1, and reject or warn on known App Execution Alias shims when applicable.
+  patch_not_proposed_reason: Full scripts/agent_loop_mcp/_dispatch_codex.py contents
+    are not embedded; imports and caller expectations for binary resolution cannot
+    be patched safely from the excerpt alone.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: Cross-platform audit found multiple Windows/Linux portability
+  defects in path containment, subprocess termination, locale decoding, YAML newline
+  handling, pattern matching, repo-root discovery, and concurrent JSONL append behavior.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: ffb75e186dc1f88f1fe5dc85805992dae5f43ce5d32ccad64b662426c3fe2fff
+  output_sha256: 7d3010aef8ececfdddbf9449e20ffb93370e272bfe80979d257354e59fc288ab
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 7a58589c91b2cbe82f219f43d132561d2bc6138d1fd35fd52aa6a97e97d70bc7
+  scope_signature: 0c91bb9131bd5ebbdb222963e50424c32f1e12452e40969acb21169f7ad389b0
+  review_target_path: agent-loop/active/iteration-audit-2026-05-11-cross-platform/review-packet.yaml
+  review_target_hash: 91816c2d5f853ef9fe7eb3eafe1258da76d224f7c72db7f6def1b40c806896cd
+sealed_at_utc: '2026-05-11T04:18:25Z'
+packet_sha256: 87429901f11884b6198eef13d77190a84152f2b344b6cfe93a3ce04f3276f72d

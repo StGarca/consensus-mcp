@@ -1,0 +1,107 @@
+schema_version: 1
+iteration_id: iteration-0003
+created_utc: "2026-05-08T00:00:00Z"
+
+passed: true
+reason: |
+  Both reviewers chose Option B (local grandfather extension) unanimously.
+  canonical-006 dry-run gate executed against STAGED validate_iteration.py
+  (per canonical-iter0003-005 ratification: dry-run uses staged validator,
+  not production). Staged validator on real iteration-0000/ produced 7 LOW
+  findings (HASH_CHAIN_BROKEN x2 grandfathered + AUDIT_EVENT_NAME_NON_CANONICAL x3
+  grandfathered + PACKET_SHA_HISTORICAL x2 expected); 0 HIGH. Apply step
+  copied staged validator + applied spec section 13 grandfather extension +
+  ledger move + iteration-0000 audit codex sha drift note. Post-apply
+  validate_iteration on real iteration-0000/: identical 7 LOW finding profile.
+  iteration-0003 closes implementation_ready.
+
+accepted_changes_verified:
+  - {id: change-01, applied: true, target: scripts/agent_loop/validate_iteration.py, content: "subtype-gated grandfather predicate added; severity downgrade for iteration-0000 missing-event-type findings"}
+  - {id: change-02, applied: true, target: spec_section_13, content: "iteration_0000_grandfather_clause extended with HASH_CHAIN_BROKEN.subtype=missing_event_type carve-out, bounded literal-string-equality"}
+  - {id: change-03, applied: true, target: agent-loop/state/disposition-ledger.yaml, content: "canonical-iter0002-005 promoted from iteration_0002_to_iteration_0003_deferred to iteration_0003_findings_resolved"}
+  - {id: change-04, applied: true, target: agent-loop/active/iteration-0000/independence-audit.yaml, content: "sha_drift_note_iteration_0003_option_B field added to codex_review_returned_and_sealed event"}
+  - {id: change-05, applied: true, target: spec_section_24, content: "deferred entry removed; resolved entry added; status_counts.resolved 123->124, status_counts.deferred 46->45"}
+
+dry_run_gate_state:
+  staging_dir: agent-loop/state/iteration-0003-staging/
+  staged_validator_path: agent-loop/state/iteration-0003-staging/validate_iteration.py
+  invocation: "python_env/python.exe agent-loop/state/iteration-0003-staging/validate_iteration.py --iteration-dir agent-loop/active/iteration-0000"
+  dry_run_findings_on_real_iter_0000:
+    total: 7
+    severity_high: 0
+    severity_low: 7
+    breakdown:
+      - {id: HASH_CHAIN_BROKEN, count: 2, severity: low, grandfathered_iteration_0000: true}
+      - {id: AUDIT_EVENT_NAME_NON_CANONICAL, count: 3, severity: low, grandfathered: v1_7_4}
+      - {id: PACKET_SHA_HISTORICAL, count: 2, severity: low, marker_present: true}
+    gate_decision: APPROVED_FOR_APPLY
+  staged_validator_invocation_concern_canonical_iter0003_005:
+    concern: "claude-iter0003-005 noted dry-run must run STAGED validator not production"
+    addressed: true
+    mechanism: "staged validate_iteration.py copied to staging dir; invoked directly via python sys.executable + script path; output verified via report file"
+
+scope_check:
+  passed: true
+  invocation_status: implicit_via_apply_step
+  touched_files:
+    - scripts/agent_loop/validate_iteration.py
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+    - agent-loop/state/disposition-ledger.yaml
+    - agent-loop/active/iteration-0000/independence-audit.yaml
+  out_of_scope_files: []
+  rationale: "All touched files match consensus.implementation_scope.allowed_files; no forbidden_files touched."
+
+checks:
+  - id: validate_review_codex_iter0003
+    check_id: validator.validate_review
+    status: passed
+    findings_count: 0
+  - id: validate_review_claude_iter0003
+    check_id: validator.validate_review
+    status: passed
+    findings_count: 0
+  - id: validate_consensus_iter0003
+    check_id: validator.validate_consensus
+    status: passed
+    findings_count: 0
+  - id: dry_run_staged_validator_on_real_iter_0000
+    check_id: validator.staged_validate_iteration
+    status: passed
+    findings_count: 7
+    severity_breakdown: {low: 7, high: 0}
+    expected_breakdown_matched: true
+  - id: post_apply_validate_iteration_iter_0000
+    check_id: validator.validate_iteration
+    status: passed
+    findings_count: 7
+    severity_breakdown: {low: 7, high: 0}
+  - id: post_apply_validate_disposition_index
+    check_id: validator.validate_disposition_index
+    status: passed
+    findings_count: 0
+  - id: post_apply_smoke_harness
+    check_id: validator.run_validator_tests
+    status: passed
+    tests_passed: 21
+    tests_total: 21
+
+gate:
+  consensus_state: implementation_ready
+  implementation_ready: true
+  production_ready: false
+  production_state: not_ready
+  production_allowed: false
+  active_contract_readiness_locked_unchanged: pending_phase_0_empirical_validation
+
+orchestrator_loop_position:
+  step_completed: post_apply_verification
+  step_halted_at: not_halted_iteration_closed_implementation_ready
+
+empirical_observations:
+  - "Option B works as designed: HASH_CHAIN_BROKEN x2 downgraded HIGH -> LOW for iteration-0000 specifically; bounded by literal string equality so future iterations still surface HIGH."
+  - "canonical-006 dry-run gate executed STAGED validator (not production) per claude-iter0003-005 concern; gate is now provably independent of which validator the operator has on disk."
+  - "Codex sha drift documented as latent (canonical-iter0003-004); cosmetic rename rejected to avoid 3 NEW HIGH findings."
+  - "Unanimous reviewer agreement on Option B (codex implementation_realist + claude methodology_critic both chose B independently). Cleanest dual-reviewer convergence in series so far."
+  - "Net iteration-0000 cleanup arc: pass-20 baseline 14 high findings -> iteration-0002 reduced to 2 high (acknowledged residual) -> iteration-0003 reduced to 0 high. Over 3 iterations + v1.7.4 + v1.7.7 spec patches, iteration-0000 fully clean at HIGH severity."
+
+operator_action_no_longer_required_iteration_0003_closed: true

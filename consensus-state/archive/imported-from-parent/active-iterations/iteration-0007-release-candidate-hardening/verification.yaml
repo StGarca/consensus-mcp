@@ -1,0 +1,89 @@
+schema_version: 1
+iteration_id: iteration-0007-release-candidate-hardening
+created_utc: '2026-05-09T00:00:00Z'
+
+passed: true
+passed_with_apply_step_landed: true
+reason: |
+  Phase 3 Release Candidate Hardening ceremony complete + iteration ceremonial files APPLIED.
+  Both reviewers rc_plan_approved=true unanimously. 0 blocking objections; 12 non-blocking
+  suggestions. 5 canonical_findings dispositioned (4 applied + 1 deferred bookkeeping).
+  T4 canonical-006 dry-run on iteration-0007 ceremonial files: 0 high findings (gate APPROVED).
+  T5 atomic-write succeeded. Round 8 sonnet external pass closed all self-applied rounds (0
+  blockers, 29/29 verified). pass-23 sealed via T6 (T7 verified=True). Section 24 archived block
+  + status_counts updated pre-apply (22 -> 23). 9-gate release checklist adopted (was 7;
+  + G_install_smoke + G_server_starts). pyproject sub-package path corrected (codex M1).
+
+accepted_changes_verified:
+  - {id: change-01, applied: true, target: iter-0007/iteration-outcome.yaml, content: "process-iteration-exception framing + 9-gate release checklist + cross-model-not-cross-vendor distinction"}
+  - {id: change-02, applied: true, target: iter-0007/verification.yaml, content: "RC verification record"}
+  - {id: change-03, applied: false, target: spec_md_v1_9_3_rc, content: "DEFERRED to out-of-MCP direct edit post-T5 close per consensus apply_orchestration"}
+  - {id: change-04, applied: false, target: ledger_v1_9_3_rc, content: "DEFERRED to out-of-MCP direct edit post-T5 close per consensus apply_orchestration"}
+
+note_on_accepted_changes: |
+  2 of 4 accepted_changes applied via T5+T4 gate (iter-0007 ceremonial files).
+  2 of 4 deferred to post-T5 out-of-MCP direct edit (spec md v1.9.3-rc + ledger v1_9_3_application_log)
+  per consensus.apply_orchestration plan + Phase 3 anti-scope rule (do not let RC ceremony expand
+  recursively; out-of-MCP edits are operator-Phase-3-authorized).
+
+scope_check:
+  passed: true
+  invocation_status: implicit_via_T5_path_traversal_guard_plus_consensus_implementation_scope
+  touched_files:
+    - agent-loop/active/iteration-0007-release-candidate-hardening/* (via T5 atomic write)
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md (section 24 + status_counts ONLY; out-of-MCP direct edit pre-apply per spec patch)
+    - agent-loop/archive/review-passes/index.yaml (T6 atomic append; pass-23)
+    - agent-loop/archive/review-passes/2026-05-09-iteration-0007-release-candidate-hardening-consolidated_codex_plus_claude-pass.yaml (T6 new seal)
+
+checks:
+  - {id: validate_review_codex_iter0007, check_id: validator.validate_review, status: passed, findings_count: 0}
+  - {id: validate_review_claude_iter0007, check_id: validator.validate_review, status: passed, findings_count: 0}
+  - {id: validate_consensus_iter0007, check_id: validator.validate_consensus, status: passed, findings_count: 0}
+  - {id: validate_iteration_iter0007, check_id: validator.validate_iteration, status: passed, findings_count: 0}
+  - {id: post_apply_validate_disposition_index, check_id: validator.validate_disposition_index, status: passed, findings_count: 0}
+  - {id: post_apply_smoke_harness, check_id: validator.run_validator_tests, status: passed, tests_passed: 21, tests_total: 21}
+  - {id: post_apply_mcp_smoke, check_id: scripts.agent_loop_mcp._smoke_test, status: passed, tests_passed: 51, tests_total: 51}
+  - {id: t4_canonical_006_dry_run_iter_0007, check_id: T4_patch_stage_and_dry_run, status: APPROVED, findings_count: 0}
+  - {id: t6_seal_pass_23, check_id: T6_review_write_and_seal, status: succeeded, packet_sha256: 71e12f828b23db9c90e741312e9c0a6689710343e7e5d8c2dfb06ea1fb859425}
+  - {id: t7_verify_pass_23, check_id: T7_review_read_post_seal, status: verified, verified: true}
+  - {id: round_8_sonnet_external_pass, check_id: cross_model_review_round, status: closed, blockers_found: 0, self_applied_resolutions_verified: 29}
+
+phase_3_rc_outcomes:
+  reviewer_concerns_alignment: mostly_aligned_two_methodological_distinctions_resolved_by_synthesizer
+  rc_plan_apply_status: APPLIED_partial_ceremonial_files_only_remainder_deferred_to_T5_T6
+  canonical_006_dry_run_findings: 0
+  governance_milestone_closed: false
+  rc_milestone_closed: false
+  rc_milestone_closure_pending_p3_t5_t6: true
+  toolchain_used_for_self_test: true
+  pre_apply_correction_landed: pyproject_subpackage_path_per_codex_M1
+  9_gate_release_checklist_adopted: true (added G_install_smoke + G_server_starts post-claude-iter0007-1)
+
+gate:
+  consensus_state: implementation_ready
+  implementation_ready: true
+  production_ready: false
+  production_state: not_ready
+  production_allowed: false
+  active_contract_readiness_after_apply: phase_0_validated
+  do_not_treat_as_phase_0_ready_after_apply: false
+  contract_version_after_apply: multi-agent-consensus-mcp-v1.9.3-rc
+  v1_9_3_release_candidate_recorded: true
+
+orchestrator_loop_position:
+  step_completed: post_apply_verification_partial_ceremonial_only
+  step_halted_at: not_halted_iteration_closed_implementation_ready_p3_t5_t6_next
+
+empirical_observations:
+- "Second consecutive iteration using full G1-G5 MCP toolchain (iter-0006 covered G1+G2; iter-0007 covered G1+G2+G3+G4+G5)."
+- "T6 + T7 + T4 + T5 all worked on real workload; no surprises post-fix from v1.9.2 hardening."
+- "Cross-model external pass (sonnet on opus's work) closed 5 self-applied rounds in single pass; anti-recursion discipline held."
+- "Codex caught a real defect pre-apply (pyproject path); demonstrates G_unstaged scoping + dual-reviewer pattern still catches drift."
+- "iter-0007 process-iteration-exception framing per claude-iter0007-3 keeps the v1.9.x record honest about render-class workload deferral."
+
+operator_action_no_longer_required_iteration_0007_ceremonial_files_landed: true
+operator_action_pending_phase_3_post_iter_close: P3_T5_packaging_plus_P3_T6_9_gate_release_checklist
+post_apply_status: |
+  iter-0007 ceremonial files APPLIED. Phase 3 RC ceremony halt-point reached. P3 T5 (sub-package
+  pyproject.toml + console entry + _release_gate_check.py + docs/ + clean-env install test) + P3
+  T6 (9-gate release checklist verification) are next. Tool ships iff 9 gates pass.

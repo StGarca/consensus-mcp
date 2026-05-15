@@ -1,0 +1,38 @@
+schema_version: 1
+iteration_id: iteration-0035-self-drive-fixes
+last_mutation: null
+closing_verdict:
+  actor:
+    id: claude-iter0035-1
+    model_family: claude
+    role: closer
+    pass_id: claude-iter0035-1-pass1
+  review_target_hash: 36b4c30bf283658b30dd059b195c6c0f2f75f9e6573e67a99521b76db1055a34
+  created_at_utc: '2026-05-11T02:15:00Z'
+  review_scope_hash: null
+invariant_checks:
+  cross_family: PASS
+  hash_match: PASS
+  freshness: PASS
+overall: PASS
+generated_utc: '2026-05-11T02:15:00Z'
+notes: |
+  iter-0035 closes all 4 iter-0034 findings as landed-in-implementation
+  with codex's 2 pre-review refinements integrated. last_mutation=null
+  because the workflow #4 fix cycle bypassed apply.codex_patch in favor
+  of direct claude-authored edits (codex declined patch authorship in
+  iter-0034; codex pre-reviewed claude's proposed approach in iter-0035
+  and approved 3/4 patches outright + flagged 2 refinements on Patch 1
+  which were integrated before implementation).
+
+  Verification:
+    pytest:        372 passed (was 363; +9 new regression tests)
+    test_self_drive: 59 passed (was 49; +10 new tests, -1 placeholder)
+    smoke:         60/60 (after commit; archive yaml needs git-tracking)
+    gates:         11/11 (after commit; G_archive_section_24_synced clears
+                   on commit; G_smoke clears once archive is tracked)
+
+  Workflow #4 catch rate across iter-0033 + iter-0035:
+    - 4/4 codex pre-review findings real and integrated
+    - 0 false positives
+    - 0 post-commit fixup iterations

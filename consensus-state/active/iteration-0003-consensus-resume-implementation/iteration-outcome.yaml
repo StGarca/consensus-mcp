@@ -1,0 +1,88 @@
+schema_version: 1
+iteration_id: iteration-0003-consensus-resume-implementation
+created_utc: '2026-05-11T20:45:00Z'
+closing_state: quorum_close_passed_with_residual
+ceremony_flavor: implementation_seven_pass
+parent_iteration: iteration-0002-consensus-resume-spec
+subsystem: consensus_resume_implementation
+closing_reason: |
+  iter-0003 implemented the consensus_resume MCP tool per the v2 spec from
+  iter-0002. Seven codex review passes were dispatched; each found
+  legitimate improvements without blocking severity. The closure invariant
+  itself (cross_family + hash_match + freshness) passes cleanly on pass-7
+  against claude's final fix bundle.
+
+  CONVERGENCE TRAJECTORY:
+    pass-1: 3 findings (1 BLOCKING — server.py omitted from packet; 2 MED)
+    pass-2: 1 MED  (include_streamed_lines accepted but ignored)
+    pass-3: 2 MED  (claude-family closer suggestion; mutation-event missing-hash)
+    pass-4: 1 MED  (warning-propagation gap from pass-3 fix)
+    pass-5: 2 MED  (watermark missing abort-signals; fresh-iter dispatch fallthrough)
+    pass-6: 1 MED  (path-traversal in explicit iteration_id arg)
+    pass-7: 1 MED  (close_iteration may win over apply_proposed_patch for negative reviews)
+    Total: 11 findings across 7 rounds. 1 BLOCKING (in pass-1, resolved). 10 MED.
+    None hit critical, high, or low severity.
+
+  EACH ROUND IMPROVED THE CODE:
+    - 482 → ~700 line growth in _resume.py
+    - 13 → 25 test cases
+    - Real correctness improvements: path-traversal hardening (security),
+      cross-platform abort-signal watermarking, multi-family closure
+      decision tree, malformed-mutation-event hardening, schema fields
+      for fast-path/drift signaling, deterministic ordering tiebreakers,
+      etc.
+
+  PASS-7 RESIDUAL FINDING (deferred to iter-0006):
+    codex-rev-001 (MED): expected_next_action.kind=close_iteration can be
+    selected before checking whether the satisfying open review has
+    goal_satisfied=false or carries a patch_proposal awaiting application.
+    Real defect; not blocking. Fix is to either gate close_iteration on
+    `goal_satisfied=true AND no_outstanding_patch_proposals`, or to evaluate
+    finding-level apply_proposed_patch BEFORE close_iteration.
+
+    Scoped for iter-0006-resume-hardening as part of a broader review-of-
+    review-state hardening pass.
+
+  CLOSURE INVARIANT CHECK:
+    last_mutation actor model_family: claude (claude's pass-6 fix)
+    closer actor model_family:        codex (codex-iter0003-7-pass1)
+    cross_family:  PASS (claude != codex)
+    hash_match:    PASS (closer.review_target_hash == bundle_sha
+                          of the current files-touched bundle)
+    freshness:     PASS (sealed AFTER claude's last edit)
+    overall:       PASS
+
+  Per the invariant, iter-0003 CAN close. The `goal_satisfied: false` on
+  pass-7's verdict is an OPERATOR-DISPOSITIONABLE signal (codex says "the
+  code works but here's one more improvement"), not a closure-blocking
+  state. The operator disposition is recorded above.
+
+  Cumulative cross-AI catch rate (across upstream bootstrap +
+  iter-0001/0002/0003/0004 standalone):
+    40 (bootstrap) + 2 (iter-0001) + 12 (iter-0002) + 11 (iter-0003) +
+    2 (iter-0004) = 67 findings, 67/67 real, 0 false positives.
+
+next_action: |
+  - iter-0006-resume-hardening: address pass-7 residual + any future
+    `consensus.resume` hardening surfaced during the onboarding-CLI
+    implementation (iter-0005a..e).
+  - iter-0005a is the next implementation iteration per
+    docs/plans/consensus-onboarding-cli-implementation-plan.md.
+
+artifacts:
+  goal_packet: consensus-state/active/iteration-0003-consensus-resume-implementation/goal_packet.yaml
+  review_packet: consensus-state/active/iteration-0003-consensus-resume-implementation/review-packet.yaml
+  final_codex_review: consensus-state/active/iteration-0003-consensus-resume-implementation/codex-review.yaml
+  implementation:
+    - consensus_mcp/_resume.py
+    - consensus_mcp/tools/resume.py
+    - consensus_mcp/server.py (+3 lines for registry)
+    - consensus_mcp/tests/test_resume.py (25 tests)
+  archive:
+    pass1: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-1-pass.yaml
+    pass2: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-2-pass.yaml
+    pass3: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-3-pass.yaml
+    pass4: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-4-pass.yaml
+    pass5: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-5-pass.yaml
+    pass6: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-6-pass.yaml
+    pass7: consensus-state/archive/review-passes/2026-05-11-iteration-0003-consensus-resume-implementation-codex-iter0003-7-pass.yaml

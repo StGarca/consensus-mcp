@@ -1,0 +1,74 @@
+schema_version: 1
+iteration_id: iteration-0000
+mode: observational_only
+applies_patches: false   # per section 23 iteration_0000_preflight
+created_utc: "2026-05-08T00:00:00Z"
+
+base_ref: renderer-may1-vintage
+base_commit: 255b99c288d6d6782f0876ec8352664702d40b80
+worktree: not_required_for_observational_run
+
+operator: <you>
+
+objective:
+  id: synthetic_dry_run_v1_6_self_review
+  text: |
+    Synthetic dry-run iteration of the multi-agent consensus loop, using the
+    contract itself as input. The loop reviews draft-v1.6-ai-contract for any
+    structural issues that the validators do not catch, and verifies that the
+    orchestration produces well-formed artifacts at each stage (review.yaml,
+    consensus.yaml, verification.yaml).
+  scope:
+    - "review v1.6 spec for issues that escape validate_disposition_index.py"
+    - "test that section 9 / 11 / 12 / 13 / 16 schemas can actually be filled in"
+    - "test that section 13 dual_reviewer_corroboration produces meaningful canonical_findings"
+    - "test that section 22 metrics can be captured from a real run"
+  out_of_scope:
+    - "applying any patch (mode is observational_only)"
+    - "raising findings already in disposition-ledger.yaml resolved/deferred lists"
+    - "expanding architecture (forbidden_before_iteration_0000 in section 23)"
+
+input_artifacts:
+  spec_path: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+  spec_sha256: "9f00ed59a3928a895604e6cd6217192c90c63acf960f9a4bb8aedf7aad6522e6"
+  disposition_ledger_path: "agent-loop/state/disposition-ledger.yaml"
+  disposition_ledger_sha256: "bcfecf0f91f73cfcbfde40aeb1e08abae8af77faa62b4c8811614836a5d0cb7e"
+  archive_index_path: "agent-loop/archive/review-passes/index.yaml"
+  archive_index_sha256: "046da608ef349c95606f008454e8e949dc4c5330385357c4cc26ab6b7dac58b8"
+  claude_md_path: "CLAUDE.md"
+  claude_md_sha256: "f8fc306383048356f10a97e977ac4c51342c1c0cf4b315d79b6e732b8ec7013d"
+
+preflight_status:
+  validator_smoke_tests: "5/5 passed (verified pre-iteration)"
+  validator_real_spec: "0 findings (verified pre-iteration)"
+  pyyaml_pinned: true
+  agent_wip_exists: true
+  tool_profiles_defined: true
+  git_diff_check: passed
+  preflight_clear: true
+
+success_criteria:
+  artifact_well_formedness:
+    - "review-packet.yaml conforms to section 7 required_packet_fields"
+    - "codex-review.yaml conforms to section 9 schema"
+    - "claude-review.yaml conforms to section 9 schema"
+    - "consensus.yaml conforms to section 13 schema"
+    - "verification.yaml conforms to section 16 schema"
+  process_well_formedness:
+    - "reviewer outputs sealed before peer exposure (independence_proof per section 13)"
+    - "synthesizer is deterministic (same inputs -> same canonical_findings)"
+    - "validator runs clean against final artifact set"
+  metrics_captured:
+    - "section 22 independent_finding_rate computed via canonical formula"
+    - "outcome_quality fields present even if null"
+    - "implementation_quality fields present (likely 0 since observational_only)"
+
+failure_modes_to_observe:
+  - "schema fields that turn out to be hard to fill in practice"
+  - "section 12 canonical_finding_key matches that produce unexpected duplicates"
+  - "section 13 severity gate that misclassifies real findings"
+  - "section 17 production_state interactions with observational_only mode"
+  - "any rule whose enforcement is implicit and only surfaces during a real run"
+
+emit_metrics: true
+emit_lessons_learned_for_v1_7: true

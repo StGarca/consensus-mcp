@@ -1,0 +1,153 @@
+iteration_id: iteration-0024-lazy-repo-root-consult
+reviewer_id: claude-iteration-0024-1
+pass_id: claude-iteration-0024-1-blind-proposal
+phase: blind_proposal
+authored_at_utc: '2026-05-13T08:50:00Z'
+authored_before_peer_visibility: true
+
+decision: SHIP-PHASED
+
+rationale_vs_alternatives: |
+  SHIP (now, all 11 modules in one PR) is too risky for v1.14.0 hygiene work.
+  The seal/audit pipeline is the project's load-bearing trust anchor; a
+  semantic bug in one of those 11 files would corrupt the audit log
+  invisibly. Single-iteration scope can't carry that risk responsibly.
+
+  DEFER is tempting but wrong. iter-0019 hides the symptom in
+  test_dispatch_codex but the same gotcha is now an unmaintained landmine
+  for any new tool added to consensus_mcp/tools/. Every new test author has
+  to know to monkeypatch the cached module attributes; every new tool that
+  caches REPO_ROOT at import inherits the bug. The cost compounds.
+
+  SHIP-PHASED gives the operator confidence at each step:
+    Phase A (iter-0025) — introduce a small `_paths.py` helper exposing
+      `repo_root()`, `archive_dir()`, `index_path()`, `active_dir()`,
+      `audit_log_path()` as functions. Each function reads
+      CONSENSUS_MCP_REPO_ROOT (and CONSENSUS_MCP_STATE_ROOT etc per
+      iter-0007 v1.13.0) on every call. NO existing modules touched yet —
+      we ship the API + tests proving it composes correctly.
+    Phase B (iter-0026) — migrate ONE tool at a time, starting with the
+      least-load-bearing (state_read_decision_ledger.py, repo_get_section.py)
+      and ending with the highest-load-bearing (review_write_and_seal.py,
+      audit_append_event.py). Each migration is one workflow #3 iteration
+      with codex + gemini review.
+    Phase C (iter-0027+) — retire iter-0019's _isolate_archive_root once
+      every dispatch-touching tool is migrated; replace with a thinner
+      env-var-only fixture.
+
+  This pattern matches how iter-0010 handled _dispatch_base extraction:
+  introduce the helper, then incrementally migrate callers. It worked.
+
+selected_call: SHIP-PHASED
+
+phase_a_design:
+  new_file: consensus_mcp/_paths.py
+  api_sketch: |
+    """Lazy path resolution. Every call re-reads env state so tests can
+    monkeypatch.setenv(...) and pytest fixtures Just Work.
+
+    Backward compatibility: this module DOES NOT change existing tool
+    behavior on its own. Tools migrate one by one in Phase B.
+    """
+    from __future__ import annotations
+    import os
+    from pathlib import Path
+
+    def repo_root() -> Path:
+        """Resolve repo root per CONSENSUS_MCP_REPO_ROOT env (current
+        convention) → walked-up __file__ → cwd. Reads env on every call."""
+        ...
+
+    def state_root() -> Path:
+        """Per iter-0007 v1.13.0: CONSENSUS_MCP_STATE_ROOT → legacy
+        REPO_ROOT/consensus-state → cwd/consensus-state."""
+        ...
+
+    def archive_dir() -> Path:
+        return state_root() / "archive" / "review-passes"
+
+    def index_path() -> Path:
+        return archive_dir() / "index.yaml"
+
+    def active_dir() -> Path:
+        return state_root() / "active"
+
+    def audit_log_path() -> Path:
+        return state_root() / "state" / "audit-log.jsonl"
+
+    def dispatch_log_path() -> Path:
+        return state_root() / "state" / "dispatch-log.jsonl"
+
+  tests_new:
+    - consensus_mcp/tests/test_paths.py
+    - covers: env-var override, walked-up discovery, state-root vs
+      repo-root split, monkeypatch semantics (env-after-import works)
+    - ~12 tests
+
+backward_compatibility: |
+  Phase A adds NEW api; nothing existing changes. The MCP server's
+  "stable repo root within a session" contract is not affected because the
+  contract is enforced at the orchestrator level (one env-var setting per
+  session), not the module-load level. Lazy resolution honors whatever
+  env state is current at call time — which is the same value the
+  module-level capture WOULD HAVE captured, except now it's re-resolvable
+  by tests.
+
+test_side_surface: |
+  In Phase B (per-tool migration), each migrated tool's tests can DROP
+  iter-0019's _isolate_archive_root monkeypatching for that tool — the
+  tool now reads env-state per call, so monkeypatch.setenv() Just Works.
+  Tests for un-migrated tools keep using _isolate_archive_root. Phase C
+  retires the helper entirely once all tools are migrated.
+
+call_site_mechanical_scope: |
+  Phase B migrations look like:
+    -from consensus_mcp.tools.X import REPO_ROOT, ARCHIVE_DIR, INDEX_PATH
+    +from consensus_mcp._paths import repo_root, archive_dir, index_path
+    -ARCHIVE_DIR.mkdir(...)
+    +archive_dir().mkdir(...)
+    -sealed_path = ARCHIVE_DIR / filename
+    +sealed_path = archive_dir() / filename
+  Mechanical, easy-to-diff, easy-to-test per file.
+
+rollback_plan: |
+  Phase A is purely additive — rollback = `git revert <commit>`. Phase B
+  per-tool migrations are each a single-iteration commit; rollback any
+  individual migration is `git revert <commit>` and the suite continues
+  working because we kept iter-0019's _isolate_archive_root for un-migrated
+  tools.
+
+smallest_deliverable_for_iter_0025:
+  iteration_id: iteration-0025-paths-helper-introduce
+  scope:
+    in:
+      - consensus_mcp/_paths.py (new)
+      - consensus_mcp/tests/test_paths.py (new)
+    out:
+      - any changes to existing tools or seal pipeline
+      - any callers using the new helper (that's Phase B)
+  acceptance_gates:
+    - full suite stays >=688 green + adds ~12 new test_paths tests → >=700
+    - test_paths.py exercises env-override path with monkeypatch.setenv
+      AFTER import (the key gotcha iter-0019 worked around)
+  recommended_workflow: post-review (workflow #3)
+  rationale: Implementation per a converged design (this consult) is
+    canonical workflow #3.
+
+deferred_to_iter_0026_plus:
+  - Phase B per-tool migration sequence
+  - Phase C _isolate_archive_root retirement
+  - Each phase B migration ships as its own peer-reviewed iteration so the
+    operator can pause/resume at any tool boundary.
+
+risks:
+  - The walked-up __file__ fallback in _resolve_repo_root has subtle
+    behavior on installed wheels (no .git, source tree in site-packages).
+    Phase A test_paths.py must exercise BOTH dev-checkout and wheel-install
+    layouts.
+  - Some tools may have OTHER module-level state that derives from
+    REPO_ROOT in subtle ways (e.g., loaded YAML configs, hardcoded path
+    components). Phase B per-tool reviews catch these.
+  - The state_root vs repo_root split from iter-0007 needs to be respected:
+    consensus-state lives under state_root, source code under repo_root.
+    The helper must NOT collapse them.

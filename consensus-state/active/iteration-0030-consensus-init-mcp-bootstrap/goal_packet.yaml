@@ -1,0 +1,112 @@
+schema_version: 1
+pilot_id: iteration-0030-consensus-init-mcp-bootstrap
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    iter-0030 — workflow #4 consult on extending `consensus-init` to
+    auto-bootstrap a project's MCP wiring. Operator ran consensus-init
+    + had to hand-craft .mcp.json in notepad to register the pipx-
+    installed consensus-mcp server with Claude Code. Two-step manual
+    setup is friction. Goal: single command bootstraps a project.
+  question: |
+    Should `consensus-init` write `.mcp.json` automatically, and if
+    yes, what's the design? Each contributor should weigh in on these
+    5 design questions and pick a stance on each:
+
+    Q1 — **Auto-write .mcp.json by default vs opt-in flag.**
+      Default-write means new users get the full bootstrap with no
+      extra flags. Risk: operators with custom MCP configs get their
+      file modified unexpectedly. Opt-in (e.g., --write-mcp-json) is
+      safer but means everyone reads the README to discover the flag.
+
+    Q2 — **Existing .mcp.json: merge vs overwrite vs skip.**
+      Merge = add consensus-mcp entry, preserve other servers (most
+      respectful). Overwrite = replace entire file (most predictable).
+      Skip = print "exists, not touching" (safest, lowest ceremony).
+
+    Q3 — **Dev-folder detection.**
+      In the consensus-mcp dev folder itself, .mcp.json uses
+      `py -3.11 -m consensus_mcp.server` + PYTHONPATH for live-source
+      dev mode. Should consensus-init detect this and refuse to
+      overwrite? Detection signal: presence of `consensus_mcp/server.py`
+      or `pyproject.toml` with consensus-mcp metadata in cwd.
+
+    Q4 — **Binary discovery.**
+      consensus-init runs as `consensus-mcp-init`-equivalent inside
+      the pipx venv. It can self-locate via `shutil.which("consensus-mcp")`
+      or via `sys.executable`'s parent / "consensus-mcp.exe" (more
+      reliable: doesn't depend on PATH propagation in the spawning
+      shell). What's the right discovery path? What's the failure
+      message when the binary isn't found?
+
+    Q5 — **Backward compatibility + idempotency.**
+      Running `consensus-init` twice should be safe. Running it after
+      manual .mcp.json edits shouldn't clobber. What's the
+      idempotency contract? Same as the existing `.gitignore`
+      managed-block approach (iter-0016d)? Different?
+
+    Each contributor: pick a stance on Q1-Q5, justify against the
+    alternatives, sketch the smallest deliverable scope. Honest
+    structural_abstention is acceptable if you genuinely lack
+    context.
+
+    Bonus: is there a 6th design question we're missing? (E.g.,
+    Windows vs POSIX path handling, what env vars to set besides
+    STATE_ROOT/PROJECT_ROOT, what about
+    .claude/settings.local.json vs project-root .mcp.json scope...)
+
+  desired_end_state: |
+    converged-plan.yaml at iteration_dir root names: (a) yes/no on
+    auto-write, (b) merge/overwrite/skip for existing .mcp.json,
+    (c) dev-folder detection mechanism, (d) binary discovery
+    strategy, (e) idempotency contract, (f) bonus question if any.
+
+    Implementation becomes iter-0031 (workflow #3, execution per
+    converged design).
+
+    Strict-majority of 3 contributors → 2 substantive votes required.
+    Codex now has proposal-mode templates (iter-0028) so it should
+    engage substantively this time — this is the first REAL workflow
+    #4 consult run with --mode proposal active.
+  non_goals:
+    - implementing the change in this iteration
+    - changing _init_wizard.py source
+    - resolving every related improvement (just .mcp.json bootstrap)
+allowed_files: []
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - pyproject.toml
+  - README.md
+  - CHANGELOG.md
+  - .github/
+  - .gitignore
+  - docs/
+  - tests/
+max_iterations: 3
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml at iteration_dir
+    check: 'py -3.11 -c "import os; assert os.path.exists(''consensus-state/active/iteration-0030-consensus-init-mcp-bootstrap/converged-plan.yaml''); print(''ok'')"'
+  - id: A2
+    description: codex participated substantively (not structural-abstention)
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+operator_escalation_triggers:
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T15:30:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: '6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: strict-majority
+  finding_disposition: all-or-nothing

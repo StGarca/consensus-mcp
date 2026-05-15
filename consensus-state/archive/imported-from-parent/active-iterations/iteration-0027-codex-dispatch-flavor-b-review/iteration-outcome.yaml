@@ -1,0 +1,185 @@
+schema_version: 1
+iteration_id: iteration-0027-codex-dispatch-flavor-b-review
+created_utc: '2026-05-10T21:35:00Z'
+closing_state: quorum_close_passed_no_mutation
+ceremony_flavor: B_subsystem_review
+parent_iteration: null
+subsystem: codex_dispatch
+
+closing_reason: |
+  iter-0027 is the THIRD subsystem-wide Flavor B review of agent-loop code,
+  targeting the codex dispatch subsystem (6 files: _dispatch_codex.py +
+  dispatch_templates/codex_review_template.md + codex_review_schema.json +
+  tools/reviewer_dispatch_codex.py + 2 test files).
+
+  Empirical chain:
+    1. Goal_packet authored with allowed_files=6, fix_author_policy=strict,
+       max_patch_size=400, codex_patch_apply_authorized=true, scope_signature
+       computed (52a791000a0a2008...).
+    2. Review-packet authored via _author_review_packet (iter-0021 helper);
+       defect_target.base_sha=f32304261646cfec... (6-file bundle); touched-file
+       contents embedded inline (6 entries).
+    3. Real codex (codex-cli) dispatched against the review-packet. Sealed
+       cleanly. 4 findings emitted with severity breakdown:
+         - codex-rev-001 (high): MCP wrapper strips helper return code.
+           reviewer_dispatch_codex.handle() does not capture the int from
+           _dispatch_codex.main(argv); if the helper printed success-shaped
+           JSON but returned non-zero, the wrapper would report ok=true.
+           Defense-in-depth gap; current helper contract shields this in
+           practice. NO PATCH (patch_not_proposed_reason: needs careful test
+           authoring for non-stdout rc-vs-content disagreement).
+         - codex-rev-002 (high): _validate_patch_proposal scope-checks
+           pp["files_touched"] against allowed/forbidden but never checks
+           the actual `+++ b/<path>` headers inside pp["unified_diff"]. A
+           malicious or buggy codex emission could declare files_touched=[ok]
+           and target a forbidden path via the diff body. NO PATCH
+           (patch_not_proposed_reason: requires unified-diff path parsing
+           semantics for /dev/null/renames/prefixes, not safe surgically).
+         - codex-rev-003 (medium): dispatch_templates/codex_review_template.md
+           line 204 states `expected_tests` is "the only optional field",
+           but the schema at codex_review_schema.json:24 lists expected_tests
+           in patch_proposal.required[]. Template-vs-schema drift.
+           PATCH_PROPOSAL provided but malformed (codex's proprietary
+           `*** Begin Patch / *** Update File / *** End Patch` format, NOT
+           the standard unified-diff form the iter-0026 F2 hunk-anchored
+           applier expects). Claude verifier verdict: corrected_resubmit.
+         - codex-rev-004 (medium): _resolve_repo_root in _dispatch_codex.py:87
+           falls through from invalid env var to cwd/__file__ candidates.
+           Codex argues fail-closed-on-invalid-env-supplied is operator-intent
+           safer. NO PATCH (patch_not_proposed_reason: behavior change affects
+           operator workflows, deliberate decision needed).
+       blocking_objections=[] (no blocking/critical severity). goal_satisfied=false.
+    4. Claude verifier reviewed the ONE patch_proposal (codex-rev-003):
+       verdict=corrected_resubmit. The intent is correct (template drift is
+       real) but the diff format is wrong — codex emitted codex-cli's
+       proprietary apply_patch format instead of standard unified diff.
+       The iter-0026 F2 hunk-anchored applier would reject. Verification
+       record at codex-patch-verifications/codex-rev-003-patch.yaml.
+    5. NO mutations landed. apply.codex_patch was not invoked.
+    6. Closure invariant trivially passes when last_mutation is None
+       (per _closure_invariant.check_closure_invariant:246); cross_family,
+       hash_match, freshness all PASS by definition.
+    7. closure-certificate.yaml authored with overall: PASS.
+    8. pytest 316/316 (unchanged from iter-0026 baseline; no code mutated).
+
+primary_empirical_finding:
+  iter_0027_dogfooded_its_own_subject: PARTIAL
+  defect_surfaced: |
+    The codex dispatch subsystem successfully produced 4 valid, actionable
+    findings against itself — schema validation, scope checks, sealing
+    pipeline all worked. BUT codex's patch_proposal emission used codex-cli's
+    proprietary `*** Begin Patch` apply_patch format instead of standard
+    unified diff. This is a NEW failure mode not previously surfaced:
+    iter-0023 and iter-0025 codex patches were emitted in correct unified-diff
+    form. The dispatch subsystem's prompt template does not explicitly demand
+    the unified-diff form, nor reject the apply_patch form at schema time.
+  defect_severity: medium (intermittent codex output drift; ergonomic gap)
+  defect_followup: iter-0028 scope (file_id: PROMPT_TEMPLATE_DIFF_FORMAT)
+
+artifacts_produced:
+  - agent-loop/active/iteration-0027-codex-dispatch-flavor-b-review/goal_packet.yaml
+  - agent-loop/active/iteration-0027-codex-dispatch-flavor-b-review/review-packet.yaml
+  - agent-loop/active/iteration-0027-codex-dispatch-flavor-b-review/codex-review.yaml
+  - agent-loop/active/iteration-0027-codex-dispatch-flavor-b-review/codex-patch-verifications/codex-rev-003-patch.yaml
+  - agent-loop/active/iteration-0027-codex-dispatch-flavor-b-review/closure-certificate.yaml
+  - agent-loop/active/iteration-0027-codex-dispatch-flavor-b-review/iteration-outcome.yaml
+  - agent-loop/archive/review-passes/2026-05-10-iteration-0027-codex-dispatch-flavor-b-review-codex-iter0027-1-pass.yaml
+
+artifacts_modified: []
+
+empirical_observations:
+  - "iter-0027 closes pure-review (no mutation). Codex emitted 4 findings against itself; the dispatch subsystem proved capable of cross-AI self-review without crashing or producing schema-invalid output."
+  - "All 4 findings are real (verified by claude on inspection). 2 high-severity (rc swallow + scope-bypass via diff body); 2 medium (template drift + env fall-through). None blocking."
+  - "Codex emitted ONE patch_proposal (codex-rev-003) but in the wrong diff format. The prompt template demands `unified_diff` text but does not show an example of unified-diff form, leading codex-cli to default to its own apply_patch syntax."
+  - "Per Karpathy principle #2 (Simplicity First) and #3 (Surgical Changes), iter-0027 lands no code; all 4 findings deferred to iter-0028. The mutation budget was reserved for codex-authored, claude-approved patches that verify clean — codex-rev-003 did not."
+
+operational_caveats:
+  - id: codex_diff_format_drift_apply_patch_vs_unified_diff
+    description: |
+      codex-cli's default patch_proposal.unified_diff emission uses the
+      `*** Begin Patch / *** Update File: path / @@ ... *** End Patch`
+      format (codex's proprietary apply_patch tool format), not the
+      standard unified-diff `--- a/path / +++ b/path / @@ -L,N +L,N @@`
+      format the iter-0026 F2 hunk-anchored applier expects. iter-0023 and
+      iter-0025 happened to get unified diffs (maybe by virtue of less
+      diff-shaped surface); iter-0027's template-text-edit naturally hit
+      apply_patch shape.
+    workaround: |
+      iter-0028 F-1 (recommended): augment the prompt template to (a) show
+      an explicit unified-diff example in the patch_proposal documentation,
+      (b) name the apply_patch format as REJECTED, (c) optionally add a
+      python parser-side check that rejects `*** Begin Patch` prefix at
+      validate-time with a clear error message. Cost ~15 LOC template +
+      ~5 LOC validator + tests.
+
+iter_0028_followup_scope:
+  - id: F1
+    severity: medium
+    description: |
+      Augment codex_review_template.md to require unified-diff form for
+      patch_proposal.unified_diff, with an explicit example and explicit
+      rejection of codex-cli's apply_patch `*** Begin Patch` shape. Add
+      a python-side validator check that rejects the wrong-format prefix
+      with a named error.
+    target_files:
+      - scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+      - scripts/agent_loop_mcp/_dispatch_codex.py
+      - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+  - id: F2
+    severity: medium
+    description: |
+      codex-rev-003 root cause: template line 204 says `expected_tests` is
+      "the only optional field" but schema requires it. Replace with
+      "required by schema; empty array when no focused tests are known."
+    target_file: scripts/agent_loop_mcp/dispatch_templates/codex_review_template.md
+  - id: F3
+    severity: high
+    description: |
+      codex-rev-001: reviewer_dispatch_codex.handle() should capture
+      _dispatch_codex.main(argv)'s return code. When rc != 0 but stdout
+      somehow parsed as success-shaped JSON, force ok=False. Defense-in-
+      depth; current helper contract shields this in practice but the
+      MCP wrapper layer should not depend on that.
+    target_files:
+      - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+      - scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+  - id: F4
+    severity: high
+    description: |
+      codex-rev-002: _validate_patch_proposal should parse unified_diff
+      file headers (`+++ b/path`) and verify EVERY path in the diff body
+      matches files_touched AND passes allowed_files/forbidden_files scope
+      checks. Today only the files_touched list is scope-checked; a
+      malicious or buggy codex emission could declare files_touched=[ok.py]
+      with a diff body targeting forbidden.py.
+    target_files:
+      - scripts/agent_loop_mcp/_dispatch_codex.py
+      - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+  - id: F5
+    severity: medium
+    description: |
+      codex-rev-004: _resolve_repo_root falls through from invalid
+      AGENT_LOOP_MCP_REPO_ROOT to cwd/__file__ candidates. Codex argues
+      operator-supplied env var should be authoritative: if it doesn't
+      validate, raise RepoRootResolutionError immediately. Behavior
+      change requires updating the env-without-markers test expectation.
+    target_files:
+      - scripts/agent_loop_mcp/_dispatch_codex.py
+      - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+
+acceptance_gates:
+  A1_pytest:
+    status: PASS
+    detail: '316 passed in 5.66s (unchanged from iter-0026 316 baseline; no code mutated this iteration)'
+  A2_closure_certificate_overall_PASS:
+    status: PASS
+    detail: 'closure-certificate.yaml overall=PASS; invariant trivially passes when last_mutation is None (no mutation in iter-0027)'
+
+post_close_status: |
+  iter-0027 closes quorum_close_passed_no_mutation. The Flavor B review cycle
+  itself completed: codex emitted findings, claude verified 1 patch
+  (corrected_resubmit), no mutation landed, closure invariant trivially
+  passed. pytest 316/316 unchanged; release gates run pre-commit.
+
+  All 4 findings deferred to iter-0028 followup (1 medium template drift, 1
+  medium env-var policy, 2 high defense-in-depth: wrapper-rc + scope-via-diff-body).

@@ -1,0 +1,150 @@
+schema_version: 1
+pass_id: pass-23-iteration-0007
+pass_label: iteration-0007-phase-3-release-candidate-hardening
+iteration_id: iteration-0007-release-candidate-hardening
+reviewer_id: consolidated_codex_plus_claude
+reviewer_pair:
+  codex: codex (implementation_realist)
+  claude: claude-opus-4-7 (methodology_critic)
+date: '2026-05-09'
+spec_path: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+spec_version_reviewed_pre_apply: draft-v1.9.2-ai-contract
+spec_version_post_apply_proposed: draft-v1.9.3-rc-ai-contract
+review_type: Phase 3 Release Candidate Hardening (RC plan ratification)
+iteration_directory: agent-loop/active/iteration-0007-release-candidate-hardening/
+independence_attestation:
+  fresh_context: false
+  rationale: 'G4 forced post-exposure carried; both reviewers seal at position 1;
+    corroboration_strength: suggested_by_context.'
+verdict:
+  rc_plan_approved_unanimous: true
+  blocking_objections_total: 0
+  non_blocking_suggestions_total: 12
+  codex_confidence: high
+  claude_confidence: medium
+  convergence_observed: both flagged release-gate-set incomplete (codex G_install
+    gate-test script; claude G_install_smoke + G_server_starts); both endorse freeze-G1-G5
+    framing
+codex_review:
+  archived_at: agent-loop/active/iteration-0007-release-candidate-hardening/codex-review.yaml
+  stance: implementation_realist
+  rc_plan_approved: true
+  key_recommendations:
+  - 'codex-iter0007-M1 (medium): pyproject.toml at repo root already exists for parent
+    upstream; T5 must target sub-package path (e.g., scripts/agent_loop_mcp/pyproject.toml)
+    before dispatch'
+  - 'codex-iter0007-L1: G_unstaged scoping to shippable_boundary_paths'
+  - 'codex-iter0007-L2: G_install needs explicit gate-test script for reproducibility'
+  - 'codex-iter0007-L3: Round 8 "29 self-applied" vs 32 spot-check entries de-dup
+    footnote'
+  blocking_objections: 0
+claude_review:
+  archived_at: agent-loop/active/iteration-0007-release-candidate-hardening/claude-review.yaml
+  stance: methodology_critic
+  rc_plan_approved: true
+  key_recommendations:
+  - 'claude-iter0007-1: add G_install_smoke (smoke from installed package matches
+    51/51) + G_server_starts (entry point boots <2s); both <30s wall to add'
+  - 'claude-iter0007-2: v1.9.3 record cross-model-not-cross-vendor distinction explicitly
+    (sonnet + opus both Anthropic; cross-VENDOR not yet met)'
+  - 'claude-iter0007-3: iter-0007 IS process polishing, permitted as exception (not
+    a render-class real iteration); record honestly in v1.9.3'
+  - 'claude-iter0007-4: anti-recursion bound is discipline-enforced, NOT technically
+    gated; document explicitly'
+  - 'claude-iter0007-5: iter-0007 input.yaml 134 lines still on high side (lines 36-62
+    restate directive 3 ways); pattern-flag for future'
+  blocking_objections: 0
+findings:
+- id: iter0007-converged-001
+  claim: 'Release gate set incomplete: missing G_install_smoke + G_server_starts (per
+    claude); missing explicit gate-test script (per codex)'
+  severity: medium
+  claim_class: process
+  source_findings:
+  - claude-iter0007-1
+  - codex-iter0007-L2
+  corroboration_strength: suggested_by_context
+  synthesizer_disposition: accepted; release_gate_criteria expanded from 7 to 9 (add
+    G_install_smoke + G_server_starts); P3 T5 will produce explicit gate-test script
+    as part of pyproject.toml + console entry deliverable
+- id: iter0007-codex-M1
+  claim: T5 must target sub-package pyproject.toml, NOT repo-root (already taken by
+    parent audiobook package)
+  severity: medium
+  claim_class: correctness
+  source_findings:
+  - codex-iter0007-M1
+  synthesizer_disposition: accepted; consensus.implementation_scope.allowed_files
+    updated to scripts/agent_loop_mcp/pyproject.toml; iteration-0007 input.yaml's
+    allowed_files entry was loose; corrected here
+- id: iter0007-claude-2
+  claim: Round 8 cross-model pass is sonnet+opus (both Anthropic); cross-VENDOR pass
+    not yet met
+  severity: low
+  claim_class: process
+  source_findings:
+  - claude-iter0007-2
+  synthesizer_disposition: accepted; v1.9.3 entry will explicitly say 'cross-model
+    (different model class) verification met; cross-vendor verification not in this
+    RC's scope'
+- id: iter0007-claude-3
+  claim: iter-0007 is process-polishing exception, not render-class real iteration
+  severity: low
+  claim_class: process
+  source_findings:
+  - claude-iter0007-3
+  synthesizer_disposition: accepted; iteration-outcome.yaml will record honestly that
+    iter-0007 is mechanical-G1-G5 ceremony (T2-T11 exercise) not render-class workload;
+    G_real_iter pass criterion clarified accordingly
+- id: iter0007-claude-4
+  claim: Anti-recursion bound is discipline-enforced not technically gated
+  severity: low
+  claim_class: process
+  source_findings:
+  - claude-iter0007-4
+  synthesizer_disposition: accepted; v1.9.3 entry explicitly documents the bound as
+    discipline-enforced (per Phase 3 anti-scope rule + operator enforcement); future
+    tooling could add a Round-N counter circuit-breaker but not in v1.9.3 scope
+- id: iter0007-codex-L1
+  claim: G_unstaged scoping to shippable_boundary_paths
+  severity: low
+  source_findings:
+  - codex-iter0007-L1
+  synthesizer_disposition: 'accepted; G_unstaged definition refined: ''no unstaged
+    files within shippable boundary paths'' (not ''no unstaged files anywhere in repo'')'
+- id: iter0007-codex-L3
+  claim: Round 8 entry de-dup footnote (29 vs 32)
+  severity: low
+  source_findings:
+  - codex-iter0007-L3
+  synthesizer_disposition: deferred to bookkeeping fix in v1.9.3 entry (not a load-bearing
+    finding)
+- id: iter0007-claude-5
+  claim: iter-0007 input.yaml lines 36-62 restate operator directive 3 ways
+  severity: low
+  source_findings:
+  - claude-iter0007-5
+  synthesizer_disposition: accepted as pattern-flag for future iterations; not modifying
+    iter-0007 input.yaml post-seal
+post_apply_actions_recommended:
+  iteration_ceremonial_files_via_T5:
+  - iteration-outcome.yaml
+  - verification.yaml
+  - consensus.yaml
+  spec_md_changes_out_of_mcp:
+  - 'frontmatter: status v1.9.2 -> v1.9.3-rc'
+  - 'frontmatter: contract_version v1.9.2 -> v1.9.3-rc'
+  - 'revision_history: add v1.9.3 entry recording Phase 3 RC + 9-gate release checklist
+    + Round 8 cross-model pass + iter-0007 process-iteration-exception framing'
+  ledger_changes:
+  - spec_version v1.9.2 -> v1.9.3-rc
+  - v1_9_3_application_log block recording Phase 3 RC ceremony
+  new_files_created_outside_iteration_dir:
+  - scripts/agent_loop_mcp/pyproject.toml (P3 T5; sub-package location to avoid clash
+    with parent audiobook pyproject.toml at repo root)
+  - scripts/agent_loop_mcp/_release_gate_check.py (P3 T5; explicit gate-test script
+    per codex-iter0007-L2)
+  - scripts/agent_loop_mcp/docs/README.md + tool-reference.md + state-schema.md (P3
+    T5; per shippable-boundary.md ship list)
+sealed_at_utc: '2026-05-09T15:14:28Z'
+packet_sha256: 71e12f828b23db9c90e741312e9c0a6689710343e7e5d8c2dfb06ea1fb859425

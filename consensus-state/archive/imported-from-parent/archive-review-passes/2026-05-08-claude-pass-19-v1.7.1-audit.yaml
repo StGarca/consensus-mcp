@@ -1,0 +1,289 @@
+schema_version: 1
+pass_id: pass-19-claude-v1.7.1-audit
+reviewer: claude-opus-4-7
+date: 2026-05-08
+spec_path: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.7.1-ai-contract"
+review_type: "v1.7.1 cleanup verification + cross-reviewer audit + methodology extension"
+
+independence_attestation:
+  fresh_context: false
+  rationale: |
+    Pass-19 cannot claim full independence per section 13 independence_proof_required.
+    Pass-18 was already in archive when v1.7.1 cleanup work began, and I read pass-18
+    to apply its required_change items. This is a VERIFICATION pass with methodology
+    extension, not a fresh independent review. Honest framing per cf-001 enforcement
+    notes (Phase 0 honor-system).
+  exposure_metadata:
+    read_pass_18_before_writing: true
+    purpose_of_exposure: "applied codex-rev-065/066/068/069 required_change items as v1.7.1 patches; codex-rev-067 deferred to v1.8"
+    sealed_inputs_at_pass_19_start:
+      - pass-18 (sha256 from archive)
+      - v1.7.1 spec post-patch
+      - v1.7.1 disposition-ledger post-patch
+      - v1.7.1 pass-17 archive yaml post-patch (renamed IDs)
+      - v1.7.1 archive index yaml post-patch
+    treat_pass_19_findings_as: |
+      Section 13 corroboration_strength: suggested_by_context (NOT independent).
+      Per rebuttal_blocker_corroboration_rule analog: post-exposure findings
+      cannot auto-promote via severity_gate. They are valid as audit findings
+      but not as corroboration signal.
+
+stance: methodology_critic_with_implementation_verification
+
+verdict:
+  pass_18_findings_resolution_quality: PARTIAL
+  pass_18_5_of_5_required_changes_landed: 4_of_5_partial
+  v1_7_1_self_introduced_bugs: detected_3_real_findings
+  active_contract_readiness: KEEP_pending_phase_0_empirical_validation
+  next_step_recommendation: v1.7.2_micro_cleanup OR explicit_acceptance_of_inconsistency
+  iteration_0001_blocked: not_strictly_blocked_but_undesirable
+
+# ---- Verification: did codex pass-18 fixes actually land? ----
+
+pass_18_fix_verification:
+  - codex_finding: codex-rev-065-section24-v17-disposition-drift
+    required_change: "v1.7.1 should update section 24 resolved/deferred counts and id-only lists for cf-001/cf-003/cf-004/cf-005/cf-007/cf-008, cf-002/cf-006/cf-risk-001..003, and pass-17 outcomes; remove or replace pending_v1_7"
+    landed: true
+    verification:
+      - "section 24 resolved count: 109 entries (matches status_counts.resolved)"
+      - "section 24 deferred count: 45 entries (matches status_counts.deferred)"
+      - "section 24 archived count: 18 (matches archive index)"
+      - "pending_v1_7 block removed from section 24"
+      - "pending count: 0 (matches status_counts.pending)"
+      - "cf-001..cf-008 (resolved subset) all present"
+      - "cf-002, cf-006, cf-risk-001..003 (deferred) all present"
+      - "pass-17-codex-rev-049/050/051 promotions present"
+    status: cleanly_resolved
+
+  - codex_finding: codex-rev-066-pass17-id-collision-remains-visible
+    required_change: "Choose one canonical repair: either rewrite pass-17 finding IDs to a non-colliding range (preferred before commit), or permanently prefix pass-17-local IDs in both archive and index. Add validator detection in v1.8 or v1.7.1."
+    landed: PARTIAL
+    landed_components:
+      - "pass-17 archive yaml: finding IDs prefixed (pass-17-codex-rev-049..051)"
+      - "archive index yaml: pass-17 finding range prefixed (pass-17-codex-rev-049..pass-17-codex-rev-051)"
+      - "validator detection deferred to v1.8 (recorded in section 24 deferred + ledger pass_17_open_followups)"
+    NOT_landed:
+      - "disposition-ledger.yaml still uses 'pass-17/codex-rev-049-cf-findings-not-archived' form (slash separator + short suffix) instead of consistent 'pass-17-codex-rev-049-cf-findings-not-archived-in-repo' (hyphen + full suffix)"
+    new_finding_introduced: claude-rev-037 (below)
+    status: incomplete_partial_fix_with_documented_intentional_inconsistency
+
+  - codex_finding: codex-rev-067-validator-misses-cross-artifact-disposition-drift
+    required_change: "Add checks for duplicate finding IDs across archive/active review artifacts and for section24 status entries that contradict disposition-ledger resolved/deferred blocks."
+    landed: deferred_to_v1_8_per_pass_18_disposition
+    verification:
+      - "section 24 deferred block contains: codex-rev-067-validator-misses-cross-artifact-disposition-drift, defer_to: v1.8"
+      - "section 24 deferred block contains: pass_17_open_followup_namespace_id_collision_detection_validator, defer_to: v1.8"
+    status: deferral_recorded_correctly
+
+  - codex_finding: codex-rev-068-active-spec-nonascii-regression
+    required_change: "Replace the mojibake/em dash with ASCII punctuation in v1.7.1; optionally clean the same pattern in active iteration artifacts."
+    landed: true
+    verification:
+      - "line 1657 non-ASCII char count: 0 (verified via python ord scan)"
+      - "full spec non-ASCII line count: 0 (verified)"
+      - "active iteration artifacts NOT scanned in v1.7.1 (codex 'optionally' clause; out of scope)"
+    status: cleanly_resolved
+    note: "5th instance of em-dash/mojibake regression class (codex-rev-016/024/032/068 + this fix); pattern persists despite section 0 ASCII rule"
+
+  - codex_finding: codex-rev-069-v17-revision-history-overstates-actual-iteration-file-set
+    required_change: "Change the revision_history wording to distinguish state-tree allowed files from files actually produced in iteration-0000."
+    landed: true
+    verification:
+      - "v1.7 entry now states: 'NOTE: peer-questions.yaml is schema-allowed but was NOT produced by iteration-0000 (no peer questions fired); revision_history v1.7.1 corrects an earlier wording...'"
+    status: cleanly_resolved
+
+# ---- New findings introduced by v1.7.1 ----
+
+new_findings:
+  - id: claude-rev-037-pass17-prefix-inconsistency-across-artifacts
+    severity: high
+    claim_class: correctness
+    claim: |
+      pass-17 finding IDs use THREE different forms across artifacts:
+        - disposition-ledger.yaml: 'pass-17/codex-rev-049-cf-findings-not-archived' (slash separator, short suffix)
+        - pass-17 archive yaml: 'pass-17-codex-rev-049-cf-findings-not-archived-in-repo' (hyphen separator, full suffix)
+        - archive index yaml: 'pass-17-codex-rev-049' (hyphen, no suffix)
+      A future validator extending codex-rev-067 to check finding-ID consistency
+      across artifacts will see three non-equal strings and either flag them
+      (correct) or special-case multiple equivalent forms (technical debt).
+    evidence:
+      - "agent-loop/state/disposition-ledger.yaml grep for 'pass-17/codex-rev-049' returns 3 entries"
+      - "agent-loop/archive/review-passes/2026-05-08-codex-pass-17-path-x-readiness-review.yaml grep for 'pass-17-codex-rev' returns 3 entries with full suffixes"
+      - "agent-loop/archive/review-passes/index.yaml grep for 'pass-17-codex-rev-049' returns 2 entries with no suffix"
+    introduced_by: v1.7.1
+    introduced_how: |
+      My v1.7.1 patch updated archive yaml and archive index to use 'pass-17-' hyphen
+      prefix per codex-rev-066 required_change. I did NOT update disposition-ledger.yaml
+      (which I had originally written using 'pass-17/' slash form during v1.7).
+      The pass-17 archive yaml id_collision_disambiguation note documented the
+      inconsistency as intentional, but documenting drift is not resolving drift.
+    impact: |
+      Cross-artifact finding-ID consistency is broken. The codex-rev-066 fix is
+      effectively partial. v1.8 validator extension (per codex-rev-067 deferral)
+      will need to either flag this OR carry compatibility logic; the latter is
+      maintenance debt.
+    recommended_fix: |
+      Option A (preferred): Pick canonical form 'pass-17-codex-rev-NNN-<full-suffix>';
+      update disposition-ledger.yaml and archive index.yaml to match. Single source
+      of truth.
+      Option B: Document the dual form as a permanent allowed pattern in section 0
+      finding-id allocation; require any validator to handle both. Adds rule
+      complexity without solving drift.
+      Recommend A: trivial mechanical edit; preserves single canonical form.
+    disposition: archived_pending_v1_7_2
+    self_correction_eligible: true   # claude-rev-028 self-patch scope: bookkeeping fix
+    corroboration_strength: suggested_by_context   # I applied the patches; not independent
+
+  - id: claude-rev-038-id_collision_disambiguation-block-documents-bug-as-feature
+    severity: medium
+    claim_class: methodology
+    claim: |
+      The id_collision_disambiguation block I added to pass-17 archive yaml
+      describes inconsistent ID forms as 'equivalent for reference purposes'
+      rather than fixing them. This is the partial-fix pattern (claude-rev-001
+      anti-regression criterion target) at meta level: the disambiguation
+      block IS the regression rationalization.
+    evidence:
+      - |
+        agent-loop/archive/review-passes/2026-05-08-codex-pass-17-path-x-readiness-review.yaml id_collision_disambiguation:
+          ledger_uses: "pass-17/codex-rev-049 form (slash) which is equivalent for reference purposes; archive uses 'pass-17-' (hyphen) for filename-safe alignment with archive_index_yaml entries."
+    introduced_by: v1.7.1
+    impact: |
+      Future agents reading the disambiguation block will see operator-blessed
+      inconsistency and may extend the pattern (e.g., section_24/section-24
+      forms; iteration_0000/iteration-0000 forms; etc). Section 0 ASCII rule
+      establishes one form; this disambiguation establishes a precedent for
+      multiple forms.
+    recommended_fix: |
+      If claude-rev-037 Option A applied: delete or rewrite this disambiguation
+      block to say 'IDs prefixed; ledger updated to match'.
+      If Option B applied: tighten language to specify EXACTLY which dual forms
+      are permitted, with no 'equivalent' fudge.
+    disposition: archived_pending_v1_7_2
+    corroboration_strength: suggested_by_context
+
+  - id: claude-rev-039-v1_7_1-perpetuates-4-of-4-patch-regression-pattern
+    severity: medium
+    claim_class: methodology
+    claim: |
+      Empirical pattern observation: every consolidation/patch by claude has
+      introduced new bugs caught by next codex pass. v1.7.1 is the 5th instance.
+        - v1.0 -> v1.2: rev-031..rev-038 surfaced post-hoc by claude pass-3
+        - v1.2 -> v1.3: rev-005 deleted; caught by codex pass-7
+        - v1.3 -> v1.4 patches: corroboration ownership conflict + hash type confusion; caught by pass-9 / pass-13
+        - v1.4 patches -> v1.4 patches: section 9 schema active despite section 13 disable; caught by pass-13
+        - v1.7 -> v1.7.1: prefix inconsistency + disambiguation-as-resolution; caught by THIS PASS
+      Pattern is structural, not anecdotal. Every claude self-applied patch
+      (regardless of size, regardless of self-patch scope) has introduced at
+      least one regression caught by next reviewer.
+    evidence: archived disposition-ledger.yaml + archive index.yaml passes 1-19
+    impact: |
+      The Path C protocol (operator ratification + validator-first) was supposed
+      to break this pattern, and v1.5 + v1.6 broke it briefly. v1.7 + v1.7.1
+      reverted to claude-self-patches-introduce-bugs mode.
+      The difference between pattern-broken and pattern-restored:
+        - v1.5: large coherent patch from operator-ratified Tier-1/2/3 designs (no claude self-decisions on architecture)
+        - v1.6: small Quoroom borrows that operator ratified before claude applied
+        - v1.7: medium patch from operator-ratified Tier-2 designs BUT the bookkeeping (which is "self-patch scope") was claude-only -> codex pass-18 caught 5 bookkeeping bugs
+        - v1.7.1: tiny cleanup that claude self-applied -> THIS PASS caught 3 (bookkeeping inconsistency + disambiguation-as-bug + this meta finding)
+      Pattern: claude reliably introduces ~1-5 bugs per self-applied patch
+      regardless of scope. Operator ratification of architectural design works;
+      claude self-application of mechanical fixes still drifts.
+    recommended_fix: |
+      Two options:
+        Option A: Tighten claude-rev-028 self-patch scope. Even mechanical
+          fixes require codex-cross-review BEFORE landing. Slower but
+          empirically necessary.
+        Option B: Build the codex-rev-067 cross-artifact validator now (not
+          v1.8) so machine catches what claude misses. Validator becomes the
+          first-line check; codex review becomes audit-of-validator.
+      Recommend B: validator extension is one of the deferred-to-v1.8 items;
+      promoting it here doesn't add architecture, just enforces existing rules.
+    disposition: archived_pending_v1_8 (or v1.7.2 if Option B accepted)
+    corroboration_strength: cross_pass (corroborates claude-rev-028 from pass-14 + codex-rev-067 from pass-18)
+
+# ---- Methodology lens (claude-stance critic) ----
+
+methodology_observations:
+  - id: m-001
+    observation: |
+      v1.7.1 verdict 'KEEP_pending_phase_0_empirical_validation' is correct
+      independent of pass-19's new findings. The cf-007 readiness-flip review
+      pass mechanism still has not been EXERCISED. Even if v1.7.2 fixes
+      claude-rev-037/038 cleanly, the readiness flip cannot occur until a
+      proper readiness-flip review pass runs. v1.7.1 is not THAT pass.
+
+  - id: m-002
+    observation: |
+      The independence_proof for pass-19 is honestly broken (I applied v1.7.1
+      patches before reviewing). This is the kind of case section 13
+      enforcement notes mention: 'no technical mechanism prevents reading
+      sealed file; this is documented and accepted for Phase 0'.
+      Phase 1 MCP would prevent this by gating archive read access.
+
+  - id: m-003
+    observation: |
+      pass-19's claude-rev-037..039 findings are post-exposure (not independent).
+      Per rebuttal_blocker_corroboration_rule analog from cf-003, they should
+      have corroboration_strength: suggested_by_context. They're audit-class
+      findings, not corroboration signal. Recorded honestly above.
+
+# ---- Recommended next steps ----
+
+recommendation:
+  primary_path: |
+    v1.7.2 micro-cleanup addressing claude-rev-037 + claude-rev-038:
+      - Update disposition-ledger.yaml pass-17 entry IDs to canonical hyphen+full-suffix form
+      - Update id_collision_disambiguation block in pass-17 archive yaml to reflect
+        single canonical form (or delete entirely if all artifacts now consistent)
+    Then claude-rev-039 promotion decision:
+      - Option A (defer): keep codex-rev-067 cross-artifact validator at v1.8
+      - Option B (promote): build the validator NOW as first-line drift detection
+    Then iteration-0001 OR readiness-flip review pass.
+
+  alternative_path: |
+    Accept v1.7.1 inconsistency as documented; proceed to iteration-0001 on
+    a real project decision. Defer all bookkeeping cleanup to v1.8.
+    Risk: v1.8 will inherit v1.7.1's debt; codex pass next-N will catch it.
+
+  do_not_recommend: |
+    Flipping active_contract_readiness regardless of whether v1.7.2 lands.
+    cf-007 readiness-flip mechanism has not been exercised.
+
+iteration_0001_blocking_status:
+  strictly_blocked: false
+  recommended_blocked: true
+  reason: |
+    iteration-0001 will produce new artifacts that reference disposition-ledger.
+    If ledger has prefix-inconsistency debt, iteration-0001 artifacts will
+    inherit it. Cleaner to land v1.7.2 first; tiny patch.
+
+severity_gate_replay:
+  claude_rev_037:
+    max_source_severity: high
+    claim_class: correctness IS in [safety, correctness, security, process]
+    gate_result: auto_block_eligible
+    BUT_corroboration_strength: suggested_by_context (post-exposure)
+    final_outcome: blocking_held (severity stays at source; cannot auto-promote due to taint)
+  claude_rev_038:
+    max_source_severity: medium
+    claim_class: methodology NOT in [safety, correctness, security, process]
+    gate_result: confirmed_suggestion
+  claude_rev_039:
+    max_source_severity: medium
+    claim_class: methodology NOT in eligible set
+    gate_result: confirmed_suggestion
+    cross_pass_corroboration: claude-rev-028 (pass-14) + codex-rev-067 (pass-18)
+    note: "cross-pass corroboration of meta-finding does not auto-promote per claude-rev-011 deferred semantics"
+
+# ---- Artifact integrity ----
+
+verification_signals:
+  validator_real_spec_findings: 0
+  validator_smoke_tests: "5/5 passed"
+  full_spec_ascii_clean: true
+  spec_byte_size: stable_within_v1_7_1
+  status_counts_arithmetic: verified_109_45_18_0
+  cross_artifact_consistency_check_for_pass_17_ids: FAILED_3_forms_in_3_files (claude-rev-037)
+  v1_7_1_revision_history_accuracy: clean (pass-18 codex-rev-069 fixed)

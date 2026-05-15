@@ -1,0 +1,620 @@
+schema_version: 1
+agent: claude
+stance: methodology_critic
+iteration_id: iteration-0007-release-candidate-hardening
+reviewed_packet_sha256: "79d376ff56d3dd8a308dc0c6a7916d861a231a3f9bcdaab282222e0f99221370"
+reviewed_packet_sha256_provenance:
+  formula: "hashlib.sha256(yaml.safe_dump(yaml.safe_load(open(p,'r',encoding='utf-8')), sort_keys=True).encode('utf-8')).hexdigest()"
+  form: canonical-full
+  spec_reference: "section 7 canonical_yaml_sha256; cross-artifact reference"
+  earlier_value_used: "03242d15... (file-level binary sha; not the canonical-full form validate_iteration computes); corrected post-seal to match validator expectation"
+overall_position:
+  implementation_ready: true
+  production_ready: false
+  confidence: medium
+  position_summary: |
+    Phase 3 RC hardening plan ratified with seven non-blocking methodology
+    objections. The plan structurally addresses the right problems: scope
+    freeze (G1-G5; no G6), single-pass external re-review (Round 8 sonnet
+    closure landed and is verifiable), shippable boundary manifest, package
+    + clean-env install, and a 7-gate release checklist. The verification
+    floor is real: 51/51 smoke, 21/21 validators, 0 disposition findings,
+    Round 8 verified all 29 self-applied resolutions across the 5
+    re-review-pending rounds with cross-model (sonnet vs opus) coverage,
+    zero real blockers found, one minor-drift note correctly classified as
+    false positive. That is shippable evidence by the criteria the operator
+    set. However: (a) the 7-gate checklist has at least two operationally
+    obvious post-install gates missing (smoke-from-installed-package matches
+    smoke-from-source; MCP server actually starts after install); (b) the
+    "iteration-0007 IS the real G1-G5 ceremony" claim is honest about the
+    workload being bookkeeping, but the workload IS bookkeeping
+    (frozen-scope record + boundary manifest + pyproject + verification),
+    not a render-problem decision -- whether that satisfies the operator's
+    "real bounded repo decision" intent depends on the operator's reading
+    of "real"; flag, do not block; (c) Round 8 sonnet IS cross-model but
+    same-vendor (Anthropic), so the cross-vendor independence bar is NOT
+    met; flag for the operator to confirm whether Phase 3 closure should
+    require cross-vendor or whether cross-model is the operator-defined
+    bar; (d) the Phase 3 anti-recursion bound is structural-by-text-only
+    (input.yaml says "do not expand external pass into recursive rounds"),
+    not technically enforced -- a future agent inheriting the pattern
+    could absolutely run a Round 9; the bound holds because the operator
+    will enforce it, not because the tool prevents it. The plan is
+    nevertheless implementation-ready: the gaps are pattern-flags, not
+    correctness defects, and the ratification gate (rc_plan_approved=true
+    from both reviewers) does not require closing them in this iteration.
+    confidence=medium because three of the seven objections (gate
+    completeness, cross-vendor adequacy, real-iteration authenticity) are
+    methodology-substantive judgment calls where reasonable reviewers
+    could disagree; the empirical evidence floor is high.
+rc_plan_approved: true
+rc_blocking_defects_if_any: []
+blocking_objections: []
+non_blocking_suggestions:
+  - id: claude-iter0007-001
+    severity: medium
+    target: input.yaml release_gate_criteria
+    text: |
+      Add G_install_smoke gate: after the clean-env install (G_install)
+      succeeds, run scripts/agent_loop_mcp/_smoke_test.py from the INSTALLED
+      package's working directory (NOT source-tree) and require the same
+      51/51 result. The current G_install gate verifies install succeeds;
+      it does not verify the installed code actually works. A pyproject
+      that copies the wrong package_data, ships __init__.py without tools/,
+      or has an entry-point pointing at a stale module path can install
+      cleanly and fail at first invocation. Smoke-after-install is the
+      one gate that catches this class of packaging defect at iter-0007
+      land time, not at first-user-runs-it time.
+  - id: claude-iter0007-002
+    severity: medium
+    target: input.yaml release_gate_criteria
+    text: |
+      Add G_server_starts gate: after install, run
+      `python -m scripts.agent_loop_mcp.server` (or the console entry
+      point) for >=2 seconds and require it to boot without exception
+      (exit code != non-error within boot-timeout window suffices). The
+      MCP server starts via stdio in production; clean-env install +
+      smoke-pass does not exercise the server boot path. iteration-0006's
+      Round 1 Finding 8 (smoke mutating real audit log) was exactly the
+      class of defect that surfaces only when the server actually boots.
+      A 2-second boot-and-shutdown probe at G_server_starts would cost
+      <5 seconds wall and prove the entry point is wired.
+  - id: claude-iter0007-003
+    severity: medium
+    target: input.yaml + Phase 3 closure record (post-iteration)
+    text: |
+      Round 8 sonnet pass meets the cross-MODEL-class bar (sonnet-4-6 vs
+      opus-4-7) but NOT the cross-VENDOR bar (both are Anthropic). Phase 3
+      closure should explicitly record which bar was met and which was not.
+      Recommended frontmatter or revision_history language: "Round 8
+      cross-model independent re-review pass landed (claude-sonnet-4-6
+      reviewed claude-opus-4-7's self-applied resolutions); cross-vendor
+      independent pass NOT performed in v1.9.x; if Phase 1.x or operator
+      pivot raises the bar to cross-vendor (e.g. GPT or Gemini), an
+      additional pass is required and would NOT inherit Phase 3 closure
+      status." Operator may decide cross-model is sufficient (the CFU F3
+      principle did say "different model class" not "different vendor"),
+      but the distinction must be recorded so a future reader knows
+      exactly what bar v1.9.2 cleared.
+  - id: claude-iter0007-004
+    severity: low
+    target: input.yaml objective + closure language
+    text: |
+      The phrase "iteration-0007 IS the real G1-G5 iteration" is correct
+      mechanically (T3+T4+T5+T6+T7+T8+T9+T10 all exercised end-to-end on
+      ceremonial files) but the WORKLOAD is documenting the freeze itself,
+      not a render-problem decision. The operator's stated intent for
+      "one real G1-G5 iteration" was the tool surviving a real bounded
+      repo decision without manual contract bypass; bookkeeping IS a
+      real bounded repo decision, but it is not a render-impact decision.
+      Recommend explicit closure language: "iteration-0007 exercises the
+      full G1-G5 ceremony on the Phase 3 RC hardening workload itself
+      (frozen-scope record + boundary manifest + pyproject + verification);
+      the next operator-facing render-impact iteration (Garrett P.I.
+      chapter render decision, archetype-anchor change, voice-bank
+      revision, etc.) is the FIRST render-class real iteration; v1.9.3
+      records that iter-0007 satisfies the mechanical bar but does not
+      claim the render-class bar." This prevents a future reader from
+      reading "real iteration completed" as "render-class real iteration
+      completed" when only the mechanical bar was cleared.
+  - id: claude-iter0007-005
+    severity: low
+    target: Phase 3 anti-recursion bound enforcement
+    text: |
+      The bound "do not expand external pass into another architecture
+      phase unless real blocker" is currently enforced by:
+      (a) operator directive text in input.yaml,
+      (b) Round 8 closure declaring zero real blockers,
+      (c) Phase 3 plan's explicit anti-scope list.
+      It is NOT enforced by:
+      (d) any technical gate (no MCP tool refuses to dispatch a "Round 9"
+          if a future agent decides to run one),
+      (e) any spec section 0 done_claim_rule that would block a v1.9.x
+          spec edit introducing new review-round mechanics.
+      The bound holds in v1.9.2 because the operator will enforce it. It
+      does NOT structurally prevent the recursion. The Round 7 F-pattern
+      (each round surfaces findings on the previous round's fixes) is a
+      methodological tendency of the document set, and the only thing
+      stopping Round 9 is operator discipline. Recommend that v1.9.3
+      revision_history explicitly name the recursion bound as a
+      "discipline-enforced limit, not technically gated; future agents
+      that propose Round 9 must surface a real-blocker citation, not a
+      review-round-as-default-cadence proposal." Same precedent-bounding
+      move as iteration-0006's operator-pivot bounding.
+  - id: claude-iter0007-006
+    severity: low
+    target: input.yaml allowed_files + boundary manifest scope
+    text: |
+      The SHIPS / DOES-NOT-SHIP boundary manifest is not present in
+      review-packet.yaml or input.yaml -- only NAMED as a Phase 3
+      deliverable. The reviewer cannot verify the manifest's scope is
+      right (operator's question 3 in reviewer_decision_required) without
+      seeing it. Recommend that the apply-phase of iteration-0007 produce
+      the boundary manifest BEFORE pyproject.toml is authored (so the
+      pyproject's package_data + entry_points fields are derived FROM
+      the manifest, not from a separate scope decision). Without this
+      ordering the pyproject becomes a second source of truth on what
+      ships, divergent from the manifest by typo or omission.
+  - id: claude-iter0007-007
+    severity: low
+    target: input.yaml (Karpathy Simplicity First applied to spec authoring)
+    text: |
+      input.yaml is 134 lines (down from iter-0006's 290; good). For a
+      Phase 3 RC hardening iteration that is largely "freeze + package +
+      verify", 134 is still on the high side. Lines 36-62
+      (mode + what_phase_3_does_NOT_do + what_phase_3_DOES_do) duplicate
+      content from operator_directive_quote (lines 5-8) and
+      not_a_routine_iteration_because (lines 11-19). A
+      reference-by-anchor approach ("anti-scope: see operator_directive_
+      quote line 6-8 negative-half") would shed ~25 lines without losing
+      semantic content. Pattern-flag for future iter-NNNN inputs. Same
+      Karpathy Simplicity First objection logged in claude-iter0006-005;
+      progress made (290 -> 134) but not landed.
+rationale: |
+  Verification floor is real. The ratification question is whether the
+  Phase 3 plan as drafted will, when executed, produce a release-ready
+  v1.9.3 v1.9.x family that can survive a clean-checkout install + first
+  real invocation. The empirical evidence floor (51/51 smoke; 21/21
+  validators; 0 disposition findings; Round 8 zero-real-blocker closure
+  with cross-model coverage; Round 8 spot-checked all 29 self-applied
+  resolutions and found them present at cited locations) supports a yes
+  answer at the level the operator is asking. The gaps I flag are not
+  defects in the plan as ratified; they are missing checks that would
+  raise confidence from medium to high. None of them is a structural
+  blocker:
+
+  1. Gate completeness (claude-iter0007-001 + -002): the operator's 7
+     gates verify the package can be built and installed, and that the
+     source-tree smoke is clean. They do NOT verify the installed
+     package's smoke is clean, or that the MCP server actually starts
+     after install. Both gates are <30 seconds wall to add. The
+     iteration-0006 lesson "smoke mutating real audit log" was exactly
+     the class of defect that surfaces only at server-boot path, and
+     was caught only by a reviewer running the actual server. Adding
+     these two gates closes that class for v1.9.x land.
+
+  2. Cross-vendor adequacy (claude-iter0007-003): Round 8 sonnet
+     reviewing opus's resolutions IS cross-model (different model
+     classes, different fine-tuning, different alignment passes) and
+     IS the bar CFU F3 set ("different model class"). Cross-vendor
+     (Anthropic vs OpenAI vs Google) is a STRONGER bar; it is not the
+     bar the operator named. I flag the distinction so v1.9.3 records
+     which bar was met and which was not, rather than letting "Round 8
+     external re-review pass" read as cross-vendor by default in
+     future-reader summaries.
+
+  3. Real-iteration authenticity (claude-iter0007-004): the workload of
+     iter-0007 is documenting the freeze + boundary + package; not a
+     render-impact decision. The mechanical bar (T2-T11 exercised end-
+     to-end) is met. The render-class bar (operator decision affects
+     audio outcome) is not met. Recording the distinction prevents a
+     future reader from inheriting "iter-0007 proved the loop on a real
+     iteration" as license to skip render-class iterations.
+
+  4. Anti-recursion bound enforcement (claude-iter0007-005): the bound
+     is operator-discipline, not tool-gated. The Round 7 F-pattern is
+     a real methodological tendency, and only operator authority is
+     stopping it. Naming this as discipline-enforced (not technically
+     gated) in v1.9.3 prevents the future-agent reading "Phase 3
+     closed cleanly" as license to dispatch Round 9 by default cadence.
+
+  5. Boundary manifest ordering (claude-iter0007-006): if pyproject is
+     authored before the manifest, pyproject becomes the de-facto
+     boundary record. Manifest-first ordering keeps single source of
+     truth.
+
+  6. Karpathy Simplicity First (claude-iter0007-007): input.yaml at
+     134 lines is better than iter-0006's 290 but could be ~100. Not
+     blocking; pattern-flag for future iterations.
+
+  Convergence prediction: codex (implementation_realist) will likely
+  flag the missing post-install smoke + server-start gates as
+  technical-verification gaps, which converges with my methodology
+  flags claude-iter0007-001 + -002. Phase vocabulary objections from
+  iter-0006 (claude-iter0006-002) do not recur because v1.9.3 does not
+  reopen sections 1-23. The operator-pivot-precedent bound from
+  iter-0006 (claude-iter0006-001) does extend to Phase 3: each
+  successive operator-strategic-pivot inherits the precedent unless
+  v1.9.3 explicitly re-bounds it.
+phase_3_freeze_achievability:
+  achievable: true
+  argument: |
+    "Freeze G1-G5" is achievable as the operator framed it: no NEW
+    mechanics added; existing mechanics may be exercised. iteration-0007
+    using the MCP toolchain (T3+T4+T5+T6+T7+T8+T9+T10) is exercising
+    existing mechanics, not adding new ones; T1+T2 are also called
+    (state.read_decision_ledger; audit.append_event). The toolchain is
+    the LOAD-BEARING infrastructure that the freeze applies TO; using
+    it does not violate the freeze. The freeze applies to:
+    (a) MCP tool source code (allowed_files excludes
+        scripts/agent_loop_mcp/tools/*),
+    (b) smoke test count (allowed_files excludes _smoke_test.py unless
+        gate-test additions are required),
+    (c) spec sections 1-23 (forbidden_files: spec sections 1-23
+        architectural changes).
+    The freeze does NOT apply to:
+    (d) packaging (pyproject.toml CREATED by iter-0007),
+    (e) ledger updates (spec_version + iteration log via T8),
+    (f) frontmatter / revision_history bookkeeping in spec section 0.
+    This carving is consistent: the architectural surface is frozen, the
+    bookkeeping surface is open. The operator's framing ("exercising
+    existing mechanics") is the right reading. Push-back-pressure-test
+    result: I cannot construct a case where iter-0007's MCP-tool usage
+    counts as "new mechanics" -- every tool was implemented and smoke-
+    tested in v1.9.0/v1.9.1/v1.9.2 prior to this iteration.
+external_pass_adequacy:
+  cross_model_sufficient: true
+  cross_vendor_recommended: true
+  rationale: |
+    Round 8 sonnet pass meets the cross-MODEL bar that CFU F3 named:
+    "different model class from opus implementer/reviewers". sonnet-4-6
+    is a different model class from opus-4-7 (smaller, different
+    fine-tuning, different alignment/RLHF cohort). The cross-model bar
+    is sufficient FOR THE OPERATOR-DEFINED CRITERION as of v1.9.x.
+    However: cross-vendor (Anthropic vs OpenAI vs Google or DeepSeek
+    or local-Llama) is the STRONGER independence bar. Round 8 did NOT
+    clear cross-vendor because both reviewer and implementer are
+    Anthropic-trained models sharing the same fundamental training
+    pipeline, alignment principles, and safety filters. A common
+    failure mode of same-vendor cross-model passes is shared blind
+    spots (both models fine-tuned on similar reviewer-data may share
+    biases about what constitutes "shippable" code; same-vendor
+    Constitutional AI principles may make both models reluctant to
+    flag the same class of overconfident phrasing). For v1.9.x as
+    drafted by the operator: cross-model is sufficient. For a v2.0
+    or production-deployment bar: cross-vendor is recommended.
+    Recommendation: record explicitly that v1.9.x cleared the
+    cross-model bar, NOT the cross-vendor bar; if a future Phase 1.x
+    triggers (operational signal that one of the bounded gaps bit
+    production) the closing pass should be cross-vendor.
+release_gate_completeness:
+  missing_gates_if_any:
+    - id: G_install_smoke
+      rule: "smoke from installed package matches 51/51; closes pyproject-typo / wrong-package_data class"
+      severity: medium
+    - id: G_server_starts
+      rule: "console entry point boots MCP server without exception within 2s; closes wrong-module-path / missing-tools-init class"
+      severity: medium
+    - id: G_pyproject_validates
+      rule: "pyproject.toml passes pip's PEP 621 / build-backend validation; closes invalid-metadata class"
+      severity: low
+    - id: G_console_entrypoint_present
+      rule: "console_scripts entry registered in pyproject; subprocess invocation by name resolves; closes missing-entry-point class"
+      severity: low
+  rationale: |
+    The 7 operator-defined gates verify (a) source-tree smoke clean,
+    (b) source-tree validators clean, (c) frontmatter parse,
+    (d) no-unstaged, (e) no-untracked-in-pkg, (f) clean-env install
+    works, (g) one real iteration completed without manual contract
+    bypass. They do NOT verify that the INSTALLED package, when
+    invoked, behaves equivalently to the source-tree. The class of
+    bug they miss: pyproject.toml ships a package_data manifest that
+    omits scripts/agent_loop_mcp/tools/__init__.py, install succeeds,
+    but `from scripts.agent_loop_mcp.server import ...` fails at
+    first invocation. G_install in the current plan does not catch
+    this. G_install_smoke + G_server_starts together close it. Both
+    are <30 sec wall to add. They are non-blocking because the
+    operator can choose to defer them to Phase 1.x first-user-runs-it
+    feedback; my methodology objection is that "shippable" should
+    mean "the shipped artifact actually runs", not just "the build
+    succeeded". Karpathy "Goal-Driven Execution" applied to the gate
+    set itself: success criteria should verify the success state, not
+    the intermediate state.
+real_iteration_authenticity:
+  is_real_workload: true
+  rationale: |
+    iteration-0007 IS a real bounded repo decision: it produces a
+    pyproject.toml, a SHIPS/DOES-NOT-SHIP boundary manifest, a
+    revision_history v1.9.3 entry, and an updated disposition-ledger.
+    All of these are operationally consequential: a wrong manifest
+    ships the wrong code; a wrong pyproject breaks install; a wrong
+    revision_history entry is the audit anchor a future reader will
+    reach for first. The workload IS bookkeeping, but bookkeeping in
+    this codebase is load-bearing for shippability. The operator's
+    framing in input.yaml is honest: "this iteration IS the real-
+    iteration evidence the operator asked for; it uses the MCP
+    toolchain end-to-end." That claim is mechanically true. The
+    qualification I add: this is NOT a render-class real iteration.
+    A render-class real iteration would be operator decisions on
+    chapter render outcomes (archetype-anchor swap, voice-bank
+    revision, tag-pattern promotion to known-tag-patterns.md, etc.)
+    -- those are the "real bounded repo decisions" the operator
+    actually-actually meant per CLAUDE.md ("do not keep polishing
+    process unless it directly improves render outcomes"). iter-0007
+    being a process-polishing iteration that uses the toolchain is
+    a permitted exception (operator authorized; same exception logic
+    as iter-0006), not a render-class proof. Both bars (mechanical
+    real-iteration; render-class real-iteration) are real bars; this
+    iteration clears the first, not the second. Record the distinction;
+    do not block on it.
+anti_recursion_bound_strength:
+  technically_enforced: false
+  what_could_break_it: |
+    The Phase 3 anti-recursion bound is enforced by:
+    (1) operator directive text in input.yaml ("do not expand external
+        pass into another architecture phase unless real blocker"),
+    (2) Round 8 closure declaring zero real blockers (factual
+        evidence; no blocker = no trigger to expand),
+    (3) what_phase_3_does_NOT_do list (line 49-54 in input.yaml):
+        "no recursive review rounds (single external pass; if it
+        finds blockers, fix; if it finds drift, record but do not
+        iterate)".
+    It is NOT enforced by:
+    (4) any MCP tool refusing to dispatch a "Round 9" (T6 will seal
+        any review packet that is well-formed; nothing in T6 reads
+        the round-count and refuses on round_count >= 8),
+    (5) any spec section 0 done_claim_rule that blocks a v1.9.x spec
+        edit introducing new review-round mechanics,
+    (6) any technical gate that detects "this is round N+1 of the same
+        document set; reject without explicit operator override".
+
+    What could break the bound:
+    - A future agent inheriting "v1.9.x had 8 rounds; that is the
+      cadence" and dispatching Round 9 by default rather than by
+      blocker-trigger.
+    - Operator pivot ("let's do one more round to be safe") that
+      establishes precedent for round-as-default rather than
+      round-as-blocker-response (same precedent-class as iter-0006's
+      operator-pivot precedent).
+    - A subagent run with weakened context that does not see the
+      anti-recursion text and runs Round 9 because round-counts in
+      the document set look like an ongoing series.
+
+    The bound holds in v1.9.2 because:
+    (a) the operator will enforce it explicitly,
+    (b) Round 8 closed with zero real blockers (no trigger),
+    (c) the Phase 3 plan is explicit.
+    The bound does NOT structurally prevent recursion. Recommend
+    v1.9.3 revision_history language: "Phase 3 anti-recursion bound
+    is discipline-enforced, not technically gated. Future agents
+    proposing Round 9 must cite a real blocker; round-as-cadence is
+    not a permitted invocation pattern. The same precedent-bounding
+    discipline as iteration-0006's operator-pivot bounding applies."
+karpathy_compliance_audit:
+  think_before_coding: |
+    PASS WITH RESERVATIONS. input.yaml lines 5-8 quote the operator
+    directive verbatim (good); lines 22-34 lay out the 6-step plan
+    with clear preconditions; lines 65-73 enumerate the 7 release
+    gates with verifiable criteria. The plan does state assumptions
+    explicitly. Reservation: the assumption "Round 8 sonnet cross-
+    model pass adequately closes Source-MD + CFU + MD-set + R6 + R7"
+    is named as fact (review-packet check_results says 51/51 +
+    21/21) rather than as an assumption-to-verify; the spot-check
+    evidence in the consolidated MD lines 1000-1051 is real, but the
+    iteration-0007 input.yaml itself does not cite the spot-check
+    evidence count -- a reviewer must navigate to the consolidated
+    MD to verify. Recommend the v1.9.3 revision_history entry
+    include the Round 8 verification numbers explicitly (29/29
+    self-applied resolutions verified, 1 false-positive minor-drift).
+  simplicity_first: |
+    PARTIAL FAIL. input.yaml at 134 lines is a major improvement over
+    iter-0006's 290 lines (claude-iter0006-005 carry-forward
+    progress). However: 134 lines for a freeze + package + verify
+    iteration is still on the high side. Lines 36-62 (mode +
+    what_phase_3_does_NOT_do + what_phase_3_DOES_do) restate the
+    operator directive in three different forms; could be ~25 lines
+    shorter via reference-by-anchor. Not blocking; pattern-flag
+    (claude-iter0007-007). Karpathy "minimum code that solves the
+    problem" applies to specs.
+  surgical_changes: |
+    PASS. implementation_scope (lines 80-103) is correctly scoped:
+    iteration dir + pyproject.toml (NEW; explicit) + ledger via T8 +
+    spec section 0 frontmatter + revision_history. forbidden_files
+    explicit (lines 90-95): wiki sources outside agent-loop, MCP tool
+    source frozen, smoke test frozen at 51/51 unless gate-test
+    additions required, spec sections 1-23 architectural changes
+    forbidden. forbidden_actions explicit (lines 96-103): no G6, no
+    new review-round mechanics, no production audio, no main-merge,
+    no patches without canonical-006, no expanding external pass into
+    recursive rounds. The scope discipline is the strongest part of
+    the plan; matches v1.8.2 / iter-0006 freeze pattern.
+  goal_driven_execution: |
+    PASS. success_criteria_per_G5 (lines 152-156) specifies four
+    verifiable closing-state conditions: both reviewers approve OR
+    any reviewer blocks; all 7 release gates pass; external re-review
+    pass completes without expanding; shippable boundary manifest
+    documents what ships vs not. Each criterion is independently
+    checkable with a verify-by artifact. release_gate_criteria
+    (lines 66-73) gives 7 individually-runnable gates. The pattern
+    that produced iter-0001/0002/0005 closure-text drift (closure
+    artifacts containing pre-apply text contradicting the closing
+    state) is structurally addressed: success_criteria specifies the
+    closing_state branches before T5 lands, so closure artifacts can
+    be authored against the correct branch.
+assumptions_challenged:
+  - assumption: "iteration-0007 using the MCP toolchain (T3+T4+T5+T6+T7+T8) does not violate the Phase 3 freeze"
+    challenge: |
+      Pressure-tested. The freeze applies to (a) MCP tool source
+      code, (b) smoke test count, (c) spec sections 1-23. Using the
+      tools is exercising existing mechanics, not adding new ones.
+      Every tool invoked by iter-0007 was implemented in v1.9.0
+      (T2-T7) or v1.9.2 (T8-T11) and is smoke-tested. The
+      implementation_scope's allowed_files / forbidden_files carving
+      is internally consistent: bookkeeping surface is open,
+      architectural surface is frozen. NO finding.
+  - assumption: "Round 8 sonnet pass is adequate cross-model independent re-review per CFU F3"
+    challenge: |
+      Verified. CFU F3 named "different model class". sonnet-4-6 IS
+      a different model class from opus-4-7 (smaller, different
+      fine-tuning, different alignment cohort, different release
+      vintage). Round 8 spot-checked 29/29 self-applied resolutions,
+      ran the verification gates empirically (51/51 / 21/21 / 0
+      findings / 4 frontmatter parses / T9+T10 file= empirical
+      probes), and found one minor-drift correctly classified as
+      false positive. The bar CFU F3 set IS met. CAVEAT: cross-model
+      is met; cross-vendor is NOT met. Both reviewers (sonnet,
+      opus) are Anthropic-trained models sharing the same training
+      pipeline, alignment principles, and safety filters. For
+      v1.9.x as drafted: cross-model is the operator-defined bar
+      and it is met. For v2.0 or production-deployment bar:
+      cross-vendor is recommended. claude-iter0007-003 records the
+      distinction.
+  - assumption: "the 7-gate release checklist verifies shippability"
+    challenge: |
+      Pressure-tested. The 7 gates verify the package can be built
+      and installed; they do NOT verify the installed package
+      actually runs. Class of defect they miss: pyproject ships a
+      package_data manifest that omits scripts/agent_loop_mcp/tools/
+      __init__.py; install succeeds; first invocation fails. Adding
+      G_install_smoke (smoke from installed package) and
+      G_server_starts (entry-point boots within 2s) closes this
+      class. Both are <30 sec wall. Recommended in claude-iter0007-
+      001 + -002.
+  - assumption: "iteration-0007 IS the 'one real G1-G5 iteration' the operator asked for"
+    challenge: |
+      The mechanical bar (T2-T11 exercised end-to-end on a real
+      bounded repo decision without manual contract bypass) IS
+      cleared. The render-class bar (operator decision affects audio
+      outcome) is NOT cleared. The operator's CLAUDE.md guidance
+      ("do not keep polishing process unless it directly improves
+      render outcomes") suggests render-class is the actually-
+      actually intended bar. iter-0007 is a process-polishing
+      iteration, permitted as an exception (same exception logic as
+      iter-0006). Record the distinction in v1.9.3 closure language;
+      do not block on it. Recommended in claude-iter0007-004.
+  - assumption: "the Phase 3 anti-recursion bound prevents Round 9"
+    challenge: |
+      The bound is enforced by operator directive text + Round 8's
+      zero-blocker conclusion + Phase 3 plan's anti-scope list. It is
+      NOT enforced by any MCP tool refusing to dispatch a Round 9, by
+      any spec section 0 rule blocking new review-round mechanics, or
+      by any technical gate. A future agent inheriting "v1.9.x had 8
+      rounds" as a cadence pattern, or an operator pivot ("one more
+      round to be safe"), could break the bound without violating any
+      tool-level rule. The bound holds in v1.9.2 because the operator
+      will enforce it. Recommend v1.9.3 explicitly name this as
+      discipline-enforced, not technically gated. Recommended in
+      claude-iter0007-005.
+  - assumption: "the SHIPS/DOES-NOT-SHIP boundary manifest is well-defined enough to ratify"
+    challenge: |
+      The manifest is NAMED as a Phase 3 deliverable but is not
+      present in input.yaml or review-packet.yaml; the reviewer
+      cannot verify its scope is right (operator's question 3 in
+      reviewer_decision_required). Recommend that the apply-phase
+      produce the manifest BEFORE pyproject.toml is authored, so the
+      pyproject derives FROM the manifest; otherwise pyproject
+      becomes a divergent second source of truth. Recommended in
+      claude-iter0007-006.
+  - assumption: "input.yaml at 134 lines is appropriately sized"
+    challenge: |
+      Karpathy Simplicity First applied to specs. 134 is a major
+      improvement over iter-0006's 290; could plausibly be ~100 by
+      reference-by-anchor on lines 36-62 (mode + what_phase_3_does_
+      NOT_do + what_phase_3_DOES_do, which restate the operator
+      directive in three forms). Not blocking; pattern-flag for
+      future iter-NNNN inputs (claude-iter0007-007).
+methodological_red_flags_observed:
+  - |
+    Sonnet-cross-model recorded as "external re-review pass" without
+    explicit cross-vendor disclaimer: future readers may infer
+    cross-vendor independence by default. The Round 8 doc itself is
+    careful (line 975 names sonnet specifically as different model
+    class), but iteration-0007 input.yaml's reference to "single
+    external re-review pass" (line 26) does not preserve the
+    distinction. v1.9.3 must record cross-model-not-cross-vendor.
+  - |
+    "iteration-0007 IS the real G1-G5 iteration" elides the
+    render-class-vs-mechanical-class distinction. The mechanical bar
+    is cleared; the render-class bar is not. Operator CLAUDE.md
+    guidance "do not keep polishing process unless it directly
+    improves render outcomes" is the test the render-class bar would
+    apply. iter-0007 fails that test (it is process polishing). The
+    exception is operator-authorized (same logic as iter-0006), but
+    must be explicitly recorded as exception, not as "real iteration
+    completed". Otherwise a future reader inherits "the loop ran a
+    real iteration" as license for indefinite further process work.
+  - |
+    Anti-recursion bound enforced by discipline only. The bound is
+    correct and operationally important, but it is NOT a tool-gated
+    rule. Any future agent or operator pivot could dispatch Round 9
+    without violating any technical constraint. The same precedent-
+    class as iter-0006's operator-pivot precedent: legitimate this
+    time, problematic if normalized. Bound v1.9.3 explicitly.
+  - |
+    7-gate checklist treats install-success as shippable. Should
+    treat first-invocation-success as shippable. G_install verifies
+    pip install completes; it does NOT verify the installed code
+    actually runs. The class of bug missed (wrong package_data,
+    wrong entry_points, missing __init__.py) is exactly the class
+    of bug that ships in v1.0 and surfaces at first user. Adding
+    G_install_smoke + G_server_starts costs <30 sec wall.
+  - |
+    Boundary manifest is a Phase 3 deliverable but not visible to
+    reviewers at ratification time. Reviewer cannot verify operator's
+    question 3 ("Is the SHIPS manifest scope right?") without seeing
+    the manifest. Manifest-first ordering (manifest before pyproject)
+    keeps single source of truth. Without it, pyproject becomes a
+    divergent record.
+  - |
+    Round 7 F-pattern recurrence risk: each round surfaced findings
+    on the previous round's fixes (R2 on R1; Source-MD on Round 2;
+    CFU on Source-MD; MD-set on CFU; R6 on v1.9.2; R7 on R6 fixes;
+    R8 verifies R3-R7 fixes). Round 8 finding zero real blockers is
+    the clean exit; Round 9 would be the F-pattern recurrence. The
+    operator-stated bound is "do not let that pass expand into
+    another architecture phase unless it finds a real blocker". The
+    bound holds because Round 8 found zero real blockers and the
+    operator will enforce; the structural risk remains.
+  - |
+    Smoke count and validator count quoted as evidence at point-in-
+    time without test-set SHA pinning. Same iter-0006 pattern
+    (claude-iter0006-006 carry-forward). Recommend v1.9.3
+    revision_history pin the SHA256 of _smoke_test.py and
+    run_validator_tests.py at land time, so the 51/51 + 21/21
+    claims are verifiable against the exact test sets that produced
+    them. Mitigates "counts were true at v1.9.3 land but the test
+    list has since drifted" risk.
+no_objection_rationale:
+  required_when_no_blockers: true
+  text: |
+    No blockers. The Phase 3 RC hardening plan as drafted will, when
+    executed, produce a release-ready v1.9.3 family. The empirical
+    evidence floor is real: 51/51 smoke; 21/21 validators; 0
+    disposition findings; Round 8 cross-model independent re-review
+    pass with 29/29 self-applied resolutions verified, zero real
+    blockers, one false-positive minor-drift correctly classified.
+    The implementation scope is surgically carved (architectural
+    surface frozen; bookkeeping surface open; allowed_files /
+    forbidden_files / forbidden_actions explicit). The success
+    criteria specify two closing_state branches that prevent
+    iter-0001/0002/0005-class closure-text drift. Seven non-blocking
+    methodology objections logged: (1) gate completeness gap missing
+    G_install_smoke + G_server_starts; (2) cross-model met but cross-
+    vendor not met -- record the distinction; (3) iter-0007 clears
+    mechanical-class real-iteration bar but not render-class bar --
+    record the distinction; (4) anti-recursion bound is discipline-
+    enforced not tool-gated; (5) boundary manifest should be
+    authored before pyproject; (6) Karpathy Simplicity First applied
+    to input.yaml (134 -> ~100); (7) Round 8 verification numbers
+    should be quoted in v1.9.3 revision_history. None of these
+    blocks ratification; all are pattern-flags for v1.9.3 closure
+    language or for future Phase 1.x work. rc_plan_approved=true
+    with confidence=medium because three of the seven objections
+    (gate completeness, cross-vendor adequacy, real-iteration
+    authenticity) are methodology-substantive judgment calls where
+    reasonable reviewers could disagree; the empirical evidence
+    floor is high.
+independence_attestation:
+  fresh_context: false
+  rationale: "G4 forced post-exposure"
+  seal_position: 1

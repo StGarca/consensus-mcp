@@ -1,0 +1,236 @@
+schema_version: 1
+agent: claude
+stance: implementation_critic
+iteration_id: iteration-0023-closure-invariant-flavor-b-review
+reviewer_id: claude-iter0023-1
+pass_id: claude-iter0023-1-pass1
+actor:
+  id: claude-iter0023-1
+  model_family: claude
+  role: implementation_critic
+  pass_id: claude-iter0023-1-pass1
+created_at_utc: '2026-05-10T20:16:04Z'
+
+overall_position:
+  goal_satisfied: false
+  confidence: high
+  position_summary: |
+    The closure invariant subsystem is functionally correct on the canonical
+    paths exercised by the existing tests. However, this review surfaces
+    real edge cases and integrity-relevant defects that warrant fixes before
+    declaring the subsystem airtight:
+
+      - last_mutation_from_audit's top-level-wins-over-nested merge policy
+        creates a silent-bypass risk if a buggy emitter writes BOTH legacy
+        top-level actor AND structured nested last_mutation. Integrity blast
+        radius.
+      - check_closure_invariant freshness uses raw string > comparison on
+        ISO 8601 — works for canonical Z-suffix UTC same-precision but
+        fails on mixed offsets ('+00:00' vs 'Z') and mixed precisions
+        (with vs without microseconds).
+      - last_mutation_from_audit returns apply_events[-1] regardless of
+        timestamp_utc; trusts list order. Concurrent writers or any future
+        event reordering would surface a stale event as "most recent".
+      - bundle_sha doesn't normalize path separators or guard against
+        embedded \0/\n in file paths. Windows callers passing 'a\\b.py'
+        produce different hashes than POSIX callers passing 'a/b.py'.
+      - Test gaps: no boundary tests for None == None on hash_match,
+        no test for both claude+codex reviews present (max-by-timestamp
+        path), no test for legacy string actor on last_mutation, no test
+        for mixed timestamp formats.
+
+    Per CLAUDE.md "Simplicity First" / "Surgical Changes": these fixes
+    should be small, additive, and non-disruptive to the existing test
+    suite. None of the existing tests should change behavior.
+
+goal_satisfied: false
+goal_satisfied_rationale: |
+  Defects warrant patches. The 3-part gate's correctness on canonical
+  inputs does not equate to airtightness against the real edge cases
+  this review surfaces. fix_author_policy=strict in the goal_packet
+  requires each finding to emit either a patch_proposal or a
+  patch_not_proposed_reason; codex's parallel review will produce the
+  authoritative findings list. This claude-review pass is the parallel
+  Flavor B implementation_critic stance for cross-family redundancy.
+
+blocking_objections: []
+
+non_blocking_suggestions:
+  - id: claude-iter0023-001
+    severity: high
+    target: scripts/agent_loop_mcp/_closure_invariant.py:84-103
+    text: |
+      last_mutation_from_audit's hoist policy: when both top-level fields
+      and nested last_mutation are present, top-level wins. Quote from the
+      code:
+
+        merged = {**nested, **{k: v for k, v in most_recent.items() if k != "last_mutation"}}
+
+      The dict-spread overwrites nested values with top-level ones. If a
+      buggy emitter writes BOTH a structured nested last_mutation (correct,
+      from apply_codex_patch) AND a stray top-level actor/post_sha (legacy
+      or buggy), the legacy data wins. Since post_sha is integrity-critical
+      (closure-invariant hash_match binds to it), this is an integrity
+      regression vector.
+
+      Recommended: nested wins (the structured field is the canonical post-
+      iter-0017 shape). Or: assert mutual exclusion — if both present, log
+      and prefer nested. The simplest fix: swap merge order so nested wins.
+
+      Risk: low — current emitters don't write both shapes simultaneously.
+      But defense-in-depth.
+
+  - id: claude-iter0023-002
+    severity: high
+    target: scripts/agent_loop_mcp/_closure_invariant.py:201-208
+    text: |
+      check_closure_invariant freshness check uses raw Python string
+      comparison on closer_ts > lm_ts. This works for canonical UTC
+      Z-suffix ISO 8601 with the same precision. It silently misbehaves
+      on:
+
+        - Mixed offsets: '2026-05-10T12:00:00Z' vs '2026-05-10T12:00:00+00:00'
+          (lex sort: '+' < 'Z', so the +00:00 form is "older")
+        - Mixed precision: '2026-05-10T12:00:00Z' vs '2026-05-10T12:00:00.123Z'
+          (lex sort: 'Z' < '.', so the precise form is "older")
+
+      The producers in this codebase are all canonical Z-suffix no-microsecond
+      (per _now_iso helpers), so the bug is latent. But any future actor that
+      uses dateutil/datetime.isoformat() default format introduces drift.
+
+      Recommended: parse both timestamps via datetime.fromisoformat (Python
+      3.11+ accepts 'Z') and compare datetime objects. Or normalize both
+      strings before comparison. Latter is cheaper.
+
+  - id: claude-iter0023-003
+    severity: medium
+    target: scripts/agent_loop_mcp/_closure_invariant.py:73-80
+    text: |
+      last_mutation_from_audit returns apply_events[-1] under the assumption
+      that the audit_log was appended in chronological order. The comment
+      says "Most-recent by list order" — but timestamp_utc is the actual
+      authoritative chronological field on each event.
+
+      Defense-in-depth: sort apply_events by timestamp_utc before returning
+      [-1]. Falls back to list order when timestamp_utc is missing (legacy
+      events). This protects against future audit-log corruption,
+      out-of-order writers, or test fixtures that don't strictly maintain
+      chronological order.
+
+      Risk: low today — the sole writer (T6 audit_append_event) appends in
+      chronological order. But if any non-T6 path ever appends, this guard
+      prevents the wrong event becoming "last_mutation".
+
+  - id: claude-iter0023-004
+    severity: medium
+    target: scripts/agent_loop_mcp/_closure_invariant.py:34-56
+    text: |
+      bundle_sha hashes file paths as-passed. No normalization of
+      separators (Windows '\\' vs POSIX '/') and no rejection of paths
+      containing \0 (the field separator) or \n (the inter-record
+      separator). A caller passing 'a\\b.py' on Windows hashes differently
+      than 'a/b.py' on POSIX even when targeting the same file.
+
+      Today the only callers normalize to forward slashes by convention
+      (apply_codex_patch reads files_touched from patch_proposal, codex
+      emits forward slashes). But the helper is called from multiple
+      places and should be robust.
+
+      Recommended: in bundle_sha, normalize each path via
+      str(PurePosixPath(p)) (cross-platform forward-slash form) before
+      hashing. Reject paths containing \0 or \n with ValueError.
+
+  - id: claude-iter0023-005
+    severity: medium
+    target: scripts/agent_loop_mcp/_validate_closure_invariant.py:90-103
+    text: |
+      Reviewer_id-prefix model_family heuristic uses startswith("codex")
+      and startswith("claude") without dash boundary. A reviewer_id like
+      "codexica-bot" or "claudette" would silently route to codex/claude
+      family. Real reviewer_ids in this codebase always have a dash
+      (codex-iter0023-1, claude-iter0023-1), so the bug is latent.
+
+      Recommended: tighten to startswith("codex-") and startswith("claude-")
+      so only canonical-shaped reviewer_ids match. If a reviewer_id doesn't
+      match either, the family is None and the cross_family check fails
+      (correct fail-closed behavior).
+
+  - id: claude-iter0023-006
+    severity: medium
+    target: scripts/agent_loop_mcp/tests/test_closure_invariant.py
+    text: |
+      Test gap: no test for hash_match boundary when both closer_target
+      and lm_post are None. Add a test that asserts ok=False with
+      checks.hash_match=False when last_mutation has post_sha=None and
+      closer has review_target_hash=None. Pins the fail-closed behavior
+      against future "convenience" changes that might treat None==None as
+      a match.
+
+      Test gap: no test for legacy string actor on last_mutation. The
+      _actor_model_family helper returns None for string actors; downstream
+      cross_family must fail. Pin this with a test that uses a string actor
+      on last_mutation and verifies cross_family=False.
+
+  - id: claude-iter0023-007
+    severity: low
+    target: scripts/agent_loop_mcp/tests/test_validate_closure_invariant.py
+    text: |
+      Test gap: no test where BOTH claude-review.yaml AND codex-review.yaml
+      are present with different sealed_at_utc timestamps. _most_recent_
+      closing_verdict picks max by timestamp string sort; the test should
+      verify the newer one wins. Add a test with both files written and
+      asserting which actor's verdict scan_iteration uses.
+
+      Test gap: no test for the model_family=None branch (heuristic fails
+      to match reviewer_id prefix or filename). Add reviewer_id="orch-1"
+      and verify the resulting actor lacks model_family — which causes
+      cross_family to fail in the invariant evaluator.
+
+  - id: claude-iter0023-008
+    severity: low
+    target: scripts/agent_loop_mcp/_closure_invariant.py:49-52
+    text: |
+      bundle_sha silently treats OSError as empty content:
+
+        try:
+            content = full.read_bytes() if full.exists() else b""
+        except OSError:
+            content = b""
+
+      Permission errors, mid-read I/O failures, and disk corruption all
+      become "treat as missing/empty file". This masks real problems and
+      could let a corrupt working tree pass drift detection.
+
+      Recommended: log the exception (or surface via a side channel) so
+      operators can detect when the helper degrades silently. At minimum
+      add a comment documenting this behavior and the masking risk.
+
+scope_check:
+  files_in_scope: true
+  files_changed_listing: []
+  forbidden_files_touched: false
+  notes: |
+    This is the pre-codex parallel claude-review pass. No files have been
+    modified yet. Codex's parallel review will produce its own findings
+    list. Patches authored by codex (with patch_proposal) flow through the
+    helper-stamp validator and apply.codex_patch under operator
+    authorization. Defects above scope cleanly to the 5 allowed_files.
+
+regression_check:
+  pytest_pre_review: pending (will run pre-codex baseline)
+  pytest_post_codex: pending (will run after any patches land)
+  pytest_delta_explanation: TBD per codex's emitted patches.
+
+independence_attestation:
+  reviewer_did_not_co_author_implementation: true
+  reviewer_received_no_advance_summary_of_implementation_choices: true
+  reviewer_judged_against_sealed_goal_packet_only: true
+  reviewer_independently_read_all_5_files: true
+  notes: |
+    This is a Flavor B implementation_critic pass — the reviewer reads the
+    sealed review-packet (with embedded touched-file contents) and the
+    goal_packet, and produces findings independently of codex. Codex's
+    parallel review is dispatched separately. Independence is by mechanism:
+    different model family, no shared state.
+
+sealed_at_utc: '2026-05-10T20:16:04Z'

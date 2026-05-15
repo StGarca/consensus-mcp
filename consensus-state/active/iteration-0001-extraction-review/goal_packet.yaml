@@ -1,0 +1,115 @@
+schema_version: 1
+pilot_id: iteration-0001-extraction-review
+goal:
+  summary: First standalone review — codex audits the consensus-mcp extraction for rename-mechanics correctness.
+  desired_end_state: |
+    This is the inaugural review-cycle in the standalone consensus-mcp repo
+    (commit ff0164f). The repo was extracted from an upstream project that
+    used `agent_loop_mcp` as the package name + `agent-loop/` as the state
+    dir. The extraction agent performed mechanical renames across ~30 files:
+      - Python package: agent_loop_mcp -> consensus_mcp
+      - Validators sub-package: agent_loop -> consensus_mcp.validators
+      - State dir: agent-loop/ -> consensus-state/
+      - Env var: AGENT_LOOP_MCP_REPO_ROOT -> CONSENSUS_MCP_REPO_ROOT
+      - Repo root markers tuple updated for the new layout
+
+    Tests pass post-extraction (422 + 1 skipped). But mechanical sweeps can
+    miss subtle path/string references. This iteration uses the standalone
+    repo's own consensus-mcp tooling to cross-AI-verify the extraction.
+
+    DOGFOOD MOMENT: consensus-mcp is reviewing its own extraction. This is
+    the first peer-review cycle in the standalone repo. The bootstrap
+    deployment built consensus-mcp by using consensus-mcp; that pattern
+    continues here.
+
+    What to look for (reviewer prompt for codex):
+      1. Path-string drift: are there any remaining references to
+         `agent-loop/`, `agent_loop_mcp`, `scripts/agent_loop_mcp/`, or
+         the old env var `AGENT_LOOP_MCP_REPO_ROOT` that the rename
+         sweeps missed?
+      2. Import correctness: does every `from consensus_mcp...` resolve
+         in the new flat layout? Are there any imports that still
+         reference the old subpackage shape?
+      3. Marker-tuple completeness: does `_resolve_repo_root` correctly
+         identify the new repo via its markers? Are the markers minimal
+         + sufficient (no false positives in subdirs)?
+      4. `_release_gate_check.py` paths: SHIPPABLE_BOUNDARY +
+         UNSTAGED_SCOPE should reference the new flat layout (no
+         `scripts/` prefix). Verify each path entry is consistent.
+      5. `server.py` SPEC_PATH: the constant should now point at
+         `docs/architecture/orchestration-spec.md` (the new location).
+         Verify nothing else references the old wiki path.
+      6. `pyproject.toml` correctness: package name, version (2.0.0),
+         entry points, dependencies, classifiers, description should
+         all be consistent with a standalone-PyPI-ready package.
+      7. CI workflow (`.github/workflows/test.yml`): matrix correct?
+         Python versions supported? Test command discovers the new
+         test location? No references to the old layout?
+
+    A real codex reviewer (codex-cli) is dispatched against the
+    review-packet (which embeds the 4 most-likely-to-have-drift files
+    inline per iter-0021 design). Findings emit either patch_proposal
+    or patch_not_proposed_reason.
+
+    iter-0001 SUCCESS = the dogfood cycle closes:
+      1. Codex emits findings against the 4 files
+      2. Claude evaluates each finding (consensus loop)
+      3. Consensus findings get fixed in the new repo
+      4. pytest still green; smoke + gates re-run
+      5. iteration-outcome.yaml closes quorum_close_passed
+  non_goals:
+    - modify code in the upstream audiobook project (this repo is now standalone)
+    - audit the orchestration-spec.md prose scrub (separate iter for docs)
+    - rewrite the README (separate iter; user is choosing between 2 drafts)
+    - bump pyproject.toml version (already at 2.0.0 for the standalone release)
+    - introduce new MCP tools
+allowed_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_release_gate_check.py
+  - consensus_mcp/server.py
+  - pyproject.toml
+  - consensus-state/active/iteration-0001-extraction-review/
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_self_drive.py
+  - consensus_mcp/_closure_invariant.py
+  - consensus_mcp/_validate_closure_invariant.py
+  - consensus_mcp/_author_review_packet.py
+  - consensus_mcp/_visibility_tui.py
+  - consensus_mcp/_visibility_watchdog.py
+  - consensus_mcp/_smoke_test.py
+  - consensus_mcp/_sync_section_24.py
+  - consensus_mcp/tool_registry.py
+  - consensus_mcp/tools/
+  - consensus_mcp/dispatch_templates/
+  - consensus_mcp/validators/
+  - consensus_mcp/tests/
+  - docs/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - .github/
+  - consensus-state/archive/
+  - consensus-state/state/
+max_iterations: 2
+max_patch_size: 300
+fix_author_policy: strict
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: pytest still green
+    check: 'python -m pytest consensus_mcp/tests/ -q'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T15:00:00Z'
+  codex_patch_apply_authorized: true
+  scope_signature: 0a9359c98b62fa19709cd32580a118960b732a73509eacb5845613df88f6f8ee

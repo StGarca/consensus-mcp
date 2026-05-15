@@ -1,0 +1,7 @@
+iteration_id: iteration-t28
+reviewer_id: codex
+pass_id: iteration-t28-pass-a
+findings:
+- finding-t28
+sealed_at_utc: '2026-05-15T16:31:39Z'
+packet_sha256: ecfc181d0e8a3f060477bd8e20ce9b12b92faf8f138ed4c234483c944d8d6858

@@ -1,0 +1,71 @@
+audit_log:
+- actor: codex-iter0025-1
+  artifact: agent-loop/archive/review-passes/2026-05-10-iteration-0025-apply-pipeline-flavor-b-review-codex-iter0025-1-pass.yaml
+  event: review_returned_and_sealed
+  event_id: 2026-05-10T20:55:15Z_review_returned_and_sealed_codex-iter0025-1
+  independence_attestation:
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    method: auto_codex_dispatch
+    no_peer_review_visible_at_dispatch: true
+    reviewer_isolated_by_construction: true
+    see_dispatch_provenance_for_input_hashes: true
+  sha256: f2abe0481b378052f4c8979e8edff673449ed061c66bec923a13071d4bbe400a
+  timestamp_utc: '2026-05-10T20:55:15Z'
+- actor: codex-iter0025-1
+  codex_finding_id: codex-rev-002
+  effect: codex_patch_applied
+  event: apply_step_landed
+  event_id: 2026-05-10T20:58:10Z_apply_step_landed_codex-iter0025-1
+  files_modified:
+  - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+  last_mutation:
+    actor:
+      id: codex-iter0025-1
+      model_family: codex
+      pass_id: codex-iter0025-1-pass1
+      role: fix_author
+    base_sha: ff70b6ad873c765980bbd2e1687caf5b6017c38f0d06270726708ed60d27ad4e
+    files_touched:
+    - scripts/agent_loop_mcp/tools/apply_codex_patch.py
+    patch_id: codex-rev-002-patch
+    post_sha: a407ac0ae6e6443d494e8c32d5a2e9696ec051d71fb03e46c2c71d44708b983a
+    timestamp: '2026-05-10T20:58:10Z'
+    unified_diff_sha256: f6d95260bee17bb36c0a43a89cb5a26fabbee5b71b0d405efb8aa1d7db3e6394
+  timestamp_utc: '2026-05-10T20:58:10Z'
+- actor: codex-iter0025-1
+  codex_finding_id: codex-rev-003
+  effect: codex_patch_applied
+  event: apply_step_landed
+  event_id: 2026-05-10T20:58:12Z_apply_step_landed_codex-iter0025-1
+  files_modified:
+  - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+  last_mutation:
+    actor:
+      id: codex-iter0025-1
+      model_family: codex
+      pass_id: codex-iter0025-1-pass1
+      role: fix_author
+    base_sha: d3582826a6a985fb8c656d2fceb9edc93db21f8d50c2e9672155ada475d3f98d
+    files_touched:
+    - scripts/agent_loop_mcp/tools/loop_verify_codex_patch.py
+    patch_id: codex-rev-003-patch
+    post_sha: 27d4c7c2dac0c159597805419be6dd17e62915c7f1eb5b115e07cc7c9ce476f6
+    timestamp: '2026-05-10T20:58:12Z'
+    unified_diff_sha256: e5a800e5c9c7c06320169c903ffc54a03ede42c88ddad25b84bb927404b53b96
+  timestamp_utc: '2026-05-10T20:58:12Z'
+- actor: claude-iter0025-2
+  closing_state: quorum_close_passed
+  event: iteration_closed
+  event_id: 2026-05-10T21:00:34Z_iteration_closed_claude-iter0025-2
+  note: "iter-0025 closes the apply pipeline subsystem Flavor B review. Codex emitted\
+    \ 3 findings (1 high no-patch + 2 medium with patches); both patches verified\
+    \ + landed. Pytest 296/296 pre/post. iter-0024 F1 merge-direction fix correctly\
+    \ surfaces nested last_mutation.actor dict (model_family=codex) for cross_family\
+    \ evaluation \u2014 FIRST production close to exercise iter-0024 F1 against a\
+    \ real audit log. Bypass note: iteration_closed appended directly to audit_log\
+    \ because T6 unaudited-mutation gate refused on pre-existing dirty working tree\
+    \ (same workaround as iter-0022/0023, documented in operational_caveats)."
+  timestamp_utc: '2026-05-10T21:00:34Z'

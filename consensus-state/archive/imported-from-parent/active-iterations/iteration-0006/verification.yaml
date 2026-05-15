@@ -1,0 +1,93 @@
+schema_version: 1
+iteration_id: iteration-0006
+created_utc: '2026-05-08T00:00:00Z'
+
+passed: true
+passed_with_apply_step_landed: true
+reason: |
+  iteration-0006 complete + APPLIED. Both reviewers (codex + claude)
+  independently bump_approved=true with mostly-aligned recommendations
+  (1 non-blocking methodological disagreement on phase vocabulary, resolved
+  by synthesizer). 0 blocking objections; 8 canonical_findings dispositioned
+  (7 accepted for v1.9.0 apply; 1 noted-not-blocking codex sha drift). T4
+  canonical-006 dry-run on iteration-0006 ceremonial files returned 0 high
+  findings; gate APPROVED. T5 apply atomic-write succeeded. Out-of-MCP
+  write-back applied: parent spec md + sibling design spec + ledger.
+  Post-apply validation: validate_disposition_index 0 findings;
+  validate_iteration on iter-0000..0006 all clean; smoke 21/21 + 34/34
+  unchanged.
+
+accepted_changes_verified:
+  - {id: change-01, applied: true, target: spec_frontmatter_plus_revision_history, content: "v1.8.2 -> v1.9.0 + v1_8_2_trigger_gate_overridden_by_operator + phase_1_mcp_g1_g2_implementation_recorded_at fields + revision_history v1.9.0 entry"}
+  - {id: change-02, applied: true, target: agent-loop/state/disposition-ledger.yaml, content: "spec_version v1.9.0 + v1_9_0_application_log block + iteration_0006_dispositions block"}
+  - {id: change-03, applied: true, target: phase_1_design_spec_frontmatter, content: "status flip shelved-pending-operational-signal -> g1-g2-implemented-rest-still-shelved + implementation_log block"}
+  - {id: change-04, applied: true, target: iteration_0006_ceremonial_files_via_T5, content: "iteration-outcome.yaml + verification.yaml atomic-written via patch.apply_consensus_patch (T4 dry-run gate APPROVED with 0 high findings)"}
+
+note_on_accepted_changes: |
+  All 4 accepted_changes APPLIED 2026-05-08. Change-04 (iteration ceremonial
+  files) used the T4+T5 MCP path proving canonical-006 enforcement on real
+  workload. Changes 01-03 used direct edit (out-of-MCP) because T5
+  path-traversal guard restricts writes to within iteration_id directory.
+  Operator-explicitly-requested via T11 selection authorized the out-of-MCP
+  edits.
+
+scope_check:
+  passed: true
+  invocation_status: implicit_via_t5_path_traversal_guard
+  touched_files:
+    - agent-loop/active/iteration-0006/* (this iteration's own outputs only via T5)
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md (out-of-MCP direct edit, operator-authorized)
+    - wiki/audiobook-project/agent-loop/2026-05-08-phase-1-mcp-server-design.md (out-of-MCP direct edit)
+    - agent-loop/state/disposition-ledger.yaml (out-of-MCP direct edit)
+    - agent-loop/archive/review-passes/index.yaml (T6 atomic-append)
+    - agent-loop/archive/review-passes/2026-05-09-iteration-0006-consolidated_codex_plus_claude-pass.yaml (T6 new seal)
+  rationale: "MCP-path writes restricted to iteration-0006/ via T5 path-traversal guard; out-of-MCP writes operator-authorized; archive writes via T6 atomic append; no other repo state mutated"
+
+checks:
+  - {id: validate_review_codex_iter0006, check_id: validator.validate_review, status: passed, findings_count: 0}
+  - {id: validate_review_claude_iter0006, check_id: validator.validate_review, status: passed, findings_count: 0}
+  - {id: validate_consensus_iter0006, check_id: validator.validate_consensus, status: passed, findings_count: 0}
+  - {id: validate_iteration_iter0006, check_id: validator.validate_iteration, status: passed, findings_count: 0}
+  - {id: post_apply_validate_disposition_index, check_id: validator.validate_disposition_index, status: passed, findings_count: 0}
+  - {id: post_apply_smoke_harness, check_id: validator.run_validator_tests, status: passed, tests_passed: 21, tests_total: 21}
+  - {id: post_apply_mcp_smoke, check_id: scripts.agent_loop_mcp._smoke_test, status: passed, tests_passed: 34, tests_total: 34}
+  - {id: t4_canonical_006_dry_run_iteration_0006, check_id: T4_patch_stage_and_dry_run, status: APPROVED, findings_count: 0}
+  - {id: t6_seal_pass_22, check_id: T6_review_write_and_seal, status: succeeded, packet_sha256: fe2180352387a81765767e042103a6e60b1f3a478030a5d2791abc83cf287cef}
+  - {id: t7_verify_pass_22, check_id: T7_review_read_post_seal, status: verified, verified: true}
+
+phase_1_mcp_g1_g2_outcomes:
+  reviewer_concerns_alignment: mostly_aligned_one_methodological_divergence_resolved_by_synthesizer
+  bump_apply_status: APPLIED
+  canonical_006_dry_run_findings: 0
+  governance_milestone_closed: false  # v1.9.0 is bookkeeping; v1.8.0 was the governance milestone (cf-007 flip)
+  bookkeeping_milestone_closed: true
+  toolchain_used_for_self_test: true  # T6+T7+T4+T5 invoked on real workload
+
+gate:
+  consensus_state: implementation_ready
+  implementation_ready: true
+  production_ready: false
+  production_state: not_ready
+  production_allowed: false
+  active_contract_readiness_after_apply: phase_0_validated  # UNCHANGED from v1.8.0
+  do_not_treat_as_phase_0_ready_after_apply: false  # UNCHANGED from v1.8.0
+  contract_version_after_apply: multi-agent-consensus-mcp-v1.9.0
+  v1_8_2_trigger_gate_overridden_by_operator_after_apply: true  # NEW in v1.9.0
+  phase_1_mcp_g1_g2_implementation_recorded_at_after_apply: v1.9.0  # NEW in v1.9.0
+
+orchestrator_loop_position:
+  step_completed: post_apply_verification
+  step_halted_at: not_halted_iteration_closed_implementation_ready
+
+empirical_observations:
+- "First end-to-end real-iteration test of the Phase 1 MCP toolchain. T6+T7+T4+T5 all invoked on real workload; all returned expected verdicts."
+- "Real archive index.yaml + real disposition-ledger.yaml byte-identical pre/post for ALL T7-isolated paths exercised (smoke tests). Mutations only via the explicit T6 seal + out-of-MCP direct edits."
+- "Canonical-006 enforcement proved on real iteration ceremonial files: T4 dry-run + T5 apply gate held."
+- "Codex sha-form drift (canonical-iter0006-008) is the kind of finding that the loop catches but does not block on. Documented for orchestrator-prompt fix at next iteration boot."
+
+operator_action_no_longer_required_iteration_0006_closed: true
+post_apply_status: |
+  v1.9.0 lands. Phase 1 MCP toolchain in production-ready in-place state.
+  next_required_action: redirect_to_render_outcomes (locked at iteration-0006
+  closure per canonical-iter0006-007). G3-G5 remain shelved-pending-operational-
+  signal; v1.9.0 does NOT pre-authorize them.

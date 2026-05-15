@@ -1,0 +1,98 @@
+schema_version: 1
+iteration_id: iteration-0002
+audit_purpose: section 13 independence_proof_required; documents reviewer exposure
+  metadata. iteration-0002 forces post-exposure framing per operator guardrail G4
+  (carried from iteration-0001).
+global_independence_attestation:
+  achievable: false
+  reason: "G4 still applies. Both reviewers explicitly briefed on:\n  - iteration-0000\
+    \ artifacts (the things being fixed)\n  - iteration-0001 artifacts (closed blocked;\
+    \ methodology context)\n  - pass-20 archive (defect bodies)\n  - v1.7.4 spec (current\
+    \ contract)\nfresh_context: false; corroboration_strength: suggested_by_context\
+    \ for all findings.\n"
+audit_log:
+- utc: '2026-05-08T00:00:00Z'
+  event: review_packet_built
+  actor: orchestrator
+  artifact: agent-loop/active/iteration-0002/review-packet.yaml
+  sha256: 315381730d7753b75ae40af0851947ade28584780c6ef37201ff488055f1ae15
+- utc: '2026-05-08T00:00:00Z'
+  event: sealed_inputs_recorded
+  actor: orchestrator
+  sealed_inputs:
+  - artifact: agent-loop/active/iteration-0002/input.yaml
+    sha256: 43ab3341e1ab82778255e34e5ab4dec071d3ecdb52b4b0987cdbac3d350ed2de
+  - artifact: agent-loop/active/iteration-0002/review-packet.yaml
+    sha256: 315381730d7753b75ae40af0851947ade28584780c6ef37201ff488055f1ae15
+- utc: '2026-05-08T00:00:00Z'
+  event: reviewer_invoked
+  actor: codex
+  artifact: agent-loop/active/iteration-0002/codex-review.yaml
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+  invocation_protocol:
+    runtime: subagent_dispatch
+    fresh_context: false
+    fresh_context_false_reason: G4 forced post-exposure
+    reviewer_brief_excluded:
+    - claude reviewer's brief
+    - claude reviewer's review.yaml (sealed before either publishes)
+    reviewer_brief_included:
+    - agent-loop/active/iteration-0002/input.yaml
+    - agent-loop/active/iteration-0002/review-packet.yaml
+    - agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+    - agent-loop/active/iteration-0000/* (8 artifacts)
+    - agent-loop/active/iteration-0001/* (8 artifacts; methodology context)
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+- utc: '2026-05-08T00:00:00Z'
+  event: reviewer_invoked
+  actor: claude
+  artifact: agent-loop/active/iteration-0002/claude-review.yaml
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+  invocation_protocol:
+    runtime: subagent_dispatch
+    fresh_context: false
+    fresh_context_false_reason: G4 forced post-exposure
+    reviewer_brief_excluded:
+    - codex reviewer's brief
+    - codex reviewer's review.yaml (sealed before either publishes)
+    reviewer_brief_included:
+    - agent-loop/active/iteration-0002/input.yaml
+    - agent-loop/active/iteration-0002/review-packet.yaml
+    - agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+    - agent-loop/active/iteration-0000/* (8 artifacts)
+    - agent-loop/active/iteration-0001/* (8 artifacts; methodology context)
+    - wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+- utc: '2026-05-08T00:00:00Z'
+  event: review_returned_and_sealed
+  actor: codex
+  artifact: agent-loop/active/iteration-0002/codex-review.yaml
+  sha256: b451d9a7c9a19c8abfdba81af05809b46a33169cfb383c0da1446aec75a8e66f
+  validator_status: validate_review.py 0 findings
+  independence_attestation:
+    seal_order_position: 1
+    other_review_existed_at_invocation: false
+    reviewer_could_have_seen_other_review: false
+    forced_post_exposure: true
+- utc: '2026-05-08T00:00:00Z'
+  event: review_returned_and_sealed
+  actor: claude
+  artifact: agent-loop/active/iteration-0002/claude-review.yaml
+  sha256: bd660ae1d487dc32b68b5cc0d8c313f608ba51ca5afc0d4736893b47db2eb79b
+  validator_status: validate_review.py 0 findings
+  independence_attestation:
+    seal_order_position: 2
+    other_review_existed_at_invocation: true
+    other_review_sealed_sha256: b451d9a7c9a19c8abfdba81af05809b46a33169cfb383c0da1446aec75a8e66f
+    reviewer_could_have_seen_other_review: false
+    reason_could_not_see: subagent isolation
+    forced_post_exposure: true
+- utc: '2026-05-08T00:00:00Z'
+  event: both_reviews_sealed
+  actor: orchestrator
+  note: section 20 step seal_both_reviews complete

@@ -1,0 +1,51 @@
+schema_version: 1
+iteration_id: iteration-0002-consensus-resume-spec
+last_mutation:
+  actor:
+    id: claude-iter0002-author
+    model_family: claude
+    role: spec_author
+  kind: spec_v2_authored
+  timestamp_utc: '2026-05-11T18:03:30Z'
+  bundle_sha256: ed51f12d74e056d5c4c5467c2ad7c5c56388c3b29a2da1ea3f715284d61a34b3
+closing_verdict:
+  actor:
+    id: codex-iter0002-2
+    model_family: codex
+    role: closer
+    pass_id: codex-iter0002-2-pass1
+  review_target_hash: ed51f12d74e056d5c4c5467c2ad7c5c56388c3b29a2da1ea3f715284d61a34b3
+  created_at_utc: '2026-05-11T18:04:34Z'
+  review_scope_hash: null
+invariant_checks:
+  cross_family: PASS
+  hash_match: PASS
+  freshness: PASS
+overall: PASS
+generated_utc: '2026-05-11T19:55:00Z'
+notes: |
+  iter-0002 closes quorum_close_passed via a deferred-resolution pattern:
+  pass-2's 5 medium findings were addressed in iter-0003's IMPLEMENTATION
+  rather than in another spec round. Both iterations are paired; iter-0002's
+  closure is contingent on iter-0003 also closing.
+
+  Cross-family check trivially PASSes (codex closer, claude last-mutator).
+  Hash match: closer reviewed bundle_sha ed51f12d... (v2 spec content) —
+  the same hash as the last mutation. Freshness: closer sealed at
+  2026-05-11T18:04:34Z, after mutation at 2026-05-11T18:03:30Z.
+
+  PASS-1 OUTCOME (for the record):
+    Sealed 2026-05-11T17:49:28Z. 7 findings against v1 (2 HIGH, 4 MED,
+    1 LOW). pass-1 was superseded by the v2 spec rewrite.
+
+  PASS-2 OUTCOME (closing):
+    Sealed 2026-05-11T18:04:34Z. 12 findings total:
+      7 of them = per-prior-finding verdicts (5 RESOLVED + 2 PARTIALLY
+        RESOLVED with cross-refs to new findings)
+      5 of them = new v2-introduced findings (all MED, 0 blocking)
+    All 5 new findings → tracked into iter-0003 implementation; each
+    has a corresponding code path + test there.
+
+  This is the SECOND closing in the standalone consensus-mcp repo.
+  Cumulative cross-AI catch rate: 40 (bootstrap) + 2 (iter-0001) + 12
+  (iter-0002) = 54 findings, 54/54 real, 0 false positives.

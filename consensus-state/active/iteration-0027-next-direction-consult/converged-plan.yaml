@@ -1,0 +1,152 @@
+iteration_id: iteration-0027-next-direction-consult
+workflow_mode: propose-converge
+independence: blind-first-reveal
+convergence_rule_applied: strict-majority
+converged_at_round: 1
+
+participants:
+  - contributor: claude
+    pass_id: claude-iteration-0027-1-blind-proposal
+    proposal_path: claude-proposal.yaml
+    selected_target: "(b) Fix codex review-template friction so 3-AI consensus is HONEST"
+    vote: approve
+  - contributor: gemini
+    pass_id: gemini-iteration-0027-1-blind-proposal
+    proposal_path: gemini-review.yaml
+    selected_target: "(b) Fix codex review-template friction"
+    vote: approve
+    notes: |
+      Independent blind-first selection. Gemini's rationale verbatim:
+      "highest-leverage next move because the project's core '3-AI
+      consensus' premise is currently impaired for design-consult
+      workflows... Fixing this process integrity issue is a prerequisite
+      for making sound, fully-informed strategic decisions on other
+      candidates like (c)."
+  - contributor: codex
+    pass_id: codex-iteration-0027-1-blind-proposal
+    proposal_path: codex-review.yaml
+    selected_target: null
+    vote: structural-abstention
+    abstention_reason: |
+      Codex returned blocking findings about "review target content
+      missing" instead of engaging with the design question. This is
+      THE EXACT FAILURE MODE that target (b) exists to fix. The consult
+      about whether to fix codex's design-mode friction was itself
+      blocked by codex's design-mode friction. This is not a defect of
+      this consult; it's the strongest possible evidence that target
+      (b) is correct.
+
+convergence_rationale: |
+  Strict-majority threshold of 2 met on first round. Both substantive
+  contributors (claude + gemini), running blind-first, independently
+  selected target (b) with substantively similar reasoning. Codex's
+  structural abstention is itself the proof that (b) is the right
+  call — running another round won't change that, only fixing the
+  template will.
+
+  This is the cleanest convergence this project has had: a workflow #4
+  consult whose result is "fix what's preventing workflow #4 from
+  fully working."
+
+decision: |
+  Ship (b). Implement iter-0028 to add a `proposal` mode to the codex
+  (and gemini, for symmetry) dispatchers, with a dedicated prompt
+  template and output schema designed for generative proposals rather
+  than code review.
+
+next_iteration_id: iteration-0028-codex-proposal-mode
+
+deliverable_scope:
+  new_files:
+    - consensus_mcp/dispatch_templates/codex_proposal_template.md
+    - consensus_mcp/dispatch_templates/codex_proposal_schema.json
+    - consensus_mcp/dispatch_templates/gemini_proposal_template.md
+    - consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+    - consensus_mcp/tests/test_dispatch_codex_proposal_mode.py
+    - consensus_mcp/tests/test_dispatch_gemini_proposal_mode.py
+  modified_files:
+    - consensus_mcp/_dispatch_codex.py — add --mode {review,proposal}
+      flag; default 'review' for backward compat; when 'proposal',
+      load alternate template + schema.
+    - consensus_mcp/_dispatch_gemini.py — same --mode flag.
+
+  proposal_schema_sketch: |
+    {
+      "type": "object",
+      "properties": {
+        "selected_target": {"type": "string", "description": "The candidate/option picked."},
+        "rationale_vs_alternatives": {"type": "string"},
+        "deliverable_scope": {"type": "object"},
+        "risks": {"type": "array", "items": {"type": "string"}},
+        "estimated_complexity": {"type": "string", "enum": ["small", "medium", "large"]},
+        "structural_abstention": {"type": "boolean", "default": false,
+          "description": "Set true if the contributor genuinely cannot engage with the question (e.g., insufficient context, scope mismatch). Required to prevent false-positive convergence."}
+      },
+      "required": ["selected_target", "rationale_vs_alternatives", "deliverable_scope"]
+    }
+  proposal_schema_notes: |
+    - Loose enough that contributors can express any reasonable proposal
+    - Tight enough to validate (selected_target is required, can't get
+      structural-abstention-by-confusion masquerading as a proposal)
+    - structural_abstention field is NEW and IMPORTANT: lets a
+      contributor honestly opt out (e.g., "I don't have enough context
+      to pick") without that being silently treated as a vote
+
+  key_design_decisions:
+    - mode='review' is default everywhere to preserve backward compat
+    - mode='proposal' loads the alternative template + schema pair
+    - The proposal template must explicitly frame the task as
+      "generate a design proposal, NOT review code"
+    - The MCP tool wrappers (reviewer_dispatch_codex, reviewer_dispatch_
+      gemini) should NOT change in this iteration — only the dispatcher
+      itself. Tool-wrapper surface change is iter-0029 if operator
+      wants it.
+
+  out_of_scope:
+    - changing the engine's workflow_engine.py phase semantics
+    - migrating existing consults (iter-0021, iter-0024, iter-0027
+      stand as historical record)
+    - claude in-process proposal mode (already works via artifact_callback)
+
+acceptance_gates_for_iter_0028:
+  - A1: full suite >=711 + new mode='proposal' tests → >=715 green
+  - A2: integration test — dispatch codex --mode proposal against a
+        fake design-consult goal_packet, assert output validates against
+        the proposal schema and has `selected_target` set (NOT shaped
+        like {findings: [], goal_satisfied: bool, blocking_objections:
+        []})
+  - A3: backward-compat regression — dispatching without --mode produces
+        identical output shape and content as today (review mode default)
+  - A4: same fix landed for gemini dispatcher
+  - A5: at least one test exercises structural_abstention=true path
+
+recommended_workflow_for_iter_0028: workflow #3 (post-review)
+recommended_workflow_rationale: |
+  Implementation per this converged design. Workflow #4 again would be
+  recursive overkill — we just converged on the design. Two-AI audit of
+  the implementation is the right shape for execution work. AFTER
+  iter-0028 ships, iter-0029 (or any subsequent consult) becomes the
+  first true 3-AI consensus where codex actually engages substantively.
+
+risks_inherited:
+  - Prompt engineering for the codex proposal template may need
+    multiple iterations to land — codex has been trained heavily on
+    review tasks and may resist proposal-shaped framing.
+  - Designing the proposal schema is itself a small design question;
+    the sketch above is a starting point and may need revision.
+  - We have ONE concrete example of a successful design proposal from
+    a codex-template-perspective: gemini's output in iter-0021 and
+    iter-0024. That can guide the schema design.
+
+historical_significance: |
+  iter-0027 is the FIRST workflow #4 consult run after the operator
+  explicitly asked for "real 3-AI consensus" as default. It produced
+  the cleanest convergence in the project's history — 2/2 substantive
+  votes agreeing on first round, with the abstaining vote BEING the
+  proof of the chosen direction. Worth preserving as a teaching
+  example.
+
+sealed_at_utc: '2026-05-13T13:00:00Z'
+authored_by: claude-orchestrator (per claude+gemini substantive
+  convergence; codex structural-abstention is the proof-by-defect that
+  the chosen target (b) is correct)

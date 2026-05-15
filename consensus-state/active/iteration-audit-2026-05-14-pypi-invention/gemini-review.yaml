@@ -1,0 +1,97 @@
+iteration_id: iteration-audit-2026-05-14-pypi-invention
+reviewer_id: gemini-iter-audit-pypi-1
+pass_id: gemini-iter-audit-pypi-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'The root cause of both failures was not a missing tool,
+  but a flawed reasoning pattern: assumption over verification. A tool-based solution,
+  like a ''release pre-flight check'', would be a point-fix for the release symptom,
+  but would not prevent the same class of error in other domains (e.g., inferring
+  database schemas, dependency availability, etc.). By modifying the core operating
+  instructions of the AI contributors, we address the fundamental reasoning flaw directly.
+  This ''Verification-First'' invariant forces the AI to explicitly check environmental
+  facts and project conventions before acting on them, and to be precise about the
+  state of artifacts (e.g., distinguishing between a git tag and a branch head) when
+  making claims. This is a higher-leverage solution that prevents a wider class of
+  future errors and addresses both observed failure modes more robustly than a single-purpose
+  tool.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 2e159cfb51a6a78c8646814ee48846847a9efba60f86699889495fa87693fe2a
+  output_sha256: e7af6e4a9dfcba77e12a1677f5ea7f33b2423a0c36e6f8da9a0c002f7ce0afdb
+  goal_packet_sha256: a1e7acec4524d91a0181396bc9ea3afe83b647551ef2c35c082c9b7559b6351f
+  scope_signature: a1144b00b5104faceb000feedface000c0ffeebabedeadbeef0ad0deadbeef0a
+  review_target_path: null
+  review_target_hash: null
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\pipx\venvs\consensus-mcp\Lib\site-packages\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Introduce a 'Verification-First' systemic invariant to the core
+    instructions of all AI contributors.
+  rationale_vs_alternatives: 'The root cause of both failures was not a missing tool,
+    but a flawed reasoning pattern: assumption over verification. A tool-based solution,
+    like a ''release pre-flight check'', would be a point-fix for the release symptom,
+    but would not prevent the same class of error in other domains (e.g., inferring
+    database schemas, dependency availability, etc.). By modifying the core operating
+    instructions of the AI contributors, we address the fundamental reasoning flaw
+    directly. This ''Verification-First'' invariant forces the AI to explicitly check
+    environmental facts and project conventions before acting on them, and to be precise
+    about the state of artifacts (e.g., distinguishing between a git tag and a branch
+    head) when making claims. This is a higher-leverage solution that prevents a wider
+    class of future errors and addresses both observed failure modes more robustly
+    than a single-purpose tool.'
+  deliverable_scope:
+    next_iteration_id: iteration-audit-2026-05-14-verification-invariant
+    files_in_scope:
+    - consensus_mcp/dispatch_templates/gemini_proposal_template.md
+    - consensus_mcp/dispatch_templates/codex_proposal_template.md
+    - consensus_mcp/dispatch_templates/gemini_review_template.md
+    - consensus_mcp/dispatch_templates/codex_review_template.md
+    - consensus_mcp/_dispatch_base.py
+    files_out_of_scope:
+    - consensus_mcp/tools/
+    - .github/workflows/
+    key_design_decisions:
+    - A new, non-negotiable 'Verification-First' mandate will be added to the system
+      prompt of all AI contributors.
+    - The mandate will explicitly require verification of the execution context (e.g.,
+      release channels, dependencies, tool availability) *before* proposing an action
+      that depends on it.
+    - The mandate will require that all status claims about an artifact (e.g., 'shipped',
+      'fixed') must be qualified with the specific version, commit, or tag being referenced.
+    - The language will be designed to be concise but unambiguous, using strong directives
+      to ensure model adherence without causing excessive, low-value verification
+      steps.
+    acceptance_gates:
+    - When presented with the v1.14.0 release scenario, a contributor with the new
+      invariant must correctly identify the git-based distribution mechanism by citing
+      evidence from project files BEFORE proposing any distribution commands.
+    - The contributor must not propose using 'twine upload' or referencing PyPI.
+    - When asked about the state of the v1.14.0 release after the hotfix commit (7923ffe),
+      the contributor must accurately differentiate between the state of the immutable
+      `v1.14.0` tag (which contains the bug) and the state of the development branch,
+      avoiding misleading blanket statements like 'fully shipped'.
+  risks:
+  - The invariant may be ignored or overridden by the model if it conflicts with other
+    instructions; its effectiveness depends on careful prompt engineering and placement.
+  - 'Over-correction risk: A poorly-worded invariant could lead to AI contributors
+    becoming excessively pedantic, verifying obvious facts and slowing down progress.
+    The scope of verification must be tied to high-impact actions.'
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T03:24:12Z'
+packet_sha256: dc9ccf2ed05025691619fd11fa58356e39626fa91da0f6dfb5a9f893c6a035ef

@@ -1,0 +1,145 @@
+schema_version: 1
+iteration_id: iteration-0009-mcp-wrapper-v1-1-x
+created_utc: '2026-05-10T02:10:14Z'
+closing_state: quorum_close_passed
+closing_reason: |
+  v1.1.x MCP wrapper landed under the autonomy contract via FULL quorum
+  closure ceremony. Both reviewers (claude opus subagent + codex CLI via
+  _dispatch_codex helper) emit goal_satisfied=true with zero blocking
+  objections. All 5 acceptance gates pass (A1-A5). Scope held: only
+  goal_packet allowed_files touched; forbidden_files (the helper itself,
+  validators, dispatch templates) untouched. Consensus synthesized to
+  consensus_state=implementation_ready.
+
+  This iteration is the FIRST real-world end-to-end test of the agent-loop
+  MCP on a real target, closing by the full ceremony per autonomy contract
+  (in contrast to iter-0008 which closed by gate evidence only and was
+  acknowledged as PROTOTYPE-class evidence). The iteration also satisfies
+  the v1.1.x precondition and codex review #6 follow-up (project memory
+  phase_4_v1_1_x_mcp_wrapper_followup).
+
+  Operator scope was: "we want to test our agent-loop mcp on a real world
+  scenario" + selected target "v1.1.x MCP wrapper for _dispatch_codex
+  (Recommended)" + strict success bar "Sealed codex-review.yaml +
+  claude-review.yaml + consensus + T6 archive + T7". All four artifacts
+  produced and verified.
+
+tokens_per_iteration:
+  claude_subagent_tokens_approx: 76548  # from subagent usage report
+  codex_xhigh_wall_time_seconds: ~89    # codex sealed at 02:08:39 from dispatch ~02:07:10
+  total_subagent_dispatches: 2          # 1 claude (opus general-purpose) + 1 codex (CLI helper)
+  note: |
+    Claude subagent reports 76548 total_tokens for the review pass.
+    Codex CLI does not report tokens to caller; wall time only.
+
+review_quality:
+  blockers_found: 0
+  blockers_confirmed_by_other_agent: 0
+  blockers_rejected: 0
+  unanimous_goal_satisfied_first_time: true
+  claude_non_blocking_findings:
+    - {id: claude-iter0009-001, severity: low, target: 'tools/reviewer_dispatch_codex.py SCHEMA'}
+    - {id: claude-iter0009-002, severity: low, target: 'tools/reviewer_dispatch_codex.py:handle()'}
+    - {id: claude-iter0009-003, severity: low, target: 'tools/reviewer_dispatch_codex.py docstring'}
+    - {id: claude-iter0009-004, severity: low, target: 'tests/test_reviewer_dispatch_codex.py'}
+  codex_findings: 0
+
+implementation_quality:
+  accepted_changes: 3        # tools/reviewer_dispatch_codex.py, tests/, server.py +2
+  staged_changes: 0          # not git-staged at iteration close (operator decides commit timing)
+  implemented_changes: 3
+  out_of_scope_changes: 0
+  checks_passed: true
+  apply_landed: true
+  notes: |
+    All 3 file changes match goal_packet allowed_files. _dispatch_codex.py
+    untouched (forbidden). 17 new pytest cases all green. 52 pre-existing
+    pytest cases for test_dispatch_codex.py still all green (no regression).
+    Server boot probe + tools/list returns reviewer.dispatch_codex.
+
+process_outcomes:
+  full_quorum_closure_ceremony_completed: true
+  autonomy_contract_held: true
+  helper_anti_scope_upheld: true
+  cross_model_external_pass: true   # claude opus + codex (different vendor)
+  cross_vendor_external_pass: true  # Anthropic (claude) + OpenAI (codex)
+
+artifacts_produced:
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/goal_packet.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/input.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/review-packet.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/claude-review.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/codex-review.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/consensus.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/independence-audit.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/verification.yaml
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/iteration-outcome.yaml
+  - agent-loop/archive/review-passes/2026-05-10-iteration-0009-mcp-wrapper-v1-1-x-codex-iter0009-1-pass.yaml
+  - 'scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py [SOURCE TREE; 145 lines]'
+  - 'scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py [SOURCE TREE; 246 lines, 17 cases]'
+
+artifacts_modified_outside_iteration_dir:
+  - path: scripts/agent_loop_mcp/server.py
+    description: '+2 lines registering reviewer_dispatch_codex tool (canonical pattern)'
+  - path: agent-loop/state/dispatch-log.jsonl
+    description: dispatch_start + dispatch_done events for codex pass
+
+apply_steps_landed:
+  - 'Iteration scaffolding (goal_packet + input.yaml authored)'
+  - 'TDD: 17 failing tests written, ImportError confirmed (RED)'
+  - 'Wrapper implemented: tools/reviewer_dispatch_codex.py'
+  - 'Tests green (GREEN); full pytest 69 passed (52 + 17 new)'
+  - 'server.py registration applied'
+  - 'A1-A5 acceptance gates green via _self_drive evaluate_gates'
+  - 'review-packet.yaml authored'
+  - 'Claude reviewer subagent dispatched (opus model, independence-attested)'
+  - 'Codex reviewer dispatched via _dispatch_codex.py helper (sealed via T6)'
+  - 'Consensus synthesized (unanimous goal_satisfied=true, zero blocking)'
+  - 'T6 archive: 6 events appended to independence-audit.yaml'
+  - 'verification.yaml authored'
+  - 'iteration-outcome.yaml authored (this file)'
+
+next_iteration_recommendations:
+  - id: v1_1_x_polish_pass_optional
+    description: |
+      claude reviewer surfaced 4 low-severity non-blocking suggestions:
+        001: expose --prompt-template/--schema/--codex-bin if MCP callers need them
+        002: wrap json.loads in try/except returning {ok: False, error_type: ...}
+        003: doc-only comment fix re smoke flag handling
+        004: add a malformed-stdout test
+      Defer to v1.1.x+1 polish iteration if/when operator escalates. Wrapper
+      is implementation-ready as-is; polish does not block production.
+    when: optional, operator-triggered
+    priority: 3
+
+  - id: install_smoke_for_wrapper_in_wheel
+    description: |
+      The wheel at python_env/Lib/site-packages/agent_loop_mcp does NOT yet
+      contain reviewer_dispatch_codex.py. For MCP-clients-via-installed-wheel
+      deployment, rebuild + reinstall the wheel (per gate G_install). Source-tree
+      MCP server boot DOES register the new tool (verified by A5).
+    when: pre-deploy of v1.1.x to MCP clients
+    priority: 2
+
+  - id: render_outcomes_redirect
+    description: |
+      Per operator-locked next_required_action across v1.9.x and v1.10.x
+      iterations: redirect_to_render_outcomes. Phase 4 v1.1.x extraction
+      complete; render-class work is the next operator-directed scope.
+    when: next operator session
+    priority: 1
+
+empirical_observations:
+  - "First successful FULL ceremony close in this project. iter-0008 closed by gate evidence only; iter-0009 closes by sealed reviews + consensus + T6 + T7."
+  - "Cross-vendor reviewer pass achieved: claude (Anthropic opus) + codex (OpenAI codex-cli 0.129.0). Round 8 had only cross-MODEL (sonnet+opus, both Anthropic)."
+  - "Helper-dispatched codex review is meta-recursive: the helper being wrapped reviews its own wrapper. The helper held: produced sealed review with zero findings."
+  - "Subagent independence held: claude reviewer surfaced 4 different findings than codex (codex emitted zero); no co-authoring artifacts visible in either review."
+  - "TDD discipline held: tests authored before implementation; ImportError confirmed RED before GREEN; 17/17 cases pass on first implementation."
+  - "Goal-packet scope_signature mechanism worked end-to-end: validate confirmed match; verify_scope confirmed in_scope; goal_packet.acceptance_gates evaluated mechanically without operator override."
+
+post_apply_status: |
+  v1.1.x MCP wrapper for _dispatch_codex landed via full quorum closure.
+  Wrapper is registered + tested + reviewed-and-cleared. Source-tree MCP
+  server now exposes 11 tools (T2-T11 + reviewer.dispatch_codex). Operator
+  may commit when ready; no further iteration work blocking. Next required
+  action remains render-outcomes per the locked redirect.

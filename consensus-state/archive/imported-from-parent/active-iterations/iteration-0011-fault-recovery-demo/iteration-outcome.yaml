@@ -1,0 +1,191 @@
+schema_version: 1
+status_caveat: |
+  pilot_id directory name 'fault-recovery-demo' was aspirational; per the
+  iteration's own fault_recovery_demo_status.demonstrated=false (below), the
+  class-3 sealed-blocking-finding recovery branch was NOT triggered. iter-0011
+  validated review_target_path threading + addressed prior codex findings,
+  not the full recovery cycle. Authoritative status: see
+  fault_recovery_demo_status block.
+iteration_id: iteration-0011-fault-recovery-demo
+created_utc: '2026-05-10T05:15:00Z'
+closing_state: quorum_close_passed
+closing_reason: |
+  Addressed both iter-0010 codex findings (codex-rev-001 review_target_path
+  threading + codex-rev-002 orphan yaml import). Both reviewers (claude opus
+  subagent + codex CLI via loop.run_goal auto-dispatch) emit goal_satisfied=true
+  with zero findings on either side. All 3 acceptance gates pass.
+
+  FAULT-RECOVERY DEMO STATUS: attempted but NOT triggered. Per codex's expert
+  verdict 2026-05-10, the bar is "Codex finds a blocking/high issue, Claude
+  fixes it, Codex re-reviews, and the loop closes only after both reviewers
+  have goal_satisfied=true." iter-0011 implementation was clean enough that
+  codex found nothing on first dispatch. Recovery branch un-exercised at
+  sealed-blocking-finding scope.
+
+  However, iter-0010 call 3 DID exercise an INTRA-DISPATCH recovery: codex
+  emitted a malformed response (blocking_objections invariant violation);
+  helper validator rejected; loop.run_goal contained the failure (state
+  stayed ready_for_codex; no exception); re-dispatch on call 4 succeeded.
+  That is recovery-from-output-validation-failure, not recovery-from-sealed-
+  blocking-finding. Both forms exercise the supervisor's failure-containment
+  guarantees but at different layers.
+
+  Honest framing: the supervisor handles 3 failure classes correctly:
+    1. INTRA-DISPATCH (codex output validation fails) — exercised iter-0010 call 3
+    2. NO-FINDINGS (clean unanimous close) — exercised iter-0010 + iter-0011
+    3. SEALED-BLOCKING-FINDING-RECOVERY — NOT YET EXERCISED
+  The 3rd class requires either a more substantive iter-0012 target with
+  natural complexity, OR a deliberate manufactured-defect demo. Both options
+  documented in iter-0011 consensus.yaml.fault_recovery_demo_status.
+
+orchestration_form: loop_run_goal_supervised
+orchestration_call_log:
+  - call: 1
+    state: needs_implementation
+    actions_taken: []
+    notes: "Empty iteration_dir + valid goal_packet authored"
+  - call: 2 (after implementation + review-packet authored)
+    state: needs_claude_review
+    actions_taken: []
+    notes: "review-packet.yaml authored"
+  - call: 3 (after claude-review.yaml authored by subagent)
+    state: needs_consensus
+    actions_taken:
+      - action: reviewer.dispatch_codex
+        result_ok: true
+        review_target_path_passed: true   # the iter-0010 codex-rev-001 fix in action
+        pass_id: codex-iteration-0011-fault-recovery-demo-1-pass1
+    notes: |
+      Codex sealed cleanly on FIRST try (vs iter-0010 which needed retry due
+      to malformed first response). Codex's rationale explicitly cited:
+      "Canonical review target is specified and in scope" — the
+      review_target_path threading is empirically validated.
+  - call: 4 (after consensus.yaml synthesized)
+    state: ready_to_close
+    actions_taken: []
+    notes: "Both reviewers verified goal_satisfied=true via _extract_goal_satisfied"
+
+review_quality:
+  blockers_found: 0
+  blockers_confirmed_by_other_agent: 0
+  unanimous_goal_satisfied_first_time: true
+  claude_non_blocking_findings: 0
+  codex_non_blocking_findings: 0
+  codex_first_dispatch_succeeded: true   # iter-0010 needed 2 dispatches; iter-0011 needed 1
+
+implementation_quality:
+  accepted_changes: 2  # tools/loop_run_goal.py + tests/test_loop_run_goal.py
+  staged_changes: 0
+  implemented_changes: 2
+  out_of_scope_changes: 0
+  checks_passed: true
+  apply_landed: true
+  notes: |
+    tools/loop_run_goal.py: -1 / +5 (removed `import yaml`; added review_target_path
+      kwarg with 4 lines of inline comment citing codex-rev-001).
+    tests/test_loop_run_goal.py: +52 (2 new tests; one behavior assertion + one
+      regression guard).
+    Net: +56 LOC. 138 → 140 pytest. No regressions.
+
+process_outcomes:
+  loop_run_goal_supervised_iteration_2: true
+  state_machine_traversed_correctly: true
+  failure_containment_class_2_verified: false   # not exercised this iteration
+  ready_to_close_verifies_goal_satisfied: true
+  cross_vendor_external_pass: true
+  iter_0010_codex_findings_addressed: true
+  fault_recovery_demo_attempted: true
+  fault_recovery_demo_triggered: false
+  fault_recovery_class_3_carry_forward: true   # iter-0012 target
+
+# Per iter-0012 codex review codex-rev-002: status_caveat (top of file) cited
+# this block by name; codex flagged that the block didn't exist. Authoritative
+# status field is now present here.
+fault_recovery_demo_status:
+  demonstrated: false
+  attempted_in_iteration: iteration-0011-fault-recovery-demo
+  reason_not_demonstrated: |
+    iter-0011 implementation was clean enough that codex found nothing on
+    first dispatch. Class-3 (sealed-blocking-finding recovery) requires:
+    Codex finds blocking/high issue -> Claude fixes -> Codex re-reviews ->
+    closes only after both reviewers goal_satisfied=true. iter-0011's
+    codex pass had zero findings; recovery branch un-exercised at sealed-
+    blocking-finding scope.
+  what_was_demonstrated: |
+    Class-2 (clean unanimous close): both reviewers goal_satisfied=true,
+    zero blocking. iter-0010 + iter-0011 both exercise this path.
+  carry_forward_iteration: iteration-0012-codex-defect-recovery
+  carry_forward_status: |
+    iter-0012 was authored to address codex's 5 verdict findings on
+    iter-0011 work. Whether iter-0012 itself triggers class-3 (codex finds
+    blocker -> recover -> close) depends on codex's review of iter-0012.
+
+artifacts_produced:
+  - agent-loop/active/iteration-0011-fault-recovery-demo/goal_packet.yaml
+  - agent-loop/active/iteration-0011-fault-recovery-demo/review-packet.yaml
+  - agent-loop/active/iteration-0011-fault-recovery-demo/claude-review.yaml
+  - agent-loop/active/iteration-0011-fault-recovery-demo/codex-review.yaml
+  - agent-loop/active/iteration-0011-fault-recovery-demo/consensus.yaml
+  - agent-loop/active/iteration-0011-fault-recovery-demo/independence-audit.yaml
+  - agent-loop/active/iteration-0011-fault-recovery-demo/iteration-outcome.yaml
+  - 'agent-loop/archive/review-passes/2026-05-10-iteration-0011-fault-recovery-demo-codex-iteration-0011-fault-recovery-demo-1-pass.yaml [T6 archive]'
+
+artifacts_modified:
+  - path: scripts/agent_loop_mcp/tools/loop_run_goal.py
+    description: '-1 / +5: remove orphan `import yaml`; thread review_target_path through auto-dispatch'
+  - path: scripts/agent_loop_mcp/tests/test_loop_run_goal.py
+    description: '+52: 2 new tests (review_target_path behavior + orphan-yaml regression guard)'
+
+apply_steps_landed:
+  - 'Iteration scaffolding (goal_packet authored; sig validated)'
+  - 'TDD red phase: 2 failing tests for new behavior'
+  - 'Implement: removed import yaml; added review_target_path kwarg in auto-dispatch'
+  - 'TDD green phase: 140 pass (138 + 2 new)'
+  - 'review-packet.yaml authored'
+  - 'Claude reviewer subagent dispatched (opus model)'
+  - 'loop.run_goal auto-dispatch codex (1 attempt; clean first try)'
+  - 'Consensus synthesized (unanimous; zero findings on either side)'
+  - 'T6 archive: 7 events appended'
+  - 'iteration-outcome.yaml authored (this file)'
+
+next_iteration_recommendations:
+  - id: iter_0012_fault_recovery_demo_explicit
+    description: |
+      Codex's expert verdict requires demonstrating the SEALED-BLOCKING-FINDING
+      recovery branch. Two approaches:
+        (a) Substantive scope: implement loop.synthesize_consensus mechanically
+            (~150 LOC new tool). Higher complexity → higher chance codex finds
+            a real blocker. Authentic.
+        (b) Manufactured: deliberately implement with a known defect (e.g., off-
+            by-one, missing edge case). Codex catches; fix; re-dispatch.
+            Reliable demo but artificial.
+      Recommendation: (a). Real defect-find is a stronger signal than staged.
+    when: operator-decided
+    priority: 1
+
+  - id: iter_0009_RESULTS_md_optional
+    description: |
+      Codex noted iter-0010 lacks RESULTS.md (operator-friendly summary).
+      iter-0009 has one (operator requested). Optional symmetry: author
+      RESULTS.md for iter-0010 + iter-0011 retroactively. Low priority.
+    when: operator-decided
+    priority: 3
+
+  - id: render_outcomes_redirect
+    description: |
+      Operator-locked redirect remains.
+    when: next operator session
+    priority: 1
+
+empirical_observations:
+  - "iter-0011 codex's first dispatch succeeded cleanly (vs iter-0010 which needed retry)."
+  - "Codex's rationale explicitly cited 'Canonical review target is specified and in scope' — the review_target_path threading from this very iteration is empirically validated by codex's own consumption."
+  - "Pattern inverted: the very fix iter-0011 made (review_target_path threading) eliminates the conditions that produced findings in iter-0010 (fallback-scope review). Codex now finds clean. This is real progress, not regression."
+  - "Fault-recovery demo class 3 (sealed blocking finding) NOT triggered. Class 1 (intra-dispatch validation failure) WAS triggered in iter-0010 call 3. Class 2 (clean close) triggered in iter-0010 + iter-0011. Operator decides whether iter-0012 should attempt class 3 with substantive scope."
+
+post_apply_status: |
+  iter-0011 closes via loop.run_goal-supervised orchestration. iter-0010 codex
+  findings cleanly addressed; review_target_path threading empirically validated.
+  Fault-recovery demo (class 3) remains a future iteration. Operator may commit
+  iter-0009 + iter-0010 + iter-0011 work + Tasks #11-#17 + #19-#20 source-tree
+  changes when ready.

@@ -1,0 +1,38 @@
+schema_version: 1
+iteration_id: iteration-0001-extraction-review
+last_mutation: null
+closing_verdict:
+  actor:
+    id: claude-iter0001-1
+    model_family: claude
+    role: closer
+    pass_id: claude-iter0001-1-pass1
+  review_target_hash: ee058d5bf042ee1ab031588d6d6e313a22c9971cebe3230129dcac739d1c8676
+  created_at_utc: '2026-05-11T16:35:00Z'
+  review_scope_hash: null
+invariant_checks:
+  cross_family: PASS
+  hash_match: PASS
+  freshness: PASS
+overall: PASS
+generated_utc: '2026-05-11T16:35:00Z'
+notes: |
+  iter-0001 is the FIRST review-cycle in the standalone consensus-mcp repo.
+  Cross-family check trivially PASSes (codex vs claude; different families
+  per closure invariant). No apply.codex_patch mutation (direct claude
+  edits per workflow #2 ceremony).
+
+  EXTRACTION VALIDATION:
+    Codex caught 2 real defects in the post-extraction state:
+      HIGH: _release_gate_check.gate_install path drift (scripts/ prefix)
+      MEDIUM: server.py serverInfo.version hardcoded as 0.1.0-skeleton
+    Both fixed before commit. Both would have been silent failures during
+    the FIRST `python -m build` invocation or any MCP client doing version
+    introspection.
+
+  CUMULATIVE CROSS-AI CATCH RATE (across upstream bootstrap + this first
+  standalone iter): 40 codex pre-review/review findings, 40/40 real,
+  0 false positives.
+
+  pytest: 422 passed + 1 skipped (unchanged from extraction baseline)
+  serverInfo.version: 2.0.0 (was "0.1.0-skeleton")

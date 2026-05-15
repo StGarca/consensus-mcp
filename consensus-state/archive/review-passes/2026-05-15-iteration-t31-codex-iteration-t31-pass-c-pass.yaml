@@ -1,0 +1,7 @@
+findings:
+- TAMPERED finding
+iteration_id: iteration-t31
+packet_sha256: 62023a00f0ddc8d6cb479bd1112fc43bb29ae1ca22cb51e6c8549653e5b4e452
+pass_id: iteration-t31-pass-c
+reviewer_id: codex
+sealed_at_utc: '2026-05-15T16:31:39Z'

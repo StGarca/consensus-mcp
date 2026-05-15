@@ -1,0 +1,753 @@
+schema_version: 1
+purpose: Index of all review-pass artifacts on the multi-agent-consensus-mcp spec.
+  Spec frontmatter points here; section 24 of the spec mirrors archived ids.
+last_updated_utc: '2026-05-11T12:32:10Z'
+spec_path: wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md
+passes:
+- id: pass-1-structural
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.0-ai-contract
+  depth: structural / spec-internal-consistency
+  findings_id_range: rev-001..rev-018
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-1-structural.yaml
+  status_in_spec: all promoted or deferred (see spec section 24)
+- id: pass-2-architectural
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.0-ai-contract
+  depth: architectural / adversarial / prior-art
+  findings_id_range: rev-019..rev-030
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-2-architectural.yaml
+  status_in_spec: all promoted or deferred (see spec section 24)
+- id: pass-3-v1.1-followup
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.1-ai-contract
+  depth: v1.1 inline-patch quality + new-issue surfacing
+  findings_id_range: rev-031..rev-038
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-3-v1.1-followup.yaml
+  status_in_spec: all promoted in v1.2 (see spec section 24)
+- id: pass-4-v1.2-expert
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.2-ai-contract
+  depth: v1.2 expert / consolidation-quality
+  findings_id_range: rev-052..rev-065
+  findings_gap_note: rev-039..rev-051 reserved-unused (see spec section 24 id_reservations)
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-4-v1.2-expert.yaml
+  status_in_spec: rev-052/054 promoted in v1.3; rest deferred
+- id: pass-5-codex-v1.2-expert
+  reviewer: codex
+  spec_version_reviewed: draft-v1.2-ai-contract-plus-pass-4
+  depth: execution-contract / AI-noise control / pass-4 integration
+  findings_id_range: rev-066..rev-073
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-5-v1.2-expert.yaml
+  status_in_spec: rev-066/067/068/069/070/072/073 promoted in v1.3; rev-071 deferred
+    (superseded rev-065 reframing)
+- id: pass-6-claude-on-codex-pass-5
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.2-ai-contract-plus-pass-4-plus-pass-5
+  depth: dual-pass review of codex pass-5 + new findings on dual-reviewer dynamics
+  findings_id_range: rev-074..rev-080 (recorded conversationally; not promoted in
+    v1.3)
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-6-on-codex-pass-5.yaml
+  status_in_spec: informational; finding-id-allocation rule (claude-rev / codex-rev
+    namespacing) promoted to section 0; remainder defer pending iteration-0000 evidence
+- id: pass-7-codex-v1.3-expert
+  reviewer: codex
+  spec_version_reviewed: draft-v1.3-ai-contract
+  depth: execution-contract / archive-index consistency / AI-only signal-to-noise
+  findings_id_range: codex-rev-001..codex-rev-008
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-7-v1.3-expert.yaml
+  status_in_spec: all 8 promoted in v1.4 (see spec section 24 resolved)
+- id: pass-8-claude-on-codex-pass-7
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.3-ai-contract-plus-codex-pass-7
+  depth: expert review of v1.3 + dual-pass response to codex pass-7 + new findings
+  findings_id_range: claude-rev-001..claude-rev-006
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-8-on-codex-pass-7.yaml
+  status_in_spec: 'PARTIAL: rule restored to section 20 in v1.4; structural anti-regression
+    acceptance criterion (claude-rev-001) pending v1.5'
+- id: pass-9-codex-v1.4-expert
+  reviewer: codex
+  spec_version_reviewed: draft-v1.4-ai-contract
+  depth: execution-contract / v1.4 promotion audit / corroboration and gate semantics
+  findings_id_range: codex-rev-009..codex-rev-016
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-9-v1.4-expert.yaml
+  status_in_spec: 'PARTIAL: codex-rev-013/014/015/016 applied in pass-10; codex-rev-009/010/011/012
+    pending v1.5 (architectural)'
+- id: pass-10-claude-on-codex-pass-9
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.4-ai-contract-plus-codex-pass-9
+  depth: expert review of v1.4 + dual-pass response to codex pass-9 + meta-observation
+    on premature done-claims
+  findings_id_range: claude-rev-007..claude-rev-015
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-10-on-codex-pass-9.yaml
+  status_in_spec: 'PARTIAL: 4 codex-pass-9 inline patches applied; all 9 new claude
+    findings pending v1.5'
+  governance_note: 'VERDICT EXPLICITLY DOES NOT DECLARE READY FOR PHASE 0. operator
+    directive: ''stop trying to prematurely launch'''
+- id: pass-11-codex-v1.4-plus-pass10-expert
+  reviewer: codex
+  spec_version_reviewed: draft-v1.4-ai-contract-plus-claude-pass-10
+  depth: execution-contract / pass-10 writeback audit / git-trackability and lifecycle
+    consistency
+  findings_id_range: codex-rev-017..codex-rev-024
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-11-v1.4-plus-pass10-expert.yaml
+  status_in_spec: 'PARTIAL: codex-rev-017/018/019/023/024 applied in pass-12; codex-rev-020/021/022
+    pending v1.5'
+- id: pass-12-claude-on-codex-pass-11
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.4-ai-contract-plus-pass-10-plus-codex-pass-11
+  depth: expert review of v1.4-patched + dual-pass response to codex pass-11 + new
+    findings on dual-pass dynamics
+  findings_id_range: claude-rev-016..claude-rev-023
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-12-on-codex-pass-11.yaml
+  status_in_spec: 'PARTIAL: 5 codex-pass-11 inline patches applied; 8 new claude findings
+    pending v1.5'
+  governance_note: VERDICT EXPLICITLY DOES NOT DECLARE READY FOR PHASE 0. operator
+    directive 2026-05-08 enforced.
+  self_introduced_bugs_caught_by_pass_11: 5 new bugs introduced in pass-10 patches;
+    documented in pass-12 governance_observations
+- id: pass-13-codex-v1.4-patched-pass12-expert
+  reviewer: codex
+  spec_version_reviewed: draft-v1.4-ai-contract-patched-pass-10-pass-12
+  depth: blocked-contract audit / pass-12 mitigation review / Phase 0 trackability
+  findings_id_range: codex-rev-025..codex-rev-032
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-13-v1.4-patched-pass12-expert.yaml
+  status_in_spec: 'PARTIAL: codex-rev-025/026/027/028/029/032 applied in pass-14;
+    codex-rev-030/031 pending v1.5'
+  self_introduced_bugs_in_pass_12_caught_here: 5 (codex-rev-025/026/027/028/029)
+- id: pass-14-claude-on-codex-pass-13
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.4-ai-contract-patched-pass-10-pass-12-plus-codex-pass-13
+  depth: expert review of v1.4-twice-patched + dual-pass response to codex pass-13
+    + new findings on disable-mechanism semantics + meta-observation on claude self-patching
+    not converging
+  findings_id_range: claude-rev-024..claude-rev-030
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-14-on-codex-pass-13.yaml
+  status_in_spec: 'PARTIAL: 6 codex-pass-13 inline patches applied; 7 new claude findings
+    pending v1.5; meta-finding claude-rev-028 raises operator-path-decision question'
+  governance_note: VERDICT EXPLICITLY DOES NOT DECLARE READY FOR PHASE 0. Operator
+    path decision required (Path A self-patch-with-constraints / Path B operator-takes-over
+    / Path C stop-and-build-validators).
+  operator_path_decision_required: true
+- id: pass-15-codex-accomplishments-review
+  reviewer: codex
+  spec_version_reviewed: draft-v1.5-ai-contract
+  depth: accomplishments audit / validator reproducibility review / tooling-methodology
+    review
+  findings_id_range: codex-rev-033..codex-rev-038
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-15-accomplishments-review.yaml
+  status_in_spec: 'DISPOSITIONED: codex-rev-033/034/035/038 promoted in v1.6; codex-rev-036/037
+    deferred until after iteration-0000; Phase 0 still blocked on iteration-0000 metrics'
+  governance_note: VERDICT EXPLICITLY DID NOT DECLARE READY FOR PHASE 0. PyYAML dependency/provenance
+    gap fixed in v1.6.
+- id: pass-16-codex-quoroom-reference-review
+  reviewer: codex
+  spec_version_reviewed: draft-v1.5-ai-contract
+  depth: external reference architecture review against quoroom-ai/room
+  findings_id_range: codex-rev-039..codex-rev-048
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-16-quoroom-reference-review.yaml
+  status_in_spec: 'DISPOSITIONED: codex-rev-039/040/047 promoted in v1.6; codex-rev-041..046/048
+    deferred; borrow patterns, do not clone dependency'
+  governance_note: Quoroom is a reference for Phase 1 runtime patterns; it is not
+    a Phase 0 dependency and not a reason to add wallet/cloud/public-room scope.
+- id: pass-17-codex-path-x-readiness-review
+  reviewer: codex
+  spec_version_reviewed: draft-v1.6-ai-contract
+  depth: Path X / iteration-0000 cf finding ratification readiness review
+  findings_id_range: pass-17-codex-rev-049..pass-17-codex-rev-051
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-17-path-x-readiness-review.yaml
+  status_in_spec: 'RESOLVED_IN_V1_7: cf-* findings now committed under agent-loop/active/iteration-0000/
+    via .gitignore allowlist; Tier-2 walkthrough conducted; cf-007 establishes readiness-flip
+    gate with state held pending'
+  governance_note: Active findings in this archive are renamed pass-17-codex-rev-049/050/051
+    to disambiguate from iteration-0000 codex-rev-049..064 allocations.
+- id: pass-18-codex-v1-7-readiness-review
+  reviewer: codex
+  spec_version_reviewed: draft-v1.7-ai-contract
+  depth: readiness-flip pre-review / v1.7 self-patch regression audit
+  findings_id_range: codex-rev-065..codex-rev-069
+  archived_at: agent-loop/archive/review-passes/2026-05-08-codex-pass-18-v1.7-readiness-review.yaml
+  status_in_spec: 'RESOLVED_IN_V1_7_1: codex-rev-065/066/068/069 applied; codex-rev-067
+    deferred to v1.8 per pass-18 disposition'
+  governance_note: v1.7.1 cleanup landed; pass-19 audit found partial-fix issue with
+    codex-rev-066 (see claude-rev-037).
+- id: pass-19-claude-v1.7.1-audit
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.7.1-ai-contract
+  depth: v1.7.1 cleanup verification + cross-reviewer audit + methodology extension
+  findings_id_range: claude-rev-037..claude-rev-039
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-19-v1.7.1-audit.yaml
+  status_in_spec: 'PENDING_V1_7_2: claude-rev-037 (prefix inconsistency) + claude-rev-038
+    (disambiguation block documents bug as feature) + claude-rev-039 (5/5 patch regression
+    pattern meta)'
+  governance_note: 'VERDICT EXPLICITLY DOES NOT DECLARE READY FOR PHASE 0. independence_attestation:
+    pass-19 had pass-18 exposure (applied its fixes); claude-rev-037..039 marked corroboration_strength
+    suggested_by_context (post-exposure, not independent).'
+  independence_holds: false
+  exposure_documented: true
+- id: pass-20-claude-phase0-validator-suite-build
+  reviewer: claude-opus-4-7
+  spec_version_reviewed: draft-v1.7.2-ai-contract
+  depth: Phase 0 deliverable build event (6 validators + extended harness) + iteration-0000
+    real-data spot-check across all newly-built validators + spec-ambiguity surface
+    from implementer Phase-0 placeholder calls
+  findings_id_range: claude-rev-040..claude-rev-053
+  archived_at: agent-loop/archive/review-passes/2026-05-08-claude-pass-20-phase0-validator-suite-build.yaml
+  status_in_spec: 'MOSTLY_RESOLVED_BY_V1_7_4_PLUS_ITERATION_0002: 8 of 14 resolved
+    (3 architectural in v1.7.4: claude-rev-043 / 045 / 046; 5 mechanical applications
+    in iteration-0002: claude-rev-040, 041, 042, 044, 047 + iteration-0000 mechanical
+    applications of claude-rev-043 / 046 / codex-q-001). 6 remaining PENDING_OPERATOR_DECISION
+    (claude-rev-048 scope_check intra-file gap; claude-rev-049..053 build-time spec
+    ambiguities). iteration-0001 ran 2026-05-08 closed blocked (preserved historical);
+    v1.7.4 spec patch landed; iteration-0002 ran 2026-05-08 closed implementation_ready
+    (Path B with change-09 scope expansion); iteration-0000 cleaned 14 -> 7 findings
+    (11 high -> 2 high, residual HASH_CHAIN_BROKEN x2 deferred to iteration-0003 +
+    low/grandfathered).'
+  governance_note: 'Build event with full exposure to spec + iteration-0000 + 6 implementer
+    subagent reports. Independence_attestation explicitly NOT independent; all findings
+    marked corroboration_strength suggested_by_context per cf-001 Phase 0 honor-system
+    enforcement. Phase 0 validator suite is COMPLETE: 6 of 6 validators implemented,
+    21 of 21 smoke tests pass, validate_disposition_index.py runs clean on v1.7.4.
+    canonical-006 dry-run gate validated empirically in iteration-0002 (caught masked
+    schema drift; refused initial apply; Path B scope expansion remediated; clean
+    apply landed).'
+  resolution_log:
+  - finding_id: claude-rev-043
+    resolved_in: v1.7.4
+    via: canonical-004_promotion_to_section_13
+    mechanism: observational_mode_flag
+  - finding_id: claude-rev-045
+    resolved_in: v1.7.4
+    via: section_13_audit_log_canonical_event_name_rule
+  - finding_id: claude-rev-046
+    resolved_in: v1.7.4
+    via: section_7_canonical_yaml_sha256_pin
+  - finding_id: claude-rev-040
+    resolved_in: iteration-0002
+    via: change-01-revised_strip_corroborated_by_from_iteration_0000_claude_review
+  - finding_id: claude-rev-041
+    resolved_in: iteration-0002
+    via: change-02_partially_cleared_to_partially-cleared_hyphen
+  - finding_id: claude-rev-042
+    resolved_in: iteration-0002
+    via: change-03-revised_no_objection_rationale_scalar_to_dict
+  - finding_id: claude-rev-044
+    resolved_in: iteration-0002
+    via: change-04-pinned_single_quote_yaml_parse_fix_line_71
+  - finding_id: claude-rev-047
+    resolved_in: iteration-0002
+    via: change-05_add_5_packet_required_fields
+  - finding_id: claude-rev-043-mechanical
+    resolved_in: iteration-0002
+    via: change-06_observational_mode_flag_added_to_iteration_0000_consensus
+  - finding_id: claude-rev-046-mechanical
+    resolved_in: iteration-0002
+    via: change-07_and_change-08_pre_canonical_pin_markers_added
+  - finding_id: codex-q-001-mechanical
+    resolved_in: iteration-0002
+    via: change-07_and_change-08_pre_canonical_pin_markers_preserve_provenance
+  - finding_id: canonical-iter0002-007
+    resolved_in: iteration-0002
+    via: change-09_path_b_scope_expansion_section_22_metric_blocks_added
+  independence_holds: false
+  exposure_documented: true
+  deliverables_landed:
+  - scripts/agent_loop/validate_review.py
+  - scripts/agent_loop/validate_consensus.py
+  - scripts/agent_loop/build_review_packet.py
+  - scripts/agent_loop/validate_iteration.py
+  - scripts/agent_loop/scope_check.py
+  - scripts/agent_loop/consensus_gate.py
+  - scripts/agent_loop/run_validator_tests.py (extended; V0..V6 covered; 21 tests)
+  - agent-loop/tests/fixtures/{review,consensus,review_packet,iteration,scope_check,gate_state}_known_{good,bad}/
+- id: pass-21-iteration-0005-cf-007-readiness-flip
+  reviewer_pair:
+    codex: codex (implementation_realist)
+    claude: claude-opus-4-7 (methodology_critic)
+  spec_version_reviewed_pre_apply: draft-v1.7.9-ai-contract
+  spec_version_post_apply: draft-v1.8.0-ai-contract
+  depth: cf-007 dedicated readiness-flip review pass per spec section 0 done_claim_rule
+    applies_to_frontmatter_readiness_flip rule. UNANIMOUS dual-reviewer flip_approved=true
+    with identical proposed values (active_contract_readiness=phase_0_validated; do_not_treat_as_phase_0_ready=false).
+    Operator authorization received 2026-05-08 via 'authorize defaults' shortcut.
+    canonical-006 dry-run passed; apply landed.
+  archived_at: agent-loop/archive/review-passes/2026-05-08-iteration-0005-cf-007-readiness-flip-pass.yaml
+  iteration_directory: agent-loop/active/iteration-0005-cf-007-readiness-flip/
+  status_in_spec: 'APPLIED_2026_05_08: spec at v1.8.0; active_contract_readiness phase_0_validated;
+    do_not_treat_as_phase_0_ready false; Phase 0 governance milestone CLOSED. Phase
+    1 MCP design spec drafted at sibling path.'
+  governance_note: 'First UNANIMOUS dual-reviewer agreement on a non-spec-literal
+    proposed value.
+
+    Both reviewers independently arrived at phase_0_validated rather than naked
+
+    ''ready'' because of acknowledged 7 LOW grandfathered residuals on iteration-0000.
+
+    Both also independently chose preserve-field-and-flip-value over remove-field
+
+    for do_not_treat_as_phase_0_ready (audit trail per codex-q-001 precedent).
+
+    cf-007 gate held: dual-reviewer + operator-authorization + canonical-006
+
+    dry-run + atomic apply, all in sequence, no shortcut.
+
+    '
+  independence_holds: false
+  exposure_documented: true
+  forced_post_exposure_per_G4: true
+  pre_v1_8_0_5_iteration_arc:
+    iter_0000: observational baseline
+    iter_0001: blocked plan-defect catch
+    iter_0002: Path B mechanical fixes via change-09 expansion
+    iter_0003: Option B local grandfather for iteration-0000 audit
+    iter_0004: 11-item disposition consolidation
+    iter_0005_cf_007: this pass (review + apply)
+- id: pass-22-iteration-0006
+  path: agent-loop/archive/review-passes/2026-05-09-iteration-0006-consolidated_codex_plus_claude-pass.yaml
+  sealed_at: '2026-05-09T03:06:26Z'
+  packet_sha256: fe2180352387a81765767e042103a6e60b1f3a478030a5d2791abc83cf287cef
+  iteration_id: iteration-0006
+  reviewer_id: consolidated_codex_plus_claude
+- id: pass-23-iteration-0007
+  path: agent-loop/archive/review-passes/2026-05-09-iteration-0007-release-candidate-hardening-consolidated_codex_plus_claude-pass.yaml
+  sealed_at: '2026-05-09T15:14:28Z'
+  packet_sha256: 71e12f828b23db9c90e741312e9c0a6689710343e7e5d8c2dfb06ea1fb859425
+  iteration_id: iteration-0007-release-candidate-hardening
+  reviewer_id: consolidated_codex_plus_claude
+- id: codex-real-smoke-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-09-iteration-real-codex-smoke-2026-05-09-codex-real-smoke-1-pass.yaml
+  sealed_at: '2026-05-09T23:43:40Z'
+  packet_sha256: 9c6b92df71e423d33bafaa953d0852789868b0d3b6ecbd048293c1c0d36dd457
+  iteration_id: iteration-real-codex-smoke-2026-05-09
+  reviewer_id: codex-real-smoke-1
+- id: codex-real-smoke-20260509-234829-930-pass1
+  path: agent-loop/archive/review-passes/2026-05-09-iteration-real-codex-smoke-2026-05-09-codex-real-smoke-20260509-234829-930-pass.yaml
+  sealed_at: '2026-05-09T23:50:14Z'
+  packet_sha256: 6734cc0f9dc5879954027302e23c18b089ff13a9138989a49c2925829848312c
+  iteration_id: iteration-real-codex-smoke-2026-05-09
+  reviewer_id: codex-real-smoke-20260509-234829-930
+- id: codex-iter0009-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0009-mcp-wrapper-v1-1-x-codex-iter0009-1-pass.yaml
+  sealed_at: '2026-05-10T02:08:39Z'
+  packet_sha256: 565ce44bb9277021fe3f7be206a6e182326e358e49311c6c46291a7b524a5ae0
+  iteration_id: iteration-0009-mcp-wrapper-v1-1-x
+  reviewer_id: codex-iter0009-1
+- id: codex-iteration-0010-loop-run-goal-demo-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0010-loop-run-goal-demo-codex-iteration-0010-loop-run-goal-demo-1-pass.yaml
+  sealed_at: '2026-05-10T04:21:45Z'
+  packet_sha256: 27427cb13189bb9b66584965dee58808b16498af48f8ee29bd5f187108a8d7fd
+  iteration_id: iteration-0010-loop-run-goal-demo
+  reviewer_id: codex-iteration-0010-loop-run-goal-demo-1
+- id: codex-iteration-0011-fault-recovery-demo-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0011-fault-recovery-demo-codex-iteration-0011-fault-recovery-demo-1-pass.yaml
+  sealed_at: '2026-05-10T04:44:18Z'
+  packet_sha256: df1c0dfc4c92f59dd7e84325ad5fb5c2d2e49ab9a597b691bc29f437ae9041c1
+  iteration_id: iteration-0011-fault-recovery-demo
+  reviewer_id: codex-iteration-0011-fault-recovery-demo-1
+- id: codex-iteration-0012-codex-defect-recovery-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0012-codex-defect-recovery-codex-iteration-0012-codex-defect-recovery-1-pass.yaml
+  sealed_at: '2026-05-10T05:32:42Z'
+  packet_sha256: f7e0999c35e1571440812f2c5aef3244da365c9335cb41acc655267acdf0c33b
+  iteration_id: iteration-0012-codex-defect-recovery
+  reviewer_id: codex-iteration-0012-codex-defect-recovery-1
+- id: codex-iter0019-3-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0019-real-codex-fix-demo-codex-iter0019-3-pass.yaml
+  sealed_at: '2026-05-10T17:24:44Z'
+  packet_sha256: ee0258d51dc0fb0c65833507201521e532bb0e1d9774a7947742381cacbb3e44
+  iteration_id: iteration-0019-real-codex-fix-demo
+  reviewer_id: codex-iter0019-3
+- id: codex-iter0020-2-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0020-patch-id-ergonomics-codex-iter0020-2-pass.yaml
+  sealed_at: '2026-05-10T18:04:14Z'
+  packet_sha256: 51e624a6153db3949e4b4576b63f78191ac4daaeba5044ec83ac1a6c42ce4c95
+  iteration_id: iteration-0020-patch-id-ergonomics
+  reviewer_id: codex-iter0020-2
+- id: codex-iter0020-3-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0020-patch-id-ergonomics-codex-iter0020-3-pass.yaml
+  sealed_at: '2026-05-10T18:08:52Z'
+  packet_sha256: d758f8f227e4e82b23799a504a2d71baa1608592983333921a678d557e3b7433
+  iteration_id: iteration-0020-patch-id-ergonomics
+  reviewer_id: codex-iter0020-3
+- id: codex-iter0021-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0021-real-codex-fix-end-to-end-codex-iter0021-1-pass.yaml
+  sealed_at: '2026-05-10T18:30:54Z'
+  packet_sha256: 67b9ad5488caefd98f6f7d20ceef3e5c5d2d62aff059c07e28bfba2bd64fc76f
+  iteration_id: iteration-0021-real-codex-fix-end-to-end
+  reviewer_id: codex-iter0021-1
+- id: codex-iter0022-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0022-end-to-end-fix-loop-codex-iter0022-1-pass.yaml
+  sealed_at: '2026-05-10T18:46:41Z'
+  packet_sha256: 37071becfa630b31ee34aaba639ea5161dc86a7f60c1aff8399479cf82c55e06
+  iteration_id: iteration-0022-end-to-end-fix-loop
+  reviewer_id: codex-iter0022-1
+- id: claude-iter0022-2-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0022-end-to-end-fix-loop-claude-iter0022-2-pass.yaml
+  sealed_at: '2026-05-10T18:49:48Z'
+  packet_sha256: 2d365f2e918dfe0df5183137ca4b9b74ca949564f97f66ee36d9e4d20532d676
+  iteration_id: iteration-0022-end-to-end-fix-loop
+  reviewer_id: claude-iter0022-2
+- id: codex-iter0023-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0023-closure-invariant-flavor-b-review-codex-iter0023-1-pass.yaml
+  sealed_at: '2026-05-10T20:22:58Z'
+  packet_sha256: 131db3a53bc3c1cc4dd95eb10773e27c1f192d223cb3679ce3a8f1fa0114e3e9
+  iteration_id: iteration-0023-closure-invariant-flavor-b-review
+  reviewer_id: codex-iter0023-1
+- id: codex-iter0025-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0025-apply-pipeline-flavor-b-review-codex-iter0025-1-pass.yaml
+  sealed_at: '2026-05-10T20:55:15Z'
+  packet_sha256: f2abe0481b378052f4c8979e8edff673449ed061c66bec923a13071d4bbe400a
+  iteration_id: iteration-0025-apply-pipeline-flavor-b-review
+  reviewer_id: codex-iter0025-1
+- id: codex-iter0027-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0027-codex-dispatch-flavor-b-review-codex-iter0027-1-pass.yaml
+  sealed_at: '2026-05-10T21:30:43Z'
+  packet_sha256: aef3c8d53ada2f089554afef1f6080912bc1202a125757c6324846a4e66773a7
+  iteration_id: iteration-0027-codex-dispatch-flavor-b-review
+  reviewer_id: codex-iter0027-1
+- id: codex-iter0029-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0029-supervisor-flavor-b-review-codex-iter0029-1-pass.yaml
+  sealed_at: '2026-05-10T22:02:20Z'
+  packet_sha256: 67297404afedeb599aa43df35fcb594349cccda5f3a8b14851a6b8168e8207aa
+  iteration_id: iteration-0029-supervisor-flavor-b-review
+  reviewer_id: codex-iter0029-1
+- id: claude-iter0029-2-pass1
+  path: agent-loop/archive/review-passes/2026-05-10-iteration-0029-supervisor-flavor-b-review-claude-iter0029-2-pass.yaml
+  sealed_at: '2026-05-10T22:04:32Z'
+  packet_sha256: 037369843b6394fdb63eaff2f41a91eedabdf39c2f9251c8906dae593d71dbf9
+  iteration_id: iteration-0029-supervisor-flavor-b-review
+  reviewer_id: claude-iter0029-2
+- id: codex-iter0032-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0032-visibility-tui-v1105-flavor-b-review-codex-iter0032-1-pass.yaml
+  sealed_at: '2026-05-11T00:25:46Z'
+  packet_sha256: 06e3efcdec4ee131151ce8c68ea2eb5875a846a66c813e99cd68b815e0b7e799
+  iteration_id: iteration-0032-visibility-tui-v1105-flavor-b-review
+  reviewer_id: codex-iter0032-1
+- id: codex-iter0033-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0033-fix-iter-0032-findings-codex-iter0033-1-pass.yaml
+  sealed_at: '2026-05-11T00:52:59Z'
+  packet_sha256: f7ab1f5747b387f50b9286c1601988040b8a7b0a315b563deb879a9816ef5261
+  iteration_id: iteration-0033-fix-iter-0032-findings
+  reviewer_id: codex-iter0033-1
+- id: codex-iter0033-2-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0033-fix-iter-0032-findings-codex-iter0033-2-pass.yaml
+  sealed_at: '2026-05-11T00:57:40Z'
+  packet_sha256: b63bea9a2a622b80691aebae5ff44aab292b3411cb0139432bc53f116f4d9f74
+  iteration_id: iteration-0033-fix-iter-0032-findings
+  reviewer_id: codex-iter0033-2
+- id: codex-iter0034-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0034-self-drive-flavor-b-review-codex-iter0034-1-pass.yaml
+  sealed_at: '2026-05-11T01:43:29Z'
+  packet_sha256: ee75acbd655e5f9466e8a3a290d18db9c212d148b3ace47098617c9adcdbbdf0
+  iteration_id: iteration-0034-self-drive-flavor-b-review
+  reviewer_id: codex-iter0034-1
+- id: codex-iter0035-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0035-self-drive-fixes-codex-iter0035-1-pass.yaml
+  sealed_at: '2026-05-11T02:07:32Z'
+  packet_sha256: 7833963e6d270e5adfe6a8dd35af66c0ec8d0cf622bd97094069d4544a3a90e4
+  iteration_id: iteration-0035-self-drive-fixes
+  reviewer_id: codex-iter0035-1
+- id: codex-iter0036-2-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0036-subagent-watchdog-codex-iter0036-2-pass.yaml
+  sealed_at: '2026-05-11T03:11:03Z'
+  packet_sha256: 5a4ab96feee64e5416306801b039f814565d8af5ff7acc9dc5d04bed0635bbb7
+  iteration_id: iteration-0036-subagent-watchdog
+  reviewer_id: codex-iter0036-2
+- id: codex-iter0037-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0037-bidirectional-dispatch-codex-iter0037-1-pass.yaml
+  sealed_at: '2026-05-11T04:04:52Z'
+  packet_sha256: 5493731f325962b91f3c2815e9d74ec9ac9e3e25466ed1b74a0e22b2aa9d58a3
+  iteration_id: iteration-0037-bidirectional-dispatch
+  reviewer_id: codex-iter0037-1
+- id: codex-audit-security-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-security-codex-audit-security-1-pass.yaml
+  sealed_at: '2026-05-11T04:06:30Z'
+  packet_sha256: 5b6870cfe9f8ba0a35592fd7ff7293b9a36f568f61b48c85b8185fac5057864b
+  iteration_id: iteration-audit-2026-05-11-security
+  reviewer_id: codex-audit-security-1
+- id: codex-audit-performance-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-performance-codex-audit-performance-1-pass.yaml
+  sealed_at: '2026-05-11T04:17:46Z'
+  packet_sha256: 8aa3da37fce92019da89645736dac46fcd288a8f72ed789d24f1041ff140e8d1
+  iteration_id: iteration-audit-2026-05-11-performance
+  reviewer_id: codex-audit-performance-1
+- id: codex-audit-crossplat-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-cross-platform-codex-audit-crossplat-1-pass.yaml
+  sealed_at: '2026-05-11T04:18:25Z'
+  packet_sha256: 87429901f11884b6198eef13d77190a84152f2b344b6cfe93a3ce04f3276f72d
+  iteration_id: iteration-audit-2026-05-11-cross-platform
+  reviewer_id: codex-audit-crossplat-1
+- id: codex-audit-bareexc-1-pass1
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-audit-2026-05-11-bare-except-codex-audit-bareexc-1-pass.yaml
+  sealed_at: '2026-05-11T04:19:34Z'
+  packet_sha256: 502db1578a8bc6aeea3ff4aff55eba2cced253f1dd8652447e01cbbc9aad6c71
+  iteration_id: iteration-audit-2026-05-11-bare-except
+  reviewer_id: codex-audit-bareexc-1
+- id: codex-iter0039-1-pass2
+  path: agent-loop/archive/review-passes/2026-05-11-iteration-0039-dispatch-crossplat-fixes-codex-iter0039-1-pass.yaml
+  sealed_at: '2026-05-11T12:32:10Z'
+  packet_sha256: aacb1f4d1335e6833d7bb0a38708fad74d35866976922d2d9e5a8b8e0e268c46
+  iteration_id: iteration-0039-dispatch-crossplat-fixes
+  reviewer_id: codex-iter0039-1
+finding_id_namespacing:
+  pre_v1_3: shared sequential rev-NNN range
+  post_v1_3: namespaced by reviewer (claude-rev-NNN, codex-rev-NNN); cross-reviewer
+    collisions impossible
+  reserved_gaps:
+  - range: rev-039..rev-051
+    status: reserved_unused
+    reason: no findings issued; pass-4 started at rev-052 to leave room for hypothetical
+      pass-3.5
+loop_self_test_observations:
+- cycle: passes 4 and 5
+  independent_finding_rate: 0.86
+  formula_status: PROVISIONAL_per_codex-rev-022_and_claude-rev-010_and_codex-rev-029
+  formula: (unique_canonical_findings - duplicates) / total_findings - formula not
+    yet promoted to section 22
+  total_findings: 22
+  duplicates: 4
+  duplicates_observed:
+  - 'rev-052 (claude) <-> rev-067 (codex): both flagged section 10 / section 20 budget
+    conflict'
+  - 'rev-054 (claude) <-> rev-067 (codex): both flagged state-machine transitions
+    implicit'
+  - 'rev-058 (claude) <-> rev-072 (codex): both flagged peer-question coupling; codex
+    sharper'
+  - 'rev-065 (claude) <-> rev-071 (codex): both flagged iteration-0000 reviewer; codex
+    reframed correctly'
+- cycle: passes 7 and 8
+  independent_finding_rate: 0.86
+  formula_status: PROVISIONAL_per_codex-rev-022_and_claude-rev-010_and_codex-rev-029
+  formula: (unique_canonical_findings - duplicates) / total_findings - formula not
+    yet promoted to section 22
+  total_findings: 14
+  duplicates: 2
+  duplicates_observed:
+  - 'claude-rev-001 (claude) <-> codex-rev-002 (codex): both flagged failure-modes
+    regression in v1.2 consolidation; auto-promote eligible'
+  - 'claude implicit <-> codex-rev-005: both noticed TOCTOU on production transition
+    (claude credited codex)'
+- cycle: passes 9 and 10
+  independent_finding_rate: 0.81
+  formula_status: PROVISIONAL_per_codex-rev-022_and_claude-rev-010
+  formula: (unique_canonical_findings - duplicates) / total_findings - formula not
+    yet promoted to section 22
+  total_findings: 16
+  duplicates: 3
+  duplicates_observed:
+  - claude-rev-008 (corroboration weaponization) extends codex-rev-010 (auto-block
+    too broad)
+  - claude-rev-013 (consensus mutation invalidates approvals) overlaps codex-rev-011
+    (hash type confusion)
+  - claude-rev-009 (adversarial pass undefined) and codex-rev-012 (section 24 drift)
+    both about under-specified mechanism behavior
+  pattern_note: Slightly lower independence (0.81) because pass-10 builds on pass-9
+    explicitly; expected and still well above kill-switch threshold of 0.30
+- cycle: passes 11 and 12
+  independent_finding_rate: 0.71
+  formula_status: PROVISIONAL_per_codex-rev-022_and_claude-rev-010_and_codex-rev-029
+  total_findings: 16
+  duplicates: 3 explicit + cross-pass corroborations cataloged in pass-12 claude-rev-019
+  duplicates_observed:
+  - claude-rev-016 (canonical-key timing) extends codex-rev-009 (corroboration ownership)
+  - claude-rev-018 (rollback semantics) parallels codex-rev-017 (version bump discipline)
+  - claude-rev-020 (state file tracking) extends codex-rev-018 (gitignore Phase 0
+    scripts)
+  pass_10_self_introduced_bugs_caught_by_pass_11: 5
+  interpretation: 'Claude pass-10 introduced 5 new bugs (gitignore /scripts gap, em
+
+    dash in own gitignore patch, no version bump, section 24 prose drift,
+
+    published rates with undefined formula) while applying 4 prior fixes.
+
+    Net +1 bug.
+
+    '
+- cycle: passes 13 and 14
+  independent_finding_rate: 0.62
+  formula_status: PROVISIONAL_per_codex-rev-022_and_claude-rev-010_and_codex-rev-029
+  total_findings: 16
+  duplicates: 6
+  duplicates_observed:
+  - claude-rev-024 (disable-mechanism-informal) generalizes codex-rev-025 + codex-rev-026
+  - claude-rev-025 (broken-code pattern) follows from claude-rev-024
+  - claude-rev-027 (structural contradiction) overlaps claude-rev-024
+  - claude-rev-026 (frontmatter context gap) extends codex-rev-027
+  pass_12_self_introduced_bugs_caught_by_pass_13: 5
+  interpretation: 'Claude pass-12 introduced 5 self-bugs (codex-rev-025 schema-active-
+
+    despite-disable, codex-rev-026 section-17-broken-but-live,
+
+    codex-rev-027 known_blockers-incomplete, codex-rev-028 patch-history-
+
+    gap, codex-rev-029 partial-provisional-flagging). Same partial-fix
+
+    pattern: addresses surface symptom, leaves related artifacts broken.
+
+    4 of 4 consolidation/patch passes have now introduced bugs.
+
+    '
+cycle_independence_trend_summary: "Independence rate trend over cycles: 0.86 (4-5),\
+  \ 0.86 (7-8), 0.81 (9-10),\n0.71 (11-12), 0.62 (13-14). Monotonically declining.\
+  \ Two interpretations:\n  (a) GOOD: each pass cleans surface issues; deeper findings\
+  \ cluster\n      around remaining architectural themes (corroboration design,\n\
+  \      section 24 drift, disable mechanism, known-blocker marking)\n  (b) BAD: claude\
+  \ self-patching means each pass produces findings\n      dependent on prior passes'\
+  \ work, reducing independence by\n      construction\nCannot distinguish (a) vs\
+  \ (b) without external check. Operator path\ndecision (claude-rev-028) addresses\
+  \ this directly.\nStill well above section 4 kill-switch threshold of 0.30.\n"
+v1_5_consolidation_2026_05_08:
+  description: 'Single coherent v1.5 patch landed after operator ratified Tier 1/2/3
+
+    decisions. All 24 v1.4 known_blockers resolved. Validator runs clean
+
+    (0 findings) on v1.5.
+
+    '
+  applied_after: path_c_kickoff (validator built and run on v1.4 first)
+  validator_pre_v1_5: 14 findings
+  validator_post_v1_5: 0 findings
+  net_blocker_delta: -24 (full clearance)
+  pattern_break: 'First consolidation pass that did NOT introduce new bugs (per pass-15
+
+    validator). Prior 4 of 4 patches each introduced ~5 bugs. Hypothesis:
+
+    deterministic validator + pre-ratified design (no claude self-decisions
+
+    on architecture) breaks the regression pattern.
+
+    '
+  awaiting:
+  - codex review pass-15 (cross-reviewer corroboration of v1.5)
+  - if pass-15 returns 0 blocking findings: build remaining Phase 0 scripts
+  - iteration-0000 dry-run produces section 22 metrics
+  - then active_contract_readiness: ready
+path_c_kickoff_2026_05_08:
+  description: 'Operator chose Path C from claude-rev-028 (pass-14): stop claude
+
+    self-patching of spec; build Phase 0 infrastructure; run validator;
+
+    use empirical findings to drive v1.5 design.
+
+    '
+  artifacts_built:
+  - scripts/agent_loop/__init__.py
+  - scripts/agent_loop/validate_disposition_index.py
+  - scripts/agent_loop/run_validator_tests.py
+  - agent-loop/tests/fixtures/spec_known_good/spec.md
+  - agent-loop/tests/fixtures/spec_known_bad/spec.md
+  validator_test_results:
+    fixture_smoke_tests: 5/5 passed (known_good=0 findings; known_bad=4 findings as
+      expected)
+  validator_run_against_real_spec:
+    spec_validated: draft-v1.4-ai-contract-patched-pass-10-pass-12-pass-14
+    report_path: agent-loop/state/validate-disposition-index-report.yaml
+    total_findings: 14
+    severity_counts:
+      high: 12
+      medium: 2
+    finding_classes:
+      PROMOTED_TO_DEAD_REFERENCE: 4
+      KNOWN_BLOCKER_SECTION_LACKS_DISABLE_MARKER: 8
+      ARCHIVED_FILE_NOT_TRACKED: 1
+      SECTION_24_INDEX_ONLY_VIOLATION: 1
+  validator_caught_real_bugs:
+  - rev-005 promoted_to references nonexistent section_20_error_handling (real dead-reference;
+    section heading is 'Orchestrator loop' not 'Error handling')
+  - 3 disposition entries cite section 24 sub-blocks (id_reservations, pending_v1_4,
+    archived) which the validator's heading-based resolver does not recognize - either
+    fix dispositions to cite 'section_24' or extend validator semantics
+  - 8 known_blockers reference active sections (section 0, section 22, section 23,
+    section 24) that have no inline DISABLED markers - claude-rev-024 prediction confirmed
+  - 39 prose fields in section 24 confirm codex-rev-020/030 + claude-rev-027 structural
+    contradiction
+  - yaml parse error in this index.yaml (introduced by linter mid-pass-14) caught
+    and fixed during validator development
+  validator_caught_meta_observation:
+  - validator development itself caught a real production bug in this index.yaml (line
+    183 pattern_note unindented under list parent). The infrastructure-first approach
+    paid off immediately.
+  v1_5_work_list_extracted_deterministically:
+  - fix_rev_005_promoted_to_pointing_at_section_20_error_handling_OR_create_explicit_subsection_anchor
+  - extend_validator_or_disposition_schema_to_handle_section_N_sub_block_references_(claude-rev-031)
+  - land_claude_rev_024_inline_DISABLED_markers_in_8_affected_sections_OR_redesign_known_blockers_marking
+  - resolve_section_24_index_only_contradiction_via_codex_rev_030_(rename)_OR_codex_rev_020_(disposition_ledger)
+  - stage_pass_14_archive_via_git_add
+  recommended_next_step: 'Operator review of validate-disposition-index-report.yaml.
+
+    Decide which of the 14 findings to fix and whether to extend validator
+
+    semantics (e.g., recognize section_N_sub_block_id refs).
+
+    Do NOT resume claude inline self-patching of the spec until at least
+
+    one cycle of operator-driven v1.5 fixes lands AND validator runs clean.
+
+    '
+claude_self_patch_convergence_assessment:
+  pass_10_introduced_bugs_caught_by_pass_11: 5
+  pass_12_introduced_bugs_caught_by_pass_13: 5
+  pattern: claude self-patching is NOT converging; ~5 bugs introduced per consolidation/patch
+    pass
+  recommendation: operator path decision required per claude-rev-028 in pass-14 archive
+  paths:
+    A: continue claude self-patching with strict scope constraints; build validate_disposition_index.py
+      FIRST and gate further patches
+    B: operator takes patch authority for v1.5; claude+codex review-only; no inline
+      patches
+    C: stop patching; build scripts/agent_loop/* infrastructure; run iteration-0000
+      dry-run; use empirical metrics to drive v1.5 design
+  cumulative_interpretation: 'Two-agent disagreement-then-consensus pattern produced
+    independent
+
+    signal across THREE separate cycles (passes 4-5: 0.86, passes 7-8:
+
+    0.86, passes 9-10: 0.81). All well above section 4 kill-switch
+
+    threshold of 0.30. Architecture is justifying itself across
+
+    multiple iterations, not just once. Most informative side-effect:
+
+    pass-7 caught review-log-drift behaviors that claude introduced in
+
+    pass-4; pass-9 caught architectural bugs (hash type confusion,
+
+    corroboration ownership conflict) that claude introduced in v1.4
+
+    while applying pass-7 fixes. Three of three consolidation/patch
+
+    passes have introduced new bugs while fixing prior ones. The
+
+    dual-reviewer pattern is actively catching defects the spec author
+
+    missed.
+
+    '
+premature_done_claim_pattern:
+  observation: Spec-author claude has declared 'ready for Phase 0' or equivalent three
+    times. All three were rebutted by the next pass.
+  instances:
+  - claim: 'v1.2: ''production-quality contract'''
+    rebuttal_pass: pass-5
+  - claim: 'v1.3: ''ready for Phase 0 with no known blocking issues'''
+    rebuttal_pass: pass-7
+  - claim: 'v1.4: ''Spec is now ready for Phase 0'''
+    rebuttal_pass: pass-9
+  operator_directive_2026_05_08: stop trying to prematurely launch
+  proposed_structural_remedy: claude-rev-007 done-claim rule (pending v1.5)
+  pass_10_compliance: verdict explicitly does NOT declare ready
+consolidation_regression_pattern:
+  observation: Two of two consolidation passes have silently dropped behavioral rules
+    that were protected in earlier versions.
+  instances:
+  - cycle: v1.0 -> v1.2
+    rule_dropped: implicit (rev-031..rev-038 surfaced post-hoc by claude pass-3)
+    caught_by: claude-pass-3
+  - cycle: v1.2 -> v1.3
+    rule_dropped: rev-005 malformed-output retry rule (section 22 failure-modes table
+      deleted)
+    caught_by: codex-pass-7
+    corroborated_by: claude-pass-8
+  interim_mitigation_in_v1_4: claude-rev-005 validate_disposition_index.py added to
+    Phase 0 deliverables
+  structural_fix_pending_v1_5: 'claude-rev-001 anti-regression acceptance criterion
+    (consolidations cannot delete rules without explicit dropped: annotation)'

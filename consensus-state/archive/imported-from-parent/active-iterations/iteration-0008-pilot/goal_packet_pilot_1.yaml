@@ -1,0 +1,42 @@
+schema_version: 1
+pilot_id: iteration-0008-pilot-1-memory-promotion
+goal:
+  summary: Promote claude-iter0006-006 'do not keep polishing process' guidance from
+    spec corpus to durable operator memory
+  desired_end_state: feedback_no_process_polishing.md exists in operator memory dir
+    with right content; MEMORY.md index has a 1-line entry pointing at it
+  non_goals:
+  - modify spec md or design spec content
+  - modify any tool source
+  - introduce new MCP tools
+  - alter the canonical-iter0006-006 entry in disposition-ledger.yaml
+allowed_files:
+- C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/feedback_no_process_polishing.md
+- C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/MEMORY.md
+allowed_sections: []
+forbidden_files:
+- scripts/agent_loop_mcp/tools/
+- wiki/
+- agent-loop/state/disposition-ledger.yaml
+max_iterations: 1
+max_patch_size: 60
+validators_required: []
+acceptance_gates:
+- id: A1
+  description: feedback_no_process_polishing.md exists in operator memory dir
+  check: test -f "$HOME/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/feedback_no_process_polishing.md"
+- id: A2
+  description: MEMORY.md index has a line referencing the new memory file
+  check: grep -q "feedback_no_process_polishing.md" "$HOME/.claude/projects/C--Users-<you>-Downloads-upstream-26-4-16/memory/MEMORY.md"
+stop_conditions:
+- max_iteration_count_reached
+- patch_would_touch_forbidden_files
+- any_acceptance_gate_returns_undefined
+- patch_size_exceeds_max
+operator_escalation_triggers:
+- touched_forbidden_files
+- max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-09T00:00:00Z'
+  scope_signature: ab01bccb6004c819b7c716db6566caef9a6d743ce25020162564a1d95f71363c

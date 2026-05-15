@@ -1,0 +1,98 @@
+schema_version: 1
+iteration_id: iteration-0035-self-drive-fixes
+created_utc: '2026-05-11T02:15:00Z'
+closing_state: quorum_close_passed
+ceremony_flavor: claude_fix_author_with_codex_pre_review
+parent_iteration: iteration-0034-self-drive-flavor-b-review
+subsystem: self_drive_stop_rules
+closing_reason: |
+  iter-0035 lands all 4 iter-0034 findings as claude-authored fixes
+  with codex pre-implementation code review (workflow #4 per operator
+  preference, second empirical run after iter-0033).
+
+  EMPIRICAL CHAIN:
+    1. Goal_packet authored (iter-0035 scope = same 2 files as iter-0034);
+       fix_author_policy=permissive (claude is fix-author).
+    2. Proposed-patches.md authored with 4 unified-diff patches + per-
+       patch rationale + reviewer questions.
+    3. Review-packet authored via _author_review_packet (mandatory iter-0033
+       gotcha applied — proposed-patches.md content embedded inline).
+    4. Codex pre-review (codex-iter0035-1) sealed cleanly. 2 substantive
+       findings against Patch 1:
+         codex-rev-001 (medium): untracked symlink dereference. Patch as
+           drafted would follow symlinks via Path.open(), potentially
+           counting arbitrary out-of-repo targets or crashing on broken
+           links. Recommended is_symlink() detection + count-as-1.
+         codex-rev-002 (medium): no-trailing-newline undercount.
+           text.count("\n") gives 0 for a 1-line file without trailing
+           newline; gives N-1 for N-line files without trailing newline.
+           Recommended text.count("\n") + (1 if text and not text.endswith("\n") else 0).
+       Patches 2/3/4: directionally correct as proposed; no refinements.
+    5. Claude integrated BOTH codex refinements into Patch 1 BEFORE any
+       code landed:
+         - is_symlink() detection: total += 1 for symlinks; continue
+           without dereferencing
+         - trailing-newline fix: text.count("\n") + (1 if non-empty and
+           no trailing newline else 0)
+    6. Claude implemented all 4 patches via Edit:
+         _self_drive.py:443-512  Patch 1 (patch_size_exceeds_max union counting)
+         _self_drive.py:679-700  Patch 2 (_reviewer_clean blocker-first)
+         _self_drive.py:721-750  Patch 3 (closure import fail-closed signal)
+         _self_drive.py:350-385  Patch 4 (basename fallback restriction)
+    7. Claude added 9 regression tests:
+         test_patch_size_counts_untracked_text_file
+         test_patch_size_untracked_symlink_does_not_dereference (codex-rev-001)
+         test_patch_size_counts_no_trailing_newline_multi_line (codex-rev-002)
+         test_patch_size_treats_untracked_binary_as_zero
+         test_reviewer_with_blockers_missing_goal_satisfied_is_not_clean
+         test_reviewer_with_no_signal_is_treated_as_in_flight
+         test_closure_invariant_import_failure_emits_stop_rule
+         test_resolve_referenced_path_basename_only_falls_back_to_iter_dir
+         test_resolve_referenced_path_with_dirs_does_not_fall_back_to_iter_dir
+    8. Post-implementation claude review (claude-iter0035-1) confirms
+       all integrations; goal_satisfied=true; blocking_objections=[].
+    9. closure-certificate.yaml: last_mutation=null → trivial PASS.
+
+  KEY EMPIRICAL OBSERVATION:
+    Workflow #4 catch rate across iter-0033 + iter-0035: 4/4 codex
+    pre-review findings real and integrated; 0 false positives; 0 post-
+    commit fixup iterations needed.
+
+    Pre-review findings by iteration:
+      iter-0033: 2 substantive findings (OSError catch + reviewer_id anchor)
+      iter-0035: 2 substantive findings (symlink dereference + trailing-newline)
+    All 4 were real defects in claude's proposed patches that would have
+    required followup iterations to fix post-commit under workflow #3.
+
+    Workflow #4 cost: ~2 extra codex dispatches (one pre-review per
+    fix iteration); ~60-120s wall time total.
+    Workflow #4 benefit: 2 followup iterations avoided.
+
+  SUBSYSTEM CHAIN COMPLETE:
+    All 6 subsystems of agent-loop have now passed Flavor B review:
+      1. closure invariant (iter-0023/0024)
+      2. apply pipeline (iter-0025/0026)
+      3. codex dispatch (iter-0027/0028)
+      4. supervisor (iter-0029/0030)
+      5. claude-authored v1105+TUI (iter-0032/0033)
+      6. self_drive stop rules (iter-0034/0035)
+    Total findings landed: 26+ across all six subsystems. The agent-loop
+    code surface is now post-Flavor-B-reviewed end-to-end.
+
+next_action: |
+  No followup fixes pending from iter-0035. Outstanding tasks:
+    - Task #43 (subagent dispatch watchdog + external-process fallback).
+      Iter-0031 lesson; visibility TUI provides observation half;
+      watchdog adds action half (cleanup + recoverable state on stall).
+    - claude-rev-005 (LOW, bare-except policy observation) — defer or
+      address opportunistically when touching adjacent code.
+
+artifacts:
+  goal_packet: agent-loop/active/iteration-0035-self-drive-fixes/goal_packet.yaml
+  proposed_patches: agent-loop/active/iteration-0035-self-drive-fixes/proposed-patches.md
+  review_packet: agent-loop/active/iteration-0035-self-drive-fixes/review-packet.yaml
+  codex_pre_review: agent-loop/active/iteration-0035-self-drive-fixes/codex-review.yaml
+  claude_review: agent-loop/active/iteration-0035-self-drive-fixes/claude-review.yaml
+  closure_certificate: agent-loop/active/iteration-0035-self-drive-fixes/closure-certificate.yaml
+  archive:
+    codex_pre_review: agent-loop/archive/review-passes/2026-05-11-iteration-0035-self-drive-fixes-codex-iter0035-1-pass.yaml

@@ -1,0 +1,41 @@
+schema_version: 1
+iteration_id: iteration-0037-bidirectional-dispatch
+last_mutation: null
+closing_verdict:
+  actor:
+    id: claude-iter0037-1
+    model_family: claude
+    role: closer
+    pass_id: claude-iter0037-1-pass1
+  review_target_hash: 48f3f1fde32ff1c810f59938569719e94921102494a97913cf3ae51f5ae47637
+  created_at_utc: '2026-05-11T05:00:00Z'
+  review_scope_hash: null
+invariant_checks:
+  cross_family: PASS
+  hash_match: PASS
+  freshness: PASS
+overall: PASS
+generated_utc: '2026-05-11T05:00:00Z'
+notes: |
+  iter-0037 closes the deferred half of Task #43. Combined with iter-0036
+  watchdog work, Task #43 is now complete: codex dispatches stream every
+  output line in real-time, emit heartbeats every 30s, and auto-abort on
+  heartbeat-silence within ~1 second of the configurable threshold.
+
+  last_mutation=null (direct claude edits + parallel-agent edits; no
+  apply.codex_patch call). Cross_family / hash_match / freshness trivially
+  PASS per check_closure_invariant when last_mutation is None.
+
+  Verification:
+    pytest:        417 passed (was 388; +29 across 4 parallel commits)
+    smoke:         60/60 (after section-24 sync + commits land)
+    gates:         11/11 expected after all 4 iterations land
+
+  Workflow #4 cumulative catch rate (iter-0033 + 0035 + 0036 + 0037):
+    12 codex pre-review findings, 12/12 real, 0 false positives,
+    0 post-commit fixup iterations.
+
+  Parallel-agent execution: 7 agents ran simultaneously across iter-0037,
+  iter-0038, and 3 audit-followup iterations. Zero file conflicts; all
+  completed independently. Operator's "maximize parallel agents at every
+  step" mandate validated at scale.

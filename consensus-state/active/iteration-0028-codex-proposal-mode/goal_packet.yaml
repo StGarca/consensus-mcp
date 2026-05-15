@@ -1,0 +1,105 @@
+schema_version: 1
+pilot_id: iteration-0028-codex-proposal-mode
+goal:
+  summary: |
+    iter-0028 — implement the iter-0027 converged plan. Add `--mode
+    {review,proposal}` to both codex and gemini dispatchers with default
+    'review' (backward compat). Ship new proposal_template.md +
+    proposal_schema.json pairs explicitly framed as "generate a design
+    proposal, NOT code review."
+  desired_end_state: |
+    `consensus_mcp/dispatch_templates/` contains 4 new files:
+    codex_proposal_template.md, codex_proposal_schema.json,
+    gemini_proposal_template.md, gemini_proposal_schema.json. The
+    schemas require selected_target, rationale_vs_alternatives,
+    deliverable_scope, risks, estimated_complexity (enum), and
+    structural_abstention (bool) — selected_target and
+    deliverable_scope are nullable to support honest abstention.
+
+    `_dispatch_codex.py` and `_dispatch_gemini.py` gain a `--mode`
+    argparse flag (choices=['review','proposal'], default='review').
+    When mode='proposal', the default template + schema names switch
+    to the proposal pair. --prompt-template and --schema overrides
+    still win, preserving every existing call site.
+
+    New tests in `test_dispatch_codex_proposal_mode.py` (15 tests) and
+    `test_dispatch_gemini_proposal_mode.py` (8 tests) cover:
+      - both files + schemas exist
+      - JSON schema parses + has required fields
+      - template text explicitly frames task as proposal, not review
+      - dispatcher accepts --mode, defaults to review, rejects garbage
+      - source code references both template names + the mode-switch
+      - schema validates well-formed proposals
+      - schema validates structural_abstention=true with null fields
+      - schema REJECTS review-shaped output (findings/goal_satisfied/
+        blocking_objections) — the core asymmetry that makes proposal
+        mode worth shipping
+
+    Full suite: 734 pass + 1 skipped + 0 fail (was 711 + 23 new tests).
+  non_goals:
+    - changing the MCP tool wrappers (reviewer_dispatch_codex/gemini)
+      to surface --mode — that's iter-0029 if operator wants it
+    - migrating iter-0021 / iter-0024 / iter-0027 to use proposal mode
+      retroactively (historical record preserved)
+    - changing workflow_engine.py phase semantics
+    - changing the ClaudeAdapter (in-process; already supports proposal)
+allowed_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/_dispatch_base.py
+  - consensus_mcp/dispatch_templates/codex_proposal_template.md
+  - consensus_mcp/dispatch_templates/codex_proposal_schema.json
+  - consensus_mcp/dispatch_templates/gemini_proposal_template.md
+  - consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  - consensus_mcp/tests/test_dispatch_codex_proposal_mode.py
+  - consensus_mcp/tests/test_dispatch_gemini_proposal_mode.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_paths.py
+  - consensus_mcp/server.py
+  - consensus_mcp/tools/
+  - consensus_mcp/workflow_engine.py
+  - consensus_mcp/contributors/
+  - consensus_mcp/config.py
+  - consensus_mcp/_init_wizard.py
+  - consensus_mcp/_engine_factory.py
+  - consensus_mcp/_snapshot_state.py
+  - consensus_mcp/_import_parent_history.py
+  - consensus_mcp/dispatch_templates/codex_review_template.md
+  - consensus_mcp/dispatch_templates/codex_review_schema.json
+  - consensus_mcp/dispatch_templates/gemini_review_template.md
+  - consensus-state/
+  - pyproject.toml
+  - README.md
+  - CHANGELOG.md
+  - .github/
+  - .gitignore
+  - docs/
+max_iterations: 1
+max_patch_size: 800
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: full suite >=734 green
+    check: py -3.11 -m pytest consensus_mcp/tests -q
+  - id: A2
+    description: proposal schemas reject review-shaped output (the core asymmetry)
+    check: py -3.11 -m pytest consensus_mcp/tests/test_dispatch_codex_proposal_mode.py::test_proposal_schema_rejects_review_shaped_output -q
+  - id: A3
+    description: both schemas allow structural_abstention=true
+    check: 'py -3.11 -m pytest consensus_mcp/tests/test_dispatch_codex_proposal_mode.py::test_proposal_schema_validates_structural_abstention consensus_mcp/tests/test_dispatch_gemini_proposal_mode.py::test_gemini_proposal_schema_allows_abstention -q'
+  - id: A4
+    description: backward-compat — review mode still works (default)
+    check: 'py -3.11 -c "import argparse; p=argparse.ArgumentParser(); p.add_argument(''--mode'',default=''review'',choices=[''review'',''proposal'']); assert p.parse_args([]).mode==''review''; print(''ok'')"'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T13:30:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: '6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6'

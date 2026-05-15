@@ -1,0 +1,118 @@
+schema_version: 1
+iteration_id: iteration-0011-fault-recovery-demo
+created_utc: '2026-05-10T05:00:00Z'
+review_target: |
+  Address codex's two iter-0010 findings:
+    codex-rev-001 (medium): loop.run_goal auto-dispatch now passes
+    review_target_path=str(iter_dir / "review-packet.yaml") to
+    reviewer_dispatch_codex.handle() so codex receives explicit review-target-
+    binding instead of fallback-scope review.
+    codex-rev-002 (low): orphan `import yaml` removed from
+    tools/loop_run_goal.py (unused after iter-0010 dedup of _read_yaml_or_empty
+    to _self_drive).
+
+  Iteration purpose (per expert verdict 2026-05-10): demonstrate the
+  fault-recovery pattern of the supervisor loop on real findings — Codex
+  identified these as iter-0010 non-blockers; iter-0011 implements the fix and
+  re-submits for review. If Codex finds a blocking issue on this submission,
+  the demo continues with fix → re-dispatch → close.
+
+scope:
+  goal_summary: 'Address codex-rev-001 (review_target_path threading) + codex-rev-002 (orphan yaml import) from iter-0010'
+  goal_packet_path: agent-loop/active/iteration-0011-fault-recovery-demo/goal_packet.yaml
+  scope_signature: 3a7afc7025cd059e1acc33642daa8e2ebc9d6bce1f53a457cba578875d225b24
+
+artifacts_modified:
+  - path: scripts/agent_loop_mcp/tools/loop_run_goal.py
+    sha256_post: 73c855def92be006ea2c56197a6b05b303e24e861891ca647261f3ebe9597b6c
+    lines_post: 286
+    diff_summary: |
+      -1 / +5: removed `import yaml` (orphan after iter-0010 dedup); added
+      `review_target_path=str(iter_dir / "review-packet.yaml")` to the
+      reviewer_dispatch_codex.handle() call in auto-dispatch + 4 lines of
+      explanatory comment citing codex-rev-001. Net +4 LOC.
+
+  - path: scripts/agent_loop_mcp/tests/test_loop_run_goal.py
+    sha256_post: 6b16cac401ebf6d2e9542093758d52cf88d4fff3ee4fc8e1ab192e17d0ff9c76
+    lines_post: 670
+    diff_summary: |
+      +52 lines: 2 new tests appended at end:
+        test_auto_dispatch_passes_review_target_path — asserts review_target_path
+          kwarg is passed to reviewer_dispatch_codex.handle() and equals
+          str(iter_dir / "review-packet.yaml"). 30 LOC.
+        test_no_orphan_yaml_import — reads loop_run_goal.py source; asserts no
+          line is bare "import yaml". Defends against the orphan reappearing.
+          22 LOC.
+
+iteration_artifacts:
+  - path: agent-loop/active/iteration-0011-fault-recovery-demo/goal_packet.yaml
+    sha256: d9ae5723aa011681defaa8819d22b4440bbb752ac1d1ad82be4e644a1ad66c48
+    role: scope-sealed goal_packet
+  - path: agent-loop/active/iteration-0011-fault-recovery-demo/review-packet.yaml
+    role: this file
+
+verification_results:
+  acceptance_gates:
+    A1: {description: 'review_target_path passed in handle call', passed: true}
+    A2: {description: 'orphan import yaml removed', passed: true}
+    A3: {description: 'pytest 140 passing', passed: true, output: '140 passed in 1.31s'}
+
+  pytest_full_suite:
+    invocation: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+    result: '140 passed in 1.31s'
+    pre_iteration_count: 138
+    iteration_added: 2
+    post_iteration_total: 140
+    regressions: 0
+
+  tdd_discipline_observed:
+    red_phase: |
+      2 new tests written first; both failed.
+      test_auto_dispatch_passes_review_target_path: KeyError-style failure
+        (assertion: "review_target_path" not in called[0]).
+      test_no_orphan_yaml_import: AssertionError ("import yaml" found in source).
+    green_phase: |
+      Removed `import yaml` from loop_run_goal.py imports.
+      Added review_target_path=str(iter_dir / "review-packet.yaml") to the
+      handle() call in auto-dispatch (lines 251-256 region).
+      Both tests pass; full suite remains all-green.
+
+design_notes:
+  - |
+    review_target_path uses Path(iter_dir) / "review-packet.yaml" computed
+    inside the auto-dispatch branch. By the state-machine precedence,
+    auto-dispatch only fires when state == ready_for_codex, which requires
+    review-packet.yaml AND claude-review.yaml to exist. The path is therefore
+    guaranteed to exist at dispatch time.
+  - |
+    The orphan import was created by iter-0010's _read_yaml_or_empty dedup.
+    Codex-rev-002 identified it as a hygiene gap. Removal is straightforward;
+    no other code in tools/loop_run_goal.py references the yaml module.
+  - |
+    Per Karpathy "Surgical Changes": removing this orphan is in-scope because
+    iter-0010's dedup created it. Cleaning up orphans your changes created is
+    explicitly required; not scope creep.
+
+anti_scope_check:
+  self_drive_modified: false
+  reviewer_dispatch_codex_modified: false
+  dispatch_codex_modified: false
+  server_modified: false
+  pyproject_version_bumped: false
+  files_changed_in_scope_only: true
+
+reviewer_question: |
+  Does this iteration cleanly address codex-rev-001 + codex-rev-002 from iter-0010?
+  Specifically:
+    1. Is review_target_path correctly threaded through auto-dispatch (path
+       points to the iteration's review-packet.yaml)?
+    2. Is the orphan `import yaml` removed without breaking any consumer (no
+       other code references it)?
+    3. Are the new tests substantive (assert behavior, not structure)?
+    4. Was iter-0010's dedup-created orphan correctly classified as in-scope
+       cleanup vs scope creep?
+    5. Any new orphans created by THIS change set?
+  Reviewers must emit:
+    - goal_satisfied: bool
+    - blocking_objections: list
+    - rationale: string

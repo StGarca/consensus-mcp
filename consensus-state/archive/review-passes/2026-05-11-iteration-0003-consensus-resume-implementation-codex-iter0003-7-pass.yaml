@@ -1,0 +1,44 @@
+iteration_id: iteration-0003-consensus-resume-implementation
+reviewer_id: codex-iter0003-7
+pass_id: codex-iter0003-7-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Close action can win over an undispositioned negative review with a patch
+    proposal
+  citation: consensus_mcp/_resume.py:552
+  risk: A current cross-family review is treated as enough to close the iteration
+    before checking whether that same review has goal_satisfied=false, blocking objections,
+    or patch proposals awaiting application. That can make resume recommend close_iteration
+    instead of apply_proposed_patch for a review that is explicitly asking for more
+    work.
+  recommendation: Gate close_iteration on a satisfied or operator-dispositioned review,
+    or evaluate open review findings and patch proposals before reporting closure
+    as the next action.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The implementation addresses the five named pass-2 mechanics,
+  but the expected-next-action decision can prematurely recommend closure while review
+  findings still need action.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: e7aec8b48fc572498f21a049252b4335d59feb671484c1598e79006794eaaf30
+  output_sha256: 39771199c14e0f33c550e0dc512fafadccfcc31ad3655397c98d01db7dcf24a6
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: bc0c3ab981da72a771c2075bab4752e76cdf4f8fe982d081db23e50116149d2f
+  scope_signature: 7f3d7442de9161a7c9e43c96c2296d27660c59d885b30b6d503263d0e0e6caf3
+  review_target_path: consensus-state/active/iteration-0003-consensus-resume-implementation/review-packet.yaml
+  review_target_hash: 9f0f6fc876450b48d2ade09e8e4edc084383d9c18d1bda91eddcee80c5cc081a
+sealed_at_utc: '2026-05-11T20:41:58Z'
+packet_sha256: 233c277ea3751ffd0a39bb26956f15c9e0114b44f8127e1154e1d18349e3c7d4

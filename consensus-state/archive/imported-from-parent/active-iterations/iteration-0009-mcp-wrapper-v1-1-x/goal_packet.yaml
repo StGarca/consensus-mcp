@@ -1,0 +1,65 @@
+schema_version: 1
+pilot_id: iteration-0009-mcp-wrapper-v1-1-x
+goal:
+  summary: Add reviewer.dispatch_codex MCP tool wrapping the proven _dispatch_codex helper
+  desired_end_state: |
+    scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py exists as a thin wrapper
+    over _dispatch_codex.main; tool is registered in server.py; MCP tools/list returns
+    reviewer.dispatch_codex; pytest test_reviewer_dispatch_codex.py passes; no
+    behavior divergence from the underlying helper (verified by argv-translation tests).
+  non_goals:
+    - re-implement any logic from _dispatch_codex.py
+    - modify _dispatch_codex.py behavior
+    - change goal_packet schema or codex output schema
+    - bump pyproject.toml version (separate concern)
+    - change any other MCP tool
+allowed_files:
+  - scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/server.py
+  - scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+  - agent-loop/active/iteration-0009-mcp-wrapper-v1-1-x/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - scripts/agent_loop/
+  - run/
+  - wiki/
+max_iterations: 1
+max_patch_size: 400
+validators_required:
+  - validate_disposition_index
+  - validate_iteration
+acceptance_gates:
+  - id: A1
+    description: tools/reviewer_dispatch_codex.py exists at expected path
+    check: test -f scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+  - id: A2
+    description: server.py imports and registers reviewer_dispatch_codex
+    check: grep -q "reviewer_dispatch_codex.register" scripts/agent_loop_mcp/server.py
+  - id: A3
+    description: pytest test_reviewer_dispatch_codex.py passes
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py -q'
+  - id: A4
+    description: full dispatch_codex pytest still passes (no regression)
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/test_dispatch_codex.py -q'
+  - id: A5
+    description: server boot probe + tools/list lists reviewer.dispatch_codex
+    check: 'python_env\python.exe -c "import sys; sys.path.insert(0, ''scripts''); from agent_loop_mcp import server; tools = [t[''name''] for t in server.registry.list_tools()]; sys.exit(0 if ''reviewer.dispatch_codex'' in tools else 1)"'
+stop_conditions:
+  - max_iteration_count_reached
+  - same_class_finding_repeats_twice
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+  - claude_codex_disagree_on_goal_satisfied
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+  - any_acceptance_gate_returns_undefined
+  - quorum_disagreement_on_scope
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-09T00:00:00Z'
+  scope_signature: bf0febb01c9f6a995342688658ce514b29a336268222959742e16ea4db0ab3eb

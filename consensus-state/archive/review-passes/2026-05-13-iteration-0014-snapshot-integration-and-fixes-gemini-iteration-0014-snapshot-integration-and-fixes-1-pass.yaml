@@ -1,0 +1,34 @@
+iteration_id: iteration-0014-snapshot-integration-and-fixes
+reviewer_id: gemini-iteration-0014-snapshot-integration-and-fixes-1
+pass_id: gemini-iteration-0014-snapshot-integration-and-fixes-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The changes successfully implement the desired end state.
+  The new integration tests in `test_snapshot_state_integration.py` are comprehensive
+  and cover all specified features and regressions. The idempotency logic in `_import_parent_history`
+  is correctly implemented and verified by new unit tests. The modifications to `_snapshot_state.py`,
+  such as the detailed restore plan and improved dry-run validation, meet the requirements
+  and are well-tested.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 4abc5df8972ca4879c338b177ec18e0bdf6ce2fb051e955c0c3cdb62f4e31d50
+  output_sha256: 5b60eb3aeb60cdd672fe717f6c0ba4be06c87b1a92e7e51d6df8885c25e35060
+  goal_packet_sha256: da6ee58c2e33cc457c0f9759a2bd1833ed2db84bb1fffff12a112de84318e9ea
+  scope_signature: 17f678d7741405fa0be3ce60e853059bf169ad6a32701d30f826e9d85c89afed
+  review_target_path: consensus-state/active/iteration-0014-snapshot-integration-and-fixes/review-packet.yaml
+  review_target_hash: ec5be1d211d7e693c1d67a559c392cf0a4bba8171b1ac5046b191fad34ee9512
+  adapter: gemini
+sealed_at_utc: '2026-05-13T03:33:33Z'
+packet_sha256: ff878b5706328d6a5070a2365078a7bbcf21bccbe4034ab00f652209b6e4f579

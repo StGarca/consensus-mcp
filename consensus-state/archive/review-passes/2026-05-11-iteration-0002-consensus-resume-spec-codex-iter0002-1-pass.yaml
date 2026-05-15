@@ -1,0 +1,122 @@
+iteration_id: iteration-0002-consensus-resume-spec
+reviewer_id: codex-iter0002-1
+pass_id: codex-iter0002-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: The expected_next_action schema omits wait_for_dispatch even though the
+    decision tree requires it.
+  citation: docs/specs/consensus-resume-spec.md:83
+  risk: A conforming implementation cannot represent the non-stuck in-flight dispatch
+    state described in behavior step 6, so clients may either reject valid responses
+    or fall through to an unsafe redispatch/close path.
+  recommendation: Add wait_for_dispatch to expected_next_action.kind and define its
+    required payload, including pass_id and freshness fields sourced from in_flight_dispatches.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: The spec says auto-detection picks by authorized_at_utc but also says to
+    pick the lex-greatest directory, creating contradictory selection rules.
+  citation: docs/specs/consensus-resume-spec.md:44
+  risk: Two clients can select different active iterations from the same state, especially
+    for non-numeric or same-prefix iteration names, breaking resume ergonomics and
+    risking action against the wrong iteration.
+  recommendation: Make authorized_at_utc the primary sort key, define deterministic
+    tie-breakers, and treat multiple non-closed active iterations as an ambiguity
+    surfaced in the response rather than relying on lexicographic names.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: Disk-read error handling is incomplete for required reads beyond goal_packet.yaml
+    and malformed dispatch-log lines.
+  citation: docs/specs/consensus-resume-spec.md:149
+  risk: Missing, unreadable, or malformed review YAML, missing dispatch-log.jsonl,
+    absent active directory, and malformed goal packets are unspecified despite acceptance
+    criteria requiring every disk read error path to be covered.
+  recommendation: "Extend \xA77 to cover every read in \xA75 with explicit return-vs-raise\
+    \ behavior and warning text for active directory listing, goal packet parse, dispatch\
+    \ log absence, review glob/parse, and iteration outcome/certificate reads."
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-004
+  severity: medium
+  summary: open_reviews is documented as sealed-but-not-closed, but the behavior populates
+    it from every review file without excluding closing or already-consumed reviews.
+  citation: docs/specs/consensus-resume-spec.md:97
+  risk: A closed iteration or an iteration with prior superseded reviews can be reported
+    as having open reviews, which can make closure_invariant_status and expected_next_action
+    misleading.
+  recommendation: Define how to classify review files into open, closing, invalid,
+    superseded, or already-consumed, and name the on-disk source used to detect closure
+    state such as iteration-outcome.yaml or closure certificate.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-005
+  severity: medium
+  summary: last_mutation.kind is under-specified and mixes bundle-changing events
+    with review/dispatch state.
+  citation: docs/specs/consensus-resume-spec.md:65
+  risk: The closure invariant depends on the latest bundle-changing mutation and review
+    target hash, but implementations may incorrectly treat dispatch_started, dispatch_aborted,
+    or review authored events as the mutation that needs cross-family closure.
+  recommendation: Define mutation taxonomy narrowly as review-target/bundle-changing
+    events for closure purposes, expose dispatch/review activity separately, and list
+    the exact event kinds that can become last_mutation.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-006
+  severity: medium
+  summary: The concurrency section permits transient inconsistency but does not require
+    a coherent watermark tying log, reviews, and last mutation to one snapshot.
+  citation: docs/specs/consensus-resume-spec.md:161
+  risk: A mutation or sealed review landing between log walk and review glob can make
+    the response claim a closure blocker or satisfiable state that was never true
+    at one point in time.
+  recommendation: Either require read-side locking/shared log append synchronization
+    for the files that define closure, or include a snapshot watermark and revalidation
+    rule so clients know when to retry instead of acting on a torn read.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-007
+  severity: low
+  summary: The spec leaves all seven open design questions unresolved while the acceptance
+    criteria require them to be answered or explicitly deferred.
+  citation: docs/specs/consensus-resume-spec.md:172
+  risk: Implementers must guess policy for threshold sourcing, tamper handling, cross-iteration
+    hints, ambiguity handling, blocked state, and deterministic ordering, causing
+    incompatible client behavior.
+  recommendation: 'Resolve the questions in the spec: import the dispatch stall threshold
+    from the dispatch module or shared config, keep invariant status separate from
+    action, block automated action on invalid scope signatures, add an optional predecessor
+    summary only if explicitly recorded, sort active iterations by authorized_at_utc
+    with tie-breaker, derive blocked state unless a marker is introduced in a later
+    spec, and sort arrays deterministically.'
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The draft has implementability gaps in the action enum,
+  iteration selection, error handling, closure-state classification, mutation taxonomy,
+  and snapshot consistency, so it is not ready as-is.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 692fadf2ac22aaef2f4d8ffc350b276ed845272f844da4aafddb3ee44e48d708
+  output_sha256: 225e5d1702ed3f4af29a883b453f31ab5aaa12b5dd2434bee87de2aac469713c
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 6bfb509a6b0fed5dbe65f66cb1443138a5cd28e1afe2e5938dfab06239b7fa00
+  scope_signature: d6c5dc733d5fb7c1ad60b77c2f4c913692ba7c9142702f1328a58afa42845c98
+  review_target_path: consensus-state/active/iteration-0002-consensus-resume-spec/review-packet.yaml
+  review_target_hash: 0834c0553930e43af4ab6a97302c5d3ffaa3984b3187ca6766e61e1261bc6485
+sealed_at_utc: '2026-05-11T17:49:28Z'
+packet_sha256: 8631d4f922c46fb89da398d62d09bc48e14eed2d1a3ee3027b673460a21492d9

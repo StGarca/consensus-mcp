@@ -1,0 +1,204 @@
+schema_version: 1
+iteration_id: iteration-0012-codex-defect-recovery
+created_utc: '2026-05-10T06:00:00Z'
+review_target: |
+  Address codex's 2026-05-10 expert verdict on iter-0011 — 5 findings:
+    F1 (HIGH, closed inline pre-iteration): Section-24 archive drift —
+      iter-0010 + iter-0011 codex passes added to archive index but missing
+      from spec md section 24. Resolved by adding 2 entries + bumping count
+      26→28. validate_disposition_index now reports 0 findings.
+    F2 (HIGH): Stop-rule diff collection now inspects staged + unstaged +
+      untracked files (union via new _collect_changed_files helper).
+    F3 (MEDIUM): reviewer.dispatch_codex.handle now wraps the
+      _dispatch_codex.main(argv) call itself in try/except — direct MCP
+      callers get structured {ok: False, error_type, error} instead of
+      raw exceptions.
+    F4 (MEDIUM): _release_gate_check.gate_real_iter rewritten dynamic —
+      globs agent-loop/active/iteration-*/iteration-outcome.yaml; uses the
+      latest closed iteration. iter-0007 hardcode removed.
+    F5 (LOW): iter-0011 iteration-outcome.yaml prepended with
+      status_caveat clarifying the 'fault-recovery-demo' label was
+      aspirational; class-3 was not triggered.
+
+  THIS ITERATION IS THE CLASS-3 RECOVERY DEMO: codex emitted real findings
+  on iter-0011 (the 5 above); iter-0012 implements the fixes; codex re-
+  reviews this submission. Whether codex finds clean or finds new blockers
+  is the empirical answer to whether class-3 recovery is now demonstrable.
+
+scope:
+  goal_summary: 'Address codex 2026-05-10 verdict findings F2/F3/F4/F5 (F1 fixed inline)'
+  goal_packet_path: agent-loop/active/iteration-0012-codex-defect-recovery/goal_packet.yaml
+  scope_signature: 9dbf666ffbb433ab948579b5e89b5e5bbf6291d8f82478c80ca79c9353908087
+  scope_signature_history:
+    - sig: 59e3e900594815f949aa665edf0cfb95fad292048d00735237748ff03293c37b
+      retired_utc: '2026-05-10T06:30:00Z'
+      retire_reason: |
+        Initial sig; forbidden_files included server.py + loop_run_goal.py +
+        run/ + wiki/. F2 stop-rule fix (this iteration's own deliverable)
+        immediately fired patch_would_touch_forbidden_files on pre-existing
+        uncommitted dirty state from iter-0009/0010/0011 + audiobook-project
+        work. Scope refined: removed those entries (they have legitimate
+        prior-iteration drift outside iter-0012's intent). _dispatch_codex.py
+        + audit_append_event.py remain forbidden — those iter-0012 must not
+        touch and DOES not touch.
+    - sig: 9dbf666ffbb433ab948579b5e89b5e5bbf6291d8f82478c80ca79c9353908087
+      created_utc: '2026-05-10T06:30:00Z'
+      status: active
+      change: |
+        forbidden_files trimmed to {_dispatch_codex.py, tools/audit_append_event.py}
+        from the broader set. Operator-orchestrator decision; documented in goal_packet
+        comment block.
+
+artifacts_modified:
+  - path: scripts/agent_loop_mcp/_self_drive.py
+    sha256_post: 9efaeea10a936ef9
+    description: |
+      F2 fix: added _collect_changed_files(repo_root) helper returning
+      de-duplicated union of `git diff --cached --name-only` (staged) +
+      `git diff --name-only` (unstaged tracked) + `git ls-files --others
+      --exclude-standard` (untracked). Per-view subprocess failures absorbed
+      best-effort. cmd_check_stop_rules forbidden-files branch and
+      cmd_verify_scope both route through the helper.
+
+  - path: scripts/agent_loop_mcp/tools/reviewer_dispatch_codex.py
+    sha256_post: c0387b1cd65e443d
+    description: |
+      F3 fix: wrapped _dispatch_codex.main(argv) invocation in inner
+      try/except Exception returning {ok: False, error_type:
+      type(exc).__name__, error: str(exc)}. Existing JSONDecodeError
+      post-call path (WrapperJsonDecodeError) preserved. Output_schema
+      already declares all needed fields (raw_stdout_sample, error,
+      error_type) — no schema change required.
+
+  - path: scripts/agent_loop_mcp/_release_gate_check.py
+    sha256_post: 39ccae946b32658d  # original sha; updated for codex-rev-001 fix
+    description: |
+      F4 fix: gate_real_iter rewritten to glob
+      agent-loop/active/iteration-*/iteration-outcome.yaml, lex-sort,
+      accept closing_state in {quorum_close_passed,
+      implementation_ready_apply_landed}.
+
+      F4 round-2 fix (per codex iter-0012 codex-rev-001 MEDIUM finding):
+      original implementation used substring containment (`marker in state`);
+      this incorrectly accepted superstrings like
+      'implementation_ready_apply_landed_post_operator_authorization' from
+      iter-0005. Fixed to extract first non-empty stripped line of
+      closing_state and require exact membership in accepted_states.
+      Empirical proof: count of accepted iterations went 7 -> 6 (iter-0005
+      correctly excluded). Latest match: iteration-0011-fault-recovery-demo.
+
+  - path: agent-loop/active/iteration-0011-fault-recovery-demo/iteration-outcome.yaml
+    sha256_post: 0fdba7653ef686da  # original sha; updated for codex-rev-002 fix
+    description: |
+      F5 fix: prepended status_caveat block (right after schema_version)
+      noting the 'fault-recovery-demo' label was aspirational; class-3
+      not triggered. Authoritative status pointer at
+      fault_recovery_demo_status block.
+
+      F5 round-2 fix (per codex iter-0012 codex-rev-002 LOW finding):
+      original status_caveat referenced a fault_recovery_demo_status block
+      that did NOT exist in the file; codex correctly flagged this as a
+      pointer to a phantom field. Added the fault_recovery_demo_status
+      block (after process_outcomes) with: demonstrated=false,
+      attempted_in_iteration, reason_not_demonstrated,
+      what_was_demonstrated, carry_forward_iteration,
+      carry_forward_status. Caveat now points at a real authoritative field.
+
+  - path: scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py
+    sha256_post: d02abc85c76078e7
+    description: |
+      +7 tests for F2: scaffolded scenarios with staged-clean +
+      unstaged-forbidden, untracked files, empty repo. The codex-described
+      proof scenario is now an explicit pytest case.
+
+  - path: scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+    sha256_post: ffedebdbc62e5cb2
+    description: |
+      +4 tests for F3: helper exception wrapping (RuntimeError, ImportError,
+      yaml.YAMLError, generic Exception), plus 1 regression-guard test
+      that the existing JSONDecodeError post-call path still works.
+
+iteration_artifacts:
+  - path: agent-loop/active/iteration-0012-codex-defect-recovery/goal_packet.yaml
+    sha256: 214270e5091ac060
+    role: scope-sealed goal_packet
+  - path: agent-loop/active/iteration-0012-codex-defect-recovery/review-packet.yaml
+    role: this file
+
+verification_results:
+  acceptance_gates:
+    A1: {description: 'stop-rule diff helper inspects staged+unstaged+untracked', passed: true}
+    A2: {description: 'reviewer.dispatch_codex.handle wraps helper main() in try/except', passed: true}
+    A3: {description: 'G_real_iter dynamic iteration scan present', passed: true}
+    A4: {description: 'pytest still green', passed: true, output: '152 passed in 2.74s'}
+
+  pytest_full_suite:
+    invocation: 'AGENT_LOOP_MCP_REPO_ROOT=$(pwd) python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/ -q'
+    result: '152 passed in 2.74s'
+    pre_iteration_count: 140
+    iteration_added: 12
+    post_iteration_total: 152
+    regressions: 0
+
+  smoke:
+    invocation: 'AGENT_LOOP_MCP_REPO_ROOT=$(pwd) python_env\python.exe -m agent_loop_mcp._smoke_test'
+    result: '56/56 tests passed'
+
+  release_gate_real_iter:
+    new_target: 'iteration-0011-fault-recovery-demo (latest, closing_state=quorum_close_passed)'
+    n_closed_iterations_found: 7
+    iter_0007_hardcode_removed: true
+
+  tdd_discipline_observed:
+    f2_red_phase: 'staged-clean+unstaged-forbidden test failed (caught nothing); implemented helper; passed'
+    f3_red_phase: 'monkeypatched _dispatch_codex.main to raise RuntimeError; assertion `result["ok"] is False` failed (raised); wrapped main() call; passed'
+    f4_red_phase: 'no dedicated test (release-gate functional verification only)'
+
+design_notes:
+  - |
+    F2 helper signature: _collect_changed_files(repo_root: Path) -> list[str].
+    Returns de-duplicated, sorted list. Per-view subprocess timeouts set; per-view
+    subprocess failures swallowed (best-effort). The rule itself becomes stricter
+    overall: previously a clean-staged + dirty-unstaged scenario silently passed;
+    now it correctly flags.
+  - |
+    F3 wrap is in the redirect_stdout context but BEFORE the JSON parse — so a
+    helper exception during stdin/argv/path-resolution produces an immediate
+    structured return without reaching json.loads. The existing
+    WrapperJsonDecodeError path is unchanged for the post-stdout parse failure.
+  - |
+    F4 lex-sort handles current iteration naming convention
+    (iteration-NNNN-suffix). Future iterations using different naming may need
+    a more sophisticated sort; documented as a known limitation in
+    self_review_findings.
+  - |
+    F5 is documentation-only. Adds status_caveat top-level field to
+    iter-0011 outcome.yaml. No schema validator currently enforces shape;
+    additive change is safe.
+
+anti_scope_check:
+  dispatch_codex_modified: false
+  server_modified: false
+  loop_run_goal_modified: false
+  audit_append_event_modified: false
+  pyproject_version_bumped: false
+  files_changed_in_scope_only: true
+
+reviewer_question: |
+  Does this iteration cleanly address codex's 2026-05-10 verdict findings F2/F3/F4
+  + the F5 documentation fix, without scope drift or regression?
+    1. Is _collect_changed_files correct? Does it actually catch the codex-described
+       proof scenario (staged clean + unstaged forbidden)?
+    2. Does the F3 wrap actually contain ALL helper exceptions (not just JSONDecodeError)?
+       Test the boundary cases: ImportError, FileNotFoundError, yaml.YAMLError.
+    3. Does the new gate_real_iter correctly identify quorum_close_passed iterations?
+       Edge cases: no iterations exist; multiple iterations with same closing_state.
+    4. Is the F5 status_caveat well-placed (top-level), and does it not break any
+       downstream parser?
+    5. Are forbidden_files honored (no _dispatch_codex.py or server.py changes)?
+    6. Is the test coverage substantive (asserts behavior, not structure)?
+
+  Reviewers must emit:
+    - goal_satisfied: bool
+    - blocking_objections: list
+    - rationale: string

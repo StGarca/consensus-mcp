@@ -1,0 +1,30 @@
+iteration_id: iteration-0010-extract-dispatch-base
+reviewer_id: codex-iteration-0010-extract-dispatch-base-2
+pass_id: codex-iteration-0010-extract-dispatch-base-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The embedded touched-file contents show the shared helpers
+  extracted into _dispatch_base.py and _dispatch_codex.py reduced to codex-specific
+  invocation/parsing/entrypoint code while preserving backward-compatible helper bindings
+  through imports.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 09d925368200fff1265390df5936dcfec4fe887060ed36156cf420d454024a01
+  output_sha256: 0d8d57a1892de7fec0e2197bc8fa03c23dcda93661afa67547e594467511b8fd
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 0716e78e2e5d8485671753efe35f8be46273b8c12351576794127c2c3615f636
+  scope_signature: 03deae7b9c8fb59bc2330732a33d7dc65d7c39c08bee3297121301ba7e02dbea
+  review_target_path: consensus-state/active/iteration-0010-extract-dispatch-base/review-packet.yaml
+  review_target_hash: 350c235b4b0aac12a03e18e29a1e34b864aed09a07648718549d8545dbc1b4a3
+sealed_at_utc: '2026-05-13T00:52:08Z'
+packet_sha256: ade779edd3fbc7a626543df58c81ffa945e70a44e9533ab8d93faf65bc9c6067

@@ -1,0 +1,100 @@
+schema_version: 1
+pilot_id: iteration-0035-self-drive-fixes
+goal:
+  summary: Workflow #4 fix cycle for the 4 iter-0034 findings against _self_drive.py.
+  desired_end_state: |
+    iter-0035 lands fixes for all 4 iter-0034 findings under operator-preferred
+    workflow #4 (claude as fix-author with codex pre-implementation review).
+    Codex declined patch authorship on all 4 of its iter-0034 findings; per
+    the codex-fix-author directive fallback + feedback_workflow_4_preferred.md,
+    claude authors the patches and codex pre-reviews the diffs BEFORE landing.
+
+    Files in scope (2 — same as iter-0034):
+      - scripts/agent_loop_mcp/_self_drive.py
+      - scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py
+
+    Patches to land (drafted in proposed-patches.md, codex pre-reviews):
+      Patch 1 (HIGH, codex-rev-001 + claude-rev-001): patch_size_exceeds_max
+        counts the union of staged + unstaged + untracked changes rather
+        than only staged-or-HEAD diff. Uses `git diff --numstat HEAD` for
+        tracked (covers staged+unstaged in one view) plus per-untracked-
+        file line count.
+      Patch 2 (HIGH, codex-rev-002 + claude-rev-002): _reviewer_clean
+        checks blocking_objections BEFORE the goal_satisfied early-return.
+        Non-empty blocker => not-clean regardless of goal_satisfied state.
+      Patch 3 (MEDIUM, codex-rev-003 + claude-rev-003): emit
+        closure_invariant_module_unavailable stop_rule when the
+        _closure_invariant import fails; narrow the except to
+        (ImportError, ModuleNotFoundError) so unrelated exceptions
+        propagate.
+      Patch 4 (MEDIUM, codex-rev-004 + claude-rev-004): drop the
+        basename fallback in _resolve_referenced_path for paths with
+        directory components. Iter-dir-local fallback applies only to
+        bare basenames (semantically "this is iter-relative").
+
+    iter-0035 SUCCESS = workflow #4 closes:
+      1. proposed-patches.md authored with 4 unified diffs
+      2. review-packet embeds proposed-patches.md content via _author_review_packet
+      3. Codex pre-review dispatched against the embedded review-packet
+      4. Claude integrates any codex feedback BEFORE implementation
+      5. Claude implements integrated patches via Edit
+      6. Regression tests added (≥ 4 new tests)
+      7. pytest still green; smoke 60/60; gates 11/11
+      8. iteration-outcome.yaml closes quorum_close_passed
+  non_goals:
+    - modify _closure_invariant.py / _validate_closure_invariant.py
+    - modify _dispatch_codex.py / codex template / codex schema
+    - modify apply pipeline / supervisor / TUI / wrapper code
+    - introduce new MCP tools
+    - bump pyproject.toml version
+allowed_files:
+  - scripts/agent_loop_mcp/_self_drive.py
+  - scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py
+  - scripts/agent_loop_mcp/_release_gate_check.py
+  - agent-loop/active/iteration-0035-self-drive-fixes/
+allowed_sections: []
+forbidden_files:
+  - scripts/agent_loop_mcp/_closure_invariant.py
+  - scripts/agent_loop_mcp/_validate_closure_invariant.py
+  - scripts/agent_loop_mcp/_dispatch_codex.py
+  - scripts/agent_loop_mcp/_author_review_packet.py
+  - scripts/agent_loop_mcp/_visibility_tui.py
+  - scripts/agent_loop_mcp/server.py
+  - scripts/agent_loop_mcp/tool_registry.py
+  - scripts/agent_loop_mcp/tools/
+  - scripts/agent_loop_mcp/dispatch_templates/
+  - scripts/agent_loop_mcp/tests/test_closure_invariant.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_apply_codex_patch_multifile.py
+  - scripts/agent_loop_mcp/tests/test_loop_verify_codex_patch.py
+  - scripts/agent_loop_mcp/tests/test_loop_run_goal.py
+  - scripts/agent_loop_mcp/tests/test_capstone_full_fix_loop.py
+  - scripts/agent_loop_mcp/tests/test_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_reviewer_dispatch_codex.py
+  - scripts/agent_loop_mcp/tests/test_visibility_tui.py
+  - run/
+  - wiki/
+  - pyproject.toml
+  - requirements.txt
+max_iterations: 2
+max_patch_size: 500
+fix_author_policy: permissive
+validators_required:
+  - validate_disposition_index
+acceptance_gates:
+  - id: A1
+    description: pytest still green
+    check: 'python_env\python.exe -m pytest scripts/agent_loop_mcp/tests/test_self_drive_stop_rules.py -q'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+  - any_acceptance_gate_returns_undefined
+operator_escalation_triggers:
+  - touched_forbidden_files
+  - max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-11T02:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: e6c7bfe47569fd17d7d6555ab215ae9c88e3c0de7bbbe19b2083c8282823353a

@@ -1,0 +1,56 @@
+iteration_id: iteration-0011-add-gemini-adapter
+reviewer_id: codex-iteration-0011-add-gemini-adapter-4
+pass_id: codex-iteration-0011-add-gemini-adapter-4-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Watchdog progress only advances on complete stdout lines, so valid long
+    Gemini JSON can be aborted before the configured timeout.
+  citation: consensus_mcp/_dispatch_gemini.py:262
+  risk: Gemini may emit a single JSON object without newline-delimited progress, or
+    may take longer than 180 seconds before the first complete line. In that case
+    last_streamed_ts remains unset and the helper raises a stuck-process error even
+    though timeout_seconds defaults to 600 and the review may still be valid.
+  recommendation: Track progress on any stdout or stderr bytes read, reconstruct lines
+    only for logging, and keep timeout_seconds as the user-visible hard budget.
+  patch_not_proposed_reason: Patch proposal deferred per goal scope; review-only for
+    this iteration.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: Local Gemini validator accepts empty finding summaries even though the
+    bundled schema requires a non-empty summary.
+  citation: consensus_mcp/_dispatch_gemini.py:543
+  risk: Because Gemini has no --schema enforcement, the Python parser is the effective
+    gate. It can seal malformed findings with blank summaries, drifting from gemini_review_schema.json
+    and reducing quorum-review usefulness.
+  recommendation: After the string type checks, enforce a non-empty summary, preferably
+    using strip() to reject whitespace-only values.
+  patch_not_proposed_reason: Patch proposal deferred per goal scope; review-only for
+    this iteration.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The adapter is structurally present and registered, but
+  the runtime watchdog and local validation gaps mean the desired Gemini dispatch
+  behavior is not fully satisfied.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: c0c0deb48e7b0ad9baab4fef6ef00393dabb91a3da423fc275e52cb5ed06c90a
+  output_sha256: 442f41fe89e1a6ccef9b972e6cb67ba43afe5880a23a1ceea25bcda64a9e8fae
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 842a69235724db3f8f84def5f96a0e2cbf329bca50a300d263ab34cf1caf3ad3
+  scope_signature: b06b39180e49e03f3da383ce4ec0046eb6e7e199877929865a367db956a734b3
+  review_target_path: consensus-state/active/iteration-0011-add-gemini-adapter/review-packet.yaml
+  review_target_hash: 2e1e0122af6b00677a290ed1cfd0472b67ef56ea438a779960bfa732eafd91da
+sealed_at_utc: '2026-05-13T03:12:04Z'
+packet_sha256: f06b6c59785730426493fbebea824566702740747a324f154f41cb47d86bde67

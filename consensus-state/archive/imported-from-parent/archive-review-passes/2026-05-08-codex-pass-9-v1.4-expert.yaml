@@ -1,0 +1,81 @@
+schema_version: 1
+pass_id: pass-9-codex-v1.4-expert
+reviewer: codex
+reviewed_utc: "2026-05-08T00:00:00Z"
+spec_under_review: "wiki/audiobook-project/agent-loop/2026-05-08-multi-agent-consensus-mcp-orchestration.md"
+spec_version_reviewed: "draft-v1.4-ai-contract"
+depth: "execution-contract / v1.4 promotion audit / corroboration and gate semantics"
+overall_verdict: >
+  v1.4 is a strong improvement over v1.3 and promoted the important pass-7
+  issues into the active contract. Remaining problems are narrower but still
+  operationally meaningful: the new corroboration rule is internally
+  inconsistent and too aggressive, production approval hash binding is
+  type-confused, and section 24 still contains non-index behavioral metadata.
+findings:
+  high:
+    - id: codex-rev-009-corroboration-signal-owner-conflict
+      claim: "Section 9 says corroborated_by is populated by the synthesizer and agents leave it empty, while section 13 says each reviewer's finding declares corroborated_by."
+      evidence:
+        - "section 9 review artifact schema: corroborated_by comment says synthesizer populates it"
+        - "section 13 dual_reviewer_corroboration.required_signal says each reviewer declares it"
+      risk: "A validator cannot know whether missing corroborated_by is valid reviewer behavior or a schema failure. The synthesizer may also lack a canonical place to store corroboration because canonical_findings does not define corroborated_by."
+      required_change: "Move corroborated_by to consensus.canonical_findings as a synthesizer-owned field; keep reviewer artifacts sealed and unmodified; add source_exposure metadata if independence must be measured."
+    - id: codex-rev-010-corroboration-auto-blocks-too-broadly
+      claim: "Section 13 auto-promotes any duplicate canonical finding from two reviewers to must-apply and upgrades severity to blocking if any source was non-blocking."
+      evidence: "section 13 dual_reviewer_corroboration.auto_promotion_effect"
+      risk: "Two reviewers can independently notice the same low-value cleanup or stylistic issue and accidentally force a blocking change. This converts correlation into authority without enough severity gating."
+      required_change: "Restrict auto-promotion to independent corroboration with max source severity high/blocking or claim_class in safety/correctness/security/process; duplicate low/medium suggestions become confirmed_suggestion, not blocking."
+    - id: codex-rev-011-production-approval-hash-type-confusion
+      claim: "Section 17 compares artifact_or_commit_sha256 with verification artifact sha256, but approval_schema defines artifact_or_commit_sha256 as the production target hash and production_scope can be render, merge, deploy, or data-mutation."
+      evidence:
+        - "section 17 approval_schema artifact_or_commit_sha256"
+        - "section 17 transition guard: artifact_or_commit_sha256 == verification artifact sha256 at transition time"
+      risk: "For merge/deploy/data-mutation scopes, the approved target hash and verification artifact hash are different objects. A strict implementation rejects valid approvals; a lax one may bind approval to the wrong artifact."
+      required_change: "Split fields: approved_target_sha256, approved_consensus_sha256, approved_verification_sha256. Transition must verify each against the correct current object."
+  medium:
+    - id: codex-rev-012-section-24-still-not-index-only
+      claim: "Section 24 is declared index-only, but it still contains Pending summaries, Deferred rationales, and Tradeoffs decision prose."
+      evidence:
+        - "section 24 pending_v1_5 summary/note blocks"
+        - "section 24 deferred rationales"
+        - "section 24 tradeoffs decisions"
+      risk: "Agents are told section 24 is non-contract but still receive behavioral and prioritization text there. This recreates the review-log drift problem at lower volume."
+      required_change: "Either rename section 24 to disposition metadata, or move pending/deferred/tradeoff prose to archive/ledger and keep only ids, status, target, and archive pointers."
+    - id: codex-rev-013-pass8-archive-ignored-by-default
+      claim: "The MD and archive index point to pass-8, but archive files live under a repo-root ignored path and require force-add."
+      evidence:
+        - ".gitignore ignores /*"
+        - "git check-ignore reports pass-8 ignored"
+      risk: "Future review passes can be referenced from the MD while absent from git, producing broken audit trails unless the operator remembers git add -f."
+      required_change: "Add an explicit .gitignore exception for agent-loop/archive/review-passes/*.yaml or teach the orchestrator to force-add archive artifacts."
+    - id: codex-rev-014-pass8-status-overstates-promotion
+      claim: "archive index says all six pass-8 findings were promoted in v1.4, but claude-rev-001 anti-regression criterion is explicitly pending v1.5."
+      evidence:
+        - "archive index pass-8 status_in_spec"
+        - "section 24 pending_v1_5 claude-rev-001-anti-regression-criterion"
+      risk: "Disposition validators and future agents may conclude there are no open pass-8 actions when a structural anti-regression criterion remains pending."
+      required_change: "Change pass-8 status to partial: rule restored in v1.4, anti-regression acceptance criterion pending v1.5."
+    - id: codex-rev-015-invalid-legacy-finding-id-reference
+      claim: "v1.4 text refers to codex-rev-071, but the actual pre-namespacing finding was rev-071."
+      evidence:
+        - "frontmatter revision_history v1.4 summary"
+        - "section 23 fixture deliverable comment"
+      risk: "A disposition validator that checks finding ids will fail or infer a nonexistent namespaced codex finding."
+      required_change: "Replace codex-rev-071 with rev-071 in v1.4 summary and section 23 comment."
+  low:
+    - id: codex-rev-016-ascii-rule-violated-in-spec-body
+      claim: "Section 0 requires ASCII for spec body, but section 24 contains an em dash in the rev-074..rev-080 namespace note."
+      evidence: "section 24 id_reservations namespace string"
+      risk: "Low, but exact-string patching and PowerShell display were already affected by mojibake in earlier passes."
+      required_change: "Replace the em dash with ASCII hyphen or parentheses."
+positive_assessment:
+  - "v1.4 correctly moved the dual-reviewer corroboration behavior out of section 24 and into section 13."
+  - "v1.4 correctly restored malformed-output retry handling in section 20."
+  - "v1.4 correctly tightened production-state transitions with current_state guards and consensus hash binding."
+  - "v1.4 correctly removed manual runtime from the active enum."
+  - "v1.4 correctly added validator fixtures and validate_disposition_index.py to Phase 0."
+recommendation: >
+  Fix codex-rev-009 through codex-rev-011 before Phase 0 implementation, because
+  they affect validator and gate semantics. Fix codex-rev-012 through codex-rev-016
+  as a small hygiene pass before the next consolidation. After that, stop
+  reworking the spec and build the Phase 0 validators.

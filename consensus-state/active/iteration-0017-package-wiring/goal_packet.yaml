@@ -1,0 +1,56 @@
+schema_version: 1
+pilot_id: iteration-0017-package-wiring
+goal:
+  summary: |
+    iter-0017 — wire iter-0016 packaging. Adds the new contributors subpackage
+    to setuptools.packages so it ships in wheel/sdist; adds two console_scripts
+    (`consensus-init` and `consensus-mcp-dispatch-gemini`) so iter-0016d wizard
+    and iter-0011 gemini dispatcher are reachable as installed commands; bumps
+    version 1.13.1 → 1.14.0 to reflect the iter-0016 feature series.
+  desired_end_state: |
+    pyproject.toml lists consensus_mcp.contributors in [tool.setuptools].packages;
+    [project.scripts] includes consensus-init and consensus-mcp-dispatch-gemini;
+    [project].version == "1.14.0". Existing scripts (consensus-mcp,
+    consensus-mcp-dispatch-codex) remain. Package metadata parses cleanly
+    (tomllib loads, no setuptools warning). No source code outside pyproject.toml
+    is touched. Full test suite remains green (no regression from version bump).
+  non_goals:
+    - changing seal/audit infrastructure
+    - adding new tests beyond pyproject smoke validation
+    - cleaning up stale iter-9999 test fixtures in archive/index.yaml
+    - architectural changes to REPO_ROOT module-level caching
+allowed_files:
+  - pyproject.toml
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - consensus-state/
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - .github/
+  - .gitignore
+  - docs/
+  - tests/
+max_iterations: 1
+max_patch_size: 50
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: pyproject parses + version bumped
+    check: 'py -3.11 -c "import tomllib; d=tomllib.load(open(''pyproject.toml'',''rb'')); assert d[''project''][''version'']==''1.14.0''; assert ''consensus_mcp.contributors'' in d[''tool''][''setuptools''][''packages'']; assert ''consensus-init'' in d[''project''][''scripts'']; print(''ok'')"'
+  - id: A2
+    description: imports of new package + script still work
+    check: py -3.11 -c "from consensus_mcp.contributors import ContributorAdapter; from consensus_mcp._init_wizard import main; print('ok')"
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+  - patch_size_exceeds_max
+operator_escalation_triggers:
+  - touched_forbidden_files
+authorization:
+  authorized_by: operator-autonomous-overnight
+  authorized_at_utc: '2026-05-13T05:15:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1

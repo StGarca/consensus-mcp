@@ -1,0 +1,44 @@
+iteration_id: iteration-0022-mcp-wire-workflow-engine
+reviewer_id: codex-iteration-0022-4
+pass_id: codex-iteration-0022-4-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: missing claude_proposal_yaml is accepted even when the configured workflow
+    dispatches ClaudeAdapter
+  citation: consensus_mcp/tools/consensus_run_iteration.py:160
+  risk: 'A workflow #4 or advisory run with Claude enabled can proceed without an
+    artifact callback, reintroducing the deadlock or adapter failure path the MCP
+    wrapper is required to prevent.'
+  recommendation: 'After loading config, reject calls where Claude is enabled and
+    the workflow mode dispatches ClaudeAdapter unless claude_proposal_yaml is provided;
+    add a regression test for workflow #4 missing claude_proposal_yaml.'
+  patch_not_proposed_reason: No patch proposed because config.py and WorkflowEngine
+    mode-dispatch definitions are not embedded, and the sealed review rules forbid
+    inferring missing file content.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'The tool surface is registered and mostly wired, but the
+  main workflow #4 deadlock guard is not enforced when claude_proposal_yaml is omitted.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 15f0049910b82670c22e3c4a2cf9261b3cf0f1bb81a26e202bc45ff560402789
+  output_sha256: 52415948daae0041d086b509d4e44749756d58557db555b47d303640480fe550
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 8d96511639ddc73c2755cded50272ae155f3d9e10d7ff6b6febc225d316b8aa0
+  scope_signature: 0718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6
+  review_target_path: consensus-state/active/iteration-0022-mcp-wire-workflow-engine/review-packet.yaml
+  review_target_hash: ffac36ed5e8032af48020beb70570a0683775a99c3dc6cda373a317fe9f6359f
+sealed_at_utc: '2026-05-13T08:17:49Z'
+packet_sha256: e867069faee32d81415d7cb58e77d381442e1564cf6819236dfc2a6809c36b6c

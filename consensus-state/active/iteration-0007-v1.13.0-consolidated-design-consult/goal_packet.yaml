@@ -1,0 +1,64 @@
+schema_version: 1
+pilot_id: iteration-0007-v1.13.0-consolidated-design-consult
+goal:
+  summary: "Cross-AI consult on consolidated v1.13.0 design (6 findings) \u2014 approve\
+    \ scope split + correctness verdict."
+  desired_end_state: "Codex reviews docs/design-consults/v1.13.0-consolidated-design.md\n\
+    (embedded in review-packet.yaml, NOT a raw md file) and emits ONE\nfinding answering\
+    \ three questions:\n  Q1 scope: A (F1+F2), B (+F3), C (F1-F5), or D (F1-F6)\n\
+    \  Q2 F1 correctness: \"correct\" or \"defect: <description>\"\n  Q3 missing findings:\
+    \ \"none\" or \"added: <list>\"\n\nRecommendation field carries: \"Q1: <A|B|C|D>;\
+    \ Q2: <correct|defect: ...>; Q3: <none|added: ...>\"\nRisk field carries short\
+    \ rationale.\n\nContext codex needs to weigh:\n  - F1 = 3-way root split (codex's\
+    \ own iter-0006-4 finding)\n  - F2 = ship spec template in wheel\n  - F3 = dispatcher\
+    \ auto-discover review-packet.yaml + warn\n  - F4 = watchdog cold-start grace\
+    \ period (pre/post first byte)\n  - F5 = visibility upgrade (loading/streaming/stalled\
+    \ status)\n  - F6 = iter-0005 verdict-incomplete-premise record\n  - Maintainer\
+    \ wants codex's scope judgment; impatient with my asking\n"
+  non_goals:
+  - implement v1.13.0 code (this is design + scope, not patch authoring)
+  - propose findings outside the six listed (unless Q3 finds a gap)
+  - touch existing iter-0001..0006 artifacts
+allowed_files:
+- docs/design-consults/v1.13.0-consolidated-design.md
+allowed_sections: []
+forbidden_files:
+- consensus_mcp/
+- consensus-state/active/iteration-0001-extraction-review/
+- consensus-state/active/iteration-0002-consensus-resume-spec/
+- consensus-state/active/iteration-0003-consensus-resume-implementation/
+- consensus-state/active/iteration-0004-onboarding-design-consult/
+- consensus-state/active/iteration-0005-main-spec-scrub-design-consult/
+- consensus-state/active/iteration-0006-multi-project-resolution-design-consult/
+- consensus-state/archive/
+- consensus-state/state/
+- README.md
+- LICENSE
+- CHANGELOG.md
+- pyproject.toml
+- .github/
+- docs/architecture/
+- docs/workflows/
+- docs/postmortems/
+- docs/specs/
+- docs/templates/
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+- id: A1
+  description: codex emits one finding with recommendation containing Q1/Q2/Q3 verdicts
+  check: 'true'
+stop_conditions:
+- max_iteration_count_reached
+- patch_would_touch_forbidden_files
+- patch_size_exceeds_max
+operator_escalation_triggers:
+- touched_forbidden_files
+- max_patch_size_exceeded
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-12T04:10:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 9354d11c2b8edbc9bf2f7d2096b9c7f9a31b6c619ca06fbb04bc22fa1f1e11df

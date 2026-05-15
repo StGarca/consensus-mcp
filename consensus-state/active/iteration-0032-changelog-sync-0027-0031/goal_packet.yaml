@@ -1,0 +1,65 @@
+schema_version: 1
+pilot_id: iteration-0032-changelog-sync-0027-0031
+goal:
+  summary: |
+    iter-0032 — backfill CHANGELOG.md with iter-0024/0025/0026/0027/0028/
+    0030/0031 release notes. The v1.14.0 section had stopped at iter-0028
+    in CHANGELOG; this iteration brings it current through iter-0031.
+    Also documents the workflow-#4-default operator policy correction
+    + the new bootstrap UX for other projects.
+  desired_end_state: |
+    CHANGELOG.md v1.14.0 section reflects everything actually shipped:
+      - Lazy path resolution (iter-0024 design → iter-0025 Phase A →
+        iter-0026 first per-tool migration)
+      - Codex proposal mode (iter-0027 consult → iter-0028 impl)
+      - First successful real workflow #4 with codex substantive
+        participation (iter-0030)
+      - consensus-init auto-bootstraps .mcp.json (iter-0031)
+      - Operator policy: default workflow #4 for design questions
+      - Operator memories saved this cycle
+      - Deferred follow-ups (remaining 9 Phase B migrations + stale
+        iter-9999 cleanup)
+    No existing v1.13.0 or v1.12.0 content mutated. No source code
+    touched.
+  non_goals:
+    - any source-code changes
+    - changing existing earlier sections (v1.13.0, v1.12.0 preserved)
+    - bumping the version (still v1.14.0; this is doc sync only)
+    - documenting iterations not yet shipped
+allowed_files:
+  - CHANGELOG.md
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/
+  - consensus-state/
+  - pyproject.toml
+  - README.md
+  - LICENSE
+  - .github/
+  - .gitignore
+  - docs/
+  - tests/
+max_iterations: 1
+max_patch_size: 300
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: v1.14.0 covers iter-0025 through iter-0031
+    check: 'py -3.11 -c "t=open(''CHANGELOG.md'',encoding=''utf-8'').read().split(''## 1.13.0'')[0]; assert ''iter-0025'' in t; assert ''iter-0026'' in t; assert ''iter-0027'' in t; assert ''iter-0028'' in t; assert ''iter-0030'' in t; assert ''iter-0031'' in t; print(''ok'')"'
+  - id: A2
+    description: workflow-#4-default policy documented
+    check: 'py -3.11 -c "t=open(''CHANGELOG.md'',encoding=''utf-8'').read().split(''## 1.13.0'')[0]; assert ''workflow #4'' in t.lower() or ''workflow-#4'' in t.lower(); assert ''default'' in t.lower(); print(''ok'')"'
+  - id: A3
+    description: v1.13.0 and v1.12.0 still present unchanged
+    check: 'py -3.11 -c "t=open(''CHANGELOG.md'',encoding=''utf-8'').read(); assert ''## 1.13.0'' in t; assert ''## 1.12.0'' in t; print(''ok'')"'
+stop_conditions:
+  - max_iteration_count_reached
+  - patch_would_touch_forbidden_files
+operator_escalation_triggers:
+  - touched_forbidden_files
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-13T16:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: '8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e'
