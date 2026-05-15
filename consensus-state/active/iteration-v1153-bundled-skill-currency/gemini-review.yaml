@@ -1,0 +1,142 @@
+iteration_id: iteration-v1153-bundled-skill-currency
+reviewer_id: gemini-v1153-1
+pass_id: gemini-v1153-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'DIFFERENTIAL/PRIOR: My reasoning is rooted in the project''s
+  own ''Completion Mandate'' and ''no-deferral'' doctrines. The primary failure mode
+  is ''currency drift'' where documentation and code literals are stale versus reality.
+  This mode is shared across all four facts (F1-F4).
+
+
+  Q1/Q3 RATIONALE: I recommend option (d) and bundling the code change (F4) because
+  the ''bundle hot-patches that share a single failure-mode'' doctrine is stronger
+  than the ''don''t mix code+doc'' convention, especially when the code change is
+  a trivial string literal in an error message. Precedent exists in prior hot-patches
+  (e.g., v1.14.5, v1.14.6) for mixing trivial code changes with doc updates. This
+  is the most efficient path to correcting the entire known problem surface.
+
+  My recommendation would be WRONG if there is a strict, unstated policy forbidding
+  any modification of `.py` files in a hot-patch, regardless of triviality.
+
+
+  Q2 RATIONALE: Option (b) is superior because it not only corrects the false forward-reference
+  but also proactively manages operator expectations by informing them that running
+  Workflow C will raise a `NotImplementedError`. This provides maximum clarity and
+  adheres to the ''artifact-scoped claims'' doctrine by stating what the current artifact
+  *does*.
+
+
+  Q4 RATIONALE: Including the clarification on AI-count-agnostic governance passes
+  the ''Completion Test''. The goal is clear, the implementation cost is trivial (a
+  few lines in a markdown file), and it directly addresses the ambiguity that triggered
+  the operator''s original question. This is not scope creep; it is completing the
+  goal of providing user clarity.
+
+
+  Q5 RATIONALE: There are no identified blockers. The work is low-risk, low-effort,
+  and high-value for new user experience. Per the no-deferral rule, it should ship
+  now.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 2f102559375bf14a128010fea920cd1d7a29ce2627ed980fd723a3902644496e
+  output_sha256: 6802e8b8d31e8d4250a3eee3781226fe74c060d3611bd4ab0bca148c2381b6db
+  goal_packet_sha256: 2f57c9b87ab01ab8cb912a690ed8474e0d39acfa8e45fe65b0bf099874ede433
+  scope_signature: v1153-bundled-skill-currency-scope-consult
+  review_target_path: consensus-state/active/iteration-v1153-bundled-skill-currency/review-packet.yaml
+  review_target_hash: 3a5ca3013c3cc7cbe3e59459a7b159e60c88d4d89469fdf9fdccf4d6228a9cae
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Q1:(d), Q2:(b), Q3:Yes, Q4:Yes, Q5:No blocker - ship full scope
+  rationale_vs_alternatives: 'DIFFERENTIAL/PRIOR: My reasoning is rooted in the project''s
+    own ''Completion Mandate'' and ''no-deferral'' doctrines. The primary failure
+    mode is ''currency drift'' where documentation and code literals are stale versus
+    reality. This mode is shared across all four facts (F1-F4).
+
+
+    Q1/Q3 RATIONALE: I recommend option (d) and bundling the code change (F4) because
+    the ''bundle hot-patches that share a single failure-mode'' doctrine is stronger
+    than the ''don''t mix code+doc'' convention, especially when the code change is
+    a trivial string literal in an error message. Precedent exists in prior hot-patches
+    (e.g., v1.14.5, v1.14.6) for mixing trivial code changes with doc updates. This
+    is the most efficient path to correcting the entire known problem surface.
+
+    My recommendation would be WRONG if there is a strict, unstated policy forbidding
+    any modification of `.py` files in a hot-patch, regardless of triviality.
+
+
+    Q2 RATIONALE: Option (b) is superior because it not only corrects the false forward-reference
+    but also proactively manages operator expectations by informing them that running
+    Workflow C will raise a `NotImplementedError`. This provides maximum clarity and
+    adheres to the ''artifact-scoped claims'' doctrine by stating what the current
+    artifact *does*.
+
+
+    Q4 RATIONALE: Including the clarification on AI-count-agnostic governance passes
+    the ''Completion Test''. The goal is clear, the implementation cost is trivial
+    (a few lines in a markdown file), and it directly addresses the ambiguity that
+    triggered the operator''s original question. This is not scope creep; it is completing
+    the goal of providing user clarity.
+
+
+    Q5 RATIONALE: There are no identified blockers. The work is low-risk, low-effort,
+    and high-value for new user experience. Per the no-deferral rule, it should ship
+    now.'
+  deliverable_scope:
+    next_iteration_id: iteration-v1153-hotfix-implementation
+    files_in_scope:
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+    - consensus_mcp/claude_extensions/skills/consensus/SKILL.md
+    - consensus_mcp/workflow_engine.py
+    - consensus_mcp/tests/test_documentation_currency.py
+    - CHANGELOG.md
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - any file not listed in files_in_scope
+    key_design_decisions:
+    - Bundle all identified currency drift fixes (F1, F2, F3, F4) into a single v1.15.3
+      hot-patch.
+    - Correct the F3/F4 Workflow C text to state it 'remains UNIMPLEMENTED as of v1.15.2'
+      and raises NotImplementedError, pointing to the canonical doc for the latest
+      status.
+    - Add a new section to consensus-workflow/SKILL.md clarifying that consensus governance
+      is scoped by WORKFLOW MODE, not contributor count.
+    - Create a new test file, `test_documentation_currency.py`, to pin the corrected
+      strings from F1, F3, and F4, preventing future silent regressions (addressing
+      F5).
+    acceptance_gates:
+    - Grep on `consensus-workflow/SKILL.md` confirms updates for F1 (machine enforcement),
+      F2 (GEMINI_CLI_TRUST_WORKSPACE), F3 (Workflow C status), and Q4 (AI-count agnostic)
+      are present.
+    - Grep on `consensus/SKILL.md` confirms update for F3 (Workflow C status) is present.
+    - Grep on `workflow_engine.py` confirms the `NotImplementedError` message for
+      Workflow C is updated.
+    - The new `test_documentation_currency.py` test file exists and passes, asserting
+      the corrected strings are present.
+    - The `CHANGELOG.md` for v1.15.3 is created and accurately reflects the bundled
+      fixes.
+    - The full test suite passes with zero regressions.
+  risks:
+  - Introducing a new test file could be considered minor scope expansion, but it's
+    the direct, correct mitigation for F5 and prevents this entire class of issue
+    from recurring, making it a high-leverage safeguard.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T17:43:58Z'
+packet_sha256: 637fdcc1461ad756605ab4de8f922596ff68c48716407a4e8714c8bb74235339

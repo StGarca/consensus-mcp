@@ -1,0 +1,146 @@
+iteration_id: iteration-v1153-bundled-skill-currency
+converged_at_utc: '2026-05-15T17:55:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+shared_prior_self_check:
+  result: PASSED-WITH-CORRECTION
+  reasoning: |
+    Fast 3/3 unanimity on Q1=(d)/Q2=(b)/Q3/Q4/Q5 — a verify-harder
+    flag per the v1.15.0 doctrine, not confidence. Differentials:
+    codex prior = "user-facing currency-drift hot-patch; root
+    failure is installers getting stale text vs shipped artifacts";
+    gemini prior = "no-deferral/completion doctrine; one failure
+    mode across F1-F4"; claude prior = "stale forward-refs are
+    systemic, rarely a single set" → which drove an independent
+    grep of the Q2(c) delegation target and surfaced F7
+    (docs/workflows/workflow-c-autonomous.md is ITSELF stale:
+    "v1.15.0" at lines 4,24,29,113,143). codex AND gemini both
+    reasoned from the SHARED PRIOR that F1-F4 = the complete
+    problem surface (codex: "entire known problem surface"; gemini:
+    "shared across all four facts F1-F4"). That shared prior is
+    REFUTED by F7 (grep-verifiable, external to the agreement).
+    The synthesis therefore INTEGRATES F7 into scope — it is not
+    outvoted by the 2/3 who lacked it; the unanimity is corrected
+    by the dissenting differential, exactly as the doctrine
+    intends. Convergence on the remaining questions stands because
+    each contributor cited a DIFFERENT supporting doctrine
+    (no-deferral / blast-radius / completion-test) and gemini's
+    code+doc precedent (v1.14.5, v1.14.6) was independently
+    verified against the git log, not assumed.
+
+q1_scope:
+  claude: "(d) + F7 (workflow-c-autonomous.md also stale)"
+  codex: "(d) F1+F2+F3+F4 (assumed complete surface)"
+  gemini: "(d) F1+F2+F3+F4 (assumed complete surface)"
+  weighted_synthesis: |
+    ADOPT (d) AND extend with F7. Unanimous core: all of F1-F4
+    share one failure mode — a shipped v1.15.x artifact carrying a
+    forward-reference whose target version already came due
+    (F1 convention "follow-up"→shipped v1.15.1; F3/F4 "v1.15.0"
+    →passed) or omitting a shipped fix (F2 gemini-trust). The
+    no-deferral doctrine ("bundle when items share a doctrine
+    boundary; sequencing = same end-state + more drift") governs;
+    splitting would be the named sequencing-as-deferral
+    anti-pattern. F7 is the SAME failure mode in the very doc
+    Q2(b) points operators at — excluding it would ship a fix
+    that points at a stale doc. Converged scope =
+    F1+F2+F3+F4+F7 + the Q4 line.
+
+q2_workflow_c_text:
+  unanimous: "(b)"
+  weighted_synthesis: |
+    State the artifact-scoped truth: "Workflow C (autonomous-
+    execute) engine is UNIMPLEMENTED as of v1.15.2; NO target
+    version is committed; running it raises a clear
+    NotImplementedError; status tracked in
+    docs/workflows/workflow-c-autonomous.md." (b) over (a):
+    pre-setting the NotImplementedError expectation is the point
+    of F4. (c) was REFUTED by F7 — cannot delegate to a stale
+    doc; the pointer is valid ONLY because F7 corrects that doc
+    in the same tag. Do NOT invent a replacement version
+    (that repeats the exact defect being fixed).
+
+q3_engine_string_in_doc_patch:
+  unanimous: "Yes — F4 ships in this tag"
+  weighted_synthesis: |
+    The "bundle fixes sharing a single failure-mode into one tag"
+    doctrine outranks the "don't mix code+doc / small blast
+    radius" convention HERE because: (i) F5 — no test pins the
+    NotImplementedError string (grep-verified) → code-class risk
+    collapses to doc-class; (ii) the change is a user-facing
+    message string + comment, zero engine semantics; (iii)
+    verified precedent: v1.14.5 (adapter code + README sweep) and
+    v1.14.6 (argparse code hot-patch) already mix trivial code +
+    doc in one tag (gemini's citation, confirmed against git log
+    93714c7 / 3f0f23f). Leaving the engine emitting "lands in
+    v1.15.0" while the skill is corrected would CREATE a new
+    inconsistency — the exact property this consult protects.
+
+q4_count_agnostic_line:
+  unanimous: "Yes — add one normative sentence; not scope-creep"
+  weighted_synthesis: |
+    It is the operator's literal question and is TRUE but only
+    IMPLICIT (validator has zero count-logic; the seal-time gate
+    is workflow-mode-scoped via _run_workflow_4 only; bundled-skill
+    install is not count-gated, _init_wizard.py:128,135). Stating
+    it converts an implicit invariant into a written guarantee for
+    the next operator — strengthening, not creeping, the
+    consistency this consult exists to protect. Exact line to add
+    to consensus-workflow/SKILL.md: doctrine + machine-enforcement
+    are scoped by WORKFLOW MODE, never by contributor count; 2-AI
+    and 3-AI installs are governed identically — only the
+    convergence-rule DEFAULT differs (unanimous@2 vs
+    strict-majority@3, an operator-overridable governance default).
+
+q5_minimal_and_blockers:
+  unanimous: "Ship now as v1.15.3; no blocker"
+  weighted_synthesis: |
+    Completion test passes: acceptance gates concrete + grep-
+    verifiable; zero open design once this consult fixes the Q2
+    wording; cost << 60 min (known strings/files, F5 = no test
+    churn). F1 alone is non-negotiable (actively misinforms every
+    new installer that v1.15.1's headline feature is unshipped).
+    No named blocker — the Workflow C ENGINE itself is explicitly
+    out of scope (goal_packet non_goals); this only corrects its
+    STATED status everywhere it is misstated.
+
+# === dogfoods the convention it documents (v1.15.1 machine-enforced) ===
+convention:
+  convention_schema_version: 1
+  falsification:
+    hypothesis: "Correcting the 5 stale forward-references (F1-F4,F7) + adding the count-agnostic line makes every new v1.15.3 install's bundled doctrine/status consistent with shipped reality."
+    falsifiable_from_artifacts: true
+    empirical_status: n/a
+    reason_na: "doc/string currency; the proving check ships WITH it — a post-fix grep gate (no surviving 'sequenced follow-up' for the convention; no 'v1.15.0' as a Workflow-C target in the 4 artifacts) + full suite green. No external experiment."
+  independent_safeguard:
+    applicable: false
+    why: "Currency/documentation fix; not a safety/data-loss/bricking/irreversible-risk class. Recorded explicitly per the convention (judgement must be stated, not omitted)."
+  decisive_experiment_before_next_iteration: null
+  cited_pass_ids: [claude-v1153-1-pass1, codex-v1153-1-pass1, gemini-v1153-1-pass1]
+
+deliverable:
+  scope: F1 F2 F3 F4 F7 + Q4-line
+  files:
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md   # F1 convention machine-enforced; F2 gemini-trust note; F3 WfC status; Q4 line
+    - consensus_mcp/claude_extensions/skills/consensus/SKILL.md             # F3 WfC status (bootstrap skill)
+    - consensus_mcp/workflow_engine.py                                      # F4: NotImplementedError string + comment ONLY (no control flow)
+    - docs/workflows/workflow-c-autonomous.md                               # F7: lines 4,24,29,113,143 stale 'v1.15.0'
+    - CHANGELOG.md ; README ; pyproject.toml                                # release-cut
+  workflow_c_canonical_text: "UNIMPLEMENTED as of v1.15.2; no committed target version; running Workflow C raises a clear NotImplementedError; status: docs/workflows/workflow-c-autonomous.md"
+  acceptance_gates:
+    - 'grep the 4 corrected artifacts: ZERO "machine validation is a sequenced follow-up" (F1); convention described as machine-enforced from v1.15.1 with the converged_plan_enforcement knob'
+    - 'consensus-workflow SKILL.md Gemini section names GEMINI_CLI_TRUST_WORKSPACE: empty-output ≠ 429, fixed v1.15.2, manual workaround only ≤v1.15.1 (F2)'
+    - 'NO occurrence of v1.15.0 (or any invented v-number) as a Workflow C ENGINE target in SKILL.md ×2, workflow_engine.py, workflow-c-autonomous.md; all use the canonical text (F3/F4/F7)'
+    - 'consensus-workflow SKILL.md states the count-agnostic governance invariant verbatim per q4 (Q4)'
+    - 'workflow_engine.py change is string/comment only — no behavior; full suite green, 0 regressions (F5: no test pinned the string)'
+    - 'Workflow B audit: codex + gemini goal_satisfied=true, no blocking; confirm no NEW invented forward-reference was introduced (anti-recurrence of the very defect)'
+  estimated_complexity: low
+  named_blockers: []
+
+next_steps:
+  - Implement per scope (Workflow B execution of this converged design).
+  - Workflow B audit (codex + gemini).
+  - Cut v1.15.3 from the v1.15.3 branch tip → origin + tag.

@@ -1,0 +1,120 @@
+pass_id: claude-v1153-1-pass1
+contributor: claude
+role: orchestrator
+goal_satisfied: true
+blocking_objections: []
+
+differential_prior: |
+  I reasoned from a first-hand read of the v1.15.3 branch tip (the
+  exact lines in F1-F4) PLUS one fact I discovered while preparing
+  this proposal that is NOT in the goal_packet — see F7 below. My
+  prior: "currency drift is rarely a single line; a stale
+  forward-reference to a now-passed version is usually systemic."
+  That prior is what made me grep the status doc rather than trust
+  the goal_packet's F1-F4 as the complete set. If a contributor
+  converges with me on (d) WITHOUT having independently checked
+  whether the delegation target (workflow-c-autonomous.md) is
+  itself stale, treat that agreement as a shared-prior artifact,
+  not confirmation.
+
+new_verified_fact:
+  F7: |
+    docs/workflows/workflow-c-autonomous.md — the doc F3's
+    proposed correction (Q2c) would delegate to as "single source
+    of truth" — is ITSELF stale: "named blocker for v1.15.0"
+    (line 4), "NotImplementedError with a clear v1.15.0 reference"
+    (24), "What v1.15.0 will add" (29), "ships in v1.15.0" (113),
+    "v1.15.0+ may relax" (143). So the failure mode is systemic,
+    not 4 isolated spots. Q2c (delegate to that doc) is REFUTED
+    unless that doc is also corrected in-scope.
+
+positions:
+  Q1_scope:
+    stance: "(d) F1+F2+F3+F4 — AND fold in F7 (workflow-c-autonomous.md)."
+    reasoning: |
+      All are ONE failure mode: a shipped v1.15.x artifact makes a
+      forward-reference promise whose target version already came
+      due unfulfilled (F1 convention 'follow-up'→shipped; F3/F4/F7
+      'v1.15.0'→passed) or omits a shipped fix (F2 gemini-trust).
+      The no-deferral doctrine is explicit: bundle when items share
+      a doctrine boundary; sequencing produces "the same end-state
+      with more bookkeeping and more chances for drift." Splitting
+      F1 from F3 from F7 is sequencing-as-deferral — the named
+      anti-pattern — when one tag fixes all. The "doc-only blast
+      radius / don't mix code+doc" hygiene rule is real but its
+      PURPOSE is to bound risk; F5 (no test pins the strings) makes
+      F4's code-class risk equal to doc-class. Bundling wins.
+    wrong_if: |
+      A test DOES pin the NotImplementedError or SKILL text
+      (F5 says none — verified by grep, but a reviewer should
+      re-grep), OR correcting F4 needs a control-flow change (it
+      does not — pure string literal).
+  Q2_workflow_c_text:
+    stance: "(b), self-contained — do NOT delegate to a stale doc."
+    reasoning: |
+      Artifact-scoped-truth forbids inventing a version; replacing
+      'v1.15.0' with another v-number repeats the exact defect.
+      (a)/(b) say the true thing: 'UNIMPLEMENTED as of v1.15.2; no
+      target version committed; running Workflow C raises a clear
+      NotImplementedError.' Prefer (b) over (a): pre-setting the
+      NotImplementedError expectation is the whole point of F4.
+      (c) is REFUTED by F7 — you cannot make a stale doc the single
+      source of truth. If we keep ANY pointer to
+      workflow-c-autonomous.md, that doc must be corrected in the
+      same tag (folds into Q1=d+F7).
+    wrong_if: "workflow-c-autonomous.md is corrected in-scope AND made authoritative — then a single pointer to it is fine and less duplicative."
+  Q3_engine_string_in_doc_patch:
+    stance: "Yes — F4 belongs in this tag."
+    reasoning: |
+      The hot-patch-bundling doctrine ("fixes sharing a single
+      failure-mode bundle into one tag, don't split across version
+      bumps") is the governing rule here; the doc-only convention
+      is a heuristic for its underlying goal (bounded blast
+      radius). F5 collapses the risk delta. Leaving the engine
+      emitting a falsehood ('lands in v1.15.0') while the skill is
+      corrected CREATES a new internal inconsistency — precisely
+      the property this consult exists to protect. Mixing is
+      acceptable specifically because the code change is a
+      user-facing message string with no behavioral surface.
+    wrong_if: "the change touches anything besides the literal string (it does not)."
+  Q4_state_count_agnostic_property:
+    stance: "Yes — add one normative sentence; not scope-creep."
+    reasoning: |
+      It is the operator's literal question and it is TRUE but only
+      IMPLICIT (derivable from validator having zero count-logic +
+      gate being workflow-mode-scoped + skill install not
+      count-gated). Doctrine that isn't written is not doctrine for
+      the next operator. One sentence stating 'doctrine +
+      machine-enforcement are scoped by WORKFLOW MODE, never
+      contributor count; 2-AI and 3-AI are governed identically —
+      only the convergence-rule DEFAULT differs (unanimous@2 vs
+      strict-majority@3)' converts an implicit invariant into a
+      stated guarantee. That STRENGTHENS the consistency this
+      consult protects; it is the opposite of scope-creep.
+    wrong_if: "the property were false — verified true: config.py N>=2 for propose-converge; validator no count refs; _seal_converged_plan only in _run_workflow_4."
+  Q5_minimal_and_blockers:
+    stance: "Ship F1+F2+F3+F4+F7+Q4-line as v1.15.3 now. No blocker."
+    reasoning: |
+      Completion test: acceptance gates concrete (text matches
+      shipped reality, grep-verifiable); zero open design once Q2
+      wording converges here; cost << 60 min (known strings, known
+      files, F5 = no test churn). All three completion-test
+      conditions pass → execute in this tag, no future iteration.
+      F1 alone is non-negotiable: it actively misinforms every new
+      installer that machine-enforcement is unshipped when it is
+      the headline of v1.15.1.
+    wrong_if: "convergence finds genuine open design in the Q2 wording requiring its own consult (I judge it bounded)."
+
+recommended_converged_shape:
+  scope: F1, F2, F3, F4, F7
+  files:
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+    - consensus_mcp/claude_extensions/skills/consensus/SKILL.md
+    - consensus_mcp/workflow_engine.py            # F4: string only
+    - docs/workflows/workflow-c-autonomous.md     # F7
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # Q4 line
+    - CHANGELOG.md ; README ; pyproject (release-cut)
+  workflow_c_text: "UNIMPLEMENTED as of v1.15.2; no committed target version; running it raises NotImplementedError; status: docs/workflows/workflow-c-autonomous.md (corrected same tag)."
+  count_agnostic_line: "one normative sentence in consensus-workflow SKILL.md"
+  release: v1.15.3 doc+string hot-patch; Workflow B audit (codex+gemini); tag from v1.15.3 branch.
+  named_blockers: []   # none — Workflow C ENGINE itself is out of scope by goal_packet non_goals; this only corrects its STATED status.
