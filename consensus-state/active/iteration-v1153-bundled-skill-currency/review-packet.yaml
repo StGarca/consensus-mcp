@@ -1,100 +1,164 @@
 defect_target:
   files:
-  - consensus-state/active/iteration-v1153-bundled-skill-currency/goal_packet.yaml
+  - consensus-state/active/iteration-v1153-bundled-skill-currency/implementation-summary.md
+  - consensus-state/active/iteration-v1153-bundled-skill-currency/converged-plan.yaml
   - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
   - consensus_mcp/claude_extensions/skills/consensus/SKILL.md
   - consensus_mcp/workflow_engine.py
+  - docs/workflows/workflow-c-autonomous.md
   - CHANGELOG.md
-  base_sha: 913e67a802ecb0b33e8e4a8f489e4ef8a8e6f6be57b240187b7611f1d2116d85
+  base_sha: 0d12350ea57db8120d586e1c6b01f1a7759cd1600510f09a188bcd43594ecef9
   touched_files_contents:
-    consensus-state/active/iteration-v1153-bundled-skill-currency/goal_packet.yaml: "schema_version:\
-      \ 1\npilot_id: iteration-v1153-bundled-skill-currency\nworkflow_mode: propose-converge\n\
-      independence: blind-first-reveal\ngoal:\n  summary: |\n    Scope + content consult\
-      \ for a v1.15.3 hot-patch. Operator\n    question that triggered this: \"on\
-      \ a new install, will the 2-AI\n    config follow all the upgraded workflow\
-      \ lessons-learned, same as\n    3-AI?\" Investigation answer (verified): YES\
-      \ — doctrine + v1.15.1\n    machine-enforcement are AI-count-AGNOSTIC, scoped\
-      \ by WORKFLOW\n    MODE not contributor count. But the investigation surfaced\
-      \ real\n    CURRENCY DRIFT in shipped v1.15.2 artifacts that misleads every\n\
-      \    new installer (2-AI and 3-AI identically).\n\n    VERIFIED FACTS (read\
-      \ first-hand at v1.15.3 branch tip; reason\n    from THESE, and state the differential/prior\
-      \ you used — fast\n    unanimity on a shared prior is a verify-harder flag,\
-      \ not\n    confidence):\n\n    F1. consensus_mcp/claude_extensions/skills/consensus-workflow/\n\
-      \        SKILL.md:262-263 says the converged-plan convention is\n        \"\
-      an authoring convention enforced by this doctrine now;\n        machine validation\
-      \ is a sequenced follow-up.\" This is the\n        v1.15.0 wording. v1.15.1\
-      \ (tag bef618cf) SHIPPED machine\n        enforcement (validate_converged_plan.py\
-      \ + seal-time gate in\n        workflow_engine._seal_converged_plan + config\
-      \ knob\n        convergence.converged_plan_enforcement default `graduated`).\n\
-      \        => bundled skill is STALE vs shipped reality.\n    F2. Same SKILL.md\
-      \ \"Gemini 429 handling\" section (~285) has no\n        mention of GEMINI_CLI_TRUST_WORKSPACE.\
-      \ v1.15.2 (tag\n        fb60f3cf) fixed _dispatch_gemini to inject it; gemini\
-      \ CLI\n        >=0.43.0-preview.0 otherwise fails EMPTY-OUTPUT, which\n    \
-      \    masquerades as a 429 and would waste the 429 retry budget.\n        Manual\
-      \ workaround only needed on <=v1.15.1.\n    F3. SKILL.md:46-48 (consensus-workflow)\
-      \ AND consensus/SKILL.md:\n        44-48 (bootstrap) both say the Workflow C\
-      \ multi-iteration\n        engine \"ships in v1.15.0\". v1.15.0/1/2 ALL shipped;\
-      \ the\n        engine is STILL NotImplementedError. The forward-reference\n\
-      \        target version has already passed without the feature.\n    F4. workflow_engine.py:162-168\
-      \ raises NotImplementedError for\n        Workflow C with message \"Multi-iteration\
-      \ auto-execution\n        lands in v1.15.0.\" Same already-passed-target drift,\
-      \ but in\n        a CODE path (a string), not a doc.\n    F5. No test pins the\
-      \ SKILL.md text or the NotImplementedError\n        message string (grep of\
-      \ consensus_mcp/tests/ = empty).\n    F6. The bundled skill IS installed for\
-      \ every new user via\n        consensus-init --install-claude-code through a\
-      \ FIXED list\n        (_init_wizard.py:128,135), NOT gated on contributor count.\n\
-      \        Fresh wizard defaults n>=2 to Workflow A (full enforcement);\n    \
-      \    only the zero-config legacy-synth fallback defaults to\n        post-review,\
-      \ identically for 2-AI and 3-AI.\n\n  question: |\n    Each contributor: STATE\
-      \ THE DIFFERENTIAL/PRIOR YOU REASONED\n    FROM. Stances on Q1-Q5 + the observation\
-      \ that would show your\n    recommendation WRONG. structural_abstention OK per\
-      \ question.\n\n    Q1 — SCOPE of v1.15.3. Which of F1-F4 ship in this one\n\
-      \    hot-patch?\n      (a) F1 only (the exact thing that answered the operator;\n\
-      \          minimal blast radius).\n      (b) F1 + F2 (both are bundled-skill\
-      \ currency vs shipped\n          v1.15.1/v1.15.2; same file, same failure mode).\n\
-      \      (c) F1 + F2 + F3 (all bundled-skill currency drift; +\n          consensus/SKILL.md).\n\
-      \      (d) F1 + F2 + F3 + F4 (also correct the engine\n          NotImplementedError\
-      \ string — same \"already-passed\n          forward-reference\" failure mode,\
-      \ but mixes a code path\n          into a doc hot-patch).\n      Apply the no-deferral\
-      \ doctrine (\"bundle when items share a\n      doctrine boundary\") vs. release-hygiene\
-      \ (\"don't mix code +\n      doc in a doc hot-patch; small blast radius\").\
-      \ Which wins\n      here and WHY?\n\n    Q2 — Content for the F3/F4 Workflow-C\
-      \ correction (IF in scope).\n    There is NO valid target version to name (v1.15.0/1/2\
-      \ passed;\n    no v-number is committed for the engine). Artifact-scoped-truth\n\
-      \    forbids inventing one. What should the corrected text say?\n      (a) \"\
-      remains UNIMPLEMENTED as of v1.15.2; no target version\n          committed;\
-      \ tracked as a named blocker — see\n          docs/workflows/workflow-c-autonomous.md.\"\
-      \n      (b) Same, but ALSO state running Workflow C raises a clear\n       \
-      \   NotImplementedError (set expectation before the operator\n          hits\
-      \ it).\n      (c) Drop all version forward-references entirely; point only\n\
-      \          at the status doc as the single source of truth.\n\n    Q3 — Does\
-      \ correcting workflow_engine.py:162-168 (F4, a code\n    string) belong in THIS\
-      \ doc-currency hot-patch, or is mixing\n    code+doc a release-hygiene anti-pattern\
-      \ that should be its own\n    patch even though it shares the failure mode?\
-      \ (The workflow\n    doctrine says hot-patches that share a single failure-mode\n\
-      \    should bundle; weigh against the doc-only blast-radius\n    convention.)\n\
-      \n    Q4 — Should the bundled skill EXPLICITLY state the\n    consistency property\
-      \ the operator asked about — i.e. add a\n    short normative line that the doctrine\
-      \ + machine-enforcement\n    are scoped by WORKFLOW MODE, never by contributor\
-      \ count, so 2-AI\n    and 3-AI installs are governed identically (only the\n\
-      \    convergence-rule DEFAULT differs: unanimous@2 vs\n    strict-majority@3)?\
-      \ Or is that scope-creep beyond a currency\n    fix?\n\n    Q5 — Minimal shippable\
-      \ slice + any named blocker with a\n    CONCRETE reason (not \"complex\"). Is\
-      \ there any reason F1 (at\n    least) should NOT ship now as v1.15.3?\n\n  non_goals:\n\
-      \    - re-litigating v1.15.1/v1.15.2 (shipped, audited, clean)\n    - implementing\
-      \ the Workflow C engine itself\n    - touching _dispatch_gemini / _dispatch_codex\
-      \ behavior\n    - the operator's separate projects\n  type: design_consult\n\
-      allowed_files: []\nallowed_sections: []\nforbidden_files:\n  - consensus_mcp/_dispatch_codex.py\n\
-      \  - consensus_mcp/_dispatch_gemini.py\n  - .github/\nmax_iterations: 3\nmax_patch_size:\
-      \ 0\nfix_author_policy: permissive\nvalidators_required: []\nacceptance_gates:\n\
-      \  - id: A1\n    description: converged-plan.yaml with per-question synthesis\
-      \ Q1-Q5\n    check: 'true'\n  - id: A2\n    description: at least 2 substantive\
-      \ proposals sealed\n    check: 'true'\nstop_conditions:\n  - max_iteration_count_reached\n\
-      \  - non_convergence_after_3_rounds\noperator_escalation_triggers:\n  - non_convergence_after_3_rounds\n\
-      authorization:\n  authorized_by: operator\n  authorized_at_utc: '2026-05-15T17:45:00Z'\n\
-      \  scope_signature: 'v1153-bundled-skill-currency-scope-consult'\ncontributors:\n\
-      \  enabled: [claude, codex, gemini]\nconvergence:\n  rule: weighted-synthesis\n\
-      \  finding_disposition: weighted-synthesis\n"
+    consensus-state/active/iteration-v1153-bundled-skill-currency/implementation-summary.md: "#\
+      \ Workflow B audit target — v1.15.3 bundled-doctrine currency hot-patch\n\n\
+      Executes `converged-plan.yaml` in this iteration dir (Workflow A\nconsult: claude\
+      \ + codex + gemini; weighted-synthesis; shared-prior\nself-check PASSED-WITH-CORRECTION).\
+      \ Doc/string only — no behavior.\n\n## Converged scope implemented (F1,F2,F3,F4,F7,Q4)\n\
+      \n- **F1** `consensus-workflow/SKILL.md` — converged-plan convention\n  now\
+      \ stated machine-enforced as of v1.15.1 (validator + seal-time\n  gate + `converged_plan_enforcement`\
+      \ default graduated); v1.15.0\n  doctrine-only caveat retained.\n- **F2** same\
+      \ skill, Gemini section — \"empty output is NOT a 429\"\n  + `GEMINI_CLI_TRUST_WORKSPACE`\
+      \ (fixed v1.15.2; manual workaround\n  only ≤v1.15.1).\n- **F3** `consensus-workflow/SKILL.md`\
+      \ + bootstrap `consensus/\n  SKILL.md` — Workflow C engine: UNIMPLEMENTED as\
+      \ of v1.15.2, no\n  committed target version.\n- **F4** `workflow_engine.py:152-174`\
+      \ — NotImplementedError message\n  + comment corrected. STRING/COMMENT ONLY,\
+      \ no control flow. F5\n  verified: no test pins it (grep of consensus_mcp/tests/\
+      \ empty);\n  full suite 968 passed 0 regressions confirms.\n- **F7** `docs/workflows/workflow-c-autonomous.md`\
+      \ — 5 stale\n  \"v1.15.0\" forward-refs corrected (the consult's shared-prior\n\
+      \  correction; this doc is what F4's message points at, so it had\n  to be fixed\
+      \ in the same tag or the pointer would be stale).\n- **Q4** `consensus-workflow/SKILL.md`\
+      \ — new normative\n  \"Consistency invariant (count-agnostic governance)\" block.\n\
+      \n## Acceptance-gate evidence (grep-verified)\n\n- ZERO \"machine validation\
+      \ is a sequenced follow-up\" in skills/\n  converged-plan-convention.md.\n-\
+      \ `GEMINI_CLI_TRUST_WORKSPACE` present in consensus-workflow skill.\n- NO live\
+      \ \"v1.15.0 / lands in / ships in / pointing at\" Workflow-C\n  ENGINE target\
+      \ across the 4 artifacts. The ONLY surviving\n  \"v1.15.0\" string is `workflow_engine.py:159`,\
+      \ an INTENTIONAL\n  corrected comment naming the historical false ref (\"the\
+      \ earlier\n  'lands in v1.15.0' forward-reference came due unfulfilled and was\n\
+      \  corrected in v1.15.3\") — artifact-scoped truth, not a live\n  promise.\n\
+      - Count-agnostic invariant present in consensus-workflow skill.\n- workflow_engine.py\
+      \ change is string+comment only; suite green.\n\n## Audit questions\n\n- Q1\
+      \ goal_satisfied: does the implementation match the converged\n  plan's scope\
+      \ + the canonical Workflow-C text exactly?\n- Q2 (anti-recurrence — the converged\
+      \ plan's explicit audit gate):\n  was ANY new invented forward-reference introduced\
+      \ (a version\n  promise, \"will ship in vX\")? Verify the corrected texts state\n\
+      \  only artifact-scoped truth.\n- Q3: is the count-agnostic invariant (Q4) accurate\
+      \ vs. the code\n  (validator no count-logic; seal gate only in _run_workflow_4;\n\
+      \  skill install not count-gated; propose-converge N≥2)?\n- Q4: any blocking\
+      \ objection? State the differential/prior you\n  reasoned from.\n"
+    consensus-state/active/iteration-v1153-bundled-skill-currency/converged-plan.yaml: "iteration_id:\
+      \ iteration-v1153-bundled-skill-currency\nconverged_at_utc: '2026-05-15T17:55:00Z'\n\
+      convergence_rule: weighted-synthesis\ncontributors_responsive: [claude, codex,\
+      \ gemini]\nblocking_objections: []\nall_substantive: true\n\nshared_prior_self_check:\n\
+      \  result: PASSED-WITH-CORRECTION\n  reasoning: |\n    Fast 3/3 unanimity on\
+      \ Q1=(d)/Q2=(b)/Q3/Q4/Q5 — a verify-harder\n    flag per the v1.15.0 doctrine,\
+      \ not confidence. Differentials:\n    codex prior = \"user-facing currency-drift\
+      \ hot-patch; root\n    failure is installers getting stale text vs shipped artifacts\"\
+      ;\n    gemini prior = \"no-deferral/completion doctrine; one failure\n    mode\
+      \ across F1-F4\"; claude prior = \"stale forward-refs are\n    systemic, rarely\
+      \ a single set\" → which drove an independent\n    grep of the Q2(c) delegation\
+      \ target and surfaced F7\n    (docs/workflows/workflow-c-autonomous.md is ITSELF\
+      \ stale:\n    \"v1.15.0\" at lines 4,24,29,113,143). codex AND gemini both\n\
+      \    reasoned from the SHARED PRIOR that F1-F4 = the complete\n    problem surface\
+      \ (codex: \"entire known problem surface\"; gemini:\n    \"shared across all\
+      \ four facts F1-F4\"). That shared prior is\n    REFUTED by F7 (grep-verifiable,\
+      \ external to the agreement).\n    The synthesis therefore INTEGRATES F7 into\
+      \ scope — it is not\n    outvoted by the 2/3 who lacked it; the unanimity is\
+      \ corrected\n    by the dissenting differential, exactly as the doctrine\n \
+      \   intends. Convergence on the remaining questions stands because\n    each\
+      \ contributor cited a DIFFERENT supporting doctrine\n    (no-deferral / blast-radius\
+      \ / completion-test) and gemini's\n    code+doc precedent (v1.14.5, v1.14.6)\
+      \ was independently\n    verified against the git log, not assumed.\n\nq1_scope:\n\
+      \  claude: \"(d) + F7 (workflow-c-autonomous.md also stale)\"\n  codex: \"(d)\
+      \ F1+F2+F3+F4 (assumed complete surface)\"\n  gemini: \"(d) F1+F2+F3+F4 (assumed\
+      \ complete surface)\"\n  weighted_synthesis: |\n    ADOPT (d) AND extend with\
+      \ F7. Unanimous core: all of F1-F4\n    share one failure mode — a shipped v1.15.x\
+      \ artifact carrying a\n    forward-reference whose target version already came\
+      \ due\n    (F1 convention \"follow-up\"→shipped v1.15.1; F3/F4 \"v1.15.0\"\n\
+      \    →passed) or omitting a shipped fix (F2 gemini-trust). The\n    no-deferral\
+      \ doctrine (\"bundle when items share a doctrine\n    boundary; sequencing =\
+      \ same end-state + more drift\") governs;\n    splitting would be the named\
+      \ sequencing-as-deferral\n    anti-pattern. F7 is the SAME failure mode in the\
+      \ very doc\n    Q2(b) points operators at — excluding it would ship a fix\n\
+      \    that points at a stale doc. Converged scope =\n    F1+F2+F3+F4+F7 + the\
+      \ Q4 line.\n\nq2_workflow_c_text:\n  unanimous: \"(b)\"\n  weighted_synthesis:\
+      \ |\n    State the artifact-scoped truth: \"Workflow C (autonomous-\n    execute)\
+      \ engine is UNIMPLEMENTED as of v1.15.2; NO target\n    version is committed;\
+      \ running it raises a clear\n    NotImplementedError; status tracked in\n  \
+      \  docs/workflows/workflow-c-autonomous.md.\" (b) over (a):\n    pre-setting\
+      \ the NotImplementedError expectation is the point\n    of F4. (c) was REFUTED\
+      \ by F7 — cannot delegate to a stale\n    doc; the pointer is valid ONLY because\
+      \ F7 corrects that doc\n    in the same tag. Do NOT invent a replacement version\n\
+      \    (that repeats the exact defect being fixed).\n\nq3_engine_string_in_doc_patch:\n\
+      \  unanimous: \"Yes — F4 ships in this tag\"\n  weighted_synthesis: |\n    The\
+      \ \"bundle fixes sharing a single failure-mode into one tag\"\n    doctrine\
+      \ outranks the \"don't mix code+doc / small blast\n    radius\" convention HERE\
+      \ because: (i) F5 — no test pins the\n    NotImplementedError string (grep-verified)\
+      \ → code-class risk\n    collapses to doc-class; (ii) the change is a user-facing\n\
+      \    message string + comment, zero engine semantics; (iii)\n    verified precedent:\
+      \ v1.14.5 (adapter code + README sweep) and\n    v1.14.6 (argparse code hot-patch)\
+      \ already mix trivial code +\n    doc in one tag (gemini's citation, confirmed\
+      \ against git log\n    93714c7 / 3f0f23f). Leaving the engine emitting \"lands\
+      \ in\n    v1.15.0\" while the skill is corrected would CREATE a new\n    inconsistency\
+      \ — the exact property this consult protects.\n\nq4_count_agnostic_line:\n \
+      \ unanimous: \"Yes — add one normative sentence; not scope-creep\"\n  weighted_synthesis:\
+      \ |\n    It is the operator's literal question and is TRUE but only\n    IMPLICIT\
+      \ (validator has zero count-logic; the seal-time gate\n    is workflow-mode-scoped\
+      \ via _run_workflow_4 only; bundled-skill\n    install is not count-gated, _init_wizard.py:128,135).\
+      \ Stating\n    it converts an implicit invariant into a written guarantee for\n\
+      \    the next operator — strengthening, not creeping, the\n    consistency this\
+      \ consult exists to protect. Exact line to add\n    to consensus-workflow/SKILL.md:\
+      \ doctrine + machine-enforcement\n    are scoped by WORKFLOW MODE, never by\
+      \ contributor count; 2-AI\n    and 3-AI installs are governed identically —\
+      \ only the\n    convergence-rule DEFAULT differs (unanimous@2 vs\n    strict-majority@3,\
+      \ an operator-overridable governance default).\n\nq5_minimal_and_blockers:\n\
+      \  unanimous: \"Ship now as v1.15.3; no blocker\"\n  weighted_synthesis: |\n\
+      \    Completion test passes: acceptance gates concrete + grep-\n    verifiable;\
+      \ zero open design once this consult fixes the Q2\n    wording; cost << 60 min\
+      \ (known strings/files, F5 = no test\n    churn). F1 alone is non-negotiable\
+      \ (actively misinforms every\n    new installer that v1.15.1's headline feature\
+      \ is unshipped).\n    No named blocker — the Workflow C ENGINE itself is explicitly\n\
+      \    out of scope (goal_packet non_goals); this only corrects its\n    STATED\
+      \ status everywhere it is misstated.\n\n# === dogfoods the convention it documents\
+      \ (v1.15.1 machine-enforced) ===\nconvention:\n  convention_schema_version:\
+      \ 1\n  falsification:\n    hypothesis: \"Correcting the 5 stale forward-references\
+      \ (F1-F4,F7) + adding the count-agnostic line makes every new v1.15.3 install's\
+      \ bundled doctrine/status consistent with shipped reality.\"\n    falsifiable_from_artifacts:\
+      \ true\n    empirical_status: n/a\n    reason_na: \"doc/string currency; the\
+      \ proving check ships WITH it — a post-fix grep gate (no surviving 'sequenced\
+      \ follow-up' for the convention; no 'v1.15.0' as a Workflow-C target in the\
+      \ 4 artifacts) + full suite green. No external experiment.\"\n  independent_safeguard:\n\
+      \    applicable: false\n    why: \"Currency/documentation fix; not a safety/data-loss/bricking/irreversible-risk\
+      \ class. Recorded explicitly per the convention (judgement must be stated, not\
+      \ omitted).\"\n  decisive_experiment_before_next_iteration: null\n  cited_pass_ids:\
+      \ [claude-v1153-1-pass1, codex-v1153-1-pass1, gemini-v1153-1-pass1]\n\ndeliverable:\n\
+      \  scope: F1 F2 F3 F4 F7 + Q4-line\n  files:\n    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md\
+      \   # F1 convention machine-enforced; F2 gemini-trust note; F3 WfC status; Q4\
+      \ line\n    - consensus_mcp/claude_extensions/skills/consensus/SKILL.md    \
+      \         # F3 WfC status (bootstrap skill)\n    - consensus_mcp/workflow_engine.py\
+      \                                      # F4: NotImplementedError string + comment\
+      \ ONLY (no control flow)\n    - docs/workflows/workflow-c-autonomous.md    \
+      \                           # F7: lines 4,24,29,113,143 stale 'v1.15.0'\n  \
+      \  - CHANGELOG.md ; README ; pyproject.toml                                #\
+      \ release-cut\n  workflow_c_canonical_text: \"UNIMPLEMENTED as of v1.15.2; no\
+      \ committed target version; running Workflow C raises a clear NotImplementedError;\
+      \ status: docs/workflows/workflow-c-autonomous.md\"\n  acceptance_gates:\n \
+      \   - 'grep the 4 corrected artifacts: ZERO \"machine validation is a sequenced\
+      \ follow-up\" (F1); convention described as machine-enforced from v1.15.1 with\
+      \ the converged_plan_enforcement knob'\n    - 'consensus-workflow SKILL.md Gemini\
+      \ section names GEMINI_CLI_TRUST_WORKSPACE: empty-output ≠ 429, fixed v1.15.2,\
+      \ manual workaround only ≤v1.15.1 (F2)'\n    - 'NO occurrence of v1.15.0 (or\
+      \ any invented v-number) as a Workflow C ENGINE target in SKILL.md ×2, workflow_engine.py,\
+      \ workflow-c-autonomous.md; all use the canonical text (F3/F4/F7)'\n    - 'consensus-workflow\
+      \ SKILL.md states the count-agnostic governance invariant verbatim per q4 (Q4)'\n\
+      \    - 'workflow_engine.py change is string/comment only — no behavior; full\
+      \ suite green, 0 regressions (F5: no test pinned the string)'\n    - 'Workflow\
+      \ B audit: codex + gemini goal_satisfied=true, no blocking; confirm no NEW invented\
+      \ forward-reference was introduced (anti-recurrence of the very defect)'\n \
+      \ estimated_complexity: low\n  named_blockers: []\n\nnext_steps:\n  - Implement\
+      \ per scope (Workflow B execution of this converged design).\n  - Workflow B\
+      \ audit (codex + gemini).\n  - Cut v1.15.3 from the v1.15.3 branch tip → origin\
+      \ + tag.\n"
     consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md: "---\nname:\
       \ consensus-workflow\ndescription: Operating procedures for working with consensus-mcp\
       \ in any project. Trigger when the user asks to run a consensus consult, dispatch\
@@ -129,83 +193,94 @@ defect_target:
       \ — LONG-FORM/OVERNIGHT. Runs\n  to completion without operator-in-the-loop,\
       \ auto-approves\n  emergent scope items within operator-pre-declared\n  `autonomy_contract`\
       \ boundaries. v1.14.4 ships the contract\n  (config alias, validators, scope_check\
-      \ helper, schema); the\n  multi-iteration engine ships in v1.15.0. See\n  `docs/workflows/workflow-c-autonomous.md`.\n\
-      - **Advisory** — dispatches happen but no vote is load-bearing. Rare.\n\n##\
-      \ Maximize parallelism — always\n\n**Default to parallel; serial is the choice\
-      \ that needs justification.**\nEvery operation in a consensus workflow that\
-      \ can run independently\nSHOULD run in parallel. This applies to:\n\n- Round-1\
-      \ peer dispatches (codex + gemini in background, claude\n  authors proposal\
-      \ in parallel)\n- Round-2+ batches where multiple peers are re-dispatched\n\
-      - Reading multiple sealed artifacts (one batched call, not N\n  serial reads)\n\
-      - Investigating multiple files / running multiple greps during\n  iteration\
-      \ scoping\n- Background long-running operations (snapshots, audits, blast-\n\
-      \  radius scans) kicked off to run alongside foreground work\n- Cross-iteration\
-      \ parallelism: when two iterations have no data\n  dependency, dispatch them\
-      \ as parallel branches (worktrees) and\n  converge results\n\nPractice has demonstrated\
-      \ drastic performance improvement when\nparallelism is fully exploited. Burden\
-      \ of proof flips: if you\nchoose serial, the reason must be a real data dependency\n\
-      (operation B needs operation A's output), not \"felt simpler\" or\n\"easier\
-      \ to reason about.\"\n\n### Round-1 dispatch order (Workflow A) — specific case\n\
-      \nDispatch peer contributors FIRST in background, then author your\nown proposal\
-      \ in parallel while they run. Independence (blind-\nfirst-reveal) depends on\
-      \ **visibility**, not **temporal order**.\nNo contributor sees another's output\
-      \ → independence preserved\nregardless of who started writing first. This optimization\
-      \ saves\nwall-clock and surfaces dispatcher errors earlier.\n\nConstraints:\
-      \ the goal_packet MUST be final before kicking off\ncontributors (mid-flight\
-      \ rewrites mean wasted dispatches), and the\n\"author in parallel\" optimization\
-      \ applies to round 1 only — round\n2+ explicitly require seeing round-1 outputs.\n\
-      \n## Consensus runs to COMPLETION — no gratuitous deferral\n\n**Default: consensus\
-      \ runs to completion when goals + acceptance\ngates are clear. Defer only when\
-      \ open design surface genuinely\nrequires more analysis, the implementation\
-      \ cost is large\n(multiple sessions worth), or the work has a real dependency\n\
-      on something not-yet-built.**\n\nThe deferral instinct comes from \"splitting\
-      \ reduces blast\nradius\" + \"small PRs are better.\" Both are RIGHT for genuinely\n\
-      independent units of work; both are WRONG when the items share\na doctrine boundary\
-      \ or when splitting just postpones the same\ndecisions without adding analysis.\n\
-      \n### The completion test\n\nWhen authoring a converged-plan.yaml or scoping\
-      \ a deliverable,\nask for each candidate item:\n\n1. Are the acceptance gates\
-      \ concrete and verifiable?\n2. Is there ANY open design question remaining (API\
-      \ shape,\n   trade-off, mechanism) that actually needs more thought?\n3. Is\
-      \ the implementation cost SMALL enough to fit in this\n   session? (rough heuristic:\
-      \ <60 minutes of edits + tests)\n\nIf (1)=yes AND (2)=no AND (3)=yes → **execute\
-      \ in the same\nsession, not a future iteration.** \"Future iteration\" is the\n\
-      cop-out — a way to pass the work to a hypothetical later-self\nwithout admitting\
-      \ later-self has the same context window and\nwill face the same decision.\n\
-      \n### Anti-patterns to abort\n\n- \"iter-XXXX candidate: <thing>\" with no concrete\
-      \ reason it\n  can't be done now → fold into current iteration.\n- \"Phase B\
-      \ / Phase C\" sequencing when phases share the same\n  doctrine boundary → bundle\
-      \ into one.\n- \"Defer to dedicated iteration\" because something is \"complex\"\
-      \n  when the complexity is BOUNDED (concrete decisions, finite\n  alternatives)\
-      \ → execute now; consult only on the open part.\n- Splitting a hot-patch across\
-      \ multiple version bumps when the\n  fixes share a single failure-mode → bundle\
-      \ into one tag.\n- Writing a goal_packet that ASSUMES future iterations will\n\
-      \  exist → write goal_packets that assume completion is the\n  default.\n\n\
-      ### Application to live consults\n\nBefore writing `next_iteration_id: ...`\
-      \ or `deferred to ...`\nin a converged plan, run the completion test on each\
-      \ item.\nIf the test passes, delete the deferral and add the work to\nthe current\
-      \ scope. Only ratify the deferral if the test\ngenuinely fails, and name the\
-      \ SPECIFIC blocker\n(not \"complexity,\" not \"out of scope\" — name the missing\n\
-      data, the dependency, or the design question).\n\n### Sequencing-as-deferral\
-      \ is the same anti-pattern\n\nDon't sequence three independent fixes across\
-      \ three\nhot-patches when bundling them into one passes the\ncompletion test.\
-      \ Sequencing produces the same end-state with\nmore bookkeeping and more chances\
-      \ for drift. The cost of\n\"big PR\" is real but bounded; the cost of perpetual\
-      \ deferral\nbacklog is unbounded.\n\n## Convergence model — weighted-synthesis\
-      \ by default\n\n**Default convergence model: weighted-synthesis.** All ideas\
-      \ of\nall proposals are weighed for benefit to the project as a whole.\nNo good\
-      \ ideas are lost; no babies tossed with the bathwater.\n\nWhen writing a `converged-plan.yaml`:\n\
-      \n- Structure synthesis per-question (or per-decision-point), naming\n  each\
-      \ contributor's position and explaining which element was\n  adopted and why.\n\
-      - When a contributor's position was NOT adopted, explicitly note\n  WHY (sequencing,\
-      \ scope, evidence quality) so the good idea is\n  preserved as a follow-up rather\
-      \ than lost.\n- Scan each rejected proposal element: if there's no follow-up\n\
-      \  iteration, ADR, or CHANGELOG note capturing it, write one.\n- Report votes\
-      \ per question (transparency) but treat the synthesis\n  as an integration,\
-      \ not a vote winner.\n\n`all-or-nothing` finding-disposition (the legacy default\
-      \ in\n`config.py:295-308` for Workflow A) is **edge-case opt-in only.**\nReserve\
-      \ it for binary scope decisions (\"ship X or not\"), security/\nsafety gates\
-      \ (\"approve patch or reject\"), or legal/compliance\nverdicts where partial\
-      \ acceptance is incoherent. Operator must\nexplicitly opt in via `goal_packet.convergence.finding_disposition:\n\
+      \ helper, schema); the\n  multi-iteration **engine is UNIMPLEMENTED as of v1.15.2\
+      \ — no\n  committed target version; running Workflow C raises a clear\n  `NotImplementedError`**.\
+      \ Status:\n  `docs/workflows/workflow-c-autonomous.md`.\n\n> **Consistency invariant\
+      \ (count-agnostic governance).** This\n> doctrine and the v1.15.1 machine-enforcement\
+      \ are scoped by\n> WORKFLOW MODE, never by contributor count. A 2-AI install\n\
+      > (claude + codex) and a 3-AI install (claude + codex + gemini)\n> are governed\
+      \ identically — same doctrine, same seal-time gate,\n> same enforcement knob.\
+      \ The ONLY count-sensitive default is the\n> convergence rule (`unanimous` at\
+      \ 2 contributors,\n> `strict-majority` at 3), and that is an operator-overridable\n\
+      > default, not a doctrine difference. (`propose-converge` requires\n> N≥2, so\
+      \ 2-AI gets full Workflow A enforcement; only\n> `autonomous-execute` requires\
+      \ exactly 3.)\n- **Advisory** — dispatches happen but no vote is load-bearing.\
+      \ Rare.\n\n## Maximize parallelism — always\n\n**Default to parallel; serial\
+      \ is the choice that needs justification.**\nEvery operation in a consensus\
+      \ workflow that can run independently\nSHOULD run in parallel. This applies\
+      \ to:\n\n- Round-1 peer dispatches (codex + gemini in background, claude\n \
+      \ authors proposal in parallel)\n- Round-2+ batches where multiple peers are\
+      \ re-dispatched\n- Reading multiple sealed artifacts (one batched call, not\
+      \ N\n  serial reads)\n- Investigating multiple files / running multiple greps\
+      \ during\n  iteration scoping\n- Background long-running operations (snapshots,\
+      \ audits, blast-\n  radius scans) kicked off to run alongside foreground work\n\
+      - Cross-iteration parallelism: when two iterations have no data\n  dependency,\
+      \ dispatch them as parallel branches (worktrees) and\n  converge results\n\n\
+      Practice has demonstrated drastic performance improvement when\nparallelism\
+      \ is fully exploited. Burden of proof flips: if you\nchoose serial, the reason\
+      \ must be a real data dependency\n(operation B needs operation A's output),\
+      \ not \"felt simpler\" or\n\"easier to reason about.\"\n\n### Round-1 dispatch\
+      \ order (Workflow A) — specific case\n\nDispatch peer contributors FIRST in\
+      \ background, then author your\nown proposal in parallel while they run. Independence\
+      \ (blind-\nfirst-reveal) depends on **visibility**, not **temporal order**.\n\
+      No contributor sees another's output → independence preserved\nregardless of\
+      \ who started writing first. This optimization saves\nwall-clock and surfaces\
+      \ dispatcher errors earlier.\n\nConstraints: the goal_packet MUST be final before\
+      \ kicking off\ncontributors (mid-flight rewrites mean wasted dispatches), and\
+      \ the\n\"author in parallel\" optimization applies to round 1 only — round\n\
+      2+ explicitly require seeing round-1 outputs.\n\n## Consensus runs to COMPLETION\
+      \ — no gratuitous deferral\n\n**Default: consensus runs to completion when goals\
+      \ + acceptance\ngates are clear. Defer only when open design surface genuinely\n\
+      requires more analysis, the implementation cost is large\n(multiple sessions\
+      \ worth), or the work has a real dependency\non something not-yet-built.**\n\
+      \nThe deferral instinct comes from \"splitting reduces blast\nradius\" + \"\
+      small PRs are better.\" Both are RIGHT for genuinely\nindependent units of work;\
+      \ both are WRONG when the items share\na doctrine boundary or when splitting\
+      \ just postpones the same\ndecisions without adding analysis.\n\n### The completion\
+      \ test\n\nWhen authoring a converged-plan.yaml or scoping a deliverable,\nask\
+      \ for each candidate item:\n\n1. Are the acceptance gates concrete and verifiable?\n\
+      2. Is there ANY open design question remaining (API shape,\n   trade-off, mechanism)\
+      \ that actually needs more thought?\n3. Is the implementation cost SMALL enough\
+      \ to fit in this\n   session? (rough heuristic: <60 minutes of edits + tests)\n\
+      \nIf (1)=yes AND (2)=no AND (3)=yes → **execute in the same\nsession, not a\
+      \ future iteration.** \"Future iteration\" is the\ncop-out — a way to pass the\
+      \ work to a hypothetical later-self\nwithout admitting later-self has the same\
+      \ context window and\nwill face the same decision.\n\n### Anti-patterns to abort\n\
+      \n- \"iter-XXXX candidate: <thing>\" with no concrete reason it\n  can't be\
+      \ done now → fold into current iteration.\n- \"Phase B / Phase C\" sequencing\
+      \ when phases share the same\n  doctrine boundary → bundle into one.\n- \"Defer\
+      \ to dedicated iteration\" because something is \"complex\"\n  when the complexity\
+      \ is BOUNDED (concrete decisions, finite\n  alternatives) → execute now; consult\
+      \ only on the open part.\n- Splitting a hot-patch across multiple version bumps\
+      \ when the\n  fixes share a single failure-mode → bundle into one tag.\n- Writing\
+      \ a goal_packet that ASSUMES future iterations will\n  exist → write goal_packets\
+      \ that assume completion is the\n  default.\n\n### Application to live consults\n\
+      \nBefore writing `next_iteration_id: ...` or `deferred to ...`\nin a converged\
+      \ plan, run the completion test on each item.\nIf the test passes, delete the\
+      \ deferral and add the work to\nthe current scope. Only ratify the deferral\
+      \ if the test\ngenuinely fails, and name the SPECIFIC blocker\n(not \"complexity,\"\
+      \ not \"out of scope\" — name the missing\ndata, the dependency, or the design\
+      \ question).\n\n### Sequencing-as-deferral is the same anti-pattern\n\nDon't\
+      \ sequence three independent fixes across three\nhot-patches when bundling them\
+      \ into one passes the\ncompletion test. Sequencing produces the same end-state\
+      \ with\nmore bookkeeping and more chances for drift. The cost of\n\"big PR\"\
+      \ is real but bounded; the cost of perpetual deferral\nbacklog is unbounded.\n\
+      \n## Convergence model — weighted-synthesis by default\n\n**Default convergence\
+      \ model: weighted-synthesis.** All ideas of\nall proposals are weighed for benefit\
+      \ to the project as a whole.\nNo good ideas are lost; no babies tossed with\
+      \ the bathwater.\n\nWhen writing a `converged-plan.yaml`:\n\n- Structure synthesis\
+      \ per-question (or per-decision-point), naming\n  each contributor's position\
+      \ and explaining which element was\n  adopted and why.\n- When a contributor's\
+      \ position was NOT adopted, explicitly note\n  WHY (sequencing, scope, evidence\
+      \ quality) so the good idea is\n  preserved as a follow-up rather than lost.\n\
+      - Scan each rejected proposal element: if there's no follow-up\n  iteration,\
+      \ ADR, or CHANGELOG note capturing it, write one.\n- Report votes per question\
+      \ (transparency) but treat the synthesis\n  as an integration, not a vote winner.\n\
+      \n`all-or-nothing` finding-disposition (the legacy default in\n`config.py:295-308`\
+      \ for Workflow A) is **edge-case opt-in only.**\nReserve it for binary scope\
+      \ decisions (\"ship X or not\"), security/\nsafety gates (\"approve patch or\
+      \ reject\"), or legal/compliance\nverdicts where partial acceptance is incoherent.\
+      \ Operator must\nexplicitly opt in via `goal_packet.convergence.finding_disposition:\n\
       all-or-nothing` with rationale.\n\n**Engine-level follow-up:** `config.py:295-308`\
       \ currently ENFORCES\n`all-or-nothing` for `workflow.mode=propose-converge`.\
       \ Until that\nconstraint is lifted (tracked as a separate iteration), the goal\n\
@@ -259,12 +334,16 @@ defect_target:
       \ the remaining hypothesis space.\n\nSee `docs/workflows/converged-plan-convention.md`\
       \ for the\nconverged-plan blocks (`falsification`, `independent_safeguard`,\n\
       `decisive_experiment_before_next_iteration`). These are an\nauthoring convention\
-      \ enforced by this doctrine now; machine\nvalidation is a sequenced follow-up.\n\
-      \n## Dispatching codex / gemini\n\n**`--review-target` must be a `.yaml` review-packet,\
-      \ not a raw `.md`\nor `.diff` file.** The peer reviewer sandboxes refuse to\
-      \ read paths\nunder `consensus-state/`, so the file contents have to be embedded\n\
-      inline. Use `python -m consensus_mcp._author_review_packet\n--iteration-dir\
-      \ <dir> --files <comma-list>` to author a packet with\n`defect_target.touched_files_contents`\
+      \ AND, **as of v1.15.1, machine-enforced**:\n`validators/validate_converged_plan.py`\
+      \ + a fail-closed seal-time\ngate in `workflow_engine._seal_converged_plan`\
+      \ validate the blocks\n(structure + consequence only — never soundness), governed\
+      \ by\n`convergence.converged_plan_enforcement`\n(`off|warn|graduated|strict`,\
+      \ default `graduated`). The v1.15.0\ntag is doctrine-only; machine enforcement\
+      \ exists only from the\nv1.15.1 tag forward.\n\n## Dispatching codex / gemini\n\
+      \n**`--review-target` must be a `.yaml` review-packet, not a raw `.md`\nor `.diff`\
+      \ file.** The peer reviewer sandboxes refuse to read paths\nunder `consensus-state/`,\
+      \ so the file contents have to be embedded\ninline. Use `python -m consensus_mcp._author_review_packet\n\
+      --iteration-dir <dir> --files <comma-list>` to author a packet with\n`defect_target.touched_files_contents`\
       \ populated, then pass\n`<dir>/review-packet.yaml` as the review target.\n\n\
       **The MCP wrapper `reviewer_dispatch_codex` has a 45-second silence\nthreshold**\
       \ that is often too aggressive on cold-start. The shell\nbinary `consensus-mcp-dispatch-codex`\
@@ -280,8 +359,19 @@ defect_target:
       \ 429s.\n\nThe signal \"skip vs retry\" is the cost of getting it wrong — when\
       \ a\nchore goes through with 2-AI consensus, the worst case is \"we get a\n\
       weaker review\"; when a design decision goes through with 2-AI\nconsensus, the\
-      \ worst case is \"we ratify a flawed design.\"\n\n## Codex auth model\n\nCodex\
-      \ uses **token-based auth, not API keys.** If a dispatch hangs\nwith \"AuthRequired\"\
+      \ worst case is \"we ratify a flawed design.\"\n\n**Empty gemini output is NOT\
+      \ a 429 — don't burn the retry budget.**\ngemini CLI ≥ `0.43.0-preview.0` refuses\
+      \ headless runs in an\n\"untrusted\" directory: it writes the trust error to\
+      \ stderr and\nproduces **empty stdout**, which fails as `GeminiOutputParseError`\n\
+      (\"Expecting value: line 1 column 1\"), often twice (initial +\nauto-retry)\
+      \ — looking like a transient 429 but it is deterministic.\n**Fixed in v1.15.2:**\
+      \ `_dispatch_gemini` injects\n`GEMINI_CLI_TRUST_WORKSPACE=true` into the subprocess\
+      \ env. On\n**≤ v1.15.1** apply the manual workaround:\n`GEMINI_CLI_TRUST_WORKSPACE=true`\
+      \ in the environment that runs the\ndispatcher (or MCP server). `--skip-trust`\
+      \ alone is NOT\nload-bearing on this CLI version. Diagnose by probing `gemini\
+      \ -p\n\"reply OK\"` directly — the trust error prints plainly. See\n`docs/advisories.md`\
+      \ (Advisory 2026-05-15, resolved v1.15.2).\n\n## Codex auth model\n\nCodex uses\
+      \ **token-based auth, not API keys.** If a dispatch hangs\nwith \"AuthRequired\"\
       \ messages, the most common cause is a **secondary\nMCP** that codex itself\
       \ is configured to use — not codex's own auth.\nCheck codex's MCP config (`~/.codex/config.toml`)\
       \ for any nested MCP\nreferences; remove or disable the offending entry. Codex's\
@@ -445,25 +535,25 @@ defect_target:
       \ (NEW) — runs to completion\n  overnight without operator-in-the-loop, auto-approving\
       \ emergent\n  scope items within an operator-pre-declared `autonomy_contract`.\n\
       \  v1.14.4 ships the CONTRACT (validators, scope_check, halt-set,\n  audit-ledger);\
-      \ the multi-iteration engine ships in v1.15.0\n  (named blocker). Operators\
-      \ can stage and validate Workflow C\n  goal_packets in v1.14.4+; running them\
-      \ surfaces a clear\n  `NotImplementedError` pointing at v1.15.0.\n- **Advisory**\
-      \ — dispatches happen but no vote is load-bearing. Rare.\n\nNumeric aliases\
-      \ (3, 4) still resolve at the CLI but emit a\n`DeprecationWarning`; will be\
-      \ removed in a future minor release.\n\nFor the operating procedures (when to\
-      \ use which workflow, how to\ndispatch peers, halt conditions, etc.) the bootstrap\
-      \ pack also\ninstalls `~/.claude/skills/consensus-workflow/SKILL.md` — that\n\
-      skill is the load-bearing reference and triggers automatically\non workflow-execution\
-      \ intent.\n\n## What NOT to do\n\n- Don't reimplement any of `consensus-init`'s\
-      \ logic. It writes\n  `.consensus/config.yaml`, `.mcp.json`, and a `.gitignore`\
-      \ managed\n  block — let the binary handle all of that.\n- Don't paraphrase\
-      \ the binary's output. Operators rely on the exact\n  next-step text from the\
-      \ CLI.\n- Don't run if the user is asking a conceptual question\n  (\"what is\
-      \ consensus-mcp?\", \"how does consensus work?\") — that is\n  not a bootstrap\
-      \ intent.\n\n## Expected output flow\n\n```text\n$ consensus-init --from-claude-code\n\
-      .mcp.json written: <project-root>/.mcp.json\n.consensus/config.yaml written:\
-      \ <project-root>/.consensus/config.yaml\n.gitignore managed block added.\n\n\
-      Detected --from-claude-code: Claude Code must reload to activate the\nconsensus-mcp\
+      \ the multi-iteration engine is **UNIMPLEMENTED as\n  of v1.15.2 — no committed\
+      \ target version**. Operators can stage\n  and validate Workflow C goal_packets;\
+      \ running one raises a clear\n  `NotImplementedError`. Status:\n  `docs/workflows/workflow-c-autonomous.md`.\n\
+      - **Advisory** — dispatches happen but no vote is load-bearing. Rare.\n\nNumeric\
+      \ aliases (3, 4) still resolve at the CLI but emit a\n`DeprecationWarning`;\
+      \ will be removed in a future minor release.\n\nFor the operating procedures\
+      \ (when to use which workflow, how to\ndispatch peers, halt conditions, etc.)\
+      \ the bootstrap pack also\ninstalls `~/.claude/skills/consensus-workflow/SKILL.md`\
+      \ — that\nskill is the load-bearing reference and triggers automatically\non\
+      \ workflow-execution intent.\n\n## What NOT to do\n\n- Don't reimplement any\
+      \ of `consensus-init`'s logic. It writes\n  `.consensus/config.yaml`, `.mcp.json`,\
+      \ and a `.gitignore` managed\n  block — let the binary handle all of that.\n\
+      - Don't paraphrase the binary's output. Operators rely on the exact\n  next-step\
+      \ text from the CLI.\n- Don't run if the user is asking a conceptual question\n\
+      \  (\"what is consensus-mcp?\", \"how does consensus work?\") — that is\n  not\
+      \ a bootstrap intent.\n\n## Expected output flow\n\n```text\n$ consensus-init\
+      \ --from-claude-code\n.mcp.json written: <project-root>/.mcp.json\n.consensus/config.yaml\
+      \ written: <project-root>/.consensus/config.yaml\n.gitignore managed block added.\n\
+      \nDetected --from-claude-code: Claude Code must reload to activate the\nconsensus-mcp\
       \ server. Either restart Claude Code in this project\n(Ctrl-C, then `claude\
       \ code`), or run `/mcp` to reload MCP servers\nif your build supports it.\n\
       ```\n\nAfter running, confirm the message to the user and stop. Do not\nattempt\
@@ -549,23 +639,26 @@ defect_target:
       \            # iter-workflow-abc-introduce: v1.14.4 ships the contract\n   \
       \             # (alias, validators, scope_check helper, schema,\n          \
       \      # autonomy_contract block) but NOT the multi-iteration\n            \
-      \    # auto-execution loop. Engine path lands in v1.15.0\n                #\
-      \ (named blocker: cross-platform interrupt-file watching\n                #\
-      \ validation + integration tests with real peer dispatches +\n             \
-      \   # autonomy-ledger replay design). Operators can write and\n            \
-      \    # validate Workflow C goal_packets in v1.14.4; running them\n         \
-      \       # surfaces this clear NotImplementedError.\n                raise NotImplementedError(\n\
-      \                    \"Workflow C (autonomous-execute) engine path is not \"\
-      \n                    \"implemented in v1.14.4; the contract (config alias,\
-      \ \"\n                    \"validators, scope_check, autonomy_contract schema)\
-      \ \"\n                    \"ships in v1.14.4 for staging only. Multi-iteration\
-      \ \"\n                    \"auto-execution lands in v1.15.0. See \"\n      \
-      \              \"docs/workflows/workflow-c-autonomous.md for status.\"\n   \
-      \             )\n            else:\n                raise WorkflowError(f\"\
-      unknown workflow.mode {mode!r}\")\n        except WorkflowError as exc:\n  \
-      \          outcome.error = str(exc)\n        except NotImplementedError as exc:\n\
-      \            outcome.error = f\"NotImplementedError: {exc}\"\n        return\
-      \ outcome\n\n    # ---- Workflow runners ----\n\n    def _run_workflow_3(\n\
+      \    # auto-execution loop. The engine path remains\n                # UNIMPLEMENTED\
+      \ as of v1.15.2 — no committed target\n                # version (v1.15.0/1/2\
+      \ shipped other work; the earlier\n                # \"lands in v1.15.0\" forward-reference\
+      \ came due\n                # unfulfilled and was corrected in v1.15.3 rather\
+      \ than\n                # re-promised). Named-blocker design: cross-platform\n\
+      \                # interrupt-file watching validation + integration tests\n\
+      \                # with real peer dispatches + autonomy-ledger replay.\n   \
+      \             # Operators can write and validate Workflow C\n              \
+      \  # goal_packets; running them surfaces this clear\n                # NotImplementedError.\n\
+      \                raise NotImplementedError(\n                    \"Workflow\
+      \ C (autonomous-execute) engine path is \"\n                    \"UNIMPLEMENTED\
+      \ as of v1.15.2; no target version is \"\n                    \"committed. The\
+      \ contract (config alias, validators, \"\n                    \"scope_check,\
+      \ autonomy_contract schema) ships for \"\n                    \"staging/validation\
+      \ only. See \"\n                    \"docs/workflows/workflow-c-autonomous.md\
+      \ for status.\"\n                )\n            else:\n                raise\
+      \ WorkflowError(f\"unknown workflow.mode {mode!r}\")\n        except WorkflowError\
+      \ as exc:\n            outcome.error = str(exc)\n        except NotImplementedError\
+      \ as exc:\n            outcome.error = f\"NotImplementedError: {exc}\"\n   \
+      \     return outcome\n\n    # ---- Workflow runners ----\n\n    def _run_workflow_3(\n\
       \        self,\n        iteration_dir: Path,\n        goal_packet_path: Path,\n\
       \        target_path: Path,\n        outcome: IterationOutcome,\n    ) -> None:\n\
       \        \"\"\"Post-review: claude is assumed to have already produced target;\n\
@@ -855,45 +948,164 @@ defect_target:
       \  plan[\"convention_gate\"] = gate\n\n        out.write_text(\n           \
       \ yaml.safe_dump(plan, sort_keys=False, default_flow_style=False, allow_unicode=True),\n\
       \            encoding=\"utf-8\",\n        )\n        return out\n"
-    CHANGELOG.md: "# Changelog\n\n## 1.15.3 - unreleased\n\n_No changes yet. Branched\
-      \ from v1.15.2 tip._\n\n## 1.15.2 - 2026-05-15\n\n**gemini-dispatch workspace-trust\
-      \ fix** — closes the v1.15.1\nnamed blocker (advisory 2026-05-15, now **resolved**).\n\
-      \n`consensus_mcp/_dispatch_gemini.py` now injects\n`GEMINI_CLI_TRUST_WORKSPACE=true`\
-      \ into the gemini subprocess env\nvia a new `_gemini_subprocess_env()` helper\
-      \ (returns a COPY of the\nparent env; forces the var to `true` even if an inherited\
-      \ value is\n`false`; never mutates `os.environ`). gemini CLI\n`0.43.0-preview.0`+\
-      \ refuses headless runs in an \"untrusted\"\ndirectory — it writes the trust\
-      \ error to stderr and produces\n**empty stdout**, which the dispatcher then\
-      \ fails as\n`GeminiOutputParseError`.\n\n**Empirically verified 2026-05-15**\
-      \ (the v1.15.1 audit diagnosed\nthis first-hand; gemini pass-1 failed twice\
-      \ for exactly this):\n- `--skip-trust` alone (still passed, defense-in-depth)\
-      \ is NOT\n  load-bearing on this version — gemini bypassed trust but went\n\
-      \  autonomous and 429'd.\n- `GEMINI_CLI_TRUST_WORKSPACE=true` produced clean\
-      \ deterministic\n  output, and the two clean v1.15.1 Workflow B audit approvals.\n\
-      \n`_dispatch_gemini.py` was in the v1.15.1 iteration's\n`forbidden_files`, so\
-      \ the dispatcher-level fix was correctly\ndeferred to this version rather than\
-      \ patched out-of-scope.\n\nWorkflow B audit clean: gemini `goal_satisfied=true`,\
-      \ 0 blocking,\n0 findings — **dispatched from source with\n`GEMINI_CLI_TRUST_WORKSPACE`\
-      \ explicitly unset**, so the audit pass\nof this fix was made possible BY this\
-      \ fix (end-to-end in-vivo\nproof; acceptance gate A4). codex: 0 blocking; doc-accuracy\n\
-      findings on the advisory/changelog wording integrated. Full suite\ngreen: 968\
-      \ passed, 1 skipped, 0 regressions; 4 new unit tests for\n`_gemini_subprocess_env`\
-      \ in `test_dispatch_gemini.py`.\n\n## 1.15.1 - 2026-05-15\n\n**Machine-enforcement\
-      \ of the converged-plan convention** — closes the\nv1.15.0 NAMED BLOCKER. From\
-      \ `iteration-converged-plan-machine-\nenforcement` (Workflow A weighted-synthesis:\
-      \ claude + codex + gemini;\nshared-prior self-check PASSED; no blocking objections;\
-      \ the consult\ndogfooded the very convention it enforces). The recorded v1.15.0\n\
-      \"starting design\" (gemini's `severity` field + `consensus_gate.py`\nmechanism)\
-      \ was **partially refuted by first-hand code-reading** during\nthe consult:\
-      \ `consensus_mcp/validators/consensus_gate.py` is the\nPhase-0 production-readiness\
-      \ gate (P0-V6) and is the WRONG component —\nthe v1.15.0 doctrine working correctly\
-      \ on its own audit trail.\n\n**Artifact truth (scoped claim):** the **v1.15.0\
-      \ tag `4e81f9e` is\nDOCTRINE-ONLY** — it shipped the convention as an authoring\
-      \ convention\nenforced by the bundled skill + Workflow B audit, with **zero\
-      \ engine\ncode**. Machine enforcement exists **only from the v1.15.1 tag\nforward**.\
-      \ Users on v1.15.0 get doctrine; they must upgrade to v1.15.1\nto get the gate.\n\
-      \nShipped (real code paths — meaningful regression signal, unlike\nv1.15.0's\
-      \ doc-only change):\n\n- **`consensus_mcp/schemas/converged_plan_convention.schema.json`**\n\
+    docs/workflows/workflow-c-autonomous.md: "# Workflow C — autonomous-execute\n\n\
+      **Status (as of v1.15.2):** Contract shipped (v1.14.4). The\nmulti-iteration\
+      \ engine is **UNIMPLEMENTED — no committed target\nversion.** The earlier \"\
+      v1.15.0\" forward-reference came due\nunfulfilled (v1.15.0 = convergence-correctness\
+      \ doctrine; v1.15.1 =\nconverged-plan machine-enforcement; v1.15.2 = gemini-dispatch\
+      \ fix —\nnone shipped the Workflow C engine) and was corrected in v1.15.3\n\
+      rather than re-promised against another version. This doc is the\nsingle source\
+      \ of truth for status.\n\nWorkflow C runs consensus iterations to completion\
+      \ **without\noperator-in-the-loop**, auto-approving emergent scope items if\
+      \ they\nfall within an operator-pre-declared `autonomy_contract`. Designed\n\
+      for overnight runs and operator-unavailable windows.\n\n## What v1.14.4 ships\n\
+      \n- Letter aliases (A/B/C) replace numeric (3/4) as canonical operator\n  vocabulary.\
+      \ Numeric aliases stay accepted for one cycle with\n  `DeprecationWarning`.\n\
+      - `WORKFLOW_AUTONOMOUS_EXECUTE = \"autonomous-execute\"` constant in\n  `consensus_mcp/config.py`.\n\
+      - `consensus_mcp/validators/scope_check.py` gains\n  `validate_autonomy_contract()`\
+      \ + `check_autonomy_scope()` functions\n  for use by the engine (and by operators\
+      \ authoring contracts).\n- Workflow C requires exactly 3 contributors (claude\
+      \ + codex + gemini)\n  enforced at config-load.\n- `workflow_engine.py` recognizes\
+      \ Workflow C and raises a clear\n  `NotImplementedError` (stating it is unimplemented\
+      \ as of v1.15.2,\n  no committed target) when an operator tries to RUN one.\
+      \ Operators\n  can stage and validate Workflow C goal_packets; execution is\n\
+      \  gated until the engine ships.\n\n## What the engine will add (named blocker)\n\
+      \nThe multi-iteration auto-execution loop. Specifically:\n\n- Cross-platform\
+      \ interrupt-file watching (Windows `ReadDirectoryChangesW`\n  vs Unix `select`/`poll`\
+      \ differences need validation).\n- Integration tests with real peer dispatches\
+      \ (cost: dispatcher\n  latency × N iterations per test run).\n- Resume-after-halt\
+      \ semantics (operator returns, hits a parked item,\n  approves it; how does\
+      \ the loop pick up?).\n- Autonomy-ledger replay for failure recovery.\n\n##\
+      \ What's deferred to v1.16.0+\n\nProject-level `.consensus/autonomous-policy.yaml`\
+      \ as a default that\ngoal_packets can override per-run. Deferred until empirical\
+      \ evidence\noperators want it across multiple Workflow C runs (we have zero\
+      \ runs\ntoday; designing for hypothetical reuse is premature).\n\n## Authoring\
+      \ a Workflow C goal_packet\n\nAdd an `autonomy_contract` block to your goal_packet:\n\
+      \n```yaml\nschema_version: 1\npilot_id: my-overnight-run\nworkflow_mode: autonomous-execute\
+      \  # or alias \"C\"\ncontributors:\n  enabled: [claude, codex, gemini]  # all\
+      \ 3 required for Workflow C\n\nautonomy_contract:\n  max_iterations: 10\n  max_wall_clock_minutes:\
+      \ 240\n  allowed_file_patterns:\n    - \"consensus_mcp/contributors/**\"\n \
+      \   - \"consensus_mcp/tests/test_contributors.py\"\n    - \"docs/**/*.md\"\n\
+      \  forbidden_file_patterns:\n    - \".github/**\"\n    - \"pyproject.toml\"\n\
+      \    - \"consensus_mcp/_dispatch_*.py\"\n  # Optional: opt OUT of specific halt\
+      \ conditions for less-safe runs\n  # (default is wide-by-default; all halt conditions\
+      \ active)\n  skip_halt_on:\n    # - test_suite_regression\n    # - schema_change_proposed\n\
+      ```\n\n## Halt conditions (wide-by-default)\n\nEvery Workflow C iteration boundary\
+      \ checks for these conditions; ANY\none halts the run and surfaces to operator.\
+      \ Operator opts OUT per-run\nvia `autonomy_contract.skip_halt_on`.\n\n| Halt\
+      \ condition | Triggered when |\n|---|---|\n| `blocking_objection` | Any peer\
+      \ raises a blocking_objection |\n| `test_suite_regression` | New test failures\
+      \ vs baseline |\n| `schema_change_proposed` | config.py / goal_packet schema\
+      \ / sealed-artifact schemas modified |\n| `max_iterations_exceeded` | Iteration\
+      \ count > `autonomy_contract.max_iterations` |\n| `max_wall_clock_minutes_exceeded`\
+      \ | Wall-clock > `autonomy_contract.max_wall_clock_minutes` |\n| `convergence_failure_after_n_rounds`\
+      \ | Convergence fails after N rounds (default 3) |\n| `reviewer_dispatch_permanent_failure`\
+      \ | Peer dispatch fails after 3 retries |\n| `files_outside_allowed_patterns`\
+      \ | Proposed scope touches files outside allowed_file_patterns |\n| `files_in_forbidden_patterns`\
+      \ | Proposed scope touches files in forbidden_file_patterns |\n| `operator_interrupt_file_present`\
+      \ | `.consensus/interrupt` file marker exists |\n| `reviewer_explicit_recommend_operator_review`\
+      \ | A peer's sealed packet has `recommend_operator_review: true` |\n\n## Scope-check\
+      \ decisions\n\n`check_autonomy_scope(proposed_files, contract)` returns one\
+      \ of:\n\n- `approved` — every file is within `allowed_file_patterns` AND none\n\
+      \  in `forbidden_file_patterns`. Auto-proceed.\n- `parked` — at least one file\
+      \ is OUTSIDE allowed_file_patterns but\n  none are forbidden. Item parked for\
+      \ operator review when they\n  return. Other (in-bounds) work continues.\n-\
+      \ `halt` — at least one file is in `forbidden_file_patterns`. Hard\n  stop;\
+      \ operator must review before any further autonomous action.\n\n## Operator\
+      \ interrupt mechanism\n\nTo halt a running Workflow C from outside the session,\
+      \ create the\nfile `.consensus/interrupt` in the repo root. The engine (once\n\
+      implemented — see Status above) checks for this file at every\niteration boundary\n\
+      and halts cleanly if present, deletes the file, and surfaces a\n\"halted by\
+      \ operator interrupt\" status in the audit log.\n\n## Audit log\n\nWorkflow\
+      \ C writes to\n`consensus-state/autonomous-runs/<run-id>/log.jsonl` with one\
+      \ entry\nper iteration boundary:\n\n```json\n{\n  \"schema_version\": 1,\n \
+      \ \"iteration_id\": \"...\",\n  \"started_utc\": \"...\",\n  \"completed_utc\"\
+      : \"...\",\n  \"halt_check_results\": {...},\n  \"scope_check_decision\": \"\
+      approved\" | \"parked\" | \"halt\",\n  \"files_touched\": [...],\n  \"next_iteration_id\"\
+      : \"...\" | null\n}\n```\n\nWhen the operator returns, the audit log tells the\
+      \ complete story:\nwhich iterations ran, which halted and why, which scope items\
+      \ were\nparked.\n\n## Why ONLY 3-AI contributors?\n\nAutonomous mode means \"\
+      no operator-in-the-loop.\" The wide cross-AI\nsafety net is mandatory by default\
+      \ (Workflow C requires exactly 3\ncontributors, enforced at config-load). A\
+      \ future relaxation\n(explicit operator opt-in, e.g. 2-AI Workflow C with a\
+      \ brief safety\nwarning) is possible but is NOT committed to any version — when\
+      \ the\nengine lands it ships safety-first.\n\n## Provenance\n\n- iter-workflow-abc-introduce\
+      \ convergence (workflow #4 weighted-\n  synthesis across claude + codex + gemini,\
+      \ no blocking objections).\n- See `consensus-state/active/iteration-workflow-abc-introduce/`\n\
+      \  for the full converged plan; archived snapshot under\n  `consensus-state-snapshots`\
+      \ branch.\n"
+    CHANGELOG.md: "# Changelog\n\n## 1.15.3 - 2026-05-15\n\n**Bundled-doctrine + status\
+      \ currency hot-patch** — doc/string only,\nno behavior change. Triggered by\
+      \ an operator question (\"on a new\ninstall, will 2-AI follow all the upgraded\
+      \ workflow lessons, same\nas 3-AI?\"). Investigation answer: **yes — doctrine\
+      \ + v1.15.1\nmachine-enforcement are AI-count-AGNOSTIC, scoped by workflow mode,\n\
+      never by contributor count.** But the investigation found shipped\nv1.15.2 artifacts\
+      \ carrying stale forward-references that misled\nevery new installer (2-AI and\
+      \ 3-AI identically).\n\nScope set by a **Workflow A consult** (`iteration-v1153-bundled-\n\
+      skill-currency`; claude + codex + gemini; weighted-synthesis;\nshared-prior\
+      \ self-check PASSED-WITH-CORRECTION — fast 3/3 unanimity\non scope was partly\
+      \ a shared prior; claude's differing differential\nsurfaced F7, which was integrated,\
+      \ not laundered by the unanimity).\n\nFixed (one failure mode — a shipped artifact's\
+      \ forward-reference\nwhose target version already came due):\n- **F1** `consensus-workflow/SKILL.md`:\
+      \ the converged-plan\n  convention is no longer described as \"machine validation\
+      \ is a\n  sequenced follow-up\" — it is **machine-enforced as of v1.15.1**\n\
+      \  (`validate_converged_plan` + fail-closed seal-time gate +\n  `convergence.converged_plan_enforcement`\
+      \ knob, default\n  `graduated`).\n- **F2** same skill, Gemini section: empty\
+      \ gemini output is NOT a\n  429 — `GEMINI_CLI_TRUST_WORKSPACE` guidance added\
+      \ (fixed v1.15.2;\n  manual workaround only ≤ v1.15.1; don't burn the 429 budget).\n\
+      - **F3** both bundled skills (`consensus-workflow` +\n  bootstrap `consensus`):\
+      \ Workflow C engine status corrected — it\n  did **not** ship in v1.15.0; it\
+      \ is UNIMPLEMENTED as of v1.15.2,\n  no committed target version.\n- **F4**\
+      \ `workflow_engine.py`: the Workflow C `NotImplementedError`\n  message + comment\
+      \ no longer promise \"lands in v1.15.0\" (string/\n  comment only — no control\
+      \ flow; no test pinned it).\n- **F7** `docs/workflows/workflow-c-autonomous.md`:\
+      \ 5 stale\n  \"v1.15.0\" forward-references corrected (the consult's\n  shared-prior-correction\
+      \ finding — the doc F4's text points at).\n- **Q4** `consensus-workflow/SKILL.md`:\
+      \ new normative\n  **consistency invariant** stating doctrine + enforcement\
+      \ are\n  workflow-mode-scoped, never contributor-count-scoped — 2-AI and\n \
+      \ 3-AI installs governed identically; only the convergence-rule\n  default differs\
+      \ (unanimous@2 vs strict-majority@3). Converts the\n  operator's implicit invariant\
+      \ into a written guarantee.\n\nNo invented replacement version anywhere (artifact-scoped\
+      \ truth —\nthat would repeat the exact defect). Code+doc bundled in one tag\n\
+      per the shared-failure-mode hot-patch doctrine (verified precedent:\nv1.14.5,\
+      \ v1.14.6). Full suite green, 0 regressions. Workflow B\naudit: codex + gemini.\n\
+      \n## 1.15.2 - 2026-05-15\n\n**gemini-dispatch workspace-trust fix** — closes\
+      \ the v1.15.1\nnamed blocker (advisory 2026-05-15, now **resolved**).\n\n`consensus_mcp/_dispatch_gemini.py`\
+      \ now injects\n`GEMINI_CLI_TRUST_WORKSPACE=true` into the gemini subprocess\
+      \ env\nvia a new `_gemini_subprocess_env()` helper (returns a COPY of the\n\
+      parent env; forces the var to `true` even if an inherited value is\n`false`;\
+      \ never mutates `os.environ`). gemini CLI\n`0.43.0-preview.0`+ refuses headless\
+      \ runs in an \"untrusted\"\ndirectory — it writes the trust error to stderr\
+      \ and produces\n**empty stdout**, which the dispatcher then fails as\n`GeminiOutputParseError`.\n\
+      \n**Empirically verified 2026-05-15** (the v1.15.1 audit diagnosed\nthis first-hand;\
+      \ gemini pass-1 failed twice for exactly this):\n- `--skip-trust` alone (still\
+      \ passed, defense-in-depth) is NOT\n  load-bearing on this version — gemini\
+      \ bypassed trust but went\n  autonomous and 429'd.\n- `GEMINI_CLI_TRUST_WORKSPACE=true`\
+      \ produced clean deterministic\n  output, and the two clean v1.15.1 Workflow\
+      \ B audit approvals.\n\n`_dispatch_gemini.py` was in the v1.15.1 iteration's\n\
+      `forbidden_files`, so the dispatcher-level fix was correctly\ndeferred to this\
+      \ version rather than patched out-of-scope.\n\nWorkflow B audit clean: gemini\
+      \ `goal_satisfied=true`, 0 blocking,\n0 findings — **dispatched from source\
+      \ with\n`GEMINI_CLI_TRUST_WORKSPACE` explicitly unset**, so the audit pass\n\
+      of this fix was made possible BY this fix (end-to-end in-vivo\nproof; acceptance\
+      \ gate A4). codex: 0 blocking; doc-accuracy\nfindings on the advisory/changelog\
+      \ wording integrated. Full suite\ngreen: 968 passed, 1 skipped, 0 regressions;\
+      \ 4 new unit tests for\n`_gemini_subprocess_env` in `test_dispatch_gemini.py`.\n\
+      \n## 1.15.1 - 2026-05-15\n\n**Machine-enforcement of the converged-plan convention**\
+      \ — closes the\nv1.15.0 NAMED BLOCKER. From `iteration-converged-plan-machine-\n\
+      enforcement` (Workflow A weighted-synthesis: claude + codex + gemini;\nshared-prior\
+      \ self-check PASSED; no blocking objections; the consult\ndogfooded the very\
+      \ convention it enforces). The recorded v1.15.0\n\"starting design\" (gemini's\
+      \ `severity` field + `consensus_gate.py`\nmechanism) was **partially refuted\
+      \ by first-hand code-reading** during\nthe consult: `consensus_mcp/validators/consensus_gate.py`\
+      \ is the\nPhase-0 production-readiness gate (P0-V6) and is the WRONG component\
+      \ —\nthe v1.15.0 doctrine working correctly on its own audit trail.\n\n**Artifact\
+      \ truth (scoped claim):** the **v1.15.0 tag `4e81f9e` is\nDOCTRINE-ONLY** —\
+      \ it shipped the convention as an authoring convention\nenforced by the bundled\
+      \ skill + Workflow B audit, with **zero engine\ncode**. Machine enforcement\
+      \ exists **only from the v1.15.1 tag\nforward**. Users on v1.15.0 get doctrine;\
+      \ they must upgrade to v1.15.1\nto get the gate.\n\nShipped (real code paths\
+      \ — meaningful regression signal, unlike\nv1.15.0's doc-only change):\n\n- **`consensus_mcp/schemas/converged_plan_convention.schema.json`**\n\
       \  (NEW; `schemas/` is net-new) — JSON Schema for the convention\n  object;\
       \ `empirical_status` enum `proven|pending|refuted|n/a` matches\n  v1.15.0 verbatim.\n\
       - **`consensus_mcp/validators/validate_converged_plan.py`** (NEW;\n  small;\
