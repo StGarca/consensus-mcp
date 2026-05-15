@@ -1,10 +1,44 @@
 # Changelog
 
-## 1.15.5 - unreleased
+## 1.15.5 - 2026-05-15
 
-_No changes yet. Branched from v1.15.4 tip. (Per the v1.15.4
-branch doctrine, `main` already tracks the v1.15.4 tag; this
-branch is where new work lands until the next cut.)_
+**Account migration + provenance purge + doctrine reconciliation.**
+
+Operator directed (1) zero `upstream` references anywhere
+and (2) GitHub account rename `stgarca` → `stgarca`. Both
+required reaching immutable commit/tag messages, so — with
+explicit operator authorization — a full `git filter-repo` history
+rewrite was performed:
+
+- **Rewrite:** literal replace `upstream`→`upstream`,
+  `stgarca`→`stgarca` across ALL blob contents AND
+  commit/tag messages, all 18 branches + 66 tags (127 commits).
+  Verified before pushing: zero target strings in any blob or
+  message across every ref; all 17 release tags + branches
+  present; full suite green on the rewritten tree (token
+  replacements internally consistent). Pre-rewrite safety bundle
+  kept outside the repo.
+- **Consequence (artifact-scoped truth):** every published tag SHA
+  changed. Tag-pinned `pipx install …@vX.Y.Z` URLs keep working
+  (tags moved with the rewrite); any raw-commit-SHA pin or old
+  clone against the previous `stgarca` remote is dead. The
+  canonical repo is now `https://github.com/stgarca/consensus-mcp`.
+- **Doctrine reconciliation:** the v1.15.4 doctrine says `main` is
+  never force-pushed. This rewrite force-pushed everything, so the
+  bundled `consensus-workflow` skill now carries a
+  **sanctioned-exception carve-out**: a full-history rewrite is the
+  ONE non-routine reason to force-push `main`, gated on explicit
+  authorization + verified backup + pre-push verification + suite
+  green. Leaving the doctrine contradicting the action would be the
+  exact currency-drift v1.15.3/v1.15.4 fixed.
+- **`consensus-state/README.md`** added (tracked) — documents the
+  runtime-state tree + recovery, and (doctrine-correctly, via a
+  fresh commit rather than more history surgery) relabels the
+  GitHub `consensus-state/` folder off the old root commit the
+  operator flagged.
+
+No engine/config/behavior code touched. Full suite green. Workflow
+B audit: codex + gemini (bundled-doctrine change).
 
 ## 1.15.4 - 2026-05-15
 
