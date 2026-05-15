@@ -1,82 +1,61 @@
 defect_target:
   files:
-  - consensus-state/active/iteration-v1155-history-rewrite-doctrine/implementation-summary.md
+  - consensus-state/active/iteration-v1155-history-rewrite-doctrine/fix-response-pass2.md
   - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
   - consensus-state/README.md
   - CHANGELOG.md
   - README.md
-  base_sha: 1ec5143e328c7b7fc861545f7c05e3f8b0af2daeb3b1d5fcdbed0e5077a975f8
+  base_sha: 94c5356c0b15c08626524a52cf0dc48edcd2650acd740165218ae2b3ceadd5ab
   touched_files_contents:
-    consensus-state/active/iteration-v1155-history-rewrite-doctrine/implementation-summary.md: "#\
-      \ Workflow B audit target — v1.15.5 post-rewrite doctrine reconciliation\n\n\
-      The operator-authorized `git filter-repo` rewrite is ALREADY DONE,\nverified,\
-      \ and force-pushed to github.com/stgarca. This iteration\naudits only the DOCTRINE/DOC\
-      \ reconciliation that must ship with it.\nDoc-only; no engine/config/behavior\
-      \ code touched.\n\n## Context (verified, executed)\n\n- Rules: literal `upstream`→`upstream`,\n\
-      \  `stgarca`→`stgarca`, applied to ALL blobs + commit/tag\n  messages,\
-      \ 18 branches + 66 tags (127 commits).\n- Pre-push verification PASSED: `git\
-      \ grep`/`git log --all` show\n  ZERO `upstream`/`stgarca` across\
-      \ every ref; 17\n  release tags + all branches present; full suite 968 passed\
-      \ / 1\n  skipped / 0 regressions on the rewritten tip (token replacement\n \
-      \ internally consistent — e.g. `_import_parent_history.py` +\n  `test_import_parent_history.py`\
-      \ rewritten together).\n- Pre-rewrite full backup bundle stored OUTSIDE the\
-      \ repo.\n- Remote re-pointed to `github.com/stgarca/consensus-mcp`; all\n  branches\
-      \ + tags force-pushed; `origin/main` == local verified.\n\n## Changes under\
-      \ audit (v1.15.5)\n\n1. **`consensus-workflow/SKILL.md` — sanctioned-exception\n\
-      \   carve-out.** The v1.15.4 doctrine says `main` is never\n   force-pushed.\
-      \ The rewrite force-pushed everything. Without\n   reconciliation the bundled\
-      \ skill self-contradicts the action\n   (the exact currency-drift v1.15.3/v1.15.4\
-      \ fixed). The carve-out\n   states a full-history rewrite is the ONE non-routine\
-      \ reason to\n   force-push `main`, gated on: explicit operator authorization\
-      \ OF\n   THE REWRITE + verified `git bundle --all` backup outside repo +\n \
-      \  pre-push verification (grep/log clean all refs, tags present,\n   suite green)\
-      \ + re-verify origin==local. Cites the 2026-05-15\n   precedent + the SHA-change\
-      \ consequence.\n2. **`consensus-state/README.md`** (NEW, tracked — verified\
-      \ not\n   gitignored). Documents the runtime-state tree (what's\n   gitignored\
-      \ vs tracked), recovery via the snapshot orphan\n   branch, and provenance (generic\
-      \ \"upstream\", no upstream).\n   A fresh commit adding it relabels the\
-      \ GitHub `consensus-state/`\n   folder off the old root commit the operator\
-      \ flagged — the\n   doctrine-correct fix (no further history surgery).\n3. **CHANGELOG\
-      \ 1.15.5** — artifact-scoped truth: every published\n   tag SHA changed; tag-pinned\
-      \ `pipx …@vX.Y.Z` still works (tags\n   moved), raw-SHA pins / old `stgarca`\
-      \ clones are dead;\n   canonical repo = github.com/stgarca/consensus-mcp.\n\
-      4. README install URLs + Status → `@v1.15.5` (cut-sequence step 3,\n   pre-tag,\
-      \ per the v1.15.4 doctrine since the tag's README is the\n   landing page).\n\
-      \n## Audit questions\n\n- Q1 goal_satisfied: is the carve-out self-consistent\
-      \ with the\n  surrounding fast-forward doctrine + 12-step cut sequence (no\n\
-      \  contradiction, no stale step cross-refs, not a blanket\n  force-push license)?\n\
-      - Q2: is the CHANGELOG's artifact-scoped-truth statement accurate\n  and not\
-      \ over/under-claiming (tag-pinned vs raw-SHA impact)?\n- Q3: consensus-state/README.md\
-      \ — accurate vs the real .gitignore\n  (only `active/iteration-*/`, `state/*.jsonl|*.yaml`,\n\
-      \  `archive/review-passes/*.yaml` ignored)? Any upstream\n  residue or\
-      \ new invented claim?\n- Q4: any blocking objection? State the differential/prior\
-      \ used.\n"
+    consensus-state/active/iteration-v1155-history-rewrite-doctrine/fix-response-pass2.md: "#\
+      \ Fix response — Workflow B pass-2 (codex pass-1 + gemini pass-1)\n\ngemini\
+      \ pass-1: goal_satisfied=true, 0 blocking, 0 findings (ran\nwith GEMINI_CLI_TRUST_WORKSPACE\
+      \ unset — v1.15.2 trust fix still\nproven post-rewrite).\n\ncodex pass-1: 0\
+      \ blocking, 1 medium (codex-rev-001) — verified\ncorrect, integrated.\n\n##\
+      \ codex-rev-001 (medium) — ACCEPTED, RESOLVED\n\nBundled `consensus-workflow`\
+      \ SKILL.md still used numeric `#4`\nDIRECTIVELY (\"go through #4\", \"round-1\
+      \ #4 dispatch\", \"workflow #4\nor Workflow B\", \"Workflow B vs #4\" in the\
+      \ trigger description) even\nthough A/B/C is canonical since v1.14.4 — the same\
+      \ currency-drift\nclass this session has been eliminating. codex's cited line\
+      \ was\napproximate (line numbers shifted post-edits) but the finding is\nvalid\
+      \ and verified.\n\nFix: all four DIRECTIVE uses changed to \"Workflow A\":\n\
+      - frontmatter description: \"Workflow B vs #4\" → \"Workflow B vs\n  Workflow\
+      \ A\" (kept the \"workflow 3\"/\"workflow 4\" *trigger\n  phrases* — those legitimately\
+      \ match what an operator might\n  type).\n- \"go through #4\" → \"go through\
+      \ Workflow A\"\n- \"round-1 #4 dispatch\" → \"round-1 Workflow A dispatch\"\n\
+      - \"workflow #4 or Workflow B\" → \"Workflow A or Workflow B\"\nThe two \"(Was\
+      \ numbered #4.)\" / \"(Was numbered #3.)\" lines are\nINTENTIONALLY kept — they\
+      \ are the alias-history mapping operators\nwho knew the old vocabulary need.\
+      \ Verified: no directive numeric\nref remains.\n\n## Scope\n\nDoc-only (bundled\
+      \ skill markdown); no code/behavior. Suite\nremains 968 passed / 1 skipped /\
+      \ 0 regressions from the\nrelease-gate run. This pass-2 is verification: confirm\n\
+      codex-rev-001 resolved and no NEW drift/contradiction introduced.\n"
     consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md: "---\nname:\
       \ consensus-workflow\ndescription: Operating procedures for working with consensus-mcp\
       \ in any project. Trigger when the user asks to run a consensus consult, dispatch\
-      \ codex/gemini for review, evaluate a Workflow B vs #4 decision, debug a stalled\
-      \ or failed reviewer dispatch, or any question about HOW the cross-AI consensus\
-      \ workflow runs (as opposed to \"consensus init\" which only bootstraps). Phrases\
-      \ include \"consensus review\", \"consensus iteration\", \"consensus consult\"\
-      , \"run a consult\", \"dispatch codex\", \"dispatch gemini\", \"workflow 3\"\
-      , \"workflow 4\", \"propose-converge\", \"post-review\".\n---\n\n# Consensus-mcp\
-      \ operating procedures\n\nLoad-bearing rules for working with consensus-mcp.\
-      \ These are not\nproject-specific tips — they apply in every project that uses\
-      \ the\ncross-AI consensus workflow. Follow them by default; deviate only when\n\
-      the operator explicitly says otherwise.\n\n## Workflow selection\n\n**Default\
-      \ to Workflow A (propose-converge with blind-first-reveal) for\nany decision\
-      \ with real design surface** — API shape, trade-off, novel\nmechanism, anything\
-      \ where reasonable people could disagree on the right\napproach. Workflow B\
-      \ (post-review: claude implements, codex+gemini\naudit) is for **execution per\
-      \ a converged design** or for hot-patches\nthat block in-flight work.\n\nThe\
-      \ mistake to avoid is defaulting to B because it's faster and\ncalling everything\
+      \ codex/gemini for review, evaluate a Workflow B vs Workflow A decision, debug\
+      \ a stalled or failed reviewer dispatch, or any question about HOW the cross-AI\
+      \ consensus workflow runs (as opposed to \"consensus init\" which only bootstraps).\
+      \ Phrases include \"consensus review\", \"consensus iteration\", \"consensus\
+      \ consult\", \"run a consult\", \"dispatch codex\", \"dispatch gemini\", \"\
+      workflow 3\", \"workflow 4\", \"propose-converge\", \"post-review\".\n---\n\n\
+      # Consensus-mcp operating procedures\n\nLoad-bearing rules for working with\
+      \ consensus-mcp. These are not\nproject-specific tips — they apply in every\
+      \ project that uses the\ncross-AI consensus workflow. Follow them by default;\
+      \ deviate only when\nthe operator explicitly says otherwise.\n\n## Workflow\
+      \ selection\n\n**Default to Workflow A (propose-converge with blind-first-reveal)\
+      \ for\nany decision with real design surface** — API shape, trade-off, novel\n\
+      mechanism, anything where reasonable people could disagree on the right\napproach.\
+      \ Workflow B (post-review: claude implements, codex+gemini\naudit) is for **execution\
+      \ per a converged design** or for hot-patches\nthat block in-flight work.\n\n\
+      The mistake to avoid is defaulting to B because it's faster and\ncalling everything\
       \ \"execution.\" Test: did the converged plan specify\nthe API shape, error\
       \ contract, mechanism? If not, those choices are\nthemselves design surface\
-      \ — go through #4.\n\nListing 2+ design choices in a single response = Workflow\
-      \ A\ncandidate. Stop and route to a consult.\n\n## Workflow A / B / C in one\
-      \ line each\n\n**As of v1.14.4: letter aliases (A/B/C) replace numeric (3/4)\
-      \ as\ncanonical operator vocabulary. Numeric aliases stay accepted for\none\
-      \ cycle with `DeprecationWarning`.**\n\n- **Workflow A (propose-converge)**\
+      \ — go through Workflow A.\n\nListing 2+ design choices in a single response\
+      \ = Workflow A\ncandidate. Stop and route to a consult.\n\n## Workflow A / B\
+      \ / C in one line each\n\n**As of v1.14.4: letter aliases (A/B/C) replace numeric\
+      \ (3/4) as\ncanonical operator vocabulary. Numeric aliases stay accepted for\n\
+      one cycle with `DeprecationWarning`.**\n\n- **Workflow A (propose-converge)**\
       \ — DEFAULT. All enabled\n  contributors propose independently in round 1 (blind),\
       \ then\n  converge across reviewed rounds. Used for design questions.\n  (Was\
       \ numbered #4.)\n- **Workflow B (post-review)** — LIGHTWEIGHT/QUICK. Claude\
@@ -242,8 +221,8 @@ defect_target:
       \ respects\n`CONSENSUS_MCP_STALL_SILENCE_SECONDS` (default 180s) and is the\
       \ right\nfallback when the MCP wrapper times out.\n\n**Proposal-mode dispatch\
       \ requires `--mode proposal`** on the shell\nbinaries. The MCP wrappers as of\
-      \ v1.14.0 don't expose this flag —\nfall back to the shell CLI for round-1 #4\
-      \ dispatch.\n\n## Gemini 429 handling (priority-tiered)\n\n- **Low-priority\
+      \ v1.14.0 don't expose this flag —\nfall back to the shell CLI for round-1 Workflow\
+      \ A dispatch.\n\n## Gemini 429 handling (priority-tiered)\n\n- **Low-priority\
       \ iterations** (chores, doc syncs, simple migrations):\n  if gemini returns\
       \ a single 429, skip it and proceed with a 2-AI\n  consensus (claude + codex).\
       \ Don't retry.\n- **High-priority iterations** (design questions, security review,\n\
@@ -338,7 +317,7 @@ defect_target:
       \ work using\nconsensus-mcp as a tool — there, the operator decides what's\n\
       non-trivial in their codebase.\n\n## \"Consensus\" trigger word\n\nWhen the\
       \ user says \"consensus\" in a sentence about reviewing,\ndeciding, or analyzing\
-      \ — **use the consensus-mcp tools (workflow\n#4 or Workflow B as appropriate),\
+      \ — **use the consensus-mcp tools (Workflow A\nor Workflow B as appropriate),\
       \ NOT the older /council skill.**\nCouncil was a single-Claude multi-persona\
       \ simulation; consensus-mcp\nis a real cross-AI workflow with sealed-provenance\
       \ peer reviewers.\n\n## Release cadence — Friday cut if anything landed\n\n\

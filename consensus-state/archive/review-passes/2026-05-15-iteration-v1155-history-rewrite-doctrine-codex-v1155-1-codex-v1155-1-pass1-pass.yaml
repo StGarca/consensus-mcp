@@ -1,0 +1,61 @@
+iteration_id: iteration-v1155-history-rewrite-doctrine
+reviewer_id: codex-v1155-1
+pass_id: codex-v1155-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Bundled workflow doctrine still tells operators to route design work through
+    numeric workflow '#4' after declaring A/B/C canonical vocabulary.
+  citation: consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md:18
+  risk: The v1.15.5 reconciliation leaves a stale workflow reference in the shipped
+    doctrine, weakening the stated goal of keeping bundled instructions current after
+    the rewrite/release-policy updates.
+  recommendation: 'Replace the remaining ''#4'' wording with ''Workflow A'' or ''Workflow
+    A (formerly #4)'' in the workflow-selection paragraph.'
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-001-patch
+    applies_to_findings:
+    - codex-rev-001
+    base_sha: 468650c0ba0f671262b635359ff3a9c33023010d85c950a122522ba15e213c3a
+    unified_diff: "--- a/consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md\n\
+      +++ b/consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md\n@@\
+      \ -15,7 +15,7 @@ approach. Workflow B (post-review: claude implements, codex+gemini\n\
+      \ audit) is for **execution per a converged design** or for hot-patches\n that\
+      \ block in-flight work.\n \n The mistake to avoid is defaulting to B because\
+      \ it's faster and\n calling everything \"execution.\" Test: did the converged\
+      \ plan specify\n the API shape, error contract, mechanism? If not, those choices\
+      \ are\n-themselves design surface \u2014 go through #4.\n+themselves design\
+      \ surface \u2014 go through Workflow A.\n \n Listing 2+ design choices in a\
+      \ single response = Workflow A\n candidate. Stop and route to a consult.\n"
+    files_touched:
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+    expected_tests: []
+    unified_diff_sha256: 2eb4e40c6fdefbbd766de288b6e50864da207996a475f167eabe2ff425321bd4
+goal_satisfied: false
+goal_satisfied_rationale: The rewrite-specific carve-out, CHANGELOG impact statement,
+  README install URL, and consensus-state README are present, but the bundled doctrine
+  still contains a stale numeric workflow instruction in the same operating-procedure
+  skill.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: d76929e37a01afde79d8f1afd26bf5176731a5c2425f91d188ade0a8d5637d18
+  output_sha256: 862d9f120e06977a3c27adf7adc09e0c19c8c947cf7463d0d0fbf6e256783dd9
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 827ac5b7edfdd5a6ef6366ec6e8ade37f93dab41251f25e7ebd32225cd3353f9
+  scope_signature: v1155-history-rewrite-doctrine-reconciliation
+  review_target_path: consensus-state/active/iteration-v1155-history-rewrite-doctrine/review-packet.yaml
+  review_target_hash: d3789651178e95982e11cfe0134b4a2fa123d281c77fb85c2bc2f581dda0296f
+  mode: review
+sealed_at_utc: '2026-05-15T19:12:31Z'
+packet_sha256: 924ef4bed8a1bc85841e66ff9571568d682b324e28f8e84562ed08e9fffc4d96

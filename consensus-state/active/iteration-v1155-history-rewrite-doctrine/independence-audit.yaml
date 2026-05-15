@@ -1,0 +1,47 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T19:12:31Z'
+  event_id: 2026-05-15T19:12:31Z_review_returned_and_sealed_codex-v1155-1
+  actor: codex-v1155-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1155-history-rewrite-doctrine-codex-v1155-1-codex-v1155-1-pass1-pass.yaml
+  sha256: 924ef4bed8a1bc85841e66ff9571568d682b324e28f8e84562ed08e9fffc4d96
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T19:12:36Z'
+  event_id: 2026-05-15T19:12:36Z_review_returned_and_sealed_gemini-v1155-1
+  actor: gemini-v1155-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1155-history-rewrite-doctrine-gemini-v1155-1-gemini-v1155-1-pass1-pass.yaml
+  sha256: 6e67b517e8e43fb8bbe3e882f2860a3361480f80f36a579b9110fa863b8bce69
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T19:15:05Z'
+  event_id: 2026-05-15T19:15:05Z_review_returned_and_sealed_codex-v1155-2
+  actor: codex-v1155-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1155-history-rewrite-doctrine-codex-v1155-2-codex-v1155-2-pass1-pass.yaml
+  sha256: e59fc1e7d7ecaccb1c358615854afda3ab51a4028e89e9997375c157aa13d2e2
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

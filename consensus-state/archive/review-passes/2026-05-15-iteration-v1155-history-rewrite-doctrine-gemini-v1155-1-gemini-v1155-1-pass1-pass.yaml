@@ -1,0 +1,37 @@
+iteration_id: iteration-v1155-history-rewrite-doctrine
+reviewer_id: gemini-v1155-1
+pass_id: gemini-v1155-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The documentation and doctrine changes are self-consistent
+  and accurately reflect the operator-authorized history rewrite. The new 'sanctioned-exception
+  carve-out' in the consensus-workflow skill is well-defined with strict safety gates,
+  preventing it from becoming a blanket license for force-pushes. All user-facing
+  documentation (CHANGELOG, README) has been updated with the correct new repository
+  URL and version, and accurately describes the impact of the history rewrite on users.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: cdff9b4a5dd6a48e132fe5ed7c269e6b0500f3a8aa1c9f8e2dde0b702bbec2fa
+  output_sha256: 19a92500bd0c316f8af245ee0eeadd725687dcbf0df551b2cac05995eeaaa877
+  goal_packet_sha256: 827ac5b7edfdd5a6ef6366ec6e8ade37f93dab41251f25e7ebd32225cd3353f9
+  scope_signature: v1155-history-rewrite-doctrine-reconciliation
+  review_target_path: consensus-state/active/iteration-v1155-history-rewrite-doctrine/review-packet.yaml
+  review_target_hash: d3789651178e95982e11cfe0134b4a2fa123d281c77fb85c2bc2f581dda0296f
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T19:12:36Z'
+packet_sha256: 6e67b517e8e43fb8bbe3e882f2860a3361480f80f36a579b9110fa863b8bce69
