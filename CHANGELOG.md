@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.15.9 - unreleased
+
+_Development branch. Candidate: Q2(a) deterministic synchronizing
+`_ControllableClock` rework (the v1.15.8 named follow-up — removes
+the Windows-CI heartbeat-pattern skip; see `docs/advisories.md`
+2026-05-15 v1.15.8). Real concurrency design surface → Workflow A._
+
 ## 1.15.8 - 2026-05-15
 
 **Windows-CI flakes — root-caused via Workflow A consult.** The
