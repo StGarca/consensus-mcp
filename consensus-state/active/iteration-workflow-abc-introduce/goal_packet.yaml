@@ -1,0 +1,210 @@
+schema_version: 1
+pilot_id: iteration-workflow-abc-introduce
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    Workflow #4 (now to be renamed Workflow A) consult on:
+      (1) renaming the existing operator-facing workflow vocabulary
+          from numeric ({3, 4}) to letter ({A, B}) aliases; AND
+      (2) introducing Workflow C — a new "consensus-to-completion-
+          autonomous" mode for overnight / operator-unavailable
+          runs where new scope items emerging from convergence are
+          AUTO-APPROVED if they fall within operator-pre-declared
+          boundaries.
+
+    Operator's directive (verbatim, 2026-05-14):
+      "workflow 4 is default = now called workflow A, workflow 3
+      is the lightweight/quick option = now called workflow B,
+      lets make your proposed #5 the new workflow C (long form)
+      where new scope is automatically approved if within scope.
+      This can be for overnight or runs where operator is not
+      available."
+
+    Verified state (per `verify-before-invent` rule):
+      - `consensus_mcp/config.py:38-44` defines:
+          WORKFLOW_POST_REVIEW = "post-review" (numeric alias 3)
+          WORKFLOW_PROPOSE_CONVERGE = "propose-converge" (alias 4)
+          WORKFLOW_ADVISORY = "advisory" (no numeric alias)
+      - 30 references to "workflow #3" and 61 references to
+        "workflow #4" across docs/skill/templates (verified via
+        grep)
+      - 1 historical reference to "workflow #1" (codex-fix-author
+        cycle, never wired into engine); zero refs to #2 or #5
+      - `WORKFLOW_ALIASES` map at line 44 maps "3" → post-review,
+        "4" → propose-converge
+
+    The rename portion is mechanical / settled directive (not
+    design surface). Workflow C is the real design question.
+
+  question: |
+    Each contributor: pick a stance on Q1-Q5, justify against
+    alternatives, sketch the SMALLEST deliverable scope that
+    fits the no-deferral rule (acceptance gates concrete,
+    cost small enough for one session OR explicit named
+    blocker for any deferred sub-scope). Honest
+    structural_abstention is acceptable per question.
+
+    Q1 — **Alias mechanism for the rename.** Two interpretations
+    of the operator directive:
+      (a) **Replace numeric aliases with letter aliases.** Keep
+          semantic strings ("post-review", "propose-converge")
+          unchanged. Replace the WORKFLOW_ALIASES map: "A" →
+          propose-converge, "B" → post-review. Numeric aliases
+          {3, 4} become DEPRECATED but still accepted for
+          backward compat for one release cycle.
+      (b) **Rename semantic strings entirely.** "post-review" →
+          "B", "propose-converge" → "A", new "C". Goal_packets
+          and configs would need to declare workflow_mode: A
+          instead of workflow_mode: propose-converge.
+      (c) **Add letter aliases ALONGSIDE numeric.** Keep both;
+          operators can use whichever feels natural. No
+          deprecation. Letters become primary in docs.
+
+    Q2 — **Scope-boundary declaration mechanism for Workflow C.**
+    Where does the operator declare what's "within scope" for
+    autonomous-approval?
+      (a) **In the goal_packet itself.** Add an `autonomous_scope`
+          block to the v1 goal_packet schema:
+          ```
+          autonomous_scope:
+            max_iterations: 10
+            max_wall_clock_minutes: 240
+            file_patterns_allowed: ["consensus_mcp/contributors/**"]
+            file_patterns_forbidden: [".github/**", "pyproject.toml"]
+            halt_on:
+              - test_suite_regression
+              - any_blocking_objection
+              - schema_change_proposed
+          ```
+      (b) **In a separate `.consensus/autonomous-policy.yaml`** —
+          one policy file per project; goal_packets opt in by
+          referencing it. Operator declares boundaries once;
+          reused across many autonomous runs.
+      (c) **CLI flags only on the autonomous-run invocation** —
+          operator passes `--autonomous --max-iter 10
+          --halt-on-regression` etc. each time they kick off a
+          run. No persistent policy.
+      (d) **(a) + (b) layered:** policy file as project default,
+          goal_packet can override per-run.
+
+    Q3 — **Halt-on conditions (safety net) for Workflow C.**
+    Which conditions MUST cause autonomous halt and surface to
+    operator? Each contributor: list which of these belong in
+    the MINIMAL halt set (any operator can opt OUT later if
+    they want a less-safe run, but the default must be safe).
+      (a) Any iteration produces a `blocking_objection`
+      (b) Test suite regression (new failures vs baseline)
+      (c) Schema change proposed (config.py / goal_packet
+          schema / sealed-artifact schema)
+      (d) Iteration count exceeds `max_iterations`
+      (e) Wall-clock exceeds `max_wall_clock_minutes`
+      (f) Convergence fails after N rounds (default 3)
+      (g) Any reviewer dispatch fails permanently (3 retries)
+      (h) Files outside `file_patterns_allowed` would be touched
+      (i) Files in `file_patterns_forbidden` would be touched
+      (j) Operator messages the session (clear interrupt signal)
+      (k) Any peer reviewer (codex/gemini) explicitly
+          recommends operator review
+
+    Q4 — **Auto-iteration loop semantics.** When Workflow C runs
+    a converged plan whose `deliverable.next_iteration_id` is
+    set, what happens?
+      (a) **Auto-create + auto-execute.** Engine generates the
+          next goal_packet from the converged plan's deliverable
+          fields, dispatches contributors, converges, repeats.
+          Halts only on Q3 conditions.
+      (b) **Auto-create only.** Engine writes the next
+          goal_packet to disk but pauses for operator
+          approval-by-presence (operator returns, sees the
+          queued packets, runs them manually). Halfway between
+          autonomous and manual.
+      (c) **Operator-pre-stages a list of iterations.** Workflow
+          C consumes a queue file
+          (`.consensus/autonomous-queue.yaml`) of pre-defined
+          goal_packets in order. Each completes before next
+          starts; halt on Q3 conditions. No auto-generation
+          from converged plans.
+
+    Q5 — **Smallest viable v1.14.4 deliverable that respects
+    no-deferral.** Pick which of these MUST land in v1.14.4
+    versus what can ship in v1.14.5 with named blocker:
+      (a) **Rename only (Q1) + Workflow C constant + schema
+          scaffolding** — accepts `workflow_mode: C` as valid
+          but engine path raises `NotImplementedError`. Smallest
+          shippable today.
+      (b) **(a) + Q3 halt set definition + Q2 scope-boundary
+          schema** — schema/contract is complete but engine still
+          doesn't run autonomous. Tests cover schema validation.
+      (c) **(b) + minimal autonomous loop (Q4-c queue-based
+          consumption)** — operator can pre-stage a queue and
+          run autonomous; Q4-a auto-generation deferred.
+      (d) **Full implementation (rename + scope + halt + Q4-a
+          auto-generation)** — single comprehensive ship.
+
+    Required of each contributor:
+      (a) verdict on Q1 alias mechanism
+      (b) verdict on Q2 scope-boundary declaration
+      (c) MINIMAL halt set from Q3 (list which conditions)
+      (d) verdict on Q4 loop semantics
+      (e) verdict on Q5 v1.14.4 scope (with named blockers
+          for any deferral)
+      (f) any missed dimension from Q6
+
+    Q6 — **Missed dimensions.** Open-ended. Candidates:
+      - How does Workflow C interact with weighted-synthesis
+        convergence? (the converged plan IS the next-scope
+        signal in propose-converge; for autonomous mode this
+        becomes load-bearing)
+      - Should there be a "Workflow C log" — structured trace
+        of what got auto-approved + why — for operator audit
+        when they return?
+      - How should operator-issued interrupts (Q3-j) be
+        detected (file marker? stdin? signal?)
+      - Should Workflow C require all 3 contributors (no 2-AI
+        consensus during autonomous runs) for safety?
+
+  non_goals:
+    - changing the system prompt
+    - implementing Workflow C engine logic in this iteration
+      (that's the q5 question — what's deferrable with named
+      blocker)
+    - touching the existing post-review or propose-converge
+      semantic behavior (only the alias surface changes for
+      those modes)
+    - removing numeric aliases entirely in this iteration
+      (deprecation cycle preserves backward compat)
+  type: design_consult
+allowed_files: []
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - .github/
+  - .gitignore
+max_iterations: 3
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml at iteration_dir
+    check: 'py -3.11 -c "import os; assert os.path.exists(''consensus-state/active/iteration-workflow-abc-introduce/converged-plan.yaml''); print(''ok'')"'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+operator_escalation_triggers:
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-14T23:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'a14ab0a1144b00b5104face70a075b00b5104faceabba110a14abc01ab0a14ab'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis
