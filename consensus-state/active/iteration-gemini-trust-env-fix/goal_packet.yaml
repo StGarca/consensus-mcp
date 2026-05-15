@@ -1,0 +1,51 @@
+schema_version: 1
+pilot_id: iteration-gemini-trust-env-fix
+workflow_mode: post-review
+goal:
+  summary: |
+    v1.15.2: fix the v1.15.1 named blocker — gemini dispatch fails
+    empty-output on gemini CLI >=0.43.0-preview.0 because the
+    dispatcher does not establish workspace trust.
+  desired_end_state: |
+    consensus_mcp/_dispatch_gemini.py injects
+    GEMINI_CLI_TRUST_WORKSPACE=true into the gemini subprocess env;
+    gemini dispatches succeed headless on CLI >=0.43; full suite
+    green; advisory 2026-05-15 marked resolved.
+  non_goals:
+    - changing gemini review semantics / prompt / approval-mode
+    - touching codex dispatch
+    - the broader "gemini goes autonomous in plan mode" behavior
+      (separate; --approval-mode plan is unchanged)
+  type: bugfix
+risk_class: none
+allowed_files:
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/tests/test_dispatch_gemini.py
+  - CHANGELOG.md
+  - docs/advisories.md
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+acceptance_gates:
+  - id: A1
+    description: _gemini_subprocess_env() returns os.environ copy with GEMINI_CLI_TRUST_WORKSPACE=true, preserves PATH, forces true over inherited false, no os.environ mutation
+    check: pytest -k subprocess_env
+  - id: A2
+    description: env= threaded into the _invoke_gemini Popen call
+    check: 'grep env=_gemini_subprocess_env _dispatch_gemini.py'
+  - id: A3
+    description: full suite green, 0 regressions
+    check: pytest -q
+  - id: A4
+    description: this iteration's own gemini audit dispatch succeeds WITHOUT the manual env-var workaround (end-to-end proof the fix works from source)
+    check: gemini-review.yaml sealed with goal_satisfied
+stop_conditions:
+  - max_iteration_count_reached
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T17:30:00Z'
+  scope_signature: 'gemini-trust-env-fix-v1152'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: unanimous
+  finding_disposition: all-or-nothing
