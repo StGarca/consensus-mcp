@@ -87,11 +87,20 @@ defects, integrated not dismissed):**
   `_REPOLL` — fixed by a `readline()`-entry notify (true
   happens-before).
 
-The multi-pass Workflow B audit caught **7 substantive defects**
+- Pass-5: codex 0 prior blocking re-raised; gemini clean 5th.
+  One new blocking (integrated): the lockstep heartbeat driver
+  advanced exactly `interval`/step so it only proved "one per
+  step" — an emit-every-poll regression still passed; the
+  interval-GATE coverage the pre-rewrite test had was lost.
+  Fixed: each round asserts NO heartbeat at +½interval, exactly
+  one at the boundary.
+
+The multi-pass Workflow B audit caught **8 substantive defects**
 self-certification would have shipped (governance scope;
 deadlock-invariant claim-vs-code; SIGTERM coverage; post-stream
 coverage; release_all-doesn't-terminate; operator mid-run
-determinism; reader-event waker). gemini cleared determinism/
+determinism; reader-event waker; heartbeat interval-gate
+coverage). gemini cleared determinism/
 design 4×; codex traced control flow + coverage fidelity — the
 two priors were genuinely complementary, not redundant. Local
 after pass-4: streaming 8/8 deterministic ×6 (sub-0.21s); full

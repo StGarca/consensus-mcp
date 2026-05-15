@@ -516,26 +516,58 @@ def _drive(clock: _SyncClock, th: threading.Thread, *, until=None, chunk: float 
 def _drive_heartbeats(
     clock: _SyncClock,
     th: threading.Thread,
+    log_path: Path,
     *,
     interval: float,
     steps: int,
     final_advance: float,
 ):
-    """Lockstep driver for heartbeat cadence: the runner must OBSERVE
-    each interval boundary (production emits at most one heartbeat per
-    poll iteration). Pin start_ts/last_heartbeat by waiting for the
-    first park, then advance one interval at a time, each synced to the
-    runner having consumed it, then advance past proc exit."""
-    assert clock.wait_runner_parked(after_epoch=0), "runner never parked (startup)"
-    for _ in range(steps):
-        e = clock.advance(interval)
+    """Lockstep driver that PROVES the heartbeat interval gate
+    (codex-v1159-wfb-5 codex-rev-001, integrated). Advancing exactly
+    `interval` per step with one poll/step only checks "one per step"
+    — a regression that emits EVERY poll (or uses a tiny threshold)
+    would still produce one-per-step and pass. So each round we:
+      (1) advance a SUB-interval amount, sync, and assert NO new
+          heartbeat (the interval gate held — premature emit fails);
+      (2) advance the remainder to cross the boundary, sync, and
+          assert EXACTLY ONE new heartbeat.
+    This restores the cadence coverage the pre-rewrite test had via
+    its many sub-interval polls + loose count window."""
+
+    def _hb():
+        return len(_events(log_path, "dispatch_heartbeat"))
+
+    def _sync(e, where):
         if not clock.wait_runner_parked(after_epoch=e):
             clock.release_all()
             th.join(timeout=5)
             raise AssertionError(
-                "_drive_heartbeats: runner did not consume an advance "
-                "(release_all fired — handshake broken, not a timing flake)"
+                f"_drive_heartbeats: runner did not consume advance "
+                f"({where}) — release_all fired; handshake broken, NOT "
+                "a timing flake"
             )
+
+    assert clock.wait_runner_parked(after_epoch=0), "runner never parked (startup)"
+    for k in range(steps):
+        before = _hb()
+        # (1) sub-interval: the interval gate MUST suppress emission.
+        e1 = clock.advance(interval * 0.5)
+        _sync(e1, f"round {k} sub-interval")
+        mid = _hb()
+        assert mid == before, (
+            f"round {k}: heartbeat emitted at +{interval*0.5}s — BEFORE "
+            f"the {interval}s interval elapsed: count {before}->{mid}. "
+            "The interval gate is broken (regression: emit-every-poll / "
+            "wrong threshold)."
+        )
+        # (2) cross the boundary: EXACTLY one new heartbeat.
+        e2 = clock.advance(interval * 0.5)
+        _sync(e2, f"round {k} boundary")
+        after = _hb()
+        assert after == before + 1, (
+            f"round {k}: expected exactly 1 heartbeat at the {interval}s "
+            f"boundary, got {after - before} (count {before}->{after})"
+        )
     clock.advance(final_advance)
     ok = clock.wait_for(lambda: not th.is_alive())
     clock.release_all()
@@ -829,8 +861,9 @@ def test_heartbeat_fires_at_interval(tmp_path):
         time_fn=clock.now,
         popen_factory=factory,
     )
-    # 3 lockstep 30s advances (heartbeats at 30/60/90), then past exit.
-    _drive_heartbeats(clock, th, interval=30.0, steps=3, final_advance=20.0)
+    # 3 lockstep interval rounds — each PROVES the gate: no heartbeat
+    # at +15s, exactly one at +30s (codex-v1159-wfb-5 codex-rev-001).
+    _drive_heartbeats(clock, th, log_path, interval=30.0, steps=3, final_advance=20.0)
     assert "e" not in holder, f"unexpected exception: {holder.get('e')}"
 
     hb = _events(log_path, "dispatch_heartbeat")
