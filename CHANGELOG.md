@@ -30,6 +30,29 @@ codex absent (simulated) → 4 skip, 0 failed. **Named follow-up
 pattern the genuinely-hermetic `main()` tests already use) and drop
 the skip. Test-only change; no production code, no behavior.
 
+Two more pre-existing CI-env debts re-enabled CI surfaced, fixed
+here too:
+
+- **Validator self-test `20/21` (windows legs).**
+  `run_validator_tests.py::test_packet_build_sanitizes_injection`
+  failed because `review_packet_known_good/input.yaml` listed
+  `target_files: agent-loop/tests/fixtures/prompt_injection_doc.md`
+  — a **parent-project path never rewritten during the standalone
+  extraction**. The doc actually lives at
+  `consensus-state/tests/fixtures/prompt_injection_doc.md`; the
+  stale path meant the builder read nothing, sanitized nothing, and
+  the empty `sanitization_log` failed the `>=7` check. Repointed the
+  fixture path (the doc contains all 7 `SANITIZE_PATTERNS`); now
+  **21/21**. Not Windows-specific — reproduced locally; latent since
+  iter-0001, masked by dormant CI.
+- **ubuntu `exit code 143` (mystery SIGTERM ~23%).** A different
+  test (not the 4 above) hangs on the Linux runner and the job is
+  killed before pytest can name it. Added `pytest-timeout` to the
+  workflow (`--timeout=120`) so a hang becomes a NAMED failing test
+  with a traceback instead of an unattributable job kill — both the
+  diagnostic and permanent CI hardening. Follow-up: the named
+  culprit gets the same skipif/proper-mock treatment.
+
 ## 1.15.6 - 2026-05-15
 
 **Literal-zero pass** — completes the v1.15.5 identifier migration
