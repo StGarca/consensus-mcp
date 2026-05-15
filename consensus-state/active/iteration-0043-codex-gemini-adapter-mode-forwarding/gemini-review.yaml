@@ -1,0 +1,120 @@
+iteration_id: iteration-0043-codex-gemini-adapter-mode-forwarding
+reviewer_id: gemini-iteration-0043-1
+pass_id: gemini-iteration-0043-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'The core defect lies at the integration boundary between
+  the workflow engine and the dispatch CLIs. The adapter layer (`CodexAdapter`, `GeminiAdapter`)
+  is the choke point where the `DispatchPacket.phase` information is dropped. The
+  proposed fix addresses the root cause directly within this layer, ensuring that
+  any caller using the production `workflow_engine` path will automatically have the
+  correct `--mode` forwarded based on the workflow phase.
+
+
+  An alternative would be to modify only the higher-level MCP tools (`reviewer_dispatch_codex.py`,
+  etc.). This would be an incomplete fix, as it would not correct the behavior for
+  direct engine consumers like `loop_run_goal` and `consensus_run_iteration`, which
+  is where the production impact is most acute. Another alternative would be to require
+  all callers to manually specify the mode, which would be brittle and contrary to
+  the design principle of having the workflow engine manage the phase.
+
+
+  This proposal also includes updating the MCP wrapper tools and, crucially, adding
+  specific test coverage for the adapter-level integration. The existing tests are
+  green because they bypass the adapter layer entirely, which is how the defect remained
+  hidden. Adding tests at the adapter boundary is the only way to guarantee the fix
+  is correct and prevent future regressions.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 48b40e244dff824e490b85e5b54d1d2517aa00d942f42c96bcce5480edad6b41
+  output_sha256: a8ad9018c9f06f8b1f4ae9ed5b17894229fa64739d8ded512eb41c694c6979f6
+  goal_packet_sha256: 7db3d9c03b655ce46c5e01d819d47ac56ca906949c217862683228b138d89ab0
+  scope_signature: a043c0deadbeef1eaffaceb000feedfacecafebabedeadbeef0043fedcba9876
+  review_target_path: null
+  review_target_hash: null
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\pipx\venvs\consensus-mcp\Lib\site-packages\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: 'Fix: Plumb DispatchPacket.phase to adapter layer and forward as
+    --mode flag'
+  rationale_vs_alternatives: 'The core defect lies at the integration boundary between
+    the workflow engine and the dispatch CLIs. The adapter layer (`CodexAdapter`,
+    `GeminiAdapter`) is the choke point where the `DispatchPacket.phase` information
+    is dropped. The proposed fix addresses the root cause directly within this layer,
+    ensuring that any caller using the production `workflow_engine` path will automatically
+    have the correct `--mode` forwarded based on the workflow phase.
+
+
+    An alternative would be to modify only the higher-level MCP tools (`reviewer_dispatch_codex.py`,
+    etc.). This would be an incomplete fix, as it would not correct the behavior for
+    direct engine consumers like `loop_run_goal` and `consensus_run_iteration`, which
+    is where the production impact is most acute. Another alternative would be to
+    require all callers to manually specify the mode, which would be brittle and contrary
+    to the design principle of having the workflow engine manage the phase.
+
+
+    This proposal also includes updating the MCP wrapper tools and, crucially, adding
+    specific test coverage for the adapter-level integration. The existing tests are
+    green because they bypass the adapter layer entirely, which is how the defect
+    remained hidden. Adding tests at the adapter boundary is the only way to guarantee
+    the fix is correct and prevent future regressions.'
+  deliverable_scope:
+    next_iteration_id: iter-0044-adapter-mode-forwarding-fix
+    files_in_scope:
+    - consensus_mcp/contributors/codex.py
+    - consensus_mcp/contributors/gemini.py
+    - consensus_mcp/tools/reviewer_dispatch_codex.py
+    - consensus_mcp/tools/reviewer_dispatch_gemini.py
+    - consensus_mcp/tests/test_dispatch_codex.py
+    - consensus_mcp/tests/test_dispatch_gemini.py
+    - consensus_mcp/tests/test_reviewer_dispatch_codex.py
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - consensus-workflow skill (external to this repo)
+    key_design_decisions:
+    - In `CodexAdapter.dispatch` and `GeminiAdapter.dispatch`, inspect the `packet.phase`
+      attribute.
+    - If `packet.phase` is `PHASE_PROPOSE`, inject `['--mode', 'proposal']` into the
+      `argv` list passed to the subprocess.
+    - If `packet.phase` is not `PHASE_PROPOSE`, do not add the `--mode` flag, allowing
+      the underlying script to use its default value of 'review'.
+    - Update the `reviewer_dispatch_codex` and `reviewer_dispatch_gemini` MCP tools
+      to accept a phase parameter and pass it correctly when constructing the `DispatchPacket`
+      for the adapters.
+    - Create new unit tests that call the `CodexAdapter.dispatch` and `GeminiAdapter.dispatch`
+      methods directly and mock the `subprocess.run` call to assert that the `argv`
+      argument is correctly constructed for both proposal and review phases.
+    acceptance_gates:
+    - All existing tests must continue to pass.
+    - A new test in `test_dispatch_codex.py` must successfully assert that `CodexAdapter`
+      forwards `--mode proposal` when `packet.phase == PHASE_PROPOSE`.
+    - A new test in `test_dispatch_gemini.py` must successfully assert that `GeminiAdapter`
+      forwards `--mode proposal` when `packet.phase == PHASE_PROPOSE`.
+    - Tests for `reviewer_dispatch_codex.py` must be updated to cover the new phase-forwarding
+      logic.
+  risks:
+  - The adapter dispatch methods may be called from other locations not identified
+    in the initial investigation, requiring a broader search for call sites.
+  - The existing tests for the adapter layer do not appear to mock `subprocess.run`,
+    so adding this test pattern may introduce unforeseen complexity.
+  - Modifying the signature of functions within the `reviewer_dispatch_*` tools could
+    impact other tools that call them, although this is considered low risk.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T02:52:44Z'
+packet_sha256: 12ca2e228523aa3f30f0f6583a604927f64cd99848c884fcd9dd25a3edf138cc

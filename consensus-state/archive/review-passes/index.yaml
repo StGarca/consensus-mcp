@@ -905,4 +905,16 @@ passes:
   packet_sha256: 08f2c9d7d88a4cf69515be431e105e4902958f7139333e914654160a8b03e951
   iteration_id: iteration-0042-codex-plugin-vs-cli-dispatch
   reviewer_id: codex-iteration-0042-1
-last_updated_utc: '2026-05-13T21:40:01Z'
+- id: gemini-iteration-0043-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-0043-codex-gemini-adapter-mode-forwarding-gemini-iteration-0043-1-pass.yaml
+  sealed_at: '2026-05-15T02:52:44Z'
+  packet_sha256: 12ca2e228523aa3f30f0f6583a604927f64cd99848c884fcd9dd25a3edf138cc
+  iteration_id: iteration-0043-codex-gemini-adapter-mode-forwarding
+  reviewer_id: gemini-iteration-0043-1
+- id: codex-iteration-0043-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-0043-codex-gemini-adapter-mode-forwarding-codex-iteration-0043-1-pass.yaml
+  sealed_at: '2026-05-15T02:52:45Z'
+  packet_sha256: f352d79d98bcdf9ce13f8f1eab4faa20ee257e6bdeb9c14f26a570484fa1cbc1
+  iteration_id: iteration-0043-codex-gemini-adapter-mode-forwarding
+  reviewer_id: codex-iteration-0043-1
+last_updated_utc: '2026-05-15T02:52:45Z'
