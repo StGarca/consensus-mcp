@@ -1,9 +1,27 @@
 # Changelog
 
-## 1.15.6 - unreleased
+## 1.15.6 - 2026-05-15
 
-_No changes yet. Branched from v1.15.5 tip. Canonical repo:
-`github.com/stgarca/consensus-mcp`._
+**Literal-zero pass** — completes the v1.15.5 identifier migration
+per the operator "true zero" directive. The v1.15.5
+changelog/commit/doctrine that *documented* the migration
+necessarily still contained the legacy tokens (you cannot record
+"X was removed" without writing "X"). Those are now phrased only
+obliquely ("the former upstream project name", "the prior account
+handle, now `stgarca`"). The entire working tree (tracked +
+gitignored scratch + binary caches; `__pycache__` purged) was
+swept, and a second `git filter-repo` pass (same substitutions)
+cleaned all historical blobs, every commit/tag message, and the
+snapshot branch. Verified: **zero literal occurrences in any blob
+across every ref, in any commit message, in any tag message, and
+in the working tree (including binary)** — including the record of
+the migration itself. 18 release tags + all branches intact; full
+suite green; a fresh pre-rewrite backup bundle was kept outside
+the repo. Semantically identical to v1.15.5 (de-literalization
+only; no doctrine/behavior change — the substance was
+Workflow-B-audited in v1.15.5). Every published tag SHA changed
+again; tag-pinned `pipx …@vX.Y.Z` URLs still resolve.
+Canonical repo: `github.com/stgarca/consensus-mcp`.
 
 ## 1.15.5 - 2026-05-15
 
