@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.6 - unreleased
+
+_No changes yet. Branched from v1.15.5 tip. Repo is now
+`github.com/stgarca/consensus-mcp` (post-rewrite)._
+
 ## 1.15.5 - 2026-05-15
 
 **Account migration + provenance purge + doctrine reconciliation.**
