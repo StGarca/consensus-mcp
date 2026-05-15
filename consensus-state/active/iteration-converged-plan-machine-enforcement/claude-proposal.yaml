@@ -1,0 +1,220 @@
+actor:
+  id: claude-cpme-1
+  model_family: claude
+  role: design_proposer
+  pass_id: claude-cpme-1-pass1
+iteration_id: iteration-converged-plan-machine-enforcement
+created_at_utc: '2026-05-15T17:05:00Z'
+mode: proposal
+structural_abstention: false
+differential_prior_reasoned_from: |
+  I reason from a "minimize machine ownership of human judgment"
+  prior: the convention blocks are irreducibly human judgment
+  (is this falsifiable from artifacts? is this safeguard truly
+  root-cause-independent?), so machine code may enforce PRESENCE
+  and CONSEQUENCE-CONSISTENCY but must be structurally incapable
+  of asserting SOUNDNESS. A contributor reasoning from the
+  opposite prior ("the engine should derive/own as much as
+  possible") would push toward contributors emitting blocks in
+  the converge schema + uniform hard-reject. Naming this so a
+  shared prior is visible at reveal (v1.15.0 doctrine applied to
+  this consult).
+proposal:
+  selected_target: |
+    Ship a SMALL, real-code enforcement slice that validates
+    PRESENCE + CONSEQUENCE-CONSISTENCY of the convention blocks
+    at converged-plan seal time, sourced from an operator/
+    orchestrator-authored sidecar the engine merges, with the
+    gate STRUCTURALLY incapable of implying correctness (it
+    stamps an explicit non-soundness disclaimer). No heavy new
+    gate file mimicking the production gate; no heuristic
+    classifier (the report's named shared-prior trap).
+
+    Q1: (a) operator/orchestrator-authored sidecar
+        `converged-plan.convention.yaml`, merged by the engine
+        at seal time.
+    Q2: (d-minimal) NEW schema file + a tiny validator module
+        invoked inside _seal_converged_plan + read-time
+        surfacing — NOT a standalone converged_plan_gate.py.
+    Q3: (d) engine does NOT classify; enforces only the
+        consequences of an orchestrator-attested
+        `falsification.falsifiable_from_artifacts` bool.
+    Q4: (c)+(d) graduated strictness + config knob (default
+        graduated); legacy plans grandfathered by
+        convention_schema_version absence.
+    Q5: gate validates presence/structure/consequence ONLY and
+        MUST emit a machine+human "NOT a soundness assertion"
+        disclaimer; structurally cannot set any approved/correct
+        state.
+    Q6: ship the slice now WITH real code-path tests; defer
+        only the operator defect_class UX + anti-gaming
+        cross-check (need usage evidence — a real blocker).
+
+  rationale_vs_alternatives: |
+    Q1 — why (a) over (b)/(c)/(d):
+    The blocks are a SINGLE post-convergence judgment about the
+    iteration, not per-contributor data. (b) contributors-emit
+    fractures it — three contributors would each emit a
+    falsification; which is canonical? Convergence is about
+    agreement on the plan; the falsification is one orchestrator
+    judgment layered on the converged plan. (c) present-but-
+    unfilled + post-seal populate adds a stateful "not closed
+    until filled" machine — heavier, and nothing forces quality.
+    (d) hybrid splits ownership confusingly. (a) formalizes what
+    already happens: the orchestrator authors the convention
+    content every consult by hand; a
+    `converged-plan.convention.yaml` sidecar the engine merges
+    at seal time turns existing practice into a machine-checked
+    artifact with the least new machinery.
+    WRONG-OBSERVATION: if iterations ship with the sidecar
+    absent as the norm (merge is a no-op every time), (a)
+    produced a doc nobody fills — the discipline didn't
+    transfer; that refutes (a) toward (c)'s forcing function.
+
+    Q2 — why (d-minimal) over (a-newgate)/(b-only)/(c-only):
+    consensus_gate.py is the production gate (verified) — a new
+    converged_plan_gate.py mimicking its weight is ceremony for
+    a small structural check. Minimal layering: NEW
+    `consensus_mcp/schemas/converged_plan_convention.schema.json`
+    (the machine contract; schemas/ is net-new) + a tiny
+    `consensus_mcp/_converged_plan_convention.py` (load+merge
+    sidecar, validate presence+consequences, return violations +
+    the non-soundness disclaimer) + call it inside
+    `_seal_converged_plan` (closest to where the plan is
+    written) + surface violations read-time in
+    consensus_get_iteration_outcome. Schema-only (no engine
+    call) wouldn't enforce anything; read-time-only wouldn't
+    block the safety class.
+    WRONG-OBSERVATION: if the validator logic grows past ~150
+    LOC it has become a de-facto gate and should be a named
+    file with its own tests — that refutes "tiny module."
+
+    Q3 — why (d) pure consequence-enforcement:
+    This is the report's central warning. A keyword/heuristic
+    classifier ("boot", "timing", "race" => not-falsifiable)
+    IS a shared prior that "fits" — the exact failure mode.
+    The engine must NOT guess the class. It enforces only:
+    IF falsifiable_from_artifacts == false THEN
+    discriminating_experiment AND refutation_observation are
+    non-empty AND empirical_status in {pending, refuted}
+    (never `proven` and never `n/a`) unless a recorded
+    experiment result is present. Deterministic, auditable,
+    zero inference. Operator MAY add an optional goal_packet
+    declaration later (deferred, Q6).
+    WRONG-OBSERVATION: if iterations systematically declare
+    falsifiable_from_artifacts=true to dodge the gate (gaming),
+    pure-(d) is insufficient and a light auditable cross-check
+    is needed — that refutes pure-(d). (Watch for it; do not
+    pre-build the cross-check without the evidence.)
+
+    Q4 — why graduated + knob:
+    Uniform hard-reject is the rejected-goal_packet papercut
+    the named blocker warned about. Uniform warn under-protects
+    the safety class — and the report's lesson 4 is that the
+    independent safeguard is the LOAD-BEARING protection, so
+    safety-class enforcement must be strict from day one.
+    Graduated: hard-reject ONLY (i) safety/data-loss/bricking/
+    irreversible risk class missing a conforming
+    independent_safeguard, and (ii) empirical_status: proven
+    with no recorded experiment (a lie the gate can catch
+    structurally); warn+annotate everything else. Config knob
+    `converged_plan_enforcement: off|warn|graduated|strict`
+    (default graduated) lets a project tighten/loosen with
+    doctrine guidance. Backward compat: converged-plan carries
+    `convention_schema_version`; absent => legacy => warn-once,
+    NEVER reject (this session's own iter-0043..v1.15.0 plans
+    must keep reading via consensus_get_iteration_outcome).
+    WRONG-OBSERVATION: if graduated still blocks legitimate
+    non-safety iterations in practice, drop to warn-default;
+    if safety-class strictness is bypassed via mis-declared
+    risk class, the risk-class declaration itself needs
+    hardening.
+
+    Q5 — the recursive trap (highest-order, from the doctrine):
+    A green gate becoming "convergence mistaken for
+    correctness" is v1.15.0 lesson 1 turned on our own tooling.
+    Structural defenses, not just a comment:
+      - The validator's ONLY verbs are present / consistent /
+        non-empty. It has no code path that computes or sets
+        any approved|correct|ready|sound state from the
+        convention blocks. (Auditable: grep the module for
+        such tokens — there must be none.)
+      - Every pass result (engine outcome + stamped into
+        converged-plan as `convention_gate`) carries a
+        mandatory, non-removable field:
+        gate_scope: "presence-and-consistency only; NOT a
+        soundness assertion. A passing gate is NOT evidence the
+        hypothesis is correct or the safeguard adequate — only
+        that the required thinking was RECORDED. The auditable
+        question 'would this safeguard still work if the root
+        cause were entirely different?' remains a HUMAN
+        judgement."
+      - consensus_get_iteration_outcome surfaces gate_scope
+        adjacent to any pass marker so a reader cannot see
+        "gate: pass" without the disclaimer.
+    WRONG-OBSERVATION: if downstream tooling/operators start
+    treating convention_gate==pass as a readiness signal
+    (cited as "the gate approved it"), the structural defense
+    failed and the gate output must be made even harder to
+    misread (e.g., rename the pass token to
+    `recorded_not_validated`).
+
+    Q6 — minimal slice now, real test signal:
+    This time it IS code paths (engine + new module + schema +
+    config) — the test suite signal is meaningful, directly
+    closing the v1.15.0 doc-only honest loose end. Ship the
+    slice; defer ONLY the operator goal_packet defect_class
+    UX and the anti-gaming cross-check, each with a real
+    blocker: both need usage evidence from the shipped slice
+    before their design is well-posed (premature now =
+    speculative). That is a need-evidence blocker, not a
+    cop-out.
+
+deliverable_scope:
+  next_iteration_id: implement-immediately-then-workflow-B
+  files_in_scope:
+    - consensus_mcp/schemas/converged_plan_convention.schema.json  # NEW (schemas/ dir net-new)
+    - consensus_mcp/_converged_plan_convention.py  # NEW tiny: load+merge sidecar, validate presence/consequences, emit non-soundness disclaimer
+    - consensus_mcp/workflow_engine.py  # _seal_converged_plan: merge sidecar + invoke validator + graduated strictness + stamp convention_gate{gate_scope,...} + convention_schema_version
+    - consensus_mcp/tools/consensus_get_iteration_outcome.py  # surface convention_violations + gate_scope at read time
+    - consensus_mcp/config.py  # converged_plan_enforcement knob (off|warn|graduated|strict; default graduated)
+    - consensus_mcp/tests/test_converged_plan_convention.py  # NEW real code-path tests
+    - docs/workflows/converged-plan-convention.md  # machine-enforced now; sidecar location; gate_scope disclaimer; backward-compat
+    - CHANGELOG.md ; README.md (install URL + Status) ; pyproject.toml (1.15.1 or 1.16.0)
+  files_out_of_scope:
+    - consensus_mcp/validators/consensus_gate.py  # production gate; NOT this (corrects the recorded starting design)
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+  named_blockers_for_deferred_work:
+    - 'Operator goal_packet `defect_class`/`risk_class` declaration UX + the anti-gaming cross-check on falsifiable_from_artifacts: both need real usage data from the shipped slice to be well-posed; designing them now is speculative. Need-evidence blocker.'
+  key_design_decisions:
+    - 'Source = operator/orchestrator-authored converged-plan.convention.yaml sidecar; engine merges at seal time (formalizes existing practice, least new machinery)'
+    - 'Enforcement = NEW schema file + tiny _converged_plan_convention.py invoked in _seal_converged_plan + read-time surfacing; NOT a heavy standalone gate; NOT consensus_gate.py (production gate)'
+    - 'Engine never classifies the defect class — enforces only consequences of the orchestrator-attested falsifiable_from_artifacts bool (no heuristic = no shared-prior trap)'
+    - 'Graduated strictness: hard-reject only safety-class-missing-safeguard + empirical_status:proven-without-experiment; warn+annotate else; config knob default graduated'
+    - 'convention_schema_version on the plan; legacy/absent = grandfathered warn-once, never reject (this session''s plans keep reading)'
+    - 'gate is structurally presence/consistency-only and stamps a mandatory non-removable gate_scope non-soundness disclaimer; cannot express correctness/readiness (recursive-trap defense)'
+    - 'empirical_status enum matches v1.15.0: proven|pending|refuted|n/a'
+  acceptance_gates:
+    gating:
+      - 'consensus_mcp/schemas/converged_plan_convention.schema.json exists + is valid JSON Schema; empirical_status enum = proven|pending|refuted|n/a'
+      - '_seal_converged_plan merges <iter>/converged-plan.convention.yaml when present and stamps convention_schema_version + convention_gate.gate_scope (the non-soundness disclaimer) UNCONDITIONALLY'
+      - 'consequence rule enforced: falsifiable_from_artifacts==false ⇒ discriminating_experiment & refutation_observation non-empty & empirical_status∈{pending,refuted}'
+      - 'safety-risk-class converged plan missing a conforming independent_safeguard ⇒ hard-reject (graduated); non-safety ⇒ warn+annotate'
+      - 'empirical_status: proven with no recorded experiment ⇒ hard-reject'
+      - 'legacy converged-plan (no convention_schema_version, e.g. this session iter-0043..v1.15.0) ⇒ grandfathered: consensus_get_iteration_outcome still reads it; no reject'
+      - 'config converged_plan_enforcement knob respected (off|warn|graduated|strict; default graduated)'
+      - 'grep of _converged_plan_convention.py shows NO approved/correct/ready/sound state-setting from convention blocks (recursive-trap structural check)'
+      - 'consensus_get_iteration_outcome surfaces convention_violations + gate_scope adjacent to any pass marker'
+      - 'NEW test_converged_plan_convention.py covers all the above; full suite green; THIS TIME code paths are touched so the regression signal is meaningful'
+      - 'Workflow B audit: codex + gemini goal_satisfied=true, no blocking objections; auditors confirm the recursive-trap defense is structural not cosmetic'
+    non_gating:
+      - 'consult did not converge fast+unanimous without engaging the wrong-recommendation observations (lesson-2 self-check)'
+  estimated_complexity: medium
+risks:
+  - 'Sidecar never authored in practice → enforcement is a no-op (Q1 wrong-observation). Mitigation: doctrine already mandates the blocks; the gate warns loudly on absence for defect-type iterations; revisit toward (c) forcing-function if observed.'
+  - 'Validator scope-creeps into soundness judgement. Mitigation: the grep-for-no-correctness-tokens acceptance gate is itself the structural guard; Workflow B instructed to verify it is structural.'
+  - 'Graduated strictness still papercuts legitimate iterations. Mitigation: config knob + warn-default fallback; only safety-class is strict, justified by report lesson 4.'
+  - 'convention_schema_version backward-compat miss breaks consensus_get_iteration_outcome on this session''s own plans. Mitigation: explicit grandfather test using a real legacy plan fixture from iter-0043.'
+  - 'This consult converging on my own "minimize machine ownership" prior. Mitigation: stated the prior explicitly; every recommendation carries its wrong-observation; Workflow B + the non-gating self-check.'
+estimated_complexity: medium

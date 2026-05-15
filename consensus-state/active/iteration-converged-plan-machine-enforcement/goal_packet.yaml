@@ -1,0 +1,209 @@
+schema_version: 1
+pilot_id: iteration-converged-plan-machine-enforcement
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    Workflow A consult on the v1.15.0 NAMED-BLOCKER follow-up:
+    machine-enforcement of the converged-plan convention blocks
+    (`falsification`, `independent_safeguard`,
+    `decisive_experiment_before_next_iteration`) documented in
+    docs/workflows/converged-plan-convention.md (v1.15.0,
+    doctrine-only today).
+
+    NOTE: the shell dispatcher uses the INSTALLED pipx templates,
+    which predate v1.15.0's convergence-correctness preamble. So
+    the doctrine is restated IN this goal_packet: state the
+    differential/prior you reason from; for any claim not
+    falsifiable from the code in evidence, name a pre-specified
+    EXTERNAL refuting observation; guard against this consult
+    itself converging on a shared "just add a JSON schema" prior.
+
+    VERIFIED CODE SURFACE (read first-hand at v1.15.0 tag 4e81f9e,
+    correcting the recorded starting design):
+
+    1. `consensus_mcp/validators/consensus_gate.py` EXISTS but is
+       the Phase-0 PRODUCTION-READINESS gate (P0-V6): it computes
+       production_state from consensus.yaml / verification.yaml /
+       operator approval.yaml. It has NOTHING to do with
+       converged-plan structure and is invoked only via
+       gate_evaluate_production_with_scope_match.py + self-tests.
+       => gemini's recorded "starting design" (severity field +
+       consensus_gate.py mechanism) is PARTIALLY REFUTED by
+       code-reading: consensus_gate.py is the wrong component.
+       (This is the v1.15.0 doctrine working on its own audit
+       trail — a plausible recorded mechanism, refuted on
+       inspection.)
+    2. NO `consensus_mcp/schemas/` directory exists — any
+       converged-plan schema file is net-new.
+    3. `workflow_engine._seal_converged_plan` (~lines 498-528)
+       AUTO-GENERATES converged-plan.yaml from a FIXED key set
+       derived from ConvergenceOutcome (iteration_id,
+       workflow_mode, convergence_rule, converged_at_round,
+       contributors_responsive/timed_out, approve_votes,
+       rationale, convergence_round_artifacts). There is
+       structurally NOWHERE for the human-judgment convention
+       blocks to enter.
+    4. Zero occurrences of falsification / independent_safeguard
+       / decisive_experiment / empirical_status anywhere in the
+       codebase — the blocks live ONLY in doctrine + human-
+       authored consult artifacts.
+    5. `consensus_get_iteration_outcome` reads converged-plan.yaml
+       generically (yaml.safe_load, no schema).
+
+    Therefore the real problem is NOT "add a schema validator."
+    It is: GIVEN the engine auto-generates converged-plan.yaml
+    with fixed keys and the convention blocks are human judgment
+    with no machine source, WHERE do the blocks enter the
+    pipeline, WHAT component enforces them, and HOW do we prevent
+    the enforcement gate from itself becoming the "green-means-
+    correct" shared-prior trap the v1.15.0 doctrine documents.
+
+  question: |
+    Each contributor: state the DIFFERENTIAL/PRIOR you reason
+    from. Stance on Q1-Q6, justified against the strongest
+    counter, with the observation that would show your
+    recommendation is WRONG. Honest structural_abstention OK
+    per question.
+
+    Q1 — **Source of the human-judgment blocks in a machine-
+    generated pipeline.** The engine auto-writes converged-
+    plan.yaml; the blocks are human judgment. Where do they
+    enter?
+      (a) Operator/orchestrator authors a sidecar
+          (converged-plan.convention.yaml OR a `convention:`
+          section in a hand-authored file); engine MERGES it
+          into the auto-generated plan at seal time; gate
+          validates the merged result.
+      (b) Converging contributors emit the blocks in their
+          converge-phase sealed artifacts (extend the converge
+          output schema); _seal_converged_plan aggregates +
+          requires them.
+      (c) Engine writes the convention keys present-but-
+          `status: unfilled`; a post-seal step (operator/tool)
+          populates them; gate blocks iteration-close until
+          filled.
+      (d) Hybrid: contributors attest
+          falsification.falsifiable_from_artifacts +
+          refutation_observation in their converge artifact
+          (they hold that judgment); operator/orchestrator owns
+          independent_safeguard + decisive_experiment; engine
+          aggregates; gate enforces consequences.
+
+    Q2 — **Enforcing component** (consensus_gate.py is the WRONG
+    one — production gate). Where does enforcement live?
+      (a) NEW consensus_mcp/validators/converged_plan_gate.py +
+          NEW consensus_mcp/schemas/converged_plan.schema.json.
+      (b) Inline validation inside
+          workflow_engine._seal_converged_plan (closest to
+          where the plan is written; no new file; reject or
+          annotate at seal time).
+      (c) Read-time check in consensus_get_iteration_outcome
+          (surfaces violations on query; does not block seal).
+      (d) Layered: schema file (machine contract) + seal-time
+          enforcement in the engine + read-time surfacing.
+
+    Q3 — **Defined-class classifier** (the part the report warns
+    is itself a shared-prior risk).
+      (a) operator-declared field on the goal_packet
+          (defect_class), no inference.
+      (b) contributor-attested bool
+          (falsification.falsifiable_from_artifacts) in the
+          converge artifact.
+      (c) (a)+(b) with mismatch -> escalate to operator.
+      (d) engine does NOT classify at all — it only enforces
+          the CONSEQUENCES of a declared/attested bool (no
+          keyword heuristic; heuristics are the shared-prior
+          trap the report documents).
+
+    Q4 — **Strictness / papercut avoidance + backward compat.**
+      (a) hard-reject (engine refuses to seal a non-conforming
+          converged plan for a defect-class iteration).
+      (b) warn + annotate `convention_violations`, non-blocking.
+      (c) graduated: hard-reject ONLY for (i) the safety/data-
+          loss/bricking/irreversible risk class missing
+          independent_safeguard and (ii) empirical_status:
+          proven without a recorded experiment; warn otherwise.
+      (d) config knob (.consensus/config.yaml
+          converged_plan_enforcement: off|warn|strict; default
+          warn) + doctrine guidance.
+      Backward compat: existing converged-plans (this session's
+      iter-0043 .. v1.15.0) lack the blocks — enforcement MUST
+      grandfather plans below a converged-plan schema_version
+      bump and not break consensus_get_iteration_outcome.
+
+    Q5 — **The recursive trap (HIGHEST-ORDER constraint).** A
+    machine gate that PASSES can become the new "convergence
+    mistaken for correctness" — operators stop thinking because
+    the gate is green. This is v1.15.0 lesson 1 applied to our
+    own enforcement. How does the design structurally prevent
+    its own gate from becoming the shared prior it documents?
+    (Candidate: the gate validates PRESENCE/STRUCTURE only and
+    must emit an explicit "presence-checked, NOT soundness-
+    checked — a green gate is not evidence the falsification is
+    correct" disclaimer in its output; the gate must never
+    imply the hypothesis is true.)
+
+    Q6 — **Minimal shippable deliverable (no-deferral) given the
+    corrected starting design.** gemini's recorded mechanism
+    (severity + consensus_gate.py) is partly refuted. Restate
+    the real minimal slice that ships now WITH tests (this time
+    it IS code paths — the test signal will be meaningful,
+    unlike v1.15.0's doc-only change) vs. any further named
+    blocker with a concrete reason.
+
+    Required: Q1-Q6 verdicts + Q7 + your wrong-recommendation
+    observation + the differential you reasoned from.
+
+    Q7 — Open. Candidates: does this need a goal_packet
+    `risk_class` / `defect_class` field at all, or is the
+    existing `type:` enough? Should _seal_converged_plan stop
+    auto-generating and instead REQUIRE an orchestrator-authored
+    plan (bigger change, cleaner ownership)? Is warn-by-default
+    safe given the report's lesson that the safeguard is the
+    load-bearing protection (maybe safety-class enforcement must
+    be strict from day one)?
+
+  non_goals:
+    - re-litigating the v1.15.0 doctrine itself (shipped,
+      converged, audited)
+    - changing convergence VOTING rules
+    - building the not-falsifiable-from-artifacts HEURISTIC
+      classifier (the report explicitly warns heuristics are a
+      shared-prior trap; engine enforces consequences of a
+      declared/attested bool, it does not guess the class)
+    - the ChilipadScreen project itself
+  type: design_consult
+allowed_files: []
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - .github/
+  - .gitignore
+max_iterations: 3
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml at iteration_dir
+    check: 'true'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+operator_escalation_triggers:
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T17:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'e9f0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis

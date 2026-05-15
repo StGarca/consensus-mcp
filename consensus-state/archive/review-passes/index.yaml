@@ -1,32 +1,14 @@
 passes:
-- id: gemini-convdoc-1-pass1
-  path: consensus-state/archive/review-passes/2026-05-15-iteration-convergence-correctness-doctrine-gemini-convdoc-1-pass.yaml
-  sealed_at: '2026-05-15T15:30:30Z'
-  packet_sha256: fcfd75398c84898c65db224e0727ef9783fba0cdeb78a16068b128c84b59ef11
-  iteration_id: iteration-convergence-correctness-doctrine
-  reviewer_id: gemini-convdoc-1
-- id: codex-convdoc-1-pass1
-  path: consensus-state/archive/review-passes/2026-05-15-iteration-convergence-correctness-doctrine-codex-convdoc-1-pass.yaml
-  sealed_at: '2026-05-15T15:34:15Z'
-  packet_sha256: 228661ec6554f71282f6341c2969010317b18f38c778dec6301cdcc9eb7efac3
-  iteration_id: iteration-convergence-correctness-doctrine
-  reviewer_id: codex-convdoc-1
-- id: codex-convdoc-audit-1-pass1
-  path: consensus-state/archive/review-passes/2026-05-15-iteration-convergence-correctness-doctrine-codex-convdoc-audit-1-pass.yaml
-  sealed_at: '2026-05-15T15:42:56Z'
-  packet_sha256: 5a02dbf399c0f87e8bfd85ea15ae674c950eb11a4cdd6674a3d91086b7ee9b3a
-  iteration_id: iteration-convergence-correctness-doctrine
-  reviewer_id: codex-convdoc-audit-1
-- id: gemini-convdoc-audit-1-pass1
-  path: consensus-state/archive/review-passes/2026-05-15-iteration-convergence-correctness-doctrine-gemini-convdoc-audit-1-pass.yaml
-  sealed_at: '2026-05-15T15:42:56Z'
-  packet_sha256: 2b6ce114e13c40305699569a35e2d14a33b5c87b883436f0cb2acb7dee9041e2
-  iteration_id: iteration-convergence-correctness-doctrine
-  reviewer_id: gemini-convdoc-audit-1
-- id: codex-convdoc-audit-2-pass1
-  path: consensus-state/archive/review-passes/2026-05-15-iteration-convergence-correctness-doctrine-codex-convdoc-audit-2-pass.yaml
-  sealed_at: '2026-05-15T15:46:11Z'
-  packet_sha256: a44223d24c3a08254b97f5bbbdee866c70d7a2b256214c4d11c5423904ee5363
-  iteration_id: iteration-convergence-correctness-doctrine
-  reviewer_id: codex-convdoc-audit-2
-last_updated_utc: '2026-05-15T15:46:11Z'
+- id: gemini-cpme-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-gemini-cpme-1-pass.yaml
+  sealed_at: '2026-05-15T15:57:35Z'
+  packet_sha256: 07b6893b4196f24e10ccad3803d5f1b19c9cae77cd4518b9ebdce11109128545
+  iteration_id: iteration-converged-plan-machine-enforcement
+  reviewer_id: gemini-cpme-1
+- id: codex-cpme-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-codex-cpme-1-pass.yaml
+  sealed_at: '2026-05-15T15:58:27Z'
+  packet_sha256: b81308948268f78a6f475540bff34e6255515a720c7ed0b0abc8c64e03cfdce6
+  iteration_id: iteration-converged-plan-machine-enforcement
+  reviewer_id: codex-cpme-1
+last_updated_utc: '2026-05-15T15:58:27Z'
