@@ -1,13 +1,19 @@
 # Changelog
 
-## 1.14.1 - unreleased
+## 1.14.1 - 2026-05-14
 
-Hot-patch and small-bump release branch from v1.14.0 tip. Open scope:
+Hot-patch: corrects the bundled `consensus-workflow` skill so it
+no longer documents a PyPI publish step in the release cut
+sequence. consensus-mcp ships via git tags + pipx (`pipx install
+git+https://github.com/.../@vX.Y.Z`); the package is not
+registered on PyPI. The v1.14.0 skill incorrectly added a PyPI
+step that does not match the project's actual distribution model;
+v1.14.1 removes it and adds an explicit "if you catch yourself
+proposing PyPI, stop" warning so future sessions don't repeat
+the mistake.
 
-- iter-0044: implement adapter `--mode` forwarding fix per iter-0043
-  converged plan (CodexAdapter + GeminiAdapter forward `packet.phase`
-  → dispatcher `--mode`; centralized phase-to-mode helper; MCP
-  wrappers expose `phase` parameter; skill workaround removed).
+iter-0044 (adapter `--mode` forwarding fix per iter-0043 converged
+plan) is open scope on v1.14.2 — not in this hot-patch.
 
 ## 1.14.0 - 2026-05-14
 
