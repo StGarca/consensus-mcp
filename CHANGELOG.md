@@ -1,8 +1,43 @@
 # Changelog
 
-## 1.15.4 - unreleased
+## 1.15.4 - 2026-05-15
 
-_No changes yet. Branched from v1.15.3 tip._
+**Repo-presentation + CI + branch-doctrine fix.** Operator observed
+that the GitHub landing page looked stuck at v1.13.0 and showed a
+hallucinated "v2.0.0" commit label on `.github/workflows/`.
+
+Root cause: the pre-v1.15.4 release-branching convention froze
+`main` forever (releases lived only on `v<X.Y.Z>` branches/tags,
+never merged back). `main` is GitHub's default branch, so the
+landing page was frozen at v1.13.0 — and, more seriously,
+`.github/workflows/test.yml` triggered **only** on `main`, so
+GitHub Actions CI was **dormant from v1.13.0 → v1.15.3** (every
+release ran on a `v*` branch CI never saw; those releases were
+verified by local pytest only).
+
+- **CI** (`.github/workflows/test.yml`): now triggers on push/PR to
+  `main` **and** `v*` branches, so release-branch work is actually
+  exercised by GitHub Actions.
+- **Branch doctrine evolved** (`consensus-workflow` SKILL.md): the
+  "`main` frozen forever / never merge back" convention is replaced
+  by "`main` = latest released state; every release cut
+  fast-forwards `main` to the just-cut tag (clean ff, never a merge
+  or force-push); development continues on `v<next>` branches." A
+  new cut-sequence step 8 documents the fast-forward with an
+  ancestor-check safety guard (and step 3 moves README install/
+  status currency pre-tag, since the tag's README is now the
+  landing page). Updating the bundled doctrine here
+  prevents the same currency-drift v1.15.3 just fixed.
+- **`main` fast-forwarded** from v1.13.0 (`64f70ec`) to the v1.15.4
+  tag — a verified clean fast-forward (no history rewrite, no
+  dropped commits, no force-push). The GitHub landing page now
+  reflects the current state, including the accessible README.
+- **README** rewritten as an accessible ~150-line summary (was 364
+  dense lines); deep internals moved behind CHANGELOG/`docs/`
+  links. Load-bearing facts preserved.
+
+No engine/config/behavior change. Full suite green. Workflow B
+audit: codex + gemini.
 
 ## 1.15.3 - 2026-05-15
 

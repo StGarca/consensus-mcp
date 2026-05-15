@@ -51,7 +51,7 @@ agree."
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.3
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.4
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -110,9 +110,11 @@ failed open, and a path-matching bug, each missed by single-AI review.
 
 ## Status
 
-**Current: v1.15.3.** Recent work hardened the review machinery
-(machine-enforced plan conventions, dispatcher fixes) and made the
-documentation match shipped reality. Full per-release detail is in
+**Current: v1.15.4.** Recent work hardened the review machinery
+(machine-enforced plan conventions, dispatcher fixes), made the
+documentation match shipped reality, and fixed the release/branch
+model so `main` (and this landing page) and GitHub Actions CI stay
+on the latest released state. Full per-release detail is in
 [`CHANGELOG.md`](CHANGELOG.md); upgrade guidance for known-issue
 releases is in [`docs/advisories.md`](docs/advisories.md).
 
