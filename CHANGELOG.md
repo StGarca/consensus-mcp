@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.1 - unreleased
+
+Hot-patch and small-bump release branch from v1.14.0 tip. Open scope:
+
+- iter-0044: implement adapter `--mode` forwarding fix per iter-0043
+  converged plan (CodexAdapter + GeminiAdapter forward `packet.phase`
+  → dispatcher `--mode`; centralized phase-to-mode helper; MCP
+  wrappers expose `phase` parameter; skill workaround removed).
+
 ## 1.14.0 - 2026-05-14
 
 Multi-AI contributor pool, blind-first-reveal workflow #4, configurable
