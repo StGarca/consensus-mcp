@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.5 - unreleased
+
+_No changes yet. Branched from v1.15.4 tip. (Per the v1.15.4
+branch doctrine, `main` already tracks the v1.15.4 tag; this
+branch is where new work lands until the next cut.)_
+
 ## 1.15.4 - 2026-05-15
 
 **Repo-presentation + CI + branch-doctrine fix.** Operator observed
