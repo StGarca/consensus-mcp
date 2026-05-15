@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.4 - unreleased
+
+_No changes yet. Branched from v1.15.3 tip._
+
 ## 1.15.3 - 2026-05-15
 
 **Bundled-doctrine + status currency hot-patch** — doc/string only,
