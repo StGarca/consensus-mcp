@@ -1061,4 +1061,16 @@ passes:
   packet_sha256: b4b395ce1f49c8a32fc8182e688b0b2923b29aea9f5401d06e177be73e4bcf16
   iteration_id: iteration-gemini-trust-env-fix
   reviewer_id: codex-gtef-1
-last_updated_utc: '2026-05-15T17:24:18Z'
+- id: codex-gtef-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-gemini-trust-env-fix-codex-gtef-2-codex-gtef-2-pass1-pass.yaml
+  sealed_at: '2026-05-15T17:27:23Z'
+  packet_sha256: fae71444bedd64478b6aca00f08dd6d525a573ff5e684ad8925124502dc18d7f
+  iteration_id: iteration-gemini-trust-env-fix
+  reviewer_id: codex-gtef-2
+- id: codex-gtef-3-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-gemini-trust-env-fix-codex-gtef-3-codex-gtef-3-pass1-pass.yaml
+  sealed_at: '2026-05-15T17:28:17Z'
+  packet_sha256: 3782d5eac14d03c0ad857e513a7031db1711d75ad94bfe47ca5025d760c933e9
+  iteration_id: iteration-gemini-trust-env-fix
+  reviewer_id: codex-gtef-3
+last_updated_utc: '2026-05-15T17:28:17Z'
