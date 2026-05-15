@@ -13,6 +13,7 @@ run real gemini CLI (smoke env-gated to CONSENSUS_MCP_RUN_REAL_GEMINI_SMOKE=1).
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -25,6 +26,41 @@ if str(ROOT) not in sys.path:
 
 from consensus_mcp import _dispatch_gemini  # noqa: E402
 from consensus_mcp.tools import reviewer_dispatch_gemini  # noqa: E402
+
+
+# ---------- _gemini_subprocess_env (v1.15.2: gemini CLI ≥0.43 trust) ----------
+# gemini 0.43.0-preview.0+ refuses headless runs in an "untrusted" dir,
+# emitting the trust error to stderr with EMPTY stdout. --skip-trust
+# (already passed) is NOT load-bearing on this version — empirically
+# verified 2026-05-15: with --skip-trust only, gemini bypassed trust but
+# went autonomous + 429; with GEMINI_CLI_TRUST_WORKSPACE=true it produced
+# clean deterministic output (and 2 clean v1.15.1 audit approvals).
+
+def test_gemini_subprocess_env_sets_trust_workspace():
+    env = _dispatch_gemini._gemini_subprocess_env()
+    assert env["GEMINI_CLI_TRUST_WORKSPACE"] == "true"
+
+
+def test_gemini_subprocess_env_preserves_parent_env(monkeypatch):
+    monkeypatch.setenv("PATH", "/sentinel/path")
+    monkeypatch.setenv("SOME_UNRELATED_VAR", "keepme")
+    env = _dispatch_gemini._gemini_subprocess_env()
+    assert env["PATH"] == "/sentinel/path"          # PATH not clobbered
+    assert env["SOME_UNRELATED_VAR"] == "keepme"     # full inheritance
+
+
+def test_gemini_subprocess_env_does_not_mutate_os_environ():
+    before = "GEMINI_CLI_TRUST_WORKSPACE" in os.environ
+    _dispatch_gemini._gemini_subprocess_env()
+    after = "GEMINI_CLI_TRUST_WORKSPACE" in os.environ
+    assert before == after  # helper returns a copy; never touches os.environ
+
+
+def test_gemini_subprocess_env_overrides_falsey_inherited_value(monkeypatch):
+    # An operator/CI env that set it to 'false' must not defeat the fix.
+    monkeypatch.setenv("GEMINI_CLI_TRUST_WORKSPACE", "false")
+    env = _dispatch_gemini._gemini_subprocess_env()
+    assert env["GEMINI_CLI_TRUST_WORKSPACE"] == "true"
 
 
 # ---------- _extract_json_from_text ----------

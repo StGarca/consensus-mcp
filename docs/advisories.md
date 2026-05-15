@@ -12,6 +12,13 @@ the entry stays for the historical record.
 
 ## Advisory 2026-05-15: gemini dispatch fails on gemini CLI ≥ 0.43.0-preview.0
 
+**RESOLVED in `v1.15.2`** — `_dispatch_gemini.py` now injects
+`GEMINI_CLI_TRUST_WORKSPACE=true` into the gemini subprocess env
+(`_gemini_subprocess_env()`). Users on `v1.15.1` or earlier with
+gemini CLI ≥ 0.43.0-preview.0 must upgrade to `v1.15.2` (or apply
+the env-var workaround below until they do). Entry retained for the
+historical record.
+
 **Affected versions:** all consensus-mcp versions through `v1.15.1`
 (the gemini dispatcher behavior is unchanged across this range).
 
@@ -23,10 +30,13 @@ degrades from 3-AI to 2-AI until worked around.
 **Issue:**
 - `gemini` CLI `0.43.0-preview.0`+ refuses headless/automated runs
   in an "untrusted" directory, emitting the trust error to stderr
-  and **empty stdout**. `consensus_mcp/_dispatch_gemini.py` does
-  not set `GEMINI_CLI_TRUST_WORKSPACE` (or pass `--skip-trust`),
-  so the dispatcher sees empty output and fails with
-  `GeminiOutputParseError` ("Expecting value: line 1 column 1").
+  and **empty stdout**. `consensus_mcp/_dispatch_gemini.py` did
+  not set `GEMINI_CLI_TRUST_WORKSPACE`; it already passed
+  `--skip-trust`, but that flag is **not load-bearing** on this CLI
+  version (empirically: with `--skip-trust` only, gemini bypassed
+  trust but went autonomous and 429'd). So the dispatcher saw empty
+  output and failed `GeminiOutputParseError` ("Expecting value:
+  line 1 column 1").
 - Observed first-hand 2026-05-15 during the v1.15.1 Workflow B
   audit: gemini pass-1 failed twice (initial + dispatcher
   auto-retry) for exactly this reason.
@@ -36,16 +46,22 @@ degrades from 3-AI to 2-AI until worked around.
 dispatcher (or the MCP server). The v1.15.1 audit was completed
 this way; gemini returned clean approvals once the env var was set.
 
-**Correct upgrade target:** none yet — the dispatcher fix is the
-named v1.15.2 follow-up (`_dispatch_gemini.py` was in the v1.15.1
-iteration's `forbidden_files`, so it was correctly NOT patched
-under that scope). This advisory is the standing record until
-v1.15.2 ships the dispatcher-level fix.
+**Correct upgrade target:** `v1.15.2` — ships the dispatcher-level
+fix (`_gemini_subprocess_env()` injects
+`GEMINI_CLI_TRUST_WORKSPACE=true` into the gemini subprocess env).
+`_dispatch_gemini.py` was in the v1.15.1 iteration's
+`forbidden_files`, so the fix was correctly deferred to v1.15.2
+rather than patched out-of-scope. The env-var workaround above
+remains valid for anyone still on ≤ v1.15.1.
 
 **Provenance:**
 - Diagnosed during `iteration-converged-plan-machine-enforcement`
-  (v1.15.1 Workflow B audit). Recorded as a v1.15.2 named blocker
-  in that iteration's `fix-response-pass2.md`.
+  (v1.15.1 Workflow B audit); recorded there as a v1.15.2 named
+  blocker in `fix-response-pass2.md`.
+- Fixed in `iteration-gemini-trust-env-fix` (v1.15.2; Workflow B
+  audit clean — gemini approved end-to-end via the source fix with
+  the env-var workaround explicitly unset; codex doc-accuracy
+  findings integrated).
 
 ---
 
