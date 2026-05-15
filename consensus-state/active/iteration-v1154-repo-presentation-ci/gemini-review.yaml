@@ -1,0 +1,38 @@
+iteration_id: iteration-v1154-repo-presentation-ci
+reviewer_id: gemini-v1154-1
+pass_id: gemini-v1154-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The changes directly and correctly resolve the dormant CI
+  issue by updating the GitHub Actions workflow trigger to include 'v*' branches.
+  The project's branching doctrine, documented in the consensus-workflow SKILL.md,
+  has been updated to reflect that 'main' should track the latest release, preventing
+  future CI dormancy and repository presentation staleness. All related documentation
+  (CHANGELOG, README) has been updated accurately, and the changes introduce no security
+  or safety risks.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 1aa86b8a3fdf6ebd704259bc118ae47427ce101e7f138918a1be6d23c96efe6a
+  output_sha256: 9f9162a6df96d9f5c3d3f936175e3ebf5e8be515c77332752df94c32ae85cdf1
+  goal_packet_sha256: b83bc1f67fbb946c9557aac2c5095c33d311906a4735a7bb758774bc65107aa4
+  scope_signature: v1154-repo-presentation-ci-operator-directed
+  review_target_path: consensus-state/active/iteration-v1154-repo-presentation-ci/review-packet.yaml
+  review_target_hash: 4e6715aa9916c936f16270c749252b56c99cebd664d9ca9accd64fbbf427285c
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T18:34:47Z'
+packet_sha256: 877ce6b2a425573edaf94f2e8f0f35520e5e72ec2140bc10c782648907fdd964

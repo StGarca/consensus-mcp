@@ -1,0 +1,96 @@
+iteration_id: iteration-v1154-repo-presentation-ci
+reviewer_id: codex-v1154-1
+pass_id: codex-v1154-1-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: README and release doctrine still leave the GitHub landing page pointing
+    at v1.15.3 after the v1.15.4 main fast-forward.
+  citation: README.md:52
+  risk: After main is fast-forwarded, GitHub's default-branch README still tells users
+    to install v1.15.3 and says the current release is v1.15.3, so the repo-presentation/currency
+    defect is not actually fixed for the primary landing page. The cut sequence also
+    bumps README URLs only after tagging, on the next dev branch, which would repeat
+    this drift on future releases.
+  recommendation: Update the release-branch README to v1.15.4 before tagging/main
+    fast-forward, and adjust the bundled cut sequence so README install/status currency
+    is part of the pre-tag release step while the post-tag dev-branch step only verifies
+    it.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-001-patch
+    applies_to_findings:
+    - codex-rev-001
+    base_sha: 45c097422fe1c5705a75ac9e8b7e2d8de4dc20f8aa9f0b0339ae4692cf9bef4b
+    unified_diff: "--- a/README.md\n+++ b/README.md\n@@ -49,8 +49,8 @@\n Install once\
+      \ per machine (works in any project):\n \n ```bash\n-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.3\n\
+      +pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.4\n\
+      \ \n # Optional: add a small Claude Code helper so you can type\n # \"consensus\
+      \ init\" inside Claude Code chat in any project.\n@@ -108,8 +108,10 @@\n \n\
+      \ ## Status\n \n-**Current: v1.15.3.** Recent work hardened the review machinery\n\
+      -(machine-enforced plan conventions, dispatcher fixes) and made the\n-documentation\
+      \ match shipped reality. Full per-release detail is in\n-[`CHANGELOG.md`](CHANGELOG.md);\
+      \ upgrade guidance for known-issue\n+**Current: v1.15.4.** Latest work fixes\
+      \ the GitHub landing-page\n+currency problem, reactivates GitHub Actions on\
+      \ release branches, and\n+keeps `main` fast-forwarded to the latest released\
+      \ tag. Earlier\n+1.15.x work hardened the review machinery (machine-enforced\
+      \ plan\n+conventions, dispatcher fixes). Full per-release detail is in\n+[`CHANGELOG.md`](CHANGELOG.md);\
+      \ upgrade guidance for known-issue\n releases is in [`docs/advisories.md`](docs/advisories.md).\n\
+      --- a/consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md\n+++\
+      \ b/consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md\n@@ -482,9\
+      \ +482,10 @@\n **Cut sequence (apply in order on the v<X.Y.Z> branch tip):**\n\
+      \ \n-1. Update `CHANGELOG.md` date stamp to the cut date; add an\n-   addendum\
+      \ for any iterations that landed after the section was\n-   first authored.\n\
+      +1. Update `CHANGELOG.md` date stamp to the cut date; update README\n+   install\
+      \ URLs/status to `v<X.Y.Z>` on the release branch before\n+   tagging; add an\
+      \ addendum for any iterations that landed after the\n+   section was first authored.\n\
+      \ 2. Verify `pyproject.toml` `version` matches the branch.\n 3. Run the full\
+      \ test suite; surface regressions before tagging.\n    Document any pre-existing\
+      \ known-issue flakes in CHANGELOG so\n@@ -512,12 +513,13 @@\n    `pyproject.toml`\
+      \ on the new branch to the new dev version\n    (e.g., `1.14.1.dev0`); add a\
+      \ `## X.Y.Z+1 - unreleased` stub\n    to CHANGELOG.md.\n-9. **Bump README install\
+      \ URLs to `@v<X.Y.Z>` (the just-cut tag,\n-   NOT the dev version) on the new\
+      \ dev branch.** This step\n-   prevents the bleeding-wound failure mode where\
+      \ the README\n+9. **Verify README install URLs still point to `@v<X.Y.Z>` (the\n\
+      +   just-cut tag, NOT the dev version) on the new dev branch.** Step\n+   1\
+      \ should have already made this true before tagging; this check\n+   prevents\
+      \ the bleeding-wound failure mode where the README\n    continues to point users\
+      \ at an older defective tag after a\n    fix is published. Grep `@v<old-prefix>`\
+      \ to catch all stale\n-   refs; bump them all in one commit.\n+   refs; fix\
+      \ them in one commit.\n 10. Push the new branch: `git push -u origin v<X.Y.Z+1>`.\n\
+      \ 11. **If the just-cut tag has a known issue worth flagging to\n     users\
+      \ on older versions** \u2014 add an entry to\n"
+    files_touched:
+    - README.md
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
+    expected_tests:
+    - grep "@v1.15.4" README.md
+    - 'grep "Current: v1.15.4" README.md'
+    unified_diff_sha256: c8f4f8d0f86578b8f9f6e4a1fb73762cb2647a00b0e0700d4b3710db1a6e2a18
+goal_satisfied: false
+goal_satisfied_rationale: CI branch triggers and the fast-forward doctrine are mostly
+  present, but the default-branch README would still present v1.15.3 after the v1.15.4
+  fast-forward, leaving the repo-presentation goal unmet.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 6dd9a4d500c03b09c0fd55be6eefe0c99bc2ca0f2474122133a146ccfeebbb69
+  output_sha256: 717fe33c6cedd4926c9aa5a164872d9549158f97d1b1df09b0fec40cc1cb10be
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: b83bc1f67fbb946c9557aac2c5095c33d311906a4735a7bb758774bc65107aa4
+  scope_signature: v1154-repo-presentation-ci-operator-directed
+  review_target_path: consensus-state/active/iteration-v1154-repo-presentation-ci/review-packet.yaml
+  review_target_hash: 4e6715aa9916c936f16270c749252b56c99cebd664d9ca9accd64fbbf427285c
+  mode: review
+sealed_at_utc: '2026-05-15T18:38:07Z'
+packet_sha256: f883afae22f6a29de6d92981a01308ffde8e838cd476bf9cc926dc090327b686

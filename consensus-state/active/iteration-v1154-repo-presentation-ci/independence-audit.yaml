@@ -1,0 +1,32 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T18:34:47Z'
+  event_id: 2026-05-15T18:34:47Z_review_returned_and_sealed_gemini-v1154-1
+  actor: gemini-v1154-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1154-repo-presentation-ci-gemini-v1154-1-gemini-v1154-1-pass1-pass.yaml
+  sha256: 877ce6b2a425573edaf94f2e8f0f35520e5e72ec2140bc10c782648907fdd964
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T18:38:07Z'
+  event_id: 2026-05-15T18:38:07Z_review_returned_and_sealed_codex-v1154-1
+  actor: codex-v1154-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1154-repo-presentation-ci-codex-v1154-1-codex-v1154-1-pass1-pass.yaml
+  sha256: f883afae22f6a29de6d92981a01308ffde8e838cd476bf9cc926dc090327b686
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

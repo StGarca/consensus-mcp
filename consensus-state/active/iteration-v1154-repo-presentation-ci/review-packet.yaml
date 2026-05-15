@@ -1,13 +1,47 @@
 defect_target:
   files:
+  - consensus-state/active/iteration-v1154-repo-presentation-ci/fix-response-pass2.md
   - consensus-state/active/iteration-v1154-repo-presentation-ci/implementation-summary.md
   - .github/workflows/test.yml
   - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
-  - CHANGELOG.md
   - README.md
+  - CHANGELOG.md
   - pyproject.toml
-  base_sha: 08b879fae36bed5dba2f3041be3a10f17e45d74d171edbd40e7165efa3810941
+  base_sha: 04736a68243ae6e7fa1001e3f79a717a3f7572c561bc1a6d70a70cbe2ed04722
   touched_files_contents:
+    consensus-state/active/iteration-v1154-repo-presentation-ci/fix-response-pass2.md: "#\
+      \ Fix response — Workflow B pass-2 (codex pass-1 + gemini pass-1)\n\ngemini\
+      \ pass-1: goal_satisfied=true, 0 blocking, 0 findings (ran\nwith GEMINI_CLI_TRUST_WORKSPACE\
+      \ unset — v1.15.2 trust fix still\nproven end-to-end).\n\ncodex pass-1: 1 BLOCKING\
+      \ (codex-rev-001) — verified CORRECT, a real\ninternal inconsistency I introduced\
+      \ when evolving the branch\ndoctrine. Integrated in full.\n\n## codex-rev-001\
+      \ (blocking) — ACCEPTED, RESOLVED\n\n**Finding:** under the NEW main=just-cut-tag\
+      \ doctrine, the README\n*inside the v1.15.4 tag* becomes the GitHub landing\
+      \ page the moment\n`main` fast-forwards. The tag's README still said install\n\
+      `@v1.15.3` / \"Current: v1.15.3\" because the old cut-sequence bumped\nREADME\
+      \ only POST-tag on the next dev branch (correct under\nmain-frozen, broken under\
+      \ main=tag). So v1.15.4 would ship without\nactually fixing the presentation\
+      \ defect it exists to fix —\nverified at README.md:54 (`@v1.15.3`) and :113\
+      \ (\"Current:\nv1.15.3\").\n\n**Root cause:** I evolved the branch model but\
+      \ did not reconcile\nthe README-bump-timing step with it. Legitimate blocking\
+      \ catch.\n\n**Fix (both parts of codex's recommendation):**\n1. README.md bumped\
+      \ on the release branch (pre-tag): all\n   `@v1.15.3` → `@v1.15.4`; Status →\
+      \ \"Current: v1.15.4\" with a\n   one-line note on the release/branch-model\
+      \ fix.\n2. Cut-sequence doctrine reconciled: README install/status\n   currency\
+      \ is now **pre-tag step 3** (before `git tag`, so the\n   tag — which `main`\
+      \ fast-forwards onto — is correct at tag\n   time). The post-tag dev-branch\
+      \ step (now step 10) is rewritten\n   as a **verify-only no-op**, explicitly\
+      \ stating the bump moved\n   pre-tag in v1.15.4. Steps renumbered 1-12 cleanly\
+      \ (no dup).\n3. Anti-currency-drift: the Branch-convention cross-reference\n\
+      \   \"cut-sequence step 7\" → \"step 8\" (the renumber shifted the\n   fast-forward\
+      \ step) — fixed so the doctrine has no stale\n   internal step pointer (the\
+      \ exact lesson from v1.15.3).\n\n## Verification\n\n- No code touched (CI yaml\
+      \ + skill md + README + CHANGELOG +\n  pyproject version). Full suite re-run\
+      \ (gate).\n- Grep gates: README has zero `@v1.15.3`; Status = v1.15.4;\n  cut-sequence\
+      \ is 1..12 with README pre-tag (step 3) + verify-only\n  (step 10) + fast-forward\
+      \ (step 8); no stale step cross-ref.\n\nThis pass-2 is verification: confirm\
+      \ codex-rev-001 fully resolved,\nthe cut-sequence is internally self-consistent,\
+      \ and no NEW\ninconsistency or invented version was introduced.\n"
     consensus-state/active/iteration-v1154-repo-presentation-ci/implementation-summary.md: "#\
       \ Workflow B audit target — v1.15.4 repo-presentation + CI + branch doctrine\n\
       \nOperator-directed policy decision (operator chose \"fast-forward\nmain to\
@@ -372,16 +406,24 @@ defect_target:
       \n**Cut sequence (apply in order on the v<X.Y.Z> branch tip):**\n\n1. Update\
       \ `CHANGELOG.md` date stamp to the cut date; add an\n   addendum for any iterations\
       \ that landed after the section was\n   first authored.\n2. Verify `pyproject.toml`\
-      \ `version` matches the branch.\n3. Run the full test suite; surface regressions\
-      \ before tagging.\n   Document any pre-existing known-issue flakes in CHANGELOG\
-      \ so\n   they aren't mistaken for v<X.Y.Z> regressions.\n4. `git tag -a v<X.Y.Z>\
-      \ -m \"...\"` on the branch tip.\n5. `git push origin refs/heads/v<X.Y.Z> refs/tags/v<X.Y.Z>`\
+      \ `version` matches the branch.\n3. **Bump README install URLs + `## Status`\
+      \ to `@v<X.Y.Z>` on the\n   release branch tip — BEFORE tagging.** Since v1.15.4\
+      \ `main`\n   fast-forwards to the just-cut tag, the README *inside the tag*\n\
+      \   IS the GitHub landing page. If it still says the previous\n   version, the\
+      \ landing page tells users to install the old\n   release the moment `main`\
+      \ advances — the exact bleeding-wound\n   this is meant to prevent. Grep `@v<old-prefix>`\
+      \ + the Status\n   line; fix all in one commit on the release branch before\
+      \ step 5.\n   (Pre-v1.15.4 this was a post-tag dev-branch step; under\n   main=tag\
+      \ it MUST be pre-tag.)\n4. Run the full test suite; surface regressions before\
+      \ tagging.\n   Document any pre-existing known-issue flakes in CHANGELOG so\n\
+      \   they aren't mistaken for v<X.Y.Z> regressions.\n5. `git tag -a v<X.Y.Z>\
+      \ -m \"...\"` on the branch tip.\n6. `git push origin refs/heads/v<X.Y.Z> refs/tags/v<X.Y.Z>`\
       \ (use\n   explicit `refs/heads/` and `refs/tags/` to disambiguate; the\n  \
-      \ branch and tag now share a name).\n6. **Release is complete.** Distribution\
+      \ branch and tag now share a name).\n7. **Release is complete.** Distribution\
       \ is git-tag-based — users\n   install via `pipx install git+https://github.com/stgarca/\n\
       \   consensus-mcp.git@v<X.Y.Z>`. There is NO PyPI publish step;\n   the package\
       \ is not registered on PyPI. Optional: build wheel\n   + sdist locally (`python\
-      \ -m build`) for local smoke-testing\n   only, not for upload.\n7. **Fast-forward\
+      \ -m build`) for local smoke-testing\n   only, not for upload.\n8. **Fast-forward\
       \ `main` to the just-cut tag**\n   (`git push origin refs/tags/v<X.Y.Z>^{}:refs/heads/main`,\
       \ or\n   `git push origin v<X.Y.Z>-tip:main`). This is ALWAYS a clean\n   fast-forward\
       \ because each release branch descends linearly from\n   the previous release\
@@ -390,27 +432,29 @@ defect_target:
       \ state. Verify with\n   `git merge-base --is-ancestor origin/main <tag>` first;\
       \ if it is\n   NOT an ancestor, STOP — that means history diverged and a\n \
       \  force-update would rewrite public `main` (escalate, do not\n   force).\n\
-      8. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`\n   for hot-patches,\
+      9. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`\n   for hot-patches,\
       \ OR `v<X.(Y+1).0>` for the next minor. Bump\n   `pyproject.toml` on the new\
       \ branch to the new dev version\n   (e.g., `1.14.1.dev0`); add a `## X.Y.Z+1\
-      \ - unreleased` stub\n   to CHANGELOG.md.\n9. **Bump README install URLs to\
-      \ `@v<X.Y.Z>` (the just-cut tag,\n   NOT the dev version) on the new dev branch.**\
-      \ This step\n   prevents the bleeding-wound failure mode where the README\n\
-      \   continues to point users at an older defective tag after a\n   fix is published.\
-      \ Grep `@v<old-prefix>` to catch all stale\n   refs; bump them all in one commit.\n\
-      10. Push the new branch: `git push -u origin v<X.Y.Z+1>`.\n11. **If the just-cut\
-      \ tag has a known issue worth flagging to\n    users on older versions** — add\
-      \ an entry to\n    `docs/advisories.md` naming the affected versions, the\n\
-      \    issue, the correct upgrade target, and the user action\n    required. The\
-      \ advisory is the long-lived record; CHANGELOG\n    entries get buried as new\
-      \ releases ship.\n\n**Distribution convention:** consensus-mcp ships via git\
-      \ tags +\npipx, NOT PyPI. README documents `pipx install\ngit+https://github.com/.../consensus-mcp.git@vX.Y.Z`.\
-      \ No\n`twine upload`, no `~/.pypirc`, no PyPI workflow exists. If you\ncatch\
-      \ yourself proposing a PyPI step, stop — you're adding a\nchannel that is not\
-      \ part of this project's release flow.\n\n**Branch convention (evolved in v1.15.4):**\
+      \ - unreleased` stub\n   to CHANGELOG.md.\n10. **Verify** the README on the\
+      \ new dev branch still shows\n    `@v<X.Y.Z>` (the just-cut tag) — it should\
+      \ already, because\n    step 3 bumped it pre-tag and the dev branch descends\
+      \ from the\n    tag. This is now a no-op verification, NOT a bump (the bump\n\
+      \    moved to pre-tag step 3 in v1.15.4 so the tag's README — which\n    `main`\
+      \ fast-forwards onto — is correct at tag time). If it is\n    somehow stale,\
+      \ that is a bug in step 3, not a routine bump.\n11. Push the new branch: `git\
+      \ push -u origin v<X.Y.Z+1>`.\n12. **If the just-cut tag has a known issue worth\
+      \ flagging to\n    users on older versions** — add an entry to\n    `docs/advisories.md`\
+      \ naming the affected versions, the\n    issue, the correct upgrade target,\
+      \ and the user action\n    required. The advisory is the long-lived record;\
+      \ CHANGELOG\n    entries get buried as new releases ship.\n\n**Distribution\
+      \ convention:** consensus-mcp ships via git tags +\npipx, NOT PyPI. README documents\
+      \ `pipx install\ngit+https://github.com/.../consensus-mcp.git@vX.Y.Z`. No\n\
+      `twine upload`, no `~/.pypirc`, no PyPI workflow exists. If you\ncatch yourself\
+      \ proposing a PyPI step, stop — you're adding a\nchannel that is not part of\
+      \ this project's release flow.\n\n**Branch convention (evolved in v1.15.4):**\
       \ `main` is the GitHub\ndefault branch and tracks **the latest released state**.\
       \ After\nevery release cut, `main` is **fast-forwarded to the just-cut tag**\n\
-      (cut-sequence step 7) — never a merge, never a force-push (the\nfast-forward\
+      (cut-sequence step 8) — never a merge, never a force-push (the\nfast-forward\
       \ is always clean because each release branch descends\nlinearly from the prior\
       \ release tip, which descends from `main`).\nActive development happens on the\
       \ `v<X.Y.Z>` branches, which are\nself-contained and branch from the previous\
@@ -432,6 +476,86 @@ defect_target:
       \ in 5 minutes,\nstop and ask the operator. Don't keep retrying — there is almost\n\
       always a config or auth issue upstream, and burning more dispatches\ndeepens\
       \ the hole.\n"
+    README.md: "# consensus-mcp\n\n**Automated peer review for AI-written code.**\
+      \ Instead of trusting one\nAI to check its own work, consensus-mcp puts a small\
+      \ panel of AIs\n(Claude, Codex, and Gemini by default) on every change — and\
+      \ the\nchange only ships when they agree.\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)\n\
+      [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)\n\
+      [![MCP](https://img.shields.io/badge/MCP-server-purple.svg)](https://modelcontextprotocol.io)\n\
+      \n---\n\n## Why\n\nAI coding assistants are fast, but they're confident even\
+      \ when they're\nwrong — they invent functions, misremember files, and skip\n\
+      assumptions. An AI reviewing its *own* work shares the exact blind\nspots that\
+      \ caused the mistake.\n\nDifferent AI models fail in different ways. When two\
+      \ of them disagree\nabout what a piece of code does, at least one is wrong —\
+      \ and that\ndisagreement is what catches bugs a single reviewer misses.\nconsensus-mcp\
+      \ turns that into an automatic step in your workflow.\n\n## What it does\n\n\
+      When you ask the AI panel to write, fix, or review code, consensus-mcp:\n\n\
+      1. **Writes down the request as a contract** — what's changing, which\n   files,\
+      \ what \"done\" looks like, who approved it.\n2. **Sends it to each AI independently**\
+      \ — they review without seeing\n   each other's answers first, so they can't\
+      \ just agree out of\n   politeness.\n3. **Collects structured findings** — each\
+      \ AI returns specific issues\n   with file-and-line citations, not vague impressions.\n\
+      4. **Requires agreement before anything lands** — a configurable rule\n   (e.g.\
+      \ \"majority\" or \"unanimous\") decides when the panel has\n   converged.\n\
+      5. **Seals every step** with content hashes, so you can later prove\n   exactly\
+      \ what was reviewed, by which AI, and when.\n6. **Backs up its working state**\
+      \ to a separate git branch so a stray\n   `git clean` can't lose review history.\n\
+      \nThe payoff: a change that passes three different AI families isn't\n\"one\
+      \ model liked it\" — it's \"three models that fail differently all\nagree.\"\
+      \n\n## Quick start\n\nInstall once per machine (works in any project):\n\n```bash\n\
+      pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.4\n\
+      \n# Optional: add a small Claude Code helper so you can type\n# \"consensus\
+      \ init\" inside Claude Code chat in any project.\nconsensus-init --install-claude-code\n\
+      ```\n\nThen, in any project:\n\n```bash\ncd /path/to/your-project\nconsensus-init\
+      \                       # interactive setup, or:\nconsensus-init --non-interactive\
+      \ --accept-defaults\n```\n\nThat writes a small config and registers the tool\
+      \ with Claude Code.\nReopen Claude Code in the project and just ask in plain\
+      \ language —\ne.g. *\"get a consensus review on this change.\"*\n\n> Codex and\
+      \ Gemini are optional and auto-detected if their CLIs are on\n> your PATH. Claude\
+      \ is always there as the coordinator. With just\n> Claude + Codex you still\
+      \ get full cross-AI review — see\n> \"2 AIs or 3?\" below.\n\n## How it works\
+      \ (the short version)\n\nEvery review runs the same four steps: **author** the\
+      \ contract →\n**dispatch** each AI in a locked-down, read-only mode → **seal**\
+      \ the\nresponses with hashes into an append-only log → **verify** the result\n\
+      against the contract before any code is applied.\n\nA change can only \"close\"\
+      \ if a *different* AI family than the one that\nwrote it reviewed the *exact*\
+      \ changed state *after* the change was\nmade. Miss any of those and the review\
+      \ is rejected automatically. A\nbackground watchdog also kills any AI call that\
+      \ stalls, so reviews\ncan't hang indefinitely.\n\nYou pick how strict things\
+      \ are per project — the review style, who's\non the panel, the agreement rule,\
+      \ and more. `consensus-init` walks you\nthrough it; `consensus-init --print-defaults`\
+      \ shows every option.\n\n## 2 AIs or 3?\n\nA 2-AI setup (Claude + Codex) and\
+      \ a 3-AI setup (adding Gemini) are\ngoverned **identically** — same rules, same\
+      \ enforcement, same\nguarantees. The number of AIs never changes the doctrine;\
+      \ it's the\n*workflow mode* that does. The only difference is a sensible default:\n\
+      2 AIs default to \"both must agree,\" 3 default to \"majority\" — and you\n\
+      can override either.\n\n## Does it actually work?\n\nconsensus-mcp is built\
+      \ using itself. During its own development the\nAI panel caught **38 real defects\
+      \ before commit, with zero false\npositives** — including a race condition,\
+      \ a safety check that silently\nfailed open, and a path-matching bug, each missed\
+      \ by single-AI review.\n\n## Status\n\n**Current: v1.15.4.** Recent work hardened\
+      \ the review machinery\n(machine-enforced plan conventions, dispatcher fixes),\
+      \ made the\ndocumentation match shipped reality, and fixed the release/branch\n\
+      model so `main` (and this landing page) and GitHub Actions CI stay\non the latest\
+      \ released state. Full per-release detail is in\n[`CHANGELOG.md`](CHANGELOG.md);\
+      \ upgrade guidance for known-issue\nreleases is in [`docs/advisories.md`](docs/advisories.md).\n\
+      \nExtracted from the project that produced and stress-tested it, then\nrestarted\
+      \ as a standalone tool. ~970 regression tests, green.\n\n## Learn more\n\n-\
+      \ [`CHANGELOG.md`](CHANGELOG.md) — what changed in each release\n- [`docs/architecture/orchestration-spec.md`](docs/architecture/orchestration-spec.md)\n\
+      \  — the full multi-AI orchestration design\n- [`docs/workflows/`](docs/workflows/)\
+      \ — the review modes\n  (propose-converge, post-review, advisory, autonomous-execute)\
+      \ and\n  when to use each\n- [`docs/advisories.md`](docs/advisories.md) — known-issue\
+      \ releases\n  and the right version to upgrade to\n\n(Power-user options — bootstrap\
+      \ flags, single-reviewer escape hatches,\nthe full configuration table, the\
+      \ architecture map — moved to\n[`CHANGELOG.md`](CHANGELOG.md) and the `docs/`\
+      \ tree to keep this page\nreadable.)\n\n## Requirements\n\n- Python 3.10+\n\
+      - [`pipx`](https://pipx.pypa.io/) recommended (isolated, reusable\n  across\
+      \ projects)\n- Optional: [`codex-cli`](https://github.com/openai/codex-cli)\
+      \ and/or\n  [`gemini-cli`](https://github.com/google-gemini/gemini-cli) on PATH\n\
+      \  for the multi-AI panel (Claude is always present)\n\n## License\n\nMIT —\
+      \ see [LICENSE](LICENSE).\n\n## Contributing\n\nThe project reviews itself:\
+      \ contributions go through the same\nfour-step cross-AI cycle, so expect review\
+      \ feedback from more than one\nmodel on your change.\n"
     CHANGELOG.md: "# Changelog\n\n## 1.15.4 - 2026-05-15\n\n**Repo-presentation +\
       \ CI + branch-doctrine fix.** Operator observed\nthat the GitHub landing page\
       \ looked stuck at v1.13.0 and showed a\nhallucinated \"v2.0.0\" commit label\
@@ -1188,85 +1312,6 @@ defect_target:
       \ -> `CONSENSUS_MCP_REPO_ROOT`\n- MCP server name `agent-loop-mcp` -> `consensus-mcp`\n\
       - Repo-root markers updated to `(\"consensus-state\", \"consensus_mcp\")`\n\
       - Flat layout (no `scripts/` prefix)\n"
-    README.md: "# consensus-mcp\n\n**Automated peer review for AI-written code.**\
-      \ Instead of trusting one\nAI to check its own work, consensus-mcp puts a small\
-      \ panel of AIs\n(Claude, Codex, and Gemini by default) on every change — and\
-      \ the\nchange only ships when they agree.\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)\n\
-      [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)\n\
-      [![MCP](https://img.shields.io/badge/MCP-server-purple.svg)](https://modelcontextprotocol.io)\n\
-      \n---\n\n## Why\n\nAI coding assistants are fast, but they're confident even\
-      \ when they're\nwrong — they invent functions, misremember files, and skip\n\
-      assumptions. An AI reviewing its *own* work shares the exact blind\nspots that\
-      \ caused the mistake.\n\nDifferent AI models fail in different ways. When two\
-      \ of them disagree\nabout what a piece of code does, at least one is wrong —\
-      \ and that\ndisagreement is what catches bugs a single reviewer misses.\nconsensus-mcp\
-      \ turns that into an automatic step in your workflow.\n\n## What it does\n\n\
-      When you ask the AI panel to write, fix, or review code, consensus-mcp:\n\n\
-      1. **Writes down the request as a contract** — what's changing, which\n   files,\
-      \ what \"done\" looks like, who approved it.\n2. **Sends it to each AI independently**\
-      \ — they review without seeing\n   each other's answers first, so they can't\
-      \ just agree out of\n   politeness.\n3. **Collects structured findings** — each\
-      \ AI returns specific issues\n   with file-and-line citations, not vague impressions.\n\
-      4. **Requires agreement before anything lands** — a configurable rule\n   (e.g.\
-      \ \"majority\" or \"unanimous\") decides when the panel has\n   converged.\n\
-      5. **Seals every step** with content hashes, so you can later prove\n   exactly\
-      \ what was reviewed, by which AI, and when.\n6. **Backs up its working state**\
-      \ to a separate git branch so a stray\n   `git clean` can't lose review history.\n\
-      \nThe payoff: a change that passes three different AI families isn't\n\"one\
-      \ model liked it\" — it's \"three models that fail differently all\nagree.\"\
-      \n\n## Quick start\n\nInstall once per machine (works in any project):\n\n```bash\n\
-      pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.3\n\
-      \n# Optional: add a small Claude Code helper so you can type\n# \"consensus\
-      \ init\" inside Claude Code chat in any project.\nconsensus-init --install-claude-code\n\
-      ```\n\nThen, in any project:\n\n```bash\ncd /path/to/your-project\nconsensus-init\
-      \                       # interactive setup, or:\nconsensus-init --non-interactive\
-      \ --accept-defaults\n```\n\nThat writes a small config and registers the tool\
-      \ with Claude Code.\nReopen Claude Code in the project and just ask in plain\
-      \ language —\ne.g. *\"get a consensus review on this change.\"*\n\n> Codex and\
-      \ Gemini are optional and auto-detected if their CLIs are on\n> your PATH. Claude\
-      \ is always there as the coordinator. With just\n> Claude + Codex you still\
-      \ get full cross-AI review — see\n> \"2 AIs or 3?\" below.\n\n## How it works\
-      \ (the short version)\n\nEvery review runs the same four steps: **author** the\
-      \ contract →\n**dispatch** each AI in a locked-down, read-only mode → **seal**\
-      \ the\nresponses with hashes into an append-only log → **verify** the result\n\
-      against the contract before any code is applied.\n\nA change can only \"close\"\
-      \ if a *different* AI family than the one that\nwrote it reviewed the *exact*\
-      \ changed state *after* the change was\nmade. Miss any of those and the review\
-      \ is rejected automatically. A\nbackground watchdog also kills any AI call that\
-      \ stalls, so reviews\ncan't hang indefinitely.\n\nYou pick how strict things\
-      \ are per project — the review style, who's\non the panel, the agreement rule,\
-      \ and more. `consensus-init` walks you\nthrough it; `consensus-init --print-defaults`\
-      \ shows every option.\n\n## 2 AIs or 3?\n\nA 2-AI setup (Claude + Codex) and\
-      \ a 3-AI setup (adding Gemini) are\ngoverned **identically** — same rules, same\
-      \ enforcement, same\nguarantees. The number of AIs never changes the doctrine;\
-      \ it's the\n*workflow mode* that does. The only difference is a sensible default:\n\
-      2 AIs default to \"both must agree,\" 3 default to \"majority\" — and you\n\
-      can override either.\n\n## Does it actually work?\n\nconsensus-mcp is built\
-      \ using itself. During its own development the\nAI panel caught **38 real defects\
-      \ before commit, with zero false\npositives** — including a race condition,\
-      \ a safety check that silently\nfailed open, and a path-matching bug, each missed\
-      \ by single-AI review.\n\n## Status\n\n**Current: v1.15.3.** Recent work hardened\
-      \ the review machinery\n(machine-enforced plan conventions, dispatcher fixes)\
-      \ and made the\ndocumentation match shipped reality. Full per-release detail\
-      \ is in\n[`CHANGELOG.md`](CHANGELOG.md); upgrade guidance for known-issue\n\
-      releases is in [`docs/advisories.md`](docs/advisories.md).\n\nExtracted from\
-      \ the project that produced and stress-tested it, then\nrestarted as a standalone\
-      \ tool. ~970 regression tests, green.\n\n## Learn more\n\n- [`CHANGELOG.md`](CHANGELOG.md)\
-      \ — what changed in each release\n- [`docs/architecture/orchestration-spec.md`](docs/architecture/orchestration-spec.md)\n\
-      \  — the full multi-AI orchestration design\n- [`docs/workflows/`](docs/workflows/)\
-      \ — the review modes\n  (propose-converge, post-review, advisory, autonomous-execute)\
-      \ and\n  when to use each\n- [`docs/advisories.md`](docs/advisories.md) — known-issue\
-      \ releases\n  and the right version to upgrade to\n\n(Power-user options — bootstrap\
-      \ flags, single-reviewer escape hatches,\nthe full configuration table, the\
-      \ architecture map — moved to\n[`CHANGELOG.md`](CHANGELOG.md) and the `docs/`\
-      \ tree to keep this page\nreadable.)\n\n## Requirements\n\n- Python 3.10+\n\
-      - [`pipx`](https://pipx.pypa.io/) recommended (isolated, reusable\n  across\
-      \ projects)\n- Optional: [`codex-cli`](https://github.com/openai/codex-cli)\
-      \ and/or\n  [`gemini-cli`](https://github.com/google-gemini/gemini-cli) on PATH\n\
-      \  for the multi-AI panel (Claude is always present)\n\n## License\n\nMIT —\
-      \ see [LICENSE](LICENSE).\n\n## Contributing\n\nThe project reviews itself:\
-      \ contributions go through the same\nfour-step cross-AI cycle, so expect review\
-      \ feedback from more than one\nmodel on your change.\n"
     pyproject.toml: "[build-system]\nrequires = [\"setuptools>=64\", \"wheel\"]\n\
       build-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"consensus-mcp\"\
       \nversion = \"1.15.4\"\ndescription = \"MCP server enforcing G1-G5 consensus\
