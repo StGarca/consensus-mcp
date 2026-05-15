@@ -1181,4 +1181,16 @@ passes:
   packet_sha256: 0eb0fc218d7e82d3c57f1c58da3ad9a4a8882ca614d2fc945d453ad18369f889
   iteration_id: iteration-v1157-ci-greening
   reviewer_id: gemini-v1157-3
-last_updated_utc: '2026-05-15T21:22:13Z'
+- id: codex-v1158-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1158-flaky-ci-and-locked-append-codex-v1158-1-codex-v1158-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T21:41:18Z'
+  packet_sha256: f0b0c422dd8be14e74173a689b80c6ca2a4a01f6ef0b9c049b2b02c128784852
+  iteration_id: iteration-v1158-flaky-ci-and-locked-append
+  reviewer_id: codex-v1158-1
+- id: gemini-v1158-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1158-flaky-ci-and-locked-append-gemini-v1158-1-gemini-v1158-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T21:41:36Z'
+  packet_sha256: d38b3a2c8333a71e16281e3a68241de093940184a8ffb893b5c03d400e3b1d89
+  iteration_id: iteration-v1158-flaky-ci-and-locked-append
+  reviewer_id: gemini-v1158-1
+last_updated_utc: '2026-05-15T21:41:36Z'

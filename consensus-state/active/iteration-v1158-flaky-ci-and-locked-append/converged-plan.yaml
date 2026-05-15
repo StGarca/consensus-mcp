@@ -1,0 +1,120 @@
+iteration_id: iteration-v1158-flaky-ci-and-locked-append
+converged_at_utc: '2026-05-15T21:45:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+shared_prior_self_check:
+  result: PASSED
+  reasoning: |
+    Fast 3/3 unanimity on Q1=(d)/Q2=(a) — a verify-harder flag per
+    the v1.15.0 doctrine. Differentials were DISTINCT, not shared:
+    claude pattern-matched the v1.15.7 OS-lock-vs-threads precedent
+    (and explicitly flagged that as a possible shared prior needing
+    independent check); codex reasoned from "an integrity/
+    provenance append must be lossless OR fail observable" and read
+    the embedded `_locked_append` + F1 first-hand ("catches OSError
+    from msvcrt.locking and still writes; lost 4 of 50"); gemini
+    reasoned from "match the synchronization primitive to the
+    contention type (intra→threading.Lock, inter→OS lock); a
+    time.sleep-timed test is an anti-pattern". Three independent
+    routes, each citing the embedded code/F1, each giving a
+    DISTINCT falsifying observation. Convergence followed the
+    artifact evidence (intra-process 50-thread loss; injected
+    time_fn) not a laundered hunch.
+
+q1_locked_append:
+  unanimous: "(d)"
+  weighted_synthesis: |
+    `_visibility_watchdog._locked_append` is the sealed-provenance/
+    audit + watchdog integrity primitive. Its Windows path catches
+    `OSError` (incl. `PermissionError`) from `msvcrt.locking` and
+    proceeds with an UNLOCKED write → silent line loss under
+    contention (F1: 46/50 in a 50-thread, one-process fan-out).
+    Two coupled defects, both fixed:
+    - **Intra-process (the observed class):** add a module-level
+      `threading.Lock` serializing ALL in-process callers — the
+      exact v1.15.7 `_log_dispatch` correction, applied for
+      consistency to this primitive. (claude precedent + gemini
+      "right primitive per contention type" + codex "process-local
+      mutex can actually serialize the known case".)
+    - **Cross-process fallback fail-LOUD (independent safeguard):**
+      the OS-lock-acquire-failure path must NOT silently write
+      unlocked. It raises (or, minimally, the write is refused and
+      a structured integrity event is emitted) so an audit
+      consumer can never be misled by a silently-incomplete log.
+      codex explicitly framed this as a ROOT-CAUSE-INDEPENDENT
+      safeguard (safety-interlock-first doctrine): valuable for
+      audit integrity regardless of why the OS lock failed.
+    (b) retry = still can lose lines (wrong for an integrity
+    primitive); (a) alone leaves the silent cross-process landmine;
+    (c) alone doesn't fix the thread race. (d) is the only complete
+    fix. Caveat to honor in impl: the threading.Lock must wrap the
+    open+write so it is held for the whole append; lock ordering —
+    no nested/reentrant `_locked_append` calls under the lock
+    (verify no caller re-enters).
+
+q2_heartbeat_test:
+  unanimous: "(a)"
+  weighted_synthesis: |
+    `test_heartbeat_fires_at_interval` (+ same-pattern siblings:
+    silence-abort / wall-time tests that use `clock.advance()` +
+    real `time.sleep` + `join(timeout)`) flake on loaded Windows
+    runners because they hope the daemon runner thread is scheduled
+    enough in a wall-clock budget. Heartbeats are driven off the
+    INJECTED `time_fn`, so coverage is fully preservable with
+    deterministic synchronization: the runner signals progress
+    (Event/Condition/queue) the test waits on, and assertions are
+    on the EMITTED heartbeat events (already in dispatch-log), not
+    on thread-liveness timing. (b) widen-join is still
+    probabilistic = still flaky. (c) quarantine-on-Windows is the
+    HONEST INTERIM only if (a)'s harness rework genuinely exceeds
+    this iteration — with a concrete named follow-up, never a
+    silent skip.
+
+q3_scope_and_verification:
+  weighted_synthesis: |
+    Ship Q1(d) + Q2(a) in v1.15.8 (both bounded; codex+gemini "both
+    in v1.15.8"; claude "if Q2(a) bounded"). PROVISIONAL-UNTIL-
+    PROVEN governs the close: a flaky fix is NOT proven by one
+    green run (the exact over-claim that already happened). Resolved
+    requires BOTH: (i) a determinism argument — Q1: threading.Lock
+    strictly serializes in-process, no scheduler dependence; Q2:
+    no real-`time.sleep`/`join`-timing dependence remains; AND
+    (ii) ≥3 consecutive green Windows CI runs of the SAME commit
+    (the matrix legs that flaked: windows py3.10 + py3.12). If
+    Q2(a) overruns the iteration bound, Q2(c) interim + named
+    follow-up is acceptable; Q1(d) is non-deferrable (audit
+    integrity).
+
+# dogfoods the v1.15.1 machine-enforced convention
+convention:
+  convention_schema_version: 1
+  falsification:
+    hypothesis: "The Windows flakes are (Q1) wrong-primitive intra-process contention in _locked_append + silent-unlock loss, and (Q2) a real-sleep/scheduling-timed test — fixed by an in-process threading.Lock + fail-loud fallback and deterministic test synchronization."
+    falsifiable_from_artifacts: false
+    discriminating_experiment: "after the fix: ≥3 consecutive green Windows CI runs (py3.10 + py3.12) of the same commit running test_locked_append_serializes_concurrent_writes (50-thread) and test_heartbeat_fires_at_interval"
+    refutation_observation: "any of those Windows CI runs shows test_locked_append_serializes_concurrent_writes <50 distinct parseable records WITHOUT a loud raise, OR test_heartbeat_fires_at_interval 'runner did not finish' / heartbeat-count assertion fails"
+    empirical_status: pending
+  independent_safeguard:
+    applicable: true
+    mechanism: "_locked_append refuses to write (raises / emits structured integrity event) instead of silently writing UNLOCKED when the lock layer cannot guarantee serialization"
+    works_if_root_cause_wrong: true
+    why: "Even if the true cause of a future contention loss is something other than msvcrt LK_LOCK behavior, refusing a silent unlocked write means the sealed-provenance/audit log can never be silently incomplete — the failure becomes observable rather than corrupting integrity. Protects regardless of the hypothesis."
+    ships_with_fix: true
+  decisive_experiment_before_next_iteration: "the ≥3-consecutive-green-Windows-CI-runs gate above (provisional-until-proven; one green run is explicitly insufficient)"
+  cited_pass_ids: [claude-v1158-1-pass1, codex-v1158-1-pass1, gemini-v1158-1-pass1]
+
+deliverable:
+  files:
+    - consensus_mcp/_visibility_watchdog.py  # Q1(d): module-level threading.Lock + fail-loud fallback
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py  # Q2(a): deterministic sync for heartbeat-pattern tests
+    - CHANGELOG.md ; docs/advisories.md (resolve the v1.15.7 follow-up advisory item for _locked_append)
+  next_steps:
+    - Implement Q1(d) + Q2(a) per synthesis.
+    - Workflow B audit (codex + gemini).
+    - Cut v1.15.8 ONLY after the provisional-until-proven gate:
+      determinism argument + ≥3 consecutive green Windows CI runs.
+  named_blockers: []  # Q2(c) interim only if (a) overruns; decide at impl
+  estimated_complexity: medium

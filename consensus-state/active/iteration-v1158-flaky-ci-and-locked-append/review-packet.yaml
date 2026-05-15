@@ -1,89 +1,152 @@
 defect_target:
   files:
-  - consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/goal_packet.yaml
+  - consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/implementation-summary.md
+  - consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/converged-plan.yaml
   - consensus_mcp/_visibility_watchdog.py
-  - consensus_mcp/tests/test_visibility_watchdog.py
   - consensus_mcp/tests/test_dispatch_codex_streaming.py
-  base_sha: e3381af4e1b7abbe0604318afa2a0ebaaa89d1be04ce44bce5f9e4c6dec302b4
+  - CHANGELOG.md
+  base_sha: b66a777c9fc1b0abeb87d2d3ad5659f54053b230167f481d3de2b702a2f6fb8b
   touched_files_contents:
-    consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/goal_packet.yaml: "schema_version:\
-      \ 1\npilot_id: iteration-v1158-flaky-ci-and-locked-append\nworkflow_mode: propose-converge\n\
-      independence: blind-first-reveal\ngoal:\n  summary: |\n    Re-enabled CI (v1.15.4)\
-      \ keeps exposing intermittent Windows\n    failures: the SAME commit is green\
-      \ on one run, red on another.\n    v1.15.7's product fixes are sound (full suite\
-      \ 968/0 local;\n    ubuntu always green) but two tests flake on Windows CI runners.\n\
-      \    Decide the correct fix-shape for each (NOT chase-and-pray).\n\n    VERIFIED\
-      \ FACTS (read first-hand; reason from THESE; state the\n    differential/prior\
-      \ you used; fast unanimity on a shared prior\n    is a verify-harder flag):\n\
-      \n    F1 — `_visibility_watchdog._locked_append` integrity.\n    Windows path:\
-      \ `with path.open(\"ab\") as f:\n    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK,\
-      \ 1)` wrapped in\n    `except OSError: pass` → on lock-acquire failure it\n\
-      \    **proceeds UNLOCKED** (\"best-effort\"). CI windows-py3.10:\n    `test_locked_append_serializes_concurrent_writes`\
-      \ (50 threads,\n    ONE process, each calling _locked_append) failed\n    \"\
-      expected 50 lines, got 46\" + `PermissionError [Errno 13]`\n    (PermissionError\
-      \ IS an OSError → caught → unlocked write →\n    concurrent intra-process writes\
-      \ interleave/truncate → 4 lines\n    LOST). `_locked_append` is the AUDIT-LOG\
-      \ / sealed-provenance\n    integrity primitive (also used by the visibility\
-      \ watchdog).\n    The contention here is INTRA-process (threads), the exact\n\
-      \    class v1.15.7 already learned an OS file lock is wrong for\n    (→ threading.Lock\
-      \ for _dispatch_base._log_dispatch). I did NOT\n    modify _locked_append or\
-      \ this test; latent, CI-exposed.\n\n    F2 — `test_dispatch_codex_streaming.test_heartbeat_fires_at_\n\
-      \    interval` timing flake. Drives `_invoke_codex` in a daemon\n    thread\
-      \ with a `_ControllableClock`; advances the clock 100×1s\n    via `for _ in\
-      \ range(100): clock.advance(1.0); time.sleep(0.01)`\n    then `th.join(timeout=10)`\
-      \ and asserts `not th.is_alive()`.\n    On loaded Windows runners the runner\
-      \ thread is not scheduled\n    enough within the ~1s real-time budget + 10s\
-      \ join to observe\n    the advanced clock and exit → \"runner did not finish\"\
-      . Failed\n    under the old `_locked_append` (stall) AND still intermittently\n\
-      \    under the correct v1.15.7 `threading.Lock` → the lock is right;\n    the\
-      \ TEST's real-sleep+thread-scheduling design is the flake.\n\n    F3 — Same\
-      \ commit (c81d1ea) green on v1.15.7-branch run\n    25942112936 but red on main\
-      \ run 25942127279 → genuine\n    nondeterminism, not a code regression. Product\
-      \ is sound.\n\n  question: |\n    Each contributor: STATE THE DIFFERENTIAL/PRIOR.\
-      \ Q1-Q3 stance,\n    justified vs the strongest counter, + the observation that\n\
-      \    would show you WRONG. structural_abstention OK per question.\n\n    Q1\
-      \ — `_locked_append` fix-shape. The silent\n    `except OSError: pass` → unlocked\
-      \ write loses audit/provenance\n    lines under intra-process contention. Options:\n\
-      \      (a) Add a module-level `threading.Lock` serializing ALL\n          callers\
-      \ in-process (mirrors v1.15.7 _log_dispatch); keep\n          the OS lock as\
-      \ the best-effort CROSS-process layer.\n      (b) Retry/backoff the msvcrt.locking\
-      \ acquisition; only\n          fall back to unlocked after N failed retries\
-      \ (still can\n          lose lines → arguably still wrong for an integrity\n\
-      \          primitive).\n      (c) Make the fallback fail-LOUD (raise) instead\
-      \ of silent\n          unlocked write, so callers/audit detect integrity loss.\n\
-      \      (d) (a)+(c): in-process lock for the real (thread) case +\n         \
-      \ loud failure if the OS layer ever can't serialize a\n          genuine cross-process\
-      \ contender.\n      Is silent-unlock-on-contention a real integrity DEFECT in\n\
-      \      the sealed-provenance audit primitive (not just a flaky\n      test)?\
-      \ What is the minimally-correct fix?\n\n    Q2 — `test_heartbeat_fires_at_interval`\
-      \ (and siblings that use\n    the same real-sleep + clock-advance + join pattern).\n\
-      \      (a) Make deterministic: replace \"advance clock + real sleep\n      \
-      \    + hope the runner interleaves + join(10)\" with explicit\n          synchronization\
-      \ (runner signals heartbeat progress via\n          an Event/queue the test\
-      \ waits on; bounded, not\n          wall-clock-hopeful).\n      (b) Keep as-is\
-      \ but vastly widen the join/scheduling budget\n          (still probabilistic\
-      \ on loaded runners).\n      (c) Quarantine on Windows CI (skip/xfail-flaky)\
-      \ + tracked\n          stabilize follow-up.\n      Which, and is (a) feasible\
-      \ without losing the heartbeat-\n      interval coverage the test exists for?\n\
-      \n    Q3 — Minimal converged deliverable for v1.15.8 (no-deferral\n    where\
-      \ bounded) vs. any genuinely-blocked follow-up with a\n    CONCRETE reason.\
-      \ Note: flaky tests can't be \"verified\" by a\n    single green run — converged\
-      \ plan must say how we confirm a\n    flaky fix (e.g., N consecutive green CI\
-      \ runs / determinism\n    argument), per provisional-until-proven.\n\n  non_goals:\n\
-      \    - re-litigating v1.15.7's threading.Lock for _log_dispatch\n      (correct;\
-      \ audited pass-3 unanimous)\n    - product/behavior changes beyond the test/primitive\
-      \ integrity\n    - cross-process _locked_append redesign IF it is out of scope\n\
-      \      for the observed intra-process failure (state if so)\n  type: design_consult\n\
-      allowed_files: []\nforbidden_files:\n  - consensus_mcp/_dispatch_gemini.py\n\
-      \  - consensus_mcp/_dispatch_codex.py\nmax_iterations: 3\nfix_author_policy:\
-      \ permissive\nacceptance_gates:\n  - id: A1\n    description: converged-plan.yaml\
-      \ with per-Q synthesis + flaky-fix verification method\n    check: 'true'\n\
-      \  - id: A2\n    description: at least 2 substantive proposals sealed\n    check:\
-      \ 'true'\nstop_conditions:\n  - max_iteration_count_reached\n  - non_convergence_after_3_rounds\n\
-      authorization:\n  authorized_by: operator\n  authorized_at_utc: '2026-05-15T22:00:00Z'\n\
-      \  scope_signature: 'v1158-flaky-ci-and-locked-append-integrity'\ncontributors:\n\
-      \  enabled: [claude, codex, gemini]\nconvergence:\n  rule: weighted-synthesis\n\
-      \  finding_disposition: weighted-synthesis\n"
+    consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/implementation-summary.md: "#\
+      \ Workflow B audit target — v1.15.8: converged-plan execution\n\nExecutes `converged-plan.yaml`\
+      \ (Workflow A: claude+codex+gemini,\nweighted-synthesis, shared-prior self-check\
+      \ PASSED; dogfoods the\nv1.15.1 convention incl. independent_safeguard). Fixes\
+      \ the two\nintermittent Windows-CI flakes (same commit green on one run, red\n\
+      on another); product is sound (968/0 local, ubuntu always green).\n\n## Q1(d)\
+      \ — `_visibility_watchdog._locked_append` (REAL FIX)\n\nThe audit/sealed-provenance\
+      \ integrity primitive caught `OSError`\nfrom `msvcrt.locking` and then **wrote\
+      \ UNLOCKED** (\"best-effort\")\n→ silent line loss under contention (F1: 46/50\
+      \ from a 50-thread,\nONE-process fan-out — intra-process, the v1.15.7 OS-lock-vs-threads\n\
+      class in a different primitive).\n\n- **Intra-process:** new module-level `_APPEND_LOCK\
+      \ =\n  threading.Lock()`, held around the whole append (open + OS-lock +\n \
+      \ write). Deterministically serializes all in-process callers — no\n  scheduler\
+      \ luck. This is the verified-observed contention class.\n- **Independent safeguard\
+      \ (fail-LOUD):** the Windows\n  `msvcrt.locking` failure path no longer `pass`-es\
+      \ and writes\n  unlocked; it **raises** `OSError` (\"refusing a silent unlocked\n\
+      \  write to a sealed-provenance/audit log\"). Audit integrity loss is\n  now\
+      \ observable, never silent — protects regardless of *why* the\n  OS lock failed\
+      \ (the convention's independent_safeguard;\n  works_if_root_cause_wrong=true).\n\
+      - The no-lock-module platform branch keeps its warning (in-process\n  still\
+      \ serialized by `_APPEND_LOCK`); not made fatal — that would\n  needlessly break\
+      \ platforms lacking msvcrt+fcntl, and is a\n  different branch than the F1 defect.\n\
+      \n## Q2(c interim) — heartbeat-pattern timing tests\n\nConverged plan Q3 explicitly\
+      \ permits the (c) interim when the\ndeterministic (a) rework overruns the iteration\
+      \ bound. A correct\nsynchronizing-`_ControllableClock` redesign across all four\n\
+      runner-thread+clock tests is substantial harness work with real\ndeadlock risk\
+      \ (the precise failure mode this session keeps\nhitting), so it is the **named\
+      \ follow-up**, not rushed here.\n`@_FLAKY_WINDOWS_CI` (skipif `sys.platform=='win32'\
+      \ and\nGITHUB_ACTIONS=='true'`) applied to the 4 racy tests\n(`test_heartbeat_fires_at_interval`,\n\
+      `test_heartbeat_silence_triggers_abort`,\n`test_operator_abort_signal_file_triggers_abort`,\n\
+      `test_wall_time_hard_ceiling`). They still run on **Linux CI every\npush** and\
+      \ **local Windows dev**, so the regression coverage is\nretained (logic is driven\
+      \ by the injected `time_fn`, not a Windows\ncode path). Named follow-up tracked\
+      \ in `docs/advisories.md`.\n\n## Verification discipline (provisional-until-proven)\n\
+      \nPer the converged plan: a flaky fix is NOT proven by one green\nrun. Resolved\
+      \ requires BOTH (i) the determinism argument — Q1:\n`threading.Lock` strictly\
+      \ serializes in-process (no scheduler\ndependence); Q2: the racy tests no longer\
+      \ execute on the flaky\nWindows-CI environment — AND (ii) ≥3 consecutive green\
+      \ Windows CI\nruns (py3.10 + py3.12) of the same commit. v1.15.8 is NOT cut\n\
+      until that gate passes.\n\n## Audit questions\n- Q1: does Q1(d) match the converged\
+      \ plan; is fail-LOUD-raise the\n  right safeguard (vs. structured-event-and-continue)\
+      \ for the\n  audit primitive; any caller that legitimately relied on the\n \
+      \ silent best-effort write and would now break? (grep callers.)\n- Q2: is the\
+      \ Windows-GitHub-Actions-only skip acceptable\n  (coverage retained on Linux\
+      \ CI + local) per the converged plan's\n  explicit (c)-interim allowance, with\
+      \ the named follow-up\n  concrete enough?\n- Q3: is the ≥3-consecutive-green-Windows-CI\
+      \ gate the right\n  proven-bar; anything that makes Q1(d) itself nondeterministic?\n\
+      - Q4: blocking objections; state the differential/prior.\n"
+    consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/converged-plan.yaml: "iteration_id:\
+      \ iteration-v1158-flaky-ci-and-locked-append\nconverged_at_utc: '2026-05-15T21:45:00Z'\n\
+      convergence_rule: weighted-synthesis\ncontributors_responsive: [claude, codex,\
+      \ gemini]\nblocking_objections: []\nall_substantive: true\n\nshared_prior_self_check:\n\
+      \  result: PASSED\n  reasoning: |\n    Fast 3/3 unanimity on Q1=(d)/Q2=(a) —\
+      \ a verify-harder flag per\n    the v1.15.0 doctrine. Differentials were DISTINCT,\
+      \ not shared:\n    claude pattern-matched the v1.15.7 OS-lock-vs-threads precedent\n\
+      \    (and explicitly flagged that as a possible shared prior needing\n    independent\
+      \ check); codex reasoned from \"an integrity/\n    provenance append must be\
+      \ lossless OR fail observable\" and read\n    the embedded `_locked_append`\
+      \ + F1 first-hand (\"catches OSError\n    from msvcrt.locking and still writes;\
+      \ lost 4 of 50\"); gemini\n    reasoned from \"match the synchronization primitive\
+      \ to the\n    contention type (intra→threading.Lock, inter→OS lock); a\n   \
+      \ time.sleep-timed test is an anti-pattern\". Three independent\n    routes,\
+      \ each citing the embedded code/F1, each giving a\n    DISTINCT falsifying observation.\
+      \ Convergence followed the\n    artifact evidence (intra-process 50-thread loss;\
+      \ injected\n    time_fn) not a laundered hunch.\n\nq1_locked_append:\n  unanimous:\
+      \ \"(d)\"\n  weighted_synthesis: |\n    `_visibility_watchdog._locked_append`\
+      \ is the sealed-provenance/\n    audit + watchdog integrity primitive. Its Windows\
+      \ path catches\n    `OSError` (incl. `PermissionError`) from `msvcrt.locking`\
+      \ and\n    proceeds with an UNLOCKED write → silent line loss under\n    contention\
+      \ (F1: 46/50 in a 50-thread, one-process fan-out).\n    Two coupled defects,\
+      \ both fixed:\n    - **Intra-process (the observed class):** add a module-level\n\
+      \      `threading.Lock` serializing ALL in-process callers — the\n      exact\
+      \ v1.15.7 `_log_dispatch` correction, applied for\n      consistency to this\
+      \ primitive. (claude precedent + gemini\n      \"right primitive per contention\
+      \ type\" + codex \"process-local\n      mutex can actually serialize the known\
+      \ case\".)\n    - **Cross-process fallback fail-LOUD (independent safeguard):**\n\
+      \      the OS-lock-acquire-failure path must NOT silently write\n      unlocked.\
+      \ It raises (or, minimally, the write is refused and\n      a structured integrity\
+      \ event is emitted) so an audit\n      consumer can never be misled by a silently-incomplete\
+      \ log.\n      codex explicitly framed this as a ROOT-CAUSE-INDEPENDENT\n   \
+      \   safeguard (safety-interlock-first doctrine): valuable for\n      audit integrity\
+      \ regardless of why the OS lock failed.\n    (b) retry = still can lose lines\
+      \ (wrong for an integrity\n    primitive); (a) alone leaves the silent cross-process\
+      \ landmine;\n    (c) alone doesn't fix the thread race. (d) is the only complete\n\
+      \    fix. Caveat to honor in impl: the threading.Lock must wrap the\n    open+write\
+      \ so it is held for the whole append; lock ordering —\n    no nested/reentrant\
+      \ `_locked_append` calls under the lock\n    (verify no caller re-enters).\n\
+      \nq2_heartbeat_test:\n  unanimous: \"(a)\"\n  weighted_synthesis: |\n    `test_heartbeat_fires_at_interval`\
+      \ (+ same-pattern siblings:\n    silence-abort / wall-time tests that use `clock.advance()`\
+      \ +\n    real `time.sleep` + `join(timeout)`) flake on loaded Windows\n    runners\
+      \ because they hope the daemon runner thread is scheduled\n    enough in a wall-clock\
+      \ budget. Heartbeats are driven off the\n    INJECTED `time_fn`, so coverage\
+      \ is fully preservable with\n    deterministic synchronization: the runner signals\
+      \ progress\n    (Event/Condition/queue) the test waits on, and assertions are\n\
+      \    on the EMITTED heartbeat events (already in dispatch-log), not\n    on\
+      \ thread-liveness timing. (b) widen-join is still\n    probabilistic = still\
+      \ flaky. (c) quarantine-on-Windows is the\n    HONEST INTERIM only if (a)'s\
+      \ harness rework genuinely exceeds\n    this iteration — with a concrete named\
+      \ follow-up, never a\n    silent skip.\n\nq3_scope_and_verification:\n  weighted_synthesis:\
+      \ |\n    Ship Q1(d) + Q2(a) in v1.15.8 (both bounded; codex+gemini \"both\n\
+      \    in v1.15.8\"; claude \"if Q2(a) bounded\"). PROVISIONAL-UNTIL-\n    PROVEN\
+      \ governs the close: a flaky fix is NOT proven by one\n    green run (the exact\
+      \ over-claim that already happened). Resolved\n    requires BOTH: (i) a determinism\
+      \ argument — Q1: threading.Lock\n    strictly serializes in-process, no scheduler\
+      \ dependence; Q2:\n    no real-`time.sleep`/`join`-timing dependence remains;\
+      \ AND\n    (ii) ≥3 consecutive green Windows CI runs of the SAME commit\n  \
+      \  (the matrix legs that flaked: windows py3.10 + py3.12). If\n    Q2(a) overruns\
+      \ the iteration bound, Q2(c) interim + named\n    follow-up is acceptable; Q1(d)\
+      \ is non-deferrable (audit\n    integrity).\n\n# dogfoods the v1.15.1 machine-enforced\
+      \ convention\nconvention:\n  convention_schema_version: 1\n  falsification:\n\
+      \    hypothesis: \"The Windows flakes are (Q1) wrong-primitive intra-process\
+      \ contention in _locked_append + silent-unlock loss, and (Q2) a real-sleep/scheduling-timed\
+      \ test — fixed by an in-process threading.Lock + fail-loud fallback and deterministic\
+      \ test synchronization.\"\n    falsifiable_from_artifacts: false\n    discriminating_experiment:\
+      \ \"after the fix: ≥3 consecutive green Windows CI runs (py3.10 + py3.12) of\
+      \ the same commit running test_locked_append_serializes_concurrent_writes (50-thread)\
+      \ and test_heartbeat_fires_at_interval\"\n    refutation_observation: \"any\
+      \ of those Windows CI runs shows test_locked_append_serializes_concurrent_writes\
+      \ <50 distinct parseable records WITHOUT a loud raise, OR test_heartbeat_fires_at_interval\
+      \ 'runner did not finish' / heartbeat-count assertion fails\"\n    empirical_status:\
+      \ pending\n  independent_safeguard:\n    applicable: true\n    mechanism: \"\
+      _locked_append refuses to write (raises / emits structured integrity event)\
+      \ instead of silently writing UNLOCKED when the lock layer cannot guarantee\
+      \ serialization\"\n    works_if_root_cause_wrong: true\n    why: \"Even if the\
+      \ true cause of a future contention loss is something other than msvcrt LK_LOCK\
+      \ behavior, refusing a silent unlocked write means the sealed-provenance/audit\
+      \ log can never be silently incomplete — the failure becomes observable rather\
+      \ than corrupting integrity. Protects regardless of the hypothesis.\"\n    ships_with_fix:\
+      \ true\n  decisive_experiment_before_next_iteration: \"the ≥3-consecutive-green-Windows-CI-runs\
+      \ gate above (provisional-until-proven; one green run is explicitly insufficient)\"\
+      \n  cited_pass_ids: [claude-v1158-1-pass1, codex-v1158-1-pass1, gemini-v1158-1-pass1]\n\
+      \ndeliverable:\n  files:\n    - consensus_mcp/_visibility_watchdog.py  # Q1(d):\
+      \ module-level threading.Lock + fail-loud fallback\n    - consensus_mcp/tests/test_dispatch_codex_streaming.py\
+      \  # Q2(a): deterministic sync for heartbeat-pattern tests\n    - CHANGELOG.md\
+      \ ; docs/advisories.md (resolve the v1.15.7 follow-up advisory item for _locked_append)\n\
+      \  next_steps:\n    - Implement Q1(d) + Q2(a) per synthesis.\n    - Workflow\
+      \ B audit (codex + gemini).\n    - Cut v1.15.8 ONLY after the provisional-until-proven\
+      \ gate:\n      determinism argument + ≥3 consecutive green Windows CI runs.\n\
+      \  named_blockers: []  # Q2(c) interim only if (a) overruns; decide at impl\n\
+      \  estimated_complexity: medium\n"
     consensus_mcp/_visibility_watchdog.py: "\"\"\"Watchdog for stalled dispatches\
       \ (Task #43; iter-0031 abandonment lesson).\n\nDetects dispatch_start events\
       \ in consensus-state/state/dispatch-log.jsonl that\nlack a matching terminal\
@@ -110,16 +173,26 @@ defect_target:
       \ consensus_mcp/_visibility_watchdog.py --action mark\n\n    # Custom thresholds\
       \ (seconds).\n    python consensus_mcp/_visibility_watchdog.py --stall-after\
       \ 1800\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport\
-      \ json\nimport os\nimport sys\nfrom datetime import datetime, timedelta, timezone\n\
-      from pathlib import Path\nfrom typing import Iterator\n\nWATCHDOG_VERSION =\
-      \ \"1.1.0\"\n\n# Per iter-0036 codex-rev-001: include dispatch_refused as terminal\
-      \ so a\n# refused dispatch (env-gate failure, etc.) isn't reclassified as an\n\
-      # orphan. dispatch_aborted reserved for iter-0037 streaming/abort work.\n_TERMINAL_EVENTS\
-      \ = {\n    \"dispatch_done\",\n    \"dispatch_failed\",\n    \"dispatch_refused\"\
-      ,\n    \"dispatch_aborted\",\n    \"dispatch_stalled\",\n}\n\n# Markers identifying\
-      \ the consensus-mcp repo root (mirrors\n# _dispatch_codex._REPO_ROOT_MARKERS,\
-      \ kept local to avoid an import cycle).\n_REPO_ROOT_MARKERS = (\"consensus-state\"\
-      , \"consensus_mcp\", \"consensus_mcp/validators\")\n\n\nclass RepoRootResolutionError(RuntimeError):\n\
+      \ json\nimport os\nimport sys\nimport threading\nfrom datetime import datetime,\
+      \ timedelta, timezone\n\n# v1.15.8 Q1(d): `_locked_append` is the sealed-provenance/audit\
+      \ +\n# watchdog integrity primitive. Its OS file lock (msvcrt.locking /\n# fcntl.flock)\
+      \ serializes CROSS-process writers, but the observed\n# loss (windows-py3.10\
+      \ CI: 46/50 lines from a 50-thread, ONE-process\n# fan-out) was INTRA-process\
+      \ thread contention — for which an OS file\n# lock is the wrong primitive (same\
+      \ lesson as v1.15.7\n# `_dispatch_base._log_dispatch`). A process-wide lock\
+      \ serializes all\n# in-process callers deterministically; the OS lock then only\
+      \ matters\n# for genuine cross-process contention. Converged via Workflow A\n\
+      # (claude+codex+gemini, weighted-synthesis, shared-prior check\n# PASSED): iteration-v1158-flaky-ci-and-locked-append.\n\
+      _APPEND_LOCK = threading.Lock()\nfrom pathlib import Path\nfrom typing import\
+      \ Iterator\n\nWATCHDOG_VERSION = \"1.1.0\"\n\n# Per iter-0036 codex-rev-001:\
+      \ include dispatch_refused as terminal so a\n# refused dispatch (env-gate failure,\
+      \ etc.) isn't reclassified as an\n# orphan. dispatch_aborted reserved for iter-0037\
+      \ streaming/abort work.\n_TERMINAL_EVENTS = {\n    \"dispatch_done\",\n    \"\
+      dispatch_failed\",\n    \"dispatch_refused\",\n    \"dispatch_aborted\",\n \
+      \   \"dispatch_stalled\",\n}\n\n# Markers identifying the consensus-mcp repo\
+      \ root (mirrors\n# _dispatch_codex._REPO_ROOT_MARKERS, kept local to avoid an\
+      \ import cycle).\n_REPO_ROOT_MARKERS = (\"consensus-state\", \"consensus_mcp\"\
+      , \"consensus_mcp/validators\")\n\n\nclass RepoRootResolutionError(RuntimeError):\n\
       \    \"\"\"Raised when repo_root cannot be resolved to a valid repo (no markers\
       \ found).\"\"\"\n\n\ndef _has_repo_markers(candidate: Path) -> bool:\n    \"\
       \"\"Return True iff candidate contains all _REPO_ROOT_MARKERS as subpaths.\"\
@@ -182,32 +255,47 @@ defect_target:
       \       if ts is not None and ts < since_ts:\n                        continue\n\
       \                yield ev\n    except OSError:\n        return\n\n\ndef _locked_append(path:\
       \ Path, payload: str) -> None:\n    \"\"\"Append ``payload`` to ``path`` under\
-      \ an OS-appropriate exclusive lock\n    (xplat-rev-007 fix).\n\n    On Windows\
-      \ uses ``msvcrt.locking`` (byte-range; we lock the first byte\n    of the file\
-      \ from the writer's offset). On POSIX uses ``fcntl.flock``.\n    If neither\
-      \ module is importable we fall back to an unlocked append and\n    emit a one-time\
-      \ warning to stderr — concurrent writers may produce\n    torn lines.\n    \"\
-      \"\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    data = payload.encode(\"\
-      utf-8\")\n    try:\n        import msvcrt  # type: ignore[import-not-found]\n\
+      \ an OS-appropriate exclusive lock\n    (xplat-rev-007 fix).\n\n    Concurrency\
+      \ model (v1.15.8 Q1(d), Workflow A converged):\n      - INTRA-process (threads\
+      \ of one process): serialized by the\n        module-level ``_APPEND_LOCK``\
+      \ held for the whole append. This\n        is the verified-observed contention\
+      \ class (F1: 50 threads /\n        one process lost 4 lines). Deterministic;\
+      \ no scheduler luck.\n      - CROSS-process: the OS lock (``msvcrt.locking``\
+      \ byte-range on\n        Windows / ``fcntl.flock`` on POSIX) still serializes\
+      \ distinct\n        processes.\n      - **Fail-LOUD (independent safeguard):**\
+      \ if the OS lock cannot\n        be acquired we DO NOT silently write unlocked\
+      \ — that would\n        let the sealed-provenance/audit log be silently incomplete\n\
+      \        (the F1 defect: ``except OSError: pass`` + unlocked write).\n     \
+      \   We raise so integrity loss is observable, never silent. This\n        protects\
+      \ audit integrity regardless of *why* the OS lock\n        failed.\n      -\
+      \ If neither lock module is importable (rare platform), the\n        in-process\
+      \ lock still serializes threads; cross-process is\n        unsupportable there,\
+      \ so we warn (unchanged) rather than fail\n        the platform outright.\n\
+      \    \"\"\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    data =\
+      \ payload.encode(\"utf-8\")\n    try:\n        import msvcrt  # type: ignore[import-not-found]\n\
       \    except ImportError:\n        msvcrt = None  # type: ignore[assignment]\n\
       \    try:\n        import fcntl  # type: ignore[import-not-found]\n    except\
-      \ ImportError:\n        fcntl = None  # type: ignore[assignment]\n\n    if msvcrt\
-      \ is None and fcntl is None:\n        sys.stderr.write(\n            \"WARNING:\
-      \ _locked_append: neither msvcrt nor fcntl available; \"\n            \"falling\
-      \ back to unlocked append (concurrent writers may produce \"\n            \"\
-      torn lines).\\n\"\n        )\n        with path.open(\"ab\") as f:\n       \
-      \     f.write(data)\n        return\n\n    with path.open(\"ab\") as f:\n  \
-      \      if msvcrt is not None:\n            # Windows byte-range lock: lock 1\
-      \ byte at the current file\n            # offset. LK_LOCK blocks (with internal\
-      \ retries) until the\n            # lock is acquired. The lock auto-releases\
-      \ when the file\n            # handle closes, so we don't need an explicit LK_UNLCK.\n\
-      \            try:\n                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK,\
-      \ 1)\n            except OSError:\n                # Lock acquisition failed\
-      \ (e.g., on a filesystem that\n                # doesn't support locking). Proceed\
-      \ unlocked; this is\n                # strictly best-effort cross-process serialization.\n\
-      \                pass\n            f.write(data)\n        else:\n          \
-      \  # POSIX advisory lock; auto-released on close.\n            fcntl.flock(f.fileno(),\
-      \ fcntl.LOCK_EX)\n            f.write(data)\n\n\ndef find_stalled(events, stall_threshold_seconds:\
+      \ ImportError:\n        fcntl = None  # type: ignore[assignment]\n\n    with\
+      \ _APPEND_LOCK:\n        if msvcrt is None and fcntl is None:\n            sys.stderr.write(\n\
+      \                \"WARNING: _locked_append: neither msvcrt nor fcntl \"\n  \
+      \              \"available; cross-process serialization unavailable \"\n   \
+      \             \"(in-process writers are still serialized).\\n\"\n          \
+      \  )\n            with path.open(\"ab\") as f:\n                f.write(data)\n\
+      \            return\n\n        with path.open(\"ab\") as f:\n            if\
+      \ msvcrt is not None:\n                # Windows byte-range lock (1 byte at\
+      \ the writer's\n                # offset). LK_LOCK blocks with internal retries;\
+      \ the\n                # lock auto-releases on handle close.\n             \
+      \   try:\n                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)\n\
+      \                except OSError as exc:\n                    # Fail LOUD: never\
+      \ a silent unlocked write to an\n                    # integrity log. (Was:\
+      \ `except OSError: pass` +\n                    # unlocked write — the F1 audit-loss\
+      \ defect.)\n                    raise OSError(\n                        f\"\
+      _locked_append: could not acquire OS lock on \"\n                        f\"\
+      {path} ({exc!r}); refusing a silent unlocked \"\n                        f\"\
+      write to a sealed-provenance/audit log\"\n                    ) from exc\n \
+      \               f.write(data)\n            else:\n                # POSIX advisory\
+      \ lock; auto-released on close.\n                fcntl.flock(f.fileno(), fcntl.LOCK_EX)\n\
+      \                f.write(data)\n\n\ndef find_stalled(events, stall_threshold_seconds:\
       \ float, now: datetime) -> list[dict]:\n    \"\"\"Return orphan dispatch_start\
       \ events older than stall_threshold_seconds.\n\n    Pairing uses (iteration_id,\
       \ pass_id) tuple key (per iter-0033 codex-rev-002\n    fix). dispatch_stalled\
@@ -294,314 +382,6 @@ defect_target:
       ] = True\n            entry[\"appended_event_timestamp_utc\"] = emitted[\"timestamp_utc\"\
       ]\n        output[\"stale\"].append(entry)\n\n    print(json.dumps(output, indent=2))\n\
       \    return 1 if stale else 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
-    consensus_mcp/tests/test_visibility_watchdog.py: "\"\"\"Unit tests for _visibility_watchdog.\n\
-      \nThe watchdog is a read-only consumer of consensus-state/state/dispatch-log.jsonl\n\
-      in default mode; in --action=mark mode it APPENDS dispatch_stalled events\n\
-      (append-only audit-log invariant). These tests exercise the pure-function\n\
-      pieces (orphan detection, terminal-event recognition, append semantics)\n+ the\
-      \ CLI end-to-end.\n\"\"\"\nfrom __future__ import annotations\n\nimport json\n\
-      import sys\nimport threading\nfrom datetime import datetime, timedelta, timezone\n\
-      from pathlib import Path\n\nimport pytest\n\nsys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))\n\
-      \nfrom consensus_mcp import _visibility_watchdog  # noqa: E402\n\n\ndef _start_event(pass_id:\
-      \ str, iteration_id: str, timestamp: str, **kw) -> dict:\n    base = {\n   \
-      \     \"event\": \"dispatch_start\",\n        \"pass_id\": pass_id,\n      \
-      \  \"iteration_id\": iteration_id,\n        \"timestamp_utc\": timestamp,\n\
-      \        \"timeout_seconds\": 900,\n    }\n    base.update(kw)\n    return base\n\
-      \n\ndef _done_event(pass_id: str, iteration_id: str, timestamp: str, **kw) ->\
-      \ dict:\n    base = {\n        \"event\": \"dispatch_done\",\n        \"pass_id\"\
-      : pass_id,\n        \"iteration_id\": iteration_id,\n        \"timestamp_utc\"\
-      : timestamp,\n        \"exit_code\": 0,\n    }\n    base.update(kw)\n    return\
-      \ base\n\n\ndef _refused_event(pass_id: str, iteration_id: str, timestamp: str,\
-      \ **kw) -> dict:\n    base = {\n        \"event\": \"dispatch_refused\",\n \
-      \       \"pass_id\": pass_id,\n        \"iteration_id\": iteration_id,\n   \
-      \     \"timestamp_utc\": timestamp,\n    }\n    base.update(kw)\n    return\
-      \ base\n\n\ndef _stalled_event(pass_id: str, iteration_id: str, timestamp: str,\
-      \ **kw) -> dict:\n    base = {\n        \"event\": \"dispatch_stalled\",\n \
-      \       \"pass_id\": pass_id,\n        \"iteration_id\": iteration_id,\n   \
-      \     \"timestamp_utc\": timestamp,\n        \"stall_reason\": \"watchdog_timeout\"\
-      ,\n    }\n    base.update(kw)\n    return base\n\n\n# ---- find_stalled --------------------------------------------------------\n\
-      \n\ndef test_find_stalled_returns_empty_when_no_orphans():\n    \"\"\"Start\
-      \ + matching done → no orphan.\"\"\"\n    now = datetime(2026, 5, 11, 4, 0,\
-      \ 0, tzinfo=timezone.utc)\n    events = [\n        _start_event(\"p1\", \"iter-001\"\
-      , \"2026-05-11T03:00:00Z\"),\n        _done_event(\"p1\", \"iter-001\", \"2026-05-11T03:05:00Z\"\
-      ),\n    ]\n    stale = _visibility_watchdog.find_stalled(events, stall_threshold_seconds=600,\
-      \ now=now)\n    assert stale == []\n\n\ndef test_find_stalled_returns_orphan_older_than_threshold():\n\
-      \    \"\"\"Start without terminal, age > threshold → returned.\"\"\"\n    now\
-      \ = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    # Started 30 min\
-      \ ago, threshold 600s (10 min) → stale.\n    events = [_start_event(\"p2\",\
-      \ \"iter-002\", \"2026-05-11T03:30:00Z\")]\n    stale = _visibility_watchdog.find_stalled(events,\
-      \ stall_threshold_seconds=600, now=now)\n    assert len(stale) == 1\n    assert\
-      \ stale[0][\"start_event\"][\"pass_id\"] == \"p2\"\n    assert stale[0][\"age_seconds\"\
-      ] >= 600\n\n\ndef test_find_stalled_ignores_orphan_younger_than_threshold():\n\
-      \    \"\"\"Start without terminal, age < threshold → not returned.\"\"\"\n \
-      \   now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    # Started\
-      \ 5 min ago, threshold 600s (10 min) → not stale.\n    events = [_start_event(\"\
-      p3\", \"iter-003\", \"2026-05-11T03:55:00Z\")]\n    stale = _visibility_watchdog.find_stalled(events,\
-      \ stall_threshold_seconds=600, now=now)\n    assert stale == []\n\n\ndef test_find_stalled_recognizes_dispatch_stalled_as_terminal():\n\
-      \    \"\"\"iter-0036: dispatch_stalled is itself a terminal event. Re-running\n\
-      \    the watchdog on a log that already contains dispatch_stalled for an\n \
-      \   orphan does NOT re-mark it (idempotency).\n    \"\"\"\n    now = datetime(2026,\
-      \ 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    events = [\n        _start_event(\"\
-      p4\", \"iter-004\", \"2026-05-11T03:00:00Z\"),\n        _stalled_event(\"p4\"\
-      , \"iter-004\", \"2026-05-11T03:15:00Z\"),\n    ]\n    stale = _visibility_watchdog.find_stalled(events,\
-      \ stall_threshold_seconds=600, now=now)\n    assert stale == [], (\n       \
-      \ \"dispatch_stalled must terminate the pairing; otherwise watchdog re-marks\
-      \ orphans\"\n    )\n\n\ndef test_find_stalled_recognizes_dispatch_refused_as_terminal():\n\
-      \    \"\"\"iter-0036 codex-rev-001 regression: dispatch_refused must be\n  \
-      \  recognized as terminal. A refused dispatch with no later events would\n \
-      \   otherwise be misclassified as an orphan, and the watchdog would append\n\
-      \    a false dispatch_stalled, corrupting the audit shape.\n    \"\"\"\n   \
-      \ now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    events = [\n\
-      \        _start_event(\"p5\", \"iter-005\", \"2026-05-11T03:00:00Z\"),\n   \
-      \     _refused_event(\"p5\", \"iter-005\", \"2026-05-11T03:00:01Z\",\n     \
-      \                  error_type=\"smoke_env_gate\"),\n    ]\n    stale = _visibility_watchdog.find_stalled(events,\
-      \ stall_threshold_seconds=600, now=now)\n    assert stale == [], \"dispatch_refused\
-      \ must terminate pairing\"\n\n\ndef test_find_stalled_uses_iteration_id_pass_id_tuple_key():\n\
-      \    \"\"\"Two iterations sharing pass_id 'p1' must NOT collapse: terminating\n\
-      \    one must not silence the other.\n    \"\"\"\n    now = datetime(2026, 5,\
-      \ 11, 4, 0, 0, tzinfo=timezone.utc)\n    events = [\n        _start_event(\"\
-      p-shared\", \"iter-A\", \"2026-05-11T03:00:00Z\"),\n        _start_event(\"\
-      p-shared\", \"iter-B\", \"2026-05-11T03:00:00Z\"),\n        _done_event(\"p-shared\"\
-      , \"iter-A\", \"2026-05-11T03:05:00Z\"),\n        # iter-B is NEVER terminated.\n\
-      \    ]\n    stale = _visibility_watchdog.find_stalled(events, stall_threshold_seconds=600,\
-      \ now=now)\n    stale_iters = {s[\"start_event\"][\"iteration_id\"] for s in\
-      \ stale}\n    assert stale_iters == {\"iter-B\"}, (\n        f\"only iter-B\
-      \ should be flagged; got {stale_iters}\"\n    )\n\n\n# ---- emit_stalled_event\
-      \ --------------------------------------------------\n\n\ndef test_emit_stalled_event_appends_to_log(tmp_path):\n\
-      \    \"\"\"emit_stalled_event writes a single jsonl line with the right shape.\"\
-      \"\"\n    log = tmp_path / \"dispatch-log.jsonl\"\n    pre = '{\"event\":\"\
-      some_pre_existing\",\"x\":1}\\n'\n    log.write_text(pre, encoding=\"utf-8\"\
-      )\n\n    now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    orphan\
-      \ = {\n        \"start_event\": _start_event(\"p1\", \"iter-001\", \"2026-05-11T03:00:00Z\"\
-      ),\n        \"age_seconds\": 3600,\n        \"start_timestamp_utc\": \"2026-05-11T03:00:00Z\"\
-      ,\n    }\n    emitted = _visibility_watchdog.emit_stalled_event(log, orphan,\
-      \ 600, now)\n    assert emitted[\"event\"] == \"dispatch_stalled\"\n    assert\
-      \ emitted[\"pass_id\"] == \"p1\"\n    assert emitted[\"iteration_id\"] == \"\
-      iter-001\"\n    assert emitted[\"stall_reason\"] == \"watchdog_timeout\"\n \
-      \   assert emitted[\"age_seconds\"] == 3600\n    assert emitted[\"stall_threshold_seconds\"\
-      ] == 600\n\n    # Pre-existing line preserved byte-for-byte.\n    after = log.read_text(encoding=\"\
-      utf-8\")\n    assert after.startswith(pre), \"append must not alter pre-existing\
-      \ content\"\n    # New line is the second one.\n    lines = after.strip().splitlines()\n\
-      \    assert len(lines) == 2\n    parsed = json.loads(lines[1])\n    assert parsed[\"\
-      event\"] == \"dispatch_stalled\"\n    assert parsed[\"pass_id\"] == \"p1\"\n\
-      \n\ndef test_emit_stalled_event_does_not_modify_existing_events(tmp_path):\n\
-      \    \"\"\"Append-only: existing lines must remain byte-identical.\"\"\"\n \
-      \   log = tmp_path / \"dispatch-log.jsonl\"\n    pre_lines = [\n        '{\"\
-      event\":\"dispatch_start\",\"pass_id\":\"px\",\"iteration_id\":\"ix\",\"timestamp_utc\"\
-      :\"2026-05-11T03:00:00Z\"}',\n        '{\"event\":\"some_other\",\"x\":42}',\n\
-      \        '{\"event\":\"dispatch_done\",\"pass_id\":\"py\",\"iteration_id\":\"\
-      iy\",\"timestamp_utc\":\"2026-05-11T03:05:00Z\"}',\n    ]\n    log.write_text(\"\
-      \\n\".join(pre_lines) + \"\\n\", encoding=\"utf-8\")\n    pre_bytes = log.read_bytes()\n\
-      \n    now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    orphan\
-      \ = {\n        \"start_event\": json.loads(pre_lines[0]),\n        \"age_seconds\"\
-      : 3600,\n        \"start_timestamp_utc\": \"2026-05-11T03:00:00Z\",\n    }\n\
-      \    _visibility_watchdog.emit_stalled_event(log, orphan, 600, now)\n\n    after_bytes\
-      \ = log.read_bytes()\n    # Pre-existing bytes must be a prefix of post-append\
-      \ bytes.\n    assert after_bytes.startswith(pre_bytes), (\n        \"emit_stalled_event\
-      \ must be strictly append-only\"\n    )\n\n\n# ---- main() CLI end-to-end ----------------------------------------------\n\
-      \n\ndef _scaffold_state_dir(tmp_path):\n    state = tmp_path / \"consensus-state\"\
-      \ / \"state\"\n    state.mkdir(parents=True)\n    return state / \"dispatch-log.jsonl\"\
-      \n\n\ndef test_main_report_mode_does_not_mutate_log(tmp_path, capsys):\n   \
-      \ \"\"\"--action=report writes no events to the log.\"\"\"\n    log_path = _scaffold_state_dir(tmp_path)\n\
-      \    log_path.write_text(\n        json.dumps(_start_event(\"p1\", \"iter-001\"\
-      , \"2026-05-11T03:00:00Z\")) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\
-      \    pre_bytes = log_path.read_bytes()\n    rc = _visibility_watchdog.main([\n\
-      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
-      \        \"--action\", \"report\",\n    ])\n    out = capsys.readouterr().out\n\
-      \    assert rc == 1, f\"orphan present => rc=1; got rc={rc}; out={out!r}\"\n\
-      \    assert log_path.read_bytes() == pre_bytes, (\n        \"--action=report\
-      \ must not mutate the log\"\n    )\n    parsed = json.loads(out)\n    assert\
-      \ parsed[\"stale_count\"] == 1\n    assert \"recommended_redispatch\" in parsed[\"\
-      stale\"][0]\n    assert \"_dispatch_codex\" in parsed[\"stale\"][0][\"recommended_redispatch\"\
-      ]\n\n\ndef test_main_mark_mode_appends_dispatch_stalled(tmp_path, capsys):\n\
-      \    \"\"\"--action=mark appends exactly one dispatch_stalled per orphan.\"\"\
-      \"\n    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n\
-      \        json.dumps(_start_event(\"p2\", \"iter-002\", \"2026-05-11T03:00:00Z\"\
-      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n\
-      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
-      \        \"--action\", \"mark\",\n    ])\n    out = capsys.readouterr().out\n\
-      \    assert rc == 1\n    parsed = json.loads(out)\n    assert parsed[\"stale\"\
-      ][0].get(\"dispatch_stalled_appended\") is True\n\n    # The log now has 2 lines:\
-      \ original start + appended stalled.\n    after_lines = log_path.read_text(encoding=\"\
-      utf-8\").strip().splitlines()\n    assert len(after_lines) == 2\n    appended\
-      \ = json.loads(after_lines[1])\n    assert appended[\"event\"] == \"dispatch_stalled\"\
-      \n    assert appended[\"pass_id\"] == \"p2\"\n    assert appended[\"stall_reason\"\
-      ] == \"watchdog_timeout\"\n\n\ndef test_main_mark_is_idempotent(tmp_path, capsys):\n\
-      \    \"\"\"Second --action=mark run on the same log must NOT re-mark — the\n\
-      \    dispatch_stalled from the first run is terminal and pairs the orphan.\n\
-      \    \"\"\"\n    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n\
-      \        json.dumps(_start_event(\"p3\", \"iter-003\", \"2026-05-11T03:00:00Z\"\
-      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    # First mark: appends.\n\
-      \    rc1 = _visibility_watchdog.main([\n        \"--repo-root\", str(tmp_path),\n\
-      \        \"--stall-after\", \"1\",\n        \"--action\", \"mark\",\n    ])\n\
-      \    capsys.readouterr()\n    line_count_after_first = len(log_path.read_text(encoding=\"\
-      utf-8\").strip().splitlines())\n\n    # Second mark: should NOT append again.\n\
-      \    rc2 = _visibility_watchdog.main([\n        \"--repo-root\", str(tmp_path),\n\
-      \        \"--stall-after\", \"1\",\n        \"--action\", \"mark\",\n    ])\n\
-      \    out2 = capsys.readouterr().out\n    line_count_after_second = len(log_path.read_text(encoding=\"\
-      utf-8\").strip().splitlines())\n\n    assert rc1 == 1, \"first run sees an orphan\
-      \ → rc=1\"\n    assert rc2 == 0, f\"second run must see zero stale (terminal\
-      \ exists); got rc={rc2}; out={out2!r}\"\n    assert line_count_after_first ==\
-      \ line_count_after_second == 2, (\n        f\"idempotency violated: lines went\
-      \ {line_count_after_first} -> {line_count_after_second}\"\n    )\n\n\ndef test_main_returns_0_when_no_orphans(tmp_path,\
-      \ capsys):\n    \"\"\"Clean state → rc=0.\"\"\"\n    log_path = _scaffold_state_dir(tmp_path)\n\
-      \    log_path.write_text(\n        json.dumps(_start_event(\"p4\", \"iter-004\"\
-      , \"2026-05-11T03:00:00Z\")) + \"\\n\"\n        + json.dumps(_done_event(\"\
-      p4\", \"iter-004\", \"2026-05-11T03:05:00Z\")) + \"\\n\",\n        encoding=\"\
-      utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n        \"--repo-root\"\
-      , str(tmp_path),\n        \"--stall-after\", \"1\",\n        \"--action\", \"\
-      report\",\n    ])\n    out = capsys.readouterr().out\n    assert rc == 0, f\"\
-      no orphans → rc=0; got rc={rc}; out={out!r}\"\n\n\ndef test_main_missing_log_file_returns_0(tmp_path,\
-      \ capsys):\n    \"\"\"Missing log file (fresh repo) should not crash; report\
-      \ 0 stale.\"\"\"\n    (tmp_path / \"consensus-state\" / \"state\").mkdir(parents=True)\n\
-      \    # No log file written.\n    rc = _visibility_watchdog.main([\n        \"\
-      --repo-root\", str(tmp_path),\n        \"--action\", \"report\",\n    ])\n \
-      \   out = capsys.readouterr().out\n    assert rc == 0\n    parsed = json.loads(out)\n\
-      \    assert parsed[\"stale_count\"] == 0\n\n\ndef test_recommended_redispatch_uses_external_codex_cli(tmp_path,\
-      \ capsys):\n    \"\"\"The recommended re-dispatch command must use _dispatch_codex\n\
-      \    (external codex-cli), NOT in-process subagent dispatch. This is the\n \
-      \   operator-locked external-process fallback policy.\n    \"\"\"\n    log_path\
-      \ = _scaffold_state_dir(tmp_path)\n    # Include reviewer_id explicitly so the\
-      \ suggestion is well-formed\n    # (production dispatch_start events always\
-      \ carry reviewer_id).\n    log_path.write_text(\n        json.dumps(_start_event(\n\
-      \            \"p5\", \"iter-005\", \"2026-05-11T03:00:00Z\",\n            reviewer_id=\"\
-      codex-iter-005-1\",\n        )) + \"\\n\",\n        encoding=\"utf-8\",\n  \
-      \  )\n    rc = _visibility_watchdog.main([\n        \"--repo-root\", str(tmp_path),\n\
-      \        \"--stall-after\", \"1\",\n        \"--action\", \"report\",\n    ])\n\
-      \    out = capsys.readouterr().out\n    parsed = json.loads(out)\n    cmd =\
-      \ parsed[\"stale\"][0][\"recommended_redispatch\"]\n    assert \"consensus_mcp._dispatch_codex\"\
-      \ in cmd, (\n        f\"recommendation must use external codex-cli path; got\
-      \ {cmd!r}\"\n    )\n    assert \"Agent\" not in cmd, \"must not suggest in-process\
-      \ subagent dispatch\"\n    assert \"--iteration-dir consensus-state/active/iter-005\"\
-      \ in cmd\n    assert \"--reviewer-id codex-iter-005-1\" in cmd\n    assert \"\
-      codex-iter-005-1-pass2\" in cmd, \"pass_id must be bumped to avoid collision\"\
-      \n\n\n# ---- perf-rev-005: streaming reader + time-window cutoff -----------------\n\
-      \n\ndef test_streaming_reader_skips_old_events_outside_window(tmp_path):\n \
-      \   \"\"\"_read_jsonl_streaming must drop events whose timestamp_utc is older\n\
-      \    than ``since_ts``. This is the perf-rev-005 fix: stalled-dispatch\n   \
-      \ detection only needs recent unmatched starts, so the watchdog must\n    not\
-      \ parse and yield every event in a multi-MB dispatch log.\n    \"\"\"\n    log\
-      \ = tmp_path / \"dispatch-log.jsonl\"\n    old_event = _start_event(\"p-old\"\
-      , \"iter-old\", \"2020-01-01T00:00:00Z\")\n    recent_event = _start_event(\"\
-      p-new\", \"iter-new\", \"2026-05-11T03:55:00Z\")\n    log.write_text(\n    \
-      \    json.dumps(old_event) + \"\\n\" + json.dumps(recent_event) + \"\\n\",\n\
-      \        encoding=\"utf-8\",\n    )\n\n    # since_ts halfway between the two\
-      \ events: only the recent one survives.\n    since_ts = datetime(2026, 1, 1,\
-      \ tzinfo=timezone.utc)\n    out = list(_visibility_watchdog._read_jsonl_streaming(log,\
-      \ since_ts=since_ts))\n    pass_ids = [ev.get(\"pass_id\") for ev in out]\n\
-      \    assert pass_ids == [\"p-new\"], (\n        f\"expected only the recent\
-      \ event to survive the window cutoff; got {pass_ids}\"\n    )\n\n    # No cutoff\
-      \ → both events come through (back-compat with _read_jsonl).\n    out_all =\
-      \ list(_visibility_watchdog._read_jsonl_streaming(log, since_ts=None))\n   \
-      \ assert [ev.get(\"pass_id\") for ev in out_all] == [\"p-old\", \"p-new\"]\n\
-      \n\ndef test_streaming_reader_keeps_events_with_missing_timestamps(tmp_path):\n\
-      \    \"\"\"Events without a parseable timestamp are always yielded (we can't\n\
-      \    prove they're old, and find_stalled already drops them).\n    \"\"\"\n\
-      \    log = tmp_path / \"dispatch-log.jsonl\"\n    no_ts = {\"event\": \"dispatch_start\"\
-      , \"pass_id\": \"p-x\", \"iteration_id\": \"i-x\"}\n    log.write_text(json.dumps(no_ts)\
-      \ + \"\\n\", encoding=\"utf-8\")\n    since_ts = datetime(2026, 5, 11, tzinfo=timezone.utc)\n\
-      \    out = list(_visibility_watchdog._read_jsonl_streaming(log, since_ts=since_ts))\n\
-      \    assert len(out) == 1\n\n\ndef test_legacy_read_jsonl_still_returns_list(tmp_path):\n\
-      \    \"\"\"_read_jsonl is preserved as a list-returning thin wrapper around\n\
-      \    the streaming reader so any caller depending on the old API keeps\n   \
-      \ working.\n    \"\"\"\n    log = tmp_path / \"dispatch-log.jsonl\"\n    log.write_text(\n\
-      \        json.dumps(_start_event(\"p1\", \"iter-1\", \"2026-05-11T03:00:00Z\"\
-      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    out = _visibility_watchdog._read_jsonl(log)\n\
-      \    assert isinstance(out, list)\n    assert len(out) == 1\n    assert out[0][\"\
-      pass_id\"] == \"p1\"\n\n\n# ---- xplat-rev-006: _default_repo_root walks parents\
-      \ looking for markers --\n\n\ndef _scaffold_repo_markers(root: Path) -> None:\n\
-      \    \"\"\"Create the directories that _has_repo_markers checks for.\"\"\"\n\
-      \    (root / \"consensus-state\").mkdir(parents=True, exist_ok=True)\n    (root\
-      \ / \"scripts\" / \"consensus_mcp\").mkdir(parents=True, exist_ok=True)\n  \
-      \  (root / \"consensus_mcp\" / \"validators\").mkdir(parents=True, exist_ok=True)\n\
-      \n\ndef test_default_repo_root_walks_to_marker(tmp_path, monkeypatch):\n   \
-      \ \"\"\"Synthesize a temp tree with repo markers and verify _default_repo_root\n\
-      \    finds it from a nested cwd. The xplat-rev-006 fix replaced the unsafe\n\
-      \    ``parent.parent.parent`` fallback (which lands in site-packages after\n\
-      \    a non-editable install) with a marker-validated parent walk.\n    \"\"\"\
-      \n    repo = tmp_path / \"fake-repo\"\n    _scaffold_repo_markers(repo)\n  \
-      \  nested = repo / \"scripts\" / \"consensus_mcp\" / \"tests\" / \"deeply\"\
-      \ / \"nested\"\n    nested.mkdir(parents=True)\n\n    # Operator did not supply\
-      \ env var; cwd is somewhere inside the fake repo.\n    monkeypatch.delenv(\"\
-      CONSENSUS_MCP_REPO_ROOT\", raising=False)\n    monkeypatch.chdir(nested)\n\n\
-      \    resolved = _visibility_watchdog._default_repo_root()\n    assert resolved\
-      \ == repo.resolve()\n\n\ndef test_default_repo_root_honors_env_var_when_valid(tmp_path,\
-      \ monkeypatch):\n    \"\"\"CONSENSUS_MCP_REPO_ROOT takes precedence when it\
-      \ validates.\"\"\"\n    repo = tmp_path / \"env-repo\"\n    _scaffold_repo_markers(repo)\n\
-      \    monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\", str(repo))\n    resolved\
-      \ = _visibility_watchdog._default_repo_root()\n    assert resolved == repo.resolve()\n\
-      \n\ndef test_default_repo_root_raises_when_env_var_invalid(tmp_path, monkeypatch):\n\
-      \    \"\"\"Operator-supplied env var is authoritative; if it doesn't validate\n\
-      \    we fail loudly rather than silently fall through to a wrong tree.\n   \
-      \ \"\"\"\n    bogus = tmp_path / \"not-a-repo\"\n    bogus.mkdir()\n    monkeypatch.setenv(\"\
-      CONSENSUS_MCP_REPO_ROOT\", str(bogus))\n    with pytest.raises(_visibility_watchdog.RepoRootResolutionError):\n\
-      \        _visibility_watchdog._default_repo_root()\n\n\ndef test_default_repo_root_raises_when_no_markers_anywhere(tmp_path,\
-      \ monkeypatch):\n    \"\"\"Walk reaches filesystem root without finding markers\
-      \ → raise.\"\"\"\n    monkeypatch.delenv(\"CONSENSUS_MCP_REPO_ROOT\", raising=False)\n\
-      \    empty = tmp_path / \"empty\"\n    empty.mkdir()\n    monkeypatch.chdir(empty)\n\
-      \    # The walk also inspects parents of __file__, which on this checkout\n\
-      \    # IS a valid repo (the real one). To isolate the failure mode we\n    #\
-      \ patch _has_repo_markers to always return False.\n    monkeypatch.setattr(_visibility_watchdog,\
-      \ \"_has_repo_markers\", lambda _p: False)\n    with pytest.raises(_visibility_watchdog.RepoRootResolutionError):\n\
-      \        _visibility_watchdog._default_repo_root()\n\n\n# ---- xplat-rev-007:\
-      \ cross-process locked append --------------------------\n\n\ndef test_locked_append_writes_payload(tmp_path):\n\
-      \    \"\"\"Basic sanity: _locked_append appends the payload to the file.\"\"\
-      \"\n    log = tmp_path / \"out.jsonl\"\n    _visibility_watchdog._locked_append(log,\
-      \ '{\"a\":1}\\n')\n    _visibility_watchdog._locked_append(log, '{\"a\":2}\\\
-      n')\n    lines = log.read_text(encoding=\"utf-8\").splitlines()\n    assert\
-      \ lines == ['{\"a\":1}', '{\"a\":2}']\n\n\ndef test_locked_append_creates_parent_dir(tmp_path):\n\
-      \    \"\"\"Append into a not-yet-existing parent dir.\"\"\"\n    log = tmp_path\
-      \ / \"nested\" / \"deep\" / \"out.jsonl\"\n    _visibility_watchdog._locked_append(log,\
-      \ '{\"x\":true}\\n')\n    assert log.exists()\n    assert log.read_text(encoding=\"\
-      utf-8\") == '{\"x\":true}\\n'\n\n\ndef test_locked_append_serializes_concurrent_writes(tmp_path):\n\
-      \    \"\"\"Spawn N threads each calling _locked_append; verify ALL writes are\n\
-      \    persisted as complete JSONL records (no torn lines). This is best-effort\n\
-      \    — we can't easily force a race on a single host — but a 50-thread fan-out\n\
-      \    is sensitive enough to catch obviously-broken locking on Windows\n    (xplat-rev-007\
-      \ fix).\n    \"\"\"\n    log = tmp_path / \"concurrent.jsonl\"\n    payloads\
-      \ = [json.dumps({\"i\": i, \"filler\": \"x\" * 200}) + \"\\n\" for i in range(50)]\n\
-      \n    def writer(payload: str) -> None:\n        _visibility_watchdog._locked_append(log,\
-      \ payload)\n\n    threads = [threading.Thread(target=writer, args=(p,)) for\
-      \ p in payloads]\n    for t in threads:\n        t.start()\n    for t in threads:\n\
-      \        t.join()\n\n    # All N lines present, each parseable as JSON, all\
-      \ distinct i values.\n    raw = log.read_text(encoding=\"utf-8\")\n    lines\
-      \ = raw.splitlines()\n    assert len(lines) == len(payloads), (\n        f\"\
-      expected {len(payloads)} lines, got {len(lines)}; raw={raw!r}\"\n    )\n   \
-      \ seen_i = set()\n    for line in lines:\n        ev = json.loads(line)  # raises\
-      \ if torn\n        seen_i.add(ev[\"i\"])\n    assert seen_i == set(range(len(payloads)))\n\
-      \n\ndef test_emit_stalled_event_uses_locked_append(tmp_path, monkeypatch):\n\
-      \    \"\"\"emit_stalled_event must route through _locked_append so any future\n\
-      \    refactor doesn't silently regress xplat-rev-007.\n    \"\"\"\n    log =\
-      \ tmp_path / \"dispatch-log.jsonl\"\n    called: list[tuple[Path, str]] = []\n\
-      \n    def fake_locked_append(p: Path, payload: str) -> None:\n        called.append((p,\
-      \ payload))\n        p.parent.mkdir(parents=True, exist_ok=True)\n        with\
-      \ p.open(\"a\", encoding=\"utf-8\") as f:\n            f.write(payload)\n\n\
-      \    monkeypatch.setattr(_visibility_watchdog, \"_locked_append\", fake_locked_append)\n\
-      \n    now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    orphan\
-      \ = {\n        \"start_event\": _start_event(\"p-lock\", \"iter-lock\", \"2026-05-11T03:00:00Z\"\
-      ),\n        \"age_seconds\": 3600,\n        \"start_timestamp_utc\": \"2026-05-11T03:00:00Z\"\
-      ,\n    }\n    _visibility_watchdog.emit_stalled_event(log, orphan, 600, now)\n\
-      \n    assert len(called) == 1\n    assert called[0][0] == log\n    assert \"\
-      dispatch_stalled\" in called[0][1]\n\n\n# ---- perf-rev-005: --window-days CLI\
-      \ flag --------------------------------\n\n\ndef test_main_window_days_filters_old_events(tmp_path,\
-      \ capsys):\n    \"\"\"--window-days drops events older than the window. An ancient\
-      \ orphan\n    must NOT be flagged when the window excludes it.\n    \"\"\"\n\
-      \    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n  \
-      \      json.dumps(_start_event(\"p-ancient\", \"iter-old\", \"2020-01-01T00:00:00Z\"\
-      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n\
-      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
-      \        \"--window-days\", \"7\",\n        \"--action\", \"report\",\n    ])\n\
-      \    out = capsys.readouterr().out\n    parsed = json.loads(out)\n    assert\
-      \ rc == 0, f\"ancient orphan must be filtered by window; got {out!r}\"\n   \
-      \ assert parsed[\"stale_count\"] == 0\n\n\ndef test_main_window_days_zero_disables_filter(tmp_path,\
-      \ capsys):\n    \"\"\"--window-days 0 keeps the legacy behaviour (no filtering).\"\
-      \"\"\n    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n\
-      \        json.dumps(_start_event(\"p-ancient\", \"iter-old\", \"2020-01-01T00:00:00Z\"\
-      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n\
-      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
-      \        \"--window-days\", \"0\",\n        \"--action\", \"report\",\n    ])\n\
-      \    out = capsys.readouterr().out\n    parsed = json.loads(out)\n    assert\
-      \ rc == 1\n    assert parsed[\"stale_count\"] == 1\n"
     consensus_mcp/tests/test_dispatch_codex_streaming.py: "\"\"\"Regression tests\
       \ for iter-0037 streaming/heartbeat/abort features of\n`_invoke_codex` in `consensus_mcp/_dispatch_codex.py`.\n\
       \nThese tests use:\n  - `_ControllableClock` — manual `time_fn` substitute;\
@@ -614,11 +394,29 @@ defect_target:
       \ real sleeps between clock-advances so the\nreader thread can drain. This is\
       \ acceptable: the *decision* logic in\n_invoke_codex is driven entirely by `time_fn`;\
       \ we only need a few ms of\nreal time for thread scheduling.\n\"\"\"\nfrom __future__\
-      \ import annotations\n\nimport json as _json\nimport sys\nimport threading\n\
-      import time\nfrom pathlib import Path\n\nimport pytest\n\nREPO_ROOT = Path(__file__).resolve().parent.parent.parent\n\
-      \nfrom consensus_mcp import _dispatch_codex  # noqa: E402\n\n\nSCHEMA_PATH =\
-      \ REPO_ROOT / \"consensus_mcp\" / \"dispatch_templates\" / \"codex_review_schema.json\"\
-      \n\n\n# --------------------------------------------------------------------------\n\
+      \ import annotations\n\nimport json as _json\nimport os\nimport sys\nimport\
+      \ threading\nimport time\nfrom pathlib import Path\n\nimport pytest\n\nREPO_ROOT\
+      \ = Path(__file__).resolve().parent.parent.parent\n\nfrom consensus_mcp import\
+      \ _dispatch_codex  # noqa: E402\n\n\nSCHEMA_PATH = REPO_ROOT / \"consensus_mcp\"\
+      \ / \"dispatch_templates\" / \"codex_review_schema.json\"\n\n\n# v1.15.8 Q2(c)\
+      \ interim (Workflow A converged:\n# iteration-v1158-flaky-ci-and-locked-append).\
+      \ These tests drive the\n# `_invoke_codex` runner in a daemon thread and advance\
+      \ a controllable\n# clock with real `time.sleep` ticks, then `join` and assert\
+      \ the thread\n# finished/aborted. On loaded Windows GitHub-Actions runners the\
+      \ runner\n# thread is not scheduled enough within the wall-clock budget → \"\
+      runner\n# did not finish\" (same commit green on Linux CI + local; the logic\
+      \ is\n# driven by the INJECTED time_fn, so it is NOT a Windows product path\
+      \ —\n# purely runner scheduling). Skipped ONLY on Windows + GitHub Actions:\n\
+      # Linux CI runs them every push and local Windows dev still runs them,\n# so\
+      \ the regression coverage is retained. NAMED FOLLOW-UP: rework\n# `_ControllableClock`\
+      \ into a deterministic synchronizing clock\n# (test↔runner handshake, no real\
+      \ sleeps) so these run everywhere and\n# this skip can be dropped. Tracked:\
+      \ docs/advisories.md 2026-05-15.\n_FLAKY_WINDOWS_CI = pytest.mark.skipif(\n\
+      \    sys.platform == \"win32\" and os.environ.get(\"GITHUB_ACTIONS\") == \"\
+      true\",\n    reason=\"v1.15.8 Q2(c): clock.advance + real time.sleep + thread-join\
+      \ \"\n    \"timing race on loaded Windows GitHub runners (not a product defect;\
+      \ \"\n    \"green on Linux CI + local). Named follow-up: deterministic \"\n\
+      \    \"synchronizing _ControllableClock.\",\n)\n\n\n# --------------------------------------------------------------------------\n\
       # Test helpers\n# --------------------------------------------------------------------------\n\
       \n\nclass _ControllableClock:\n    \"\"\"Manually-advanced monotonic clock for\
       \ `time_fn=` injection.\"\"\"\n\n    def __init__(self, start: float = 1000.0):\n\
@@ -783,21 +581,21 @@ defect_target:
       \ assert ev[\"line_full_length\"] == 1000\n    assert ev[\"truncated\"] is True\n\
       \n\n# --------------------------------------------------------------------------\n\
       # Test 3 — heartbeat fires at heartbeat_interval cadence\n# --------------------------------------------------------------------------\n\
-      \n\ndef test_heartbeat_fires_at_interval(tmp_path):\n    \"\"\"Advance time\
-      \ so codex appears to run for ~95s with no stdout; with\n    stall_silence_seconds=200\
-      \ we don't trip silence-abort; with\n    heartbeat_interval=30 we should see\
-      \ ~3 heartbeats (at ~30, ~60, ~90).\n\n    NOTE: pre-first-line silence falls\
-      \ back to `now - start_ts`. So we set\n    `stall_silence_seconds` high enough\
-      \ (200s) to not trip silence-abort,\n    and emit no stdout, just heartbeats.\n\
-      \    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
-      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
-      \n\n    # No stdout; proc exits at clock_rel = 95s.\n    factory = _make_factory(clock,\
-      \ scheduled_stdout=[], exit_at=95.0)\n\n    th, holder = _run_invoke_in_thread(\n\
-      \        prompt=\"x\",\n        codex_bin=\"codex\",\n        timeout_seconds=300,\
-      \  # so wall-time hard ceiling isn't hit\n        repo_root=repo_root,\n   \
-      \     schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
-      \        heartbeat_interval=30.0,\n        stall_silence_seconds=200.0,  # don't\
-      \ trip silence-abort\n        poll_interval=0.01,\n        time_fn=clock.now,\n\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_heartbeat_fires_at_interval(tmp_path):\n  \
+      \  \"\"\"Advance time so codex appears to run for ~95s with no stdout; with\n\
+      \    stall_silence_seconds=200 we don't trip silence-abort; with\n    heartbeat_interval=30\
+      \ we should see ~3 heartbeats (at ~30, ~60, ~90).\n\n    NOTE: pre-first-line\
+      \ silence falls back to `now - start_ts`. So we set\n    `stall_silence_seconds`\
+      \ high enough (200s) to not trip silence-abort,\n    and emit no stdout, just\
+      \ heartbeats.\n    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock\
+      \ = _ControllableClock()\n    log_path = repo_root / \"consensus-state\" / \"\
+      state\" / \"dispatch-log.jsonl\"\n\n    # No stdout; proc exits at clock_rel\
+      \ = 95s.\n    factory = _make_factory(clock, scheduled_stdout=[], exit_at=95.0)\n\
+      \n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n        codex_bin=\"\
+      codex\",\n        timeout_seconds=300,  # so wall-time hard ceiling isn't hit\n\
+      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
+      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=200.0,\
+      \  # don't trip silence-abort\n        poll_interval=0.01,\n        time_fn=clock.now,\n\
       \        popen_factory=factory,\n    )\n\n    # Advance the clock in 1s ticks\
       \ up to ~100s (past exit_at=95s), with\n    # short real sleeps so the main\
       \ loop body can iterate, observe the\n    # advanced clock, and emit heartbeats.\n\
@@ -812,16 +610,16 @@ defect_target:
       \ = [ev[\"age_seconds\"] for ev in hb]\n    assert ages == sorted(ages), f\"\
       heartbeat ages not monotonic: {ages}\"\n\n\n# --------------------------------------------------------------------------\n\
       # Test 4 — heartbeat silence triggers abort\n# --------------------------------------------------------------------------\n\
-      \n\ndef test_heartbeat_silence_triggers_abort(tmp_path):\n    \"\"\"Codex emits\
-      \ 2 lines at t=0, then goes silent; advance clock past\n    stall_silence_seconds\
-      \ → expect `dispatch_aborted` with\n    `abort_source=\"watchdog_silence\"`\
-      \ and CodexInvocationError raised.\n    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n\
-      \    clock = _ControllableClock()\n    log_path = repo_root / \"consensus-state\"\
-      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    scheduled = [\n        (0.0, b\"\
-      a\\n\"),\n        (0.0, b\"b\\n\"),\n    ]\n    # Proc would exit at 1000s but\
-      \ we'll terminate via silence-abort first.\n    factory = _make_factory(clock,\
-      \ scheduled_stdout=scheduled, exit_at=1000.0)\n\n    exc_holder = {}\n\n   \
-      \ def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_heartbeat_silence_triggers_abort(tmp_path):\n\
+      \    \"\"\"Codex emits 2 lines at t=0, then goes silent; advance clock past\n\
+      \    stall_silence_seconds → expect `dispatch_aborted` with\n    `abort_source=\"\
+      watchdog_silence\"` and CodexInvocationError raised.\n    \"\"\"\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
+      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
+      \    scheduled = [\n        (0.0, b\"a\\n\"),\n        (0.0, b\"b\\n\"),\n \
+      \   ]\n    # Proc would exit at 1000s but we'll terminate via silence-abort\
+      \ first.\n    factory = _make_factory(clock, scheduled_stdout=scheduled, exit_at=1000.0)\n\
+      \n    exc_holder = {}\n\n    def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
       \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
       \           timeout_seconds=300,\n                repo_root=repo_root,\n   \
       \             schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
@@ -841,9 +639,9 @@ defect_target:
       \    assert len(aborts) == 1, f\"expected 1 abort event, got {aborts}\"\n  \
       \  assert aborts[0][\"abort_source\"] == \"watchdog_silence\"\n\n\n# --------------------------------------------------------------------------\n\
       # Test 5 — operator abort-signal file triggers abort\n# --------------------------------------------------------------------------\n\
-      \n\ndef test_operator_abort_signal_file_triggers_abort(tmp_path):\n    \"\"\"\
-      Mid-run, write `consensus-state/state/abort-dispatch-<pass_id>.signal`;\n  \
-      \  expect wrapper to SIGTERM codex, emit `dispatch_aborted` with\n    `abort_source=\"\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_operator_abort_signal_file_triggers_abort(tmp_path):\n\
+      \    \"\"\"Mid-run, write `consensus-state/state/abort-dispatch-<pass_id>.signal`;\n\
+      \    expect wrapper to SIGTERM codex, emit `dispatch_aborted` with\n    `abort_source=\"\
       operator_signal_file\"`, delete the signal file, and raise.\n    \"\"\"\n  \
       \  repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
       \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
@@ -872,30 +670,31 @@ defect_target:
       \ # Signal file should be deleted.\n    assert not signal_path.exists(), \"\
       abort signal file was not deleted\"\n\n\n# --------------------------------------------------------------------------\n\
       # Test 6 — wall-time hard ceiling\n# --------------------------------------------------------------------------\n\
-      \n\ndef test_wall_time_hard_ceiling(tmp_path):\n    \"\"\"Codex streams continuously\
-      \ (so silence-abort never fires) but runs\n    past `timeout_seconds + stall_silence_seconds`\
-      \ → expect dispatch_aborted\n    with abort_source=\"wall_time_hard_ceiling\"\
-      \ and CodexInvocationError.\n    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n\
-      \    clock = _ControllableClock()\n    log_path = repo_root / \"consensus-state\"\
-      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    # Stream a line every 1s of clock-time\
-      \ forever, so silence never fires.\n    # The reader thread reads scheduled\
-      \ bytes as clock advances past them.\n    scheduled = [(float(i), f\"keepalive{i}\\\
-      n\".encode(\"utf-8\")) for i in range(0, 200)]\n    factory = _make_factory(clock,\
-      \ scheduled_stdout=scheduled, exit_at=10000.0)\n\n    exc_holder = {}\n\n  \
-      \  def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
-      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
-      \           timeout_seconds=10,  # wall = 10\n                repo_root=repo_root,\n\
-      \                schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
-      \                anchors=_anchors(),\n                heartbeat_interval=1000.0,\n\
-      \                stall_silence_seconds=5.0,  # grace = 5; hard ceiling at 15s\n\
-      \                poll_interval=0.01,\n                time_fn=clock.now,\n \
-      \               popen_factory=factory,\n            )\n        except Exception\
-      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
-      \ daemon=True)\n    th.start()\n\n    # Advance clock in 1s steps; reader drains\
-      \ scheduled keepalives as we go,\n    # so silence_age stays low. After ~16s\
-      \ of clock advance, wall-time hard\n    # ceiling (10 + 5 = 15s) should trip.\n\
-      \    for _ in range(20):\n        clock.advance(1.0)\n        time.sleep(0.02)\n\
-      \    th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not abort\"\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_wall_time_hard_ceiling(tmp_path):\n    \"\"\
+      \"Codex streams continuously (so silence-abort never fires) but runs\n    past\
+      \ `timeout_seconds + stall_silence_seconds` → expect dispatch_aborted\n    with\
+      \ abort_source=\"wall_time_hard_ceiling\" and CodexInvocationError.\n    \"\"\
+      \"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    # Stream a line every 1s of clock-time forever, so silence never fires.\n\
+      \    # The reader thread reads scheduled bytes as clock advances past them.\n\
+      \    scheduled = [(float(i), f\"keepalive{i}\\n\".encode(\"utf-8\")) for i in\
+      \ range(0, 200)]\n    factory = _make_factory(clock, scheduled_stdout=scheduled,\
+      \ exit_at=10000.0)\n\n    exc_holder = {}\n\n    def runner():\n        try:\n\
+      \            _dispatch_codex._invoke_codex(\n                prompt=\"x\",\n\
+      \                codex_bin=\"codex\",\n                timeout_seconds=10, \
+      \ # wall = 10\n                repo_root=repo_root,\n                schema_path=SCHEMA_PATH,\n\
+      \                log_path=log_path,\n                anchors=_anchors(),\n \
+      \               heartbeat_interval=1000.0,\n                stall_silence_seconds=5.0,\
+      \  # grace = 5; hard ceiling at 15s\n                poll_interval=0.01,\n \
+      \               time_fn=clock.now,\n                popen_factory=factory,\n\
+      \            )\n        except Exception as e:  # noqa: BLE001\n           \
+      \ exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner, daemon=True)\n\
+      \    th.start()\n\n    # Advance clock in 1s steps; reader drains scheduled\
+      \ keepalives as we go,\n    # so silence_age stays low. After ~16s of clock\
+      \ advance, wall-time hard\n    # ceiling (10 + 5 = 15s) should trip.\n    for\
+      \ _ in range(20):\n        clock.advance(1.0)\n        time.sleep(0.02)\n  \
+      \  th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not abort\"\
       \n\n    assert \"e\" in exc_holder, \"expected CodexInvocationError\"\n    assert\
       \ isinstance(exc_holder[\"e\"], _dispatch_codex.CodexInvocationError)\n\n  \
       \  events = _read_log_events(log_path)\n    aborts = [e for e in events if e[\"\
@@ -941,5 +740,935 @@ defect_target:
       \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
       \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
       \n    assert holder[\"out\"] == '{\"ok\": true}'\n"
+    CHANGELOG.md: "# Changelog\n\n## 1.15.8 - unreleased\n\n**Windows-CI flakes —\
+      \ root-caused via Workflow A consult.** The\nre-enabled CI kept showing the\
+      \ *same commit* green on one run, red\non another (2 Windows-only flakes). Consult\n\
+      `iteration-v1158-flaky-ci-and-locked-append` (claude+codex+gemini,\nweighted-synthesis,\
+      \ shared-prior self-check PASSED — three distinct\ndifferentials; dogfoods the\
+      \ v1.15.1 convention incl. an\nindependent_safeguard).\n\n- **Q1(d) — real defect\
+      \ in `_visibility_watchdog._locked_append`\n  (the sealed-provenance/audit +\
+      \ watchdog integrity primitive).**\n  It caught `OSError` from `msvcrt.locking`\
+      \ then wrote **UNLOCKED**,\n  silently losing audit lines under contention (windows-py3.10\
+      \ CI:\n  `test_locked_append_serializes_concurrent_writes` lost 4 of 50\n  from\
+      \ a 50-thread, ONE-process fan-out — intra-process contention,\n  the v1.15.7\
+      \ OS-lock-vs-threads class in a different primitive;\n  latent + CI-exposed,\
+      \ not introduced this session). Fix: a\n  module-level `threading.Lock` (`_APPEND_LOCK`)\
+      \ serializes all\n  in-process callers deterministically; the OS lock now only\n\
+      \  governs genuine cross-process contention; and the failure path\n  **fails\
+      \ LOUD** (raises) instead of a silent unlocked write — an\n  independent safeguard\
+      \ so a sealed-provenance/audit log can never\n  be silently incomplete, regardless\
+      \ of *why* the OS lock failed.\n  Fixes the test deterministically (not a quarantine).\n\
+      - **Q2(c interim) — timing-fragile heartbeat-pattern tests.** Four\n  tests\
+      \ drive the `_invoke_codex` runner thread + advance a\n  controllable clock\
+      \ with real `time.sleep` ticks then `join`;\n  they flake on loaded Windows\
+      \ GitHub runners (not a product\n  defect — same logic green on Linux CI + local;\
+      \ driven by the\n  injected `time_fn`). Per the converged plan's explicit (c)\n\
+      \  allowance, `skipif(win32 and GITHUB_ACTIONS)` — they still run on\n  **Linux\
+      \ CI every push + local Windows dev**, so coverage is\n  retained. **Named follow-up:**\
+      \ rework `_ControllableClock` into a\n  deterministic synchronizing clock so\
+      \ they run everywhere and the\n  skip drops (advisory 2026-05-15).\n- **Verification\
+      \ discipline:** per the converged plan\n  (provisional-until-proven), v1.15.8\
+      \ is cut ONLY after a\n  determinism argument AND **≥3 consecutive green Windows\
+      \ CI runs**\n  of the same commit — one green run is explicitly insufficient\n\
+      \  (the over-claim that bit this session).\n\nFull suite 968 passed / 1 skipped\
+      \ / 0 regressions. Workflow B\naudit: codex + gemini.\n\n## 1.15.7 - 2026-05-15\n\
+      \n**CI fix: 4 codex-dispatch tests required a real `codex` binary.**\nFirst\
+      \ green CI surfaced this: `test_dispatch_codex.py`'s\n`test_main_smoke_with_mocked_codex`,\n\
+      `test_main_smoke_flag_with_env_proceeds`,\n`test_main_sealed_packet_embeds_dispatch_provenance`,\n\
+      `test_dispatch_done_includes_archive_path_and_audit_id` predate the\niter-0037\
+      \ refactor that moved the codex invocation from\n`subprocess.run` to `subprocess.Popen`.\
+      \ They still mock only\n`subprocess.run` (now just the `codex --version` probe),\
+      \ so the\nactual dispatch executes the **real** codex via Popen. They passed\n\
+      on dev machines purely because a real `codex` is on PATH; on CI\nrunners with\
+      \ none they failed `CodexInvocationError: codex binary\nnot found` (windows\
+      \ legs → exit 1) or reached a process-group kill\nthat SIGTERM'd the runner\
+      \ (ubuntu legs → exit 143). It stayed\nhidden because CI was dormant v1.13.0→v1.15.3\
+      \ (main-only trigger)\nuntil v1.15.4 re-enabled it — so these were never actually\n\
+      CI-covered.\n\nHonest interim fix: a `skipif(shutil.which(\"codex\") is None)`\n\
+      guard so they skip cleanly when no real codex is present (they are\nde-facto\
+      \ integration tests as written). Verified both ways: codex\npresent → all 4\
+      \ run + pass (no regression, full suite 968/0);\ncodex absent (simulated) →\
+      \ 4 skip, 0 failed. **Named follow-up\n(tracked):** rewrite the 4 to mock the\
+      \ Popen path via the existing\n`make_fake_codex_popen_factory` / `popen_factory=`\
+      \ kwarg (the\npattern the genuinely-hermetic `main()` tests already use) and\
+      \ drop\nthe skip. Test-only change; no production code, no behavior.\n\nTwo\
+      \ more pre-existing CI-env debts re-enabled CI surfaced, fixed\nhere too:\n\n\
+      - **Validator self-test `20/21` (windows legs).**\n  `run_validator_tests.py::test_packet_build_sanitizes_injection`\n\
+      \  failed because `review_packet_known_good/input.yaml` listed\n  `target_files:\
+      \ agent-loop/tests/fixtures/prompt_injection_doc.md`\n  — a **parent-project\
+      \ path never rewritten during the standalone\n  extraction**. The doc actually\
+      \ lives at\n  `consensus-state/tests/fixtures/prompt_injection_doc.md`; the\n\
+      \  stale path meant the builder read nothing, sanitized nothing, and\n  the\
+      \ empty `sanitization_log` failed the `>=7` check. Repointed the\n  fixture\
+      \ path (the doc contains all 7 `SANITIZE_PATTERNS`); now\n  **21/21**. Not Windows-specific\
+      \ — reproduced locally; latent since\n  iter-0001, masked by dormant CI.\n-\
+      \ **ubuntu job-kill (exit 143 / \"operation canceled\" ~25%) —\n  ROOT-CAUSED\
+      \ + fixed.** Not a hang and not the 4 above:\n  `test_dispatch_codex_streaming.py::_FakePopen.pid`\
+      \ returned\n  **`0`**. On POSIX, `_dispatch_base._terminate_process_tree` does\n\
+      \  `os.killpg(os.getpgid(proc.pid), SIG*)`; `os.getpgid(0)` resolves\n  to **the\
+      \ caller's own process group**, so the abort/watchdog\n  tests SIGTERM'd the\
+      \ pytest / GitHub-Actions job *itself* (instant,\n  hence pytest-timeout never\
+      \ fired). Windows uses the\n  `send_signal`/`taskkill` branch, so it was masked\
+      \ locally and CI\n  was dormant v1.13.0→v1.15.3 so it stayed hidden until v1.15.4\n\
+      \  re-enabled CI. Latent since iter-0039. Fixed two ways:\n  (a) corrected the\
+      \ synthetic pid to a never-live value so\n  `os.getpgid` raises `ProcessLookupError`\
+      \ → the documented\n  `proc.terminate()` fallback runs; (b) a suite-wide\n \
+      \ `tests/conftest.py` autouse guard that neutralizes\n  `os.killpg`/`os.getpgid`\
+      \ so NO test can ever signal a real\n  process group (production `_terminate_process_tree`\
+      \ logic still\n  runs; every `dispatch_aborted` assertion unchanged). `pytest-\n\
+      \  timeout` retained as permanent hardening. Verified: targeted\n  abort/dispatch\
+      \ suites 144/0; full suite 968 passed / 1 skipped /\n  0 regressions with the\
+      \ guard active.\n- **POSIX-only `signal` AttributeError (the FINAL ubuntu blocker).**\n\
+      \  Once (3) stopped the runner self-kill, ubuntu ran to completion\n  and surfaced\
+      \ the real last failure:\n  `test_terminate_process_tree_uses_signal_on_posix`\
+      \ asserted\n  `_dispatch_codex.signal.SIGTERM`, but the iter-0037 refactor moved\n\
+      \  `_terminate_process_tree` to `_dispatch_base` and `_dispatch_codex`\n  only\
+      \ re-imports the function, not the `signal` module → \n  `AttributeError`. This\
+      \ test is Windows-skipped, so it only ran on\n  POSIX CI — masked the entire\
+      \ time CI was dormant. Fixed: assert\n  against the stdlib `signal.SIGTERM`\
+      \ enum directly (module-agnostic;\n  the same object `_dispatch_base` passes).\
+      \ ubuntu was \"1 failed,\n  898 passed, 10 skipped\" — this was the 1.\n- **dispatch-log\
+      \ write atomicity (real defect — found by auditing\n  the audit).** With the\
+      \ runner-kill gone, windows-py3.10 surfaced\n  a non-JSON line in `dispatch-log.jsonl`\
+      \ during abort/thread\n  teardown. The Workflow-B audit's pass-1 (gemini) called\
+      \ it\n  test-only on the premise \"the production append is already\n  lock-atomic\"\
+      ; **first-hand code verification REFUTED that** —\n  `_dispatch_base._log_dispatch`\
+      \ was a *bare unlocked* `open(\"a\")`\n  + `write`, while the streaming path\
+      \ emits events from the main\n  thread AND both reader threads concurrently.\
+      \ So torn lines were\n  possible in production, not just the test. Per the\n\
+      \  convergence-correctness doctrine the 2-AI agreement-on-a-false-\n  prior\
+      \ was rejected; corrected fix-shape **A+C**, unanimously\n  re-confirmed by\
+      \ codex + gemini on the corrected premise:\n  - **(A)** `_log_dispatch` now\
+      \ appends via the codebase's\n    existing OS-exclusive-lock primitive\n   \
+      \ (`_visibility_watchdog._locked_append`; msvcrt/fcntl) — the\n    same mechanism\
+      \ the audit log uses. Concurrent emitters +\n    abrupt teardown can no longer\
+      \ tear a line.\n  - **(C)** the test-only `_read_log_events` skips a line that\n\
+      \    fails `json.loads` — a defensive telemetry-reader belt, not\n    the primary\
+      \ fix.\n  Full suite 968 passed / 1 skipped / 0 regressions with A+C.\n  **Workflow\
+      \ B audit clean** (corrected premise): codex pass-2 +\n  gemini pass-2 both\
+      \ goal_satisfied=true, 0 blocking, 0 findings;\n  shared-prior self-check passed\
+      \ (the false prior was exposed by\n  artifact verification, not laundered).\n\
+      - **(A) primitive corrected — CI refuted the pass-2-audited\n  implementation.**\
+      \ Pass-2's (A) routed `_log_dispatch` through\n  `_visibility_watchdog._locked_append`.\
+      \ Both auditors endorsed\n  the *concept*, but that helper uses a **blocking\
+      \ cross-process**\n  lock (`msvcrt.locking LK_LOCK` / `fcntl.flock`); the streaming\n\
+      \  concurrency is **intra-process** (main + stdout + stderr reader\n  threads\
+      \ of one dispatcher), and contending that blocking OS lock\n  across the same\
+      \ process's threads on Windows stalled the runner\n  thread → windows-py3.12\
+      \ regression (`test_heartbeat_fires_at_\n  interval` \"runner did not finish\"\
+      ; windows-py3.10 was fixed,\n  proving (A)+(C)'s direction right, but py3.12\
+      \ traded). The\n  multi-platform CI caught what audit+local-green could not\
+      \ — the\n  reason CI is the load-bearing oracle for thread/platform bugs.\n\
+      \  Corrected (A): a module-level `threading.Lock`\n  (`_DISPATCH_LOG_LOCK`)\
+      \ guarding a plain text append — the\n  correct, deadlock-free primitive for\
+      \ intra-process thread\n  serialization. Cross-process serialization of a shared\n\
+      \  dispatch-log under *parallel dispatcher processes* is a\n  separate, unobserved\
+      \ concern, named explicitly (NOT solved with\n  the blocking OS lock that just\
+      \ regressed). Full suite 968/1-skip/\n  0-reg; the previously-stalling test\
+      \ passes locally. Re-audited\n  (pass-3) on the corrected primitive.\n\n## 1.15.6\
+      \ - 2026-05-15\n\n**Literal-zero pass** — completes the v1.15.5 identifier migration\n\
+      per the operator \"true zero\" directive. The v1.15.5\nchangelog/commit/doctrine\
+      \ that *documented* the migration\nnecessarily still contained the legacy tokens\
+      \ (you cannot record\n\"X was removed\" without writing \"X\"). Those are now\
+      \ phrased only\nobliquely (\"the former upstream project name\", \"the prior\
+      \ account\nhandle, now `stgarca`\"). The entire working tree (tracked +\ngitignored\
+      \ scratch + binary caches; `__pycache__` purged) was\nswept, and a second `git\
+      \ filter-repo` pass (same substitutions)\ncleaned all historical blobs, every\
+      \ commit/tag message, and the\nsnapshot branch. Verified: **zero literal occurrences\
+      \ in any blob\nacross every ref, in any commit message, in any tag message,\
+      \ and\nin the working tree (including binary)** — including the record of\n\
+      the migration itself. 18 release tags + all branches intact; full\nsuite green;\
+      \ a fresh pre-rewrite backup bundle was kept outside\nthe repo. Semantically\
+      \ identical to v1.15.5 (de-literalization\nonly; no doctrine/behavior change\
+      \ — the substance was\nWorkflow-B-audited in v1.15.5). Every published tag SHA\
+      \ changed\nagain; tag-pinned `pipx …@vX.Y.Z` URLs still resolve.\nCanonical\
+      \ repo: `github.com/stgarca/consensus-mcp`.\n\n## 1.15.5 - 2026-05-15\n\n**Identifier\
+      \ migration + provenance scrub + doctrine reconciliation.**\n\nOperator directed\
+      \ (1) removal of every reference to the former\nupstream project's name, and\
+      \ (2) migration to the renamed GitHub\naccount (now `stgarca`). Both reached\
+      \ immutable commit/tag\nmessages, so — with explicit operator authorization\
+      \ — a full\n`git filter-repo` history rewrite was performed:\n\n- **Rewrite:**\
+      \ literal substitution of the former upstream\n  project name → `upstream` and\
+      \ the prior account handle →\n  `stgarca`, across ALL blob contents AND commit/tag\
+      \ messages,\n  all 18 branches + 66 tags (127 commits). Verified before\n  pushing:\
+      \ zero occurrences of either legacy token in any blob or\n  message across every\
+      \ ref; all 17 release tags + branches\n  present; full suite green on the rewritten\
+      \ tree (substitutions\n  internally consistent). Pre-rewrite safety bundle kept\
+      \ outside\n  the repo.\n- **Consequence (artifact-scoped truth):** every published\
+      \ tag SHA\n  changed. Tag-pinned `pipx install …@vX.Y.Z` URLs keep working\n\
+      \  (tags moved with the rewrite); any raw-commit-SHA pin or clone\n  against\
+      \ the previous account remote is dead. The canonical repo\n  is now `https://github.com/stgarca/consensus-mcp`.\n\
+      - **Doctrine reconciliation:** the v1.15.4 doctrine says `main` is\n  never\
+      \ force-pushed. This rewrite force-pushed everything, so the\n  bundled `consensus-workflow`\
+      \ skill now carries a\n  **sanctioned-exception carve-out**: a full-history\
+      \ rewrite is the\n  ONE non-routine reason to force-push `main`, gated on explicit\n\
+      \  authorization + verified backup + pre-push verification + suite\n  green.\
+      \ Leaving the doctrine contradicting the action would be the\n  exact currency-drift\
+      \ v1.15.3/v1.15.4 fixed.\n- **`consensus-state/README.md`** added (tracked)\
+      \ — documents the\n  runtime-state tree + recovery, and (doctrine-correctly,\
+      \ via a\n  fresh commit rather than more history surgery) relabels the\n  GitHub\
+      \ `consensus-state/` folder off the old root commit the\n  operator flagged.\n\
+      - **Literal-zero pass:** a follow-up scrub removed the legacy\n  tokens from\
+      \ this changelog/commit/doctrine wording itself (they\n  are described only\
+      \ obliquely now) and from snapshot scratch, so\n  the repo contains zero literal\
+      \ occurrences anywhere — including\n  the record of the migration itself.\n\n\
+      No engine/config/behavior code touched. Full suite green. Workflow\nB audit:\
+      \ codex + gemini (bundled-doctrine change).\n\n## 1.15.4 - 2026-05-15\n\n**Repo-presentation\
+      \ + CI + branch-doctrine fix.** Operator observed\nthat the GitHub landing page\
+      \ looked stuck at v1.13.0 and showed a\nhallucinated \"v2.0.0\" commit label\
+      \ on `.github/workflows/`.\n\nRoot cause: the pre-v1.15.4 release-branching\
+      \ convention froze\n`main` forever (releases lived only on `v<X.Y.Z>` branches/tags,\n\
+      never merged back). `main` is GitHub's default branch, so the\nlanding page\
+      \ was frozen at v1.13.0 — and, more seriously,\n`.github/workflows/test.yml`\
+      \ triggered **only** on `main`, so\nGitHub Actions CI was **dormant from v1.13.0\
+      \ → v1.15.3** (every\nrelease ran on a `v*` branch CI never saw; those releases\
+      \ were\nverified by local pytest only).\n\n- **CI** (`.github/workflows/test.yml`):\
+      \ now triggers on push/PR to\n  `main` **and** `v*` branches, so release-branch\
+      \ work is actually\n  exercised by GitHub Actions.\n- **Branch doctrine evolved**\
+      \ (`consensus-workflow` SKILL.md): the\n  \"`main` frozen forever / never merge\
+      \ back\" convention is replaced\n  by \"`main` = latest released state; every\
+      \ release cut\n  fast-forwards `main` to the just-cut tag (clean ff, never a\
+      \ merge\n  or force-push); development continues on `v<next>` branches.\" A\n\
+      \  new cut-sequence step 8 documents the fast-forward with an\n  ancestor-check\
+      \ safety guard (and step 3 moves README install/\n  status currency pre-tag,\
+      \ since the tag's README is now the\n  landing page). Updating the bundled doctrine\
+      \ here\n  prevents the same currency-drift v1.15.3 just fixed.\n- **`main` fast-forwarded**\
+      \ from v1.13.0 (`64f70ec`) to the v1.15.4\n  tag — a verified clean fast-forward\
+      \ (no history rewrite, no\n  dropped commits, no force-push). The GitHub landing\
+      \ page now\n  reflects the current state, including the accessible README.\n\
+      - **README** rewritten as an accessible ~150-line summary (was 364\n  dense\
+      \ lines); deep internals moved behind CHANGELOG/`docs/`\n  links. Load-bearing\
+      \ facts preserved.\n\nNo engine/config/behavior change. Full suite green. Workflow\
+      \ B\naudit: codex + gemini.\n\n## 1.15.3 - 2026-05-15\n\n**Bundled-doctrine\
+      \ + status currency hot-patch** — doc/string only,\nno behavior change. Triggered\
+      \ by an operator question (\"on a new\ninstall, will 2-AI follow all the upgraded\
+      \ workflow lessons, same\nas 3-AI?\"). Investigation answer: **yes — doctrine\
+      \ + v1.15.1\nmachine-enforcement are AI-count-AGNOSTIC, scoped by workflow mode,\n\
+      never by contributor count.** But the investigation found shipped\nv1.15.2 artifacts\
+      \ carrying stale forward-references that misled\nevery new installer (2-AI and\
+      \ 3-AI identically).\n\nScope set by a **Workflow A consult** (`iteration-v1153-bundled-\n\
+      skill-currency`; claude + codex + gemini; weighted-synthesis;\nshared-prior\
+      \ self-check PASSED-WITH-CORRECTION — fast 3/3 unanimity\non scope was partly\
+      \ a shared prior; claude's differing differential\nsurfaced F7, which was integrated,\
+      \ not laundered by the unanimity).\n\nFixed (one failure mode — a shipped artifact's\
+      \ forward-reference\nwhose target version already came due):\n- **F1** `consensus-workflow/SKILL.md`:\
+      \ the converged-plan\n  convention is no longer described as \"machine validation\
+      \ is a\n  sequenced follow-up\" — it is **machine-enforced as of v1.15.1**\n\
+      \  (`validate_converged_plan` + fail-closed seal-time gate +\n  `convergence.converged_plan_enforcement`\
+      \ knob, default\n  `graduated`).\n- **F2** same skill, Gemini section: empty\
+      \ gemini output is NOT a\n  429 — `GEMINI_CLI_TRUST_WORKSPACE` guidance added\
+      \ (fixed v1.15.2;\n  manual workaround only ≤ v1.15.1; don't burn the 429 budget).\n\
+      - **F3** both bundled skills (`consensus-workflow` +\n  bootstrap `consensus`):\
+      \ Workflow C engine status corrected — it\n  did **not** ship in v1.15.0; it\
+      \ is UNIMPLEMENTED as of v1.15.2,\n  no committed target version.\n- **F4**\
+      \ `workflow_engine.py`: the Workflow C `NotImplementedError`\n  message + comment\
+      \ no longer promise \"lands in v1.15.0\" (string/\n  comment only — no control\
+      \ flow; no test pinned it).\n- **F7** `docs/workflows/workflow-c-autonomous.md`:\
+      \ 5 stale\n  \"v1.15.0\" forward-references corrected (the consult's\n  shared-prior-correction\
+      \ finding — the doc F4's text points at).\n- **Q4** `consensus-workflow/SKILL.md`:\
+      \ new normative\n  **consistency invariant** stating doctrine + enforcement\
+      \ are\n  workflow-mode-scoped, never contributor-count-scoped — 2-AI and\n \
+      \ 3-AI installs governed identically; only the convergence-rule\n  default differs\
+      \ (unanimous@2 vs strict-majority@3). Converts the\n  operator's implicit invariant\
+      \ into a written guarantee.\n\nNo invented replacement version anywhere (artifact-scoped\
+      \ truth —\nthat would repeat the exact defect). Code+doc bundled in one tag\n\
+      per the shared-failure-mode hot-patch doctrine (verified precedent:\nv1.14.5,\
+      \ v1.14.6). Full suite green, 0 regressions. Workflow B\naudit: codex + gemini.\n\
+      \n## 1.15.2 - 2026-05-15\n\n**gemini-dispatch workspace-trust fix** — closes\
+      \ the v1.15.1\nnamed blocker (advisory 2026-05-15, now **resolved**).\n\n`consensus_mcp/_dispatch_gemini.py`\
+      \ now injects\n`GEMINI_CLI_TRUST_WORKSPACE=true` into the gemini subprocess\
+      \ env\nvia a new `_gemini_subprocess_env()` helper (returns a COPY of the\n\
+      parent env; forces the var to `true` even if an inherited value is\n`false`;\
+      \ never mutates `os.environ`). gemini CLI\n`0.43.0-preview.0`+ refuses headless\
+      \ runs in an \"untrusted\"\ndirectory — it writes the trust error to stderr\
+      \ and produces\n**empty stdout**, which the dispatcher then fails as\n`GeminiOutputParseError`.\n\
+      \n**Empirically verified 2026-05-15** (the v1.15.1 audit diagnosed\nthis first-hand;\
+      \ gemini pass-1 failed twice for exactly this):\n- `--skip-trust` alone (still\
+      \ passed, defense-in-depth) is NOT\n  load-bearing on this version — gemini\
+      \ bypassed trust but went\n  autonomous and 429'd.\n- `GEMINI_CLI_TRUST_WORKSPACE=true`\
+      \ produced clean deterministic\n  output, and the two clean v1.15.1 Workflow\
+      \ B audit approvals.\n\n`_dispatch_gemini.py` was in the v1.15.1 iteration's\n\
+      `forbidden_files`, so the dispatcher-level fix was correctly\ndeferred to this\
+      \ version rather than patched out-of-scope.\n\nWorkflow B audit clean: gemini\
+      \ `goal_satisfied=true`, 0 blocking,\n0 findings — **dispatched from source\
+      \ with\n`GEMINI_CLI_TRUST_WORKSPACE` explicitly unset**, so the audit pass\n\
+      of this fix was made possible BY this fix (end-to-end in-vivo\nproof; acceptance\
+      \ gate A4). codex: 0 blocking; doc-accuracy\nfindings on the advisory/changelog\
+      \ wording integrated. Full suite\ngreen: 968 passed, 1 skipped, 0 regressions;\
+      \ 4 new unit tests for\n`_gemini_subprocess_env` in `test_dispatch_gemini.py`.\n\
+      \n## 1.15.1 - 2026-05-15\n\n**Machine-enforcement of the converged-plan convention**\
+      \ — closes the\nv1.15.0 NAMED BLOCKER. From `iteration-converged-plan-machine-\n\
+      enforcement` (Workflow A weighted-synthesis: claude + codex + gemini;\nshared-prior\
+      \ self-check PASSED; no blocking objections; the consult\ndogfooded the very\
+      \ convention it enforces). The recorded v1.15.0\n\"starting design\" (gemini's\
+      \ `severity` field + `consensus_gate.py`\nmechanism) was **partially refuted\
+      \ by first-hand code-reading** during\nthe consult: `consensus_mcp/validators/consensus_gate.py`\
+      \ is the\nPhase-0 production-readiness gate (P0-V6) and is the WRONG component\
+      \ —\nthe v1.15.0 doctrine working correctly on its own audit trail.\n\n**Artifact\
+      \ truth (scoped claim):** the **v1.15.0 tag `4e81f9e` is\nDOCTRINE-ONLY** —\
+      \ it shipped the convention as an authoring convention\nenforced by the bundled\
+      \ skill + Workflow B audit, with **zero engine\ncode**. Machine enforcement\
+      \ exists **only from the v1.15.1 tag\nforward**. Users on v1.15.0 get doctrine;\
+      \ they must upgrade to v1.15.1\nto get the gate.\n\nShipped (real code paths\
+      \ — meaningful regression signal, unlike\nv1.15.0's doc-only change):\n\n- **`consensus_mcp/schemas/converged_plan_convention.schema.json`**\n\
+      \  (NEW; `schemas/` is net-new) — JSON Schema for the convention\n  object;\
+      \ `empirical_status` enum `proven|pending|refuted|n/a` matches\n  v1.15.0 verbatim.\n\
+      - **`consensus_mcp/validators/validate_converged_plan.py`** (NEW;\n  small;\
+      \ structure + consequence ONLY). Enforces the consequence of\n  the orchestrator-attested\
+      \ `falsifiable_from_artifacts` bool — the\n  engine does **not** classify the\
+      \ defect (keyword heuristics are the\n  shared-prior trap the v1.15.0 report\
+      \ documents). **Recursive-trap\n  defense (highest-order constraint):** the\
+      \ validator has zero code\n  path deriving any approved/correct/ready/sound\
+      \ state from the\n  blocks (pinned by `test_validator_source_sets_no_correctness_state`\n\
+      \  grepping the module), and every result carries an unconditional\n  `gate_scope`\
+      \ disclaimer: *\"presence-and-consistency only; NOT a\n  soundness assertion\
+      \ … remains a human judgement.\"* A pass means the\n  required thinking was\
+      \ **recorded**, never that it is **true**.\n- **`workflow_engine._seal_converged_plan`**\
+      \ — ingests the optional\n  orchestrator-authored `convention-input.yaml` via\
+      \ the ONE channel\n  that already reaches seal time (a file in `iteration_dir`;\
+      \ no new\n  parameter threaded through `run_iteration`/the MCP tool — codex's\n\
+      \  external-refuting-observation honored), validates it, and seals the\n  blocks\
+      \ **INTO** `converged-plan.yaml` (same write, same hash) with\n  required `cited_pass_ids`\
+      \ (provenance-by-citation: not a loose\n  untracked sidecar, not a single-winner\
+      \ extraction — gemini's\n  chain-of-evidence requirement). **Fail-closed:**\
+      \ a hard-reject does\n  NOT write `converged-plan.yaml`.\n- **Graduated strictness**\
+      \ (`convergence.converged_plan_enforcement`:\n  `off|warn|graduated|strict`,\
+      \ default `graduated`). Hard-reject ONLY\n  (i) operator-declared safety/data-loss/bricking/irreversible\
+      \ risk\n  class missing a conforming root-cause-independent\n  `independent_safeguard`,\
+      \ and (ii) `empirical_status:proven` with no\n  recorded `experiment_result`;\
+      \ warn + annotate `convention_violations`\n  otherwise.\n- **`consensus_get_iteration_outcome`**\
+      \ surfaces `enforcement` +\n  `convention_gate_scope` + `convention_violations`;\
+      \ a reader can\n  never see a pass marker without the non-soundness disclaimer\
+      \ next\n  to it. Legacy / absent-convention plans (this session's iter-0043\n\
+      \  .. v1.15.0) still load, explicitly marked `enforcement:\n  doctrine-only`\
+      \ — **NOT silently valid, NOT rejected**.\n\n**Named blocker (need-evidence,\
+      \ deferred — not a cop-out):** operator\ngoal_packet `defect_class`/`risk_class`\
+      \ declaration UX + an\nanti-gaming cross-check on `falsifiable_from_artifacts`.\
+      \ Both are\nill-posed until the shipped slice produces real usage data.\n\n\
+      **Workflow B audit chain** (codex + gemini, post-implementation):\ngemini APPROVED\
+      \ (`goal_satisfied=true`, no blocking). codex pass-1\nraised 2 blocking + 2\
+      \ high — all verified against real code (no\nhallucinations; all correctly caught\
+      \ the slice under-implementing\nthe converged plan) and integrated TDD-first:\
+      \ the third named block\n(`decisive_experiment_before_next_iteration`) is now\
+      \ schema-required\n+ validated; `doctrine-only` is a READ-time legacy classification\n\
+      only (a new convergence missing blocks is validated under the\nconfigured level,\
+      \ not bypassed); `convention_schema_version` is\npinned exactly (never defaulted/rewritten);\
+      \ a hard-reject removes any\nstale `converged-plan.yaml` (fail-closed truly\
+      \ closed). **Design\nnote (intentional, peer-converged):** under the default\
+      \ `graduated`\nlevel a new *non-safety* convergence missing blocks is sealed\
+      \ as\n**warn + annotate** (loudly marked via `convention_gate.\nenforcement_note`,\
+      \ never a silent pass), NOT hard-rejected — this is\nthe converged plan's deliberate\
+      \ q4/q5 decision (incl. codex's own\nconsult position) to avoid the rejected-goal_packet\
+      \ papercut. Strict\nenforcement is opt-in via `converged_plan_enforcement: strict`.\n\
+      \nFull suite green: 964 passed, 1 skipped, 0 regressions (38 new\ncode-path\
+      \ tests in `test_converged_plan_convention.py`, including\nall audit-integration\
+      \ fixes — they close the v1.15.0 doc-only loose\nend with a meaningful regression\
+      \ signal).\n\n## 1.15.0 - 2026-05-15\n\n**Convergence-correctness doctrine**\
+      \ — minor bump (cross-project\ndoctrine evolution, not a hot-patch). From\n\
+      `iteration-convergence-correctness-doctrine` (Workflow A\nweighted-synthesis:\
+      \ claude + codex + gemini, no blocking\nobjections; gemini dissented substantively\
+      \ on prominence +\nmachine-enforcement and that dissent was incorporated, not\n\
+      outvoted — the shared-prior self-check passed), derived from a\nreal downstream\
+      \ failure: the ChilipadScreen ESP32-P4 i2c\nboot-loop consensus-failure report\
+      \ (2026-05-15) where two clean\nstrict-majority convergences (one round-1 *unanimous*)\
+      \ were both\nrefuted on-device.\n\nDoctrine added to the bundled `consensus-workflow`\
+      \ skill + both\ndispatch-template preambles + a new\n`docs/workflows/converged-plan-convention.md`:\n\
+      \n- **Safety interlock first (headline rule).** Safety-critical /\n  data-loss\
+      \ / bricking / irreversible-risk defects MUST ship a\n  root-cause-INDEPENDENT\
+      \ safeguard with the hypothesized fix,\n  valuable even if the hypothesis is\
+      \ 100% false. Auditable bar:\n  \"would it still work if the root cause were\
+      \ entirely\n  different?\" Field-proven: an independent boot-loop breaker\n\
+      \  un-bricked a medical-safety device across two failed\n  root-cause iterations\
+      \ (\"the single highest-value decision\").\n- **Convergence is agreement, not\
+      \ truth.** Fast independent\n  unanimity is a verify-harder flag — a shared-prior\
+      \ artifact is\n  the multi-agent analog of single-agent rationalize-away.\n\
+      \  Dispatch templates now require each contributor to state the\n  differential/prior\
+      \ it reasoned from (shared prior exposed at\n  reveal instead of laundered as\
+      \ \"independent agreement\").\n- **Provisional-until-proven** for the defined\
+      \ not-falsifiable-\n  from-artifacts class (hardware/firmware state, environment/\n\
+      \  toolchain, concurrency/timing): converged root cause is\n  PROVISIONAL; \"\
+      fixed/shipped/root-cause-correct\" language\n  forbidden until a pre-specified\
+      \ EXTERNAL discriminating\n  experiment runs.\n- **Anti-theater property:**\
+      \ a falsification is real only if its\n  refuting observation is pre-specified,\
+      \ a specific observable,\n  and (for that class) external to the reasoning that\
+      \ produced\n  the hypothesis.\n- **Converged-plan convention:** `falsification`,\n\
+      \  `independent_safeguard`, and\n  `decisive_experiment_before_next_iteration`\
+      \ blocks documented\n  as an authoring standard, doctrine-enforced now.\n\n\
+      **Named blocker (sequenced follow-up):** engine/validator\nMACHINE-enforcement\
+      \ of the converged-plan blocks (gemini's\n`severity` field + `consensus_gate.py`\
+      \ mechanism is the recorded\nstarting design). Concrete blocker, file-verified:\
+      \ no standalone\nconverged-plan schema exists; `workflow_engine.py:505-525`\
+      \ reads\ngeneric YAML keys. Needs its own schema-design consult + a\nnot-falsifiable-from-artifacts\
+      \ classifier first.\n\n**Field validation of v1.14.9:** the same report independently\n\
+      confirmed the v1.14.9 void-seal preservation working correctly —\nvoid rounds\
+      \ from the v1.14.0 path-only review bug were preserved\nas honest audit history\
+      \ and correctly not counted toward\nconvergence. No new tooling; cited as regression\
+      \ evidence.\n\nDoc/skill/template/memory only — no engine, config, or code\n\
+      paths touched. Full test suite green, 0 regressions.\n\n## 1.14.9 - 2026-05-15\n\
+      \nSeal-pipeline defect fix from iteration-seal-archive-collision-fix\n(workflow\
+      \ A weighted-synthesis convergence; codex + gemini + claude;\nno blocking objections).\
+      \ Workflow B audit of the implementation by\ncodex + gemini.\n\n**Defect:**\
+      \ `review_write_and_seal.handle` built the archive filename\nfrom `reviewer_id`\
+      \ only (`{date}-{iteration_id}-{reviewer_id}-pass.yaml`),\nwhile the index keys\
+      \ uniqueness on `pass_id`. Re-using a reviewer_id\nacross passes (e.g. `gemini-iteration-0012-2`\
+      \ for pass1 AND pass2)\nproduced a hard `packet_path_collision` at the path-exists\
+      \ guard\n*before* the pass_id-aware index logic ever ran — forcing operators\n\
+      to mint throwaway reviewer-ids per attempt. `test_contributors.py:135`'s\ndocstring\
+      \ (\"filename must contain iteration_id + reviewer_id + pass_id\ntokens\") documented\
+      \ the intended 4-token contract; the implementation\nhad silently regressed\
+      \ to 3 tokens at/before extraction.\n\n**Fix (`consensus_mcp/tools/review_write_and_seal.py`):**\n\
+      \n- Archive filename is now 4-token:\n  `{date}-{iteration_id}-{reviewer_id}-{safe_pass_id}-pass.yaml`.\n\
+      \  Filename uniqueness key == index uniqueness key (pass_id).\n- New `_sanitize_for_filename`:\
+      \ maps `[^A-Za-z0-9._-]`→`-`, collapses\n  runs, strips, falls back to `pass`.\
+      \ Applied to the FILENAME only —\n  the raw `pass_id` is preserved verbatim\
+      \ in the index entry and\n  packet body.\n- The index `pass_id` lookup is REORDERED\
+      \ ahead of the path-exists\n  guard, and idempotency is judged on **content\
+      \ identity** — the\n  canonical hash of the packet with the volatile seal-provenance\n\
+      \  fields (`sealed_at_utc`, `packet_sha256`) stripped — compared\n  against\
+      \ the actual ON-DISK archived packet. An exact re-seal is\n  an idempotent SUCCESS\
+      \ (`idempotent: true`, `index_updated:\n  false`, existing recorded path; scheme-agnostic\
+      \ so old-scheme\n  archives still resolve) **regardless of seal time**. This\n\
+      \  matters because a dispatch retry builds a fresh packet with no\n  `sealed_at_utc`;\
+      \ a sha-based check would see a new timestamped\n  hash and mis-classify the\
+      \ retry as a collision — defeating the\n  whole feature for its primary use\
+      \ case (caught by codex Workflow\n  B audit, HIGH).\n- Integrity guard on the\
+      \ idempotent path: a tampered archive that\n  no longer matches the incoming\
+      \ content identity yields\n  `index_collision`; one that parses as valid **non-mapping**\
+      \ YAML\n  (list/scalar) yields `idempotent_target_integrity_mismatch`\n  without\
+      \ crashing; a deleted/unreadable archive yields\n  `idempotent_target_missing`\
+      \ / `_unreadable`. The idempotent\n  success return reports the **authoritative\
+      \ on-disk artifact\n  hash** (the file's own `packet_sha256`, or a reconstruction\
+      \ if\n  absent), never a missing/stale value copied from the index.\n- The sealed\
+      \ body now always self-records the canonical `pass_id`\n  (`packet.setdefault`),\
+      \ including for pass-label-only packets,\n  and a parameter-vs-body `pass_id`\
+      \ consistency guard mirrors the\n  existing `iteration_id` / `reviewer_id` guards.\n\
+      - `index_collision` (same pass_id, substantively *different*\n  content) preserved\
+      \ with a content-identity-based detail string.\n- path-exists guard retained\
+      \ as a defense-in-depth backstop with a\n  distinct detail string (unreachable\
+      \ in normal flow).\n- `output_schema` + the `handle()` docstring updated to\
+      \ document\n  the new `idempotent` success field and all new error codes; a\n\
+      \  schema-contract test pins every `handle()` error code to the\n  schema enum\
+      \ so this drift cannot silently regress.\n\n**Workflow B audit chain** (post-review;\
+      \ codex iterated, gemini\napproved the core design): gemini APPROVED with no\
+      \ findings; codex\nsurfaced and drove resolution of 6 distinct real gaps across\
+      \ 4\naudit passes — output-schema drift, missing pass_id consistency\nguard,\
+      \ a HIGH timestamp-dependent-idempotency defect, a\nnon-mapping-archive crash,\
+      \ pass-label body identity, and a\nstale/missing idempotent-return hash — before\
+      \ reaching\n`goal_satisfied: true` with no blocking objections. The HIGH\nfinding\
+      \ (idempotency silently broken by the pre-existing\n`sealed_at_utc`-in-hash\
+      \ stamp) would have shipped a dead feature\nwithout this audit.\n\n**Backward\
+      \ compat:** the 162 existing archives are NOT migrated.\n`review_read_post_seal`\
+      \ resolves via the index's stored relative\npath and never parses the filename,\
+      \ so old-scheme archives remain\nfully readable. Mixed-scheme archive directory\
+      \ across the v1.14.x\nboundary is expected; the index is the resolution source\
+      \ of truth.\n\n**Tests:** new `consensus_mcp/tests/test_seal_collision_fix.py`\n\
+      (19 cases: the exact `gemini-iteration-0012-2` same-reviewer-\ndistinct-pass\
+      \ scenario; timestamp-independent idempotent success;\nnon-mapping-archive integrity\
+      \ guard; target-missing; pass_id\nparameter/body consistency; pass-label body\
+      \ identity stamping;\nauthoritative-hash return when the index sha is blank;\n\
+      hostile-pass_id sanitization; schema-contract pinning of every\n`handle()` error\
+      \ code); `test_contributors.py` fake_t6 helpers\nupdated to the 4-token scheme.\
+      \ Full suite **723 pass, 0\nregressions** (excluding the pre-existing `test_dispatch_codex`\n\
+      ordering flake + `jsonschema`-missing environmental issue, both\npredating this\
+      \ work).\n\n**Deferred with stated reasons** (recorded, not silently dropped):\n\
+      \n- `superseded_by` index annotation for void seals — 2/3\n  contributors scoped\
+      \ it out as beyond the minimal defect; file\n  preservation alone already satisfies\
+      \ the audit-history\n  requirement. Own small consult if causal supersession\
+      \ tracking\n  is wanted.\n- Forensic scan of the 162 existing archives for latent\
+      \ mis-seals\n  — blocked on an undefined remediation model for immutable sealed\n\
+      \  history.\n- `index.yaml` non-atomic read-modify-write race — pre-existing,\n\
+      \  orthogonal; separate hardening consult.\n\nCarried forward from the overnight\
+      \ run (still open, unchanged):\nWorkflow C multi-iteration engine (v1.15.0 named\
+      \ blocker); iter-0045\nPHASE_CONVERGE mapping empirical evaluation; project-level\n\
+      `.consensus/autonomous-policy.yaml`.\n\n## 1.14.8 - 2026-05-14\n\niter-5 of\
+      \ autonomous run-2026-05-15-overnight. Bundled\n`consensus_mcp/claude_extensions/skills/consensus/SKILL.md`\
+      \ (the\nbootstrap skill that triggers on \"consensus init\") gains a\n\"Workflow\
+      \ modes the operator can pick (v1.14.4+)\" section:\n\n- Documents Workflow\
+      \ A (propose-converge, default), Workflow B\n  (post-review, lightweight), Workflow\
+      \ C (autonomous-execute,\n  v1.14.4 contract / v1.15.0 engine), and advisory.\n\
+      - Notes the numeric-alias deprecation cycle.\n- Cross-references the operating-procedure\
+      \ skill\n  (`~/.claude/skills/consensus-workflow/SKILL.md`) as the\n  load-bearing\
+      \ reference for dispatch rules and halt conditions.\n\nOperators running `consensus\
+      \ init` for the first time will now see\nthe workflow-mode vocabulary at bootstrap\
+      \ time instead of having to\ndiscover it from the `--help` output.\n\nNo code\
+      \ changes; doc only. 704 tests pass.\n\n## 1.14.7 - 2026-05-14\n\nDoc hot-patch\
+      \ from autonomous run-2026-05-15-overnight iter-4. Two\nstale references that\
+      \ user-facing surfaces still showed:\n\n- `README.md` \"Status\" section bumped\
+      \ from \"1.14.0 — multi-AI\n  contributor pool, blind-first-reveal workflow\
+      \ #4 ...\" to a\n  \"v1.14.6 (current)\" header + per-release train summary\
+      \ covering\n  v1.14.0 → v1.14.6. Includes pointer to `docs/advisories.md` for\n\
+      \  known-defect-release upgrade guidance.\n- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`\n\
+      \  one stale \"Workflow #3\" reference in the \"Workflow A/B in one line\"\n\
+      \  section body (the global rename in v1.14.4 missed this hyphenated\n  form).\
+      \ Bumped to \"Workflow B\".\n\nNo code changes; docs only. 704 tests pass (no\
+      \ regression).\n\n## 1.14.6 - 2026-05-14\n\nHot-patch from autonomous run-2026-05-15-overnight\
+      \ iter-3.\n\n**Defect fixed:** `consensus-init --workflow A` (and B, C, lowercase\n\
+      variants, and the new `autonomous-execute` semantic string) was\nrejected at\
+      \ argparse parse-time before alias resolution could run.\nv1.14.4 added letter\
+      \ aliases to `WORKFLOW_ALIASES` + the interactive\nwizard prompt but missed\
+      \ the CLI `--workflow` argparse `choices` list,\nwhich still hardcoded the pre-rename\
+      \ set\n`[\"3\",\"4\",\"post-review\",\"propose-converge\",\"advisory\"]`.\n\n\
+      **Fix:** `consensus_mcp/_init_wizard.py` argparse `--workflow` choices\nlist\
+      \ expanded to include `[\"A\",\"B\",\"C\",\"a\",\"b\",\"c\",\"3\",\"4\",\n\"\
+      post-review\",\"propose-converge\",\"advisory\",\"autonomous-execute\"]`.\n\
+      Help text updated to document A/B/C semantics inline so\n`consensus-init --help`\
+      \ is self-documenting. Numeric aliases (3, 4)\nstill accepted at parse-time;\
+      \ deprecation warning fires at\n`normalize()` time per the v1.14.4 contract\
+      \ (unchanged).\n\n**Tests:** 8 new in `consensus_mcp/tests/test_init_wizard_workflow_choices.py`\n\
+      asserting argparse acceptance for each new alias variant + sanity\ntest that\
+      \ letter parses through `WORKFLOW_ALIASES` to the canonical\nsemantic string.\
+      \ Total suite: 704 pass (was 696; +8 for iter-3).\n\n## 1.14.5 - 2026-05-14\n\
+      \nBundled hot-patch from autonomous-mode `run-2026-05-15-overnight`\n(operator-initiated;\
+      \ running per the v1.14.4 Workflow C contract,\nmanually-orchestrated since\
+      \ the v1.15.0 engine path is the named\nblocker). Two completed iterations bundled\
+      \ per the no-deferral rule:\n\n**iter-0044 — adapter `--mode` forwarding fix**\
+      \ (Workflow B audit;\ncodex + gemini both `goal_satisfied=true, blocking_objections=[]`).\n\
+      \nThe original defect: `CodexAdapter.dispatch` and\n`GeminiAdapter.dispatch`\
+      \ built argv without `--mode`, causing every\nworkflow A round-1 dispatch through\
+      \ the engine to silently use the\nreview template + review schema even when\
+      \ `packet.phase ==\nPHASE_PROPOSE`. The shell binaries (`consensus-mcp-dispatch-codex`,\n\
+      `consensus-mcp-dispatch-gemini`) already accepted `--mode {review,\nproposal}`\
+      \ per iter-0028; the adapter just wasn't forwarding it.\nTest coverage didn't\
+      \ catch this because\n`test_dispatch_codex_proposal_mode.py` only tested the\
+      \ dispatcher's\nown argparse in isolation, never the adapter boundary.\n\nImplementation\
+      \ per iter-0043 converged plan:\n\n- `consensus_mcp/contributors/_phase_mode.py`\
+      \ NEW — single source\n  of truth: `PHASE_PROPOSE → \"proposal\"`, `PHASE_REVIEW\
+      \ → \"review\"`,\n  `PHASE_CONVERGE → \"review\"` (interim per iter-0043 q1\n\
+      \  weighted-synthesis; iter-0045 candidate revisits with empirical\n  data).\
+      \ Strict-dict lookup; raises `ValueError` on unmapped phase\n  (no silent default\
+      \ — that's exactly what allowed the original\n  defect).\n- `consensus_mcp/contributors/codex.py`\
+      \ — append `--mode` to argv\n  via `phase_to_mode(packet.phase)`.\n- `consensus_mcp/contributors/gemini.py`\
+      \ — same.\n- `consensus_mcp/tools/reviewer_dispatch_codex.py` — schema gains\n\
+      \  `phase` (engine abstraction, primary) + `mode` (dispatcher escape\n  hatch,\
+      \ optional). `_resolve_mode(phase, mode)` helper: explicit\n  mode wins; otherwise\
+      \ translate phase via `_phase_mode`; otherwise\n  None (caller omits `--mode`\
+      \ for backward compat).\n- `consensus_mcp/tools/reviewer_dispatch_gemini.py`\
+      \ — mirrors codex\n  wrapper exactly.\n- `consensus_mcp/tests/test_phase_mode_forwarding.py`\
+      \ NEW — 21 tests\n  covering: phase_to_mode mapping (all 3 phases + ValueError\
+      \ on\n  unknown); CodexAdapter + GeminiAdapter argv forwarding for all 3\n \
+      \ phases (mock-based); MCP wrapper `_resolve_mode` + `_build_argv`\n  (phase-to-mode\
+      \ mapping + mode-wins-over-phase + neither =\n  backward-compat omission).\n\
+      \nTest results: 696 pass (was 675; +21 for iter-0044). Adapter\nboundary now\
+      \ covered by tests that would have caught the original\ndefect.\n\n**README\
+      \ staleness sweep** (doc-only; no peer audit needed).\n\n- `README.md`: \"What\
+      \ it does\" section updated to Workflow A/B/C\n  vocabulary + Workflow C mention;\
+      \ install URLs already at\n  `@v1.14.4`; \"Pre-commit vs post-commit catch\"\
+      \ section + table-of-\n  contents reference Workflow A / Workflow B with \"\
+      (was workflow\n  #4 / #3 prior to v1.14.4)\" historical note.\n- `docs/workflows/workflow-4-preferred.md`:\
+      \ filename preserved for\n  stable cross-references; frontmatter + body updated\
+      \ to Workflow A\n  vocabulary; transition note at top.\n\nAudit log: `consensus-state/autonomous-runs/run-2026-05-15-overnight/log.jsonl`\n\
+      records both iterations + halt-set checks + scope-check decisions\nper the v1.14.4\
+      \ Workflow C contract schema.\n\n## 1.14.4 - 2026-05-14\n\n## 1.14.4 - 2026-05-14\n\
+      \nWorkflow A/B/C rename + Workflow C contract from\niter-workflow-abc-introduce\
+      \ (workflow A weighted-synthesis\nconvergence across claude + codex + gemini;\
+      \ no blocking objections).\n\n**Operator-facing vocabulary: numeric → letter\
+      \ aliases.**\n\n- Workflow A = propose-converge (was numbered #4) — DEFAULT\n\
+      - Workflow B = post-review (was numbered #3) — LIGHTWEIGHT\n- Workflow C = autonomous-execute\
+      \ (NEW) — LONG-FORM/OVERNIGHT\n- Numeric aliases (3, 4) still resolve but emit\
+      \ `DeprecationWarning`;\n  scheduled for removal in a future minor release.\n\
+      \n**Workflow C — autonomous-execute (CONTRACT shipped, engine deferred).**\n\
+      \n`consensus init` operators can configure a project for Workflow C;\ngoal_packet\
+      \ authors can declare an `autonomy_contract` block with\nfile boundaries, halt\
+      \ conditions, and iteration/wall-clock caps.\nThe validator and `check_autonomy_scope`\
+      \ helper are fully\nimplemented and tested. The actual multi-iteration auto-execution\n\
+      loop is the named blocker for v1.15.0 (requires cross-platform\ninterrupt-file\
+      \ watching validation, integration tests with real\npeer dispatches, autonomy-ledger\
+      \ replay design — multi-session\nwork that does not fit a hot-patch).\n\nWorkflow\
+      \ C requires exactly 3 contributors (claude + codex + gemini)\nenforced at config-load\
+      \ — the wide cross-AI safety net is mandatory\nfor autonomous mode by default;\
+      \ v1.15.0+ may relax with explicit\noperator opt-in.\n\nWhen an operator runs\
+      \ a Workflow C goal_packet in v1.14.4, the\nengine raises `NotImplementedError`\
+      \ with a clear message naming\nv1.15.0 as the engine ship target and pointing\
+      \ at\n`docs/workflows/workflow-c-autonomous.md`.\n\n**Files in scope:**\n\n\
+      - `consensus_mcp/config.py`: `WORKFLOW_AUTONOMOUS_EXECUTE` constant +\n  alias\
+      \ map (A/B/C primary; numeric deprecated) + 3-AI requirement\n  validator +\
+      \ DeprecationWarning emission for numeric aliases.\n- `consensus_mcp/validators/scope_check.py`:\
+      \ new\n  `validate_autonomy_contract` + `check_autonomy_scope` functions\n \
+      \ (approve/park/halt decisions); `DEFAULT_HALT_ON` constant lists\n  the wide-by-default\
+      \ halt conditions; `AUTONOMY_CONTRACT_REQUIRED_FIELDS`\n  documents required\
+      \ schema.\n- `consensus_mcp/workflow_engine.py`: recognizes\n  `WORKFLOW_AUTONOMOUS_EXECUTE`;\
+      \ raises `NotImplementedError` with\n  v1.15.0 reference.\n- `consensus_mcp/_init_wizard.py`:\
+      \ workflow prompt accepts letter\n  aliases (A/B/C); resolves to canonical semantic\
+      \ string before\n  storing.\n- `consensus_mcp/tests/test_config.py`: 11 new\
+      \ tests covering alias\n  rename, deprecation warning, 3-AI requirement, and\
+      \ Workflow C\n  validation.\n- `consensus_mcp/tests/test_scope_check_autonomy.py`\
+      \ (NEW): 17 tests\n  covering autonomy_contract validation + check_autonomy_scope\n\
+      \  decision logic + glob matching edge cases.\n- `consensus_mcp/dispatch_templates/codex_proposal_template.md`,\n\
+      \  `gemini_proposal_template.md`: A/B reference instead of #3/#4.\n- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`:\n\
+      \  new \"Workflow A / B / C in one line each\" section; #3/#4 references\n \
+      \ bumped to A/B throughout.\n- `docs/workflows/workflow-c-autonomous.md` (NEW):\
+      \ operator-facing\n  doc on Workflow C usage (autonomy_contract example, halt\
+      \ set table,\n  scope-check decisions, interrupt mechanism, audit log location,\n\
+      \  v1.15.0 status note).\n\n**Test summary:**\n\n- 675 tests pass (full suite\
+      \ excluding pre-existing\n  `test_dispatch_codex.py` ordering flake and `jsonschema`-missing\n\
+      \  environmental issue in the proposal-mode tests; both predate this\n  release\
+      \ per `docs/known-issues/pytest-ordering-flake.md`).\n- New: 11 in `test_config.py`\
+      \ for alias + Workflow C; 17 in\n  `test_scope_check_autonomy.py` for the validator\
+      \ and decision\n  logic.\n\n**Named blockers for deferred work:**\n\n- v1.15.0\
+      \ — Workflow C multi-iteration auto-execution loop:\n  requires cross-platform\
+      \ interrupt-file watching validation\n  (Windows ReadDirectoryChangesW vs Unix\
+      \ select/poll), integration\n  tests with real peer dispatches (cost: dispatcher\
+      \ latency × N\n  iterations per test run), resume-after-halt semantics design,\n\
+      \  autonomy-ledger replay for failure recovery. Multi-session work.\n- v1.16.0+\
+      \ — project-level `.consensus/autonomous-policy.yaml` as\n  default with goal_packet\
+      \ override: deferred until empirical\n  evidence operators want it across multiple\
+      \ Workflow C runs (we\n  have zero runs today; designing for hypothetical reuse\
+      \ is\n  premature per the no-deferral rule's \"real blocker\" requirement).\n\
+      - iter-0044 (adapter `--mode` forwarding fix) deferred to v1.14.5\n  with named\
+      \ blocker (still requires adapter-boundary test\n  infrastructure).\n\n## 1.14.3\
+      \ - 2026-05-14\n\nStabilization hot-patch from iter-audit-2026-05-14-three-followup-gaps\n\
+      (workflow #4 weighted-synthesis convergence; codex + gemini + claude;\nno blocking\
+      \ objections). Bundles all converged scope into one tag per\nthe no-deferral\
+      \ doctrine (operator directive: \"consensus runs to\ncompletion when goals +\
+      \ acceptance gates are clear\").\n\n**Doctrine: consensus runs to completion\
+      \ (no gratuitous deferral).**\n\nNew bundled-skill section \"Consensus runs\
+      \ to COMPLETION\" + dispatch-\ntemplate completion mandate codify the rule:\
+      \ deferring well-defined\nwork to \"future iterations\" without naming a specific\
+      \ blocker is an\nanti-pattern. Includes the completion test (acceptance gates\
+      \ concrete?\nopen design surface? implementation cost small enough?) and explicit\n\
+      anti-patterns (\"iter-XXXX candidate\" with no blocker, \"Phase B\" when\nphases\
+      \ share a doctrine boundary, splitting hot-patches across tags\nwhen fixes share\
+      \ a single failure mode).\n\n**Doctrine in the data layer (Q1 — config.py):**\n\
+      \n- `DISPOSITION_WEIGHTED_SYNTHESIS = \"weighted-synthesis\"` constant\n  added\
+      \ to `consensus_mcp/config.py`.\n- `VALID_DISPOSITION` now includes the new\
+      \ value.\n- `VALID_DISPOSITION_FOR_PROPOSE_CONVERGE = {all-or-nothing,\n  weighted-synthesis}`\
+      \ — workflow #4 accepts these two only;\n  `per-finding` stays post-review-only\
+      \ (its semantics fit defect\n  lists, not plan synthesis).\n- `default_config()`\
+      \ workflow #4 default flips from `all-or-nothing`\n  to `weighted-synthesis`\
+      \ (matches the iter-0043 doctrine).\n- Validator at `config.py:303-309` updated\
+      \ to allow either valid\n  workflow #4 disposition; rejects `per-finding` with\
+      \ actionable\n  error message.\n- `_init_wizard.py` defaults updated: workflow\
+      \ #4 setup now lands\n  in `weighted-synthesis` by default; workflow #3 / advisory\
+      \ keep\n  `all-or-nothing` as their default.\n- 4 new tests in `test_config.py`\
+      \ cover both valid dispositions for\n  workflow #4 + reject `per-finding` with\
+      \ regex-matched message.\n  Pre-existing `test_default_disposition_all_or_nothing`\
+      \ renamed\n  to `test_default_disposition_weighted_synthesis` and updated.\n\
+      - All 107 tests in `test_config.py` + `test_init_wizard.py` pass.\n\n**Procedural\
+      \ enforcement of disconfirming-evidence pattern (Q2):**\n\n- Bundled skill:\
+      \ completion mandate in templates + skill (also\n  lands the no-deferral rule\
+      \ above as the structural sibling).\n- Dispatch templates (`codex_proposal_template.md`,\n\
+      \  `gemini_proposal_template.md`): completion mandate preamble so\n  peer AIs\
+      \ default to in-scope completion, not deferral.\n\n**Stale-tag mitigation (Q3):**\n\
+      \n- `README.md` install URLs bumped from `@v1.14.0` to `@v1.14.3`\n  (both pipx\
+      \ and pip-in-venv examples). Stops the bleeding wound\n  where new installs\
+      \ were getting the v1.14.0 buggy bundled skill.\n- `docs/advisories.md` NEW\
+      \ — standing channel for \"shipped artifact\n  has known doctrine drift\" notices.\
+      \ First entry covers v1.14.0\n  and v1.14.1 with explicit upgrade instructions\
+      \ (`pipx install\n  --force` + re-run `consensus init --install-claude-code`).\n\
+      - Bundled skill cut sequence (steps 8 + 10) gains explicit \"bump\n  README\
+      \ install URL on the new dev branch\" + \"add advisory entry\n  if applicable\"\
+      \ steps so this drift cannot recur structurally.\n\niter-0044 (adapter `--mode`\
+      \ forwarding fix per iter-0043 converged\nplan) deferred to v1.14.4 with named\
+      \ blocker: still requires test\ninfrastructure setup for adapter-boundary fixtures\
+      \ that does not\nfit in this hot-patch's scope.\n\n## 1.14.2 - 2026-05-14\n\n\
+      ## 1.14.2 - 2026-05-14\n\nDoctrine hot-patch from iter-audit-2026-05-14-pypi-invention\n\
+      (workflow #4 postmortem consult; weighted-synthesis convergence\nacross claude\
+      \ + codex + gemini, no blocking objections).\n\nThe audit examined two compounding\
+      \ errors observed in the v1.14.0\nrelease cycle: (1) inventing a \"publish to\
+      \ PyPI\" step in the cut\nsequence based on the inference \"Python project +\
+      \ pipx → PyPI\"\nwithout verifying the actual install URL form (the package\
+      \ is\nnot registered on PyPI; ships via git tags), and (2) gluing two\ncorrect\
+      \ statements (\"v1.14.0 tag is on origin\" + \"git tags are\nthe only channel\"\
+      ) into a misleading composite (\"v1.14.0 is\nfully shipped via the only channel\
+      \ that exists\") that masked\nthe artifact defect (the v1.14.0 tag at commit\
+      \ 8e0dab2 still\nships the buggy skill in its wheel).\n\nThree orthogonal failure\
+      \ modes converged: verification gap +\ndefaulting bias + sloppy framing. Layered\
+      \ defenses applied:\n\n- **Bundled skill: \"Verify before invent\"** section\
+      \ requires\n  positive citation of the source for any step touching an\n  external\
+      \ system / channel. Disconfirming evidence (missing\n  creds, missing workflow,\
+      \ registry 404) is treated as the\n  SIGNAL, not as a credential gap to fill.\n\
+      - **Bundled skill: \"Artifact-scoped claims\"** section forbids\n  global \"\
+      fixed\" / \"shipped\" claims when the surface is broader\n  than what was changed.\
+      \ Required form names version + commit/\n  tag + install path + bundled content\
+      \ + residual defects;\n  immutable tag and dev branch are NOT the same artifact.\n\
+      - **Dispatch templates** (codex_proposal_template,\n  gemini_proposal_template)\
+      \ gain a verification-first mandate\n  preamble so all peer AIs in future consults\
+      \ apply the rule,\n  not just claude.\n- **Project-local memories** (gitignored,\
+      \ claude-personal):\n  feedback_verify_before_invent, feedback_partial_fix_surfacing,\n\
+      \  feedback_disconfirming_evidence (names the\n  bias-rationalizes-evidence\
+      \ pattern explicitly), and\n  reference_default_priors_to_distrust (enumerated\
+      \ list of\n  high-risk inferences: PyPI/npm/Docker/MIT/pytest/etc.,\n  append-only).\n\
+      \nNo code changes; doctrine-only. Scope unchanged for v1.14.3\n(iter-0044 adapter\
+      \ `--mode` forwarding fix per iter-0043\nconverged plan).\n\n## 1.14.1 - 2026-05-14\n\
+      \n## 1.14.1 - 2026-05-14\n\nHot-patch: corrects the bundled `consensus-workflow`\
+      \ skill so it\nno longer documents a PyPI publish step in the release cut\n\
+      sequence. consensus-mcp ships via git tags + pipx (`pipx install\ngit+https://github.com/.../@vX.Y.Z`);\
+      \ the package is not\nregistered on PyPI. The v1.14.0 skill incorrectly added\
+      \ a PyPI\nstep that does not match the project's actual distribution model;\n\
+      v1.14.1 removes it and adds an explicit \"if you catch yourself\nproposing PyPI,\
+      \ stop\" warning so future sessions don't repeat\nthe mistake.\n\niter-0044\
+      \ (adapter `--mode` forwarding fix per iter-0043 converged\nplan) is open scope\
+      \ on v1.14.2 — not in this hot-patch.\n\n## 1.14.0 - 2026-05-14\n\nMulti-AI\
+      \ contributor pool, blind-first-reveal workflow #4, configurable\ngovernance,\
+      \ snapshot/restore, Claude Code bootstrap pack, bundled\noperating-procedure\
+      \ skill, and codified operator-directive defaults\n(parallelism, weighted-synthesis\
+      \ convergence, Friday release cadence).\nAdds gemini-cli as a third peer alongside\
+      \ codex-cli; introduces a\nworkflow engine that orchestrates N contributors\
+      \ per project-chosen\nrules; ships an interactive `consensus init` wizard for\
+      \ operator-\nconfigurable workflow/independence/convergence/disposition/snapshot/\n\
+      patch-authoring/timeout dimensions.\n\n**Claude Code integration + skill bundling\
+      \ (iter-0040, iter-0041):**\n\n- `consensus init --install-claude-code` standalone\
+      \ global op installs\n  the Claude Code bootstrap pack (skill + slash command)\
+      \ for any\n  Claude Code project that uses consensus-mcp.\n- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`\n\
+      \  ships in the wheel: load-bearing operating procedures (workflow\n  selection,\
+      \ dispatch, gemini 429 handling, codex auth, iteration-\n  state persistence,\
+      \ peer-cited content verification, peer-review\n  thresholds, \"consensus\"\
+      \ trigger word) automatically present in\n  every project that runs the bootstrap\
+      \ pack.\n\n**Operator-directive defaults codified (iter-0043):**\n\n- Maximize\
+      \ parallelism — always. Default to parallel; serial is the\n  choice that needs\
+      \ justification. Applies to round-1 peer dispatch,\n  round-2+ batches, multi-file\
+      \ investigation, background long-running\n  ops, and cross-iteration parallelism.\n\
+      - Weighted-synthesis convergence as default. All ideas of all\n  proposals weighed\
+      \ for benefit to the project as a whole. No good\n  ideas lost; no babies tossed\
+      \ with bathwater. `all-or-nothing`\n  finding-disposition is now edge-case opt-in\
+      \ only (binary scope\n  decisions, safety gates, compliance verdicts). Engine-level\n\
+      \  follow-up flagged: `config.py:295-308` still enforces all-or-\n  nothing\
+      \ for workflow #4 — separate iteration will lift that\n  constraint so the data\
+      \ layer matches doctrine.\n- Friday release-cadence rule. Cut a release tag\
+      \ every Friday if at\n  least one iteration closed that week. Release-cut is\
+      \ a procedure\n  with a trigger, not an ad-hoc decision. 10-step cut sequence\n\
+      \  documented in skill (CHANGELOG date stamp, version verify, test\n  suite,\
+      \ tag, build, smoke, publish, push, branch next). This\n  release is the first\
+      \ cut under the new cadence rule and clears\n  3 days of accumulated work (iter-0009..iter-0043).\n\
+      \n**Known issue carried forward:**\n\n- 5 tests in `consensus_mcp/tests/test_dispatch_codex.py`\
+      \ flake when\n  the full pytest suite runs (pass in isolation). Documented in\n\
+      \  `docs/known-issues/pytest-ordering-flake.md`. Predates v1.13.0;\n  not a\
+      \ v1.14.0 regression. Tracked for a future fix iteration.\n\n**New contributors\
+      \ + dispatch (iter-0009 through iter-0011):**\n\n- `_dispatch_base.py` extracted\
+      \ shared dispatcher helpers (`_resolve_repo_root`,\n  `_load_goal_packet`, `_build_prompt`,\
+      \ `_terminate_process_tree`,\n  `_compute_per_patch_base_sha`, `_validate_patch_proposal`,\n\
+      \  `_build_sealed_packet`, `_seal_via_t6`, `_log_dispatch`).\n- `_dispatch_gemini.py`\
+      \ wraps `gemini -p '<JSON directive>' -m <model>\n  --approval-mode plan --skip-trust`\
+      \ with validator-retry semantics.\n- `reviewer_dispatch_gemini` MCP tool surfaces\
+      \ the gemini adapter in the\n  pool.\n- Reader threads start before stdin write\
+      \ to avoid the codex-rev-001\n  deadlock pattern.\n- Codex stall-silence threshold\
+      \ now overridable via\n  `CONSENSUS_MCP_STALL_SILENCE_SECONDS` env var (default\
+      \ 180s, was 45s).\n- `reviewer_dispatch_codex` MCP wrapper catches `argparse.SystemExit`\
+      \ so\n  bad CLI args surface as MCP errors instead of hangs.\n\n**Snapshot/restore\
+      \ + parent history (iter-0012 through iter-0014):**\n\n- Orphan git branch `consensus-state-snapshots`\
+      \ stores point-in-time\n  snapshots of the gitignored `consensus-state/active/`\
+      \ tree, providing a\n  recovery path against `git clean -fdX` accidents.\n-\
+      \ `_snapshot_state.py` exposes `snapshot`, `list`, `restore`, `diff`\n  subcommands;\
+      \ ISO-timestamped `snapshot-<TS>-<label>` tags;\n  `^[A-Za-z0-9_-]{1,64}$` label\
+      \ regex; path-traversal validation; tag\n  uniqueness with retry-suffix; temp-worktree\
+      \ extraction + filesystem\n  copy on restore (no risky `git checkout`).\n- `_import_parent_history.py`\
+      \ performs a one-time mirror of the parent\n  agent-loop project's iter-0000..0042\
+      \ (41 directories, 53 review passes)\n  into `consensus-state/archive/imported-from-parent/`\
+      \ with byte-for-byte\n  idempotency checks.\n- Integration tests cover restore-after-dirty-state,\
+      \ restore-into-detached-\n  HEAD, and concurrent-snapshot race handling.\n\n\
+      **Configurable governance + workflow engine (iter-0015 through iter-0016d):**\n\
+      \nPer iter-0015 converged design (the canonical workflow #4 reference run\n\
+      across claude/codex/gemini), v1.14.0 introduces 9 operator-configurable\ndimensions\
+      \ surfaced through `.consensus/config.yaml`:\n\n- `workflow.mode`: `post-review`\
+      \ (#3), `propose-converge` (#4), `advisory`\n- `workflow.independence`: `blind-first-reveal`,\
+      \ `visible`, `sequential`\n- `convergence.rule`: `unanimous`, `strict-majority`,\
+      \ `inclusive-majority`,\n  `advisory`\n- `convergence.finding_disposition`:\
+      \ `all-or-nothing`, `per-finding`\n- `snapshots.trigger`: `manual-only`, `on-iteration-close`,\
+      \ `periodic`\n- `snapshots.periodic.every_iterations`: integer cadence\n- `patches.authoring`:\
+      \ `claude-only`, `any-contributor`, `none`\n- `workflow.timeout_policy`: `treat-as-no-vote`,\
+      \ `treat-as-blocking`,\n  `shrink-quorum`\n- `contributors.enabled`: ordered\
+      \ list (claude orchestrator always present;\n  codex/gemini optional)\n\nComponents\
+      \ shipped:\n\n- `config.py` — schema constants, defaults, normalize, validate,\
+      \ load,\n  effective-config sha256, legacy-mode synthesis. Cross-validation\n\
+      \  enforces (e.g.) workflow #4 with N≥2 contributors, strict-majority\n  with\
+      \ N≥2, manual-only snapshots requiring null cadence.\n- `contributors/` package\
+      \ — `ContributorAdapter` ABC + `DispatchPacket`,\n  `SealedArtifact`, phase\
+      \ constants. Concrete `ClaudeAdapter` (in-process\n  orchestrator self), `CodexAdapter`\
+      \ (subprocess wrapper),\n  `GeminiAdapter` (subprocess wrapper). All seal via\
+      \ T6 with confinement\n  checks. Fake adapters (`FakeAlwaysApprove`/`FakeAlwaysBlock`/\n\
+      \  `FakeRaisesDispatchError`) for hermetic tests.\n- `workflow_engine.py` —\
+      \ `WorkflowEngine.run_iteration()` routes per\n  `workflow.mode` to one of three\
+      \ runners. Workflow #3 dispatches non-\n  claude contributors as post-review\
+      \ reviewers. Workflow #4 runs blind-\n  proposal phase then reveal-and-converge\
+      \ rounds with all contributors\n  seeing the full set of prior round artifacts.\
+      \ Convergence evaluation\n  applies the rule across responsive contributors,\
+      \ mapped to config\n  contributor keys (not adapter names). Timeout policies\
+      \ adjust the\n  effective denominator and block-vote set.\n- `_init_wizard.py`\
+      \ — `consensus init` CLI. Interactive (default) +\n  `--non-interactive` + `--accept-defaults`\
+      \ + `--reconfigure` + `--check`\n  + `--print-defaults` + `--dry-run` + `--force`\
+      \ + `--config <path>` +\n  `--no-update-gitignore`. Exit codes 0/1/2/3/4 per\
+      \ converged-plan\n  Section A. Atomic temp+rename writes. `.gitignore` managed-block\
+      \ with\n  bracketed markers (`# >>> consensus-mcp managed <<<` /\n  `# <<< consensus-mcp\
+      \ managed >>>`), idempotent across reruns even with\n  malformed (orphan, reversed,\
+      \ nested) user-supplied markers — orphan\n  markers are preserved untouched.\
+      \ Repo-root detection walks upward for\n  `.git`.\n\n**Packaging (iter-0017):**\n\
+      \n- `[tool.setuptools].packages` includes `consensus_mcp.contributors`.\n- `[project.scripts]`\
+      \ adds `consensus-init` and\n  `consensus-mcp-dispatch-gemini` alongside existing\
+      \ entries.\n\n**Workflow + provenance discipline:**\n\nEvery non-trivial change\
+      \ shipped on v1.14.0 went through workflow #3 with\ncodex + gemini reviewing\
+      \ in parallel. iter-0015 was the canonical\nworkflow #4 design consult (blind\
+      \ proposals from claude + codex + gemini,\nthen convergence rounds). iter-0016d\
+      \ converged after 6 review rounds\n(both reviewers goal_satisfied=true, zero\
+      \ findings). iter-0017 converged\non first pass.\n\n**Test isolation (iter-0019):**\n\
+      \n- The 5 long-standing test_dispatch_codex.py full-suite failures are\n  fixed.\
+      \ Root cause: `review_write_and_seal.py` and `audit_append_event.py`\n  cache\
+      \ `REPO_ROOT` / `ARCHIVE_DIR` / `INDEX_PATH` / `ACTIVE_DIR` at module\n  import\
+      \ time, so `monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\", str(tmp_path))`\n\
+      \  in tests had no effect — sealed packets landed in the real archive index,\n\
+      \  polluting subsequent test runs. iter-0019 adds an `_isolate_archive_root`\n\
+      \  test helper that monkeypatches the cached module attributes directly, so\n\
+      \  every dispatch test now seals into a tmp_path-isolated archive. Full\n  suite:\
+      \ 658 pass + 1 skipped + 0 fail under any ordering.\n\n**Lazy path resolution\
+      \ (iter-0024 design consult → iter-0025 Phase A\n→ iter-0026 first per-tool\
+      \ migration):**\n\n- iter-0024 ran the workflow #4 consult on whether to refactor\
+      \ the\n  module-level `REPO_ROOT` caches into lazy resolvers. Converged on\n\
+      \  SHIP-PHASED: introduce `_paths.py` first (Phase A), then migrate\n  tools\
+      \ one at a time (Phase B).\n- iter-0025 (Phase A): introduced `consensus_mcp/_paths.py`\
+      \ with 9\n  lazy-resolver functions (`repo_root`, `state_root`, `project_root`,\n\
+      \  `spec_path`, `archive_dir`, `index_path`, `active_dir`,\n  `audit_log_path`,\
+      \ `dispatch_log_path`). Each reads env state on\n  every call. Backward compatible\
+      \ — no existing tool touched.\n- iter-0026 (Phase B step 1): migrated `state_read_decision_ledger`\n\
+      \  to use `_paths.state_root()`. First test coverage for that tool\n  (5 new\
+      \ tests including the lazy-resolution regression demo).\n- iter-0034 (Phase\
+      \ B step 2): migrated `repo_get_section` to\n  `_paths.project_root()`. Removed\
+      \ local `_resolve_repo_root`.\n- iter-0035 (Phase B steps 3-8): batched 6 LOW-impact\
+      \ tools onto\n  the lazy resolvers in one commit — `repo_set_section`,\n  `state_update_decision_ledger`,\
+      \ `patch_stage_and_dry_run`,\n  `patch_apply_consensus_patch`,\n  `gate_evaluate_production_with_scope_match`,\
+      \ `review_read_post_seal`.\n  PEP 562 `__getattr__` hooks added per-tool for\
+      \ external\n  `module.REPO_ROOT` back-compat.\n- iter-0036 (Phase B step 9,\
+      \ HIGH-impact audit-trail tool): migrated\n  `audit_append_event` from cached\
+      \ `REPO_ROOT/ACTIVE_DIR` to lazy\n  `project_root()`/`active_dir()`. Cleaned\
+      \ up 3 closure_invariant\n  tests that used unsafe `monkeypatch.setattr(audit_append_event,\n\
+      \  \"ACTIVE_DIR\", tmp_path)` — pytest's monkeypatch captures the\n  `__getattr__`-synthesized\
+      \ value at setattr time and restores it\n  into `__dict__` at teardown, permanently\
+      \ poisoning subsequent\n  tests. Switched to `monkeypatch.setenv(\"CONSENSUS_MCP_STATE_ROOT\"\
+      ,\n  ...)` matching the iter_0018 pattern.\n- iter-0037 (Phase B step 10, final\
+      \ + HIGHEST-impact seal-pipeline\n  tool): migrated `review_write_and_seal`\
+      \ from cached\n  `REPO_ROOT/ARCHIVE_DIR/INDEX_PATH` plus the in-handle\n  `from\
+      \ consensus_mcp.tools.audit_append_event import ACTIVE_DIR`\n  capture to lazy\
+      \ `project_root()`/`archive_dir()`/`index_path()`/\n  `active_dir()` resolvers.\
+      \ `_isolate_archive_root` test helper in\n  `test_dispatch_codex.py` simplified\
+      \ — only `monkeypatch.setenv(\n  \"CONSENSUS_MCP_REPO_ROOT\", ...)` remains;\
+      \ the previously-required\n  5 `setattr` calls (now unsafe against `__getattr__`\
+      \ attributes)\n  are gone.\n\n**Claude Code bootstrap pack (iter-0039 design\
+      \ → iter-0040 implementation):**\n\n- iter-0039 ran a workflow #4 consult (claude\
+      \ + codex + gemini, all\n  proposal-mode, strict-majority convergence) on the\
+      \ discoverability\n  gap reported by the operator after iter-0033: in a fresh\
+      \ project,\n  typing \"consensus init\" into Claude Code chat returned \"I don't\n\
+      \  recognize this command\" because the pipx install registers a\n  shell binary\
+      \ (`consensus-init`) not a Claude Code surface. All\n  three contributors converged\
+      \ on shipping a Claude-Code-native entry\n  point that wraps the existing shell\
+      \ binary.\n- iter-0040 implemented the converged plan. New shipped assets:\n\
+      \  - `consensus_mcp/claude_extensions/skills/consensus/SKILL.md`\n    triggers\
+      \ on \"consensus init\", \"bootstrap consensus\", \"set up\n    consensus\"\
+      \ and runs the shell binary via Bash.\n  - `consensus_mcp/claude_extensions/commands/consensus-init.md`\n\
+      \    gives explicit `/consensus-init` slash-command discoverability.\n- New\
+      \ `consensus-init --install-claude-code` flag copies both into\n  `$CLAUDE_HOME`\
+      \ (default `~/.claude`) using a managed idempotent\n  pattern: byte-identical\
+      \ = no-op; divergent = skip-with-warning;\n  `--force` overwrites. Honors `CLAUDE_HOME`\
+      \ env override for\n  non-default installs (CI, devcontainers, multi-user systems).\n\
+      - New `consensus-init --from-claude-code` flag prints contextual\n  reload guidance\
+      \ after a successful init (\"restart Claude Code or\n  run `/mcp` to activate\
+      \ the consensus-mcp server\"). Used by both\n  the skill and slash command bodies;\
+      \ deterministic so we don't\n  rely on env-var sniffing (codex's preferred convergence\n\
+      \  resolution per iter-0039 Q4).\n- Bonus from iter-0039 Q6: added `consensus`\
+      \ console-script alias\n  to pyproject.toml so `consensus init` (with a SPACE)\
+      \ at the\n  shell works alongside the hyphenated `consensus-init`. The\n  `init`\
+      \ subcommand is stripped from argv[0] inside `main()`;\n  everything else flows\
+      \ through the same argparse setup.\n- Side-effect hot-fix landed in the same\
+      \ release: the proposal-mode\n  validation path in `_dispatch_codex.py` / `_dispatch_gemini.py`\n\
+      \  did `try: import jsonschema; ...; except jsonschema.ValidationError`\n  —\
+      \ when the import failed (because `jsonschema` wasn't a declared\n  dep), the\
+      \ except clause's reference to `jsonschema.ValidationError`\n  surfaced as `UnboundLocalError`,\
+      \ masking the real problem and\n  blocking iter-0039 from running in the pipx\
+      \ venv. Added\n  `jsonschema>=4.0` to deps + split the try/except so `ImportError`\n\
+      \  surfaces with actionable wording. (workflow #3 hot-patch because\n  it blocked\
+      \ iter-0039 progress.)\n\n**Phase B closed.** All 10 tool migrations landed\
+      \ (iter-0026..0037).\nNo tool now holds a cached module-level `REPO_ROOT`/`ACTIVE_DIR`/\n\
+      `ARCHIVE_DIR`/`INDEX_PATH`/etc. — every path read is lazy and honors\nenv-var\
+      \ redirection at call time. Suite green at 773 passed,\n1 skipped. The cross-project\
+      \ pipx install pattern from iter-0030\nnow works in any project: `pipx install\
+      \ consensus-mcp` once, then\n`consensus-init` in any project writes a working\
+      \ `.mcp.json` and\nthe lazy resolvers pick up the per-project state root automatically.\n\
+      \n**Codex proposal mode (iter-0027 → iter-0028):**\n\n- iter-0021 and iter-0024\
+      \ design consults discovered that codex\n  structurally-abstained on every workflow\
+      \ #4 dispatch because the\n  codex review template is hard-coded for code-review\
+      \ tasks: codex\n  kept returning \"missing review target\" errors instead of\
+      \ engaging\n  with design questions. Documented as \"structural-abstention\"\
+      \ in\n  prior converged plans.\n- iter-0027 ran the workflow #4 consult on what\
+      \ to do about it.\n  Claude and gemini independently picked \"fix codex template\
+      \ friction\"\n  as the highest-leverage move. Codex itself structurally-abstained\n\
+      \  on this very consult (proving the problem).\n- iter-0028 shipped `--mode\
+      \ {review,proposal}` on both codex and\n  gemini dispatchers. New `codex_proposal_template.md`\
+      \ and\n  `codex_proposal_schema.json` (plus gemini equivalents) frame the\n\
+      \  task as proposal generation, not code review. Proposal schema\n  enforces\
+      \ `selected_target`, `rationale_vs_alternatives`,\n  `deliverable_scope`, `risks`,\
+      \ `estimated_complexity`,\n  `structural_abstention`. The seal pipeline detects\
+      \ proposal-shape\n  payloads and embeds them under a top-level `proposal` block\
+      \ in the\n  sealed YAML while keeping outer review-shape fields valid (empty\n\
+      \  findings, computed goal_satisfied) for audit-event compatibility.\n- iter-0029:\
+      \ smoke test of proposal mode on a synthetic design\n  question — codex returned\
+      \ a proper proposal-shape sealed YAML.\n- iter-0030: **first real workflow #4\
+      \ consult where codex engaged\n  substantively as a peer.** The meta-arc iter-0021\
+      \ → iter-0024 →\n  iter-0027 → iter-0028 → iter-0030 closed: the project that\
+      \ proves\n  cross-AI consensus works now genuinely produces three-AI consensus\n\
+      \  on its own design questions (gemini env-abstaining due to upstream\n  capacity\
+      \ issues notwithstanding).\n\n**`consensus-init` auto-bootstraps `.mcp.json`\
+      \ (iter-0030 design →\niter-0031 implementation):**\n\n- iter-0030 converged\
+      \ on extending `consensus-init` to write\n  `.mcp.json` automatically. Two substantive\
+      \ votes (claude + codex)\n  agreed on merge-mode for existing files + opt-out\
+      \ flag +\n  marker-based project-root detection + PATH-portable command\n  discovery\
+      \ + byte-for-byte idempotency.\n- iter-0031 implemented the converged design.\
+      \ New flags: `--no-mcp-json`\n  (opt out), `--mcp-command STR` (override), `--mcp-force`\
+      \ (replace\n  existing consensus-mcp entry on divergence). Merge mode preserves\n\
+      \  other MCP servers; conflict detection skip+warns instead of\n  clobbering;\
+      \ malformed JSON skip+warns instead of mutating.\n- `_detect_repo_root` extended\
+      \ from `.git`-only to marker-based:\n  `git rev-parse --show-toplevel` → strong\
+      \ markers (.git,\n  pyproject.toml, package.json, CLAUDE.md, .mcp.json, consensus-state)\n\
+      \  → cwd fallback.\n- Operator UX is now one command: `pipx install consensus-mcp`,\
+      \ then\n  `cd <any-project>; consensus-init`. The wizard writes\n  `.consensus/config.yaml`\
+      \ + `.gitignore` managed block + `.mcp.json`\n  (with correct PATH-portable\
+      \ command + per-project env vars).\n\n**Defaulting to workflow #4 for design\
+      \ questions** (operator policy\ncorrection mid-v1.14.0):\n\nThe original heuristic\
+      \ \"workflow #3 for execution; workflow #4 for\nexplicit design questions\"\
+      \ was systematically biased toward #3\nbecause of cost asymmetry. Corrected\
+      \ mid-cycle: default to workflow\n#4 for any decision with real design surface;\
+      \ require an explicit\nreason to fall back to #3. iter-0027 onward applies this\
+      \ rule. Saved\nto operator memory as\n[[feedback-default-workflow-4-for-design]].\n\
+      \n**Operator memories saved during v1.14.0 cycle:**\n\n- `feedback_no_phantom_proceed.md`\
+      \ — never end a turn with \"proceeding\n  with X\" unless the tool call is in\
+      \ the same turn\n- `feedback_gemini_429_skip.md` — priority-tiered handling\
+      \ of upstream\n  Gemini 429 errors: low-priority iterations skip gemini on first\n\
+      \  failure; high-priority iterations allow one retry\n\n**Deferred to a follow-up\
+      \ iteration:**\n\n- 20 stale `iter-9999-*` fixture entries remain in\n  `consensus-state/archive/review-passes/index.yaml`.\
+      \ Cosmetic only;\n  separate cleanup iteration if desired.\n- Phase C cleanup\
+      \ of `_isolate_archive_root`-style fixtures that are\n  now no-ops or simplifiable;\
+      \ the test helpers still work but most of\n  the `monkeypatch.setattr` calls\
+      \ inside them became redundant once\n  Phase B finished. Pure refactor, no behavior\
+      \ change.\n\n## 1.13.0 - 2026-05-12\n\nMulti-project resolution: consensus-mcp\
+      \ now boots in any project without a\nlocal checkout. The frozen wheel ships\
+      \ a spec template, and state auto-\ninitializes in CWD.\n\n**Changes (per iter-0007\
+      \ codex consult, sealed packet 39f8b7a8b...):**\n\n- New resolvers in `server.py`\
+      \ split the legacy `REPO_ROOT` into three\n  concerns: `_resolve_spec_path`\
+      \ (spec source), `_resolve_state_root`\n  (`consensus-state/` location), `_resolve_project_root`\
+      \ (reviewable-file\n  root for goal_packet `allowed_files`).\n- Resolution order\
+      \ for each:\n  - Spec: `CONSENSUS_MCP_SPEC_PATH` > legacy `CONSENSUS_MCP_REPO_ROOT`\
+      \ >\n    walked-up checkout > shipped `consensus_mcp/spec_template.md`\n  -\
+      \ State: `CONSENSUS_MCP_STATE_ROOT` > legacy `CONSENSUS_MCP_REPO_ROOT` >\n \
+      \   `Path.cwd() / \"consensus-state\"`\n  - Project: `CONSENSUS_MCP_PROJECT_ROOT`\
+      \ > legacy `CONSENSUS_MCP_REPO_ROOT`\n    > `Path.cwd()`\n- `consensus_mcp/spec_template.md`\
+      \ shipped in the wheel (added to\n  `pyproject.toml [tool.setuptools.package-data]`).\
+      \ Frozen-wheel users get a\n  bootable spec without cloning.\n- `_resolve_repo_root`\
+      \ kept for back-compat; no longer load-bearing for\n  spec/state/project-root\
+      \ in v1.13.0.\n\n**Deferred to v1.14.0** (per codex Q1 scoping):\n\n- Dispatcher\
+      \ auto-discovery of `iteration_dir/review-packet.yaml` when\n  `--review-target`\
+      \ is non-yaml (currently silent-failure, prompt ships\n  without embedded touched-file\
+      \ contents).\n- Cold-start grace period for the watchdog (pre-first-byte vs.\n\
+      \  post-first-byte silence thresholds; 45s is too aggressive for bigger\n  prompts).\n\
+      - Visibility upgrade: dispatch_heartbeat events should expose a `status`\n \
+      \ field (loading / streaming / stalled) for operator clarity.\n\n**Known pre-existing\
+      \ pytest flake** (predates v1.13.0; **fixed in v1.14.0\niter-0019**): 5 tests\
+      \ in `test_dispatch_codex.py` that pass in isolation\nbut fail in the full suite\
+      \ due to test-ordering pollution. Not introduced\nby v1.13.0; tracked separately.\
+      \ See the v1.14.0 \"Test isolation\" section\nabove for the resolution.\n\n\
+      ## 1.12.0 - 2026-05-11\n\nStandalone release. Extracted from upstream-26.4.16\
+      \ source\nproject. See `docs/architecture/codex-fix-author-roadmap.md` for the\
+      \ work\nhistory that led here.\n\nRenames vs the prior internal-only releases\
+      \ (1.0.0 - 1.11.0):\n\n- Python package `agent_loop_mcp` -> `consensus_mcp`\n\
+      - Python package `agent_loop` (validators) -> `consensus_mcp.validators`\n-\
+      \ State directory `agent-loop/` -> `consensus-state/`\n- Env var `AGENT_LOOP_MCP_REPO_ROOT`\
+      \ -> `CONSENSUS_MCP_REPO_ROOT`\n- MCP server name `agent-loop-mcp` -> `consensus-mcp`\n\
+      - Repo-root markers updated to `(\"consensus-state\", \"consensus_mcp\")`\n\
+      - Flat layout (no `scripts/` prefix)\n"
 schema_version: 1
 iteration_id: iteration-v1158-flaky-ci-and-locked-append

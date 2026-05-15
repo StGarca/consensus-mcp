@@ -1,0 +1,172 @@
+iteration_id: iteration-v1158-flaky-ci-and-locked-append
+reviewer_id: codex-v1158-1
+pass_id: codex-v1158-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential/prior: integrity primitives and timing tests
+  need different fix shapes. Audit/provenance append must be lossless or fail observable;
+  tests that depend on scheduler luck are not product evidence. Q1: silent-unlock-on-contention
+  is a real integrity defect, not just a flaky test, because the embedded `_visibility_watchdog.py::_locked_append`
+  catches `OSError` from `msvcrt.locking` and still writes, and F1 verifies Windows
+  CI lost 4 of 50 audit lines in a one-process thread fan-out. Option (a) alone fixes
+  the observed intra-process class but preserves silent cross-process loss. Option
+  (b) narrows probability but still allows unlocked writes, which is wrong for sealed
+  provenance. Option (c) surfaces integrity loss but needlessly fails the known intra-process
+  case that a process-local mutex can actually serialize. Option (d) has the best
+  value delta: it fixes the known thread contention class and provides a root-cause-independent
+  safeguard by refusing silent best-effort writes if the OS layer cannot guarantee
+  cross-process serialization. Wrong-observation for Q1: after the module lock and
+  loud OS-failure behavior, a Windows CI single-process 50-thread append test still
+  produces fewer than 50 parseable distinct records, or same-process contention still
+  raises `PermissionError`; that would refute the claim that the observed loss is
+  fixed by in-process serialization. Q2: choose deterministic synchronization. The
+  current `test_heartbeat_fires_at_interval` advances a fake clock but depends on
+  real `time.sleep` interleaving and a later `join(10)`, verified via embedded `test_dispatch_codex_streaming.py::test_heartbeat_fires_at_interval`;
+  F2 says it fails even after the correct v1.15.7 `_log_dispatch` threading lock,
+  so widening timeout is only a probability change and Windows quarantine hides coverage.
+  Event/queue synchronization is feasible without losing heartbeat-interval coverage
+  because heartbeat is already externally observable as `dispatch_heartbeat` events
+  in the dispatch log; the test can queue those events as they are emitted, advance
+  the clock to 30/60/90/exit boundaries, and wait for specific observations instead
+  of hoping the runner ran during 100 short sleeps. Wrong-observation for Q2: an event-synchronized
+  version that observes the expected heartbeat events and advances past fake process
+  exit still leaves the runner alive on Windows CI; that would point to a production
+  teardown/deadlock issue rather than a test scheduling flake. Q3: no deferral. Both
+  work items are bounded, local, and have concrete gates. External CI confirmation
+  is a real channel because F3 names existing Windows/Ubuntu CI runs for the same
+  commit, verified via `goal_packet.yaml` F3 run IDs 25942112936 and 25942127279.
+  No fixed/shipped claim should be made until a specific v1.15.8 commit/tag exists;
+  current evidence only says c81d1ea is nondeterministic, not fixed.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 233ea8a9d66cb8420e2c4fe99df97aeb560ff4af0c7a7b2d703638e243f558ca
+  output_sha256: c65e8a5e6549e1e21ad00f15803112a65f83a6e62dee2b8ad5e18787e624b321
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: 4561b9b6653a527b9ee56cf951b44be475f8b52e403e20ff62b28ae982bc1a9d
+  scope_signature: v1158-flaky-ci-and-locked-append-integrity
+  review_target_path: consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/review-packet.yaml
+  review_target_hash: 06f5579df1d4a0cdffefda1723c783d5607ca2a3e8f5b9f8b364c38ce0e43158
+  mode: proposal
+proposal:
+  selected_target: Q1=(d) module-level in-process lock plus loud failure on OS lock
+    acquisition failure; Q2=(a) deterministic event/queue synchronization for heartbeat-pattern
+    tests; Q3=complete both bounded fixes in v1.15.8 with repeat Windows CI confirmation.
+  rationale_vs_alternatives: 'Differential/prior: integrity primitives and timing
+    tests need different fix shapes. Audit/provenance append must be lossless or fail
+    observable; tests that depend on scheduler luck are not product evidence. Q1:
+    silent-unlock-on-contention is a real integrity defect, not just a flaky test,
+    because the embedded `_visibility_watchdog.py::_locked_append` catches `OSError`
+    from `msvcrt.locking` and still writes, and F1 verifies Windows CI lost 4 of 50
+    audit lines in a one-process thread fan-out. Option (a) alone fixes the observed
+    intra-process class but preserves silent cross-process loss. Option (b) narrows
+    probability but still allows unlocked writes, which is wrong for sealed provenance.
+    Option (c) surfaces integrity loss but needlessly fails the known intra-process
+    case that a process-local mutex can actually serialize. Option (d) has the best
+    value delta: it fixes the known thread contention class and provides a root-cause-independent
+    safeguard by refusing silent best-effort writes if the OS layer cannot guarantee
+    cross-process serialization. Wrong-observation for Q1: after the module lock and
+    loud OS-failure behavior, a Windows CI single-process 50-thread append test still
+    produces fewer than 50 parseable distinct records, or same-process contention
+    still raises `PermissionError`; that would refute the claim that the observed
+    loss is fixed by in-process serialization. Q2: choose deterministic synchronization.
+    The current `test_heartbeat_fires_at_interval` advances a fake clock but depends
+    on real `time.sleep` interleaving and a later `join(10)`, verified via embedded
+    `test_dispatch_codex_streaming.py::test_heartbeat_fires_at_interval`; F2 says
+    it fails even after the correct v1.15.7 `_log_dispatch` threading lock, so widening
+    timeout is only a probability change and Windows quarantine hides coverage. Event/queue
+    synchronization is feasible without losing heartbeat-interval coverage because
+    heartbeat is already externally observable as `dispatch_heartbeat` events in the
+    dispatch log; the test can queue those events as they are emitted, advance the
+    clock to 30/60/90/exit boundaries, and wait for specific observations instead
+    of hoping the runner ran during 100 short sleeps. Wrong-observation for Q2: an
+    event-synchronized version that observes the expected heartbeat events and advances
+    past fake process exit still leaves the runner alive on Windows CI; that would
+    point to a production teardown/deadlock issue rather than a test scheduling flake.
+    Q3: no deferral. Both work items are bounded, local, and have concrete gates.
+    External CI confirmation is a real channel because F3 names existing Windows/Ubuntu
+    CI runs for the same commit, verified via `goal_packet.yaml` F3 run IDs 25942112936
+    and 25942127279. No fixed/shipped claim should be made until a specific v1.15.8
+    commit/tag exists; current evidence only says c81d1ea is nondeterministic, not
+    fixed.'
+  deliverable_scope:
+    next_iteration_id: iteration-v1158-flaky-ci-and-locked-append
+    files_in_scope:
+    - consensus_mcp/_visibility_watchdog.py
+    - consensus_mcp/tests/test_visibility_watchdog.py
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    - consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/converged-plan.yaml
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - release/tag/distribution artifacts
+    - cross-process append redesign beyond loud failure on OS lock failure
+    key_design_decisions:
+    - Add a module-level `threading.Lock` in `_visibility_watchdog.py` and hold it
+      across parent-dir creation, file open, OS lock attempt, and write, serializing
+      all in-process `_locked_append` callers.
+    - 'Keep the OS lock as the cross-process layer, but replace silent `except OSError:
+      pass` on lock acquisition with loud failure before writing. For an integrity
+      primitive, no append is better than an undetectably corrupt append.'
+    - Preserve the no-locking-module fallback only if explicitly treated as unsupported/non-integrity
+      mode, or make it fail loudly too if `_locked_append` is considered always-integrity-critical
+      in this project. The safer v1.15.8 default is no silent unlocked append for
+      audit/provenance writes.
+    - Rewrite heartbeat-pattern tests to observe progress through an Event/queue tied
+      to emitted dispatch events, then drive the controllable clock in response to
+      observed states. Remove the `advance clock in loop + real sleep + join and hope`
+      shape from heartbeat, silence-abort, and wall-ceiling siblings.
+    - 'Keep coverage assertions: heartbeat count/window, monotonic ages, silence abort
+      source, wall-time ceiling source, clean thread termination, and absence of unexpected
+      exceptions.'
+    - 'Document CI confirmation as probabilistic evidence, not proof: deterministic
+      test structure is the primary fix argument; repeated Windows CI greens are regression
+      confidence.'
+    acceptance_gates:
+    - '`test_locked_append_serializes_concurrent_writes` passes on Windows with 50
+      distinct parseable JSONL records and no thread exceptions.'
+    - Add a forced OS-lock-failure test that monkeypatches/simulates `msvcrt.locking`
+      raising `PermissionError` and asserts `_locked_append` raises before writing
+      any payload.
+    - Add or preserve an append-only test proving existing log bytes remain a prefix
+      after successful locked append.
+    - '`test_heartbeat_fires_at_interval` no longer contains the 100-iteration `clock.advance`
+      plus `time.sleep` plus `join(10)` pattern and still asserts heartbeat cadence
+      around 30/60/90 seconds.'
+    - Sibling streaming tests that drive fake time for silence abort or wall-time
+      ceiling use explicit progress synchronization rather than fixed real sleeps
+      where a dispatch event is the real prerequisite.
+    - Local targeted tests pass for `consensus_mcp/tests/test_visibility_watchdog.py`
+      and `consensus_mcp/tests/test_dispatch_codex_streaming.py`.
+    - Full local suite remains green if practical in the iteration; if skipped, record
+      the concrete reason in the converged plan.
+    - 'External confirmation: run the existing Windows CI matrix at least 3 consecutive
+      times on the same v1.15.8 commit with no failures in these two tests; cite run
+      IDs in the plan. One green run is insufficient for a flake fix.'
+    - '`converged-plan.yaml` records Q1/Q2 decisions, strongest counters, wrong-observations,
+      artifact boundaries, and explicitly avoids claiming fixed in any immutable tag
+      until the v1.15.8 tag/commit exists.'
+  risks:
+  - Fail-loud OS-lock failure may expose unsupported filesystems or antivirus interference
+    as hard failures. That is acceptable for provenance integrity but should be called
+    out in release notes if it affects operators.
+  - A global module lock may reduce parallel append throughput. Audit JSONL append
+    volume is low, so correctness dominates.
+  - If deterministic tests require monkeypatching an internal logging helper whose
+    name changes, the test may become too coupled. Keep the helper local and assert
+    behavior through emitted events where possible.
+  - Repeated CI greens reduce flake risk but cannot prove absence. The determinism
+    argument must carry the fix, with CI used as external confirmation.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T21:41:18Z'
+packet_sha256: f0b0c422dd8be14e74173a689b80c6ca2a4a01f6ef0b9c049b2b02c128784852
