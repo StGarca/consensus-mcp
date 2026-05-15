@@ -107,3 +107,18 @@ audit_log:
     - prompt_template (substituted by _build_prompt)
     - review_target (path passed via --review-target; may be unspecified)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T17:07:32Z'
+  event_id: 2026-05-15T17:07:32Z_review_returned_and_sealed_codex-cpme-wfb-4b
+  actor: codex-cpme-wfb-4b
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-codex-cpme-wfb-4b-codex-cpme-wfb-4b-pass1-pass.yaml
+  sha256: 13973d0db5db6b66147c39a9c038043daf5571fa78c4c16fd503155c1365eba8
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

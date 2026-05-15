@@ -1,0 +1,88 @@
+iteration_id: iteration-converged-plan-machine-enforcement
+closed_at_utc: '2026-05-15T17:10:00Z'
+version_target: v1.15.1
+workflow: |
+  Workflow A (propose-converge, weighted-synthesis) consult run in a
+  PRIOR session: claude + codex + gemini; shared-prior self-check
+  PASSED; no blocking objections; the consult dogfooded the very
+  convention it enforces. This session EXECUTED that converged plan
+  as Workflow B (claude implements; codex + gemini audit).
+goal: |
+  Close the v1.15.0 NAMED BLOCKER: machine-enforcement of the
+  converged-plan convention blocks (falsification /
+  independent_safeguard / decisive_experiment_before_next_iteration),
+  doctrine-only on v1.15.0 tag 4e81f9e.
+
+acceptance_gates:
+  - id: intake-path-verified
+    status: pass
+    evidence: |
+      No pre-existing orchestrator post-convergence intake into
+      _seal_converged_plan (fed only by convergence_artifacts +
+      ConvergenceOutcome fixed keys + iteration_dir). Reused the one
+      channel already reaching seal time: an optional
+      convention-input.yaml file in iteration_dir. No new parameter
+      threaded through run_iteration / the MCP tool (codex
+      external-refuting-observation honored).
+  - id: schema-net-new
+    status: pass
+    evidence: consensus_mcp/schemas/converged_plan_convention.schema.json; empirical_status enum proven|pending|refuted|n/a verbatim.
+  - id: validator-structure-consequence-only
+    status: pass
+    evidence: validate_converged_plan.py; test_validator_source_sets_no_correctness_state greps the module for correctness-state assignment and finds none.
+  - id: recursive-trap-structural
+    status: pass
+    evidence: |
+      Unconditional GATE_SCOPE_DISCLAIMER on every result; surfaced
+      by consensus_get_iteration_outcome adjacent to the enforcement
+      marker. HARDENED by the audit: codex pass-3 found `off`
+      masqueraded as a clean pass; fixed to preserve real
+      presence_ok/violations + enforcement_disabled flag.
+  - id: fail-closed-seal
+    status: pass
+    evidence: hard-reject raises before write AND unlinks any stale converged-plan.yaml (codex-rev-004 pass-1).
+  - id: graduated-knob
+    status: pass
+    evidence: convergence.converged_plan_enforcement off|warn|graduated|strict default graduated; config.py default + legacy-synth + validate().
+  - id: legacy-doctrine-only-read-time
+    status: pass
+    evidence: plans with no convention_gate load via consensus_get_iteration_outcome marked enforcement=doctrine-only (NOT silently valid, NOT rejected); doctrine-only is read-time only, never a seal-time bypass (codex-rev-001 pass-1/2).
+  - id: three-named-blocks-required
+    status: pass
+    evidence: decisive_experiment_before_next_iteration schema-required + validated (codex-rev-002 pass-1); convention_schema_version pinned exactly, never defaulted/rewritten (codex-rev-003 pass-1 + rev-002 pass-2).
+  - id: artifact-scoped-truth
+    status: pass
+    evidence: CHANGELOG + README + convention doc + advisories.md state v1.15.0 tag 4e81f9e is doctrine-only; machine enforcement only from v1.15.1 forward.
+  - id: full-suite-green
+    status: pass
+    evidence: 964 passed, 1 skipped, 0 regressions; 38 new code-path tests in test_converged_plan_convention.py.
+  - id: workflow-b-audit-clean
+    status: pass
+    evidence: |
+      gemini pass-2 goal_satisfied=true (0 blocking) → pass-3
+      goal_satisfied=true 0 findings. codex pass-1 (2B+2H) → pass-2
+      (1B+1H+1M) → pass-3 (0 blocking, 1 medium) → pass-4b
+      goal_satisfied=true, 0 blocking, 0 findings. All substantive
+      findings integrated TDD-first; the one design-disagreement
+      (codex pass-2 rev-001 hard-reject demand) dismissed with
+      converged-plan q4/q5 design-authority evidence and codex did
+      NOT re-raise it.
+
+dismissed_findings:
+  - id: codex-cpme-wfb-2 / codex-rev-001
+    disposition: hard-reject-demand-dismissed
+    rationale: |
+      Demanded hard-reject for ALL missing blocks under graduated;
+      contradicts the ratified converged-plan q4/q5
+      (weighted-synthesis incl. codex's own consult position:
+      "graduated rule — safety class hard, else warn"; papercut
+      avoidance is an explicit named risk). Transparency concern
+      ACCEPTED instead (convention_gate.enforcement_note loudly
+      marks an annotated incomplete seal). Documented in
+      fix-response-pass3.md. codex pass-3/4b did not re-raise.
+
+named_blockers_carried_forward:
+  - 'v1.15.2: _dispatch_gemini.py must set GEMINI_CLI_TRUST_WORKSPACE / --skip-trust (gemini CLI >=0.43.0-preview.0 fails headless in untrusted dirs). Diagnosed this session; advisory 2026-05-15 filed; _dispatch_gemini.py was in this iteration forbidden_files so correctly out of scope.'
+  - 'v1.15.x (need-evidence, deferred): operator goal_packet defect_class/risk_class declaration UX + anti-gaming cross-check on falsifiable_from_artifacts — ill-posed until the shipped slice produces real usage data.'
+
+result: CLOSED — goal satisfied, all acceptance gates pass, Workflow B audit clean.
