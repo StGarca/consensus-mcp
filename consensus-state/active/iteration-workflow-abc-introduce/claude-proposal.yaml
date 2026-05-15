@@ -1,0 +1,287 @@
+actor:
+  id: claude-workflow-abc-1
+  model_family: claude
+  role: design_proposer
+  pass_id: claude-workflow-abc-1-pass1
+iteration_id: iteration-workflow-abc-introduce
+created_at_utc: '2026-05-14T23:05:00Z'
+mode: proposal
+structural_abstention: false
+proposal:
+  selected_target: |
+    SHIP COMPLETE CONTRACT IN v1.14.4 (rename + Workflow C
+    schema/validators/halt-set/tests/docs); DEFER engine path
+    to v1.15.0 with NAMED BLOCKER (autonomous-loop safety
+    analysis + integration tests with real peer dispatches +
+    interrupt-handling cross-platform validation requires
+    multi-session work).
+
+    Concrete answers:
+      Q1: (a) — replace numeric aliases with letter aliases;
+          semantic strings unchanged; numeric kept as
+          deprecated for one cycle.
+      Q2: (d) — layered. `.consensus/autonomous-policy.yaml`
+          as project default; goal_packet `autonomous_scope`
+          block as per-run override.
+      Q3: ALL of (a)-(j) belong in the minimal halt set;
+          (k) reviewer-recommends-operator-review SHOULD be
+          included. Autonomous mode = wide safety net by
+          default; operators opt OUT of specific conditions
+          per-run if they want.
+      Q4: (c) queue-based for v1.14.4 contract + future v1.15.0
+          adds (a) auto-generation. Queue-based is the safer
+          starting point.
+      Q5: (b) — rename + Workflow C constant + scope-boundary
+          schema + halt-set definition + complete validators
+          + tests. Engine raises clear NotImplementedError.
+          Operators can write Workflow C policies and goal
+          packets; engine path lands in v1.15.0.
+
+  rationale_vs_alternatives: |
+    Q1 — Why (a) over (b)/(c):
+
+    (b) full semantic rename is destructive: every existing
+    `.consensus/config.yaml`, every goal_packet.yaml, every
+    historical doc/audit reference, every CHANGELOG entry —
+    all break or become misleading. The operator's intent
+    is "letter mnemonics for operator-facing vocabulary,"
+    not "rip out the existing semantic naming scheme."
+    Reject (b).
+
+    (c) keeping both numeric and letter aliases creates two
+    ways to express the same thing, with eternal ambiguity
+    about which is canonical. Reject; prefer the deprecation
+    cycle in (a).
+
+    (a) replaces the OPERATOR-FACING surface (CLI flags,
+    init wizard prompts, doc references) with letter
+    aliases while keeping semantic strings intact in the
+    data layer. WORKFLOW_ALIASES becomes:
+      "A" → "propose-converge"
+      "B" → "post-review"
+      "C" → "autonomous-execute"  (new)
+      "3" → "post-review"          (deprecated, kept for compat)
+      "4" → "propose-converge"     (deprecated, kept for compat)
+    Deprecation warning emitted when numeric aliases used.
+    One release cycle later: numeric aliases removed.
+
+    Q2 — Why (d) layered over (a)/(b)/(c) alone:
+
+    (a) goal_packet only: every Workflow C run has to
+    redeclare scope from scratch. Tedious + error-prone +
+    operator may forget halt conditions on a critical run.
+    Insufficient.
+
+    (b) policy file only: rigid; operator can't dial down
+    safety for a particular trusted run, can't tighten it
+    for an experimental one. Insufficient.
+
+    (c) CLI flags only: ephemeral, no audit trail of what
+    boundaries the autonomous run was given. Reject.
+
+    (d) layered: `.consensus/autonomous-policy.yaml` is
+    PROJECT DEFAULT (operator declares once: "for this
+    project, autonomous runs are bounded by these
+    files/iterations/wall-clock"). Goal_packet
+    `autonomous_scope` block can OVERRIDE per-run when
+    needed. Audit trail captures both the policy file
+    state at run-start AND any goal_packet overrides.
+
+    Q3 — Why ALL halt conditions in the minimal set:
+
+    Autonomous mode means "operator is asleep / unavailable."
+    The cost of "halted unnecessarily and operator finds a
+    queued question" is small (operator answers, run
+    resumes). The cost of "didn't halt when it should have
+    and operator finds a wrecked repo" is large.
+
+    Asymmetric cost → wide safety net by default. Operator
+    opts OUT of specific halt conditions per-run if they
+    want a less-safe run (`autonomous_scope.skip_halt_on:
+    [test_regression]` for an exploratory branch). This is
+    the right ergonomics: safety is the floor; operator can
+    raise the ceiling.
+
+    Specific notes:
+    - (a) blocking_objection: trivial — any peer says
+      "block," halt
+    - (b) test_regression: baseline = pre-iteration test
+      pass count; autonomous run halts if NEW failures
+      appear (existing failures that were green-listed
+      via known-issues docs don't count)
+    - (c) schema_change: detect via diff of config.py,
+      goal_packet.schema.json, sealed-artifact schemas,
+      template files between iteration start and
+      proposed patches
+    - (d, e) cost caps: hard wall, no override
+    - (f) convergence failure: 3 rounds is the existing
+      max; if no convergence, operator review needed
+    - (g) dispatcher infrastructure failure: 3 retries
+      then halt
+    - (h, i) scope violations: hard halt; never silently
+      override the operator's file boundaries
+    - (j) operator interrupt: detect via
+      `.consensus/interrupt` file marker (cross-platform,
+      simple)
+    - (k) reviewer recommends operator review: peer can
+      explicitly flag "this needs human eyes" in their
+      sealed packet (`recommend_operator_review: true`
+      field); engine respects it
+
+    Q4 — Why (c) queue-based starts vs (a)/(b):
+
+    (a) auto-create + auto-execute is the most powerful
+    Workflow C end state but the riskiest first
+    implementation. Engine generating its own goal_packets
+    means: which fields does it copy from the converged
+    plan? what does it do when the plan has multiple
+    `next_iteration_id` candidates? what if the converged
+    plan's deliverable is ambiguous? These are real design
+    questions that need empirical validation, not just
+    consensus.
+
+    (b) auto-create-only is awkward middle ground:
+    operator returns to a queue of generated packets but
+    has to manually run them. Why not just let them
+    pre-stage the queue?
+
+    (c) queue-based is the safer starting point: operator
+    explicitly lists the iterations they want done
+    overnight in
+    `.consensus/autonomous-queue.yaml`; engine consumes
+    them in order. No goal-packet generation by engine.
+    Operator retains FULL control over what runs; Workflow
+    C just removes the "kick off each iteration manually"
+    overhead.
+
+    Path forward: ship (c) in v1.14.4 contract +
+    v1.15.0 engine; ship (a) auto-generation in v1.16.0
+    (if (c) proves valuable, evidence for (a) is "we
+    keep wanting auto-generation").
+
+    Q5 — Why (b) over (a)/(c)/(d):
+
+    No-deferral rule check:
+      - (1) Are acceptance gates concrete? YES — config
+        schema additions, validator updates, tests, docs.
+      - (2) Open design surface? Q4-(a) auto-generation
+        has open surface; the rest does not.
+      - (3) Cost small enough for one session? YES for
+        (b); NO for (d) full implementation.
+
+    So per the rule: ship (b), defer engine with NAMED
+    BLOCKER. The blocker is real:
+    autonomous-loop safety analysis (what happens if
+    cosmic-ray bit-flip flips a halt-condition check?
+    what if dispatcher hangs without producing
+    heartbeat? what if interrupt file is created
+    mid-write?) + integration tests with real peer
+    dispatches (cost: dispatcher latency × N
+    iterations) + interrupt-handling cross-platform
+    validation (Windows file watching is different from
+    Unix). Multi-session work.
+
+    (a) "rename + scaffolding only" is too thin —
+    operator can't even see WHAT the contract is going to
+    be when they stage their first autonomous run.
+
+    (c) "minimal autonomous loop" couples Q4 (engine
+    semantics) into v1.14.4 with no time to validate
+    safety. Risky.
+
+    (d) full implementation is multi-session per (3).
+
+    Q6 — Missed dimensions:
+
+    1. **Workflow C + weighted-synthesis interaction.**
+       Per the iter-three-gaps doctrine, converged plans
+       are weighted-synthesis (multi-element deliverables
+       pulling from each contributor). For Workflow C
+       autonomous, the next iteration's scope is the
+       weighted-synthesis plan. Engine implementation
+       must handle the synthesis-shape correctly when
+       generating queue entries. Add: when (a) auto-
+       generation lands in v1.16.0, the converged plan
+       schema gains a required `next_iteration_goal_packet`
+       field (operator-readable + engine-consumable); for
+       v1.14.4/v1.15.0 queue-based mode, operator authors
+       the queue from converged plans manually.
+
+    2. **Workflow C audit log.** Yes — write to
+       `consensus-state/autonomous-runs/<run-id>/log.jsonl`
+       with one entry per iteration boundary:
+       `{iteration_id, started_utc, completed_utc,
+       halt_check_results, files_touched, ...}`. Operator
+       reviewing post-run sees what happened.
+
+    3. **Operator interrupt mechanism.** File marker is
+       simplest cross-platform: existence of
+       `.consensus/interrupt` triggers halt AT next
+       iteration boundary (not mid-iteration to avoid
+       corruption). Engine deletes the file after halt
+       so subsequent runs aren't affected. Document the
+       mechanism in skill + bundle a `consensus
+       interrupt` CLI subcommand that creates the file.
+
+    4. **3-AI required for autonomous safety.** YES — for
+       v1.14.4 contract: workflow_mode=autonomous-execute
+       requires `len(enabled_contributors) == 3`. Validator
+       enforces this. v1.15.0+ may relax (allow 2-AI with
+       explicit operator opt-in) if practical, but ship
+       safety-first.
+
+deliverable_scope:
+  next_iteration_id: implement-immediately-as-v1_14_4
+  files_in_scope:
+    - consensus_mcp/config.py  # WORKFLOW_AUTONOMOUS_EXECUTE constant; alias rename; autonomous_scope schema; halt set; 3-AI requirement; deprecation warning for numeric aliases
+    - consensus_mcp/_init_wizard.py  # accept letter aliases in prompts; default to "A" for new project
+    - consensus_mcp/workflow_engine.py  # recognize WORKFLOW_AUTONOMOUS_EXECUTE; raise NotImplementedError with clear "v1.15.0 will ship engine path" message
+    - consensus_mcp/tests/test_config.py  # alias rename tests; autonomous_scope schema tests; halt set tests; 3-AI requirement test
+    - consensus_mcp/tests/test_init_wizard.py  # letter alias tests
+    - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # new "Workflow C — autonomous-execute" section explaining when to use, how to author policy + queue, halt conditions; rename existing #3/#4 references to A/B
+    - consensus_mcp/dispatch_templates/codex_proposal_template.md  # brief mention of A/B/C in workflow context
+    - consensus_mcp/dispatch_templates/gemini_proposal_template.md  # same
+    - README.md  # brief mention of A/B/C; pointer to advisories.md
+    - CHANGELOG.md  # v1.14.4 entry
+    - docs/workflows/workflow-c-autonomous.md  # NEW — operator-facing doc on Workflow C usage (policy file, queue file, halt conditions, audit log)
+  files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py  # no dispatcher change for Workflow C contract
+    - consensus_mcp/_dispatch_gemini.py
+    - consensus_mcp/contributors/  # iter-0044 separate
+    - .github/
+  named_blockers_for_deferred_work:
+    - 'v1.15.0 (Workflow C engine path): requires autonomous-loop safety analysis (cosmic-ray edge cases, hung dispatcher heartbeat detection, mid-write interrupt-file race conditions); requires integration tests with real peer dispatches (cost: dispatcher latency × N iterations); requires cross-platform interrupt-handling validation (Windows file watching != Unix). Multi-session work; cannot fit in v1.14.4.'
+    - 'v1.16.0 (Workflow C auto-generation per Q4-(a)): requires empirical evidence that queue-based (Q4-(c)) is valuable + observed needs for auto-generation; design questions about converged-plan→goal-packet mapping that need real Workflow C runs to validate.'
+  key_design_decisions:
+    - 'A=propose-converge, B=post-review, C=autonomous-execute (new); semantic strings unchanged; numeric aliases (3, 4) deprecated for one release cycle then removed'
+    - 'Workflow C scope-boundary declaration is layered: .consensus/autonomous-policy.yaml (project default) + goal_packet.autonomous_scope (per-run override)'
+    - 'Workflow C halt set is wide-by-default: ALL of Q3 (a-k); operator opts OUT per-run via skip_halt_on'
+    - 'Workflow C v1.14.4 ships queue-based consumption only (Q4-c); v1.15.0 adds engine; v1.16.0 may add auto-generation (Q4-a)'
+    - 'Workflow C requires 3-AI contributors; validator enforces'
+    - 'Engine raises NotImplementedError with clear "v1.15.0 will ship engine path" message — operators can stage Workflow C runs but execution is gated until engine ships'
+    - 'Interrupt mechanism: .consensus/interrupt file marker (cross-platform); engine deletes after halt'
+    - 'Audit trail: consensus-state/autonomous-runs/<run-id>/log.jsonl; one entry per iteration boundary with halt_check_results'
+  acceptance_gates:
+    gating:
+      - 'config.py: WORKFLOW_AUTONOMOUS_EXECUTE constant exists; "C" alias maps to it; "A" maps to propose-converge; "B" maps to post-review'
+      - 'config.py: numeric aliases (3, 4) still accepted but emit DeprecationWarning'
+      - 'config.py: workflow=autonomous-execute requires len(enabled_contributors) == 3 (validator)'
+      - 'config.py: workflow=autonomous-execute requires autonomous_scope block with max_iterations + max_wall_clock_minutes + halt_on (all required fields)'
+      - 'config.py: autonomous_scope.halt_on default includes ALL of Q3 (a)-(j); skip_halt_on opt-out preserves operator control'
+      - 'workflow_engine.py: workflow=autonomous-execute path raises NotImplementedError with message naming v1.15.0 as the engine ship target'
+      - '_init_wizard.py: prompts use letter aliases (A/B/C); accepts both numeric and letter input'
+      - 'tests: all alias mappings covered; 3-AI requirement covered; autonomous_scope schema covered; halt set defaults covered; engine NotImplementedError covered'
+      - 'docs/workflows/workflow-c-autonomous.md: operator-facing doc with policy + queue + halt + audit-log explanations'
+      - 'skill: new "Workflow C" section; A/B/C references throughout (with 3/4 marked deprecated)'
+      - 'README + dispatch templates: A/B/C terminology reflected'
+      - 'CHANGELOG.md v1.14.4 entry comprehensive'
+      - 'all existing tests pass (no regression)'
+      - 'v1.14.4 tagged + pushed; v1.14.5 dev branch opened'
+  estimated_complexity: medium  # contract is bigger than typical doctrine hot-patch but no engine implementation
+risks:
+  - 'Alias deprecation may surprise operators on legacy automation. Mitigation: DeprecationWarning makes the change visible; one release cycle warning before removal; CHANGELOG calls out prominently.'
+  - 'Operators may try to RUN Workflow C in v1.14.4 before engine ships. Mitigation: NotImplementedError message explicitly says "v1.15.0 ships engine; v1.14.4 ships contract for staging only"; docs/workflows/workflow-c-autonomous.md repeats the gating clearly.'
+  - 'Workflow C halt set may be too aggressive (operator gets too many false-halts on routine runs). Mitigation: skip_halt_on opt-out preserves control; safety-first default is the right starting point; tighten later based on observed false-positive rate.'
+  - 'Cross-platform interrupt file watching may behave differently on Windows vs Unix. Named blocker for v1.15.0; not a v1.14.4 risk since engine is deferred.'
+  - 'Schema changes may break older tooling that consumes goal_packets / configs without normalizing aliases first. Mitigation: numeric aliases preserved; semantic strings preserved; only NEW fields added.'
+estimated_complexity: medium
