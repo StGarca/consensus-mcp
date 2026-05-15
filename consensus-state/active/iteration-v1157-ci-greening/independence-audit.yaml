@@ -15,3 +15,34 @@ audit_log:
     - review_target (path passed via --review-target; may be unspecified)
     - model (gemini CLI --model flag; no --output-schema enforcement)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T21:09:01Z'
+  event_id: 2026-05-15T21:09:01Z_review_returned_and_sealed_gemini-v1157-2
+  actor: gemini-v1157-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1157-ci-greening-gemini-v1157-2-gemini-v1157-2-pass1-pass.yaml
+  sha256: ea3846395156144a17accc076b3843dc1c9bf939b37ed67f10c383a163efc408
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T21:09:10Z'
+  event_id: 2026-05-15T21:09:10Z_review_returned_and_sealed_codex-v1157-2
+  actor: codex-v1157-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1157-ci-greening-codex-v1157-2-codex-v1157-2-pass1-pass.yaml
+  sha256: b89db0850cb86a630dc17b50e4b5288d6c99f4d77bfce5df1864390604728bfd
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

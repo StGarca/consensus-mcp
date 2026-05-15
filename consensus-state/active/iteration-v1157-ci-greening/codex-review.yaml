@@ -1,0 +1,39 @@
+iteration_id: iteration-v1157-ci-greening
+reviewer_id: codex-v1157-2
+pass_id: codex-v1157-2-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Goal satisfied. The five landed CI-greening fixes are root-cause/test-hermeticity
+  fixes, not masks: the codex smoke tests are correctly treated as interim real-binary
+  integration tests with a named Popen-mock follow-up; the validator fixture now points
+  at the standalone repo fixture; the fake-pid/job-kill issue is confined to synthetic
+  Popen objects and the conftest os.killpg/os.getpgid guard prevents tests from signaling
+  the runner while still exercising the production fallback; pytest-timeout is defensive
+  CI hardening; and the POSIX signal assertion now targets stdlib signal.SIGTERM.
+  Open-item verdict: corrected fix-shape is A+C, not B/D and not C alone. _dispatch_base._log_dispatch
+  was a bare append and is now routed through _visibility_watchdog._locked_append,
+  which is the right production-side fix for concurrent main/stdout/stderr thread
+  emitters during abort teardown; _read_log_events JSONDecodeError skipping is an
+  appropriate defensive telemetry-reader belt, not the primary fix. No blocking objections.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: c937949cdac68aa10428f1cbf5f23da709ce6209776ce2354dc5f3ea15119bed
+  output_sha256: 6ad201d6574649f0b4ec34dd704345f9cb4986fcacf06fade0aacd84c8e284b4
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: d87ec2abdf9244b33be398710145c3137f090a06a8bc858bc378c6038df6bfad
+  scope_signature: v1157-ci-greening-audit-and-openitem-adjudication
+  review_target_path: consensus-state/active/iteration-v1157-ci-greening/review-packet.yaml
+  review_target_hash: 4462e1d0f4a7777dcae4c618b288fc47c5a478461ce567a5c0eb79e9ede6effa
+  mode: review
+sealed_at_utc: '2026-05-15T21:09:10Z'
+packet_sha256: b89db0850cb86a630dc17b50e4b5288d6c99f4d77bfce5df1864390604728bfd

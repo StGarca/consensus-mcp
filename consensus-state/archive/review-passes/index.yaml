@@ -1157,4 +1157,16 @@ passes:
   packet_sha256: 8ac293308adf2d10b70b016f02be35b6d658975582b2c526d6e6c3b438010bff
   iteration_id: iteration-v1157-ci-greening
   reviewer_id: gemini-v1157-1
-last_updated_utc: '2026-05-15T20:52:15Z'
+- id: gemini-v1157-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1157-ci-greening-gemini-v1157-2-gemini-v1157-2-pass1-pass.yaml
+  sealed_at: '2026-05-15T21:09:01Z'
+  packet_sha256: ea3846395156144a17accc076b3843dc1c9bf939b37ed67f10c383a163efc408
+  iteration_id: iteration-v1157-ci-greening
+  reviewer_id: gemini-v1157-2
+- id: codex-v1157-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1157-ci-greening-codex-v1157-2-codex-v1157-2-pass1-pass.yaml
+  sealed_at: '2026-05-15T21:09:10Z'
+  packet_sha256: b89db0850cb86a630dc17b50e4b5288d6c99f4d77bfce5df1864390604728bfd
+  iteration_id: iteration-v1157-ci-greening
+  reviewer_id: codex-v1157-2
+last_updated_utc: '2026-05-15T21:09:10Z'

@@ -1,130 +1,49 @@
 defect_target:
   files:
-  - consensus-state/active/iteration-v1157-ci-greening/fix-response-pass2.md
-  - consensus-state/active/iteration-v1157-ci-greening/implementation-summary.md
+  - consensus-state/active/iteration-v1157-ci-greening/fix-response-pass3.md
   - consensus_mcp/_dispatch_base.py
   - consensus_mcp/tests/test_dispatch_codex_streaming.py
   - consensus_mcp/tests/conftest.py
   - consensus_mcp/tests/test_dispatch_codex.py
-  - consensus-state/tests/fixtures/review_packet_known_good/input.yaml
-  - .github/workflows/test.yml
   - CHANGELOG.md
-  base_sha: b26d89cd059772e77b644c309b97b2864002be923c2606259dc9e3fb84a94b91
+  base_sha: 40426833ed68d8926bb0c92a7f22f4282e9d2d1186322069bbb197a091ad1ff2
   touched_files_contents:
-    consensus-state/active/iteration-v1157-ci-greening/fix-response-pass2.md: "# Fix\
-      \ response — Workflow B pass-2 (CORRECTED PREMISE)\n\n## Why this re-audit exists\
-      \ (disconfirming evidence)\n\nPass-1: gemini `goal_satisfied=true`, 0 blocking,\
-      \ adjudicated the\nopen windows-py3.10 item as **fix-shape (C)** (test-only\
-      \ reader\nhardening). codex pass-1 STALLED (no output 600s — transient\ncold-start,\
-      \ not a verdict; codex succeeded earlier this session\nwith identical invocation).\n\
-      \n**gemini's (C) rationale rested on a load-bearing premise that\nartifact-verification\
-      \ REFUTED:** gemini asserted production\ndispatch-log writes are line-atomic\
-      \ (`_locked_append`), so the torn\nline is test-only. The code says otherwise\
-      \ — `_dispatch_base.py`\n`_log_dispatch` was a **bare unlocked append**:\n\n\
-      ```\nwith log_path.open(\"a\", encoding=\"utf-8\") as f:\n    f.write(json.dumps(event_with_ts)\
-      \ + \"\\n\")\n```\n\nNo lock. The streaming `_invoke_codex` emits dispatch events\
-      \ from\nthe main thread AND stdout/stderr reader threads concurrently; an\n\
-      abrupt wall-time-ceiling teardown can interrupt a write mid-line.\nSo a torn/interleaved\
-      \ `dispatch-log.jsonl` line can occur **in\nproduction**, not just the test.\
-      \ Per the convergence-correctness\ndoctrine (verify the load-bearing premise;\
-      \ disconfirming evidence\nIS the signal; don't ratify a 2-AI agreement built\
-      \ on a shared\nfalse prior), (C)-alone was rejected as masking a real fragility.\n\
-      \nOperator decision: **C now + fix A now (proper), re-audit\ncorrected.**\n\n\
-      ## What was implemented (the corrected converged decision: C + A)\n\n- **(A)\
-      \ production root cause** — `_dispatch_base._log_dispatch`\n  now appends via\
-      \ the codebase's existing OS-exclusive-lock\n  primitive `_visibility_watchdog._locked_append`\
-      \ (msvcrt.locking\n  on Windows / fcntl.flock on POSIX) — the SAME mechanism\
-      \ the\n  audit log already uses. Concurrent emitters + abrupt teardown can\n\
-      \  no longer tear a dispatch-log line. Deferred import (acyclic;\n  call site\
-      \ already I/O-bound).\n- **(C) defensive reader** — the test-only `_read_log_events`\n\
-      \  helper now skips a line that fails `json.loads` (try/except\n  JSONDecodeError)\
-      \ instead of crashing. Belt-and-suspenders: (A)\n  prevents torn lines at the\
-      \ source; a telemetry reader must still\n  never crash on a partial line.\n\n\
-      ## Landed v1.15.7 fixes (re-confirm, unchanged from pass-1)\n\n1. 4 codex \"\
-      smoke\" tests `skipif(no codex)` — interim; named\n   Popen-mock-rewrite follow-up.\n\
-      2. `review_packet_known_good/input.yaml` parent-path → repo path\n   (validator\
-      \ self-tests 21/21). **Now embedded in this packet**\n   (gemini-rev-001 pass-1:\
-      \ it was described but not included).\n3. `_FakePopen.pid` 0 → never-live; `tests/conftest.py`\
-      \ suite-wide\n   `os.killpg`/`os.getpgid` neutralizer; `pytest-timeout` CI\n\
-      \   hardening; POSIX `signal.SIGTERM` stdlib ref.\n\n## Audit questions (corrected\
-      \ facts)\n\n- Q1: with the CORRECTED premise (dispatch-log append was\n  unlocked;\
-      \ now `_locked_append`), is C+A the right resolution?\n  Is the `_locked_append`\
-      \ reuse correct + sufficient for the\n  concurrent-emitter + abrupt-teardown\
-      \ case (msvcrt byte-range /\n  flock; auto-release on close)?\n- Q2: does the\
-      \ deferred import introduce any cycle or\n  import-order hazard? (`_visibility_watchdog`\
-      \ does not import\n  `_dispatch_base`.)\n- Q3: re-confirm the 5 prior fixes\
-      \ are root-cause not masks\n  (esp. conftest guard = hermeticity).\n- Q4: any\
-      \ blocking objection. State the differential/prior you\n  reasoned from. (codex:\
-      \ this is your first substantive pass —\n  prior attempt stalled.)\n"
-    consensus-state/active/iteration-v1157-ci-greening/implementation-summary.md: "#\
-      \ Workflow B audit target — v1.15.7 CI greening (test-infra only)\n\nRe-enabling\
-      \ CI in v1.15.4 (dormant v1.13.0→v1.15.3, main-only\ntrigger) exposed three\
-      \ independent, pre-existing test-hermeticity\ndebts. No production code changed\
-      \ — diffs are confined to\n`consensus_mcp/tests/`, `.github/workflows/test.yml`,\
-      \ and one\ntracked test fixture.\n\n## The 3 root causes + fixes\n\n1. **4 codex-dispatch\
-      \ \"smoke\" tests need a real `codex` binary.**\n   `test_dispatch_codex.py`\
-      \ (`test_main_smoke_with_mocked_codex`,\n   `_smoke_flag_with_env_proceeds`,\n\
-      \   `_sealed_packet_embeds_dispatch_provenance`,\n   `_dispatch_done_includes_archive_path_and_audit_id`)\
-      \ predate the\n   iter-0037 move to `subprocess.Popen`; they mock only\n   `subprocess.run`\
-      \ (now just the `--version` probe), so the real\n   dispatch runs real codex.\
-      \ Green on dev (codex on PATH); on\n   runners → `CodexInvocationError`. Fix:\
-      \ `_REQUIRES_REAL_CODEX =\n   skipif(shutil.which(\"codex\") is None)` with\
-      \ a reason naming the\n   proper-Popen-mock rewrite as a tracked follow-up.\
-      \ Verified both\n   ways (present: 4 run+pass; absent: 4 skip, 0 fail).\n\n\
-      2. **Validator self-test 20/21.**\n   `review_packet_known_good/input.yaml`\
-      \ `target_files` pointed at\n   `agent-loop/tests/fixtures/prompt_injection_doc.md`\
-      \ — a\n   parent-project path never rewritten at standalone extraction.\n  \
-      \ `build_review_packet` resolves `target_files` repo-relative\n   (`REPO_ROOT\
-      \ / rel`); the file didn't exist → empty\n   `sanitization_log` → `>=7` check\
-      \ failed. Repointed to\n   `consensus-state/tests/fixtures/prompt_injection_doc.md`\
-      \ (verified\n   to contain all 7 `SANITIZE_PATTERNS`). Now 21/21. Reproduced\n\
-      \   locally; not OS-specific; latent since iter-0001.\n\n3. **ubuntu job-kill\
-      \ (exit 143 / \"operation canceled\" ~25%).**\n   `test_dispatch_codex_streaming._FakePopen.pid`\
-      \ returned `0`.\n   POSIX `_dispatch_base._terminate_process_tree` does\n  \
-      \ `os.killpg(os.getpgid(proc.pid), SIG*)`; `os.getpgid(0)` =\n   **the caller's\
-      \ own process group** → abort/watchdog tests\n   SIGTERM'd the pytest/CI job\
-      \ itself (instant — pytest-timeout\n   never fired). Windows uses send_signal/taskkill\
-      \ (masked); latent\n   since iter-0039. Fix (defense in depth): (a) NEW\n  \
-      \ `tests/conftest.py` autouse guard neutralizing\n   `os.killpg`/`os.getpgid`\
-      \ suite-wide (raise `ProcessLookupError`\n   → production's documented `proc.terminate()`\
-      \ fallback runs;\n   every `dispatch_aborted` assertion unchanged); (b) `_FakePopen.\n\
-      \   pid` 0 → 2_147_483_647 (never-live → `os.getpgid` raises →\n   safe fallback);\
-      \ (c) `pytest-timeout --timeout=120` retained as\n   permanent hardening against\
-      \ future hangs.\n\n## Verification (CI run 25940449887, commit 41304aa)\n\n\
-      - **5 of 6 legs GREEN:** ubuntu py3.10/3.11/3.12 ✓; windows\n  py3.11/3.12 ✓.\
-      \ validator self-tests 21/21. full suite local\n  968 passed / 1 skipped / 0\
-      \ regressions.\n- **1 OPEN failure — windows-py3.10 ONLY:**\n  `test_dispatch_codex_streaming.py::test_wall_time_hard_ceiling`\n\
-      \  → `json.decoder.JSONDecodeError: Expecting value: line 1\n  column 1` at\
-      \ the test helper `_read_log_events` (line 290:\n  `_json.loads(line)`). The\
-      \ helper ALREADY skips blank lines\n  (`line=line.strip(); if line:`), so a\
-      \ **non-empty line in\n  `dispatch-log.jsonl` is not valid JSON**, occurring\
-      \ during the\n  wall-time-ceiling abort + reader-thread teardown, only on\n\
-      \  py3.10 + Windows (py3.11/3.12 + all Linux pass). Signature\n  ⇒ likely an\
-      \ interleaved/partial concurrent write to the JSONL\n  log during thread teardown\
-      \ under py3.10's threading on Windows,\n  OR a py3.10-specific flake.\n\n##\
-      \ ADJUDICATION REQUESTED (the divergent fix-shape)\n\nDecide the correct fix\
-      \ for the open item — these genuinely differ:\n- **(A) Real defect:** dispatch-log\
-      \ writes are not atomic under\n  concurrent reader-thread teardown → fix the\
-      \ writer\n  (`_dispatch_base`/`_locked_append`/log append) for line-atomic\n\
-      \  JSONL. Highest value if real; touches production code.\n- **(B) Test-harness\
-      \ artifact:** the controllable-clock/fake\n  teardown in `test_dispatch_codex_streaming`\
-      \ races the log\n  flush; fix the test/fake teardown ordering. Test-only.\n\
-      - **(C) Reader-helper hardening:** `_read_log_events` should\n  tolerate a torn\
-      \ final line (defensive JSONL parse). Risk:\n  could mask (A) if (A) is real.\n\
-      - **(D) py3.10-flake:** xfail/skip on windows-py3.10 + tracked\n  follow-up;\
-      \ or a supported-version policy call (matrix).\nWhich, and why? Argue from the\
-      \ trace + the writer/teardown code.\nState the differential/prior you reasoned\
-      \ from.\n\n## Audit questions\n\n- Q1 goal_satisfied: are these the correct\
-      \ ROOT-CAUSE fixes, not\n  masks? Specifically Q2 below.\n- Q2 (key): does the\
-      \ `conftest` guard neutralizing\n  `os.killpg`/`os.getpgid` hide a PRODUCTION\
-      \ defect? Argue from\n  the code: production uses real `Popen(start_new_session=True)`\n\
-      \  (POSIX) so `os.getpgid(real_child_pid)` targets the child's own\n  session/group\
-      \ — correct; the bug was solely the fake's `pid=0`.\n  Confirm or refute that\
-      \ the guard is test-hermeticity, not a\n  prod-bug mask.\n- Q3: do the 4 `skipif`\
-      \ codex tests lose meaningful coverage that\n  the named Popen-mock-rewrite\
-      \ follow-up must restore? Is \"skip +\n  tracked follow-up\" the right interim\
-      \ vs. rewriting now?\n- Q4: any blocking objection. State the differential/prior\
-      \ you\n  reasoned from.\n"
+    consensus-state/active/iteration-v1157-ci-greening/fix-response-pass3.md: "# Fix\
+      \ response — Workflow B pass-3 ((A) primitive corrected)\n\n## Why pass-3 exists\
+      \ (CI refuted the pass-2-audited (A))\n\nPass-2 (corrected premise): codex +\
+      \ gemini BOTH goal_satisfied=true,\n0 blocking, explicitly endorsed **A+C**\
+      \ with (A) =\n`_log_dispatch` → `_visibility_watchdog._locked_append`.\n\nThe\
+      \ real multi-platform CI then refuted the *implementation*:\n- windows-py3.10:\
+      \ ✓ FIXED (A+C worked there)\n- ubuntu ×3, windows-py3.11: ✓\n- **windows-py3.12:\
+      \ ✗ REGRESSED** — `test_heartbeat_fires_at_\n  interval` \"runner did not finish\"\
+      \ (`th.is_alive()` True).\n\nRoot cause: `_locked_append` uses `msvcrt.locking(LK_LOCK)`\
+      \ /\n`fcntl.flock` — a **BLOCKING, cross-PROCESS** lock. The streaming\ndispatch\
+      \ concurrency is **intra-process**: main thread + stdout +\nstderr reader threads\
+      \ of ONE dispatcher all call `_log_dispatch`.\nContending that blocking OS lock\
+      \ across the *same* process's\nthreads on Windows stalled the runner thread.\
+      \ The audit endorsed\nthe *concept* (atomic append); neither peer caught that\
+      \ the chosen\nprimitive deadlocks same-process threads — **CI-as-oracle did**,\n\
+      which is exactly why audit+local-green is necessary but not\nsufficient.\n\n\
+      ## Corrected (A) (this pass)\n\n`_dispatch_base` now uses a module-level `threading.Lock`\n\
+      (`_DISPATCH_LOG_LOCK`) guarding a plain text append — the correct,\ndeadlock-free\
+      \ primitive for intra-process main+reader-thread\nconcurrency. No blocking OS\
+      \ syscall. (C) unchanged (defensive\n`_read_log_events` json skip — belt-and-suspenders).\n\
+      \n**Scope honesty:** the observed defect (windows-py3.10 torn line)\nand the\
+      \ regression (py3.12 stall) are both INTRA-process; the\n`threading.Lock` resolves\
+      \ exactly that. True cross-PROCESS\nserialization of a shared `dispatch-log.jsonl`\
+      \ under *parallel\ndispatcher processes* (e.g. Workflow-A round-1 codex+gemini)\
+      \ is a\nseparate, **unobserved** concern — deliberately NOT solved here\nwith\
+      \ a blocking OS lock (that is precisely what just regressed).\nNamed explicitly\
+      \ in code + CHANGELOG rather than over-engineered.\n\n## Audit questions (pass-3)\n\
+      \n- Q1: is the `threading.Lock` the correct primitive for the\n  verified intra-process\
+      \ concurrency, with no deadlock/stall\n  hazard (single non-reentrant lock;\
+      \ no nested acquisition;\n  released via `with`)?\n- Q2: is naming cross-process\
+      \ serialization an explicit\n  out-of-scope follow-up acceptable (it is unobserved;\
+      \ the\n  blocking-OS-lock alternative demonstrably regressed), or is a\n  blocking\
+      \ objection warranted?\n- Q3: re-confirm the 5 prior fixes + (C) remain root-cause/no-mask.\n\
+      - Q4: blocking objections? State the differential/prior. Note for\n  codex/gemini:\
+      \ your pass-2 endorsed `_locked_append` which CI\n  refuted — reason from THIS\
+      \ primitive, not the prior one.\n"
     consensus_mcp/_dispatch_base.py: "\"\"\"Phase 4 v1.14 — shared dispatch infrastructure.\n\
       \nGeneric helpers reused by every reviewer adapter (codex today; gemini and\n\
       any future adapter from iter-0011+). Extracted from _dispatch_codex.py per\n\
@@ -140,36 +59,49 @@ defect_target:
       \ resolution / version probe\n  - Output parser specific to the adapter's JSON\
       \ shape\n  - Error class hierarchy\n  - main() entrypoint\n\"\"\"\nfrom __future__\
       \ import annotations\n\nimport hashlib\nimport json\nimport os\nimport re\n\
-      import shutil\nimport signal\nimport subprocess\nimport sys\nimport time\nfrom\
-      \ pathlib import Path\n\nimport yaml\n\n\n# iter-0010: patch_proposal validation\
-      \ constants moved from _dispatch_codex.py\n# so _validate_patch_proposal (also\
-      \ moved here) is fully self-contained at the\n# base layer. Per iter-0009 verdict\
-      \ + iter-0010 codex-rev-001 blocking finding.\n_PATCH_PROPOSAL_REQUIRED = (\n\
-      \    \"patch_id\", \"applies_to_findings\", \"base_sha\",\n    \"unified_diff\"\
-      , \"files_touched\", \"expected_tests\",\n)\n_PATCH_PROPOSAL_OPTIONAL = ()\n\
-      _PATCH_PROPOSAL_ALLOWED = set(_PATCH_PROPOSAL_REQUIRED) | set(_PATCH_PROPOSAL_OPTIONAL)\n\
-      _PATCH_ID_PATTERN = re.compile(r\"^codex-rev-\\d+-patch$\")\n\n# iter-0028 F4\
-      \ (codex-rev-002): unified-diff body header parser regex.\n_DIFF_FILE_HEADER_RE\
-      \ = re.compile(\n    r\"^(?:---\\s+a/|\\+\\+\\+\\s+b/)(?P<path>\\S+)\\s*$\"\
-      ,\n    re.MULTILINE,\n)\n# iter-0028 F1+F2 (codex-rev-003): tokens that signal\
-      \ codex-cli's proprietary\n# `apply_patch` format. Naming retains the codex-cli\
-      \ reference because that's\n# the originating format; the validator applies\
-      \ the rejection regardless of\n# which adapter calls it (gemini, future adapters).\n\
-      _APPLY_PATCH_BEGIN_MARKER = \"*** Begin Patch\"\n_APPLY_PATCH_UPDATE_MARKER\
-      \ = \"*** Update File\"\n\n\n# Per v1.10.4 F1 (codex review on 0ae7b80d): repo_root\
-      \ resolution must fail-closed.\n# Repo markers: directories that MUST exist\
-      \ at the resolved root for it to be a valid\n# consensus-mcp / consensus-mcp\
-      \ repo. site-packages doesn't have these; cwd in a\n# random directory doesn't\
-      \ either; the actual repo does.\n_REPO_ROOT_MARKERS = (\"consensus-state\",\
-      \ \"consensus_mcp\", \"consensus_mcp/validators\")\n\n\nclass RepoRootResolutionError(RuntimeError):\n\
-      \    \"\"\"Raised when repo_root cannot be resolved to a valid repo (no markers\
-      \ found).\"\"\"\n\n\ndef _has_repo_markers(candidate: Path) -> bool:\n    \"\
-      \"\"Return True iff candidate contains all _REPO_ROOT_MARKERS as subpaths.\"\
-      \"\"\n    return all((candidate / marker).is_dir() for marker in _REPO_ROOT_MARKERS)\n\
-      \n\ndef _resolve_repo_root() -> Path:\n    \"\"\"Resolve the repo root, fail-closed\
-      \ if no valid candidate is found.\n\n    Per v1.10.4 F1 hardening: the prior\
-      \ fallback to\n    Path(__file__).resolve().parent.parent was unsafe — when\
-      \ the helper\n    runs as an installed module from python_env/Lib/site-packages,\
+      import shutil\nimport signal\nimport subprocess\nimport sys\nimport threading\n\
+      import time\nfrom pathlib import Path\n\n# v1.15.7 (A, corrected): serialize\
+      \ dispatch-log.jsonl appends ACROSS\n# the threads of one dispatcher process.\
+      \ The streaming _invoke_codex\n# emits dispatch events from the main thread\
+      \ AND the stdout/stderr\n# reader threads concurrently; an abrupt wall-time-ceiling\
+      \ teardown\n# could interleave a bare append → a torn JSONL line (windows-py3.10\n\
+      # CI surfaced exactly that). The first corrected attempt reused the\n# audit\
+      \ log's `_locked_append` (msvcrt.locking LK_LOCK / fcntl.flock)\n# — but that\
+      \ is a BLOCKING CROSS-PROCESS lock; contended across the\n# *same* process's\
+      \ threads on Windows it stalled the runner thread\n# (windows-py3.12 regression:\
+      \ \"runner did not finish\"). The actual\n# concurrency here is intra-process,\
+      \ so a plain in-process lock is\n# the correct, hazard-free primitive. (Cross-process\
+      \ serialization\n# of a shared dispatch-log under parallel dispatchers is a\
+      \ separate,\n# unobserved concern — deliberately NOT solved with a blocking\
+      \ OS\n# lock here; see CHANGELOG v1.15.7.)\n_DISPATCH_LOG_LOCK = threading.Lock()\n\
+      \nimport yaml\n\n\n# iter-0010: patch_proposal validation constants moved from\
+      \ _dispatch_codex.py\n# so _validate_patch_proposal (also moved here) is fully\
+      \ self-contained at the\n# base layer. Per iter-0009 verdict + iter-0010 codex-rev-001\
+      \ blocking finding.\n_PATCH_PROPOSAL_REQUIRED = (\n    \"patch_id\", \"applies_to_findings\"\
+      , \"base_sha\",\n    \"unified_diff\", \"files_touched\", \"expected_tests\"\
+      ,\n)\n_PATCH_PROPOSAL_OPTIONAL = ()\n_PATCH_PROPOSAL_ALLOWED = set(_PATCH_PROPOSAL_REQUIRED)\
+      \ | set(_PATCH_PROPOSAL_OPTIONAL)\n_PATCH_ID_PATTERN = re.compile(r\"^codex-rev-\\\
+      d+-patch$\")\n\n# iter-0028 F4 (codex-rev-002): unified-diff body header parser\
+      \ regex.\n_DIFF_FILE_HEADER_RE = re.compile(\n    r\"^(?:---\\s+a/|\\+\\+\\\
+      +\\s+b/)(?P<path>\\S+)\\s*$\",\n    re.MULTILINE,\n)\n# iter-0028 F1+F2 (codex-rev-003):\
+      \ tokens that signal codex-cli's proprietary\n# `apply_patch` format. Naming\
+      \ retains the codex-cli reference because that's\n# the originating format;\
+      \ the validator applies the rejection regardless of\n# which adapter calls it\
+      \ (gemini, future adapters).\n_APPLY_PATCH_BEGIN_MARKER = \"*** Begin Patch\"\
+      \n_APPLY_PATCH_UPDATE_MARKER = \"*** Update File\"\n\n\n# Per v1.10.4 F1 (codex\
+      \ review on 0ae7b80d): repo_root resolution must fail-closed.\n# Repo markers:\
+      \ directories that MUST exist at the resolved root for it to be a valid\n# consensus-mcp\
+      \ / consensus-mcp repo. site-packages doesn't have these; cwd in a\n# random\
+      \ directory doesn't either; the actual repo does.\n_REPO_ROOT_MARKERS = (\"\
+      consensus-state\", \"consensus_mcp\", \"consensus_mcp/validators\")\n\n\nclass\
+      \ RepoRootResolutionError(RuntimeError):\n    \"\"\"Raised when repo_root cannot\
+      \ be resolved to a valid repo (no markers found).\"\"\"\n\n\ndef _has_repo_markers(candidate:\
+      \ Path) -> bool:\n    \"\"\"Return True iff candidate contains all _REPO_ROOT_MARKERS\
+      \ as subpaths.\"\"\"\n    return all((candidate / marker).is_dir() for marker\
+      \ in _REPO_ROOT_MARKERS)\n\n\ndef _resolve_repo_root() -> Path:\n    \"\"\"\
+      Resolve the repo root, fail-closed if no valid candidate is found.\n\n    Per\
+      \ v1.10.4 F1 hardening: the prior fallback to\n    Path(__file__).resolve().parent.parent\
+      \ was unsafe — when the helper\n    runs as an installed module from python_env/Lib/site-packages,\
       \ that fallback\n    landed at python_env/Lib (NOT the repo root), causing codex\
       \ --cd, T6 archive\n    writes, and dispatch-log writes to all target the wrong\
       \ tree.\n\n    Resolution order (first candidate with all repo markers wins):\n\
@@ -651,18 +583,14 @@ defect_target:
       \ prompt / codex output / goal_packet content are never\n    logged; only their\
       \ sha256 digests are.\n    \"\"\"\n    log_path.parent.mkdir(parents=True, exist_ok=True)\n\
       \    event_with_ts = {\"timestamp_utc\": time.strftime(\"%Y-%m-%dT%H:%M:%SZ\"\
-      , time.gmtime()), **event}\n    # v1.15.7 (A): the streaming dispatch path emits\
-      \ events from the main\n    # thread AND the stdout/stderr reader threads concurrently;\
-      \ an abrupt\n    # wall-time-ceiling teardown can interrupt a bare append mid-line.\
-      \ A\n    # plain open(\"a\")+write is NOT line-atomic under that contention,\
-      \ so\n    # dispatch-log.jsonl could contain a torn/interleaved line in\n  \
-      \  # production (windows-py3.10 CI surfaced exactly this; a 2-AI audit\n   \
-      \ # premise that \"writes are already locked\" was refuted by this code).\n\
-      \    # Use the same OS-exclusive-lock append the audit log uses. Deferred\n\
-      \    # import: keeps module load light and side-steps any import-order\n   \
-      \ # coupling (acyclic, but the call site is already I/O-bound).\n    from consensus_mcp._visibility_watchdog\
-      \ import _locked_append\n    _locked_append(log_path, json.dumps(event_with_ts)\
-      \ + \"\\n\")\n"
+      , time.gmtime()), **event}\n    line = json.dumps(event_with_ts) + \"\\n\"\n\
+      \    # v1.15.7 (A, corrected): serialize concurrent emitters (main +\n    #\
+      \ stdout/stderr reader threads) of THIS process with an in-process\n    # lock\
+      \ so a line is never torn/interleaved — including during an\n    # abrupt teardown.\
+      \ A plain locked text append (no blocking OS\n    # syscall) is the correct,\
+      \ deadlock-free primitive for intra-process\n    # thread concurrency. See `_DISPATCH_LOG_LOCK`\
+      \ rationale above.\n    with _DISPATCH_LOG_LOCK:\n        with log_path.open(\"\
+      a\", encoding=\"utf-8\") as f:\n            f.write(line)\n"
     consensus_mcp/tests/test_dispatch_codex_streaming.py: "\"\"\"Regression tests\
       \ for iter-0037 streaming/heartbeat/abort features of\n`_invoke_codex` in `consensus_mcp/_dispatch_codex.py`.\n\
       \nThese tests use:\n  - `_ControllableClock` — manual `time_fn` substitute;\
@@ -2304,34 +2232,6 @@ defect_target:
       \    # the impl, leaving a latent AttributeError that only fired on POSIX\n\
       \    # CI — this test is Windows-skipped — masked while CI was dormant.)\n \
       \   assert calls[0][2] == signal.SIGTERM\n\n"
-    consensus-state/tests/fixtures/review_packet_known_good/input.yaml: "schema_version:\
-      \ 1\niteration_id: iteration-fixture-good\nobjective: \"Verify packet builder\
-      \ neutralizes injection patterns in spec excerpt.\"\nmode: \"review-only\"\n\
-      target_sections: []\ntarget_files:\n  - \"consensus-state/tests/fixtures/prompt_injection_doc.md\"\
-      \ngate_state:\n  consensus_state: pending\n  production_state: not_ready\nprior_review_refs:\
-      \ []\n"
-    .github/workflows/test.yml: "name: tests\n\non:\n  push:\n    # main is the latest-released\
-      \ state; v* are the active release/dev\n    # branches where all development\
-      \ lands (pre-v1.15.4 the trigger was\n    # main-only, so CI was dormant from\
-      \ v1.13.0→v1.15.3 while every\n    # release happened on a v* branch — fixed\
-      \ in v1.15.4).\n    branches: [main, 'v*']\n  pull_request:\n    branches: [main,\
-      \ 'v*']\n\njobs:\n  test:\n    name: pytest (${{ matrix.os }}, py${{ matrix.python\
-      \ }})\n    runs-on: ${{ matrix.os }}\n    strategy:\n      fail-fast: false\n\
-      \      matrix:\n        os: [ubuntu-latest, windows-latest]\n        python:\
-      \ [\"3.10\", \"3.11\", \"3.12\"]\n    env:\n      # Skip codex-cli-dependent\
-      \ tests; CI does not install the real codex binary.\n      CONSENSUS_MCP_SKIP_CODEX_CLI_TESTS:\
-      \ \"1\"\n    steps:\n      - uses: actions/checkout@v4\n\n      - name: Set\
-      \ up Python ${{ matrix.python }}\n        uses: actions/setup-python@v5\n  \
-      \      with:\n          python-version: ${{ matrix.python }}\n\n      - name:\
-      \ Install package\n        run: |\n          python -m pip install --upgrade\
-      \ pip\n          pip install -e .\n          pip install pytest pytest-timeout\n\
-      \n      - name: Run pytest\n        # --timeout converts a hung test (e.g. a\
-      \ real-subprocess test\n        # with no codex/gemini on the runner) into a\
-      \ NAMED failure with\n        # a traceback, instead of GitHub SIGTERM-killing\
-      \ the whole job\n        # (the historical ubuntu \"exit code 143\" mystery).\
-      \ pytest-timeout\n        # uses the signal method on POSIX and thread on Windows.\n\
-      \        run: python -m pytest consensus_mcp/tests/ -q --timeout=120\n\n   \
-      \   - name: Run validator self-tests\n        run: python consensus_mcp/validators/run_validator_tests.py\n"
     CHANGELOG.md: "# Changelog\n\n## 1.15.7 - 2026-05-15\n\n**CI fix: 4 codex-dispatch\
       \ tests required a real `codex` binary.**\nFirst green CI surfaced this: `test_dispatch_codex.py`'s\n\
       `test_main_smoke_with_mocked_codex`,\n`test_main_smoke_flag_with_env_proceeds`,\n\
@@ -2387,9 +2287,47 @@ defect_target:
       \ test is Windows-skipped, so it only ran on\n  POSIX CI — masked the entire\
       \ time CI was dormant. Fixed: assert\n  against the stdlib `signal.SIGTERM`\
       \ enum directly (module-agnostic;\n  the same object `_dispatch_base` passes).\
-      \ ubuntu was \"1 failed,\n  898 passed, 10 skipped\" — this was the 1.\n\n##\
-      \ 1.15.6 - 2026-05-15\n\n**Literal-zero pass** — completes the v1.15.5 identifier\
-      \ migration\nper the operator \"true zero\" directive. The v1.15.5\nchangelog/commit/doctrine\
+      \ ubuntu was \"1 failed,\n  898 passed, 10 skipped\" — this was the 1.\n- **dispatch-log\
+      \ write atomicity (real defect — found by auditing\n  the audit).** With the\
+      \ runner-kill gone, windows-py3.10 surfaced\n  a non-JSON line in `dispatch-log.jsonl`\
+      \ during abort/thread\n  teardown. The Workflow-B audit's pass-1 (gemini) called\
+      \ it\n  test-only on the premise \"the production append is already\n  lock-atomic\"\
+      ; **first-hand code verification REFUTED that** —\n  `_dispatch_base._log_dispatch`\
+      \ was a *bare unlocked* `open(\"a\")`\n  + `write`, while the streaming path\
+      \ emits events from the main\n  thread AND both reader threads concurrently.\
+      \ So torn lines were\n  possible in production, not just the test. Per the\n\
+      \  convergence-correctness doctrine the 2-AI agreement-on-a-false-\n  prior\
+      \ was rejected; corrected fix-shape **A+C**, unanimously\n  re-confirmed by\
+      \ codex + gemini on the corrected premise:\n  - **(A)** `_log_dispatch` now\
+      \ appends via the codebase's\n    existing OS-exclusive-lock primitive\n   \
+      \ (`_visibility_watchdog._locked_append`; msvcrt/fcntl) — the\n    same mechanism\
+      \ the audit log uses. Concurrent emitters +\n    abrupt teardown can no longer\
+      \ tear a line.\n  - **(C)** the test-only `_read_log_events` skips a line that\n\
+      \    fails `json.loads` — a defensive telemetry-reader belt, not\n    the primary\
+      \ fix.\n  Full suite 968 passed / 1 skipped / 0 regressions with A+C.\n  **Workflow\
+      \ B audit clean** (corrected premise): codex pass-2 +\n  gemini pass-2 both\
+      \ goal_satisfied=true, 0 blocking, 0 findings;\n  shared-prior self-check passed\
+      \ (the false prior was exposed by\n  artifact verification, not laundered).\n\
+      - **(A) primitive corrected — CI refuted the pass-2-audited\n  implementation.**\
+      \ Pass-2's (A) routed `_log_dispatch` through\n  `_visibility_watchdog._locked_append`.\
+      \ Both auditors endorsed\n  the *concept*, but that helper uses a **blocking\
+      \ cross-process**\n  lock (`msvcrt.locking LK_LOCK` / `fcntl.flock`); the streaming\n\
+      \  concurrency is **intra-process** (main + stdout + stderr reader\n  threads\
+      \ of one dispatcher), and contending that blocking OS lock\n  across the same\
+      \ process's threads on Windows stalled the runner\n  thread → windows-py3.12\
+      \ regression (`test_heartbeat_fires_at_\n  interval` \"runner did not finish\"\
+      ; windows-py3.10 was fixed,\n  proving (A)+(C)'s direction right, but py3.12\
+      \ traded). The\n  multi-platform CI caught what audit+local-green could not\
+      \ — the\n  reason CI is the load-bearing oracle for thread/platform bugs.\n\
+      \  Corrected (A): a module-level `threading.Lock`\n  (`_DISPATCH_LOG_LOCK`)\
+      \ guarding a plain text append — the\n  correct, deadlock-free primitive for\
+      \ intra-process thread\n  serialization. Cross-process serialization of a shared\n\
+      \  dispatch-log under *parallel dispatcher processes* is a\n  separate, unobserved\
+      \ concern, named explicitly (NOT solved with\n  the blocking OS lock that just\
+      \ regressed). Full suite 968/1-skip/\n  0-reg; the previously-stalling test\
+      \ passes locally. Re-audited\n  (pass-3) on the corrected primitive.\n\n## 1.15.6\
+      \ - 2026-05-15\n\n**Literal-zero pass** — completes the v1.15.5 identifier migration\n\
+      per the operator \"true zero\" directive. The v1.15.5\nchangelog/commit/doctrine\
       \ that *documented* the migration\nnecessarily still contained the legacy tokens\
       \ (you cannot record\n\"X was removed\" without writing \"X\"). Those are now\
       \ phrased only\nobliquely (\"the former upstream project name\", \"the prior\
