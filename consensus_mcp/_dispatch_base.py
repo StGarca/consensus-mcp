@@ -34,8 +34,26 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+
+# v1.15.7 (A, corrected): serialize dispatch-log.jsonl appends ACROSS
+# the threads of one dispatcher process. The streaming _invoke_codex
+# emits dispatch events from the main thread AND the stdout/stderr
+# reader threads concurrently; an abrupt wall-time-ceiling teardown
+# could interleave a bare append → a torn JSONL line (windows-py3.10
+# CI surfaced exactly that). The first corrected attempt reused the
+# audit log's `_locked_append` (msvcrt.locking LK_LOCK / fcntl.flock)
+# — but that is a BLOCKING CROSS-PROCESS lock; contended across the
+# *same* process's threads on Windows it stalled the runner thread
+# (windows-py3.12 regression: "runner did not finish"). The actual
+# concurrency here is intra-process, so a plain in-process lock is
+# the correct, hazard-free primitive. (Cross-process serialization
+# of a shared dispatch-log under parallel dispatchers is a separate,
+# unobserved concern — deliberately NOT solved with a blocking OS
+# lock here; see CHANGELOG v1.15.7.)
+_DISPATCH_LOG_LOCK = threading.Lock()
 
 import yaml
 
@@ -918,15 +936,13 @@ def _log_dispatch(log_path: Path, event: dict) -> None:
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     event_with_ts = {"timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **event}
-    # v1.15.7 (A): the streaming dispatch path emits events from the main
-    # thread AND the stdout/stderr reader threads concurrently; an abrupt
-    # wall-time-ceiling teardown can interrupt a bare append mid-line. A
-    # plain open("a")+write is NOT line-atomic under that contention, so
-    # dispatch-log.jsonl could contain a torn/interleaved line in
-    # production (windows-py3.10 CI surfaced exactly this; a 2-AI audit
-    # premise that "writes are already locked" was refuted by this code).
-    # Use the same OS-exclusive-lock append the audit log uses. Deferred
-    # import: keeps module load light and side-steps any import-order
-    # coupling (acyclic, but the call site is already I/O-bound).
-    from consensus_mcp._visibility_watchdog import _locked_append
-    _locked_append(log_path, json.dumps(event_with_ts) + "\n")
+    line = json.dumps(event_with_ts) + "\n"
+    # v1.15.7 (A, corrected): serialize concurrent emitters (main +
+    # stdout/stderr reader threads) of THIS process with an in-process
+    # lock so a line is never torn/interleaved — including during an
+    # abrupt teardown. A plain locked text append (no blocking OS
+    # syscall) is the correct, deadlock-free primitive for intra-process
+    # thread concurrency. See `_DISPATCH_LOG_LOCK` rationale above.
+    with _DISPATCH_LOG_LOCK:
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(line)
