@@ -1049,4 +1049,16 @@ passes:
   packet_sha256: 13973d0db5db6b66147c39a9c038043daf5571fa78c4c16fd503155c1365eba8
   iteration_id: iteration-converged-plan-machine-enforcement
   reviewer_id: codex-cpme-wfb-4b
-last_updated_utc: '2026-05-15T17:07:31Z'
+- id: gemini-gtef-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-gemini-trust-env-fix-gemini-gtef-1-gemini-gtef-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T17:22:11Z'
+  packet_sha256: 2a858332257c7f982ebe1681750a96a6ed6f581b10f902fdec327224cc98df52
+  iteration_id: iteration-gemini-trust-env-fix
+  reviewer_id: gemini-gtef-1
+- id: codex-gtef-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-gemini-trust-env-fix-codex-gtef-1-codex-gtef-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T17:24:18Z'
+  packet_sha256: b4b395ce1f49c8a32fc8182e688b0b2923b29aea9f5401d06e177be73e4bcf16
+  iteration_id: iteration-gemini-trust-env-fix
+  reviewer_id: codex-gtef-1
+last_updated_utc: '2026-05-15T17:24:18Z'

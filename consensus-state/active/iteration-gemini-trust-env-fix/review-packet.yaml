@@ -1,12 +1,88 @@
 defect_target:
   files:
+  - consensus-state/active/iteration-gemini-trust-env-fix/fix-response-pass2.md
   - consensus-state/active/iteration-gemini-trust-env-fix/implementation-summary.md
   - consensus_mcp/_dispatch_gemini.py
   - consensus_mcp/tests/test_dispatch_gemini.py
   - CHANGELOG.md
   - docs/advisories.md
-  base_sha: d9cc4332447087cf66f072caa784fd5cc05d68e5b2a89f13f9873df665afccb5
+  base_sha: e216b3faef69c6058ef691b3ac6dbe5f20ab4632e9ee7a6edeaaa18bc04032b9
   touched_files_contents:
+    consensus-state/active/iteration-gemini-trust-env-fix/fix-response-pass2.md: '#
+      Fix response — Workflow B pass-2 (codex pass-1 disposition)
+
+
+      gemini pass-1: **goal_satisfied=True, 0 blocking, 0 findings** —
+
+      and its successful dispatch (run with `GEMINI_CLI_TRUST_WORKSPACE`
+
+      explicitly `env -u`''d) is the END-TO-END proof the source fix
+
+      works: the audit of the fix was made possible by the fix.
+
+
+      codex pass-1: **0 blocking objections**; 2 doc-accuracy findings,
+
+      both verified correct (I wrote the contradictory lines when hastily
+
+      marking the advisory resolved). Zero code findings — the fix itself
+
+      is accepted by both auditors.
+
+
+      ## codex-rev-001 (medium) — ACCEPTED, RESOLVED
+
+
+      Advisory header said "RESOLVED in v1.15.2" while the body still
+
+      said "Correct upgrade target: none yet … standing record until
+
+      v1.15.2 ships". Fixed: the "Correct upgrade target" section now
+
+      names v1.15.2 as shipped (dispatcher injects the env var) and
+
+      keeps the env-var workaround valid for ≤ v1.15.1.
+
+
+      ## codex-rev-002 (low) — ACCEPTED, RESOLVED
+
+
+      Issue text said the dispatcher "does not set
+
+      GEMINI_CLI_TRUST_WORKSPACE (or pass --skip-trust)", implying
+
+      --skip-trust was absent. It was present but not load-bearing.
+
+      Fixed: text now states `--skip-trust` was already passed but is
+
+      not load-bearing on gemini CLI ≥0.43 (with the empirical evidence),
+
+      and the missing piece was `GEMINI_CLI_TRUST_WORKSPACE`. Now
+
+      consistent with CHANGELOG + implementation-summary.
+
+
+      ## Scope
+
+
+      Docs-only integration; no code changed since codex pass-1. Full
+
+      suite remains green at **968 passed, 1 skipped, 0 regressions**
+
+      (`test_dispatch_gemini.py` 41 green incl. 4 new env tests).
+
+      Acceptance gates A1–A4 all pass (A4: gemini-gtef-1 sealed without
+
+      the manual workaround).
+
+
+      This pass-2 dispatch is verification-only: confirm the advisory is
+
+      now internally consistent and accurate with `goal_satisfied=true`,
+
+      no blocking. No open design surface.
+
+      '
     consensus-state/active/iteration-gemini-trust-env-fix/implementation-summary.md: "#\
       \ Workflow B audit target — v1.15.2 gemini workspace-trust fix\n\nCloses the\
       \ v1.15.1 named blocker (advisory 2026-05-15). Branch\n`v1.15.2`. This is a\
@@ -1606,30 +1682,36 @@ defect_target:
       \ net\ndegrades from 3-AI to 2-AI until worked around.\n\n**Issue:**\n- `gemini`\
       \ CLI `0.43.0-preview.0`+ refuses headless/automated runs\n  in an \"untrusted\"\
       \ directory, emitting the trust error to stderr\n  and **empty stdout**. `consensus_mcp/_dispatch_gemini.py`\
-      \ does\n  not set `GEMINI_CLI_TRUST_WORKSPACE` (or pass `--skip-trust`),\n \
-      \ so the dispatcher sees empty output and fails with\n  `GeminiOutputParseError`\
-      \ (\"Expecting value: line 1 column 1\").\n- Observed first-hand 2026-05-15\
+      \ did\n  not set `GEMINI_CLI_TRUST_WORKSPACE`; it already passed\n  `--skip-trust`,\
+      \ but that flag is **not load-bearing** on this CLI\n  version (empirically:\
+      \ with `--skip-trust` only, gemini bypassed\n  trust but went autonomous and\
+      \ 429'd). So the dispatcher saw empty\n  output and failed `GeminiOutputParseError`\
+      \ (\"Expecting value:\n  line 1 column 1\").\n- Observed first-hand 2026-05-15\
       \ during the v1.15.1 Workflow B\n  audit: gemini pass-1 failed twice (initial\
       \ + dispatcher\n  auto-retry) for exactly this reason.\n\n**Workaround (no upgrade\
       \ needed):** export\n`GEMINI_CLI_TRUST_WORKSPACE=true` in the environment that\
       \ runs the\ndispatcher (or the MCP server). The v1.15.1 audit was completed\n\
       this way; gemini returned clean approvals once the env var was set.\n\n**Correct\
-      \ upgrade target:** none yet — the dispatcher fix is the\nnamed v1.15.2 follow-up\
-      \ (`_dispatch_gemini.py` was in the v1.15.1\niteration's `forbidden_files`,\
-      \ so it was correctly NOT patched\nunder that scope). This advisory is the standing\
-      \ record until\nv1.15.2 ships the dispatcher-level fix.\n\n**Provenance:**\n\
-      - Diagnosed during `iteration-converged-plan-machine-enforcement`\n  (v1.15.1\
-      \ Workflow B audit). Recorded as a v1.15.2 named blocker\n  in that iteration's\
-      \ `fix-response-pass2.md`.\n\n---\n\n## Advisory 2026-05-15: v1.15.0 converged-plan\
-      \ convention is doctrine-only\n\n**Affected versions:** `v1.15.0`\n\n**Severity:**\
-      \ Scope clarification (no regression). The v1.15.0 tag\n`4e81f9e` shipped the\
-      \ converged-plan convention\n(`falsification` / `independent_safeguard` /\n\
-      `decisive_experiment_before_next_iteration`) as an **authoring\nconvention enforced\
-      \ by doctrine only** — bundled skill + Workflow\nB audit, **zero engine code**.\n\
-      \n**Issue:** users on `v1.15.0` may assume the convention is\nmachine-validated.\
-      \ It is not. There is no schema, no validator, no\nseal-time gate on `v1.15.0`.\n\
-      \n**Correct upgrade target:** `v1.15.1` — adds the JSON Schema, the\nstructure/consequence\
-      \ validator, the fail-closed seal-time gate,\nthe `convergence.converged_plan_enforcement`\
+      \ upgrade target:** `v1.15.2` — ships the dispatcher-level\nfix (`_gemini_subprocess_env()`\
+      \ injects\n`GEMINI_CLI_TRUST_WORKSPACE=true` into the gemini subprocess env).\n\
+      `_dispatch_gemini.py` was in the v1.15.1 iteration's\n`forbidden_files`, so\
+      \ the fix was correctly deferred to v1.15.2\nrather than patched out-of-scope.\
+      \ The env-var workaround above\nremains valid for anyone still on ≤ v1.15.1.\n\
+      \n**Provenance:**\n- Diagnosed during `iteration-converged-plan-machine-enforcement`\n\
+      \  (v1.15.1 Workflow B audit); recorded there as a v1.15.2 named\n  blocker\
+      \ in `fix-response-pass2.md`.\n- Fixed in `iteration-gemini-trust-env-fix` (v1.15.2;\
+      \ Workflow B\n  audit clean — gemini approved end-to-end via the source fix\
+      \ with\n  the env-var workaround explicitly unset; codex doc-accuracy\n  findings\
+      \ integrated).\n\n---\n\n## Advisory 2026-05-15: v1.15.0 converged-plan convention\
+      \ is doctrine-only\n\n**Affected versions:** `v1.15.0`\n\n**Severity:** Scope\
+      \ clarification (no regression). The v1.15.0 tag\n`4e81f9e` shipped the converged-plan\
+      \ convention\n(`falsification` / `independent_safeguard` /\n`decisive_experiment_before_next_iteration`)\
+      \ as an **authoring\nconvention enforced by doctrine only** — bundled skill\
+      \ + Workflow\nB audit, **zero engine code**.\n\n**Issue:** users on `v1.15.0`\
+      \ may assume the convention is\nmachine-validated. It is not. There is no schema,\
+      \ no validator, no\nseal-time gate on `v1.15.0`.\n\n**Correct upgrade target:**\
+      \ `v1.15.1` — adds the JSON Schema, the\nstructure/consequence validator, the\
+      \ fail-closed seal-time gate,\nthe `convergence.converged_plan_enforcement`\
       \ knob (default\n`graduated`), and read-time surfacing. Machine enforcement\
       \ exists\nonly from the `v1.15.1` tag forward.\n\n**Provenance:**\n- `iteration-converged-plan-machine-enforcement`\
       \ (Workflow A\n  weighted-synthesis: claude + codex + gemini; shared-prior\n\

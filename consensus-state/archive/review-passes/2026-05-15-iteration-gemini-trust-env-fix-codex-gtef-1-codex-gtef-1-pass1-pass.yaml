@@ -1,0 +1,55 @@
+iteration_id: iteration-gemini-trust-env-fix
+reviewer_id: codex-gtef-1
+pass_id: codex-gtef-1-pass1
+findings:
+- id: codex-rev-001
+  severity: medium
+  summary: Resolved advisory still tells users there is no correct upgrade target
+  citation: docs/advisories.md:46
+  risk: 'The advisory is internally contradictory: the header says v1.15.2 resolves
+    the blocker, but the body still says there is no upgrade target and describes
+    v1.15.2 as future work.'
+  recommendation: Update this section to name v1.15.2 as the correct upgrade target
+    and describe the dispatcher-level env fix as shipped.
+  patch_not_proposed_reason: Documentation-only fix is described directly in the recommendation;
+    no patch authored in this review packet.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: low
+  summary: Advisory issue text inaccurately says affected dispatchers did not pass
+    --skip-trust
+  citation: docs/advisories.md:34
+  risk: This conflicts with the changelog and implementation summary, which state
+    --skip-trust was already present but not load-bearing on gemini CLI 0.43.0-preview.0+.
+    The root-cause record becomes misleading.
+  recommendation: Revise the issue text to say the dispatcher did not set GEMINI_CLI_TRUST_WORKSPACE,
+    and that --skip-trust was already passed but insufficient on this CLI version.
+  patch_not_proposed_reason: Documentation-only fix is described directly in the recommendation;
+    no patch authored in this review packet.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The functional dispatcher change satisfies the trust-env
+  fix by inspection, but the resolved advisory still contains stale/conflicting user
+  guidance, so the desired end state is not fully met.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 795f1f07339f21a44ce01d6f71c35bc3534ac0225759941db43aa7b599461ab2
+  output_sha256: 26b0911ea32d623a9cd9358fe33f9f389de6c9a0178e4c9d61de83f4c0e0f522
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: d09fb217efc5382937bd529d5384acf0f3d6f3bcf97506598ef04eac42111bf5
+  scope_signature: gemini-trust-env-fix-v1152
+  review_target_path: consensus-state/active/iteration-gemini-trust-env-fix/review-packet.yaml
+  review_target_hash: 1833cbbc829046ee0cef546a3fbb5b303283c34bb72f370947d352f615137342
+  mode: review
+sealed_at_utc: '2026-05-15T17:24:17Z'
+packet_sha256: b4b395ce1f49c8a32fc8182e688b0b2923b29aea9f5401d06e177be73e4bcf16
