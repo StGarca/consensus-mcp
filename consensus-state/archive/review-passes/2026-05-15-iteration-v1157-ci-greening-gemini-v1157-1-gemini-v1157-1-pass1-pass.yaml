@@ -1,0 +1,70 @@
+iteration_id: iteration-v1157-ci-greening
+reviewer_id: gemini-v1157-1
+pass_id: gemini-v1157-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: medium
+  summary: A file described as modified, `review_packet_known_good/input.yaml`, was
+    not included in the review packet.
+  citation: consensus-state/active/iteration-v1157-ci-greening/implementation-summary.md
+  risk: 'The review of Fix #2 (Validator self-test 20/21) is based on the description
+    of the change, not a direct inspection of the file diff. This prevents full, independent
+    verification of that specific fix, as I cannot confirm the path was stale as described.'
+  recommendation: For future reviews, ensure all files mentioned in summaries and
+    changelogs as being modified are included in the `touched-files` bundle to allow
+    for complete verification.
+  patch_proposal: null
+  patch_not_proposed_reason: Process finding, not a code defect in the changeset under
+    review.
+goal_satisfied: true
+goal_satisfied_rationale: 'The goal is satisfied. The landed CI-greening fixes are
+  confirmed to be correct root-cause solutions to test-hermeticity and CI-environment
+  debts, not masks of production defects. My adjudication on the open item is provided
+  below.
+
+
+  - **Landed Fixes (Q1, Q2, Q3):** The three categories of fixes are sound. Specifically
+  addressing the audit questions: (Q2) The `conftest.py` guard for `os.killpg`/`os.getpgid`
+  is a correct test-hermeticity fix, not a production-bug mask. The underlying defect
+  was in the test fake''s use of `pid=0`, which is not representative of the production
+  code''s correct use of real PIDs and process groups. (Q3) Using `skipif` for the
+  four codex-dependent tests is the correct interim approach; it makes their integration-test
+  nature explicit and is preferable to expanding the scope of a CI-greening task.
+
+
+  - **Open Item Adjudication (windows-py3.10):** The correct fix-shape is **(C) Reader-helper
+  hardening**. The failure (`JSONDecodeError`) occurs in the test helper `_read_log_events`
+  when reading a log file from a process that was intentionally aborted by the test
+  (`test_wall_time_hard_ceiling`). The symptoms point to a partial line being written
+  to `dispatch-log.jsonl` due to a race condition during abrupt thread teardown on
+  Windows with Python 3.10. Hardening the test-only helper `_read_log_events` to tolerate
+  a partial/malformed final line (e.g., via a `try...except json.JSONDecodeError`)
+  is the most proportionate solution. It fixes the test failure by making the test-support
+  code robust to the exact abnormal-termination conditions it creates, without altering
+  production code for a rare crash-time artifact.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: d6912a036a06eda267ae19e5eb30d1f3b945384936907571ef154ef09a6e8a82
+  output_sha256: db13952d60e29441fbae43599269e0c5dac6669105656ab7b500c1ebc8d033f2
+  goal_packet_sha256: d87ec2abdf9244b33be398710145c3137f090a06a8bc858bc378c6038df6bfad
+  scope_signature: v1157-ci-greening-audit-and-openitem-adjudication
+  review_target_path: consensus-state/active/iteration-v1157-ci-greening/review-packet.yaml
+  review_target_hash: c152e986322c158c1c9ca771a106f3d33115980c32f117e492a09fdb0731ad8a
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T20:52:14Z'
+packet_sha256: 8ac293308adf2d10b70b016f02be35b6d658975582b2c526d6e6c3b438010bff

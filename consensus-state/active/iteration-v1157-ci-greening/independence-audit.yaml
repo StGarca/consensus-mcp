@@ -1,0 +1,17 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T20:52:15Z'
+  event_id: 2026-05-15T20:52:15Z_review_returned_and_sealed_gemini-v1157-1
+  actor: gemini-v1157-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1157-ci-greening-gemini-v1157-1-gemini-v1157-1-pass1-pass.yaml
+  sha256: 8ac293308adf2d10b70b016f02be35b6d658975582b2c526d6e6c3b438010bff
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true

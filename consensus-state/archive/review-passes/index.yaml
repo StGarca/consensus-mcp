@@ -1151,4 +1151,10 @@ passes:
   packet_sha256: e59fc1e7d7ecaccb1c358615854afda3ab51a4028e89e9997375c157aa13d2e2
   iteration_id: iteration-v1155-history-rewrite-doctrine
   reviewer_id: codex-v1155-2
-last_updated_utc: '2026-05-15T19:15:05Z'
+- id: gemini-v1157-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1157-ci-greening-gemini-v1157-1-gemini-v1157-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T20:52:15Z'
+  packet_sha256: 8ac293308adf2d10b70b016f02be35b6d658975582b2c526d6e6c3b438010bff
+  iteration_id: iteration-v1157-ci-greening
+  reviewer_id: gemini-v1157-1
+last_updated_utc: '2026-05-15T20:52:15Z'
