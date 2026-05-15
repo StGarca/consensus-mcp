@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json as _json
 import shutil as _shutil
+import signal
 import sys
 import unittest.mock as _mock
 from pathlib import Path
@@ -2244,5 +2245,12 @@ def test_terminate_process_tree_uses_signal_on_posix(monkeypatch):
     # First call should have been killpg with SIGTERM.
     assert calls, "no signal sent"
     assert calls[0][0] == "killpg", f"expected killpg first; got {calls[0]}"
-    assert calls[0][2] == _dispatch_codex.signal.SIGTERM
+    # `signal` lives in _dispatch_base (where _terminate_process_tree
+    # is defined); _dispatch_codex only re-imports the function, not the
+    # `signal` module. Compare against the stdlib enum directly —
+    # module-agnostic and the same object either way. (Pre-iter-0037
+    # this asserted `_dispatch_codex.signal.SIGTERM`; the refactor moved
+    # the impl, leaving a latent AttributeError that only fired on POSIX
+    # CI — this test is Windows-skipped — masked while CI was dormant.)
+    assert calls[0][2] == signal.SIGTERM
 
