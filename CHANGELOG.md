@@ -41,9 +41,32 @@ dogfoods the v1.15.1 convention incl. an independent_safeguard).
   same commit** (attempts-API verified — one green run / N polls
   of one run id is explicitly insufficient).
 
-Local: streaming file 8/8 deterministic across repeated runs
-(sub-0.4s, no ceiling waits); full suite pending. Workflow B
-audit: codex + gemini.
+**Workflow B audit (codex + gemini, multi-pass — caught real
+defects, integrated not dismissed):**
+- Pass-1: gemini clean (`goal_satisfied=true`, 0 findings);
+  codex 0 blocking, `codex-rev-001` (governance, high) — the
+  sealed goal_packet `forbidden_files` listed `_dispatch_codex.py`
+  while Q1 + `deliverable.files` ratified the seam there.
+  Integrated: goal_packet scope reconciled to the converged plan
+  (no code change; the authorization pre-existed via the
+  `non_goals` Q1 carve-out).
+- Pass-2: gemini clean again; codex raised a NEW **blocking**
+  `codex-rev-001` (correctness) — `_drive`/`_drive_streaming`
+  ignored the per-round `wait_for` return, so a real wedge would
+  hang ≤ `max_rounds`×`_CEILING` (~21 min) before the safeguard
+  fired, contradicting the claimed deadlock-free invariant.
+  gemini cleared Q2 both passes on design intent; codex traced
+  the control flow (convergence ≠ correctness). Integrated: every
+  per-round/per-step wait return is acted on — `False` →
+  `release_all()` + raise immediately; `max_*` exhaustion is a
+  hard fail. The invariant is now true (genuine wedge fails in
+  ≤20 s). Pass-3 re-dispatched for confirmation.
+
+Local after the pass-2 fix: streaming file 8/8 deterministic
+across 6 repeated runs (sub-0.3s, fast-fail never false-triggers);
+full suite re-verified. The provisional-until-proven
+≥3-consecutive-green-Windows-CI gate runs on the post-audit
+final commit.
 
 ## 1.15.8 - 2026-05-15
 
