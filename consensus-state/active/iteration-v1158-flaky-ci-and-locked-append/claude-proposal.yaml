@@ -1,0 +1,97 @@
+pass_id: claude-v1158-1-pass1
+contributor: claude
+role: orchestrator
+goal_satisfied: true
+blocking_objections: []
+
+differential_prior: |
+  Prior I reasoned from: "v1.15.7 already proved, with codex+gemini
+  pass-3 unanimity + CI, that an OS file lock is the WRONG primitive
+  for INTRA-process thread serialization — the right one is a
+  module-level threading.Lock." F1 is the SAME failure class
+  (50 threads, one process, msvcrt.locking → PermissionError →
+  silent unlocked write → lost lines) in a DIFFERENT primitive
+  (`_locked_append`) that I did not previously touch. So I am
+  pattern-matching to the v1.15.7 lesson. Verify-harder flag: if a
+  peer agrees with (a) purely because "claude said v1.15.7", that
+  is the shared prior — the independent check is whether
+  `_locked_append`'s callers are genuinely intra-process (the test
+  + visibility watchdog use threads in ONE process → yes) and
+  whether audit-log integrity is actually at stake (it is: this is
+  the sealed-provenance primitive; silent line loss is an
+  integrity defect, not a flaky-test artifact).
+
+positions:
+  Q1_locked_append:
+    stance: "(d): module-level threading.Lock for the real intra-process case + make the OS-lock fallback FAIL-LOUD, not silent-unlocked."
+    reasoning: |
+      The observed loss is intra-process (50 threads/1 proc); a
+      process-wide `threading.Lock` wrapping the append makes
+      same-process callers strictly serialized — exactly the
+      v1.15.7 _log_dispatch correction, now applied to the
+      audit-log primitive for consistency. That alone fixes F1.
+      But the deeper defect is `except OSError: pass` → SILENT
+      unlocked write: for a sealed-provenance/audit primitive,
+      silently dropping/torn lines under contention is an
+      integrity violation worse than a crash. So ALSO make the
+      genuine cross-process lock-failure path loud (raise / or at
+      minimum emit a structured integrity-warning event) so audit
+      consumers can never be misled by a silently-incomplete log.
+      (a) alone fixes the test + the common case but leaves the
+      silent-unlock landmine for true cross-process contention;
+      (c) alone doesn't fix the intra-process loss; (b) retry
+      still can lose lines. (d) = correct for an integrity
+      primitive.
+    wrong_if: |
+      If `_locked_append` is provably ONLY ever called from
+      distinct processes (never multiple threads in one process) —
+      then threading.Lock is inert and the test is mis-modeling.
+      Refuted by evidence: the failing test itself spawns 50
+      threads in one process, and the visibility watchdog emits
+      from threads. So intra-process IS the real usage.
+  Q2_heartbeat_test:
+    stance: "(a) make deterministic via explicit synchronization; (c) quarantine-on-Windows-CI ONLY as the interim if (a) needs its own iteration."
+    reasoning: |
+      The test asserts "≈3 heartbeats fire at ~30/60/90s of
+      simulated time" — that coverage is real and worth keeping.
+      The flake is purely the mechanism: `clock.advance()` +
+      `time.sleep(0.01)` + `join(10)` hopes the daemon runner
+      thread is scheduled enough on a loaded Windows runner.
+      Deterministic fix: drive progress with a synchronization
+      handshake — e.g., the runner signals via an Event/Condition
+      each loop iteration (or the test polls the emitted
+      dispatch-log for the expected heartbeat count with a
+      generous bounded wait) instead of fixed real sleeps; assert
+      on the observed heartbeat events, not on thread liveness
+      timing. Keep (c) quarantine as the honest interim if the
+      deterministic rework is larger than this iteration's bound,
+      with a named follow-up — never just widen join() (b): that
+      is still probabilistic, i.e. still flaky, just rarer.
+    wrong_if: |
+      If heartbeat timing is irreducibly wall-clock-coupled in
+      production such that any deterministic test loses the
+      regression it guards — then (c)+a redesigned-coverage
+      follow-up. I judge it reducible: heartbeats are driven off
+      `time_fn` (the injected clock), so a synchronization-based
+      drive preserves the exact coverage.
+  Q3_minimal_and_verification:
+    stance: "Ship Q1(d) + Q2(a) in v1.15.8 if bounded; flaky-fix verification = determinism argument + N≥3 consecutive green Windows CI runs, NOT one."
+    reasoning: |
+      Q1(d) is bounded (one primitive, ~the v1.15.7 shape + a
+      loud-fallback). Q2(a) feasibility gates scope — if the
+      deterministic rework is >1-iteration, ship Q1(d) + Q2(c
+      interim) now with Q2(a) as a CONCRETE named follow-up
+      (reason: test-harness redesign surface), per no-deferral's
+      "name the specific blocker". Crucially: a flaky fix is
+      provisional-until-proven — the converged plan must require
+      either a determinism proof (no wall-clock/scheduling
+      dependence remains) OR ≥3 consecutive green Windows CI runs
+      of the same commit before claiming resolved. One green run
+      is the exact over-claim that already happened this session.
+    wrong_if: "If Q2(a) is trivially small, fold it in fully (no interim quarantine)."
+
+recommended_converged_shape:
+  Q1: "_locked_append: module-level threading.Lock (intra-process) + fail-loud (no silent unlocked write) for the cross-process lock-acquire-failure path; audit-integrity primitive must never silently drop lines."
+  Q2: "make test_heartbeat_fires_at_interval (+ same-pattern siblings) deterministic via sync handshake on emitted heartbeat events; quarantine-on-windows-CI only as a named interim if the rework exceeds this iteration."
+  Q3: "v1.15.8; resolved-claim requires determinism proof or ≥3 consecutive green Windows CI runs (provisional-until-proven; no single-green over-claim)."
+  cited_pass_ids: [claude-v1158-1-pass1]

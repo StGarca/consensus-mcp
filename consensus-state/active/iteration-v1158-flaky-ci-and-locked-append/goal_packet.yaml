@@ -1,0 +1,126 @@
+schema_version: 1
+pilot_id: iteration-v1158-flaky-ci-and-locked-append
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    Re-enabled CI (v1.15.4) keeps exposing intermittent Windows
+    failures: the SAME commit is green on one run, red on another.
+    v1.15.7's product fixes are sound (full suite 968/0 local;
+    ubuntu always green) but two tests flake on Windows CI runners.
+    Decide the correct fix-shape for each (NOT chase-and-pray).
+
+    VERIFIED FACTS (read first-hand; reason from THESE; state the
+    differential/prior you used; fast unanimity on a shared prior
+    is a verify-harder flag):
+
+    F1 — `_visibility_watchdog._locked_append` integrity.
+    Windows path: `with path.open("ab") as f:
+    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)` wrapped in
+    `except OSError: pass` → on lock-acquire failure it
+    **proceeds UNLOCKED** ("best-effort"). CI windows-py3.10:
+    `test_locked_append_serializes_concurrent_writes` (50 threads,
+    ONE process, each calling _locked_append) failed
+    "expected 50 lines, got 46" + `PermissionError [Errno 13]`
+    (PermissionError IS an OSError → caught → unlocked write →
+    concurrent intra-process writes interleave/truncate → 4 lines
+    LOST). `_locked_append` is the AUDIT-LOG / sealed-provenance
+    integrity primitive (also used by the visibility watchdog).
+    The contention here is INTRA-process (threads), the exact
+    class v1.15.7 already learned an OS file lock is wrong for
+    (→ threading.Lock for _dispatch_base._log_dispatch). I did NOT
+    modify _locked_append or this test; latent, CI-exposed.
+
+    F2 — `test_dispatch_codex_streaming.test_heartbeat_fires_at_
+    interval` timing flake. Drives `_invoke_codex` in a daemon
+    thread with a `_ControllableClock`; advances the clock 100×1s
+    via `for _ in range(100): clock.advance(1.0); time.sleep(0.01)`
+    then `th.join(timeout=10)` and asserts `not th.is_alive()`.
+    On loaded Windows runners the runner thread is not scheduled
+    enough within the ~1s real-time budget + 10s join to observe
+    the advanced clock and exit → "runner did not finish". Failed
+    under the old `_locked_append` (stall) AND still intermittently
+    under the correct v1.15.7 `threading.Lock` → the lock is right;
+    the TEST's real-sleep+thread-scheduling design is the flake.
+
+    F3 — Same commit (c81d1ea) green on v1.15.7-branch run
+    25942112936 but red on main run 25942127279 → genuine
+    nondeterminism, not a code regression. Product is sound.
+
+  question: |
+    Each contributor: STATE THE DIFFERENTIAL/PRIOR. Q1-Q3 stance,
+    justified vs the strongest counter, + the observation that
+    would show you WRONG. structural_abstention OK per question.
+
+    Q1 — `_locked_append` fix-shape. The silent
+    `except OSError: pass` → unlocked write loses audit/provenance
+    lines under intra-process contention. Options:
+      (a) Add a module-level `threading.Lock` serializing ALL
+          callers in-process (mirrors v1.15.7 _log_dispatch); keep
+          the OS lock as the best-effort CROSS-process layer.
+      (b) Retry/backoff the msvcrt.locking acquisition; only
+          fall back to unlocked after N failed retries (still can
+          lose lines → arguably still wrong for an integrity
+          primitive).
+      (c) Make the fallback fail-LOUD (raise) instead of silent
+          unlocked write, so callers/audit detect integrity loss.
+      (d) (a)+(c): in-process lock for the real (thread) case +
+          loud failure if the OS layer ever can't serialize a
+          genuine cross-process contender.
+      Is silent-unlock-on-contention a real integrity DEFECT in
+      the sealed-provenance audit primitive (not just a flaky
+      test)? What is the minimally-correct fix?
+
+    Q2 — `test_heartbeat_fires_at_interval` (and siblings that use
+    the same real-sleep + clock-advance + join pattern).
+      (a) Make deterministic: replace "advance clock + real sleep
+          + hope the runner interleaves + join(10)" with explicit
+          synchronization (runner signals heartbeat progress via
+          an Event/queue the test waits on; bounded, not
+          wall-clock-hopeful).
+      (b) Keep as-is but vastly widen the join/scheduling budget
+          (still probabilistic on loaded runners).
+      (c) Quarantine on Windows CI (skip/xfail-flaky) + tracked
+          stabilize follow-up.
+      Which, and is (a) feasible without losing the heartbeat-
+      interval coverage the test exists for?
+
+    Q3 — Minimal converged deliverable for v1.15.8 (no-deferral
+    where bounded) vs. any genuinely-blocked follow-up with a
+    CONCRETE reason. Note: flaky tests can't be "verified" by a
+    single green run — converged plan must say how we confirm a
+    flaky fix (e.g., N consecutive green CI runs / determinism
+    argument), per provisional-until-proven.
+
+  non_goals:
+    - re-litigating v1.15.7's threading.Lock for _log_dispatch
+      (correct; audited pass-3 unanimous)
+    - product/behavior changes beyond the test/primitive integrity
+    - cross-process _locked_append redesign IF it is out of scope
+      for the observed intra-process failure (state if so)
+  type: design_consult
+allowed_files: []
+forbidden_files:
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/_dispatch_codex.py
+max_iterations: 3
+fix_author_policy: permissive
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml with per-Q synthesis + flaky-fix verification method
+    check: 'true'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T22:00:00Z'
+  scope_signature: 'v1158-flaky-ci-and-locked-append-integrity'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis

@@ -1,0 +1,945 @@
+defect_target:
+  files:
+  - consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/goal_packet.yaml
+  - consensus_mcp/_visibility_watchdog.py
+  - consensus_mcp/tests/test_visibility_watchdog.py
+  - consensus_mcp/tests/test_dispatch_codex_streaming.py
+  base_sha: e3381af4e1b7abbe0604318afa2a0ebaaa89d1be04ce44bce5f9e4c6dec302b4
+  touched_files_contents:
+    consensus-state/active/iteration-v1158-flaky-ci-and-locked-append/goal_packet.yaml: "schema_version:\
+      \ 1\npilot_id: iteration-v1158-flaky-ci-and-locked-append\nworkflow_mode: propose-converge\n\
+      independence: blind-first-reveal\ngoal:\n  summary: |\n    Re-enabled CI (v1.15.4)\
+      \ keeps exposing intermittent Windows\n    failures: the SAME commit is green\
+      \ on one run, red on another.\n    v1.15.7's product fixes are sound (full suite\
+      \ 968/0 local;\n    ubuntu always green) but two tests flake on Windows CI runners.\n\
+      \    Decide the correct fix-shape for each (NOT chase-and-pray).\n\n    VERIFIED\
+      \ FACTS (read first-hand; reason from THESE; state the\n    differential/prior\
+      \ you used; fast unanimity on a shared prior\n    is a verify-harder flag):\n\
+      \n    F1 — `_visibility_watchdog._locked_append` integrity.\n    Windows path:\
+      \ `with path.open(\"ab\") as f:\n    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK,\
+      \ 1)` wrapped in\n    `except OSError: pass` → on lock-acquire failure it\n\
+      \    **proceeds UNLOCKED** (\"best-effort\"). CI windows-py3.10:\n    `test_locked_append_serializes_concurrent_writes`\
+      \ (50 threads,\n    ONE process, each calling _locked_append) failed\n    \"\
+      expected 50 lines, got 46\" + `PermissionError [Errno 13]`\n    (PermissionError\
+      \ IS an OSError → caught → unlocked write →\n    concurrent intra-process writes\
+      \ interleave/truncate → 4 lines\n    LOST). `_locked_append` is the AUDIT-LOG\
+      \ / sealed-provenance\n    integrity primitive (also used by the visibility\
+      \ watchdog).\n    The contention here is INTRA-process (threads), the exact\n\
+      \    class v1.15.7 already learned an OS file lock is wrong for\n    (→ threading.Lock\
+      \ for _dispatch_base._log_dispatch). I did NOT\n    modify _locked_append or\
+      \ this test; latent, CI-exposed.\n\n    F2 — `test_dispatch_codex_streaming.test_heartbeat_fires_at_\n\
+      \    interval` timing flake. Drives `_invoke_codex` in a daemon\n    thread\
+      \ with a `_ControllableClock`; advances the clock 100×1s\n    via `for _ in\
+      \ range(100): clock.advance(1.0); time.sleep(0.01)`\n    then `th.join(timeout=10)`\
+      \ and asserts `not th.is_alive()`.\n    On loaded Windows runners the runner\
+      \ thread is not scheduled\n    enough within the ~1s real-time budget + 10s\
+      \ join to observe\n    the advanced clock and exit → \"runner did not finish\"\
+      . Failed\n    under the old `_locked_append` (stall) AND still intermittently\n\
+      \    under the correct v1.15.7 `threading.Lock` → the lock is right;\n    the\
+      \ TEST's real-sleep+thread-scheduling design is the flake.\n\n    F3 — Same\
+      \ commit (c81d1ea) green on v1.15.7-branch run\n    25942112936 but red on main\
+      \ run 25942127279 → genuine\n    nondeterminism, not a code regression. Product\
+      \ is sound.\n\n  question: |\n    Each contributor: STATE THE DIFFERENTIAL/PRIOR.\
+      \ Q1-Q3 stance,\n    justified vs the strongest counter, + the observation that\n\
+      \    would show you WRONG. structural_abstention OK per question.\n\n    Q1\
+      \ — `_locked_append` fix-shape. The silent\n    `except OSError: pass` → unlocked\
+      \ write loses audit/provenance\n    lines under intra-process contention. Options:\n\
+      \      (a) Add a module-level `threading.Lock` serializing ALL\n          callers\
+      \ in-process (mirrors v1.15.7 _log_dispatch); keep\n          the OS lock as\
+      \ the best-effort CROSS-process layer.\n      (b) Retry/backoff the msvcrt.locking\
+      \ acquisition; only\n          fall back to unlocked after N failed retries\
+      \ (still can\n          lose lines → arguably still wrong for an integrity\n\
+      \          primitive).\n      (c) Make the fallback fail-LOUD (raise) instead\
+      \ of silent\n          unlocked write, so callers/audit detect integrity loss.\n\
+      \      (d) (a)+(c): in-process lock for the real (thread) case +\n         \
+      \ loud failure if the OS layer ever can't serialize a\n          genuine cross-process\
+      \ contender.\n      Is silent-unlock-on-contention a real integrity DEFECT in\n\
+      \      the sealed-provenance audit primitive (not just a flaky\n      test)?\
+      \ What is the minimally-correct fix?\n\n    Q2 — `test_heartbeat_fires_at_interval`\
+      \ (and siblings that use\n    the same real-sleep + clock-advance + join pattern).\n\
+      \      (a) Make deterministic: replace \"advance clock + real sleep\n      \
+      \    + hope the runner interleaves + join(10)\" with explicit\n          synchronization\
+      \ (runner signals heartbeat progress via\n          an Event/queue the test\
+      \ waits on; bounded, not\n          wall-clock-hopeful).\n      (b) Keep as-is\
+      \ but vastly widen the join/scheduling budget\n          (still probabilistic\
+      \ on loaded runners).\n      (c) Quarantine on Windows CI (skip/xfail-flaky)\
+      \ + tracked\n          stabilize follow-up.\n      Which, and is (a) feasible\
+      \ without losing the heartbeat-\n      interval coverage the test exists for?\n\
+      \n    Q3 — Minimal converged deliverable for v1.15.8 (no-deferral\n    where\
+      \ bounded) vs. any genuinely-blocked follow-up with a\n    CONCRETE reason.\
+      \ Note: flaky tests can't be \"verified\" by a\n    single green run — converged\
+      \ plan must say how we confirm a\n    flaky fix (e.g., N consecutive green CI\
+      \ runs / determinism\n    argument), per provisional-until-proven.\n\n  non_goals:\n\
+      \    - re-litigating v1.15.7's threading.Lock for _log_dispatch\n      (correct;\
+      \ audited pass-3 unanimous)\n    - product/behavior changes beyond the test/primitive\
+      \ integrity\n    - cross-process _locked_append redesign IF it is out of scope\n\
+      \      for the observed intra-process failure (state if so)\n  type: design_consult\n\
+      allowed_files: []\nforbidden_files:\n  - consensus_mcp/_dispatch_gemini.py\n\
+      \  - consensus_mcp/_dispatch_codex.py\nmax_iterations: 3\nfix_author_policy:\
+      \ permissive\nacceptance_gates:\n  - id: A1\n    description: converged-plan.yaml\
+      \ with per-Q synthesis + flaky-fix verification method\n    check: 'true'\n\
+      \  - id: A2\n    description: at least 2 substantive proposals sealed\n    check:\
+      \ 'true'\nstop_conditions:\n  - max_iteration_count_reached\n  - non_convergence_after_3_rounds\n\
+      authorization:\n  authorized_by: operator\n  authorized_at_utc: '2026-05-15T22:00:00Z'\n\
+      \  scope_signature: 'v1158-flaky-ci-and-locked-append-integrity'\ncontributors:\n\
+      \  enabled: [claude, codex, gemini]\nconvergence:\n  rule: weighted-synthesis\n\
+      \  finding_disposition: weighted-synthesis\n"
+    consensus_mcp/_visibility_watchdog.py: "\"\"\"Watchdog for stalled dispatches\
+      \ (Task #43; iter-0031 abandonment lesson).\n\nDetects dispatch_start events\
+      \ in consensus-state/state/dispatch-log.jsonl that\nlack a matching terminal\
+      \ event after a configurable wall-time threshold.\nIn --action=mark mode, appends\
+      \ a `dispatch_stalled` audit event for each\nstale orphan so the audit shape\
+      \ closes and the visibility TUI clears it\nfrom \"active\".\n\nTHE AUDIT LOG\
+      \ IS APPEND-ONLY. The watchdog NEVER edits or deletes existing\nevents. It only\
+      \ appends new `dispatch_stalled` records that share the\norphan's identifiers\
+      \ (iteration_id / reviewer_id / pass_id).\n\nTerminal events recognized for\
+      \ pairing (per iter-0036 codex-rev-001 review\n+ workflow taxonomy):\n  - dispatch_done\
+      \       (success)\n  - dispatch_failed     (helper-side exception or codex non-zero\
+      \ exit)\n  - dispatch_refused    (env-gate / pre-flight refusal)\n  - dispatch_aborted\
+      \    (operator-signal-file or watchdog-silence, iter-0037+)\n  - dispatch_stalled\
+      \    (this watchdog's own retroactive marker)\n\nIncluding dispatch_refused\
+      \ matters: refused dispatches already have a\nterminal event; treating them\
+      \ as orphans would corrupt the audit shape\nby appending a synthetic dispatch_stalled.\n\
+      \nEXTERNAL-PROCESS FALLBACK POLICY:\nAny codex re-dispatch following a stalled\
+      \ in-process subagent dispatch\nMUST use the external codex-cli pattern via\
+      \ `python -m\nconsensus_mcp._dispatch_codex …`. In-process Claude subagent re-dispatch\n\
+      is the failure mode iter-0031 documented; see\n`memory/feedback_external_process_fallback.md`.\n\
+      \nUsage\n-----\n    # Default: read-only report; rc=1 if any orphan is stale,\
+      \ rc=0 otherwise.\n    python consensus_mcp/_visibility_watchdog.py\n\n    #\
+      \ Mutate: append dispatch_stalled events for each stale orphan.\n    python\
+      \ consensus_mcp/_visibility_watchdog.py --action mark\n\n    # Custom thresholds\
+      \ (seconds).\n    python consensus_mcp/_visibility_watchdog.py --stall-after\
+      \ 1800\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport\
+      \ json\nimport os\nimport sys\nfrom datetime import datetime, timedelta, timezone\n\
+      from pathlib import Path\nfrom typing import Iterator\n\nWATCHDOG_VERSION =\
+      \ \"1.1.0\"\n\n# Per iter-0036 codex-rev-001: include dispatch_refused as terminal\
+      \ so a\n# refused dispatch (env-gate failure, etc.) isn't reclassified as an\n\
+      # orphan. dispatch_aborted reserved for iter-0037 streaming/abort work.\n_TERMINAL_EVENTS\
+      \ = {\n    \"dispatch_done\",\n    \"dispatch_failed\",\n    \"dispatch_refused\"\
+      ,\n    \"dispatch_aborted\",\n    \"dispatch_stalled\",\n}\n\n# Markers identifying\
+      \ the consensus-mcp repo root (mirrors\n# _dispatch_codex._REPO_ROOT_MARKERS,\
+      \ kept local to avoid an import cycle).\n_REPO_ROOT_MARKERS = (\"consensus-state\"\
+      , \"consensus_mcp\", \"consensus_mcp/validators\")\n\n\nclass RepoRootResolutionError(RuntimeError):\n\
+      \    \"\"\"Raised when repo_root cannot be resolved to a valid repo (no markers\
+      \ found).\"\"\"\n\n\ndef _has_repo_markers(candidate: Path) -> bool:\n    \"\
+      \"\"Return True iff candidate contains all _REPO_ROOT_MARKERS as subpaths.\"\
+      \"\"\n    return all((candidate / marker).is_dir() for marker in _REPO_ROOT_MARKERS)\n\
+      \n\ndef _default_repo_root() -> Path:\n    \"\"\"Resolve the repo root using\
+      \ marker validation (xplat-rev-006 fix).\n\n    The prior heuristic ``Path(__file__).resolve().parent.parent``\
+      \ lands\n    inside site-packages after a non-editable install, making the watchdog\
+      \ scan\n    the wrong tree. Walk parents looking for repo markers; raise if\
+      \ none match\n    and no env var was supplied.\n\n    Resolution order (first\
+      \ candidate with all repo markers wins):\n      1. CONSENSUS_MCP_REPO_ROOT env\
+      \ var (must validate; authoritative)\n      2. Path.cwd() (operator usually\
+      \ invokes from repo root)\n      3. Walk parents of Path(__file__) until filesystem\
+      \ root\n    \"\"\"\n    candidates_tried: list[tuple[str, Path]] = []\n\n  \
+      \  override = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if override:\n\
+      \        candidate = Path(override).resolve()\n        candidates_tried.append((\"\
+      CONSENSUS_MCP_REPO_ROOT\", candidate))\n        if _has_repo_markers(candidate):\n\
+      \            return candidate\n        # Operator-supplied env var is authoritative\
+      \ — don't silently fall\n        # through. Mirrors _dispatch_codex behaviour.\n\
+      \        raise RepoRootResolutionError(\n            f\"CONSENSUS_MCP_REPO_ROOT={override!r}\
+      \ was set but the path \"\n            f\"{candidate} does not contain all required\
+      \ repo markers \"\n            f\"{_REPO_ROOT_MARKERS}. Either fix the path\
+      \ or unset the env \"\n            f\"var to use automatic discovery.\"\n  \
+      \      )\n\n    seen: set[Path] = set()\n\n    def _walk(start: Path, label:\
+      \ str) -> Path | None:\n        \"\"\"Walk start and its parents looking for\
+      \ repo markers.\"\"\"\n        node = start\n        while node not in seen:\n\
+      \            seen.add(node)\n            candidates_tried.append((f\"{label}\
+      \ ({node.name or node})\", node))\n            if _has_repo_markers(node):\n\
+      \                return node\n            if node.parent == node:\n        \
+      \        return None\n            node = node.parent\n        return None\n\n\
+      \    # 1. Walk cwd and its parents (operator usually invokes from inside the\
+      \ repo).\n    found = _walk(Path.cwd().resolve(), \"cwd-walk\")\n    if found\
+      \ is not None:\n        return found\n\n    # 2. Walk parents of __file__ (handles\
+      \ in-tree installs; fails on site-packages\n    #    because no parent up to\
+      \ filesystem root contains the marker set).\n    found = _walk(Path(__file__).resolve().parent,\
+      \ \"__file__-walk\")\n    if found is not None:\n        return found\n\n  \
+      \  tried_msg = \"; \".join(f\"{name}={path}\" for name, path in candidates_tried)\n\
+      \    raise RepoRootResolutionError(\n        f\"Cannot resolve consensus-mcp\
+      \ repo root. None of the candidates contain \"\n        f\"all required markers\
+      \ {_REPO_ROOT_MARKERS}. Set CONSENSUS_MCP_REPO_ROOT \"\n        f\"to the repo\
+      \ root directory. Candidates tried: {tried_msg}\"\n    )\n\n\ndef _parse_ts(s):\n\
+      \    if not s:\n        return None\n    try:\n        return datetime.fromisoformat(str(s).replace(\"\
+      Z\", \"+00:00\"))\n    except (ValueError, TypeError):\n        return None\n\
+      \n\ndef _read_jsonl(path: Path) -> list[dict]:\n    \"\"\"Read JSONL; tolerate\
+      \ missing file + malformed lines (mirrors TUI).\n\n    Legacy non-streaming\
+      \ API. Kept for any caller that depends on a list\n    return type. New code\
+      \ should prefer ``_read_jsonl_streaming``.\n    \"\"\"\n    return list(_read_jsonl_streaming(path))\n\
+      \n\ndef _read_jsonl_streaming(path: Path, since_ts: datetime | None = None)\
+      \ -> Iterator[dict]:\n    \"\"\"Yield parsed events from a JSONL file (perf-rev-005\
+      \ fix).\n\n    Streams line-by-line instead of slurping the whole file. Events\
+      \ whose\n    ``timestamp_utc`` parses to a value strictly older than ``since_ts``\n\
+      \    are skipped; events with missing/unparseable timestamps are always\n  \
+      \  yielded (we can't prove they're old, and ``find_stalled`` already\n    handles\
+      \ unparseable timestamps).\n    \"\"\"\n    if not path.exists():\n        return\n\
+      \    try:\n        with path.open(\"r\", encoding=\"utf-8\") as f:\n       \
+      \     for line in f:\n                line = line.strip()\n                if\
+      \ not line:\n                    continue\n                try:\n          \
+      \          ev = json.loads(line)\n                except json.JSONDecodeError:\n\
+      \                    continue\n                if since_ts is not None:\n  \
+      \                  ts = _parse_ts(ev.get(\"timestamp_utc\"))\n             \
+      \       if ts is not None and ts < since_ts:\n                        continue\n\
+      \                yield ev\n    except OSError:\n        return\n\n\ndef _locked_append(path:\
+      \ Path, payload: str) -> None:\n    \"\"\"Append ``payload`` to ``path`` under\
+      \ an OS-appropriate exclusive lock\n    (xplat-rev-007 fix).\n\n    On Windows\
+      \ uses ``msvcrt.locking`` (byte-range; we lock the first byte\n    of the file\
+      \ from the writer's offset). On POSIX uses ``fcntl.flock``.\n    If neither\
+      \ module is importable we fall back to an unlocked append and\n    emit a one-time\
+      \ warning to stderr — concurrent writers may produce\n    torn lines.\n    \"\
+      \"\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    data = payload.encode(\"\
+      utf-8\")\n    try:\n        import msvcrt  # type: ignore[import-not-found]\n\
+      \    except ImportError:\n        msvcrt = None  # type: ignore[assignment]\n\
+      \    try:\n        import fcntl  # type: ignore[import-not-found]\n    except\
+      \ ImportError:\n        fcntl = None  # type: ignore[assignment]\n\n    if msvcrt\
+      \ is None and fcntl is None:\n        sys.stderr.write(\n            \"WARNING:\
+      \ _locked_append: neither msvcrt nor fcntl available; \"\n            \"falling\
+      \ back to unlocked append (concurrent writers may produce \"\n            \"\
+      torn lines).\\n\"\n        )\n        with path.open(\"ab\") as f:\n       \
+      \     f.write(data)\n        return\n\n    with path.open(\"ab\") as f:\n  \
+      \      if msvcrt is not None:\n            # Windows byte-range lock: lock 1\
+      \ byte at the current file\n            # offset. LK_LOCK blocks (with internal\
+      \ retries) until the\n            # lock is acquired. The lock auto-releases\
+      \ when the file\n            # handle closes, so we don't need an explicit LK_UNLCK.\n\
+      \            try:\n                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK,\
+      \ 1)\n            except OSError:\n                # Lock acquisition failed\
+      \ (e.g., on a filesystem that\n                # doesn't support locking). Proceed\
+      \ unlocked; this is\n                # strictly best-effort cross-process serialization.\n\
+      \                pass\n            f.write(data)\n        else:\n          \
+      \  # POSIX advisory lock; auto-released on close.\n            fcntl.flock(f.fileno(),\
+      \ fcntl.LOCK_EX)\n            f.write(data)\n\n\ndef find_stalled(events, stall_threshold_seconds:\
+      \ float, now: datetime) -> list[dict]:\n    \"\"\"Return orphan dispatch_start\
+      \ events older than stall_threshold_seconds.\n\n    Pairing uses (iteration_id,\
+      \ pass_id) tuple key (per iter-0033 codex-rev-002\n    fix). dispatch_stalled\
+      \ is itself a terminal event, so re-running the\n    watchdog after a previous\
+      \ --action=mark run does NOT re-mark the same\n    orphan.\n\n    ``events``\
+      \ may be any iterable of dicts (list or generator from\n    ``_read_jsonl_streaming``).\n\
+      \    \"\"\"\n    by_key: dict[tuple, dict] = {}\n    for ev in events:\n   \
+      \     pass_id = ev.get(\"pass_id\") or ev.get(\"reviewer_id\")\n        if not\
+      \ pass_id:\n            continue\n        iter_id = ev.get(\"iteration_id\"\
+      )\n        key = (iter_id, pass_id)\n        entry = by_key.setdefault(key,\
+      \ {\"start\": None, \"end\": None})\n        kind = ev.get(\"event\")\n    \
+      \    if kind == \"dispatch_start\":\n            entry[\"start\"] = ev\n   \
+      \     elif kind in _TERMINAL_EVENTS:\n            entry[\"end\"] = ev\n\n  \
+      \  stale = []\n    for entry in by_key.values():\n        start = entry[\"start\"\
+      ]\n        if not start or entry[\"end\"]:\n            continue\n        start_ts\
+      \ = _parse_ts(start.get(\"timestamp_utc\"))\n        if start_ts is None:\n\
+      \            continue\n        age = (now - start_ts).total_seconds()\n    \
+      \    if age >= stall_threshold_seconds:\n            stale.append({\n      \
+      \          \"start_event\": start,\n                \"age_seconds\": age,\n\
+      \                \"start_timestamp_utc\": start.get(\"timestamp_utc\"),\n  \
+      \          })\n    return stale\n\n\ndef _suggest_redispatch(orphan_start: dict)\
+      \ -> str:\n    \"\"\"Recommended external-process re-dispatch command for the\
+      \ given orphan.\n\n    Uses the proven _dispatch_codex CLI pattern; never in-process\
+      \ subagent\n    (per iter-0031 lesson + feedback_external_process_fallback.md).\
+      \ The\n    pass_id is bumped to f\"{reviewer_id}-pass2\" to avoid collision\
+      \ with\n    the orphan; operator must adjust manually if pass2 is also taken.\n\
+      \    \"\"\"\n    iter_id = orphan_start.get(\"iteration_id\", \"<iteration_id>\"\
+      )\n    reviewer_id = orphan_start.get(\"reviewer_id\", \"<reviewer_id>\")\n\
+      \    return (\n        \"python_env/python.exe -m consensus_mcp._dispatch_codex\
+      \ \"\n        f\"--goal-packet consensus-state/active/{iter_id}/goal_packet.yaml\
+      \ \"\n        f\"--iteration-dir consensus-state/active/{iter_id} \"\n     \
+      \   f\"--reviewer-id {reviewer_id} \"\n        f\"--pass-id {reviewer_id}-pass2\
+      \ \"\n        \"--codex-bin codex \"\n        f\"--review-target consensus-state/active/{iter_id}/review-packet.yaml\
+      \ \"\n        \"--timeout-seconds 900\"\n    )\n\n\ndef emit_stalled_event(log_path:\
+      \ Path, orphan: dict, stall_threshold_seconds: float, now: datetime) -> dict:\n\
+      \    \"\"\"Append a dispatch_stalled event for the given orphan; return the\
+      \ event dict.\n\n    APPEND-ONLY: never modifies or deletes existing events.\n\
+      \n    Per iter-0036 codex-rev-002 review: stall_reason MUST be \"watchdog_timeout\"\
+      \n    (the goal_packet-contracted value). A free-text 'detail' field carries\n\
+      \    any additional context.\n    \"\"\"\n    start = orphan[\"start_event\"\
+      ]\n    event = {\n        \"timestamp_utc\": now.strftime(\"%Y-%m-%dT%H:%M:%SZ\"\
+      ),\n        \"event\": \"dispatch_stalled\",\n        \"iteration_id\": start.get(\"\
+      iteration_id\"),\n        \"reviewer_id\": start.get(\"reviewer_id\"),\n   \
+      \     \"pass_id\": start.get(\"pass_id\"),\n        \"stall_reason\": \"watchdog_timeout\"\
+      ,\n        \"stall_threshold_seconds\": stall_threshold_seconds,\n        \"\
+      age_seconds\": orphan[\"age_seconds\"],\n        \"original_start_timestamp_utc\"\
+      : orphan[\"start_timestamp_utc\"],\n        \"watchdog_run_utc\": now.strftime(\"\
+      %Y-%m-%dT%H:%M:%SZ\"),\n        \"watchdog_version\": WATCHDOG_VERSION,\n  \
+      \      \"detail\": \"orphan dispatch_start with no terminal event past stall\
+      \ threshold\",\n    }\n    _locked_append(log_path, json.dumps(event) + \"\\\
+      n\")\n    return event\n\n\ndef main(argv: list[str] | None = None) -> int:\n\
+      \    parser = argparse.ArgumentParser(description=\"Watchdog for stalled dispatches.\"\
+      )\n    parser.add_argument(\"--repo-root\", default=None,\n                \
+      \        help=\"Override repo root (default: env var or __file__ walk).\")\n\
+      \    parser.add_argument(\"--stall-after\", type=float, default=600.0,\n   \
+      \                     help=\"Seconds before an orphan is stale (default 600\
+      \ = 10 min).\")\n    parser.add_argument(\"--action\", choices=(\"report\",\
+      \ \"mark\"), default=\"report\",\n                        help=\"report = read-only\
+      \ scan; mark = append dispatch_stalled events.\")\n    parser.add_argument(\"\
+      --window-days\", type=float, default=7.0,\n                        help=\"Only\
+      \ inspect events newer than this many days \"\n                            \
+      \ \"(default 7). Stalled-dispatch detection only \"\n                      \
+      \       \"needs recent unmatched starts; older history \"\n                \
+      \             \"is skipped to avoid slurping the full log. \"\n            \
+      \                 \"Pass 0 (or negative) to disable filtering.\")\n    ns =\
+      \ parser.parse_args(argv)\n\n    repo_root = Path(ns.repo_root).resolve() if\
+      \ ns.repo_root else _default_repo_root()\n    log_path = repo_root / \"consensus-state\"\
+      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    now = datetime.now(timezone.utc)\n\
+      \    since_ts: datetime | None = None\n    if ns.window_days and ns.window_days\
+      \ > 0:\n        since_ts = now - timedelta(days=ns.window_days)\n    events\
+      \ = _read_jsonl_streaming(log_path, since_ts=since_ts)\n    stale = find_stalled(events,\
+      \ ns.stall_after, now)\n\n    output = {\n        \"watchdog_run_utc\": now.strftime(\"\
+      %Y-%m-%dT%H:%M:%SZ\"),\n        \"watchdog_version\": WATCHDOG_VERSION,\n  \
+      \      \"stall_after_seconds\": ns.stall_after,\n        \"action\": ns.action,\n\
+      \        \"stale_count\": len(stale),\n        \"stale\": [],\n    }\n    for\
+      \ orphan in stale:\n        start = orphan[\"start_event\"]\n        entry =\
+      \ {\n            \"iteration_id\": start.get(\"iteration_id\"),\n          \
+      \  \"reviewer_id\": start.get(\"reviewer_id\"),\n            \"pass_id\": start.get(\"\
+      pass_id\"),\n            \"age_seconds\": orphan[\"age_seconds\"],\n       \
+      \     \"original_start_timestamp_utc\": orphan[\"start_timestamp_utc\"],\n \
+      \           \"recommended_redispatch\": _suggest_redispatch(start),\n      \
+      \  }\n        if ns.action == \"mark\":\n            emitted = emit_stalled_event(log_path,\
+      \ orphan, ns.stall_after, now)\n            entry[\"dispatch_stalled_appended\"\
+      ] = True\n            entry[\"appended_event_timestamp_utc\"] = emitted[\"timestamp_utc\"\
+      ]\n        output[\"stale\"].append(entry)\n\n    print(json.dumps(output, indent=2))\n\
+      \    return 1 if stale else 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
+    consensus_mcp/tests/test_visibility_watchdog.py: "\"\"\"Unit tests for _visibility_watchdog.\n\
+      \nThe watchdog is a read-only consumer of consensus-state/state/dispatch-log.jsonl\n\
+      in default mode; in --action=mark mode it APPENDS dispatch_stalled events\n\
+      (append-only audit-log invariant). These tests exercise the pure-function\n\
+      pieces (orphan detection, terminal-event recognition, append semantics)\n+ the\
+      \ CLI end-to-end.\n\"\"\"\nfrom __future__ import annotations\n\nimport json\n\
+      import sys\nimport threading\nfrom datetime import datetime, timedelta, timezone\n\
+      from pathlib import Path\n\nimport pytest\n\nsys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))\n\
+      \nfrom consensus_mcp import _visibility_watchdog  # noqa: E402\n\n\ndef _start_event(pass_id:\
+      \ str, iteration_id: str, timestamp: str, **kw) -> dict:\n    base = {\n   \
+      \     \"event\": \"dispatch_start\",\n        \"pass_id\": pass_id,\n      \
+      \  \"iteration_id\": iteration_id,\n        \"timestamp_utc\": timestamp,\n\
+      \        \"timeout_seconds\": 900,\n    }\n    base.update(kw)\n    return base\n\
+      \n\ndef _done_event(pass_id: str, iteration_id: str, timestamp: str, **kw) ->\
+      \ dict:\n    base = {\n        \"event\": \"dispatch_done\",\n        \"pass_id\"\
+      : pass_id,\n        \"iteration_id\": iteration_id,\n        \"timestamp_utc\"\
+      : timestamp,\n        \"exit_code\": 0,\n    }\n    base.update(kw)\n    return\
+      \ base\n\n\ndef _refused_event(pass_id: str, iteration_id: str, timestamp: str,\
+      \ **kw) -> dict:\n    base = {\n        \"event\": \"dispatch_refused\",\n \
+      \       \"pass_id\": pass_id,\n        \"iteration_id\": iteration_id,\n   \
+      \     \"timestamp_utc\": timestamp,\n    }\n    base.update(kw)\n    return\
+      \ base\n\n\ndef _stalled_event(pass_id: str, iteration_id: str, timestamp: str,\
+      \ **kw) -> dict:\n    base = {\n        \"event\": \"dispatch_stalled\",\n \
+      \       \"pass_id\": pass_id,\n        \"iteration_id\": iteration_id,\n   \
+      \     \"timestamp_utc\": timestamp,\n        \"stall_reason\": \"watchdog_timeout\"\
+      ,\n    }\n    base.update(kw)\n    return base\n\n\n# ---- find_stalled --------------------------------------------------------\n\
+      \n\ndef test_find_stalled_returns_empty_when_no_orphans():\n    \"\"\"Start\
+      \ + matching done → no orphan.\"\"\"\n    now = datetime(2026, 5, 11, 4, 0,\
+      \ 0, tzinfo=timezone.utc)\n    events = [\n        _start_event(\"p1\", \"iter-001\"\
+      , \"2026-05-11T03:00:00Z\"),\n        _done_event(\"p1\", \"iter-001\", \"2026-05-11T03:05:00Z\"\
+      ),\n    ]\n    stale = _visibility_watchdog.find_stalled(events, stall_threshold_seconds=600,\
+      \ now=now)\n    assert stale == []\n\n\ndef test_find_stalled_returns_orphan_older_than_threshold():\n\
+      \    \"\"\"Start without terminal, age > threshold → returned.\"\"\"\n    now\
+      \ = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    # Started 30 min\
+      \ ago, threshold 600s (10 min) → stale.\n    events = [_start_event(\"p2\",\
+      \ \"iter-002\", \"2026-05-11T03:30:00Z\")]\n    stale = _visibility_watchdog.find_stalled(events,\
+      \ stall_threshold_seconds=600, now=now)\n    assert len(stale) == 1\n    assert\
+      \ stale[0][\"start_event\"][\"pass_id\"] == \"p2\"\n    assert stale[0][\"age_seconds\"\
+      ] >= 600\n\n\ndef test_find_stalled_ignores_orphan_younger_than_threshold():\n\
+      \    \"\"\"Start without terminal, age < threshold → not returned.\"\"\"\n \
+      \   now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    # Started\
+      \ 5 min ago, threshold 600s (10 min) → not stale.\n    events = [_start_event(\"\
+      p3\", \"iter-003\", \"2026-05-11T03:55:00Z\")]\n    stale = _visibility_watchdog.find_stalled(events,\
+      \ stall_threshold_seconds=600, now=now)\n    assert stale == []\n\n\ndef test_find_stalled_recognizes_dispatch_stalled_as_terminal():\n\
+      \    \"\"\"iter-0036: dispatch_stalled is itself a terminal event. Re-running\n\
+      \    the watchdog on a log that already contains dispatch_stalled for an\n \
+      \   orphan does NOT re-mark it (idempotency).\n    \"\"\"\n    now = datetime(2026,\
+      \ 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    events = [\n        _start_event(\"\
+      p4\", \"iter-004\", \"2026-05-11T03:00:00Z\"),\n        _stalled_event(\"p4\"\
+      , \"iter-004\", \"2026-05-11T03:15:00Z\"),\n    ]\n    stale = _visibility_watchdog.find_stalled(events,\
+      \ stall_threshold_seconds=600, now=now)\n    assert stale == [], (\n       \
+      \ \"dispatch_stalled must terminate the pairing; otherwise watchdog re-marks\
+      \ orphans\"\n    )\n\n\ndef test_find_stalled_recognizes_dispatch_refused_as_terminal():\n\
+      \    \"\"\"iter-0036 codex-rev-001 regression: dispatch_refused must be\n  \
+      \  recognized as terminal. A refused dispatch with no later events would\n \
+      \   otherwise be misclassified as an orphan, and the watchdog would append\n\
+      \    a false dispatch_stalled, corrupting the audit shape.\n    \"\"\"\n   \
+      \ now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    events = [\n\
+      \        _start_event(\"p5\", \"iter-005\", \"2026-05-11T03:00:00Z\"),\n   \
+      \     _refused_event(\"p5\", \"iter-005\", \"2026-05-11T03:00:01Z\",\n     \
+      \                  error_type=\"smoke_env_gate\"),\n    ]\n    stale = _visibility_watchdog.find_stalled(events,\
+      \ stall_threshold_seconds=600, now=now)\n    assert stale == [], \"dispatch_refused\
+      \ must terminate pairing\"\n\n\ndef test_find_stalled_uses_iteration_id_pass_id_tuple_key():\n\
+      \    \"\"\"Two iterations sharing pass_id 'p1' must NOT collapse: terminating\n\
+      \    one must not silence the other.\n    \"\"\"\n    now = datetime(2026, 5,\
+      \ 11, 4, 0, 0, tzinfo=timezone.utc)\n    events = [\n        _start_event(\"\
+      p-shared\", \"iter-A\", \"2026-05-11T03:00:00Z\"),\n        _start_event(\"\
+      p-shared\", \"iter-B\", \"2026-05-11T03:00:00Z\"),\n        _done_event(\"p-shared\"\
+      , \"iter-A\", \"2026-05-11T03:05:00Z\"),\n        # iter-B is NEVER terminated.\n\
+      \    ]\n    stale = _visibility_watchdog.find_stalled(events, stall_threshold_seconds=600,\
+      \ now=now)\n    stale_iters = {s[\"start_event\"][\"iteration_id\"] for s in\
+      \ stale}\n    assert stale_iters == {\"iter-B\"}, (\n        f\"only iter-B\
+      \ should be flagged; got {stale_iters}\"\n    )\n\n\n# ---- emit_stalled_event\
+      \ --------------------------------------------------\n\n\ndef test_emit_stalled_event_appends_to_log(tmp_path):\n\
+      \    \"\"\"emit_stalled_event writes a single jsonl line with the right shape.\"\
+      \"\"\n    log = tmp_path / \"dispatch-log.jsonl\"\n    pre = '{\"event\":\"\
+      some_pre_existing\",\"x\":1}\\n'\n    log.write_text(pre, encoding=\"utf-8\"\
+      )\n\n    now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    orphan\
+      \ = {\n        \"start_event\": _start_event(\"p1\", \"iter-001\", \"2026-05-11T03:00:00Z\"\
+      ),\n        \"age_seconds\": 3600,\n        \"start_timestamp_utc\": \"2026-05-11T03:00:00Z\"\
+      ,\n    }\n    emitted = _visibility_watchdog.emit_stalled_event(log, orphan,\
+      \ 600, now)\n    assert emitted[\"event\"] == \"dispatch_stalled\"\n    assert\
+      \ emitted[\"pass_id\"] == \"p1\"\n    assert emitted[\"iteration_id\"] == \"\
+      iter-001\"\n    assert emitted[\"stall_reason\"] == \"watchdog_timeout\"\n \
+      \   assert emitted[\"age_seconds\"] == 3600\n    assert emitted[\"stall_threshold_seconds\"\
+      ] == 600\n\n    # Pre-existing line preserved byte-for-byte.\n    after = log.read_text(encoding=\"\
+      utf-8\")\n    assert after.startswith(pre), \"append must not alter pre-existing\
+      \ content\"\n    # New line is the second one.\n    lines = after.strip().splitlines()\n\
+      \    assert len(lines) == 2\n    parsed = json.loads(lines[1])\n    assert parsed[\"\
+      event\"] == \"dispatch_stalled\"\n    assert parsed[\"pass_id\"] == \"p1\"\n\
+      \n\ndef test_emit_stalled_event_does_not_modify_existing_events(tmp_path):\n\
+      \    \"\"\"Append-only: existing lines must remain byte-identical.\"\"\"\n \
+      \   log = tmp_path / \"dispatch-log.jsonl\"\n    pre_lines = [\n        '{\"\
+      event\":\"dispatch_start\",\"pass_id\":\"px\",\"iteration_id\":\"ix\",\"timestamp_utc\"\
+      :\"2026-05-11T03:00:00Z\"}',\n        '{\"event\":\"some_other\",\"x\":42}',\n\
+      \        '{\"event\":\"dispatch_done\",\"pass_id\":\"py\",\"iteration_id\":\"\
+      iy\",\"timestamp_utc\":\"2026-05-11T03:05:00Z\"}',\n    ]\n    log.write_text(\"\
+      \\n\".join(pre_lines) + \"\\n\", encoding=\"utf-8\")\n    pre_bytes = log.read_bytes()\n\
+      \n    now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    orphan\
+      \ = {\n        \"start_event\": json.loads(pre_lines[0]),\n        \"age_seconds\"\
+      : 3600,\n        \"start_timestamp_utc\": \"2026-05-11T03:00:00Z\",\n    }\n\
+      \    _visibility_watchdog.emit_stalled_event(log, orphan, 600, now)\n\n    after_bytes\
+      \ = log.read_bytes()\n    # Pre-existing bytes must be a prefix of post-append\
+      \ bytes.\n    assert after_bytes.startswith(pre_bytes), (\n        \"emit_stalled_event\
+      \ must be strictly append-only\"\n    )\n\n\n# ---- main() CLI end-to-end ----------------------------------------------\n\
+      \n\ndef _scaffold_state_dir(tmp_path):\n    state = tmp_path / \"consensus-state\"\
+      \ / \"state\"\n    state.mkdir(parents=True)\n    return state / \"dispatch-log.jsonl\"\
+      \n\n\ndef test_main_report_mode_does_not_mutate_log(tmp_path, capsys):\n   \
+      \ \"\"\"--action=report writes no events to the log.\"\"\"\n    log_path = _scaffold_state_dir(tmp_path)\n\
+      \    log_path.write_text(\n        json.dumps(_start_event(\"p1\", \"iter-001\"\
+      , \"2026-05-11T03:00:00Z\")) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\
+      \    pre_bytes = log_path.read_bytes()\n    rc = _visibility_watchdog.main([\n\
+      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
+      \        \"--action\", \"report\",\n    ])\n    out = capsys.readouterr().out\n\
+      \    assert rc == 1, f\"orphan present => rc=1; got rc={rc}; out={out!r}\"\n\
+      \    assert log_path.read_bytes() == pre_bytes, (\n        \"--action=report\
+      \ must not mutate the log\"\n    )\n    parsed = json.loads(out)\n    assert\
+      \ parsed[\"stale_count\"] == 1\n    assert \"recommended_redispatch\" in parsed[\"\
+      stale\"][0]\n    assert \"_dispatch_codex\" in parsed[\"stale\"][0][\"recommended_redispatch\"\
+      ]\n\n\ndef test_main_mark_mode_appends_dispatch_stalled(tmp_path, capsys):\n\
+      \    \"\"\"--action=mark appends exactly one dispatch_stalled per orphan.\"\"\
+      \"\n    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n\
+      \        json.dumps(_start_event(\"p2\", \"iter-002\", \"2026-05-11T03:00:00Z\"\
+      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n\
+      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
+      \        \"--action\", \"mark\",\n    ])\n    out = capsys.readouterr().out\n\
+      \    assert rc == 1\n    parsed = json.loads(out)\n    assert parsed[\"stale\"\
+      ][0].get(\"dispatch_stalled_appended\") is True\n\n    # The log now has 2 lines:\
+      \ original start + appended stalled.\n    after_lines = log_path.read_text(encoding=\"\
+      utf-8\").strip().splitlines()\n    assert len(after_lines) == 2\n    appended\
+      \ = json.loads(after_lines[1])\n    assert appended[\"event\"] == \"dispatch_stalled\"\
+      \n    assert appended[\"pass_id\"] == \"p2\"\n    assert appended[\"stall_reason\"\
+      ] == \"watchdog_timeout\"\n\n\ndef test_main_mark_is_idempotent(tmp_path, capsys):\n\
+      \    \"\"\"Second --action=mark run on the same log must NOT re-mark — the\n\
+      \    dispatch_stalled from the first run is terminal and pairs the orphan.\n\
+      \    \"\"\"\n    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n\
+      \        json.dumps(_start_event(\"p3\", \"iter-003\", \"2026-05-11T03:00:00Z\"\
+      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    # First mark: appends.\n\
+      \    rc1 = _visibility_watchdog.main([\n        \"--repo-root\", str(tmp_path),\n\
+      \        \"--stall-after\", \"1\",\n        \"--action\", \"mark\",\n    ])\n\
+      \    capsys.readouterr()\n    line_count_after_first = len(log_path.read_text(encoding=\"\
+      utf-8\").strip().splitlines())\n\n    # Second mark: should NOT append again.\n\
+      \    rc2 = _visibility_watchdog.main([\n        \"--repo-root\", str(tmp_path),\n\
+      \        \"--stall-after\", \"1\",\n        \"--action\", \"mark\",\n    ])\n\
+      \    out2 = capsys.readouterr().out\n    line_count_after_second = len(log_path.read_text(encoding=\"\
+      utf-8\").strip().splitlines())\n\n    assert rc1 == 1, \"first run sees an orphan\
+      \ → rc=1\"\n    assert rc2 == 0, f\"second run must see zero stale (terminal\
+      \ exists); got rc={rc2}; out={out2!r}\"\n    assert line_count_after_first ==\
+      \ line_count_after_second == 2, (\n        f\"idempotency violated: lines went\
+      \ {line_count_after_first} -> {line_count_after_second}\"\n    )\n\n\ndef test_main_returns_0_when_no_orphans(tmp_path,\
+      \ capsys):\n    \"\"\"Clean state → rc=0.\"\"\"\n    log_path = _scaffold_state_dir(tmp_path)\n\
+      \    log_path.write_text(\n        json.dumps(_start_event(\"p4\", \"iter-004\"\
+      , \"2026-05-11T03:00:00Z\")) + \"\\n\"\n        + json.dumps(_done_event(\"\
+      p4\", \"iter-004\", \"2026-05-11T03:05:00Z\")) + \"\\n\",\n        encoding=\"\
+      utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n        \"--repo-root\"\
+      , str(tmp_path),\n        \"--stall-after\", \"1\",\n        \"--action\", \"\
+      report\",\n    ])\n    out = capsys.readouterr().out\n    assert rc == 0, f\"\
+      no orphans → rc=0; got rc={rc}; out={out!r}\"\n\n\ndef test_main_missing_log_file_returns_0(tmp_path,\
+      \ capsys):\n    \"\"\"Missing log file (fresh repo) should not crash; report\
+      \ 0 stale.\"\"\"\n    (tmp_path / \"consensus-state\" / \"state\").mkdir(parents=True)\n\
+      \    # No log file written.\n    rc = _visibility_watchdog.main([\n        \"\
+      --repo-root\", str(tmp_path),\n        \"--action\", \"report\",\n    ])\n \
+      \   out = capsys.readouterr().out\n    assert rc == 0\n    parsed = json.loads(out)\n\
+      \    assert parsed[\"stale_count\"] == 0\n\n\ndef test_recommended_redispatch_uses_external_codex_cli(tmp_path,\
+      \ capsys):\n    \"\"\"The recommended re-dispatch command must use _dispatch_codex\n\
+      \    (external codex-cli), NOT in-process subagent dispatch. This is the\n \
+      \   operator-locked external-process fallback policy.\n    \"\"\"\n    log_path\
+      \ = _scaffold_state_dir(tmp_path)\n    # Include reviewer_id explicitly so the\
+      \ suggestion is well-formed\n    # (production dispatch_start events always\
+      \ carry reviewer_id).\n    log_path.write_text(\n        json.dumps(_start_event(\n\
+      \            \"p5\", \"iter-005\", \"2026-05-11T03:00:00Z\",\n            reviewer_id=\"\
+      codex-iter-005-1\",\n        )) + \"\\n\",\n        encoding=\"utf-8\",\n  \
+      \  )\n    rc = _visibility_watchdog.main([\n        \"--repo-root\", str(tmp_path),\n\
+      \        \"--stall-after\", \"1\",\n        \"--action\", \"report\",\n    ])\n\
+      \    out = capsys.readouterr().out\n    parsed = json.loads(out)\n    cmd =\
+      \ parsed[\"stale\"][0][\"recommended_redispatch\"]\n    assert \"consensus_mcp._dispatch_codex\"\
+      \ in cmd, (\n        f\"recommendation must use external codex-cli path; got\
+      \ {cmd!r}\"\n    )\n    assert \"Agent\" not in cmd, \"must not suggest in-process\
+      \ subagent dispatch\"\n    assert \"--iteration-dir consensus-state/active/iter-005\"\
+      \ in cmd\n    assert \"--reviewer-id codex-iter-005-1\" in cmd\n    assert \"\
+      codex-iter-005-1-pass2\" in cmd, \"pass_id must be bumped to avoid collision\"\
+      \n\n\n# ---- perf-rev-005: streaming reader + time-window cutoff -----------------\n\
+      \n\ndef test_streaming_reader_skips_old_events_outside_window(tmp_path):\n \
+      \   \"\"\"_read_jsonl_streaming must drop events whose timestamp_utc is older\n\
+      \    than ``since_ts``. This is the perf-rev-005 fix: stalled-dispatch\n   \
+      \ detection only needs recent unmatched starts, so the watchdog must\n    not\
+      \ parse and yield every event in a multi-MB dispatch log.\n    \"\"\"\n    log\
+      \ = tmp_path / \"dispatch-log.jsonl\"\n    old_event = _start_event(\"p-old\"\
+      , \"iter-old\", \"2020-01-01T00:00:00Z\")\n    recent_event = _start_event(\"\
+      p-new\", \"iter-new\", \"2026-05-11T03:55:00Z\")\n    log.write_text(\n    \
+      \    json.dumps(old_event) + \"\\n\" + json.dumps(recent_event) + \"\\n\",\n\
+      \        encoding=\"utf-8\",\n    )\n\n    # since_ts halfway between the two\
+      \ events: only the recent one survives.\n    since_ts = datetime(2026, 1, 1,\
+      \ tzinfo=timezone.utc)\n    out = list(_visibility_watchdog._read_jsonl_streaming(log,\
+      \ since_ts=since_ts))\n    pass_ids = [ev.get(\"pass_id\") for ev in out]\n\
+      \    assert pass_ids == [\"p-new\"], (\n        f\"expected only the recent\
+      \ event to survive the window cutoff; got {pass_ids}\"\n    )\n\n    # No cutoff\
+      \ → both events come through (back-compat with _read_jsonl).\n    out_all =\
+      \ list(_visibility_watchdog._read_jsonl_streaming(log, since_ts=None))\n   \
+      \ assert [ev.get(\"pass_id\") for ev in out_all] == [\"p-old\", \"p-new\"]\n\
+      \n\ndef test_streaming_reader_keeps_events_with_missing_timestamps(tmp_path):\n\
+      \    \"\"\"Events without a parseable timestamp are always yielded (we can't\n\
+      \    prove they're old, and find_stalled already drops them).\n    \"\"\"\n\
+      \    log = tmp_path / \"dispatch-log.jsonl\"\n    no_ts = {\"event\": \"dispatch_start\"\
+      , \"pass_id\": \"p-x\", \"iteration_id\": \"i-x\"}\n    log.write_text(json.dumps(no_ts)\
+      \ + \"\\n\", encoding=\"utf-8\")\n    since_ts = datetime(2026, 5, 11, tzinfo=timezone.utc)\n\
+      \    out = list(_visibility_watchdog._read_jsonl_streaming(log, since_ts=since_ts))\n\
+      \    assert len(out) == 1\n\n\ndef test_legacy_read_jsonl_still_returns_list(tmp_path):\n\
+      \    \"\"\"_read_jsonl is preserved as a list-returning thin wrapper around\n\
+      \    the streaming reader so any caller depending on the old API keeps\n   \
+      \ working.\n    \"\"\"\n    log = tmp_path / \"dispatch-log.jsonl\"\n    log.write_text(\n\
+      \        json.dumps(_start_event(\"p1\", \"iter-1\", \"2026-05-11T03:00:00Z\"\
+      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    out = _visibility_watchdog._read_jsonl(log)\n\
+      \    assert isinstance(out, list)\n    assert len(out) == 1\n    assert out[0][\"\
+      pass_id\"] == \"p1\"\n\n\n# ---- xplat-rev-006: _default_repo_root walks parents\
+      \ looking for markers --\n\n\ndef _scaffold_repo_markers(root: Path) -> None:\n\
+      \    \"\"\"Create the directories that _has_repo_markers checks for.\"\"\"\n\
+      \    (root / \"consensus-state\").mkdir(parents=True, exist_ok=True)\n    (root\
+      \ / \"scripts\" / \"consensus_mcp\").mkdir(parents=True, exist_ok=True)\n  \
+      \  (root / \"consensus_mcp\" / \"validators\").mkdir(parents=True, exist_ok=True)\n\
+      \n\ndef test_default_repo_root_walks_to_marker(tmp_path, monkeypatch):\n   \
+      \ \"\"\"Synthesize a temp tree with repo markers and verify _default_repo_root\n\
+      \    finds it from a nested cwd. The xplat-rev-006 fix replaced the unsafe\n\
+      \    ``parent.parent.parent`` fallback (which lands in site-packages after\n\
+      \    a non-editable install) with a marker-validated parent walk.\n    \"\"\"\
+      \n    repo = tmp_path / \"fake-repo\"\n    _scaffold_repo_markers(repo)\n  \
+      \  nested = repo / \"scripts\" / \"consensus_mcp\" / \"tests\" / \"deeply\"\
+      \ / \"nested\"\n    nested.mkdir(parents=True)\n\n    # Operator did not supply\
+      \ env var; cwd is somewhere inside the fake repo.\n    monkeypatch.delenv(\"\
+      CONSENSUS_MCP_REPO_ROOT\", raising=False)\n    monkeypatch.chdir(nested)\n\n\
+      \    resolved = _visibility_watchdog._default_repo_root()\n    assert resolved\
+      \ == repo.resolve()\n\n\ndef test_default_repo_root_honors_env_var_when_valid(tmp_path,\
+      \ monkeypatch):\n    \"\"\"CONSENSUS_MCP_REPO_ROOT takes precedence when it\
+      \ validates.\"\"\"\n    repo = tmp_path / \"env-repo\"\n    _scaffold_repo_markers(repo)\n\
+      \    monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\", str(repo))\n    resolved\
+      \ = _visibility_watchdog._default_repo_root()\n    assert resolved == repo.resolve()\n\
+      \n\ndef test_default_repo_root_raises_when_env_var_invalid(tmp_path, monkeypatch):\n\
+      \    \"\"\"Operator-supplied env var is authoritative; if it doesn't validate\n\
+      \    we fail loudly rather than silently fall through to a wrong tree.\n   \
+      \ \"\"\"\n    bogus = tmp_path / \"not-a-repo\"\n    bogus.mkdir()\n    monkeypatch.setenv(\"\
+      CONSENSUS_MCP_REPO_ROOT\", str(bogus))\n    with pytest.raises(_visibility_watchdog.RepoRootResolutionError):\n\
+      \        _visibility_watchdog._default_repo_root()\n\n\ndef test_default_repo_root_raises_when_no_markers_anywhere(tmp_path,\
+      \ monkeypatch):\n    \"\"\"Walk reaches filesystem root without finding markers\
+      \ → raise.\"\"\"\n    monkeypatch.delenv(\"CONSENSUS_MCP_REPO_ROOT\", raising=False)\n\
+      \    empty = tmp_path / \"empty\"\n    empty.mkdir()\n    monkeypatch.chdir(empty)\n\
+      \    # The walk also inspects parents of __file__, which on this checkout\n\
+      \    # IS a valid repo (the real one). To isolate the failure mode we\n    #\
+      \ patch _has_repo_markers to always return False.\n    monkeypatch.setattr(_visibility_watchdog,\
+      \ \"_has_repo_markers\", lambda _p: False)\n    with pytest.raises(_visibility_watchdog.RepoRootResolutionError):\n\
+      \        _visibility_watchdog._default_repo_root()\n\n\n# ---- xplat-rev-007:\
+      \ cross-process locked append --------------------------\n\n\ndef test_locked_append_writes_payload(tmp_path):\n\
+      \    \"\"\"Basic sanity: _locked_append appends the payload to the file.\"\"\
+      \"\n    log = tmp_path / \"out.jsonl\"\n    _visibility_watchdog._locked_append(log,\
+      \ '{\"a\":1}\\n')\n    _visibility_watchdog._locked_append(log, '{\"a\":2}\\\
+      n')\n    lines = log.read_text(encoding=\"utf-8\").splitlines()\n    assert\
+      \ lines == ['{\"a\":1}', '{\"a\":2}']\n\n\ndef test_locked_append_creates_parent_dir(tmp_path):\n\
+      \    \"\"\"Append into a not-yet-existing parent dir.\"\"\"\n    log = tmp_path\
+      \ / \"nested\" / \"deep\" / \"out.jsonl\"\n    _visibility_watchdog._locked_append(log,\
+      \ '{\"x\":true}\\n')\n    assert log.exists()\n    assert log.read_text(encoding=\"\
+      utf-8\") == '{\"x\":true}\\n'\n\n\ndef test_locked_append_serializes_concurrent_writes(tmp_path):\n\
+      \    \"\"\"Spawn N threads each calling _locked_append; verify ALL writes are\n\
+      \    persisted as complete JSONL records (no torn lines). This is best-effort\n\
+      \    — we can't easily force a race on a single host — but a 50-thread fan-out\n\
+      \    is sensitive enough to catch obviously-broken locking on Windows\n    (xplat-rev-007\
+      \ fix).\n    \"\"\"\n    log = tmp_path / \"concurrent.jsonl\"\n    payloads\
+      \ = [json.dumps({\"i\": i, \"filler\": \"x\" * 200}) + \"\\n\" for i in range(50)]\n\
+      \n    def writer(payload: str) -> None:\n        _visibility_watchdog._locked_append(log,\
+      \ payload)\n\n    threads = [threading.Thread(target=writer, args=(p,)) for\
+      \ p in payloads]\n    for t in threads:\n        t.start()\n    for t in threads:\n\
+      \        t.join()\n\n    # All N lines present, each parseable as JSON, all\
+      \ distinct i values.\n    raw = log.read_text(encoding=\"utf-8\")\n    lines\
+      \ = raw.splitlines()\n    assert len(lines) == len(payloads), (\n        f\"\
+      expected {len(payloads)} lines, got {len(lines)}; raw={raw!r}\"\n    )\n   \
+      \ seen_i = set()\n    for line in lines:\n        ev = json.loads(line)  # raises\
+      \ if torn\n        seen_i.add(ev[\"i\"])\n    assert seen_i == set(range(len(payloads)))\n\
+      \n\ndef test_emit_stalled_event_uses_locked_append(tmp_path, monkeypatch):\n\
+      \    \"\"\"emit_stalled_event must route through _locked_append so any future\n\
+      \    refactor doesn't silently regress xplat-rev-007.\n    \"\"\"\n    log =\
+      \ tmp_path / \"dispatch-log.jsonl\"\n    called: list[tuple[Path, str]] = []\n\
+      \n    def fake_locked_append(p: Path, payload: str) -> None:\n        called.append((p,\
+      \ payload))\n        p.parent.mkdir(parents=True, exist_ok=True)\n        with\
+      \ p.open(\"a\", encoding=\"utf-8\") as f:\n            f.write(payload)\n\n\
+      \    monkeypatch.setattr(_visibility_watchdog, \"_locked_append\", fake_locked_append)\n\
+      \n    now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)\n    orphan\
+      \ = {\n        \"start_event\": _start_event(\"p-lock\", \"iter-lock\", \"2026-05-11T03:00:00Z\"\
+      ),\n        \"age_seconds\": 3600,\n        \"start_timestamp_utc\": \"2026-05-11T03:00:00Z\"\
+      ,\n    }\n    _visibility_watchdog.emit_stalled_event(log, orphan, 600, now)\n\
+      \n    assert len(called) == 1\n    assert called[0][0] == log\n    assert \"\
+      dispatch_stalled\" in called[0][1]\n\n\n# ---- perf-rev-005: --window-days CLI\
+      \ flag --------------------------------\n\n\ndef test_main_window_days_filters_old_events(tmp_path,\
+      \ capsys):\n    \"\"\"--window-days drops events older than the window. An ancient\
+      \ orphan\n    must NOT be flagged when the window excludes it.\n    \"\"\"\n\
+      \    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n  \
+      \      json.dumps(_start_event(\"p-ancient\", \"iter-old\", \"2020-01-01T00:00:00Z\"\
+      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n\
+      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
+      \        \"--window-days\", \"7\",\n        \"--action\", \"report\",\n    ])\n\
+      \    out = capsys.readouterr().out\n    parsed = json.loads(out)\n    assert\
+      \ rc == 0, f\"ancient orphan must be filtered by window; got {out!r}\"\n   \
+      \ assert parsed[\"stale_count\"] == 0\n\n\ndef test_main_window_days_zero_disables_filter(tmp_path,\
+      \ capsys):\n    \"\"\"--window-days 0 keeps the legacy behaviour (no filtering).\"\
+      \"\"\n    log_path = _scaffold_state_dir(tmp_path)\n    log_path.write_text(\n\
+      \        json.dumps(_start_event(\"p-ancient\", \"iter-old\", \"2020-01-01T00:00:00Z\"\
+      )) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    rc = _visibility_watchdog.main([\n\
+      \        \"--repo-root\", str(tmp_path),\n        \"--stall-after\", \"1\",\n\
+      \        \"--window-days\", \"0\",\n        \"--action\", \"report\",\n    ])\n\
+      \    out = capsys.readouterr().out\n    parsed = json.loads(out)\n    assert\
+      \ rc == 1\n    assert parsed[\"stale_count\"] == 1\n"
+    consensus_mcp/tests/test_dispatch_codex_streaming.py: "\"\"\"Regression tests\
+      \ for iter-0037 streaming/heartbeat/abort features of\n`_invoke_codex` in `consensus_mcp/_dispatch_codex.py`.\n\
+      \nThese tests use:\n  - `_ControllableClock` — manual `time_fn` substitute;\
+      \ tests advance the\n    clock to drive heartbeat / silence / wall-time logic\
+      \ without real waits.\n  - `StreamingFakeCodexPopen` — Popen-shaped fake; `stdout.readline()`\
+      \ returns\n    scheduled bytes when the controllable clock has reached the scheduled\n\
+      \    time, else blocks briefly (real time, not mocked) until either the next\n\
+      \    schedule time is reached or the proc is told to exit.\n\nReal `time.sleep(poll_interval)`\
+      \ is left as actual time. Tests use a tiny\npoll_interval (0.01s) plus short\
+      \ real sleeps between clock-advances so the\nreader thread can drain. This is\
+      \ acceptable: the *decision* logic in\n_invoke_codex is driven entirely by `time_fn`;\
+      \ we only need a few ms of\nreal time for thread scheduling.\n\"\"\"\nfrom __future__\
+      \ import annotations\n\nimport json as _json\nimport sys\nimport threading\n\
+      import time\nfrom pathlib import Path\n\nimport pytest\n\nREPO_ROOT = Path(__file__).resolve().parent.parent.parent\n\
+      \nfrom consensus_mcp import _dispatch_codex  # noqa: E402\n\n\nSCHEMA_PATH =\
+      \ REPO_ROOT / \"consensus_mcp\" / \"dispatch_templates\" / \"codex_review_schema.json\"\
+      \n\n\n# --------------------------------------------------------------------------\n\
+      # Test helpers\n# --------------------------------------------------------------------------\n\
+      \n\nclass _ControllableClock:\n    \"\"\"Manually-advanced monotonic clock for\
+      \ `time_fn=` injection.\"\"\"\n\n    def __init__(self, start: float = 1000.0):\n\
+      \        self.t = float(start)\n        self._lock = threading.Lock()\n\n  \
+      \  def now(self) -> float:\n        with self._lock:\n            return self.t\n\
+      \n    def advance(self, dt: float) -> None:\n        with self._lock:\n    \
+      \        self.t += float(dt)\n\n\nclass _FakeStdin:\n    \"\"\"Bytes-capturing\
+      \ stdin replacement; closed flag used to gate proc exit.\"\"\"\n\n    def __init__(self):\n\
+      \        self.buf = bytearray()\n        self.closed = False\n\n    def write(self,\
+      \ data):\n        if self.closed:\n            raise BrokenPipeError(\"stdin\
+      \ closed\")\n        self.buf.extend(data)\n        return len(data)\n\n   \
+      \ def close(self):\n        self.closed = True\n\n    def flush(self):\n   \
+      \     pass\n\n\nclass _FakePipeReader:\n    \"\"\"stdout/stderr replacement.\n\
+      \n    `readline()` returns the next scheduled `bytes` when the controllable\n\
+      \    clock has reached the scheduled time. Until then it sleeps (real time)\
+      \ in\n    short ticks. When the parent fake proc is marked exited and the schedule\n\
+      \    is drained, `readline()` returns `b\"\"` so `iter(readline, b\"\")` exits\
+      \ the\n    reader thread (matching real Popen pipe behavior).\n    \"\"\"\n\n\
+      \    def __init__(self, schedule, parent):\n        # schedule: list[tuple[float,\
+      \ bytes]] — clock-relative-to-start time + payload\n        # parent: StreamingFakeCodexPopen\
+      \ — for clock + exit state.\n        self._schedule = list(schedule)\n     \
+      \   self._idx = 0\n        self._parent = parent\n        self._real_tick =\
+      \ 0.005\n\n    def readline(self):\n        while True:\n            # If proc\
+      \ has exited and we've drained the schedule, EOF.\n            if self._idx\
+      \ >= len(self._schedule):\n                if self._parent._exited:\n      \
+      \              return b\"\"\n                # Wait for either more schedule\
+      \ entries (none coming) or exit.\n                time.sleep(self._real_tick)\n\
+      \                continue\n            sched_time, payload = self._schedule[self._idx]\n\
+      \            now_rel = self._parent._clock.now() - self._parent._t0\n      \
+      \      if now_rel >= sched_time:\n                self._idx += 1\n         \
+      \       return payload\n            # Not yet time; brief real sleep, then re-check.\n\
+      \            # Also bail out if proc was terminated mid-wait.\n            if\
+      \ self._parent._exited:\n                return b\"\"\n            time.sleep(self._real_tick)\n\
+      \n\nclass StreamingFakeCodexPopen:\n    \"\"\"Popen-shaped fake.\n\n    On instantiation,\
+      \ captures the `-o <out_file>` arg so `.close_stdin_writes_output`\n    can\
+      \ stage a payload there at exit time (mimicking real codex's output-file write).\n\
+      \n    Constructor uses Popen's positional shape so the real production code's\n\
+      \    `popen_factory(cmd, stdin=..., stdout=..., stderr=..., bufsize=...)` call\n\
+      \    works unchanged.\n    \"\"\"\n\n    def __init__(\n        self,\n    \
+      \    cmd,\n        stdin=None,\n        stdout=None,\n        stderr=None,\n\
+      \        bufsize=0,\n        *,\n        _scheduled_stdout=None,\n        _scheduled_stderr=None,\n\
+      \        _returncode: int = 0,\n        _exit_at: float = 1.0,\n        _clock:\
+      \ _ControllableClock,\n        _output_payload: str = '{\"ok\": true}',\n  \
+      \      **_popen_kwargs,  # iter-0039: absorb creationflags / start_new_session\n\
+      \    ):\n        self._cmd = cmd\n        self._clock = _clock\n        self._t0\
+      \ = _clock.now()\n        self._exit_at = float(_exit_at)\n        self._returncode_on_exit\
+      \ = int(_returncode)\n        self._exited = False\n        self.returncode\
+      \ = None\n        self._output_payload = _output_payload\n        # Find -o\
+      \ <out_file> in cmd.\n        self._out_file = None\n        for i, tok in enumerate(cmd):\n\
+      \            if tok == \"-o\" and i + 1 < len(cmd):\n                self._out_file\
+      \ = cmd[i + 1]\n                break\n        self.stdin = _FakeStdin()\n \
+      \       self.stdout = _FakePipeReader(_scheduled_stdout or [], self)\n     \
+      \   self.stderr = _FakePipeReader(_scheduled_stderr or [], self)\n\n    def\
+      \ _maybe_write_output(self):\n        if self._out_file and self._returncode_on_exit\
+      \ == 0:\n            try:\n                Path(self._out_file).write_text(self._output_payload,\
+      \ encoding=\"utf-8\")\n            except OSError:\n                pass\n\n\
+      \    def poll(self):\n        if self._exited:\n            return self.returncode\n\
+      \        now_rel = self._clock.now() - self._t0\n        if now_rel >= self._exit_at:\n\
+      \            self.returncode = self._returncode_on_exit\n            self._exited\
+      \ = True\n            self._maybe_write_output()\n            return self.returncode\n\
+      \        return None\n\n    def terminate(self):\n        if not self._exited:\n\
+      \            self.returncode = -15  # SIGTERM\n            self._exited = True\n\
+      \            # Do NOT stage output payload on termination — matches real codex.\n\
+      \n    def kill(self):\n        if not self._exited:\n            self.returncode\
+      \ = -9\n            self._exited = True\n\n    def send_signal(self, sig):\n\
+      \        \"\"\"iter-0039: _terminate_process_tree calls send_signal(CTRL_BREAK_EVENT)\n\
+      \        on Windows and os.killpg on POSIX. The fake accepts any signal and\n\
+      \        treats it as terminate (the test cares about the exit path, not the\n\
+      \        signal-delivery mechanism).\"\"\"\n        self.terminate()\n\n   \
+      \ @property\n    def pid(self):\n        \"\"\"`_terminate_process_tree` does\
+      \ os.killpg(os.getpgid(proc.pid))\n        on POSIX. Return a synthetic, never-live\
+      \ PID so os.getpgid raises\n        ProcessLookupError and the production OSError-fallback\n\
+      \        (proc.terminate()) runs. The previous value `0` was WRONG — pid 0\n\
+      \        means \"the caller's own process group\", so on Linux CI this fake\n\
+      \        made the abort path SIGTERM the pytest/runner job itself\n        (\"\
+      operation canceled\"). Belt-and-suspenders: the suite-wide\n        conftest\
+      \ guard also neutralizes os.killpg/os.getpgid.\"\"\"\n        return 2_147_483_647\n\
+      \n    def wait(self, timeout=None):\n        # We control exit via clock + terminate/kill;\
+      \ this is a no-op.\n        # The production code only calls wait() after terminate/kill,\
+      \ by which\n        # point _exited is already True. Return returncode.\n  \
+      \      return self.returncode\n\n\ndef _make_factory(\n    clock: _ControllableClock,\n\
+      \    *,\n    scheduled_stdout=None,\n    scheduled_stderr=None,\n    returncode:\
+      \ int = 0,\n    exit_at: float = 1.0,\n    output_payload: str = '{\"ok\": true}',\n\
+      ):\n    \"\"\"Build a popen_factory closure for injection into `_invoke_codex`.\"\
+      \"\"\n\n    def factory(cmd, **kwargs):\n        return StreamingFakeCodexPopen(\n\
+      \            cmd,\n            _scheduled_stdout=scheduled_stdout,\n       \
+      \     _scheduled_stderr=scheduled_stderr,\n            _returncode=returncode,\n\
+      \            _exit_at=exit_at,\n            _clock=clock,\n            _output_payload=output_payload,\n\
+      \            **kwargs,\n        )\n\n    return factory\n\n\ndef _run_invoke_in_thread(**invoke_kwargs):\n\
+      \    \"\"\"Run `_invoke_codex` in a background thread; return (thread, holder).\n\
+      \n    `holder` is a dict that, after `thread.join()`, contains either:\n   \
+      \   - `out`: the codex output (success), or\n      - `e`: the exception raised\
+      \ (failure).\n    \"\"\"\n    holder: dict = {}\n\n    def runner():\n     \
+      \   try:\n            holder[\"out\"] = _dispatch_codex._invoke_codex(**invoke_kwargs)\n\
+      \        except Exception as e:  # noqa: BLE001\n            holder[\"e\"] =\
+      \ e\n\n    th = threading.Thread(target=runner, daemon=True)\n    th.start()\n\
+      \    return th, holder\n\n\ndef _drive_clock_until_done(\n    clock: _ControllableClock,\n\
+      \    thread: threading.Thread,\n    *,\n    step: float = 0.05,\n    real_sleep:\
+      \ float = 0.01,\n    max_iterations: int = 2000,\n):\n    \"\"\"Advance `clock`\
+      \ by `step` until `thread` finishes or `max_iterations` hit.\n\n    A small\
+      \ real sleep between advances gives the reader threads + main poll\n    loop\
+      \ scheduler time. Total real wall <= max_iterations * real_sleep.\n    \"\"\"\
+      \n    i = 0\n    while thread.is_alive() and i < max_iterations:\n        clock.advance(step)\n\
+      \        time.sleep(real_sleep)\n        i += 1\n    thread.join(timeout=5)\n\
+      \n\ndef _read_log_events(log_path: Path) -> list[dict]:\n    if not log_path.exists():\n\
+      \        return []\n    out = []\n    for line in log_path.read_text(encoding=\"\
+      utf-8\").splitlines():\n        line = line.strip()\n        if not line:\n\
+      \            continue\n        try:\n            out.append(_json.loads(line))\n\
+      \        except _json.JSONDecodeError:\n            # v1.15.7 (C): defensive\
+      \ JSONL parse. A torn line can only\n            # appear if an append was interrupted\
+      \ mid-write; v1.15.7 (A)\n            # makes the production append OS-lock-atomic\
+      \ so this should\n            # no longer occur — but a telemetry-log reader\
+      \ must never\n            # crash on a partial line regardless (windows-py3.10\
+      \ abort-\n            # teardown surfaced this). Drop the torn line; the events\n\
+      \            # this helper's assertions care about are written whole.\n    \
+      \        continue\n    return out\n\n\ndef _setup_repo_root(tmp_path: Path)\
+      \ -> Path:\n    (tmp_path / \"consensus-state\" / \"state\").mkdir(parents=True,\
+      \ exist_ok=True)\n    return tmp_path\n\n\ndef _anchors():\n    return {\n \
+      \       \"iteration_id\": \"iter-test\",\n        \"reviewer_id\": \"codex-test\"\
+      ,\n        \"pass_id\": \"codex-test-pass1\",\n    }\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 1 — streamed lines appear in dispatch-log with correct seq + content\n\
+      # --------------------------------------------------------------------------\n\
+      \n\ndef test_streamed_lines_appear_in_dispatch_log(tmp_path):\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
+      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
+      \    # 5 lines scheduled at t = 0.0 (all immediately available); proc exits\
+      \ at t=0.5.\n    scheduled = [\n        (0.0, b\"line1\\n\"),\n        (0.0,\
+      \ b\"line2\\n\"),\n        (0.0, b\"line3\\n\"),\n        (0.0, b\"line4\\n\"\
+      ),\n        (0.0, b\"line5\\n\"),\n    ]\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=0.5)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        prompt=\"hi\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n\
+      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
+      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n\
+      \        poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive(),\
+      \ \"runner did not finish\"\n    assert \"e\" not in holder, f\"unexpected exception:\
+      \ {holder.get('e')}\"\n    assert holder[\"out\"] == '{\"ok\": true}'\n\n  \
+      \  events = _read_log_events(log_path)\n    stream_events = [e for e in events\
+      \ if e[\"event\"] == \"dispatch_streamed_line\"]\n    assert len(stream_events)\
+      \ == 5, f\"expected 5 stream events, got {len(stream_events)}\"\n    for i,\
+      \ ev in enumerate(stream_events):\n        assert ev[\"seq\"] == i, f\"event\
+      \ {i} seq={ev['seq']}\"\n        assert ev[\"line_truncated\"] == f\"line{i\
+      \ + 1}\"\n        assert ev[\"truncated\"] is False\n        assert ev[\"stream\"\
+      ] == \"stdout\"\n        assert ev[\"pass_id\"] == \"codex-test-pass1\"\n\n\n\
+      # --------------------------------------------------------------------------\n\
+      # Test 2 — long lines truncated to 200 chars; full length recorded\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_long_lines_are_truncated_to_200_chars(tmp_path):\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
+      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
+      \    big = (\"A\" * 1000) + \"\\n\"\n    scheduled = [(0.0, big.encode(\"utf-8\"\
+      ))]\n    factory = _make_factory(clock, scheduled_stdout=scheduled, exit_at=0.2)\n\
+      \n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n        codex_bin=\"\
+      codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n      \
+      \  schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
+      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n\n    events = _read_log_events(log_path)\n    stream = [e for e in events\
+      \ if e[\"event\"] == \"dispatch_streamed_line\"]\n    assert len(stream) ==\
+      \ 1\n    ev = stream[0]\n    assert len(ev[\"line_truncated\"]) == 200\n   \
+      \ assert ev[\"line_full_length\"] == 1000\n    assert ev[\"truncated\"] is True\n\
+      \n\n# --------------------------------------------------------------------------\n\
+      # Test 3 — heartbeat fires at heartbeat_interval cadence\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_heartbeat_fires_at_interval(tmp_path):\n    \"\"\"Advance time\
+      \ so codex appears to run for ~95s with no stdout; with\n    stall_silence_seconds=200\
+      \ we don't trip silence-abort; with\n    heartbeat_interval=30 we should see\
+      \ ~3 heartbeats (at ~30, ~60, ~90).\n\n    NOTE: pre-first-line silence falls\
+      \ back to `now - start_ts`. So we set\n    `stall_silence_seconds` high enough\
+      \ (200s) to not trip silence-abort,\n    and emit no stdout, just heartbeats.\n\
+      \    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    # No stdout; proc exits at clock_rel = 95s.\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=[], exit_at=95.0)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        prompt=\"x\",\n        codex_bin=\"codex\",\n        timeout_seconds=300,\
+      \  # so wall-time hard ceiling isn't hit\n        repo_root=repo_root,\n   \
+      \     schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=200.0,  # don't\
+      \ trip silence-abort\n        poll_interval=0.01,\n        time_fn=clock.now,\n\
+      \        popen_factory=factory,\n    )\n\n    # Advance the clock in 1s ticks\
+      \ up to ~100s (past exit_at=95s), with\n    # short real sleeps so the main\
+      \ loop body can iterate, observe the\n    # advanced clock, and emit heartbeats.\n\
+      \    for _ in range(100):\n        clock.advance(1.0)\n        time.sleep(0.01)\n\
+      \    th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not finish\"\
+      \n    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n\n    events = _read_log_events(log_path)\n    hb = [e for e in events if\
+      \ e[\"event\"] == \"dispatch_heartbeat\"]\n    # Expect heartbeats at ~30, 60,\
+      \ 90 → 3 events (could be 2 or 4 depending\n    # on scheduler timing; assert\
+      \ in window).\n    assert 2 <= len(hb) <= 4, f\"expected ~3 heartbeats, got\
+      \ {len(hb)}: {hb}\"\n    # Ages should be monotonically increasing.\n    ages\
+      \ = [ev[\"age_seconds\"] for ev in hb]\n    assert ages == sorted(ages), f\"\
+      heartbeat ages not monotonic: {ages}\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 4 — heartbeat silence triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_heartbeat_silence_triggers_abort(tmp_path):\n    \"\"\"Codex emits\
+      \ 2 lines at t=0, then goes silent; advance clock past\n    stall_silence_seconds\
+      \ → expect `dispatch_aborted` with\n    `abort_source=\"watchdog_silence\"`\
+      \ and CodexInvocationError raised.\n    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _ControllableClock()\n    log_path = repo_root / \"consensus-state\"\
+      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    scheduled = [\n        (0.0, b\"\
+      a\\n\"),\n        (0.0, b\"b\\n\"),\n    ]\n    # Proc would exit at 1000s but\
+      \ we'll terminate via silence-abort first.\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=1000.0)\n\n    exc_holder = {}\n\n   \
+      \ def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
+      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
+      \           timeout_seconds=300,\n                repo_root=repo_root,\n   \
+      \             schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
+      \                anchors=_anchors(),\n                heartbeat_interval=1000.0,\
+      \  # don't fire heartbeats\n                stall_silence_seconds=10.0,\n  \
+      \              poll_interval=0.01,\n                time_fn=clock.now,\n   \
+      \             popen_factory=factory,\n            )\n        except Exception\
+      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
+      \ daemon=True)\n    th.start()\n    # Let the reader thread consume the 2 scheduled\
+      \ lines.\n    time.sleep(0.1)\n    # Now advance the clock 15s — past the 10s\
+      \ stall_silence_seconds since\n    # last_streamed_ts was set when those lines\
+      \ were read (at clock=1000.0).\n    clock.advance(15.0)\n    th.join(timeout=10)\n\
+      \    assert not th.is_alive(), \"runner did not abort\"\n\n    assert \"e\"\
+      \ in exc_holder, \"expected CodexInvocationError\"\n    assert isinstance(exc_holder[\"\
+      e\"], _dispatch_codex.CodexInvocationError)\n\n    events = _read_log_events(log_path)\n\
+      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
+      \    assert len(aborts) == 1, f\"expected 1 abort event, got {aborts}\"\n  \
+      \  assert aborts[0][\"abort_source\"] == \"watchdog_silence\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 5 — operator abort-signal file triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_operator_abort_signal_file_triggers_abort(tmp_path):\n    \"\"\"\
+      Mid-run, write `consensus-state/state/abort-dispatch-<pass_id>.signal`;\n  \
+      \  expect wrapper to SIGTERM codex, emit `dispatch_aborted` with\n    `abort_source=\"\
+      operator_signal_file\"`, delete the signal file, and raise.\n    \"\"\"\n  \
+      \  repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    # Codex would run a long time; we'll abort externally.\n    factory\
+      \ = _make_factory(clock, scheduled_stdout=[(0.0, b\"working\\n\")], exit_at=1000.0)\n\
+      \n    exc_holder = {}\n\n    def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
+      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
+      \           timeout_seconds=10000,\n                repo_root=repo_root,\n \
+      \               schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
+      \                anchors=_anchors(),\n                heartbeat_interval=10000.0,\n\
+      \                stall_silence_seconds=10000.0,  # don't fire silence-abort\n\
+      \                poll_interval=0.01,\n                time_fn=clock.now,\n \
+      \               popen_factory=factory,\n            )\n        except Exception\
+      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
+      \ daemon=True)\n    th.start()\n    # Wait a beat so the loop is running.\n\
+      \    time.sleep(0.1)\n    signal_path = repo_root / \"consensus-state\" / \"\
+      state\" / \"abort-dispatch-codex-test-pass1.signal\"\n    signal_path.write_text(\"\
+      operator manual abort\", encoding=\"utf-8\")\n    th.join(timeout=10)\n    assert\
+      \ not th.is_alive(), \"runner did not abort\"\n\n    assert \"e\" in exc_holder,\
+      \ \"expected CodexInvocationError\"\n    assert isinstance(exc_holder[\"e\"\
+      ], _dispatch_codex.CodexInvocationError)\n\n    events = _read_log_events(log_path)\n\
+      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
+      \    assert len(aborts) == 1, f\"expected 1 abort event, got {aborts}\"\n  \
+      \  assert aborts[0][\"abort_source\"] == \"operator_signal_file\"\n    assert\
+      \ \"operator manual abort\" in aborts[0].get(\"abort_reason\", \"\")\n\n   \
+      \ # Signal file should be deleted.\n    assert not signal_path.exists(), \"\
+      abort signal file was not deleted\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 6 — wall-time hard ceiling\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_wall_time_hard_ceiling(tmp_path):\n    \"\"\"Codex streams continuously\
+      \ (so silence-abort never fires) but runs\n    past `timeout_seconds + stall_silence_seconds`\
+      \ → expect dispatch_aborted\n    with abort_source=\"wall_time_hard_ceiling\"\
+      \ and CodexInvocationError.\n    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _ControllableClock()\n    log_path = repo_root / \"consensus-state\"\
+      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    # Stream a line every 1s of clock-time\
+      \ forever, so silence never fires.\n    # The reader thread reads scheduled\
+      \ bytes as clock advances past them.\n    scheduled = [(float(i), f\"keepalive{i}\\\
+      n\".encode(\"utf-8\")) for i in range(0, 200)]\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=10000.0)\n\n    exc_holder = {}\n\n  \
+      \  def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
+      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
+      \           timeout_seconds=10,  # wall = 10\n                repo_root=repo_root,\n\
+      \                schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
+      \                anchors=_anchors(),\n                heartbeat_interval=1000.0,\n\
+      \                stall_silence_seconds=5.0,  # grace = 5; hard ceiling at 15s\n\
+      \                poll_interval=0.01,\n                time_fn=clock.now,\n \
+      \               popen_factory=factory,\n            )\n        except Exception\
+      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
+      \ daemon=True)\n    th.start()\n\n    # Advance clock in 1s steps; reader drains\
+      \ scheduled keepalives as we go,\n    # so silence_age stays low. After ~16s\
+      \ of clock advance, wall-time hard\n    # ceiling (10 + 5 = 15s) should trip.\n\
+      \    for _ in range(20):\n        clock.advance(1.0)\n        time.sleep(0.02)\n\
+      \    th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not abort\"\
+      \n\n    assert \"e\" in exc_holder, \"expected CodexInvocationError\"\n    assert\
+      \ isinstance(exc_holder[\"e\"], _dispatch_codex.CodexInvocationError)\n\n  \
+      \  events = _read_log_events(log_path)\n    aborts = [e for e in events if e[\"\
+      event\"] == \"dispatch_aborted\"]\n    assert len(aborts) == 1, f\"expected\
+      \ 1 abort, got {aborts}\"\n    assert aborts[0][\"abort_source\"] == \"wall_time_hard_ceiling\"\
+      \n\n\n# --------------------------------------------------------------------------\n\
+      # Test 7 — clean exit returns codex output payload\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_clean_exit_returns_output(tmp_path):\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _ControllableClock()\n    log_path = repo_root / \"consensus-state\"\
+      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    payload = '{\"findings\": [],\
+      \ \"verdict\": \"PASS\"}'\n    scheduled = [(0.0, b\"working...\\n\"), (0.0,\
+      \ b\"done\\n\")]\n    factory = _make_factory(\n        clock,\n        scheduled_stdout=scheduled,\n\
+      \        exit_at=0.3,\n        returncode=0,\n        output_payload=payload,\n\
+      \    )\n\n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n \
+      \       codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
+      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == payload\n\n    events = _read_log_events(log_path)\n\
+      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
+      \    assert aborts == [], f\"clean exit produced abort events: {aborts}\"\n\
+      \    stream = [e for e in events if e[\"event\"] == \"dispatch_streamed_line\"\
+      ]\n    assert len(stream) == 2\n\n\n# --------------------------------------------------------------------------\n\
+      # Optional 8th — stderr drain prevents deadlock\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_stderr_drain_prevents_deadlock(tmp_path):\n    \"\"\"codex emits\
+      \ ~100KB to stderr; without the stderr-reader thread real\n    codex would block\
+      \ on a full pipe buffer. With the drain in place,\n    dispatch completes normally.\n\
+      \n    In this fake we simulate by scheduling many stderr lines; the test\n \
+      \   asserts that _invoke_codex returns cleanly within the test budget.\n   \
+      \ \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    big_line = b\"E\" * 1000 + b\"\\n\"\n    # ~100 lines × 1001 bytes ≈\
+      \ 100KB on stderr.\n    scheduled_err = [(0.0, big_line) for _ in range(100)]\n\
+      \    scheduled_out = [(0.0, b\"ok\\n\")]\n    factory = _make_factory(\n   \
+      \     clock,\n        scheduled_stdout=scheduled_out,\n        scheduled_stderr=scheduled_err,\n\
+      \        exit_at=0.3,\n    )\n\n    th, holder = _run_invoke_in_thread(\n  \
+      \      prompt=\"x\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n\
+      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
+      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n\
+      \        poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
+      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == '{\"ok\": true}'\n"
+schema_version: 1
+iteration_id: iteration-v1158-flaky-ci-and-locked-append
