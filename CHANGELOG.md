@@ -1,26 +1,115 @@
 # Changelog
 
-## 1.14.9 - unreleased
+## 1.14.9 - 2026-05-15
 
-Open scope for next session. Autonomous run-2026-05-15-overnight
-halted cleanly after 5 iterations + 5 release tags (v1.14.4 →
-v1.14.8); see audit log at
-`consensus-state/autonomous-runs/run-2026-05-15-overnight/log.jsonl`.
+Seal-pipeline defect fix from iteration-seal-archive-collision-fix
+(workflow A weighted-synthesis convergence; codex + gemini + claude;
+no blocking objections). Workflow B audit of the implementation by
+codex + gemini.
 
-Queued candidates for next session:
+**Defect:** `review_write_and_seal.handle` built the archive filename
+from `reviewer_id` only (`{date}-{iteration_id}-{reviewer_id}-pass.yaml`),
+while the index keys uniqueness on `pass_id`. Re-using a reviewer_id
+across passes (e.g. `gemini-iteration-0012-2` for pass1 AND pass2)
+produced a hard `packet_path_collision` at the path-exists guard
+*before* the pass_id-aware index logic ever ran — forcing operators
+to mint throwaway reviewer-ids per attempt. `test_contributors.py:135`'s
+docstring ("filename must contain iteration_id + reviewer_id + pass_id
+tokens") documented the intended 4-token contract; the implementation
+had silently regressed to 3 tokens at/before extraction.
 
-- Workflow C multi-iteration auto-execution loop (v1.15.0 named
-  blocker — multi-session work; cross-platform interrupt-file
-  watching + integration tests with real peer dispatches +
-  resume-after-halt semantics design).
-- iter-0045 candidate: empirically evaluate whether
-  `PHASE_CONVERGE → "proposal"` would produce higher-quality
-  converge-mode outputs than the current interim mapping
-  `PHASE_CONVERGE → "review"`. Requires several real
-  Workflow A converge-phase dispatches as the data source.
-- Project-level `.consensus/autonomous-policy.yaml` (deferred
-  from iter-three-gaps; needs empirical evidence operators
-  want it across multiple Workflow C runs — we have zero so far).
+**Fix (`consensus_mcp/tools/review_write_and_seal.py`):**
+
+- Archive filename is now 4-token:
+  `{date}-{iteration_id}-{reviewer_id}-{safe_pass_id}-pass.yaml`.
+  Filename uniqueness key == index uniqueness key (pass_id).
+- New `_sanitize_for_filename`: maps `[^A-Za-z0-9._-]`→`-`, collapses
+  runs, strips, falls back to `pass`. Applied to the FILENAME only —
+  the raw `pass_id` is preserved verbatim in the index entry and
+  packet body.
+- The index `pass_id` lookup is REORDERED ahead of the path-exists
+  guard, and idempotency is judged on **content identity** — the
+  canonical hash of the packet with the volatile seal-provenance
+  fields (`sealed_at_utc`, `packet_sha256`) stripped — compared
+  against the actual ON-DISK archived packet. An exact re-seal is
+  an idempotent SUCCESS (`idempotent: true`, `index_updated:
+  false`, existing recorded path; scheme-agnostic so old-scheme
+  archives still resolve) **regardless of seal time**. This
+  matters because a dispatch retry builds a fresh packet with no
+  `sealed_at_utc`; a sha-based check would see a new timestamped
+  hash and mis-classify the retry as a collision — defeating the
+  whole feature for its primary use case (caught by codex Workflow
+  B audit, HIGH).
+- Integrity guard on the idempotent path: a tampered archive that
+  no longer matches the incoming content identity yields
+  `index_collision`; one that parses as valid **non-mapping** YAML
+  (list/scalar) yields `idempotent_target_integrity_mismatch`
+  without crashing; a deleted/unreadable archive yields
+  `idempotent_target_missing` / `_unreadable`. The idempotent
+  success return reports the **authoritative on-disk artifact
+  hash** (the file's own `packet_sha256`, or a reconstruction if
+  absent), never a missing/stale value copied from the index.
+- The sealed body now always self-records the canonical `pass_id`
+  (`packet.setdefault`), including for pass-label-only packets,
+  and a parameter-vs-body `pass_id` consistency guard mirrors the
+  existing `iteration_id` / `reviewer_id` guards.
+- `index_collision` (same pass_id, substantively *different*
+  content) preserved with a content-identity-based detail string.
+- path-exists guard retained as a defense-in-depth backstop with a
+  distinct detail string (unreachable in normal flow).
+- `output_schema` + the `handle()` docstring updated to document
+  the new `idempotent` success field and all new error codes; a
+  schema-contract test pins every `handle()` error code to the
+  schema enum so this drift cannot silently regress.
+
+**Workflow B audit chain** (post-review; codex iterated, gemini
+approved the core design): gemini APPROVED with no findings; codex
+surfaced and drove resolution of 6 distinct real gaps across 4
+audit passes — output-schema drift, missing pass_id consistency
+guard, a HIGH timestamp-dependent-idempotency defect, a
+non-mapping-archive crash, pass-label body identity, and a
+stale/missing idempotent-return hash — before reaching
+`goal_satisfied: true` with no blocking objections. The HIGH
+finding (idempotency silently broken by the pre-existing
+`sealed_at_utc`-in-hash stamp) would have shipped a dead feature
+without this audit.
+
+**Backward compat:** the 162 existing archives are NOT migrated.
+`review_read_post_seal` resolves via the index's stored relative
+path and never parses the filename, so old-scheme archives remain
+fully readable. Mixed-scheme archive directory across the v1.14.x
+boundary is expected; the index is the resolution source of truth.
+
+**Tests:** new `consensus_mcp/tests/test_seal_collision_fix.py`
+(19 cases: the exact `gemini-iteration-0012-2` same-reviewer-
+distinct-pass scenario; timestamp-independent idempotent success;
+non-mapping-archive integrity guard; target-missing; pass_id
+parameter/body consistency; pass-label body identity stamping;
+authoritative-hash return when the index sha is blank;
+hostile-pass_id sanitization; schema-contract pinning of every
+`handle()` error code); `test_contributors.py` fake_t6 helpers
+updated to the 4-token scheme. Full suite **723 pass, 0
+regressions** (excluding the pre-existing `test_dispatch_codex`
+ordering flake + `jsonschema`-missing environmental issue, both
+predating this work).
+
+**Deferred with stated reasons** (recorded, not silently dropped):
+
+- `superseded_by` index annotation for void seals — 2/3
+  contributors scoped it out as beyond the minimal defect; file
+  preservation alone already satisfies the audit-history
+  requirement. Own small consult if causal supersession tracking
+  is wanted.
+- Forensic scan of the 162 existing archives for latent mis-seals
+  — blocked on an undefined remediation model for immutable sealed
+  history.
+- `index.yaml` non-atomic read-modify-write race — pre-existing,
+  orthogonal; separate hardening consult.
+
+Carried forward from the overnight run (still open, unchanged):
+Workflow C multi-iteration engine (v1.15.0 named blocker); iter-0045
+PHASE_CONVERGE mapping empirical evaluation; project-level
+`.consensus/autonomous-policy.yaml`.
 
 ## 1.14.8 - 2026-05-14
 
