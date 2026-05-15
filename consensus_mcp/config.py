@@ -99,6 +99,26 @@ VALID_DISPOSITION_FOR_PROPOSE_CONVERGE = {
     DISPOSITION_WEIGHTED_SYNTHESIS,
 }
 
+# === Converged-plan convention enforcement (v1.15.1) ===
+# Machine-enforcement level for the v1.15.0 converged-plan convention
+# blocks (falsification / independent_safeguard /
+# decisive_experiment_before_next_iteration). Default `graduated`:
+# hard-reject ONLY (i) operator-declared safety/data-loss/bricking/
+# irreversible risk class missing a conforming independent_safeguard
+# and (ii) empirical_status:proven with no recorded experiment; warn +
+# annotate otherwise. See consensus_mcp.validators.validate_converged_plan
+# and docs/workflows/converged-plan-convention.md.
+ENFORCEMENT_OFF = "off"
+ENFORCEMENT_WARN = "warn"
+ENFORCEMENT_GRADUATED = "graduated"
+ENFORCEMENT_STRICT = "strict"
+VALID_CONVERGED_PLAN_ENFORCEMENT = {
+    ENFORCEMENT_OFF,
+    ENFORCEMENT_WARN,
+    ENFORCEMENT_GRADUATED,
+    ENFORCEMENT_STRICT,
+}
+
 # === Snapshot triggers ===
 SNAPSHOT_MANUAL = "manual-only"
 SNAPSHOT_ON_CLOSE = "on-iteration-close"
@@ -174,6 +194,7 @@ def default_config() -> dict:
         "convergence": {
             "rule": CONVERGE_STRICT_MAJ,
             "finding_disposition": DISPOSITION_WEIGHTED_SYNTHESIS,
+            "converged_plan_enforcement": ENFORCEMENT_GRADUATED,
         },
         "patches": {
             "authoring": PATCH_CLAUDE_ONLY,
@@ -333,6 +354,13 @@ def validate(config: dict) -> None:
     if disposition not in VALID_DISPOSITION:
         raise ConfigValidationError(
             f"convergence.finding_disposition={disposition!r} not in {sorted(VALID_DISPOSITION)}"
+        )
+    # v1.15.1: converged-plan convention machine-enforcement level.
+    cpe = convergence.get("converged_plan_enforcement", ENFORCEMENT_GRADUATED)
+    if cpe not in VALID_CONVERGED_PLAN_ENFORCEMENT:
+        raise ConfigValidationError(
+            f"convergence.converged_plan_enforcement={cpe!r} not in "
+            f"{sorted(VALID_CONVERGED_PLAN_ENFORCEMENT)}"
         )
 
     # === Cross-validation rules per converged-plan.yaml ===
@@ -529,6 +557,7 @@ def synthesize_legacy_config(repo_root: Path) -> dict:
         "convergence": {
             "rule": CONVERGE_UNANIMOUS,
             "finding_disposition": DISPOSITION_ALL_OR_NOTHING,
+            "converged_plan_enforcement": ENFORCEMENT_GRADUATED,
         },
         "patches": {"authoring": PATCH_CLAUDE_ONLY, "max_patch_lines": 600},
         "snapshots": {

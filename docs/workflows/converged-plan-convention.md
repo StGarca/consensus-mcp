@@ -1,8 +1,10 @@
 # Converged-plan convention: falsification, independent safeguard, decisive experiment
 
-Status: **authoring convention, doctrine-enforced.** Machine
-validation (engine/validator) is a sequenced follow-up — see the
-named blocker at the end.
+Status: **authoring convention, doctrine-enforced AND
+machine-enforced as of v1.15.1.** The v1.15.0 tag `4e81f9e` shipped
+this convention as doctrine only (bundled skill + Workflow B audit,
+zero engine code). v1.15.1 adds the seal-time gate — see "Machine
+enforcement (shipped v1.15.1)" at the end.
 
 Origin: `iteration-convergence-correctness-doctrine` (Workflow A
 weighted-synthesis: claude + codex + gemini; no blocking
@@ -131,18 +133,59 @@ the next step instead of opening another speculative iteration.
 
 ---
 
-## Named blocker — machine enforcement (sequenced follow-up)
+## Machine enforcement (shipped v1.15.1)
 
-Engine/validator enforcement of these blocks is **deferred** with
-a concrete, file-verified blocker: there is no standalone
-converged-plan schema; the engine reads/writes generic YAML plan
-keys (`workflow_engine.py:505-525`,
-`consensus_get_iteration_outcome.py:114-123`). Enforcement needs
-its own schema-design consult plus a not-falsifiable-from-artifacts
-classifier, or it becomes a rejected-goal_packet papercut.
-Starting design for that follow-up (gemini's proposal in this
-consult): a `severity` field on the goal packet + a
-`consensus_gate.py` check that fails a critical-severity proposal
-lacking a decoupled `independent_safeguard`. Until then this
-convention is enforced by doctrine (the bundled consensus-workflow
-skill, loaded every consult) and by Workflow B audit.
+The v1.15.0 named blocker is **closed**. Consult:
+`iteration-converged-plan-machine-enforcement` (Workflow A
+weighted-synthesis: claude + codex + gemini; shared-prior
+self-check PASSED). The v1.15.0 recorded starting design
+(`severity` + `consensus_gate.py`) was **partially refuted by
+first-hand code-reading**: `consensus_mcp/validators/
+consensus_gate.py` is the Phase-0 production-readiness gate (P0-V6),
+the WRONG component. The shipped mechanism:
+
+- **Schema:** `consensus_mcp/schemas/converged_plan_convention.schema.json`
+  (machine contract; `empirical_status` enum identical to this doc).
+- **Validator:** `consensus_mcp/validators/validate_converged_plan.py`
+  — structure + consequence ONLY. It enforces the consequence of the
+  orchestrator-attested `falsifiable_from_artifacts` bool; it does
+  **not** classify the defect (no keyword heuristic — heuristics are
+  the shared-prior trap this doctrine documents).
+- **Provenance-by-citation:** the orchestrator authors the convention
+  in `convention-input.yaml` in the iteration dir (the one channel
+  that already reaches seal time). `_seal_converged_plan` validates it
+  and seals it **INTO** `converged-plan.yaml` (same hash) with a
+  required non-empty `cited_pass_ids` listing the contributor passes
+  it synthesizes from. No loose untracked sidecar; no single-winner
+  extraction.
+- **Graduated strictness:** `convergence.converged_plan_enforcement`
+  = `off|warn|graduated|strict` (default `graduated`). Hard-reject
+  fail-closed ONLY for (i) operator-declared safety/data-loss/
+  bricking/irreversible risk class missing a conforming
+  root-cause-independent `independent_safeguard`, (ii)
+  `empirical_status:proven` with no recorded `experiment_result`.
+  Otherwise warn + annotate `convention_violations`.
+- **Recursive-trap defense (the highest-order constraint — v1.15.0
+  lesson 1 applied to our own gate):** a green gate must never become
+  the new "convergence mistaken for correctness". The validator has
+  zero code path deriving any approved/correct/ready/sound state from
+  the blocks (pinned by a source-grep test), and every result stamps
+  an unconditional `gate_scope` disclaimer surfaced by
+  `consensus_get_iteration_outcome` adjacent to any pass marker: a
+  pass means the required thinking was **recorded**, never that it is
+  **true**. *"Would this safeguard still work if the root cause were
+  entirely different?"* remains a human judgement.
+
+**Backward compatibility:** plans without `convention_schema_version`
+(this session's iter-0043 .. v1.15.0) still load through
+`consensus_get_iteration_outcome`, explicitly marked
+`enforcement: doctrine-only` — NOT silently valid, NOT rejected.
+
+**Artifact truth:** the v1.15.0 tag `4e81f9e` is doctrine-only (zero
+engine code). Machine enforcement exists only from the v1.15.1 tag
+forward.
+
+**Named blocker (need-evidence, deferred):** operator goal_packet
+`defect_class`/`risk_class` declaration UX + an anti-gaming
+cross-check on `falsifiable_from_artifacts` — ill-posed until the
+shipped slice produces real usage data.

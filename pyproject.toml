@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-version = "1.15.0"
+version = "1.15.1"
 description = "MCP server enforcing G1-G5 consensus gates (sealed-review provenance, canonical-006 dry-run, intra-file scope, production-scope match, mediated ledger updates)"
 authors = [{name = "stgarca"}]
 requires-python = ">=3.10"
@@ -39,6 +39,8 @@ consensus_mcp = [
   "dispatch_templates/*.json",
   "docs/*.md",
   "spec_template.md",
+  # v1.15.1: converged-plan convention machine-enforcement contract.
+  "schemas/*.json",
   "tests/fixtures/dispatch_codex/*",
   # iter-0040: Claude Code bootstrap pack (skill + slash command), copied
   # into ~/.claude by `consensus-init --install-claude-code`.

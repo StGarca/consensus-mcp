@@ -10,6 +10,74 @@ the entry stays for the historical record.
 
 ---
 
+## Advisory 2026-05-15: gemini dispatch fails on gemini CLI ≥ 0.43.0-preview.0
+
+**Affected versions:** all consensus-mcp versions through `v1.15.1`
+(the gemini dispatcher behavior is unchanged across this range).
+
+**Severity:** Functional — gemini peer reviews silently fail to
+seal when the installed `gemini` CLI enforces workspace trust.
+codex + claude consensus is unaffected; the cross-AI safety net
+degrades from 3-AI to 2-AI until worked around.
+
+**Issue:**
+- `gemini` CLI `0.43.0-preview.0`+ refuses headless/automated runs
+  in an "untrusted" directory, emitting the trust error to stderr
+  and **empty stdout**. `consensus_mcp/_dispatch_gemini.py` does
+  not set `GEMINI_CLI_TRUST_WORKSPACE` (or pass `--skip-trust`),
+  so the dispatcher sees empty output and fails with
+  `GeminiOutputParseError` ("Expecting value: line 1 column 1").
+- Observed first-hand 2026-05-15 during the v1.15.1 Workflow B
+  audit: gemini pass-1 failed twice (initial + dispatcher
+  auto-retry) for exactly this reason.
+
+**Workaround (no upgrade needed):** export
+`GEMINI_CLI_TRUST_WORKSPACE=true` in the environment that runs the
+dispatcher (or the MCP server). The v1.15.1 audit was completed
+this way; gemini returned clean approvals once the env var was set.
+
+**Correct upgrade target:** none yet — the dispatcher fix is the
+named v1.15.2 follow-up (`_dispatch_gemini.py` was in the v1.15.1
+iteration's `forbidden_files`, so it was correctly NOT patched
+under that scope). This advisory is the standing record until
+v1.15.2 ships the dispatcher-level fix.
+
+**Provenance:**
+- Diagnosed during `iteration-converged-plan-machine-enforcement`
+  (v1.15.1 Workflow B audit). Recorded as a v1.15.2 named blocker
+  in that iteration's `fix-response-pass2.md`.
+
+---
+
+## Advisory 2026-05-15: v1.15.0 converged-plan convention is doctrine-only
+
+**Affected versions:** `v1.15.0`
+
+**Severity:** Scope clarification (no regression). The v1.15.0 tag
+`4e81f9e` shipped the converged-plan convention
+(`falsification` / `independent_safeguard` /
+`decisive_experiment_before_next_iteration`) as an **authoring
+convention enforced by doctrine only** — bundled skill + Workflow
+B audit, **zero engine code**.
+
+**Issue:** users on `v1.15.0` may assume the convention is
+machine-validated. It is not. There is no schema, no validator, no
+seal-time gate on `v1.15.0`.
+
+**Correct upgrade target:** `v1.15.1` — adds the JSON Schema, the
+structure/consequence validator, the fail-closed seal-time gate,
+the `convergence.converged_plan_enforcement` knob (default
+`graduated`), and read-time surfacing. Machine enforcement exists
+only from the `v1.15.1` tag forward.
+
+**Provenance:**
+- `iteration-converged-plan-machine-enforcement` (Workflow A
+  weighted-synthesis: claude + codex + gemini; shared-prior
+  self-check PASSED; Workflow B audit clean: gemini ×2, codex
+  pass-4b goal_satisfied=true, 0 blocking, 0 findings).
+
+---
+
 ## Advisory 2026-05-14: v1.14.0 + v1.14.1 bundled-skill drift
 
 **Affected versions:** `v1.14.0`, `v1.14.1`

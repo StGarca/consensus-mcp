@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/consensus-mcp/converged_plan_convention.schema.json",
+  "title": "Converged-plan convention block (v1.15.0 doctrine, machine-enforced from v1.15.1)",
+  "description": "Machine contract for the falsification / independent_safeguard / decisive_experiment_before_next_iteration blocks defined in docs/workflows/converged-plan-convention.md. The schema validates STRUCTURE and PRESENCE only. It does NOT and CANNOT assert the hypothesis is true or the safeguard adequate — that remains a human judgement (see validators/validate_converged_plan.py GATE_SCOPE_DISCLAIMER).",
+  "type": "object",
+  "required": [
+    "convention_schema_version",
+    "falsification",
+    "independent_safeguard",
+    "decisive_experiment_before_next_iteration",
+    "cited_pass_ids"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "convention_schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Bumped when the convention shape changes. Plans without this key are legacy/doctrine-only, never silently valid."
+    },
+    "falsification": {
+      "type": "object",
+      "required": ["hypothesis", "falsifiable_from_artifacts", "empirical_status"],
+      "additionalProperties": true,
+      "properties": {
+        "hypothesis": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The converged root cause, one sentence."
+        },
+        "falsifiable_from_artifacts": {
+          "type": "boolean",
+          "description": "true: refutable by reading evidence already in the packet (proof is a test shippable now). false: the DEFINED CLASS — refutable only by an external observation (hardware/firmware state, environment/toolchain, concurrency/timing)."
+        },
+        "discriminating_experiment": {
+          "type": "string",
+          "description": "The single external test that would refute the hypothesis, concrete enough to run as-is. Required (non-empty) when falsifiable_from_artifacts is false."
+        },
+        "refutation_observation": {
+          "type": "string",
+          "description": "The specific pre-specified observable that, if seen, proves the hypothesis WRONG. Must be distinct from `hypothesis`. Required (non-empty) when falsifiable_from_artifacts is false."
+        },
+        "empirical_status": {
+          "type": "string",
+          "enum": ["proven", "pending", "refuted", "n/a"],
+          "description": "n/a: falsifiable_from_artifacts true and proving test ships here. pending: defined class, experiment named, not yet run ('fixed/shipped/root-cause-correct' FORBIDDEN). proven: experiment ran, refutation_observation did NOT occur (requires experiment_result). refuted: experiment ran, refutation_observation DID occur — load-bearing terminal state."
+        },
+        "reason_na": {
+          "type": "string",
+          "description": "Why empirical_status is n/a (the proving test is included in this iteration)."
+        },
+        "experiment_result": {
+          "type": "string",
+          "description": "Recorded outcome of the discriminating_experiment. Required for empirical_status proven."
+        }
+      }
+    },
+    "independent_safeguard": {
+      "type": "object",
+      "required": ["applicable"],
+      "additionalProperties": true,
+      "properties": {
+        "applicable": {
+          "type": "boolean",
+          "description": "false only when the defect is NOT safety-critical/data-loss/bricking/irreversible-risk. Recording the judgement is mandatory even when false."
+        },
+        "mechanism": {"type": "string", "description": "What the safeguard does."},
+        "works_if_root_cause_wrong": {
+          "type": "boolean",
+          "description": "MUST be true when applicable: the safeguard protects even if the hypothesis is 100% false."
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why it still protects even if the hypothesis is wrong (answerable from the mechanism alone); or, when not applicable, why the risk class is not triggered."
+        },
+        "ships_with_fix": {
+          "type": "boolean",
+          "description": "MUST be true when applicable: same change as the hypothesized fix, not later."
+        }
+      }
+    },
+    "decisive_experiment_before_next_iteration": {
+      "type": ["string", "null"],
+      "description": "The single test that most cleanly partitions the remaining hypothesis space, to run BEFORE the next iteration. null only when empirical_status is proven or n/a AND the fix is confirmed."
+    },
+    "cited_pass_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "description": "Provenance-by-citation: the contributor pass_ids whose content this orchestrator-authored synthesis draws from. Non-empty — the blocks are sealed INTO converged-plan.yaml (same hash), not a loose untracked sidecar, and not a mechanical single-winner extraction."
+    }
+  }
+}
