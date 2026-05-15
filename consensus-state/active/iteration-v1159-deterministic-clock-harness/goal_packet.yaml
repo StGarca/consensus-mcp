@@ -1,0 +1,150 @@
+schema_version: 1
+pilot_id: iteration-v1159-deterministic-clock-harness
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    v1.15.8 shipped the `_locked_append` audit-integrity fix and,
+    as the converged-plan-sanctioned Q2(c) INTERIM, skipped four
+    timing-fragile tests on Windows GitHub Actions
+    (`@_FLAKY_WINDOWS_CI`). The v1.15.8 named follow-up (advisory
+    2026-05-15 v1.15.8) is the Q2(a) PROPER fix: make the harness
+    deterministic so the four tests run EVERYWHERE and the skip is
+    deleted — without losing the abort/heartbeat coverage they
+    exist for. This iteration decides HOW (real concurrency design
+    surface + a deadlock risk this release line has repeatedly hit
+    — Workflow A, not a hot-patch).
+
+    VERIFIED FACTS (read first-hand in
+    `consensus_mcp/tests/test_dispatch_codex_streaming.py`; reason
+    from THESE; STATE the differential/prior you used; fast
+    unanimity on a shared prior is a verify-harder flag):
+
+    H1 — The flake is a test↔runner COORDINATION-BY-HOPE, not a
+    product defect. All four skipped tests
+    (`test_heartbeat_fires_at_interval` :438,
+    `test_heartbeat_silence_triggers_abort` :495,
+    `test_operator_abort_signal_file_triggers_abort` :557,
+    `test_wall_time_hard_ceiling` :618) run production
+    `_dispatch_codex._invoke_codex` in a daemon thread
+    (`_run_invoke_in_thread` :266 or an inline `runner()`), then
+    drive a `_ControllableClock` (:65 — manual `now()`/`advance()`,
+    no blocking) while doing REAL `time.sleep(0.01..0.1)` and
+    finally `th.join(timeout=10)` + `assert not th.is_alive()`.
+    The production loop polls `time_fn=clock.now` with real
+    `poll_interval` sleeps; `_FakePipeReader.readline()` (:119)
+    does real `time.sleep(self._real_tick=0.005)` poll ticks
+    against `clock.now()`. On loaded Windows CI runners the daemon
+    runner + 2 reader threads are not scheduled enough within the
+    wall-clock budget → "runner did not finish/abort". Logic is
+    driven by the INJECTED `time_fn`, so this is NOT a Windows
+    product code path — purely harness scheduling. Linux CI (every
+    push) + local Windows dev are green; v1.15.8 ran ≥3 green
+    Windows CI proving the locking fix with these SKIPPED.
+
+    H2 — Coverage at risk if done wrong. The four tests are the
+    ONLY automated proof of: heartbeat cadence emission;
+    silence-triggered abort (`abort_source=watchdog_silence`);
+    operator abort-signal-file detection + signal-file DELETION +
+    SIGTERM (`operator_signal_file`); wall-time hard ceiling
+    (`wall_time_hard_ceiling`). Assertions already read the
+    EMITTED `dispatch-log.jsonl` events (`_read_log_events` :307),
+    not thread-liveness — i.e. the observable outcome a
+    deterministic wait could key on already exists.
+
+    H3 — `test_clean_exit_returns_output` (:680, NOT skipped) and
+    the shared helper `_drive_clock_until_done` (:286) use the
+    SAME real-sleep-advance-loop family. Whether the redesign
+    must also cover them (consistency / latent same-class flake)
+    vs. scope strictly to the four skipped tests is a real
+    decision, not a given.
+
+  question: |
+    Each contributor: STATE THE DIFFERENTIAL/PRIOR you reason
+    from. For each Q: your stance, justified vs the STRONGEST
+    counter-position, AND the concrete observation that would
+    show you WRONG. `structural_abstention` is OK per question.
+
+    Q1 — SYNCHRONIZATION MECHANISM. Replace "advance clock + real
+    sleep + hope the daemon runner/readers interleave + join(10)"
+    with a deterministic test↔runner handshake. Weigh at least:
+      (a) Synchronizing clock: `_ControllableClock.advance()`
+          BLOCKS until the runner + both reader threads have
+          observably consumed the new time and quiesced (a
+          barrier/handshake). No real sleeps. RISK: if a waiter
+          is blocked elsewhere (reader at EOF, proc not exited),
+          advance() can deadlock — the exact stall mode this
+          release line keeps hitting.
+      (b) Outcome-driven wait: keep the threads but replace every
+          real `time.sleep` + `th.join(timeout)` with waiting on
+          a `threading.Event`/`Condition` the runner signals when
+          the EXPECTED observable (the specific `dispatch-log`
+          event, or abort/exit) has occurred — event-driven, so
+          deterministic under load even though a generous safety
+          timeout remains. Needs a progress signal source.
+      (c) Single-threaded cooperative drive: remove the daemon
+          runner entirely; the test pumps `_invoke_codex`'s loop
+          (or a seam) step-by-step on one thread. Biggest rewrite;
+          removes thread scheduling from the equation entirely.
+      (d) Hybrid / something better you can defend.
+      Decide the mechanism. Where does the progress signal come
+      from WITHOUT polluting production `_invoke_codex` with
+      test-only hooks — or, if a minimal production seam IS
+      warranted, justify it as a legitimate observability point
+      (not a test backdoor) and bound it. Is the chosen mechanism
+      provably deadlock-free (state the argument: every waiter has
+      a guaranteed waker on every path incl. abort/EOF/exception)?
+
+    Q2 — SCOPE. (i) the four `@_FLAKY_WINDOWS_CI` tests only;
+    (ii) + `_drive_clock_until_done` + `test_clean_exit_returns_
+    output` (same real-sleep family — fix the class, not the
+    instances); (iii) also a shared deterministic harness
+    primitive (e.g. a `_SyncClock`/`_FakePipeReader` redesign)
+    every clock-driven test adopts. Which, and what is the
+    smallest change that removes the skip AND the latent same-class
+    flake without a gratuitous rewrite (no-deferral if bounded;
+    name a CONCRETE blocker if you defer any of it)?
+
+    Q3 — DEADLOCK-AVOIDANCE DESIGN + VERIFICATION. Sketch the
+    concrete wake-discipline (which primitive; who notifies whom
+    on the heartbeat, silence-abort, operator-signal, wall-ceiling,
+    clean-exit, AND exception paths) such that no test can hang.
+    Then the proven-bar: a deterministic-harness fix is NOT proven
+    by one green run — define the gate (the skip is deleted AND
+    the four tests run on Windows CI AND the determinism argument
+    holds AND N consecutive green Windows CI runs of the same
+    commit; state N and the refutation observation), per
+    provisional-until-proven.
+
+  non_goals:
+    - "re-litigating the v1.15.8 _locked_append fix (shipped, 2-pass Workflow B clean, >=3-green proven)"
+    - "product/behavior changes to _invoke_codex beyond, at most, a single justified+bounded observability seam (Q1 decides)"
+    - "widening join/sleep budgets as the fix — v1.15.8 rejected it as still probabilistic on loaded runners"
+    - "reintroducing Windows-CI flake — any redesign that is not provably deadlock-free is out of scope"
+  type: design_consult
+allowed_files:
+  - consensus_mcp/tests/test_dispatch_codex_streaming.py
+forbidden_files:
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/_dispatch_codex.py
+max_iterations: 3
+fix_author_policy: permissive
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml with per-Q weighted synthesis + deadlock-free argument + provisional-until-proven gate (N consecutive green Windows CI, skip deleted)
+    check: 'true'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-15T22:30:00Z'
+  scope_signature: 'v1159-deterministic-clock-harness'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis

@@ -1,0 +1,153 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+converged_at_utc: '2026-05-15T22:45:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+shared_prior_self_check:
+  result: PASSED
+  reasoning: |
+    Fast 3/3 unanimity on the DIAGNOSIS (test<->runner
+    coordination-by-hope / missing happens-before, not a product
+    defect) and on SCOPE (class-wide incl. `_drive_clock_until_
+    done` + `test_clean_exit_returns_output`; delete the marker
+    with no phased follow-up) — a verify-harder flag per the
+    v1.15.0 doctrine. But the differentials were DISTINCT and the
+    proposed MECHANISMS DISAGREED, which is the opposite of
+    laundered agreement: claude reasoned from a test-determinism
+    prior (advance only on a demonstrated observation) and
+    proposed a clock gated on the production `now()` call; gemini
+    reasoned from "eliminate ALL real `time.sleep` on the
+    execution path" and proposed monkeypatching GLOBAL
+    `time.sleep`; codex reasoned from "a missing happens-before
+    contract between the virtual clock and runner/readers" and
+    proposed a private keyword-only `sleep=` DI hook, explicitly
+    rejecting global monkeypatch. Three routes, three different
+    levers, each citing the embedded harness (`_ControllableClock`
+    :65 no wait/notify; `_FakePipeReader` :119 real 5ms poll;
+    join(timeout) at :438/495/557/618; assertions key on emitted
+    `dispatch-log` via `_read_log_events` :307). Agreement on
+    diagnosis + disagreement on mechanism = genuine convergence;
+    the mechanism was decided by weighing SAFETY with
+    project-specific evidence ([[feedback-monkeypatch-getattr-
+    pollution]]: this project has been bitten by monkeypatch
+    state leakage), not by a shared hunch.
+
+q1_sync_mechanism:
+  positions: {claude: "gated clock on production now() + runner-done escape; bounded seam as sanctioned fallback", gemini: "monkeypatch GLOBAL time.sleep -> SynchronizingClock; strictly no production change", codex: "private keyword-only sleep= DI hook on _invoke_codex defaulting to time.sleep; reject global monkeypatch"}
+  weighted_synthesis: |
+    ADOPT codex's mechanism: a PRIVATE, KEYWORD-ONLY `sleep=`
+    parameter on `_invoke_codex` defaulting to `time.sleep` (and
+    likewise for any internal poll wait), plus a condition-backed
+    synchronizing clock. Rationale (weighted):
+    - This IS the "single bounded, justified observability/
+      injection seam" claude's proposal explicitly pre-sanctioned
+      as the fallback if a no-production-change design proved
+      fragile. claude's clock-gated-on-`now()` is fragile exactly
+      where claude's own `wrong_if` predicted: inferring "the
+      runner observed time T" without an explicit happens-before
+      point is brittle (which thread, quiescence). The DI hook
+      gives the explicit happens-before point with zero default
+      behavior change.
+    - It is strictly SAFER than gemini's global `time.sleep`
+      monkeypatch. gemini itself listed "incorrect patching
+      scope / leak" as a risk, and the project has a
+      load-bearing memory that monkeypatch state leaks across
+      tests ([[feedback-monkeypatch-getattr-pollution]]).
+      Dependency injection has no global-state surface. gemini's
+      no-production-change INSTINCT is still honored in SUBSTANCE:
+      production *behavior* is unchanged (default `time.sleep`);
+      only a keyword-only/private seam is added — not a backdoor,
+      a legitimate injection point, bounded and defaulted.
+    - Replace `_ControllableClock` with a `SyncClock`:
+      `now()/advance()/sleep()/wait_for_runner_sleep()/
+      wait_for(predicate)/release_all()`. Rewrite
+      `_FakePipeReader.readline()` to wait on the SyncClock +
+      parent-exit notification (notify on `poll()`-exit,
+      `terminate()`, `kill()`) — NO real 5ms poll.
+    Gemini's global-monkeypatch and claude's gate-on-now() are
+    NOT adopted as the lever, but their shared goal (zero real
+    sleep on the drive path) is fully realized by the DI hook.
+
+q2_scope:
+  positions: {claude: "(iii) class-wide shared primitive, all clock-driven sites", gemini: "4 + clean-exit + stderr-drain; remove _drive_clock_until_done", codex: "4 + _drive_clock_until_done + clean-exit; preserve stderr-drain with REAL reader threads"}
+  weighted_synthesis: |
+    Unanimous class-wide (no-deferral satisfied; the latent
+    same-class flake in the non-skipped sites is fixed in the
+    same change). Concretely: migrate the four `@_FLAKY_WINDOWS_
+    CI` tests + `test_clean_exit_returns_output` onto the
+    SyncClock; DELETE `_drive_clock_until_done` (gemini+codex);
+    DELETE `@_FLAKY_WINDOWS_CI` entirely with NO phased follow-up
+    (acceptance gates concrete + cost small — completion test
+    passes). ADOPT codex's refinement over gemini's: preserve
+    `test_stderr_drain_prevents_deadlock` coverage with REAL
+    stdout/stderr reader threads — an over-faked harness would
+    stop exercising the very reader-thread behavior that
+    regression test exists to prove. Blast radius contained to
+    ONE file + the bounded `_dispatch_codex.py` seam.
+
+q3_deadlock_design_and_verification:
+  positions: {claude: "universal runner-done escape + absolute safety ceiling -> fast loud FAIL; >=3 consecutive green Windows CI", gemini: "retain join timeouts; function-scoped teardown; 'passes reliably across platforms'", codex: "release_all() root-cause-independent teardown on ANY failed wait; Windows CI run without skips before claiming complete"}
+  weighted_synthesis: |
+    INDEPENDENT SAFEGUARD (safety-interlock-first doctrine) —
+    ADOPT codex's `release_all()`: ANY failed/timed-out wait
+    must release the SyncClock, terminate the fake process, join
+    runner+reader threads, and fail LOUD with captured harness
+    state. This works even if the timing hypothesis is entirely
+    wrong (a deadlocked or misdiagnosed harness can never wedge
+    a CI job — it fails fast with diagnostics), satisfying
+    works_if_root_cause_wrong. Merge with claude's
+    universal-escape discipline: EVERY predicate wait includes
+    the runner-done condition AND a bounded absolute ceiling AND
+    routes failure through `release_all()`. Wake-discipline (one
+    `threading.Condition`; notify_all under lock on every
+    transition): heartbeat -> production `sleep=` hook wakes on
+    advance; silence/wall-ceiling -> production returns/raises ->
+    runner `finally` sets runner_done + notify; operator-signal
+    -> test writes file, waits on (abort-event OR runner_done);
+    clean-exit -> fake `poll()` flips exited at scheduled clock,
+    reader EOF (condition-woken), runner returns + notify;
+    exception -> same `finally` (no path skips the universal
+    waker). VERIFICATION (provisional-until-proven; adopt the
+    STRICTEST = claude's, the v1.15.8 bar the project has proven
+    it can meet): `@_FLAKY_WINDOWS_CI` deleted + the four tests
+    RUN on windows py3.10 + py3.12 + zero `time.sleep` on the
+    test/harness drive path + every wait has a guaranteed waker
+    + >=3 CONSECUTIVE green Windows CI runs of the SAME commit
+    (verified per [[feedback-rerun-verification-trap]]: distinct
+    completed attempts via the attempts API, never N polls of a
+    run id). ARTIFACT-SCOPING (codex): v1.15.8 tag is immutable
+    and remains the interim-skip release; the deterministic fix
+    is attributed ONLY to the new v1.15.9 commit/tag.
+
+# dogfoods the v1.15.1 machine-enforced convention
+convention:
+  convention_schema_version: 1
+  falsification:
+    hypothesis: "The four Windows-CI flakes are a missing happens-before contract between the virtual clock and the daemon runner/reader threads (coordination by real time.sleep + join(timeout) + hope), fixed by a DI sleep-hook + condition-backed SyncClock that removes all real sleep from the drive path."
+    falsifiable_from_artifacts: false
+    discriminating_experiment: "after the rewrite (skips deleted, zero real sleep on the drive path, SyncClock recording runner sleep/wake handshakes): >=3 consecutive green Windows CI runs (py3.10 + py3.12) of the same commit running all four formerly-skipped tests + test_clean_exit_returns_output + test_stderr_drain_prevents_deadlock."
+    refutation_observation: "any of those Windows CI runs shows a formerly-skipped test FAIL or HANG (release_all teardown fires / ceiling hit) despite the handshake being correct and no real sleep on the drive path — that refutes coordination-by-hope and points at Windows process/file behavior or product logic, not test timing."
+    empirical_status: pending
+  independent_safeguard:
+    applicable: true
+    mechanism: "SyncClock.release_all(): any failed or timed-out wait releases the clock, terminates the fake process, joins runner+reader threads, and fails LOUD with captured harness state."
+    works_if_root_cause_wrong: true
+    why: "Even if the true cause of a future hang is NOT clock/runner coordination, release_all() guarantees a misdiagnosed or deadlocked harness fails fast with diagnostics instead of wedging the CI job — the failure becomes observable rather than an opaque CI timeout, regardless of the hypothesis."
+    ships_with_fix: true
+  decisive_experiment_before_next_iteration: "the >=3-consecutive-green-Windows-CI-runs gate above, verified via the attempts API per [[feedback-rerun-verification-trap]] (one green run / N polls of one run id is explicitly insufficient)"
+  cited_pass_ids: [claude-v1159-1-pass1, codex-v1159-1-pass1, gemini-v1159-1-pass1]
+
+deliverable:
+  files:
+    - consensus_mcp/_dispatch_codex.py  # private keyword-only sleep= seam, defaulting to time.sleep (zero default behavior change)
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py  # SyncClock + condition-driven _FakePipeReader; migrate all clock-driven sites; delete _drive_clock_until_done + @_FLAKY_WINDOWS_CI
+    - CHANGELOG.md
+    - docs/advisories.md  # resolve the v1.15.8 Q2(a) named follow-up
+  next_steps:
+    - "Implement per synthesis, TDD — the formerly-skipped tests ARE the regression proof; they must pass deterministically locally first."
+    - "Workflow B audit (codex + gemini) on the implementation."
+    - "Cut v1.15.9 ONLY after the provisional-until-proven gate — deadlock-free argument + skips deleted + >=3 consecutive green Windows CI runs of the same commit, attempts-API verified."
+  named_blockers: []  # completion test passes: gates concrete, no open design Q, bounded cost
+  estimated_complexity: medium

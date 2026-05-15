@@ -1,0 +1,114 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: gemini-v1159-1
+pass_id: gemini-v1159-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'The differential I am reasoning from is that the flake
+  is a pure test-harness artifact (H1): a race condition between the test thread''s
+  `clock.advance()` and the OS scheduler granting time to the runner thread, which
+  uses real `time.sleep()`. My proposal is to eliminate ALL real `time.sleep()` calls
+  from the test execution path (both in the test driver and the code-under-test) and
+  replace them with a deterministic synchronization mechanism. This is the only way
+  to guarantee deterministic execution regardless of system load.
+
+
+  An alternative would be to only modify the fakes (`_FakePipeReader`). This is insufficient
+  because the production code under test (`_dispatch_codex._invoke_codex`) has its
+  own `time.sleep(poll_interval)` calls in its main loop. Without intercepting these,
+  the non-determinism remains. Monkeypatching `time.sleep` is the standard, correct
+  pattern to solve this, as it allows the test to gain full control over the passage
+  of time for the system under test without modifying the production code itself.
+  The redesign will also be applied to the currently-passing tests that use the same
+  flaky pattern (per H3) to prevent future regressions and ensure consistency.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 797e4a05a503bad8e81487f9c40653c305b8a08de3616a751b508d48ce45324d
+  output_sha256: 91c52fc1ef63281de1fe8d2f0d6f06f9d3f5838155c5ad20c624499f6a3c6118
+  goal_packet_sha256: 7e4bc2e2369b4f28a458ac4160c700352df2ad4a222ebd816a40a8f39a2ee83f
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 36ec502a0388608de23334e9a19695d39cdd4f57a32ee2d2b01e69852d835d2c
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Replace the real `time.sleep` + `_ControllableClock` pattern with
+    a deterministic, fully-mocked time implementation that uses `pytest.monkeypatch`
+    to replace `time.sleep` for the duration of each test.
+  rationale_vs_alternatives: 'The differential I am reasoning from is that the flake
+    is a pure test-harness artifact (H1): a race condition between the test thread''s
+    `clock.advance()` and the OS scheduler granting time to the runner thread, which
+    uses real `time.sleep()`. My proposal is to eliminate ALL real `time.sleep()`
+    calls from the test execution path (both in the test driver and the code-under-test)
+    and replace them with a deterministic synchronization mechanism. This is the only
+    way to guarantee deterministic execution regardless of system load.
+
+
+    An alternative would be to only modify the fakes (`_FakePipeReader`). This is
+    insufficient because the production code under test (`_dispatch_codex._invoke_codex`)
+    has its own `time.sleep(poll_interval)` calls in its main loop. Without intercepting
+    these, the non-determinism remains. Monkeypatching `time.sleep` is the standard,
+    correct pattern to solve this, as it allows the test to gain full control over
+    the passage of time for the system under test without modifying the production
+    code itself. The redesign will also be applied to the currently-passing tests
+    that use the same flaky pattern (per H3) to prevent future regressions and ensure
+    consistency.'
+  deliverable_scope:
+    next_iteration_id: iter-v1159-deterministic-clock-harness-impl
+    files_in_scope:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    key_design_decisions:
+    - A new helper class, `SynchronizingClock`, will replace `_ControllableClock`.
+      It will use a `threading.Condition` to orchestrate blocking and waking threads
+      that believe they are sleeping.
+    - A factory function will provide a `fake_sleep` method tied to the `SynchronizingClock`
+      instance. Inside each test, `pytest.monkeypatch` will be used to replace the
+      global `time.sleep` with this `fake_sleep`.
+    - The `fake_sleep` implementation will block the calling (runner) thread on the
+      `Condition` until the test-driver thread calls `clock.advance()` enough to meet
+      the sleep's duration.
+    - The test driver logic will be rewritten to be event-driven. Instead of advancing
+      the clock and sleeping (e.g., `_drive_clock_until_done`), it will advance the
+      clock in discrete, logical steps (e.g., `clock.advance(30.0)` to simulate 30
+      seconds passing) to drive the SUT through the test scenario deterministically.
+    - The flaky helper `_drive_clock_until_done` will be removed entirely.
+    - All four skipped tests will be refactored to use this new pattern, and the `_FLAKY_WINDOWS_CI`
+      marker will be removed.
+    - The other tests in the file using the old clock pattern (`test_clean_exit_returns_output`,
+      `test_stderr_drain_prevents_deadlock`) will also be migrated to the new deterministic
+      harness for consistency.
+    acceptance_gates:
+    - The `_FLAKY_WINDOWS_CI` `pytest.mark.skipif` is removed entirely from the codebase.
+    - All tests in `test_dispatch_codex_streaming.py` pass reliably across all target
+      platforms (Linux CI, Windows CI, local dev).
+    - No `time.sleep()` calls remain in the test functions or test helpers in `test_dispatch_codex_streaming.py`
+      (timeouts on `thread.join()` are acceptable).
+    - The final implementation does not modify any production code in `consensus_mcp/`.
+  risks:
+  - 'Deadlock: The `threading.Condition` logic for the synchronized sleep is subtle.
+    An incorrect implementation could lead to a deadlock between the test driver and
+    runner threads, hanging the test. This is mitigated by retaining timeouts on `thread.join()`
+    to fail the test loudly instead of hanging CI.'
+  - 'Incorrect Patching Scope: Monkeypatching a global function like `time.sleep`
+    can have unintended side-effects if the patch ''leaks'' outside the intended test.
+    The patch must be applied using `pytest` fixtures or function-scoped `monkeypatch`
+    to ensure it is torn down correctly after each test.'
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T22:36:45Z'
+packet_sha256: 3f708aba2cd84522facd72dee2784dfae245400f14a351e752b83f30c3c82b2a

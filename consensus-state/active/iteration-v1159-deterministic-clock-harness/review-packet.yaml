@@ -1,0 +1,365 @@
+defect_target:
+  files:
+  - consensus_mcp/tests/test_dispatch_codex_streaming.py
+  base_sha: 7cf589275f86345e231047c5bbb2b0102c039777b268bfa8b9331d54ec970534
+  touched_files_contents:
+    consensus_mcp/tests/test_dispatch_codex_streaming.py: "\"\"\"Regression tests\
+      \ for iter-0037 streaming/heartbeat/abort features of\n`_invoke_codex` in `consensus_mcp/_dispatch_codex.py`.\n\
+      \nThese tests use:\n  - `_ControllableClock` — manual `time_fn` substitute;\
+      \ tests advance the\n    clock to drive heartbeat / silence / wall-time logic\
+      \ without real waits.\n  - `StreamingFakeCodexPopen` — Popen-shaped fake; `stdout.readline()`\
+      \ returns\n    scheduled bytes when the controllable clock has reached the scheduled\n\
+      \    time, else blocks briefly (real time, not mocked) until either the next\n\
+      \    schedule time is reached or the proc is told to exit.\n\nReal `time.sleep(poll_interval)`\
+      \ is left as actual time. Tests use a tiny\npoll_interval (0.01s) plus short\
+      \ real sleeps between clock-advances so the\nreader thread can drain. This is\
+      \ acceptable: the *decision* logic in\n_invoke_codex is driven entirely by `time_fn`;\
+      \ we only need a few ms of\nreal time for thread scheduling.\n\"\"\"\nfrom __future__\
+      \ import annotations\n\nimport json as _json\nimport os\nimport sys\nimport\
+      \ threading\nimport time\nfrom pathlib import Path\n\nimport pytest\n\nREPO_ROOT\
+      \ = Path(__file__).resolve().parent.parent.parent\n\nfrom consensus_mcp import\
+      \ _dispatch_codex  # noqa: E402\n\n\nSCHEMA_PATH = REPO_ROOT / \"consensus_mcp\"\
+      \ / \"dispatch_templates\" / \"codex_review_schema.json\"\n\n\n# v1.15.8 Q2(c)\
+      \ interim (Workflow A converged:\n# iteration-v1158-flaky-ci-and-locked-append).\
+      \ These tests drive the\n# `_invoke_codex` runner in a daemon thread and advance\
+      \ a controllable\n# clock with real `time.sleep` ticks, then `join` and assert\
+      \ the thread\n# finished/aborted. On loaded Windows GitHub-Actions runners the\
+      \ runner\n# thread is not scheduled enough within the wall-clock budget → \"\
+      runner\n# did not finish\" (same commit green on Linux CI + local; the logic\
+      \ is\n# driven by the INJECTED time_fn, so it is NOT a Windows product path\
+      \ —\n# purely runner scheduling). Skipped ONLY on Windows + GitHub Actions:\n\
+      # Linux CI runs them every push and local Windows dev still runs them,\n# so\
+      \ the regression coverage is retained. NAMED FOLLOW-UP: rework\n# `_ControllableClock`\
+      \ into a deterministic synchronizing clock\n# (test↔runner handshake, no real\
+      \ sleeps) so these run everywhere and\n# this skip can be dropped. Tracked:\
+      \ docs/advisories.md 2026-05-15.\n_FLAKY_WINDOWS_CI = pytest.mark.skipif(\n\
+      \    sys.platform == \"win32\" and os.environ.get(\"GITHUB_ACTIONS\") == \"\
+      true\",\n    reason=\"v1.15.8 Q2(c): clock.advance + real time.sleep + thread-join\
+      \ \"\n    \"timing race on loaded Windows GitHub runners (not a product defect;\
+      \ \"\n    \"green on Linux CI + local). Named follow-up: deterministic \"\n\
+      \    \"synchronizing _ControllableClock.\",\n)\n\n\n# --------------------------------------------------------------------------\n\
+      # Test helpers\n# --------------------------------------------------------------------------\n\
+      \n\nclass _ControllableClock:\n    \"\"\"Manually-advanced monotonic clock for\
+      \ `time_fn=` injection.\"\"\"\n\n    def __init__(self, start: float = 1000.0):\n\
+      \        self.t = float(start)\n        self._lock = threading.Lock()\n\n  \
+      \  def now(self) -> float:\n        with self._lock:\n            return self.t\n\
+      \n    def advance(self, dt: float) -> None:\n        with self._lock:\n    \
+      \        self.t += float(dt)\n\n\nclass _FakeStdin:\n    \"\"\"Bytes-capturing\
+      \ stdin replacement; closed flag used to gate proc exit.\"\"\"\n\n    def __init__(self):\n\
+      \        self.buf = bytearray()\n        self.closed = False\n\n    def write(self,\
+      \ data):\n        if self.closed:\n            raise BrokenPipeError(\"stdin\
+      \ closed\")\n        self.buf.extend(data)\n        return len(data)\n\n   \
+      \ def close(self):\n        self.closed = True\n\n    def flush(self):\n   \
+      \     pass\n\n\nclass _FakePipeReader:\n    \"\"\"stdout/stderr replacement.\n\
+      \n    `readline()` returns the next scheduled `bytes` when the controllable\n\
+      \    clock has reached the scheduled time. Until then it sleeps (real time)\
+      \ in\n    short ticks. When the parent fake proc is marked exited and the schedule\n\
+      \    is drained, `readline()` returns `b\"\"` so `iter(readline, b\"\")` exits\
+      \ the\n    reader thread (matching real Popen pipe behavior).\n    \"\"\"\n\n\
+      \    def __init__(self, schedule, parent):\n        # schedule: list[tuple[float,\
+      \ bytes]] — clock-relative-to-start time + payload\n        # parent: StreamingFakeCodexPopen\
+      \ — for clock + exit state.\n        self._schedule = list(schedule)\n     \
+      \   self._idx = 0\n        self._parent = parent\n        self._real_tick =\
+      \ 0.005\n\n    def readline(self):\n        while True:\n            # If proc\
+      \ has exited and we've drained the schedule, EOF.\n            if self._idx\
+      \ >= len(self._schedule):\n                if self._parent._exited:\n      \
+      \              return b\"\"\n                # Wait for either more schedule\
+      \ entries (none coming) or exit.\n                time.sleep(self._real_tick)\n\
+      \                continue\n            sched_time, payload = self._schedule[self._idx]\n\
+      \            now_rel = self._parent._clock.now() - self._parent._t0\n      \
+      \      if now_rel >= sched_time:\n                self._idx += 1\n         \
+      \       return payload\n            # Not yet time; brief real sleep, then re-check.\n\
+      \            # Also bail out if proc was terminated mid-wait.\n            if\
+      \ self._parent._exited:\n                return b\"\"\n            time.sleep(self._real_tick)\n\
+      \n\nclass StreamingFakeCodexPopen:\n    \"\"\"Popen-shaped fake.\n\n    On instantiation,\
+      \ captures the `-o <out_file>` arg so `.close_stdin_writes_output`\n    can\
+      \ stage a payload there at exit time (mimicking real codex's output-file write).\n\
+      \n    Constructor uses Popen's positional shape so the real production code's\n\
+      \    `popen_factory(cmd, stdin=..., stdout=..., stderr=..., bufsize=...)` call\n\
+      \    works unchanged.\n    \"\"\"\n\n    def __init__(\n        self,\n    \
+      \    cmd,\n        stdin=None,\n        stdout=None,\n        stderr=None,\n\
+      \        bufsize=0,\n        *,\n        _scheduled_stdout=None,\n        _scheduled_stderr=None,\n\
+      \        _returncode: int = 0,\n        _exit_at: float = 1.0,\n        _clock:\
+      \ _ControllableClock,\n        _output_payload: str = '{\"ok\": true}',\n  \
+      \      **_popen_kwargs,  # iter-0039: absorb creationflags / start_new_session\n\
+      \    ):\n        self._cmd = cmd\n        self._clock = _clock\n        self._t0\
+      \ = _clock.now()\n        self._exit_at = float(_exit_at)\n        self._returncode_on_exit\
+      \ = int(_returncode)\n        self._exited = False\n        self.returncode\
+      \ = None\n        self._output_payload = _output_payload\n        # Find -o\
+      \ <out_file> in cmd.\n        self._out_file = None\n        for i, tok in enumerate(cmd):\n\
+      \            if tok == \"-o\" and i + 1 < len(cmd):\n                self._out_file\
+      \ = cmd[i + 1]\n                break\n        self.stdin = _FakeStdin()\n \
+      \       self.stdout = _FakePipeReader(_scheduled_stdout or [], self)\n     \
+      \   self.stderr = _FakePipeReader(_scheduled_stderr or [], self)\n\n    def\
+      \ _maybe_write_output(self):\n        if self._out_file and self._returncode_on_exit\
+      \ == 0:\n            try:\n                Path(self._out_file).write_text(self._output_payload,\
+      \ encoding=\"utf-8\")\n            except OSError:\n                pass\n\n\
+      \    def poll(self):\n        if self._exited:\n            return self.returncode\n\
+      \        now_rel = self._clock.now() - self._t0\n        if now_rel >= self._exit_at:\n\
+      \            self.returncode = self._returncode_on_exit\n            self._exited\
+      \ = True\n            self._maybe_write_output()\n            return self.returncode\n\
+      \        return None\n\n    def terminate(self):\n        if not self._exited:\n\
+      \            self.returncode = -15  # SIGTERM\n            self._exited = True\n\
+      \            # Do NOT stage output payload on termination — matches real codex.\n\
+      \n    def kill(self):\n        if not self._exited:\n            self.returncode\
+      \ = -9\n            self._exited = True\n\n    def send_signal(self, sig):\n\
+      \        \"\"\"iter-0039: _terminate_process_tree calls send_signal(CTRL_BREAK_EVENT)\n\
+      \        on Windows and os.killpg on POSIX. The fake accepts any signal and\n\
+      \        treats it as terminate (the test cares about the exit path, not the\n\
+      \        signal-delivery mechanism).\"\"\"\n        self.terminate()\n\n   \
+      \ @property\n    def pid(self):\n        \"\"\"`_terminate_process_tree` does\
+      \ os.killpg(os.getpgid(proc.pid))\n        on POSIX. Return a synthetic, never-live\
+      \ PID so os.getpgid raises\n        ProcessLookupError and the production OSError-fallback\n\
+      \        (proc.terminate()) runs. The previous value `0` was WRONG — pid 0\n\
+      \        means \"the caller's own process group\", so on Linux CI this fake\n\
+      \        made the abort path SIGTERM the pytest/runner job itself\n        (\"\
+      operation canceled\"). Belt-and-suspenders: the suite-wide\n        conftest\
+      \ guard also neutralizes os.killpg/os.getpgid.\"\"\"\n        return 2_147_483_647\n\
+      \n    def wait(self, timeout=None):\n        # We control exit via clock + terminate/kill;\
+      \ this is a no-op.\n        # The production code only calls wait() after terminate/kill,\
+      \ by which\n        # point _exited is already True. Return returncode.\n  \
+      \      return self.returncode\n\n\ndef _make_factory(\n    clock: _ControllableClock,\n\
+      \    *,\n    scheduled_stdout=None,\n    scheduled_stderr=None,\n    returncode:\
+      \ int = 0,\n    exit_at: float = 1.0,\n    output_payload: str = '{\"ok\": true}',\n\
+      ):\n    \"\"\"Build a popen_factory closure for injection into `_invoke_codex`.\"\
+      \"\"\n\n    def factory(cmd, **kwargs):\n        return StreamingFakeCodexPopen(\n\
+      \            cmd,\n            _scheduled_stdout=scheduled_stdout,\n       \
+      \     _scheduled_stderr=scheduled_stderr,\n            _returncode=returncode,\n\
+      \            _exit_at=exit_at,\n            _clock=clock,\n            _output_payload=output_payload,\n\
+      \            **kwargs,\n        )\n\n    return factory\n\n\ndef _run_invoke_in_thread(**invoke_kwargs):\n\
+      \    \"\"\"Run `_invoke_codex` in a background thread; return (thread, holder).\n\
+      \n    `holder` is a dict that, after `thread.join()`, contains either:\n   \
+      \   - `out`: the codex output (success), or\n      - `e`: the exception raised\
+      \ (failure).\n    \"\"\"\n    holder: dict = {}\n\n    def runner():\n     \
+      \   try:\n            holder[\"out\"] = _dispatch_codex._invoke_codex(**invoke_kwargs)\n\
+      \        except Exception as e:  # noqa: BLE001\n            holder[\"e\"] =\
+      \ e\n\n    th = threading.Thread(target=runner, daemon=True)\n    th.start()\n\
+      \    return th, holder\n\n\ndef _drive_clock_until_done(\n    clock: _ControllableClock,\n\
+      \    thread: threading.Thread,\n    *,\n    step: float = 0.05,\n    real_sleep:\
+      \ float = 0.01,\n    max_iterations: int = 2000,\n):\n    \"\"\"Advance `clock`\
+      \ by `step` until `thread` finishes or `max_iterations` hit.\n\n    A small\
+      \ real sleep between advances gives the reader threads + main poll\n    loop\
+      \ scheduler time. Total real wall <= max_iterations * real_sleep.\n    \"\"\"\
+      \n    i = 0\n    while thread.is_alive() and i < max_iterations:\n        clock.advance(step)\n\
+      \        time.sleep(real_sleep)\n        i += 1\n    thread.join(timeout=5)\n\
+      \n\ndef _read_log_events(log_path: Path) -> list[dict]:\n    if not log_path.exists():\n\
+      \        return []\n    out = []\n    for line in log_path.read_text(encoding=\"\
+      utf-8\").splitlines():\n        line = line.strip()\n        if not line:\n\
+      \            continue\n        try:\n            out.append(_json.loads(line))\n\
+      \        except _json.JSONDecodeError:\n            # v1.15.7 (C): defensive\
+      \ JSONL parse. A torn line can only\n            # appear if an append was interrupted\
+      \ mid-write; v1.15.7 (A)\n            # makes the production append OS-lock-atomic\
+      \ so this should\n            # no longer occur — but a telemetry-log reader\
+      \ must never\n            # crash on a partial line regardless (windows-py3.10\
+      \ abort-\n            # teardown surfaced this). Drop the torn line; the events\n\
+      \            # this helper's assertions care about are written whole.\n    \
+      \        continue\n    return out\n\n\ndef _setup_repo_root(tmp_path: Path)\
+      \ -> Path:\n    (tmp_path / \"consensus-state\" / \"state\").mkdir(parents=True,\
+      \ exist_ok=True)\n    return tmp_path\n\n\ndef _anchors():\n    return {\n \
+      \       \"iteration_id\": \"iter-test\",\n        \"reviewer_id\": \"codex-test\"\
+      ,\n        \"pass_id\": \"codex-test-pass1\",\n    }\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 1 — streamed lines appear in dispatch-log with correct seq + content\n\
+      # --------------------------------------------------------------------------\n\
+      \n\ndef test_streamed_lines_appear_in_dispatch_log(tmp_path):\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
+      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
+      \    # 5 lines scheduled at t = 0.0 (all immediately available); proc exits\
+      \ at t=0.5.\n    scheduled = [\n        (0.0, b\"line1\\n\"),\n        (0.0,\
+      \ b\"line2\\n\"),\n        (0.0, b\"line3\\n\"),\n        (0.0, b\"line4\\n\"\
+      ),\n        (0.0, b\"line5\\n\"),\n    ]\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=0.5)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        prompt=\"hi\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n\
+      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
+      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n\
+      \        poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive(),\
+      \ \"runner did not finish\"\n    assert \"e\" not in holder, f\"unexpected exception:\
+      \ {holder.get('e')}\"\n    assert holder[\"out\"] == '{\"ok\": true}'\n\n  \
+      \  events = _read_log_events(log_path)\n    stream_events = [e for e in events\
+      \ if e[\"event\"] == \"dispatch_streamed_line\"]\n    assert len(stream_events)\
+      \ == 5, f\"expected 5 stream events, got {len(stream_events)}\"\n    for i,\
+      \ ev in enumerate(stream_events):\n        assert ev[\"seq\"] == i, f\"event\
+      \ {i} seq={ev['seq']}\"\n        assert ev[\"line_truncated\"] == f\"line{i\
+      \ + 1}\"\n        assert ev[\"truncated\"] is False\n        assert ev[\"stream\"\
+      ] == \"stdout\"\n        assert ev[\"pass_id\"] == \"codex-test-pass1\"\n\n\n\
+      # --------------------------------------------------------------------------\n\
+      # Test 2 — long lines truncated to 200 chars; full length recorded\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_long_lines_are_truncated_to_200_chars(tmp_path):\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
+      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
+      \    big = (\"A\" * 1000) + \"\\n\"\n    scheduled = [(0.0, big.encode(\"utf-8\"\
+      ))]\n    factory = _make_factory(clock, scheduled_stdout=scheduled, exit_at=0.2)\n\
+      \n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n        codex_bin=\"\
+      codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n      \
+      \  schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
+      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n\n    events = _read_log_events(log_path)\n    stream = [e for e in events\
+      \ if e[\"event\"] == \"dispatch_streamed_line\"]\n    assert len(stream) ==\
+      \ 1\n    ev = stream[0]\n    assert len(ev[\"line_truncated\"]) == 200\n   \
+      \ assert ev[\"line_full_length\"] == 1000\n    assert ev[\"truncated\"] is True\n\
+      \n\n# --------------------------------------------------------------------------\n\
+      # Test 3 — heartbeat fires at heartbeat_interval cadence\n# --------------------------------------------------------------------------\n\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_heartbeat_fires_at_interval(tmp_path):\n  \
+      \  \"\"\"Advance time so codex appears to run for ~95s with no stdout; with\n\
+      \    stall_silence_seconds=200 we don't trip silence-abort; with\n    heartbeat_interval=30\
+      \ we should see ~3 heartbeats (at ~30, ~60, ~90).\n\n    NOTE: pre-first-line\
+      \ silence falls back to `now - start_ts`. So we set\n    `stall_silence_seconds`\
+      \ high enough (200s) to not trip silence-abort,\n    and emit no stdout, just\
+      \ heartbeats.\n    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock\
+      \ = _ControllableClock()\n    log_path = repo_root / \"consensus-state\" / \"\
+      state\" / \"dispatch-log.jsonl\"\n\n    # No stdout; proc exits at clock_rel\
+      \ = 95s.\n    factory = _make_factory(clock, scheduled_stdout=[], exit_at=95.0)\n\
+      \n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n        codex_bin=\"\
+      codex\",\n        timeout_seconds=300,  # so wall-time hard ceiling isn't hit\n\
+      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
+      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=200.0,\
+      \  # don't trip silence-abort\n        poll_interval=0.01,\n        time_fn=clock.now,\n\
+      \        popen_factory=factory,\n    )\n\n    # Advance the clock in 1s ticks\
+      \ up to ~100s (past exit_at=95s), with\n    # short real sleeps so the main\
+      \ loop body can iterate, observe the\n    # advanced clock, and emit heartbeats.\n\
+      \    for _ in range(100):\n        clock.advance(1.0)\n        time.sleep(0.01)\n\
+      \    th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not finish\"\
+      \n    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n\n    events = _read_log_events(log_path)\n    hb = [e for e in events if\
+      \ e[\"event\"] == \"dispatch_heartbeat\"]\n    # Expect heartbeats at ~30, 60,\
+      \ 90 → 3 events (could be 2 or 4 depending\n    # on scheduler timing; assert\
+      \ in window).\n    assert 2 <= len(hb) <= 4, f\"expected ~3 heartbeats, got\
+      \ {len(hb)}: {hb}\"\n    # Ages should be monotonically increasing.\n    ages\
+      \ = [ev[\"age_seconds\"] for ev in hb]\n    assert ages == sorted(ages), f\"\
+      heartbeat ages not monotonic: {ages}\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 4 — heartbeat silence triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_heartbeat_silence_triggers_abort(tmp_path):\n\
+      \    \"\"\"Codex emits 2 lines at t=0, then goes silent; advance clock past\n\
+      \    stall_silence_seconds → expect `dispatch_aborted` with\n    `abort_source=\"\
+      watchdog_silence\"` and CodexInvocationError raised.\n    \"\"\"\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
+      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
+      \    scheduled = [\n        (0.0, b\"a\\n\"),\n        (0.0, b\"b\\n\"),\n \
+      \   ]\n    # Proc would exit at 1000s but we'll terminate via silence-abort\
+      \ first.\n    factory = _make_factory(clock, scheduled_stdout=scheduled, exit_at=1000.0)\n\
+      \n    exc_holder = {}\n\n    def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
+      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
+      \           timeout_seconds=300,\n                repo_root=repo_root,\n   \
+      \             schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
+      \                anchors=_anchors(),\n                heartbeat_interval=1000.0,\
+      \  # don't fire heartbeats\n                stall_silence_seconds=10.0,\n  \
+      \              poll_interval=0.01,\n                time_fn=clock.now,\n   \
+      \             popen_factory=factory,\n            )\n        except Exception\
+      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
+      \ daemon=True)\n    th.start()\n    # Let the reader thread consume the 2 scheduled\
+      \ lines.\n    time.sleep(0.1)\n    # Now advance the clock 15s — past the 10s\
+      \ stall_silence_seconds since\n    # last_streamed_ts was set when those lines\
+      \ were read (at clock=1000.0).\n    clock.advance(15.0)\n    th.join(timeout=10)\n\
+      \    assert not th.is_alive(), \"runner did not abort\"\n\n    assert \"e\"\
+      \ in exc_holder, \"expected CodexInvocationError\"\n    assert isinstance(exc_holder[\"\
+      e\"], _dispatch_codex.CodexInvocationError)\n\n    events = _read_log_events(log_path)\n\
+      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
+      \    assert len(aborts) == 1, f\"expected 1 abort event, got {aborts}\"\n  \
+      \  assert aborts[0][\"abort_source\"] == \"watchdog_silence\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 5 — operator abort-signal file triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_operator_abort_signal_file_triggers_abort(tmp_path):\n\
+      \    \"\"\"Mid-run, write `consensus-state/state/abort-dispatch-<pass_id>.signal`;\n\
+      \    expect wrapper to SIGTERM codex, emit `dispatch_aborted` with\n    `abort_source=\"\
+      operator_signal_file\"`, delete the signal file, and raise.\n    \"\"\"\n  \
+      \  repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    # Codex would run a long time; we'll abort externally.\n    factory\
+      \ = _make_factory(clock, scheduled_stdout=[(0.0, b\"working\\n\")], exit_at=1000.0)\n\
+      \n    exc_holder = {}\n\n    def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
+      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
+      \           timeout_seconds=10000,\n                repo_root=repo_root,\n \
+      \               schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
+      \                anchors=_anchors(),\n                heartbeat_interval=10000.0,\n\
+      \                stall_silence_seconds=10000.0,  # don't fire silence-abort\n\
+      \                poll_interval=0.01,\n                time_fn=clock.now,\n \
+      \               popen_factory=factory,\n            )\n        except Exception\
+      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
+      \ daemon=True)\n    th.start()\n    # Wait a beat so the loop is running.\n\
+      \    time.sleep(0.1)\n    signal_path = repo_root / \"consensus-state\" / \"\
+      state\" / \"abort-dispatch-codex-test-pass1.signal\"\n    signal_path.write_text(\"\
+      operator manual abort\", encoding=\"utf-8\")\n    th.join(timeout=10)\n    assert\
+      \ not th.is_alive(), \"runner did not abort\"\n\n    assert \"e\" in exc_holder,\
+      \ \"expected CodexInvocationError\"\n    assert isinstance(exc_holder[\"e\"\
+      ], _dispatch_codex.CodexInvocationError)\n\n    events = _read_log_events(log_path)\n\
+      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
+      \    assert len(aborts) == 1, f\"expected 1 abort event, got {aborts}\"\n  \
+      \  assert aborts[0][\"abort_source\"] == \"operator_signal_file\"\n    assert\
+      \ \"operator manual abort\" in aborts[0].get(\"abort_reason\", \"\")\n\n   \
+      \ # Signal file should be deleted.\n    assert not signal_path.exists(), \"\
+      abort signal file was not deleted\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 6 — wall-time hard ceiling\n# --------------------------------------------------------------------------\n\
+      \n\n@_FLAKY_WINDOWS_CI\ndef test_wall_time_hard_ceiling(tmp_path):\n    \"\"\
+      \"Codex streams continuously (so silence-abort never fires) but runs\n    past\
+      \ `timeout_seconds + stall_silence_seconds` → expect dispatch_aborted\n    with\
+      \ abort_source=\"wall_time_hard_ceiling\" and CodexInvocationError.\n    \"\"\
+      \"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    # Stream a line every 1s of clock-time forever, so silence never fires.\n\
+      \    # The reader thread reads scheduled bytes as clock advances past them.\n\
+      \    scheduled = [(float(i), f\"keepalive{i}\\n\".encode(\"utf-8\")) for i in\
+      \ range(0, 200)]\n    factory = _make_factory(clock, scheduled_stdout=scheduled,\
+      \ exit_at=10000.0)\n\n    exc_holder = {}\n\n    def runner():\n        try:\n\
+      \            _dispatch_codex._invoke_codex(\n                prompt=\"x\",\n\
+      \                codex_bin=\"codex\",\n                timeout_seconds=10, \
+      \ # wall = 10\n                repo_root=repo_root,\n                schema_path=SCHEMA_PATH,\n\
+      \                log_path=log_path,\n                anchors=_anchors(),\n \
+      \               heartbeat_interval=1000.0,\n                stall_silence_seconds=5.0,\
+      \  # grace = 5; hard ceiling at 15s\n                poll_interval=0.01,\n \
+      \               time_fn=clock.now,\n                popen_factory=factory,\n\
+      \            )\n        except Exception as e:  # noqa: BLE001\n           \
+      \ exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner, daemon=True)\n\
+      \    th.start()\n\n    # Advance clock in 1s steps; reader drains scheduled\
+      \ keepalives as we go,\n    # so silence_age stays low. After ~16s of clock\
+      \ advance, wall-time hard\n    # ceiling (10 + 5 = 15s) should trip.\n    for\
+      \ _ in range(20):\n        clock.advance(1.0)\n        time.sleep(0.02)\n  \
+      \  th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not abort\"\
+      \n\n    assert \"e\" in exc_holder, \"expected CodexInvocationError\"\n    assert\
+      \ isinstance(exc_holder[\"e\"], _dispatch_codex.CodexInvocationError)\n\n  \
+      \  events = _read_log_events(log_path)\n    aborts = [e for e in events if e[\"\
+      event\"] == \"dispatch_aborted\"]\n    assert len(aborts) == 1, f\"expected\
+      \ 1 abort, got {aborts}\"\n    assert aborts[0][\"abort_source\"] == \"wall_time_hard_ceiling\"\
+      \n\n\n# --------------------------------------------------------------------------\n\
+      # Test 7 — clean exit returns codex output payload\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_clean_exit_returns_output(tmp_path):\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _ControllableClock()\n    log_path = repo_root / \"consensus-state\"\
+      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    payload = '{\"findings\": [],\
+      \ \"verdict\": \"PASS\"}'\n    scheduled = [(0.0, b\"working...\\n\"), (0.0,\
+      \ b\"done\\n\")]\n    factory = _make_factory(\n        clock,\n        scheduled_stdout=scheduled,\n\
+      \        exit_at=0.3,\n        returncode=0,\n        output_payload=payload,\n\
+      \    )\n\n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n \
+      \       codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
+      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == payload\n\n    events = _read_log_events(log_path)\n\
+      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
+      \    assert aborts == [], f\"clean exit produced abort events: {aborts}\"\n\
+      \    stream = [e for e in events if e[\"event\"] == \"dispatch_streamed_line\"\
+      ]\n    assert len(stream) == 2\n\n\n# --------------------------------------------------------------------------\n\
+      # Optional 8th — stderr drain prevents deadlock\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_stderr_drain_prevents_deadlock(tmp_path):\n    \"\"\"codex emits\
+      \ ~100KB to stderr; without the stderr-reader thread real\n    codex would block\
+      \ on a full pipe buffer. With the drain in place,\n    dispatch completes normally.\n\
+      \n    In this fake we simulate by scheduling many stderr lines; the test\n \
+      \   asserts that _invoke_codex returns cleanly within the test budget.\n   \
+      \ \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    big_line = b\"E\" * 1000 + b\"\\n\"\n    # ~100 lines × 1001 bytes ≈\
+      \ 100KB on stderr.\n    scheduled_err = [(0.0, big_line) for _ in range(100)]\n\
+      \    scheduled_out = [(0.0, b\"ok\\n\")]\n    factory = _make_factory(\n   \
+      \     clock,\n        scheduled_stdout=scheduled_out,\n        scheduled_stderr=scheduled_err,\n\
+      \        exit_at=0.3,\n    )\n\n    th, holder = _run_invoke_in_thread(\n  \
+      \      prompt=\"x\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n\
+      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
+      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n\
+      \        poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
+      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == '{\"ok\": true}'\n"
+schema_version: 1
+iteration_id: iteration-v1159-deterministic-clock-harness

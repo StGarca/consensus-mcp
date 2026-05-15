@@ -1,0 +1,147 @@
+pass_id: claude-v1159-1-pass1
+contributor: claude
+role: orchestrator
+goal_satisfied: true
+blocking_objections: []
+
+differential_prior: |
+  I reason from the test-determinism prior: a test whose pass/fail
+  depends on the OS scheduling a daemon thread "enough" within a
+  wall-clock budget is structurally flaky — determinism requires
+  the test to advance ONLY when the system-under-test has
+  DEMONSTRABLY reached a known observable state (a handshake on an
+  observable), never a fixed `time.sleep` + hope. Reinforced by
+  the v1.15.7/v1.15.8 "match the primitive to the concurrency
+  domain" lesson.
+
+  EXPLICIT shared-prior flag: this is close to the prior gemini
+  reasoned from in v1.15.8 ("a time.sleep-timed test is an
+  anti-pattern"). To keep this from being laundered unanimity, my
+  DISTINCT falsifying observation is concrete and per-path: if a
+  gated/handshake clock is introduced and ANY of the four tests
+  STILL exceeds a generous absolute safety ceiling on Windows CI,
+  my mechanism is wrong (a missing waker), not merely "needs more
+  sleep". That observation discriminates a real handshake from a
+  disguised longer-sleep.
+
+positions:
+  Q1_sync_mechanism:
+    stance: "(b)-primary realized as a GATED CLOCK with a universal escape waker: `_ControllableClock.advance(dt)` blocks on a Condition until the production poll thread has OBSERVED the new time (it already calls `time_fn()` every poll iteration — no production hook) OR the runner thread has finished/aborted/raised (the `holder`/Event the tests ALREADY hold). Reject pure (a) barrier-of-all-threads and (c) single-thread rewrite."
+    reasoning: |
+      The flake's mechanism (verified from the embedded harness):
+      the test does `for _ in range(100): clock.advance(1.0);
+      time.sleep(0.01)` — it races the clock far ahead of what the
+      starved runner has OBSERVED, so the runner's view of time
+      jumps (e.g. 5 -> 50) and it emits the wrong number of
+      heartbeats / mis-times silence-abort. The cure is to forbid
+      the clock advancing past a point the runner has not yet
+      observed. That is a gated clock.
+
+      Why NOT pure (a) "barrier across runner + both
+      `_FakePipeReader` threads": a barrier must know its party
+      count and that ALL parties arrive; on abort/EOF/exception a
+      reader thread EXITS without arriving -> advance() waits
+      forever. That is precisely the stall mode this release line
+      keeps hitting. (c) needs a production loop-stepping seam ->
+      excluded by the goal's non_goals and is the largest rewrite.
+
+      The deadlock-free invariant: every `advance()` wait has TWO
+      independent guaranteed wakers — (i) the production poll loop
+      calls `now()` once per iteration (progress), and (ii) the
+      runner-finished signal the test already owns (`holder`
+      populated + thread death), notified in a `finally`. On EVERY
+      path (heartbeat, silence-abort, operator-signal, wall-ceiling,
+      clean-exit, exception) at least ONE waker is guaranteed to
+      fire. `now()` is already production-called via injected
+      `time_fn`, so the clock instruments only its OWN calls — no
+      test backdoor in `_invoke_codex`. Readers (`_FakePipeReader`)
+      switch their real-sleep poll tick to wait on the same
+      Condition the clock notifies (bytes become "due" only when
+      the clock reaches their scheduled time) — they never gate
+      `advance()`, they only consume it, so they cannot deadlock it.
+    wrong_if: |
+      If the production poll thread can, on some path, stop calling
+      `now()` while the runner is still alive AND the
+      runner-finished waker also cannot fire (no thread death, no
+      holder write) — then advance() has no guaranteed waker and
+      can hang. Refutation observation: any of the four tests on
+      Windows CI reaching the absolute safety ceiling. If observed,
+      (b)-gated-clock is refuted and the fallback is (c)-permanent
+      + a deeper redesign, NOT a longer ceiling.
+
+  Q2_scope:
+    stance: "(iii): introduce ONE shared deterministic primitive (gated clock + Condition-driven `_FakePipeReader`) and migrate ALL clock-driven sites — the four `@_FLAKY_WINDOWS_CI` tests + `_drive_clock_until_done` + `test_clean_exit_returns_output` — then DELETE `@_FLAKY_WINDOWS_CI`. Bounded; one file."
+    reasoning: |
+      `_drive_clock_until_done` (:286) and
+      `test_clean_exit_returns_output` (:680) are the SAME
+      real-sleep-advance family; they pass today only because their
+      simulated durations are short, but they are latent
+      same-class flakes on a loaded runner. The no-deferral
+      doctrine: fixing the four instances while leaving the class
+      guarantees a future "same flake, different test" iteration.
+      The blast radius is contained to ONE file
+      (`allowed_files = [test_dispatch_codex_streaming.py]`); the
+      primitive is small and the migration is mechanical once it
+      lands. This is bounded execution, not a gratuitous rewrite,
+      so it ships in v1.15.9, not a phased deferral.
+    wrong_if: |
+      If migrating `test_clean_exit_returns_output` /
+      `_drive_clock_until_done` onto the gated clock measurably
+      changes WHAT they assert (not just HOW they wait) — i.e. the
+      primitive cannot express a fast clean-exit without weakening
+      coverage — then scope (ii) (those two keep a minimal
+      bounded-sleep variant) is correct and (iii) over-reaches.
+
+  Q3_deadlock_design_and_verification:
+    stance: "Single `threading.Condition` guarding (clock value, target, byte-due, proc-exited, runner-done); every state transition notifies_all under the lock; every wait predicate includes `runner_done` as the universal escape; every wait has an absolute safety ceiling that converts a true logic hang into a FAST FAIL (loud), never an infinite CI hang. Proven-bar: skip deleted + 4 tests RUN on Windows CI + determinism argument + >=3 consecutive green Windows CI runs of the same commit (the v1.15.8 bar)."
+    reasoning: |
+      Wake-discipline (who wakes whom):
+      - heartbeat path: production poll calls now(); clock records
+        observation; advance() waiter woken.
+      - silence-abort / wall-ceiling: production emits the abort
+        event + returns/raises -> runner `finally` sets runner_done
+        + notify_all -> test wait woken on the event OR runner_done.
+      - operator-signal: test writes the signal file then waits on
+        (abort event present OR runner_done); production detects,
+        deletes file, raises -> runner_done notify.
+      - clean-exit: proc poll() flips exited at the scheduled clock
+        value; reader returns EOF (Condition-woken, not sleep);
+        runner returns -> runner_done notify.
+      - exception: runner `except` still hits the same `finally`
+        -> runner_done notify (no path skips the universal waker).
+      The absolute ceiling (e.g. 30s wall, dozens x normal) means
+      a genuinely broken handshake FAILS the assertion quickly and
+      loudly instead of hanging the CI job — so a regression is
+      observable, the anti-theater property holds.
+      Verification (provisional-until-proven): `@_FLAKY_WINDOWS_CI`
+      deleted; the four tests execute on windows py3.10 + py3.12;
+      determinism argument = zero `time.sleep` on the test/harness
+      drive path + every wait has a guaranteed waker; N >= 3
+      consecutive green Windows CI runs of the SAME commit
+      (identical bar to v1.15.8, which this release line has now
+      proven it can meet). Refutation: any of the four tests on
+      Windows CI hits the ceiling or asserts a wrong heartbeat/
+      abort count -> hypothesis refuted, do NOT close on it.
+    wrong_if: |
+      If a correct deadlock-free predicate set cannot be written
+      without a production-side progress hook (i.e. instrumenting
+      only the clock's own now() calls is insufficient to know the
+      runner "observed" a time) — then a minimal, justified,
+      bounded observability seam in `_invoke_codex` is warranted
+      and the "no production change" stance is wrong. State it
+      explicitly at convergence rather than contorting the test.
+
+recommended_converged_shape: |
+  Gated `_SyncClock` (advance() blocks until production-poll
+  observation OR runner_done; one Condition; universal-escape
+  predicate; absolute safety ceiling) + Condition-driven
+  `_FakePipeReader` (no real-sleep tick), adopted by ALL
+  clock-driven sites in `test_dispatch_codex_streaming.py`;
+  `@_FLAKY_WINDOWS_CI` DELETED. Ship in v1.15.9 only after the
+  skip is gone, the four tests run on Windows CI, the
+  deadlock-free argument is stated, and >=3 consecutive green
+  Windows CI runs of the same commit (provisional-until-proven).
+  If convergence finds the no-production-hook constraint
+  infeasible, a single bounded observability seam is the
+  sanctioned fallback (decide explicitly, do not contort).
+cited_pass_ids: [claude-v1159-1-pass1]
