@@ -205,6 +205,52 @@ deciding, or analyzing — **use the consensus-mcp tools (workflow
 Council was a single-Claude multi-persona simulation; consensus-mcp
 is a real cross-AI workflow with sealed-provenance peer reviewers.
 
+## Release cadence — Friday cut if anything landed
+
+**Cut a release tag every Friday if at least one iteration closed
+that week. Release-cut is a procedure with a trigger, not an
+ad-hoc decision.**
+
+The structural failure mode this prevents: iterations close
+continuously (acceptance gates pass → done), but the release-cut
+ceremony has no trigger of its own. So work accumulates on the
+`v<X.Y.Z>` branch indefinitely and downstream pipx/PyPI users get
+stale versions while the README documents features they cannot
+install. This actually happened — v1.14.0 sat at 37 commits across
+iter-0009..iter-0043 over 3 days with a release-ready CHANGELOG
+and no tag.
+
+**Cut sequence (apply in order on the v<X.Y.Z> branch tip):**
+
+1. Update `CHANGELOG.md` date stamp to the cut date.
+2. Verify `pyproject.toml` `version` matches the branch.
+3. Run the full test suite; surface regressions before tagging.
+4. `git tag -a v<X.Y.Z> -m "..."` on the branch tip.
+5. Build wheel + sdist. Smoke-test with `pipx install` from local
+   dist before publishing to PyPI.
+6. Publish to PyPI (operator action — confirm before running the
+   publish command since it is irreversible).
+7. `git push origin v<X.Y.Z>` (push the tag).
+8. Merge `v<X.Y.Z>` into `main` with `--no-ff` (preserves branch
+   history per the release-branching convention).
+9. Bump `pyproject.toml` on `main` to the next dev version
+   (e.g., `1.14.1.dev0`), commit.
+10. Branch the next release: `v<X.Y.Z+1>` for hot-patches, OR
+    `v<X.(Y+1).0>` for the next minor.
+
+**Variations:**
+
+- **Empty-week skip:** if zero iterations landed, no cut. Never
+  cut empty releases.
+- **Hot-patches between Fridays:** cut as `v<X.Y.Z+1>` whenever a
+  hot-patch lands; don't wait for Friday for a fix release.
+- **Operator hold:** the operator may explicitly delay a cut
+  ("hold v1.14.0 until iter-0050"). Default without explicit
+  hold is "cut Friday."
+
+Release-cut is itself an operating procedure — not a design
+decision and not subject to peer consensus.
+
 ## When in doubt
 
 The conservative move is **workflow #4 with all enabled contributors**.
