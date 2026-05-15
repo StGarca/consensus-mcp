@@ -75,6 +75,71 @@ contributors (mid-flight rewrites mean wasted dispatches), and the
 "author in parallel" optimization applies to round 1 only — round
 2+ explicitly require seeing round-1 outputs.
 
+## Consensus runs to COMPLETION — no gratuitous deferral
+
+**Default: consensus runs to completion when goals + acceptance
+gates are clear. Defer only when open design surface genuinely
+requires more analysis, the implementation cost is large
+(multiple sessions worth), or the work has a real dependency
+on something not-yet-built.**
+
+The deferral instinct comes from "splitting reduces blast
+radius" + "small PRs are better." Both are RIGHT for genuinely
+independent units of work; both are WRONG when the items share
+a doctrine boundary or when splitting just postpones the same
+decisions without adding analysis.
+
+### The completion test
+
+When authoring a converged-plan.yaml or scoping a deliverable,
+ask for each candidate item:
+
+1. Are the acceptance gates concrete and verifiable?
+2. Is there ANY open design question remaining (API shape,
+   trade-off, mechanism) that actually needs more thought?
+3. Is the implementation cost SMALL enough to fit in this
+   session? (rough heuristic: <60 minutes of edits + tests)
+
+If (1)=yes AND (2)=no AND (3)=yes → **execute in the same
+session, not a future iteration.** "Future iteration" is the
+cop-out — a way to pass the work to a hypothetical later-self
+without admitting later-self has the same context window and
+will face the same decision.
+
+### Anti-patterns to abort
+
+- "iter-XXXX candidate: <thing>" with no concrete reason it
+  can't be done now → fold into current iteration.
+- "Phase B / Phase C" sequencing when phases share the same
+  doctrine boundary → bundle into one.
+- "Defer to dedicated iteration" because something is "complex"
+  when the complexity is BOUNDED (concrete decisions, finite
+  alternatives) → execute now; consult only on the open part.
+- Splitting a hot-patch across multiple version bumps when the
+  fixes share a single failure-mode → bundle into one tag.
+- Writing a goal_packet that ASSUMES future iterations will
+  exist → write goal_packets that assume completion is the
+  default.
+
+### Application to live consults
+
+Before writing `next_iteration_id: ...` or `deferred to ...`
+in a converged plan, run the completion test on each item.
+If the test passes, delete the deferral and add the work to
+the current scope. Only ratify the deferral if the test
+genuinely fails, and name the SPECIFIC blocker
+(not "complexity," not "out of scope" — name the missing
+data, the dependency, or the design question).
+
+### Sequencing-as-deferral is the same anti-pattern
+
+Don't sequence three independent fixes across three
+hot-patches when bundling them into one passes the
+completion test. Sequencing produces the same end-state with
+more bookkeeping and more chances for drift. The cost of
+"big PR" is real but bounded; the cost of perpetual deferral
+backlog is unbounded.
+
 ## Convergence model — weighted-synthesis by default
 
 **Default convergence model: weighted-synthesis.** All ideas of
@@ -319,7 +384,19 @@ and no tag.
    `pyproject.toml` on the new branch to the new dev version
    (e.g., `1.14.1.dev0`); add a `## X.Y.Z+1 - unreleased` stub
    to CHANGELOG.md.
-8. Push the new branch: `git push -u origin v<X.Y.Z+1>`.
+8. **Bump README install URLs to `@v<X.Y.Z>` (the just-cut tag,
+   NOT the dev version) on the new dev branch.** This step
+   prevents the bleeding-wound failure mode where the README
+   continues to point users at an older defective tag after a
+   fix is published. Grep `@v<old-prefix>` to catch all stale
+   refs; bump them all in one commit.
+9. Push the new branch: `git push -u origin v<X.Y.Z+1>`.
+10. **If the just-cut tag has a known issue worth flagging to
+    users on older versions** — add an entry to
+    `docs/advisories.md` naming the affected versions, the
+    issue, the correct upgrade target, and the user action
+    required. The advisory is the long-lived record; CHANGELOG
+    entries get buried as new releases ship.
 
 **Distribution convention:** consensus-mcp ships via git tags +
 pipx, NOT PyPI. README documents `pipx install

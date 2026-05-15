@@ -468,9 +468,17 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
             "Independence model", default_ind, valid=list(cfg.VALID_INDEPENDENCE)
         )
 
-    # Finding disposition.
+    # Finding disposition. iter-three-gaps: workflow #4 defaults to
+    # weighted-synthesis (per doctrine); workflow #3 keeps the existing
+    # all-or-nothing default.
     if "finding_disposition" not in set_flags:
-        default_disp = base["convergence"]["finding_disposition"] if not fresh else cfg.DISPOSITION_ALL_OR_NOTHING
+        if fresh:
+            if base["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE:
+                default_disp = cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+            else:
+                default_disp = cfg.DISPOSITION_ALL_OR_NOTHING
+        else:
+            default_disp = base["convergence"]["finding_disposition"]
         base["convergence"]["finding_disposition"] = _prompt(
             "Finding disposition", default_disp, valid=list(cfg.VALID_DISPOSITION)
         )
@@ -552,7 +560,13 @@ def build_config_from_flags(args, repo_root: Path, interactive: bool = False) ->
                     else cfg.INDEPENDENCE_VISIBLE
                 )
             if "finding_disposition" not in set_flags:
-                base["convergence"]["finding_disposition"] = cfg.DISPOSITION_ALL_OR_NOTHING
+                # iter-three-gaps doctrine: workflow #4 defaults to
+                # weighted-synthesis; workflow #3 / advisory keep
+                # all-or-nothing as the default.
+                if base["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE:
+                    base["convergence"]["finding_disposition"] = cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+                else:
+                    base["convergence"]["finding_disposition"] = cfg.DISPOSITION_ALL_OR_NOTHING
 
     base["project"]["name"] = repo_root.name
     cfg.validate(base)
