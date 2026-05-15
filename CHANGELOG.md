@@ -2,10 +2,48 @@
 
 ## 1.15.9 - unreleased
 
-_Development branch. Candidate: Q2(a) deterministic synchronizing
-`_ControllableClock` rework (the v1.15.8 named follow-up — removes
-the Windows-CI heartbeat-pattern skip; see `docs/advisories.md`
-2026-05-15 v1.15.8). Real concurrency design surface → Workflow A._
+**Deterministic streaming-test harness — the v1.15.8 Q2(a) named
+follow-up, root-caused via Workflow A consult.** v1.15.8 shipped
+the `_locked_append` integrity fix with four timing-fragile
+`test_dispatch_codex_streaming.py` tests skipped on Windows CI
+(`@_FLAKY_WINDOWS_CI`, the converged-plan-sanctioned interim).
+Consult `iteration-v1159-deterministic-clock-harness`
+(claude+codex+gemini, weighted-synthesis, shared-prior self-check
+PASSED — agreement on diagnosis, DISAGREEMENT on mechanism;
+dogfoods the v1.15.1 convention incl. an independent_safeguard).
+
+- **Root cause:** test↔runner coordination-by-hope — the harness
+  advanced a clock + real `time.sleep` + `join(timeout)` and hoped
+  the daemon runner/reader threads were scheduled within a
+  wall-clock budget. Loaded Windows GitHub runners starved them
+  → "runner did not finish". Not a product defect (Linux CI +
+  local always green; logic is driven by the injected `time_fn`).
+- **Fix (mechanism — weighted-synthesis of 3 distinct proposals):**
+  a private, keyword-only `_sleep=` seam on `_invoke_codex`
+  **defaulting to `time.sleep`** (zero production behavior change;
+  chosen over monkeypatching global `time.sleep` — no global-state
+  leak) + a `threading.Condition`-backed `_SyncClock` (lockstep
+  `wait_runner_parked` / observable `wait_for` / Condition-driven
+  `_FakePipeReader`). All real sleep is removed from the drive
+  path; the harness is now event-driven and deterministic.
+- **Independent safeguard (ships with the fix):** `_SyncClock.
+  release_all()` — any failed/timed-out wait frees every waiter,
+  terminates the fake proc, and fails LOUD with harness state, so
+  a misdiagnosed or deadlocked harness can never wedge a CI job
+  (works regardless of whether the timing hypothesis is right).
+- **Scope:** class-wide — all 8 clock-driven tests migrated;
+  `_drive_clock_until_done` deleted; `@_FLAKY_WINDOWS_CI` DELETED
+  (no phased follow-up — gates concrete, cost bounded);
+  `test_stderr_drain_prevents_deadlock` keeps REAL reader threads.
+- **Verification discipline (provisional-until-proven):** v1.15.9
+  is cut ONLY after the skip is gone, the four tests RUN on
+  Windows CI, and **≥3 consecutive green Windows CI runs of the
+  same commit** (attempts-API verified — one green run / N polls
+  of one run id is explicitly insufficient).
+
+Local: streaming file 8/8 deterministic across repeated runs
+(sub-0.4s, no ceiling waits); full suite pending. Workflow B
+audit: codex + gemini.
 
 ## 1.15.8 - 2026-05-15
 
