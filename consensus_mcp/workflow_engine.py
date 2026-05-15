@@ -40,6 +40,7 @@ from consensus_mcp.contributors import (
     SealedArtifact,
 )
 from consensus_mcp.contributors.base import DispatchPacket
+from consensus_mcp.validators import validate_converged_plan as vcp
 
 
 class WorkflowError(RuntimeError):
@@ -288,7 +289,8 @@ class WorkflowEngine:
                 outcome.convergence = conv
                 # Seal final converged plan.
                 final_path = self._seal_converged_plan(
-                    iteration_dir, convergence_artifacts, conv, round_n
+                    iteration_dir, convergence_artifacts, conv, round_n,
+                    goal_packet_path,
                 )
                 outcome.final_artifact_path = final_path
                 return
@@ -495,14 +497,62 @@ class WorkflowEngine:
                 ids.append(bid)
         return ids
 
+    def _read_convention_input(self, iteration_dir: Path) -> dict | None:
+        """Read the OPTIONAL orchestrator-authored convention.
+
+        v1.15.1 / converged plan Q1: the convention blocks enter through
+        the ONE channel that already reaches seal time — a file in
+        `iteration_dir` (every artifact already lives here; no new
+        parameter is threaded through run_iteration / the MCP tool). The
+        validated blocks are then sealed INTO converged-plan.yaml (same
+        write, same hash) — not a loose untracked sidecar.
+        """
+        path = iteration_dir / "convention-input.yaml"
+        if not path.exists():
+            return None
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            raise WorkflowError(
+                f"convention-input.yaml is not valid YAML: {exc}"
+            ) from exc
+        if isinstance(doc, dict) and isinstance(doc.get("convention"), dict):
+            return doc["convention"]
+        if isinstance(doc, dict) and "falsification" in doc:
+            return doc
+        raise WorkflowError(
+            "convention-input.yaml must contain a `convention:` mapping "
+            "(or be the convention mapping itself)"
+        )
+
+    def _goal_risk_class(self, goal_packet_path: Path) -> str | None:
+        """Operator-DECLARED risk class. No inference (heuristics are the
+        shared-prior trap the v1.15.0 report documents)."""
+        try:
+            gp = yaml.safe_load(Path(goal_packet_path).read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            return None
+        if not isinstance(gp, dict):
+            return None
+        rc = gp.get("risk_class") or gp.get("defect_class")
+        if rc is None and isinstance(gp.get("goal"), dict):
+            rc = gp["goal"].get("risk_class") or gp["goal"].get("defect_class")
+        return rc if isinstance(rc, str) else None
+
     def _seal_converged_plan(
         self,
         iteration_dir: Path,
         convergence_artifacts: list[SealedArtifact],
         conv: ConvergenceOutcome,
         round_number: int,
+        goal_packet_path: Path,
     ) -> Path:
-        """Write converged-plan.yaml summarizing the converged round."""
+        """Write converged-plan.yaml summarizing the converged round.
+
+        v1.15.1: ingests the optional orchestrator-authored convention,
+        runs the structural/consequence validator, and — fail-closed —
+        does NOT write converged-plan.yaml when enforcement hard-rejects.
+        """
         plan = {
             "iteration_id": iteration_dir.name,
             "workflow_mode": self.config["workflow"]["mode"],
@@ -522,7 +572,82 @@ class WorkflowEngine:
                 for a in convergence_artifacts
             ],
         }
+
+        enforcement = (
+            self.config.get("convergence", {})
+            .get("converged_plan_enforcement", cfg.ENFORCEMENT_GRADUATED)
+        )
         out = iteration_dir / "converged-plan.yaml"
+
+        # codex-rev-001: every plan SEALED by the engine is new (v1.15.1+).
+        # A missing convention-input is therefore NOT "legacy" — it is a
+        # new convergence missing its blocks, validated under the
+        # configured level so safety/strict still hard-reject and graduated
+        # still annotates. `enforcement: doctrine-only` is exclusively a
+        # READ-time classification (consensus_get_iteration_outcome) for
+        # pre-v1.15.1 plans that have no convention_gate at all.
+        convention = self._read_convention_input(iteration_dir)
+        risk_class = self._goal_risk_class(goal_packet_path)
+        result = vcp.validate_convention(
+            convention if convention is not None else {},
+            risk_class=risk_class,
+            enforcement=enforcement,
+        )
+
+        if result["hard_reject"]:
+            # Fail-closed: surface the reasons and do NOT seal. codex-rev-004:
+            # a stale converged-plan.yaml from an earlier run must not
+            # survive a later hard reject and be mistaken for the outcome.
+            if out.exists():
+                out.unlink()
+            reasons = "; ".join(result["hard_reject_reasons"]) or (
+                "missing/invalid convention blocks"
+            )
+            raise WorkflowError(
+                "converged-plan convention enforcement hard-rejected this "
+                f"iteration (enforcement={enforcement}): {reasons}"
+            )
+
+        # Always stamp a v1.15.1 convention_gate (so the outcome reader can
+        # distinguish a v1.15.1 seal from a true pre-v1.15.1 legacy plan).
+        # codex-rev-002 (pass-2): when a convention IS present, stamp its
+        # version VERBATIM (never rewrite an invalid/foreign version to the
+        # current one — the validator already flagged it; a misleading
+        # top-level field would undo pass-1 codex-rev-003). The
+        # current-version default applies ONLY to the absent-convention
+        # case, which is a legitimate v1.15.1 engine seal with no input.
+        if convention is not None:
+            plan["convention_schema_version"] = convention.get(
+                "convention_schema_version"
+            )
+            plan["convention"] = convention
+        else:
+            plan["convention_schema_version"] = vcp.CONVENTION_SCHEMA_VERSION
+        plan["convention_violations"] = result["violations"]
+        gate = {
+            "enforcement": enforcement,
+            "hard_reject": False,
+            "presence_ok": result["presence_ok"],
+            "convention_present": convention is not None,
+            "gate_scope": vcp.GATE_SCOPE_DISCLAIMER,
+        }
+        # codex-rev-001 (pass-2) transparency: the converged plan's q4/q5
+        # DELIBERATELY makes graduated default = warn+annotate for a new
+        # non-safety convergence missing blocks (papercut-avoidance — an
+        # explicit named risk in the consult). That is NOT a silent bypass:
+        # surface it loudly so an operator/outcome-reader cannot mistake an
+        # annotated incomplete seal for a complete one.
+        if not result["presence_ok"]:
+            gate["enforcement_note"] = (
+                "convention incomplete/absent and sealed under "
+                f"'{enforcement}' as warn+annotate (NOT a clean pass). "
+                "Per converged-plan q4/q5 only safety-class / proven-without-"
+                "experiment hard-reject; non-safety is intentionally "
+                "non-blocking to avoid the rejected-goal_packet papercut. "
+                "See convention_violations."
+            )
+        plan["convention_gate"] = gate
+
         out.write_text(
             yaml.safe_dump(plan, sort_keys=False, default_flow_style=False, allow_unicode=True),
             encoding="utf-8",

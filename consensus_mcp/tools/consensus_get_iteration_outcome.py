@@ -71,6 +71,23 @@ SCHEMA = {
                 "description": "List of {contributor, path, sealed_at} for each sealed artifact found in the iteration dir.",
             },
             "effective_config_path": {"type": ["string", "null"]},
+            "enforcement": {
+                "type": ["string", "null"],
+                "description": (
+                    "v1.15.1 converged-plan convention enforcement level "
+                    "(off|warn|graduated|strict), or 'doctrine-only' for "
+                    "legacy/absent-convention plans (NOT silently valid)."
+                ),
+            },
+            "convention_gate_scope": {
+                "type": ["string", "null"],
+                "description": (
+                    "The mandatory non-soundness disclaimer, surfaced "
+                    "adjacent to any pass marker: a green gate is presence/"
+                    "structure only, never evidence the hypothesis is true."
+                ),
+            },
+            "convention_violations": {"type": ["array", "null"]},
             "error": {"type": ["string", "null"]},
             "error_type": {"type": ["string", "null"]},
         },
@@ -147,12 +164,35 @@ def handle(iteration_dir: str, repo_root: str | None = None) -> dict:
                 entry["parse_error"] = True
             contributor_artifacts.append(entry)
 
+        # v1.15.1: surface the converged-plan convention enforcement
+        # status. A reader must never be able to see a pass marker
+        # WITHOUT the gate-scope disclaimer next to it (the recursive
+        # trap defense — a green gate is not evidence of correctness).
+        enforcement = None
+        convention_gate_scope = None
+        convention_violations = None
+        if isinstance(converged_plan, dict):
+            gate = converged_plan.get("convention_gate")
+            gate = gate if isinstance(gate, dict) else {}
+            # codex-rev-001: a v1.15.1 seal ALWAYS stamps convention_gate.
+            # Absence of convention_gate ⇒ a true pre-v1.15.1 legacy plan
+            # (iter-0043 .. v1.15.0): NOT silently valid, NOT rejected.
+            if gate.get("enforcement"):
+                enforcement = gate["enforcement"]
+            else:
+                enforcement = "doctrine-only"
+            convention_gate_scope = gate.get("gate_scope")
+            convention_violations = converged_plan.get("convention_violations")
+
         return {
             "ok": True,
             "iteration_id": iteration_id,
             "converged_plan": converged_plan,
             "contributor_artifacts": contributor_artifacts,
             "effective_config_path": effective_config_str,
+            "enforcement": enforcement,
+            "convention_gate_scope": convention_gate_scope,
+            "convention_violations": convention_violations,
             "error": None,
             "error_type": None,
         }
