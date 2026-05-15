@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.14.7 - 2026-05-14
+
+Doc hot-patch from autonomous run-2026-05-15-overnight iter-4. Two
+stale references that user-facing surfaces still showed:
+
+- `README.md` "Status" section bumped from "1.14.0 — multi-AI
+  contributor pool, blind-first-reveal workflow #4 ..." to a
+  "v1.14.6 (current)" header + per-release train summary covering
+  v1.14.0 → v1.14.6. Includes pointer to `docs/advisories.md` for
+  known-defect-release upgrade guidance.
+- `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`
+  one stale "Workflow #3" reference in the "Workflow A/B in one line"
+  section body (the global rename in v1.14.4 missed this hyphenated
+  form). Bumped to "Workflow B".
+
+No code changes; docs only. 704 tests pass (no regression).
+
 ## 1.14.6 - 2026-05-14
 
 Hot-patch from autonomous run-2026-05-15-overnight iter-3.

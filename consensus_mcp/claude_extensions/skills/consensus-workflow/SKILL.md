@@ -15,11 +15,11 @@ the operator explicitly says otherwise.
 **Default to Workflow A (propose-converge with blind-first-reveal) for
 any decision with real design surface** — API shape, trade-off, novel
 mechanism, anything where reasonable people could disagree on the right
-approach. Workflow #3 (post-review: claude implements, codex+gemini
+approach. Workflow B (post-review: claude implements, codex+gemini
 audit) is for **execution per a converged design** or for hot-patches
 that block in-flight work.
 
-The mistake to avoid is defaulting to #3 because it's faster and
+The mistake to avoid is defaulting to B because it's faster and
 calling everything "execution." Test: did the converged plan specify
 the API shape, error contract, mechanism? If not, those choices are
 themselves design surface — go through #4.

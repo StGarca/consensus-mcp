@@ -37,7 +37,7 @@ The end result: changes that pass three independent model families aren't "looks
 ```bash
 # Install via pipx — isolated venv, console scripts on PATH, no
 # polluting individual project venvs:
-pipx install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.6
+pipx install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.7
 
 # (Optional but recommended) install the Claude Code bootstrap pack —
 # a tiny skill + slash command so you can run `consensus init` from
@@ -45,7 +45,7 @@ pipx install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.6
 consensus-init --install-claude-code
 ```
 
-(If you prefer pip-in-venv: `pip install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.6` — but pipx is the recommended pattern for cross-project use.)
+(If you prefer pip-in-venv: `pip install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.7` — but pipx is the recommended pattern for cross-project use.)
 
 `--install-claude-code` is a **standalone global operation** — it copies three files into your Claude Code config and exits:
 
@@ -279,9 +279,39 @@ Earlier workflow taxonomy (#1 codex-fix-author, #2 Flavor B subsystem review) is
 
 ## Status
 
-**1.14.0** — multi-AI contributor pool, blind-first-reveal workflow #4, configurable governance, snapshot/restore, proposal-mode codex/gemini dispatchers, `consensus-init` auto-bootstraps `.mcp.json`. Extracted from the project that produced and stress-tested it; restarted at iter-0001 as a standalone. 773+ regression tests passing (1 skipped, 0 failing under any ordering). The bootstrap deployment is the test corpus; new users can build on a stable surface.
+**1.14.7** (current) — Workflow A/B/C operator vocabulary; bundled
+operating-procedure skill carrying load-bearing doctrine (parallelism,
+weighted-synthesis convergence, no-deferral, verify-before-invent,
+artifact-scoped claims, Friday release cadence); Workflow C
+autonomous-execute contract (engine deferred to v1.15.0 with named
+blocker); centralized `phase_to_mode` adapter forwarding; advisory
+mechanism for known-defect releases; 704+ regression tests passing.
 
-See [`CHANGELOG.md`](CHANGELOG.md) for the v1.14.0 feature train (iter-0009 through iter-0022).
+**Recent train** (v1.14.0 → v1.14.6):
+- v1.14.0: multi-AI contributor pool, blind-first-reveal Workflow A
+  (was #4), configurable governance, snapshot/restore, proposal-mode
+  codex/gemini dispatchers, `consensus-init` auto-bootstraps `.mcp.json`.
+- v1.14.1-v1.14.3: doctrine corrections (PyPI-publish-step removed
+  from bundled skill; verify-before-invent + artifact-scoped-claims
+  rules; weighted-synthesis as default convergence model; README
+  install-URL bump prevents bleeding-wound on stale tags).
+- v1.14.4: Workflow A/B/C rename (numeric aliases 3/4 deprecated);
+  Workflow C autonomous-execute CONTRACT (validators, scope_check
+  helper, halt-set, audit-ledger schema, 3-AI safety floor); engine
+  is `NotImplementedError` pointing at v1.15.0.
+- v1.14.5: iter-0044 adapter `--mode` forwarding fix per iter-0043
+  converged plan; covers the adapter boundary that was uncovered
+  for the entire previous release train.
+- v1.14.6: hot-patch — `consensus-init --workflow A` (and B, C,
+  autonomous-execute) accepted at argparse-time (v1.14.4 oversight).
+
+Extracted from the project that produced and stress-tested it;
+restarted at iter-0001 as a standalone.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the per-release detail and
+[`docs/advisories.md`](docs/advisories.md) for known-defect-release
+upgrade guidance (currently advises v1.14.0/v1.14.1 users to upgrade
+to v1.14.3 or later).
 
 ## Requirements
 
