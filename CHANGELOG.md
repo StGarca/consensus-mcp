@@ -62,11 +62,28 @@ defects, integrated not dismissed):**
   hard fail. The invariant is now true (genuine wedge fails in
   ≤20 s). Pass-3 re-dispatched for confirmation.
 
-Local after the pass-2 fix: streaming file 8/8 deterministic
-across 6 repeated runs (sub-0.3s, fast-fail never false-triggers);
-full suite re-verified. The provisional-until-proven
+- Pass-3: codex confirmed the pass-2 deadlock-invariant fix
+  RESOLVED; gemini clean a 3rd time. codex pass-3 raised two
+  valid coverage-fidelity findings (reasoning from "H2 coverage
+  must be preserved"): (a, blocking) the operator-abort test
+  never asserted the SIGTERM/terminate side-effect — a
+  `_terminate_process_tree` regression would pass while leaking
+  a live process; (b, high) the rewrite dropped the original's
+  consume-then-go-silent synchronization so the silence test
+  could degrade from post-stream to startup-silence coverage.
+  Integrated: `StreamingFakeCodexPopen._terminated` +
+  `factory.instances` and an explicit SIGTERM assertion;
+  `_drive_post_stream` (process N lines, THEN drive) + an
+  assertion that the abort is tied to prior streamed output.
+
+The multi-pass Workflow B audit caught **4 substantive defects**
+self-certification would have shipped (governance scope;
+deadlock invariant claim-vs-code; SIGTERM coverage; post-stream
+coverage). Local after pass-3: streaming 8/8 deterministic ×6
+(sub-0.3s); full suite re-verified. The provisional-until-proven
 ≥3-consecutive-green-Windows-CI gate runs on the post-audit
-final commit.
+final commit; v1.15.9 is NOT cut until codex returns 0 blocking
+AND that gate passes (attempts-API verified).
 
 ## 1.15.8 - 2026-05-15
 

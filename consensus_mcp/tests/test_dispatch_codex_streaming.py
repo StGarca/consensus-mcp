@@ -276,6 +276,12 @@ class StreamingFakeCodexPopen:
         self._exit_at = float(_exit_at)
         self._returncode_on_exit = int(_returncode)
         self._exited = False
+        # codex-v1159-wfb-3 codex-rev-001 (BLOCKING): record the
+        # SIGTERM/terminate side-effect so the operator-abort test can
+        # assert _terminate_process_tree actually ran (H2 names SIGTERM
+        # as required coverage — a regression that stopped killing the
+        # process must FAIL, not silently pass).
+        self._terminated = False
         self.returncode = None
         self._output_payload = _output_payload
         self._out_file = None
@@ -307,6 +313,7 @@ class StreamingFakeCodexPopen:
         return None
 
     def terminate(self):
+        self._terminated = True
         if not self._exited:
             self.returncode = -15  # SIGTERM
             self._exited = True
@@ -314,6 +321,7 @@ class StreamingFakeCodexPopen:
             # Do NOT stage output payload on termination — matches real codex.
 
     def kill(self):
+        self._terminated = True
         if not self._exited:
             self.returncode = -9
             self._exited = True
@@ -352,10 +360,17 @@ def _make_factory(
     exit_at: float = 1.0,
     output_payload: str = '{"ok": true}',
 ):
-    """Build a popen_factory closure for injection into `_invoke_codex`."""
+    """Build a popen_factory closure for injection into `_invoke_codex`.
+
+    `factory.instances` records every `StreamingFakeCodexPopen`
+    created so a test can assert process-side-effects (codex-v1159-
+    wfb-3 codex-rev-001: the operator-abort test must verify the
+    real SIGTERM/terminate happened, not just the log/signal-file)."""
+
+    instances: list = []
 
     def factory(cmd, **kwargs):
-        return StreamingFakeCodexPopen(
+        p = StreamingFakeCodexPopen(
             cmd,
             _scheduled_stdout=scheduled_stdout,
             _scheduled_stderr=scheduled_stderr,
@@ -365,7 +380,10 @@ def _make_factory(
             _output_payload=output_payload,
             **kwargs,
         )
+        instances.append(p)
+        return p
 
+    factory.instances = instances
     return factory
 
 
@@ -548,6 +566,62 @@ def _drive_streaming(
             "handshake broke; NOT a timing flake). max_steps exhaustion "
             "is a HARD fail even if release_all later frees the thread."
         )
+
+
+def _drive_post_stream(
+    clock: _SyncClock,
+    th: threading.Thread,
+    log_path: Path,
+    *,
+    min_streamed: int,
+    step: float,
+    max_steps: int = 64,
+):
+    """codex-v1159-wfb-3 codex-rev-002 (high, integrated): phase-1
+    lockstep small advances (`step` < stall_silence_seconds) until
+    `min_streamed` lines are PROCESSED — so `last_streamed_ts` is set
+    and the subsequent silence-abort exercises the POST-stream path,
+    NOT pre-first-line startup silence (the coverage the original
+    test's now-removed `time.sleep(0.1)` guaranteed). Then delegate to
+    `_drive` for phase-2 (advance past the silence threshold → abort →
+    death). Same fast-fail discipline as `_drive`."""
+    if not clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers > 0):
+        clock.release_all()
+        th.join(timeout=5)
+        raise AssertionError("_drive_post_stream: runner never started (release_all fired)")
+
+    steps = 0
+    while (
+        th.is_alive()
+        and len(_events(log_path, "dispatch_streamed_line")) < min_streamed
+        and steps < max_steps
+    ):
+        e = clock.advance(step)
+        if not clock.wait_for(
+            lambda e=e: (not th.is_alive())
+            or len(_events(log_path, "dispatch_streamed_line")) >= min_streamed
+            or (clock._sleepers > 0 and clock._park_epoch >= e)
+        ):
+            clock.release_all()
+            th.join(timeout=5)
+            raise AssertionError(
+                "_drive_post_stream: phase-1 per-step wait hit _CEILING "
+                "(release_all fired; NOT a timing flake)"
+            )
+        steps += 1
+
+    if len(_events(log_path, "dispatch_streamed_line")) < min_streamed:
+        clock.release_all()
+        th.join(timeout=5)
+        raise AssertionError(
+            f"_drive_post_stream: only "
+            f"{len(_events(log_path, 'dispatch_streamed_line'))} of "
+            f"{min_streamed} lines processed before phase-2 — POST-stream "
+            "coverage NOT established (release_all fired)"
+        )
+    # Phase-2: now last_streamed_ts is set → drive to the post-stream
+    # silence abort + thread death.
+    _drive(clock, th)
 
 
 def _read_log_events(log_path: Path) -> list[dict]:
@@ -748,7 +822,10 @@ def test_heartbeat_silence_triggers_abort(tmp_path):
         time_fn=clock.now,
         popen_factory=factory,
     )
-    _drive(clock, th, until=lambda: len(_events(log_path, "dispatch_aborted")) >= 1)
+    # codex-v1159-wfb-3 codex-rev-002: process BOTH scheduled lines
+    # first (step=1.0 < stall_silence_seconds=10) so this exercises
+    # POST-stream silence, then advance past the threshold.
+    _drive_post_stream(clock, th, log_path, min_streamed=2, step=1.0)
     assert not th.is_alive(), "runner did not abort"
     assert "e" in holder, "expected CodexInvocationError"
     assert isinstance(holder["e"], _dispatch_codex.CodexInvocationError)
@@ -756,6 +833,13 @@ def test_heartbeat_silence_triggers_abort(tmp_path):
     aborts = _events(log_path, "dispatch_aborted")
     assert len(aborts) == 1, f"expected 1 abort event, got {aborts}"
     assert aborts[0]["abort_source"] == "watchdog_silence"
+    # Proves the POST-stream silence path (not pre-first-line startup
+    # silence): the abort is tied to prior streamed output, so a
+    # regression in last_streamed_ts handling is caught (codex-rev-002).
+    assert aborts[0].get("last_streamed_line_age_seconds") is not None, (
+        "silence abort was startup-silence, not post-stream — "
+        "last_streamed_line_age_seconds is null (codex-rev-002 coverage)"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -800,6 +884,17 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
     assert aborts[0]["abort_source"] == "operator_signal_file"
     assert "operator manual abort" in aborts[0].get("abort_reason", "")
     assert not signal_path.exists(), "abort signal file was not deleted"
+    # codex-v1159-wfb-3 codex-rev-001 (BLOCKING): assert the actual
+    # SIGTERM/terminate side-effect. A regression that removed or broke
+    # _terminate_process_tree(proc) in the operator-signal branch would
+    # still emit the event, delete the signal file, and raise — passing
+    # every assertion above while leaving the real codex process ALIVE.
+    # H2 names SIGTERM as required coverage; assert it explicitly.
+    assert factory.instances, "no codex process was ever created"
+    assert factory.instances[0]._terminated, (
+        "operator abort did NOT terminate/SIGTERM the codex process "
+        "(_terminate_process_tree regression would leak a live process)"
+    )
 
 
 # --------------------------------------------------------------------------
