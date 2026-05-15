@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.7 - unreleased
+
+_No changes yet. Branched from v1.15.6 tip. Canonical repo:
+`github.com/stgarca/consensus-mcp`._
+
 ## 1.15.6 - 2026-05-15
 
 **Literal-zero pass** — completes the v1.15.5 identifier migration
