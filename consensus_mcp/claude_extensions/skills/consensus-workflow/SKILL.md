@@ -45,8 +45,22 @@ one cycle with `DeprecationWarning`.**
   emergent scope items within operator-pre-declared
   `autonomy_contract` boundaries. v1.14.4 ships the contract
   (config alias, validators, scope_check helper, schema); the
-  multi-iteration engine ships in v1.15.0. See
+  multi-iteration **engine is UNIMPLEMENTED as of v1.15.2 — no
+  committed target version; running Workflow C raises a clear
+  `NotImplementedError`**. Status:
   `docs/workflows/workflow-c-autonomous.md`.
+
+> **Consistency invariant (count-agnostic governance).** This
+> doctrine and the v1.15.1 machine-enforcement are scoped by
+> WORKFLOW MODE, never by contributor count. A 2-AI install
+> (claude + codex) and a 3-AI install (claude + codex + gemini)
+> are governed identically — same doctrine, same seal-time gate,
+> same enforcement knob. The ONLY count-sensitive default is the
+> convergence rule (`unanimous` at 2 contributors,
+> `strict-majority` at 3), and that is an operator-overridable
+> default, not a doctrine difference. (`propose-converge` requires
+> N≥2, so 2-AI gets full Workflow A enforcement; only
+> `autonomous-execute` requires exactly 3.)
 - **Advisory** — dispatches happen but no vote is load-bearing. Rare.
 
 ## Maximize parallelism — always
@@ -172,21 +186,23 @@ When writing a `converged-plan.yaml`:
 - Report votes per question (transparency) but treat the synthesis
   as an integration, not a vote winner.
 
-`all-or-nothing` finding-disposition (the legacy default in
-`config.py:295-308` for Workflow A) is **edge-case opt-in only.**
+`all-or-nothing` finding-disposition is **edge-case opt-in only.**
 Reserve it for binary scope decisions ("ship X or not"), security/
 safety gates ("approve patch or reject"), or legal/compliance
 verdicts where partial acceptance is incoherent. Operator must
 explicitly opt in via `goal_packet.convergence.finding_disposition:
 all-or-nothing` with rationale.
 
-**Engine-level follow-up:** `config.py:295-308` currently ENFORCES
-`all-or-nothing` for `workflow.mode=propose-converge`. Until that
-constraint is lifted (tracked as a separate iteration), the goal
-packet must still declare `all-or-nothing` to pass validation, but
-**author the convergence document in weighted-synthesis style
-regardless.** Once the engine constraint is removed, the default
-flips to weighted-synthesis at the data layer too.
+**Engine state (current, not a follow-up):** the
+`config.py` validator accepts BOTH `weighted-synthesis` and
+`all-or-nothing` for `workflow.mode=propose-converge`
+(`VALID_DISPOSITION_FOR_PROPOSE_CONVERGE`), and `weighted-synthesis`
+is the `default_config()` default. The earlier "engine ENFORCES
+all-or-nothing, goal_packet must still declare it until a future
+iteration lifts the constraint" caveat is **obsolete** — that
+constraint was lifted (iter-three-gaps). Author goal_packets with
+`weighted-synthesis` (the default); no all-or-nothing declaration
+is required to pass validation.
 
 ## Safety interlock first (HEADLINE — highest-value rule)
 
@@ -259,8 +275,14 @@ that most cleanly partitions the remaining hypothesis space.
 See `docs/workflows/converged-plan-convention.md` for the
 converged-plan blocks (`falsification`, `independent_safeguard`,
 `decisive_experiment_before_next_iteration`). These are an
-authoring convention enforced by this doctrine now; machine
-validation is a sequenced follow-up.
+authoring convention AND, **as of v1.15.1, machine-enforced**:
+`validators/validate_converged_plan.py` + a fail-closed seal-time
+gate in `workflow_engine._seal_converged_plan` validate the blocks
+(structure + consequence only — never soundness), governed by
+`convergence.converged_plan_enforcement`
+(`off|warn|graduated|strict`, default `graduated`). The v1.15.0
+tag is doctrine-only; machine enforcement exists only from the
+v1.15.1 tag forward.
 
 ## Dispatching codex / gemini
 
@@ -295,6 +317,21 @@ The signal "skip vs retry" is the cost of getting it wrong — when a
 chore goes through with 2-AI consensus, the worst case is "we get a
 weaker review"; when a design decision goes through with 2-AI
 consensus, the worst case is "we ratify a flawed design."
+
+**Empty gemini output is NOT a 429 — don't burn the retry budget.**
+gemini CLI ≥ `0.43.0-preview.0` refuses headless runs in an
+"untrusted" directory: it writes the trust error to stderr and
+produces **empty stdout**, which fails as `GeminiOutputParseError`
+("Expecting value: line 1 column 1"), often twice (initial +
+auto-retry) — looking like a transient 429 but it is deterministic.
+**Fixed in v1.15.2:** `_dispatch_gemini` injects
+`GEMINI_CLI_TRUST_WORKSPACE=true` into the subprocess env. On
+**≤ v1.15.1** apply the manual workaround:
+`GEMINI_CLI_TRUST_WORKSPACE=true` in the environment that runs the
+dispatcher (or MCP server). `--skip-trust` alone is NOT
+load-bearing on this CLI version. Diagnose by probing `gemini -p
+"reply OK"` directly — the trust error prints plainly. See
+`docs/advisories.md` (Advisory 2026-05-15, resolved v1.15.2).
 
 ## Codex auth model
 

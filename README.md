@@ -37,7 +37,7 @@ The end result: changes that pass three independent model families aren't "looks
 ```bash
 # Install via pipx — isolated venv, console scripts on PATH, no
 # polluting individual project venvs:
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.2
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.3
 
 # (Optional but recommended) install the Claude Code bootstrap pack —
 # a tiny skill + slash command so you can run `consensus init` from
@@ -45,7 +45,7 @@ pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.2
 consensus-init --install-claude-code
 ```
 
-(If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.15.2` — but pipx is the recommended pattern for cross-project use.)
+(If you prefer pip-in-venv: `pip install git+https://github.com/stgarca/consensus-mcp.git@v1.15.3` — but pipx is the recommended pattern for cross-project use.)
 
 `--install-claude-code` is a **standalone global operation** — it copies three files into your Claude Code config and exits:
 
@@ -280,7 +280,19 @@ Earlier workflow taxonomy (#1 codex-fix-author, #2 Flavor B subsystem review) is
 
 ## Status
 
-**1.15.2** (current) — gemini-dispatch workspace-trust fix:
+**1.15.3** (current) — bundled-doctrine + status currency
+hot-patch (doc/string only, no behavior). Corrects stale
+forward-references in shipped artifacts that misled every new
+installer (2-AI and 3-AI identically): converged-plan convention
+is machine-enforced from v1.15.1 (not "a follow-up"); Workflow C
+engine is unimplemented as of v1.15.2 with no committed target
+(skills + engine `NotImplementedError` + status doc); gemini
+empty-output ≠ 429 guidance. **Adds a written count-agnostic
+consistency invariant: doctrine + machine-enforcement are scoped
+by workflow mode, never by contributor count — 2-AI and 3-AI
+installs are governed identically.** Scope set by a Workflow A
+consult; Workflow B audit clean (codex + gemini).
+**1.15.2** — gemini-dispatch workspace-trust fix:
 `_dispatch_gemini.py` injects `GEMINI_CLI_TRUST_WORKSPACE=true`
 (gemini CLI ≥0.43.0-preview.0 otherwise refuses headless runs with
 empty stdout). Closes the v1.15.1 named blocker; advisory

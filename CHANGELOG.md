@@ -1,8 +1,55 @@
 # Changelog
 
-## 1.15.3 - unreleased
+## 1.15.3 - 2026-05-15
 
-_No changes yet. Branched from v1.15.2 tip._
+**Bundled-doctrine + status currency hot-patch** — doc/string only,
+no behavior change. Triggered by an operator question ("on a new
+install, will 2-AI follow all the upgraded workflow lessons, same
+as 3-AI?"). Investigation answer: **yes — doctrine + v1.15.1
+machine-enforcement are AI-count-AGNOSTIC, scoped by workflow mode,
+never by contributor count.** But the investigation found shipped
+v1.15.2 artifacts carrying stale forward-references that misled
+every new installer (2-AI and 3-AI identically).
+
+Scope set by a **Workflow A consult** (`iteration-v1153-bundled-
+skill-currency`; claude + codex + gemini; weighted-synthesis;
+shared-prior self-check PASSED-WITH-CORRECTION — fast 3/3 unanimity
+on scope was partly a shared prior; claude's differing differential
+surfaced F7, which was integrated, not laundered by the unanimity).
+
+Fixed (one failure mode — a shipped artifact's forward-reference
+whose target version already came due):
+- **F1** `consensus-workflow/SKILL.md`: the converged-plan
+  convention is no longer described as "machine validation is a
+  sequenced follow-up" — it is **machine-enforced as of v1.15.1**
+  (`validate_converged_plan` + fail-closed seal-time gate +
+  `convergence.converged_plan_enforcement` knob, default
+  `graduated`).
+- **F2** same skill, Gemini section: empty gemini output is NOT a
+  429 — `GEMINI_CLI_TRUST_WORKSPACE` guidance added (fixed v1.15.2;
+  manual workaround only ≤ v1.15.1; don't burn the 429 budget).
+- **F3** both bundled skills (`consensus-workflow` +
+  bootstrap `consensus`): Workflow C engine status corrected — it
+  did **not** ship in v1.15.0; it is UNIMPLEMENTED as of v1.15.2,
+  no committed target version.
+- **F4** `workflow_engine.py`: the Workflow C `NotImplementedError`
+  message + comment no longer promise "lands in v1.15.0" (string/
+  comment only — no control flow; no test pinned it).
+- **F7** `docs/workflows/workflow-c-autonomous.md`: 5 stale
+  "v1.15.0" forward-references corrected (the consult's
+  shared-prior-correction finding — the doc F4's text points at).
+- **Q4** `consensus-workflow/SKILL.md`: new normative
+  **consistency invariant** stating doctrine + enforcement are
+  workflow-mode-scoped, never contributor-count-scoped — 2-AI and
+  3-AI installs governed identically; only the convergence-rule
+  default differs (unanimous@2 vs strict-majority@3). Converts the
+  operator's implicit invariant into a written guarantee.
+
+No invented replacement version anywhere (artifact-scoped truth —
+that would repeat the exact defect). Code+doc bundled in one tag
+per the shared-failure-mode hot-patch doctrine (verified precedent:
+v1.14.5, v1.14.6). Full suite green, 0 regressions. Workflow B
+audit: codex + gemini.
 
 ## 1.15.2 - 2026-05-15
 
