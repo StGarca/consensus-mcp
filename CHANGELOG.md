@@ -1,9 +1,34 @@
 # Changelog
 
-## 1.15.7 - unreleased
+## 1.15.7 - 2026-05-15
 
-_No changes yet. Branched from v1.15.6 tip. Canonical repo:
-`github.com/stgarca/consensus-mcp`._
+**CI fix: 4 codex-dispatch tests required a real `codex` binary.**
+First green CI surfaced this: `test_dispatch_codex.py`'s
+`test_main_smoke_with_mocked_codex`,
+`test_main_smoke_flag_with_env_proceeds`,
+`test_main_sealed_packet_embeds_dispatch_provenance`,
+`test_dispatch_done_includes_archive_path_and_audit_id` predate the
+iter-0037 refactor that moved the codex invocation from
+`subprocess.run` to `subprocess.Popen`. They still mock only
+`subprocess.run` (now just the `codex --version` probe), so the
+actual dispatch executes the **real** codex via Popen. They passed
+on dev machines purely because a real `codex` is on PATH; on CI
+runners with none they failed `CodexInvocationError: codex binary
+not found` (windows legs → exit 1) or reached a process-group kill
+that SIGTERM'd the runner (ubuntu legs → exit 143). It stayed
+hidden because CI was dormant v1.13.0→v1.15.3 (main-only trigger)
+until v1.15.4 re-enabled it — so these were never actually
+CI-covered.
+
+Honest interim fix: a `skipif(shutil.which("codex") is None)`
+guard so they skip cleanly when no real codex is present (they are
+de-facto integration tests as written). Verified both ways: codex
+present → all 4 run + pass (no regression, full suite 968/0);
+codex absent (simulated) → 4 skip, 0 failed. **Named follow-up
+(tracked):** rewrite the 4 to mock the Popen path via the existing
+`make_fake_codex_popen_factory` / `popen_factory=` kwarg (the
+pattern the genuinely-hermetic `main()` tests already use) and drop
+the skip. Test-only change; no production code, no behavior.
 
 ## 1.15.6 - 2026-05-15
 
