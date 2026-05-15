@@ -2,8 +2,48 @@
 
 ## 1.15.8 - unreleased
 
-_No changes yet. Branched from v1.15.7 tip. Canonical repo:
-`github.com/stgarca/consensus-mcp`._
+**Windows-CI flakes — root-caused via Workflow A consult.** The
+re-enabled CI kept showing the *same commit* green on one run, red
+on another (2 Windows-only flakes). Consult
+`iteration-v1158-flaky-ci-and-locked-append` (claude+codex+gemini,
+weighted-synthesis, shared-prior self-check PASSED — three distinct
+differentials; dogfoods the v1.15.1 convention incl. an
+independent_safeguard).
+
+- **Q1(d) — real defect in `_visibility_watchdog._locked_append`
+  (the sealed-provenance/audit + watchdog integrity primitive).**
+  It caught `OSError` from `msvcrt.locking` then wrote **UNLOCKED**,
+  silently losing audit lines under contention (windows-py3.10 CI:
+  `test_locked_append_serializes_concurrent_writes` lost 4 of 50
+  from a 50-thread, ONE-process fan-out — intra-process contention,
+  the v1.15.7 OS-lock-vs-threads class in a different primitive;
+  latent + CI-exposed, not introduced this session). Fix: a
+  module-level `threading.Lock` (`_APPEND_LOCK`) serializes all
+  in-process callers deterministically; the OS lock now only
+  governs genuine cross-process contention; and the failure path
+  **fails LOUD** (raises) instead of a silent unlocked write — an
+  independent safeguard so a sealed-provenance/audit log can never
+  be silently incomplete, regardless of *why* the OS lock failed.
+  Fixes the test deterministically (not a quarantine).
+- **Q2(c interim) — timing-fragile heartbeat-pattern tests.** Four
+  tests drive the `_invoke_codex` runner thread + advance a
+  controllable clock with real `time.sleep` ticks then `join`;
+  they flake on loaded Windows GitHub runners (not a product
+  defect — same logic green on Linux CI + local; driven by the
+  injected `time_fn`). Per the converged plan's explicit (c)
+  allowance, `skipif(win32 and GITHUB_ACTIONS)` — they still run on
+  **Linux CI every push + local Windows dev**, so coverage is
+  retained. **Named follow-up:** rework `_ControllableClock` into a
+  deterministic synchronizing clock so they run everywhere and the
+  skip drops (advisory 2026-05-15).
+- **Verification discipline:** per the converged plan
+  (provisional-until-proven), v1.15.8 is cut ONLY after a
+  determinism argument AND **≥3 consecutive green Windows CI runs**
+  of the same commit — one green run is explicitly insufficient
+  (the over-claim that bit this session).
+
+Full suite 968 passed / 1 skipped / 0 regressions. Workflow B
+audit: codex + gemini.
 
 ## 1.15.7 - 2026-05-15
 
