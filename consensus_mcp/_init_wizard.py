@@ -885,8 +885,20 @@ def main(argv: list[str] | None = None) -> int:
                               "after init."))
 
     parser.add_argument("--workflow", default=None,
-                        choices=["3", "4", "post-review", "propose-converge", "advisory"],
-                        help="workflow mode")
+                        choices=[
+                            # Letter aliases (canonical operator vocabulary as of v1.14.4)
+                            "A", "B", "C", "a", "b", "c",
+                            # Numeric aliases (deprecated; emit DeprecationWarning)
+                            "3", "4",
+                            # Semantic strings (canonical internal values)
+                            "post-review", "propose-converge", "advisory", "autonomous-execute",
+                        ],
+                        help=("workflow mode. A=propose-converge (default; "
+                              "all contributors propose blindly then converge), "
+                              "B=post-review (lightweight; one AI implements, "
+                              "others review), C=autonomous-execute (overnight; "
+                              "v1.14.4 contract, v1.15.0 engine). Numeric "
+                              "aliases 3/4 deprecated."))
     parser.add_argument("--contributors", default=None,
                         help="comma-separated list of enabled contributors")
     parser.add_argument("--independence", default=None,
