@@ -434,11 +434,21 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
             )
         else:
             default_workflow = base["workflow"]["mode"]
+        # iter-workflow-abc-introduce: Workflow C (autonomous-execute) added.
+        # Letter aliases A/B/C accepted by WORKFLOW_ALIASES; semantic strings
+        # remain canonical for the underlying value.
         choice = _prompt(
-            "Workflow mode", default_workflow,
-            valid=[cfg.WORKFLOW_POST_REVIEW, cfg.WORKFLOW_PROPOSE_CONVERGE, cfg.WORKFLOW_ADVISORY],
+            "Workflow mode (A=propose-converge, B=post-review, C=autonomous-execute, advisory)",
+            default_workflow,
+            valid=[
+                cfg.WORKFLOW_POST_REVIEW,
+                cfg.WORKFLOW_PROPOSE_CONVERGE,
+                cfg.WORKFLOW_ADVISORY,
+                cfg.WORKFLOW_AUTONOMOUS_EXECUTE,
+            ],
         )
-        base["workflow"]["mode"] = choice
+        # Resolve letter alias (A/B/C) to semantic string before storing.
+        base["workflow"]["mode"] = cfg.WORKFLOW_ALIASES.get(choice, choice)
 
     # Convergence rule.
     if "convergence" not in set_flags:
