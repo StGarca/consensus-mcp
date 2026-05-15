@@ -1121,4 +1121,16 @@ passes:
   packet_sha256: f883afae22f6a29de6d92981a01308ffde8e838cd476bf9cc926dc090327b686
   iteration_id: iteration-v1154-repo-presentation-ci
   reviewer_id: codex-v1154-1
-last_updated_utc: '2026-05-15T18:38:07Z'
+- id: gemini-v1154-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1154-repo-presentation-ci-gemini-v1154-2-gemini-v1154-2-pass1-pass.yaml
+  sealed_at: '2026-05-15T18:42:27Z'
+  packet_sha256: 433e2721b27f2649c53664e76a7bfaffeab8dbedc93be208b85207ad1f33e252
+  iteration_id: iteration-v1154-repo-presentation-ci
+  reviewer_id: gemini-v1154-2
+- id: codex-v1154-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1154-repo-presentation-ci-codex-v1154-2-codex-v1154-2-pass1-pass.yaml
+  sealed_at: '2026-05-15T18:45:00Z'
+  packet_sha256: 0c7d9ba2ae97359bd6e3ff2c7b2717a0564913571d524f7e8c4ca90d2187e027
+  iteration_id: iteration-v1154-repo-presentation-ci
+  reviewer_id: codex-v1154-2
+last_updated_utc: '2026-05-15T18:45:00Z'
