@@ -104,6 +104,28 @@ here too:
   gemini pass-2 both goal_satisfied=true, 0 blocking, 0 findings;
   shared-prior self-check passed (the false prior was exposed by
   artifact verification, not laundered).
+- **(A) primitive corrected — CI refuted the pass-2-audited
+  implementation.** Pass-2's (A) routed `_log_dispatch` through
+  `_visibility_watchdog._locked_append`. Both auditors endorsed
+  the *concept*, but that helper uses a **blocking cross-process**
+  lock (`msvcrt.locking LK_LOCK` / `fcntl.flock`); the streaming
+  concurrency is **intra-process** (main + stdout + stderr reader
+  threads of one dispatcher), and contending that blocking OS lock
+  across the same process's threads on Windows stalled the runner
+  thread → windows-py3.12 regression (`test_heartbeat_fires_at_
+  interval` "runner did not finish"; windows-py3.10 was fixed,
+  proving (A)+(C)'s direction right, but py3.12 traded). The
+  multi-platform CI caught what audit+local-green could not — the
+  reason CI is the load-bearing oracle for thread/platform bugs.
+  Corrected (A): a module-level `threading.Lock`
+  (`_DISPATCH_LOG_LOCK`) guarding a plain text append — the
+  correct, deadlock-free primitive for intra-process thread
+  serialization. Cross-process serialization of a shared
+  dispatch-log under *parallel dispatcher processes* is a
+  separate, unobserved concern, named explicitly (NOT solved with
+  the blocking OS lock that just regressed). Full suite 968/1-skip/
+  0-reg; the previously-stalling test passes locally. Re-audited
+  (pass-3) on the corrected primitive.
 
 ## 1.15.6 - 2026-05-15
 
