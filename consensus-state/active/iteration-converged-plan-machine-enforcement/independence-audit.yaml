@@ -92,3 +92,18 @@ audit_log:
     - review_target (path passed via --review-target; may be unspecified)
     - model (gemini CLI --model flag; no --output-schema enforcement)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T16:55:32Z'
+  event_id: 2026-05-15T16:55:32Z_review_returned_and_sealed_codex-cpme-wfb-3
+  actor: codex-cpme-wfb-3
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-converged-plan-machine-enforcement-codex-cpme-wfb-3-codex-cpme-wfb-3-pass1-pass.yaml
+  sha256: 06d41c52f253dd3f1e3daad0e86c1a96a541756c160db1a69bed94bf9e0353b5
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
