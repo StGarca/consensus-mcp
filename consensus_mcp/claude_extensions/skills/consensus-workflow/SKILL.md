@@ -36,19 +36,79 @@ candidate. Stop and route to a consult.
   rounds. Used for design questions.
 - **Advisory**: dispatches happen but no vote is load-bearing. Rare.
 
-## Round-1 dispatch order (workflow #4)
+## Maximize parallelism — always
 
-**Dispatch peer contributors FIRST in background, then author my own
-proposal in parallel while they run.** Independence (blind-first-
-reveal) depends on **visibility**, not **temporal order**. No
-contributor sees another's output → independence preserved regardless
-of who started writing first. This optimization saves wall-clock and
-surfaces dispatcher errors earlier.
+**Default to parallel; serial is the choice that needs justification.**
+Every operation in a consensus workflow that can run independently
+SHOULD run in parallel. This applies to:
+
+- Round-1 peer dispatches (codex + gemini in background, claude
+  authors proposal in parallel)
+- Round-2+ batches where multiple peers are re-dispatched
+- Reading multiple sealed artifacts (one batched call, not N
+  serial reads)
+- Investigating multiple files / running multiple greps during
+  iteration scoping
+- Background long-running operations (snapshots, audits, blast-
+  radius scans) kicked off to run alongside foreground work
+- Cross-iteration parallelism: when two iterations have no data
+  dependency, dispatch them as parallel branches (worktrees) and
+  converge results
+
+Practice has demonstrated drastic performance improvement when
+parallelism is fully exploited. Burden of proof flips: if you
+choose serial, the reason must be a real data dependency
+(operation B needs operation A's output), not "felt simpler" or
+"easier to reason about."
+
+### Round-1 dispatch order (workflow #4) — specific case
+
+Dispatch peer contributors FIRST in background, then author your
+own proposal in parallel while they run. Independence (blind-
+first-reveal) depends on **visibility**, not **temporal order**.
+No contributor sees another's output → independence preserved
+regardless of who started writing first. This optimization saves
+wall-clock and surfaces dispatcher errors earlier.
 
 Constraints: the goal_packet MUST be final before kicking off
-contributors (mid-flight rewrites mean wasted dispatches), and this
-applies to round 1 only — round 2+ explicitly require seeing round-1
-outputs.
+contributors (mid-flight rewrites mean wasted dispatches), and the
+"author in parallel" optimization applies to round 1 only — round
+2+ explicitly require seeing round-1 outputs.
+
+## Convergence model — weighted-synthesis by default
+
+**Default convergence model: weighted-synthesis.** All ideas of
+all proposals are weighed for benefit to the project as a whole.
+No good ideas are lost; no babies tossed with the bathwater.
+
+When writing a `converged-plan.yaml`:
+
+- Structure synthesis per-question (or per-decision-point), naming
+  each contributor's position and explaining which element was
+  adopted and why.
+- When a contributor's position was NOT adopted, explicitly note
+  WHY (sequencing, scope, evidence quality) so the good idea is
+  preserved as a follow-up rather than lost.
+- Scan each rejected proposal element: if there's no follow-up
+  iteration, ADR, or CHANGELOG note capturing it, write one.
+- Report votes per question (transparency) but treat the synthesis
+  as an integration, not a vote winner.
+
+`all-or-nothing` finding-disposition (the legacy default in
+`config.py:295-308` for workflow #4) is **edge-case opt-in only.**
+Reserve it for binary scope decisions ("ship X or not"), security/
+safety gates ("approve patch or reject"), or legal/compliance
+verdicts where partial acceptance is incoherent. Operator must
+explicitly opt in via `goal_packet.convergence.finding_disposition:
+all-or-nothing` with rationale.
+
+**Engine-level follow-up:** `config.py:295-308` currently ENFORCES
+`all-or-nothing` for `workflow.mode=propose-converge`. Until that
+constraint is lifted (tracked as a separate iteration), the goal
+packet must still declare `all-or-nothing` to pass validation, but
+**author the convergence document in weighted-synthesis style
+regardless.** Once the engine constraint is removed, the default
+flips to weighted-synthesis at the data layer too.
 
 ## Dispatching codex / gemini
 
