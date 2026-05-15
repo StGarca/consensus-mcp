@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.8 - unreleased
+
+_No changes yet. Branched from v1.15.7 tip. Canonical repo:
+`github.com/stgarca/consensus-mcp`._
+
 ## 1.15.7 - 2026-05-15
 
 **CI fix: 4 codex-dispatch tests required a real `codex` binary.**
