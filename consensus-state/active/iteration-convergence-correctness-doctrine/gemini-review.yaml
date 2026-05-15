@@ -1,0 +1,35 @@
+iteration_id: iteration-convergence-correctness-doctrine
+reviewer_id: gemini-convdoc-audit-1
+pass_id: gemini-convdoc-audit-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The changes correctly and consistently implement the convergence-correctness
+  doctrine across the specified skill, template, and documentation files. The new
+  rules are clearly articulated, the implementation aligns with the stated goal, and
+  the deferral of machine enforcement is appropriately documented as a named blocker.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 2597bfe68ff9a8ee68ead379b391a44af7a471423f15405703fc7c01a81867d6
+  output_sha256: 2702cfa1d2805b28cd9de67fe24c31687a738e2ca751a5b63309584636699628
+  goal_packet_sha256: 3865a341ded037e9192150b430e4bd2f6c707d9695c34a77686971d9850b6336
+  scope_signature: c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0117e8e3c0
+  review_target_path: consensus-state/active/iteration-convergence-correctness-doctrine/review-packet.yaml
+  review_target_hash: c384a9b7979fdba7f8c3d48e3def616d2a92c29b1a30303336d97958819d375d
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T15:42:56Z'
+packet_sha256: 2b6ce114e13c40305699569a35e2d14a33b5c87b883436f0cb2acb7dee9041e2

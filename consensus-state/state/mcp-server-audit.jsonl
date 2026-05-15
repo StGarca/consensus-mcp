@@ -1,6 +1,3 @@
-{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T14:42:22Z", "findings_at_boot": 0}
-{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T14:50:40Z", "findings_at_boot": 0}
-{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T14:54:17Z", "findings_at_boot": 0}
-{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T14:57:50Z", "findings_at_boot": 0}
-{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T15:00:26Z", "findings_at_boot": 0}
-{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T15:10:13Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T15:29:37Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T15:42:32Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-15T15:45:36Z", "findings_at_boot": 0}
