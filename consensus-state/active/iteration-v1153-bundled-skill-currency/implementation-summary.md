@@ -29,16 +29,23 @@ self-check PASSED-WITH-CORRECTION). Doc/string only — no behavior.
 
 ## Acceptance-gate evidence (grep-verified)
 
-- ZERO "machine validation is a sequenced follow-up" in skills/
-  converged-plan-convention.md.
+- ZERO "machine validation is a sequenced follow-up" in the two
+  bundled skills (consensus-workflow + consensus) NOR in
+  `docs/workflows/converged-plan-convention.md` (corrected per
+  gemini-rev-001 pass-1: the convention doc is under docs/workflows/,
+  not skills/).
 - `GEMINI_CLI_TRUST_WORKSPACE` present in consensus-workflow skill.
-- NO live "v1.15.0 / lands in / ships in / pointing at" Workflow-C
-  ENGINE target across the 4 artifacts. The ONLY surviving
-  "v1.15.0" string is `workflow_engine.py:159`, an INTENTIONAL
-  corrected comment naming the historical false ref ("the earlier
-  'lands in v1.15.0' forward-reference came due unfulfilled and was
-  corrected in v1.15.3") — artifact-scoped truth, not a live
-  promise.
+- NO LIVE "v1.15.0 / lands in / ships in / pointing at" Workflow-C
+  ENGINE target remains across the 4 artifacts. Surviving "v1.15.0"
+  strings are INTENTIONAL historical-reference explanations, by
+  design, in BOTH `workflow_engine.py` (the corrected comment) AND
+  `docs/workflows/workflow-c-autonomous.md` (the corrected Status
+  block naming what each of v1.15.0/1/2 actually shipped) —
+  artifact-scoped truth naming the defect being fixed, not live
+  promises. (Corrected per codex-rev-003 pass-1: the earlier draft
+  of this line said workflow_engine.py was the ONLY survivor, which
+  overstated the grep — the status doc intentionally retains
+  historical text too.)
 - Count-agnostic invariant present in consensus-workflow skill.
 - workflow_engine.py change is string+comment only; suite green.
 

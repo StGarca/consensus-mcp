@@ -1,51 +1,107 @@
 defect_target:
   files:
-  - consensus-state/active/iteration-v1153-bundled-skill-currency/implementation-summary.md
+  - consensus-state/active/iteration-v1153-bundled-skill-currency/fix-response-wfb-pass2.md
   - consensus-state/active/iteration-v1153-bundled-skill-currency/converged-plan.yaml
   - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md
   - consensus_mcp/claude_extensions/skills/consensus/SKILL.md
   - consensus_mcp/workflow_engine.py
   - docs/workflows/workflow-c-autonomous.md
   - CHANGELOG.md
-  base_sha: 0d12350ea57db8120d586e1c6b01f1a7759cd1600510f09a188bcd43594ecef9
+  base_sha: 2fa55d70c77751f27fa901abca6304947fae312ca652ac24e704332f66787e09
   touched_files_contents:
-    consensus-state/active/iteration-v1153-bundled-skill-currency/implementation-summary.md: "#\
-      \ Workflow B audit target — v1.15.3 bundled-doctrine currency hot-patch\n\n\
-      Executes `converged-plan.yaml` in this iteration dir (Workflow A\nconsult: claude\
-      \ + codex + gemini; weighted-synthesis; shared-prior\nself-check PASSED-WITH-CORRECTION).\
-      \ Doc/string only — no behavior.\n\n## Converged scope implemented (F1,F2,F3,F4,F7,Q4)\n\
-      \n- **F1** `consensus-workflow/SKILL.md` — converged-plan convention\n  now\
-      \ stated machine-enforced as of v1.15.1 (validator + seal-time\n  gate + `converged_plan_enforcement`\
-      \ default graduated); v1.15.0\n  doctrine-only caveat retained.\n- **F2** same\
-      \ skill, Gemini section — \"empty output is NOT a 429\"\n  + `GEMINI_CLI_TRUST_WORKSPACE`\
-      \ (fixed v1.15.2; manual workaround\n  only ≤v1.15.1).\n- **F3** `consensus-workflow/SKILL.md`\
-      \ + bootstrap `consensus/\n  SKILL.md` — Workflow C engine: UNIMPLEMENTED as\
-      \ of v1.15.2, no\n  committed target version.\n- **F4** `workflow_engine.py:152-174`\
-      \ — NotImplementedError message\n  + comment corrected. STRING/COMMENT ONLY,\
-      \ no control flow. F5\n  verified: no test pins it (grep of consensus_mcp/tests/\
-      \ empty);\n  full suite 968 passed 0 regressions confirms.\n- **F7** `docs/workflows/workflow-c-autonomous.md`\
-      \ — 5 stale\n  \"v1.15.0\" forward-refs corrected (the consult's shared-prior\n\
-      \  correction; this doc is what F4's message points at, so it had\n  to be fixed\
-      \ in the same tag or the pointer would be stale).\n- **Q4** `consensus-workflow/SKILL.md`\
-      \ — new normative\n  \"Consistency invariant (count-agnostic governance)\" block.\n\
-      \n## Acceptance-gate evidence (grep-verified)\n\n- ZERO \"machine validation\
-      \ is a sequenced follow-up\" in skills/\n  converged-plan-convention.md.\n-\
-      \ `GEMINI_CLI_TRUST_WORKSPACE` present in consensus-workflow skill.\n- NO live\
-      \ \"v1.15.0 / lands in / ships in / pointing at\" Workflow-C\n  ENGINE target\
-      \ across the 4 artifacts. The ONLY surviving\n  \"v1.15.0\" string is `workflow_engine.py:159`,\
-      \ an INTENTIONAL\n  corrected comment naming the historical false ref (\"the\
-      \ earlier\n  'lands in v1.15.0' forward-reference came due unfulfilled and was\n\
-      \  corrected in v1.15.3\") — artifact-scoped truth, not a live\n  promise.\n\
-      - Count-agnostic invariant present in consensus-workflow skill.\n- workflow_engine.py\
-      \ change is string+comment only; suite green.\n\n## Audit questions\n\n- Q1\
-      \ goal_satisfied: does the implementation match the converged\n  plan's scope\
-      \ + the canonical Workflow-C text exactly?\n- Q2 (anti-recurrence — the converged\
-      \ plan's explicit audit gate):\n  was ANY new invented forward-reference introduced\
-      \ (a version\n  promise, \"will ship in vX\")? Verify the corrected texts state\n\
-      \  only artifact-scoped truth.\n- Q3: is the count-agnostic invariant (Q4) accurate\
-      \ vs. the code\n  (validator no count-logic; seal gate only in _run_workflow_4;\n\
-      \  skill install not count-gated; propose-converge N≥2)?\n- Q4: any blocking\
-      \ objection? State the differential/prior you\n  reasoned from.\n"
+    consensus-state/active/iteration-v1153-bundled-skill-currency/fix-response-wfb-pass2.md: '#
+      Fix response — Workflow B pass-2 (codex pass-1 + gemini pass-1)
+
+
+      Both auditors **0 blocking**. gemini goal_satisfied=true (1 low);
+
+      codex goal_satisfied=false (1 high + 2 medium) — all verified
+
+      against real content, none hallucinated, all the SAME currency-
+
+      drift the consult exists to fix, in files already in scope →
+
+      no-deferral fold-in.
+
+
+      ## codex-rev-001 (high) — ACCEPTED, RESOLVED
+
+
+      `consensus-workflow/SKILL.md` "Engine-level follow-up" block said
+
+      config.py ENFORCES all-or-nothing for propose-converge and the
+
+      goal_packet "must still declare all-or-nothing to pass
+
+      validation." VERIFIED STALE: config.py
+
+      `VALID_DISPOSITION_FOR_PROPOSE_CONVERGE` accepts BOTH
+
+      weighted-synthesis and all-or-nothing, and `default_config()`
+
+      defaults to weighted-synthesis. Constraint was lifted
+
+      (iter-three-gaps). Same failure mode as F1/F3/F7, same file. Block
+
+      rewritten to "Engine state (current, not a follow-up)" stating the
+
+      accurate validator behavior; stale line-number citation removed.
+
+
+      ## codex-rev-002 (medium) — ACCEPTED, RESOLVED
+
+
+      `workflow-c-autonomous.md:47` heading "## What''s deferred to
+
+      v1.16.0+" — a live version-promise, the exact anti-pattern this
+
+      hot-patch is about. Reworded to "## What''s deferred (no committed
+
+      version)" + body now states no target version is committed.
+
+
+      ## codex-rev-003 (medium) — ACCEPTED, RESOLVED
+
+
+      implementation-summary.md acceptance evidence overstated: claimed
+
+      workflow_engine.py was the ONLY surviving v1.15.0 string;
+
+      workflow-c-autonomous.md intentionally also retains historical
+
+      v1.15.0 text. Corrected to "no LIVE engine target remains;
+
+      historical explanations survive in BOTH by design."
+
+
+      ## gemini-rev-001 (low) — ACCEPTED, RESOLVED
+
+
+      implementation-summary.md referenced `skills/converged-plan-
+
+      convention.md` — the convention doc is `docs/workflows/converged-
+
+      plan-convention.md`. Path corrected.
+
+
+      ## Scope / verification
+
+
+      All four are doc/summary edits — NO code touched since the
+
+      968-passed/0-regression run (codex-rev-001 is a bundled-skill
+
+      markdown change, not engine). The grep acceptance gates still hold;
+
+      the v1.16.0+ removal extends the anti-recurrence gate. This pass-2
+
+      dispatch is verification-only: confirm goal_satisfied=true, no
+
+      blocking, no remaining or NEWLY-introduced version forward-
+
+      reference.
+
+      '
     consensus-state/active/iteration-v1153-bundled-skill-currency/converged-plan.yaml: "iteration_id:\
       \ iteration-v1153-bundled-skill-currency\nconverged_at_utc: '2026-05-15T17:55:00Z'\n\
       convergence_rule: weighted-synthesis\ncontributors_responsive: [claude, codex,\
@@ -276,66 +332,66 @@ defect_target:
       - Scan each rejected proposal element: if there's no follow-up\n  iteration,\
       \ ADR, or CHANGELOG note capturing it, write one.\n- Report votes per question\
       \ (transparency) but treat the synthesis\n  as an integration, not a vote winner.\n\
-      \n`all-or-nothing` finding-disposition (the legacy default in\n`config.py:295-308`\
-      \ for Workflow A) is **edge-case opt-in only.**\nReserve it for binary scope\
-      \ decisions (\"ship X or not\"), security/\nsafety gates (\"approve patch or\
-      \ reject\"), or legal/compliance\nverdicts where partial acceptance is incoherent.\
-      \ Operator must\nexplicitly opt in via `goal_packet.convergence.finding_disposition:\n\
-      all-or-nothing` with rationale.\n\n**Engine-level follow-up:** `config.py:295-308`\
-      \ currently ENFORCES\n`all-or-nothing` for `workflow.mode=propose-converge`.\
-      \ Until that\nconstraint is lifted (tracked as a separate iteration), the goal\n\
-      packet must still declare `all-or-nothing` to pass validation, but\n**author\
-      \ the convergence document in weighted-synthesis style\nregardless.** Once the\
-      \ engine constraint is removed, the default\nflips to weighted-synthesis at\
-      \ the data layer too.\n\n## Safety interlock first (HEADLINE — highest-value\
-      \ rule)\n\nFor **safety-critical / data-loss / bricking / irreversible-risk**\n\
-      defects: a root-cause-**INDEPENDENT** safeguard that is valuable\neven if the\
-      \ root-cause hypothesis is 100% false **MUST** ship in\nthe same change as the\
-      \ hypothesized fix. **Stopping the bleeding\noutranks perfecting the diagnosis.**\n\
-      \nField-proven (ChilipadScreen i2c boot-loop report, 2026-05-15): an\nindependent\
-      \ boot-loop breaker, made hypothesis-independent *by\ndesign*, un-bricked a\
-      \ medical-safety device and kept it serving\nacross **two** consecutive consensus\
-      \ iterations whose converged\nroot causes were both later refuted on-device.\
-      \ It was called \"the\nsingle highest-value decision.\"\n\nAuditable bar: **\"\
-      would this safeguard still work if the root cause\nwere entirely different?\"\
-      ** If a reviewer cannot answer *yes* from\nthe safeguard's mechanism alone,\
-      \ it does not qualify — it is a\ndisguised bet on the hypothesis, not an interlock.\n\
-      \n## Convergence is agreement, not truth\n\n**Convergence measures agreement,\
-      \ not correctness.** Two clean\nstrict-majority 2-of-2 convergences (and one\
-      \ round-1 *unanimous*\none) shipped root causes that on-device tests then refuted.\n\
-      \n**Fast independent unanimity is a VERIFY-HARDER flag, not\nconfidence.** When\
-      \ contributors agree quickly, suspect a *shared\nprior*: independent agents\
-      \ reasoning from the same incomplete\ndifferential is the multi-agent analog\
-      \ of single-agent\nrationalize-away (see the disconfirming-evidence doctrine).\
-      \ Unanimity\nis evidence only when the contributors reasoned from *different*\n\
-      differentials — so make the differential visible (the dispatch\ntemplates now\
-      \ require each contributor to state the prior it\nreasoned from; at reveal,\
-      \ a shared prior is exposed instead of\nlaundered as \"independent agreement\"\
-      ).\n\n### Provisional-until-proven (defined defect class)\n\nFor claims **not\
-      \ falsifiable from the artifacts in evidence** —\nhardware/firmware state, environment/toolchain,\
-      \ concurrency/timing,\nanything refutable only by an *external* observation\
-      \ — a converged\nroot cause is **PROVISIONAL**. The converged plan's\n`falsification.empirical_status`\
-      \ is `pending` until the named\ndiscriminating experiment runs; it then becomes\
-      \ `proven` (the\nrefutation observation did NOT occur) or **`refuted`** (it\
-      \ did —\nthe load-bearing terminal state; the hypothesis is dead, the\niteration\
-      \ does not close on it, and the decisive experiment for\nthe next iteration\
-      \ carries forward). **\"Fixed\" / \"shipped\" /\n\"root-cause-correct\" language\
-      \ is forbidden before `proven`.**\n(Pure-code defects refutable by a unit test\
-      \ already carry their\nproof — no extra ceremony; forcing one there is the theater\
-      \ this\nrule is meant to prevent.)\n\n### Anti-theater property (what makes\
-      \ falsification real)\n\nA falsification is real **only if its refuting observation\
-      \ is\n(1) pre-specified, (2) a specific observable, and (3) for the\ndefined\
-      \ class, EXTERNAL to the reasoning that produced the\nhypothesis.** External\
-      \ tests can't be rationalized in the room —\nthat is precisely why the device\
-      \ refuted what code-reading could\nnot. \"We'll test it\" is not a falsification;\
-      \ \"X at address Y still\nreturns 0x103 on a clean POWERON\" is.\n\nAlso name\
-      \ **the single decisive experiment that must run before\nthe next iteration**\
-      \ (the report's Exp-4 pattern) — the one test\nthat most cleanly partitions\
-      \ the remaining hypothesis space.\n\nSee `docs/workflows/converged-plan-convention.md`\
-      \ for the\nconverged-plan blocks (`falsification`, `independent_safeguard`,\n\
-      `decisive_experiment_before_next_iteration`). These are an\nauthoring convention\
-      \ AND, **as of v1.15.1, machine-enforced**:\n`validators/validate_converged_plan.py`\
-      \ + a fail-closed seal-time\ngate in `workflow_engine._seal_converged_plan`\
+      \n`all-or-nothing` finding-disposition is **edge-case opt-in only.**\nReserve\
+      \ it for binary scope decisions (\"ship X or not\"), security/\nsafety gates\
+      \ (\"approve patch or reject\"), or legal/compliance\nverdicts where partial\
+      \ acceptance is incoherent. Operator must\nexplicitly opt in via `goal_packet.convergence.finding_disposition:\n\
+      all-or-nothing` with rationale.\n\n**Engine state (current, not a follow-up):**\
+      \ the\n`config.py` validator accepts BOTH `weighted-synthesis` and\n`all-or-nothing`\
+      \ for `workflow.mode=propose-converge`\n(`VALID_DISPOSITION_FOR_PROPOSE_CONVERGE`),\
+      \ and `weighted-synthesis`\nis the `default_config()` default. The earlier \"\
+      engine ENFORCES\nall-or-nothing, goal_packet must still declare it until a future\n\
+      iteration lifts the constraint\" caveat is **obsolete** — that\nconstraint was\
+      \ lifted (iter-three-gaps). Author goal_packets with\n`weighted-synthesis` (the\
+      \ default); no all-or-nothing declaration\nis required to pass validation.\n\
+      \n## Safety interlock first (HEADLINE — highest-value rule)\n\nFor **safety-critical\
+      \ / data-loss / bricking / irreversible-risk**\ndefects: a root-cause-**INDEPENDENT**\
+      \ safeguard that is valuable\neven if the root-cause hypothesis is 100% false\
+      \ **MUST** ship in\nthe same change as the hypothesized fix. **Stopping the\
+      \ bleeding\noutranks perfecting the diagnosis.**\n\nField-proven (ChilipadScreen\
+      \ i2c boot-loop report, 2026-05-15): an\nindependent boot-loop breaker, made\
+      \ hypothesis-independent *by\ndesign*, un-bricked a medical-safety device and\
+      \ kept it serving\nacross **two** consecutive consensus iterations whose converged\n\
+      root causes were both later refuted on-device. It was called \"the\nsingle highest-value\
+      \ decision.\"\n\nAuditable bar: **\"would this safeguard still work if the root\
+      \ cause\nwere entirely different?\"** If a reviewer cannot answer *yes* from\n\
+      the safeguard's mechanism alone, it does not qualify — it is a\ndisguised bet\
+      \ on the hypothesis, not an interlock.\n\n## Convergence is agreement, not truth\n\
+      \n**Convergence measures agreement, not correctness.** Two clean\nstrict-majority\
+      \ 2-of-2 convergences (and one round-1 *unanimous*\none) shipped root causes\
+      \ that on-device tests then refuted.\n\n**Fast independent unanimity is a VERIFY-HARDER\
+      \ flag, not\nconfidence.** When contributors agree quickly, suspect a *shared\n\
+      prior*: independent agents reasoning from the same incomplete\ndifferential\
+      \ is the multi-agent analog of single-agent\nrationalize-away (see the disconfirming-evidence\
+      \ doctrine). Unanimity\nis evidence only when the contributors reasoned from\
+      \ *different*\ndifferentials — so make the differential visible (the dispatch\n\
+      templates now require each contributor to state the prior it\nreasoned from;\
+      \ at reveal, a shared prior is exposed instead of\nlaundered as \"independent\
+      \ agreement\").\n\n### Provisional-until-proven (defined defect class)\n\nFor\
+      \ claims **not falsifiable from the artifacts in evidence** —\nhardware/firmware\
+      \ state, environment/toolchain, concurrency/timing,\nanything refutable only\
+      \ by an *external* observation — a converged\nroot cause is **PROVISIONAL**.\
+      \ The converged plan's\n`falsification.empirical_status` is `pending` until\
+      \ the named\ndiscriminating experiment runs; it then becomes `proven` (the\n\
+      refutation observation did NOT occur) or **`refuted`** (it did —\nthe load-bearing\
+      \ terminal state; the hypothesis is dead, the\niteration does not close on it,\
+      \ and the decisive experiment for\nthe next iteration carries forward). **\"\
+      Fixed\" / \"shipped\" /\n\"root-cause-correct\" language is forbidden before\
+      \ `proven`.**\n(Pure-code defects refutable by a unit test already carry their\n\
+      proof — no extra ceremony; forcing one there is the theater this\nrule is meant\
+      \ to prevent.)\n\n### Anti-theater property (what makes falsification real)\n\
+      \nA falsification is real **only if its refuting observation is\n(1) pre-specified,\
+      \ (2) a specific observable, and (3) for the\ndefined class, EXTERNAL to the\
+      \ reasoning that produced the\nhypothesis.** External tests can't be rationalized\
+      \ in the room —\nthat is precisely why the device refuted what code-reading\
+      \ could\nnot. \"We'll test it\" is not a falsification; \"X at address Y still\n\
+      returns 0x103 on a clean POWERON\" is.\n\nAlso name **the single decisive experiment\
+      \ that must run before\nthe next iteration** (the report's Exp-4 pattern) —\
+      \ the one test\nthat most cleanly partitions the remaining hypothesis space.\n\
+      \nSee `docs/workflows/converged-plan-convention.md` for the\nconverged-plan\
+      \ blocks (`falsification`, `independent_safeguard`,\n`decisive_experiment_before_next_iteration`).\
+      \ These are an\nauthoring convention AND, **as of v1.15.1, machine-enforced**:\n\
+      `validators/validate_converged_plan.py` + a fail-closed seal-time\ngate in `workflow_engine._seal_converged_plan`\
       \ validate the blocks\n(structure + consequence only — never soundness), governed\
       \ by\n`convergence.converged_plan_enforcement`\n(`off|warn|graduated|strict`,\
       \ default `graduated`). The v1.15.0\ntag is doctrine-only; machine enforcement\
@@ -976,25 +1032,27 @@ defect_target:
       \ (cost: dispatcher\n  latency × N iterations per test run).\n- Resume-after-halt\
       \ semantics (operator returns, hits a parked item,\n  approves it; how does\
       \ the loop pick up?).\n- Autonomy-ledger replay for failure recovery.\n\n##\
-      \ What's deferred to v1.16.0+\n\nProject-level `.consensus/autonomous-policy.yaml`\
+      \ What's deferred (no committed version)\n\nProject-level `.consensus/autonomous-policy.yaml`\
       \ as a default that\ngoal_packets can override per-run. Deferred until empirical\
       \ evidence\noperators want it across multiple Workflow C runs (we have zero\
-      \ runs\ntoday; designing for hypothetical reuse is premature).\n\n## Authoring\
-      \ a Workflow C goal_packet\n\nAdd an `autonomy_contract` block to your goal_packet:\n\
-      \n```yaml\nschema_version: 1\npilot_id: my-overnight-run\nworkflow_mode: autonomous-execute\
-      \  # or alias \"C\"\ncontributors:\n  enabled: [claude, codex, gemini]  # all\
-      \ 3 required for Workflow C\n\nautonomy_contract:\n  max_iterations: 10\n  max_wall_clock_minutes:\
-      \ 240\n  allowed_file_patterns:\n    - \"consensus_mcp/contributors/**\"\n \
-      \   - \"consensus_mcp/tests/test_contributors.py\"\n    - \"docs/**/*.md\"\n\
-      \  forbidden_file_patterns:\n    - \".github/**\"\n    - \"pyproject.toml\"\n\
-      \    - \"consensus_mcp/_dispatch_*.py\"\n  # Optional: opt OUT of specific halt\
-      \ conditions for less-safe runs\n  # (default is wide-by-default; all halt conditions\
-      \ active)\n  skip_halt_on:\n    # - test_suite_regression\n    # - schema_change_proposed\n\
-      ```\n\n## Halt conditions (wide-by-default)\n\nEvery Workflow C iteration boundary\
-      \ checks for these conditions; ANY\none halts the run and surfaces to operator.\
-      \ Operator opts OUT per-run\nvia `autonomy_contract.skip_halt_on`.\n\n| Halt\
-      \ condition | Triggered when |\n|---|---|\n| `blocking_objection` | Any peer\
-      \ raises a blocking_objection |\n| `test_suite_regression` | New test failures\
+      \ runs\ntoday; designing for hypothetical reuse is premature). No target\nversion\
+      \ is committed — status tracked here, not promised against a\nversion number\
+      \ (the v1.15.3 currency hot-patch removed all such\nforward-references).\n\n\
+      ## Authoring a Workflow C goal_packet\n\nAdd an `autonomy_contract` block to\
+      \ your goal_packet:\n\n```yaml\nschema_version: 1\npilot_id: my-overnight-run\n\
+      workflow_mode: autonomous-execute  # or alias \"C\"\ncontributors:\n  enabled:\
+      \ [claude, codex, gemini]  # all 3 required for Workflow C\n\nautonomy_contract:\n\
+      \  max_iterations: 10\n  max_wall_clock_minutes: 240\n  allowed_file_patterns:\n\
+      \    - \"consensus_mcp/contributors/**\"\n    - \"consensus_mcp/tests/test_contributors.py\"\
+      \n    - \"docs/**/*.md\"\n  forbidden_file_patterns:\n    - \".github/**\"\n\
+      \    - \"pyproject.toml\"\n    - \"consensus_mcp/_dispatch_*.py\"\n  # Optional:\
+      \ opt OUT of specific halt conditions for less-safe runs\n  # (default is wide-by-default;\
+      \ all halt conditions active)\n  skip_halt_on:\n    # - test_suite_regression\n\
+      \    # - schema_change_proposed\n```\n\n## Halt conditions (wide-by-default)\n\
+      \nEvery Workflow C iteration boundary checks for these conditions; ANY\none\
+      \ halts the run and surfaces to operator. Operator opts OUT per-run\nvia `autonomy_contract.skip_halt_on`.\n\
+      \n| Halt condition | Triggered when |\n|---|---|\n| `blocking_objection` | Any\
+      \ peer raises a blocking_objection |\n| `test_suite_regression` | New test failures\
       \ vs baseline |\n| `schema_change_proposed` | config.py / goal_packet schema\
       \ / sealed-artifact schemas modified |\n| `max_iterations_exceeded` | Iteration\
       \ count > `autonomy_contract.max_iterations` |\n| `max_wall_clock_minutes_exceeded`\
