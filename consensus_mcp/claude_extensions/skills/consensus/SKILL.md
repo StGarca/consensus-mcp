@@ -29,6 +29,34 @@ Use Bash to run `consensus-init --from-claude-code` from the current
 working directory. The binary detects the project root automatically
 (git rev-parse → strong markers → cwd, per iter-0031).
 
+## Workflow modes the operator can pick (v1.14.4+)
+
+The wizard will prompt for `--workflow`. Three modes plus advisory:
+
+- **Workflow A** = `propose-converge` (DEFAULT) — all contributors
+  propose blindly, then converge across reviewed rounds. Use for
+  design questions where reasonable people could disagree.
+- **Workflow B** = `post-review` — one AI implements, others audit.
+  Lightweight; use for execution per a converged design or hot-patches.
+- **Workflow C** = `autonomous-execute` (NEW) — runs to completion
+  overnight without operator-in-the-loop, auto-approving emergent
+  scope items within an operator-pre-declared `autonomy_contract`.
+  v1.14.4 ships the CONTRACT (validators, scope_check, halt-set,
+  audit-ledger); the multi-iteration engine ships in v1.15.0
+  (named blocker). Operators can stage and validate Workflow C
+  goal_packets in v1.14.4+; running them surfaces a clear
+  `NotImplementedError` pointing at v1.15.0.
+- **Advisory** — dispatches happen but no vote is load-bearing. Rare.
+
+Numeric aliases (3, 4) still resolve at the CLI but emit a
+`DeprecationWarning`; will be removed in a future minor release.
+
+For the operating procedures (when to use which workflow, how to
+dispatch peers, halt conditions, etc.) the bootstrap pack also
+installs `~/.claude/skills/consensus-workflow/SKILL.md` — that
+skill is the load-bearing reference and triggers automatically
+on workflow-execution intent.
+
 ## What NOT to do
 
 - Don't reimplement any of `consensus-init`'s logic. It writes
