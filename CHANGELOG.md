@@ -1,15 +1,72 @@
 # Changelog
 
-## 1.14.5 - unreleased
+## 1.14.5 - 2026-05-14
 
-Open scope:
+Bundled hot-patch from autonomous-mode `run-2026-05-15-overnight`
+(operator-initiated; running per the v1.14.4 Workflow C contract,
+manually-orchestrated since the v1.15.0 engine path is the named
+blocker). Two completed iterations bundled per the no-deferral rule:
 
-- iter-0044: implement adapter `--mode` forwarding fix per
-  iter-0043 converged plan (CodexAdapter + GeminiAdapter forward
-  `packet.phase` → dispatcher `--mode`; centralized phase-to-mode
-  helper; MCP wrappers expose `phase` parameter; skill workaround
-  removed). Named blocker: requires adapter-boundary test
-  infrastructure.
+**iter-0044 — adapter `--mode` forwarding fix** (Workflow B audit;
+codex + gemini both `goal_satisfied=true, blocking_objections=[]`).
+
+The original defect: `CodexAdapter.dispatch` and
+`GeminiAdapter.dispatch` built argv without `--mode`, causing every
+workflow A round-1 dispatch through the engine to silently use the
+review template + review schema even when `packet.phase ==
+PHASE_PROPOSE`. The shell binaries (`consensus-mcp-dispatch-codex`,
+`consensus-mcp-dispatch-gemini`) already accepted `--mode {review,
+proposal}` per iter-0028; the adapter just wasn't forwarding it.
+Test coverage didn't catch this because
+`test_dispatch_codex_proposal_mode.py` only tested the dispatcher's
+own argparse in isolation, never the adapter boundary.
+
+Implementation per iter-0043 converged plan:
+
+- `consensus_mcp/contributors/_phase_mode.py` NEW — single source
+  of truth: `PHASE_PROPOSE → "proposal"`, `PHASE_REVIEW → "review"`,
+  `PHASE_CONVERGE → "review"` (interim per iter-0043 q1
+  weighted-synthesis; iter-0045 candidate revisits with empirical
+  data). Strict-dict lookup; raises `ValueError` on unmapped phase
+  (no silent default — that's exactly what allowed the original
+  defect).
+- `consensus_mcp/contributors/codex.py` — append `--mode` to argv
+  via `phase_to_mode(packet.phase)`.
+- `consensus_mcp/contributors/gemini.py` — same.
+- `consensus_mcp/tools/reviewer_dispatch_codex.py` — schema gains
+  `phase` (engine abstraction, primary) + `mode` (dispatcher escape
+  hatch, optional). `_resolve_mode(phase, mode)` helper: explicit
+  mode wins; otherwise translate phase via `_phase_mode`; otherwise
+  None (caller omits `--mode` for backward compat).
+- `consensus_mcp/tools/reviewer_dispatch_gemini.py` — mirrors codex
+  wrapper exactly.
+- `consensus_mcp/tests/test_phase_mode_forwarding.py` NEW — 21 tests
+  covering: phase_to_mode mapping (all 3 phases + ValueError on
+  unknown); CodexAdapter + GeminiAdapter argv forwarding for all 3
+  phases (mock-based); MCP wrapper `_resolve_mode` + `_build_argv`
+  (phase-to-mode mapping + mode-wins-over-phase + neither =
+  backward-compat omission).
+
+Test results: 696 pass (was 675; +21 for iter-0044). Adapter
+boundary now covered by tests that would have caught the original
+defect.
+
+**README staleness sweep** (doc-only; no peer audit needed).
+
+- `README.md`: "What it does" section updated to Workflow A/B/C
+  vocabulary + Workflow C mention; install URLs already at
+  `@v1.14.4`; "Pre-commit vs post-commit catch" section + table-of-
+  contents reference Workflow A / Workflow B with "(was workflow
+  #4 / #3 prior to v1.14.4)" historical note.
+- `docs/workflows/workflow-4-preferred.md`: filename preserved for
+  stable cross-references; frontmatter + body updated to Workflow A
+  vocabulary; transition note at top.
+
+Audit log: `consensus-state/autonomous-runs/run-2026-05-15-overnight/log.jsonl`
+records both iterations + halt-set checks + scope-check decisions
+per the v1.14.4 Workflow C contract schema.
+
+## 1.14.4 - 2026-05-14
 
 ## 1.14.4 - 2026-05-14
 

@@ -21,9 +21,9 @@ consensus-mcp is the infrastructure that makes that automatic.
 When you ask the contributor pool to write code, fix a bug, or review a change, consensus-mcp:
 
 1. **Captures the request as a sealed contract** — what's being changed, what files are touched, what success looks like, who authorized it. This is the `goal_packet`.
-2. **Routes through the operator-chosen workflow** — three modes shipped in v1.14.0: `post-review` (#3, one AI implements, the others review), `propose-converge` (#4, all contributors propose blindly then converge across rounds), and `advisory` (recommendations only; orchestrator decides).
+2. **Routes through the operator-chosen workflow** — four modes (operator vocabulary updated to letter aliases in v1.14.4; numeric aliases 3/4 deprecated for one cycle): **Workflow A** (`propose-converge`, default — all contributors propose blindly then converge across rounds), **Workflow B** (`post-review`, lightweight — one AI implements, the others review), **Workflow C** (`autonomous-execute`, NEW in v1.14.4 contract; engine deferred to v1.15.0 — runs to completion overnight without operator-in-the-loop, auto-approving emergent scope items within an operator-pre-declared `autonomy_contract`), and **advisory** (recommendations only; orchestrator decides).
 3. **Each contributor produces a sealed artifact** — structured findings with severity-graded defects, citations to specific file:line locations, and proposed patches (where applicable). Codex via the codex CLI, Gemini via the gemini CLI, Claude as the in-process orchestrator.
-4. **The configured convergence rule decides** — unanimous, strict-majority, inclusive-majority, or advisory. Workflow #4 hides each contributor's proposal from the others until reveal phase, then runs convergence rounds until the rule is satisfied or the round limit is hit.
+4. **The configured convergence rule decides** — unanimous, strict-majority, inclusive-majority, or advisory. Workflow A hides each contributor's proposal from the others until reveal phase, then runs convergence rounds until the rule is satisfied or the round limit is hit.
 5. **Every step is cryptographically sealed** with content hashes so you can prove later what was reviewed by whom and when.
 6. **State snapshots into an orphan git branch** — `consensus-state-snapshots` carries point-in-time captures of the gitignored iteration tree, so a `git clean -fdX` can't lose work.
 7. **A separate watchdog process catches stuck reviews** — real-time output streaming, heartbeats, and a kill-switch file the operator can write to abort.
@@ -37,7 +37,7 @@ The end result: changes that pass three independent model families aren't "looks
 ```bash
 # Install via pipx — isolated venv, console scripts on PATH, no
 # polluting individual project venvs:
-pipx install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.4
+pipx install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.5
 
 # (Optional but recommended) install the Claude Code bootstrap pack —
 # a tiny skill + slash command so you can run `consensus init` from
@@ -45,7 +45,7 @@ pipx install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.4
 consensus-init --install-claude-code
 ```
 
-(If you prefer pip-in-venv: `pip install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.4` — but pipx is the recommended pattern for cross-project use.)
+(If you prefer pip-in-venv: `pip install git+https://github.com/stgarciaarca/consensus-mcp.git@v1.14.5` — but pipx is the recommended pattern for cross-project use.)
 
 `--install-claude-code` is a **standalone global operation** — it copies three files into your Claude Code config and exits:
 
@@ -209,7 +209,7 @@ Concrete examples of the kind of defect cross-AI review surfaces that single-AI 
 
 **Cross-AI authorship-vs-reviewer collapse.** A naive "two-AI review" architecture can have both AIs be Claude (one instance reviews, another implements). That's not cross-AI; that's same-model bias laundered through state. consensus-mcp enforces `model_family` as the cross-AI axis — two different families (e.g., claude/codex, claude/gemini, codex/gemini) must touch any closing review. v1.14.0 extends this from 2 to N: with three contributors in the default pool, the convergence rule (strict-majority by default for N≥3) requires at least two-of-three cross-family agreement.
 
-**Pre-commit vs post-commit catch.** Workflow #4 (claude proposes patches, codex pre-reviews the proposed diff, claude integrates feedback, then implements) catches defects before they hit the working tree. Workflow #3 (claude implements, codex reviews after) catches them post-commit and requires fix iterations. The bootstrap deployment used both; workflow #4 had a 100% catch-fix rate; workflow #3 required 6 followup iterations.
+**Pre-commit vs post-commit catch.** Workflow A (`propose-converge`; was numbered #4 prior to v1.14.4 — claude proposes patches, codex pre-reviews the proposed diff, claude integrates feedback, then implements) catches defects before they hit the working tree. Workflow B (`post-review`; was #3 — claude implements, codex reviews after) catches them post-commit and requires fix iterations. The bootstrap deployment used both; Workflow A had a 100% catch-fix rate; Workflow B required 6 followup iterations.
 
 **Audit-log shape under concurrent writers.** JSONL append-only logs can interleave bytes on Windows. consensus-mcp's `_locked_append` wraps every audit-event write in an OS-appropriate exclusive lock (`msvcrt.locking` on Windows; `fcntl.flock` on POSIX). 50-thread concurrent write tests pass.
 
@@ -272,7 +272,8 @@ Earlier workflow taxonomy (#1 codex-fix-author, #2 Flavor B subsystem review) is
 
 - [`docs/architecture/orchestration-spec.md`](docs/architecture/orchestration-spec.md) — the full multi-agent consensus orchestration design
 - [`docs/architecture/autonomy-contract.md`](docs/architecture/autonomy-contract.md) — what the AI is allowed to do without operator approval
-- [`docs/workflows/workflow-4-preferred.md`](docs/workflows/workflow-4-preferred.md) — when and how to use workflow #4
+- [`docs/workflows/workflow-4-preferred.md`](docs/workflows/workflow-4-preferred.md) — when and how to use Workflow A (was workflow #4); filename preserved for stable cross-references
+- [`docs/workflows/workflow-c-autonomous.md`](docs/workflows/workflow-c-autonomous.md) — Workflow C autonomous-execute usage (v1.14.4 contract; v1.15.0 engine)
 - [`docs/workflows/external-process-fallback.md`](docs/workflows/external-process-fallback.md) — recovery policy for stalled dispatches
 - [`docs/postmortems/iter-0019-0036-failures.md`](docs/postmortems/iter-0019-0036-failures.md) — failure modes encountered during bootstrap, with how each was caught
 
