@@ -1133,4 +1133,22 @@ passes:
   packet_sha256: 0c7d9ba2ae97359bd6e3ff2c7b2717a0564913571d524f7e8c4ca90d2187e027
   iteration_id: iteration-v1154-repo-presentation-ci
   reviewer_id: codex-v1154-2
-last_updated_utc: '2026-05-15T18:45:00Z'
+- id: codex-v1155-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1155-history-rewrite-doctrine-codex-v1155-1-codex-v1155-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T19:12:31Z'
+  packet_sha256: 924ef4bed8a1bc85841e66ff9571568d682b324e28f8e84562ed08e9fffc4d96
+  iteration_id: iteration-v1155-history-rewrite-doctrine
+  reviewer_id: codex-v1155-1
+- id: gemini-v1155-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1155-history-rewrite-doctrine-gemini-v1155-1-gemini-v1155-1-pass1-pass.yaml
+  sealed_at: '2026-05-15T19:12:36Z'
+  packet_sha256: 6e67b517e8e43fb8bbe3e882f2860a3361480f80f36a579b9110fa863b8bce69
+  iteration_id: iteration-v1155-history-rewrite-doctrine
+  reviewer_id: gemini-v1155-1
+- id: codex-v1155-2-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-v1155-history-rewrite-doctrine-codex-v1155-2-codex-v1155-2-pass1-pass.yaml
+  sealed_at: '2026-05-15T19:15:05Z'
+  packet_sha256: e59fc1e7d7ecaccb1c358615854afda3ab51a4028e89e9997375c157aa13d2e2
+  iteration_id: iteration-v1155-history-rewrite-doctrine
+  reviewer_id: codex-v1155-2
+last_updated_utc: '2026-05-15T19:15:05Z'
