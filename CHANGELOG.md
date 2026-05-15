@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.14.6 - 2026-05-14
+
+Hot-patch from autonomous run-2026-05-15-overnight iter-3.
+
+**Defect fixed:** `consensus-init --workflow A` (and B, C, lowercase
+variants, and the new `autonomous-execute` semantic string) was
+rejected at argparse parse-time before alias resolution could run.
+v1.14.4 added letter aliases to `WORKFLOW_ALIASES` + the interactive
+wizard prompt but missed the CLI `--workflow` argparse `choices` list,
+which still hardcoded the pre-rename set
+`["3","4","post-review","propose-converge","advisory"]`.
+
+**Fix:** `consensus_mcp/_init_wizard.py` argparse `--workflow` choices
+list expanded to include `["A","B","C","a","b","c","3","4",
+"post-review","propose-converge","advisory","autonomous-execute"]`.
+Help text updated to document A/B/C semantics inline so
+`consensus-init --help` is self-documenting. Numeric aliases (3, 4)
+still accepted at parse-time; deprecation warning fires at
+`normalize()` time per the v1.14.4 contract (unchanged).
+
+**Tests:** 8 new in `consensus_mcp/tests/test_init_wizard_workflow_choices.py`
+asserting argparse acceptance for each new alias variant + sanity
+test that letter parses through `WORKFLOW_ALIASES` to the canonical
+semantic string. Total suite: 704 pass (was 696; +8 for iter-3).
+
 ## 1.14.5 - 2026-05-14
 
 Bundled hot-patch from autonomous-mode `run-2026-05-15-overnight`
