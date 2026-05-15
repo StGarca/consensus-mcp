@@ -929,4 +929,16 @@ passes:
   packet_sha256: dc9ccf2ed05025691619fd11fa58356e39626fa91da0f6dfb5a9f893c6a035ef
   iteration_id: iteration-audit-2026-05-14-pypi-invention
   reviewer_id: gemini-iter-audit-pypi-1
-last_updated_utc: '2026-05-15T03:24:12Z'
+- id: gemini-three-gaps-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-audit-2026-05-14-three-followup-gaps-gemini-three-gaps-1-pass.yaml
+  sealed_at: '2026-05-15T03:39:15Z'
+  packet_sha256: cd5629042bef2345b730d03019cbd3f2f1149ad11be41d907d7dd92a6321e23d
+  iteration_id: iteration-audit-2026-05-14-three-followup-gaps
+  reviewer_id: gemini-three-gaps-1
+- id: codex-three-gaps-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-15-iteration-audit-2026-05-14-three-followup-gaps-codex-three-gaps-1-pass.yaml
+  sealed_at: '2026-05-15T03:39:34Z'
+  packet_sha256: d178c025fd571ff1fb7390adfbcc5f1a2c46b70bfda4260ea236fddee817769d
+  iteration_id: iteration-audit-2026-05-14-three-followup-gaps
+  reviewer_id: codex-three-gaps-1
+last_updated_utc: '2026-05-15T03:39:34Z'
