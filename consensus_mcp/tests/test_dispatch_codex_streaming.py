@@ -230,12 +230,15 @@ class _FakePipeReader:
 
     def __init__(self, schedule, parent, *, capacity: int | None):
         # schedule: list[tuple[float, bytes]] — clock-relative time + payload
+        # capacity: BYTE capacity (codex-v11510-wfb-2 codex-rev-002 —
+        # a real OS pipe buffer is byte-bounded, ~64 KB, NOT line-count
+        # bounded). None = unbounded (preserves the other 7 tests).
         self._schedule = list(schedule)
         self._schedule_idx = 0  # producer's cursor
         self._parent = parent
         self._capacity = capacity
-        # A None capacity -> infinite buffer, preserves old behavior.
-        self._buffer = collections.deque(maxlen=capacity)
+        self._buffer = collections.deque()
+        self._buffered_bytes = 0
         self._writer_blocked = False
 
     @property
@@ -243,28 +246,34 @@ class _FakePipeReader:
         return self._schedule_idx < len(self._schedule)
 
     def _bytes_in_buffer(self) -> int:
-        return sum(len(b) for b in self._buffer)
+        return self._buffered_bytes
 
-    def write(self, data: bytes):
-        """Called by the fake Popen to push a scheduled line into the
-        pipe buffer. Blocks if the buffer is at capacity."""
-        deadline = time.monotonic() + _CEILING
+    def write(self, data: bytes) -> bool:
+        """NON-BLOCKING producer push (codex-v11510-wfb-2 codex-rev-003:
+        write() must NOT block inside poll() — that parks the runner
+        thread inside poll() so the nominal driver can fall back to
+        _CEILING). Returns True if `data` fit within the BYTE capacity
+        (buffered); False if it would overflow (backpressure — caller
+        does NOT advance the schedule cursor; poll() returns None and
+        the runner parks NORMALLY in clock.sleep). A reader consuming
+        bytes frees space for a later retry."""
         with self._parent._clock._cond:
-            while not self._parent._clock.is_released():
-                if self._capacity is None or len(self._buffer) < self._capacity:
-                    self._buffer.append(data)
-                    self._writer_blocked = False
-                    self._parent._clock.notify()
-                    return
-                # Buffer is full; block until readline() consumes.
-                self._writer_blocked = True
+            if self._parent._clock.is_released():
+                self._writer_blocked = False
+                return True  # teardown: drop, never block
+            if (
+                self._capacity is None
+                or self._buffered_bytes + len(data) <= self._capacity
+            ):
+                self._buffer.append(data)
+                self._buffered_bytes += len(data)
+                self._writer_blocked = False
                 self._parent._clock.notify()
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    return  # safety: ceiling break
-                self._parent._clock._cond.wait(min(remaining, _REPOLL))
-            # Released.
-            self._writer_blocked = False
+                return True
+            # Would overflow the byte buffer → backpressure (no append).
+            self._writer_blocked = True
+            self._parent._clock.notify()
+            return False
 
     def readline(self):
         # codex-v1159-wfb-4 codex-rev-003 (integrated): production's
@@ -282,7 +291,10 @@ class _FakePipeReader:
             while not self._parent._clock.is_released():
                 if self._buffer:
                     line = self._buffer.popleft()
-                    self._parent._clock.notify()  # space is now free
+                    self._buffered_bytes -= len(line)
+                    # Space freed → a backpressured writer can retry.
+                    self._writer_blocked = False
+                    self._parent._clock.notify()
                     return line
                 # Buffer is empty. EOF?
                 if self._parent._exited and not self._pending_schedule:
@@ -359,13 +371,18 @@ class StreamingFakeCodexPopen:
         for pipe in (self.stdout, self.stderr):
             while pipe._pending_schedule:
                 sched_time, payload = pipe._schedule[pipe._schedule_idx]
-                if now_rel >= sched_time:
-                    # This call will BLOCK if the pipe buffer is full,
-                    # not returning until a reader consumes.
-                    pipe.write(payload)
-                    pipe._schedule_idx += 1
-                else:
-                    break  # This pipe's next line is not due yet.
+                if now_rel < sched_time:
+                    break  # this pipe's next line is not due yet
+                # NON-BLOCKING (codex-v11510-wfb-2 codex-rev-003): if
+                # the byte buffer would overflow, write() returns False
+                # WITHOUT consuming the schedule cursor. Stop pumping
+                # this pipe; poll() returns None (proc still running,
+                # backpressured), the runner parks NORMALLY in
+                # clock.sleep, and a later poll retries after a reader
+                # has freed space. The runner NEVER parks inside poll().
+                if not pipe.write(payload):
+                    break
+                pipe._schedule_idx += 1
 
     def poll(self):
         if self._exited:
@@ -1176,38 +1193,49 @@ def test_clean_exit_returns_output(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_stderr_drain_prevents_deadlock(tmp_path):
-    """Production must drain stderr to prevent a real codex from deadlocking
-    on a full OS pipe buffer. This test proves the harness detects that
-    deadlock.
+@pytest.mark.parametrize(
+    "drain_stderr,expect_clean",
+    [(True, True), (False, False)],
+    ids=["nominal-drain", "mutant-no-drain"],
+)
+def test_stderr_drain_prevents_deadlock(tmp_path, drain_stderr, expect_clean):
+    """Production MUST drain stderr or a real codex deadlocks on a full
+    OS pipe buffer. ONE clean-exit contract, asserted both ways — this
+    is the mutant gate (codex-v11510-wfb-2 codex-rev-001):
 
-    - A `_FakePipeReader` is given a small `capacity`.
-    - `StreamingFakeCodexPopen` writes to it until full, then its
-      `write()` call blocks, and it sets `_writer_blocked=True`.
-    - `poll()` will not report exit while `_writer_blocked`.
-    - MUTANT GATE:
-      - With a live reader thread (`drain_stderr=True`), the buffer is
-        drained, the writer is unblocked, the process exits, PASS.
-      - With NO reader (`drain_stderr=False`), the writer blocks
-        forever, the process never exits, `_drive` hits its ceiling,
-        `release_all()` fires, and the test fails with a loud
-        `AssertionError` for a broken handshake -> deterministic FAIL.
+    - nominal-drain: the stderr reader relieves backpressure, the proc
+      exits, `out=={"ok": true}`, the byte buffer fully drains → the
+      clean-exit contract HOLDS.
+    - mutant-no-drain: NO stderr reader → the BYTE-bounded pipe
+      (codex-rev-002) saturates → the producer is perpetually
+      backpressured → the proc can NEVER cleanly exit. The SAME
+      clean-exit contract MUST FAIL, and that failure is detected
+      FAST + DETERMINISTICALLY (codex-rev-003: write() is
+      non-blocking so the runner parks normally in clock.sleep, never
+      inside poll(); the writer-blocked state is observed via a
+      notify-driven `wait_for`, NOT a `_CEILING`/`_drive` timeout).
+
+    If a production regression removed/broke the stderr drain, the
+    nominal case's clean-exit assertions would fail → the gate has
+    teeth in both directions.
     """
     repo_root = _setup_repo_root(tmp_path)
     log_path = repo_root / "consensus-state" / "state" / "dispatch-log.jsonl"
 
-    big_line = b"E" * 100 + b"\n"
-    # Schedule more lines than the pipe's capacity to force backpressure.
-    scheduled_err = [(0.0, big_line) for _ in range(5)]
+    big_line = b"E" * 100 + b"\n"  # 101 bytes/line
+    scheduled_err = [(0.0, big_line) for _ in range(5)]  # 505 bytes total
     scheduled_out = [(0.0, b"ok\n")]
+    # BYTE capacity (codex-rev-002) below the 505 B scheduled volume but
+    # >= a couple lines, so the producer writes some, backpressures,
+    # and a live reader relieves it progressively.
+    STDERR_CAP = 250  # ~2 lines of 101 B
 
-    # --- Case 1: Stderr is drained; process exits cleanly. ---
     clock = _SyncClock()
     factory = _make_factory(
         clock,
         scheduled_stdout=scheduled_out,
         scheduled_stderr=scheduled_err,
-        stderr_capacity=2,  # Small buffer to exercise backpressure
+        stderr_capacity=STDERR_CAP,
         exit_at=0.3,
     )
     th, holder = _run_invoke_in_thread(
@@ -1222,80 +1250,60 @@ def test_stderr_drain_prevents_deadlock(tmp_path):
         poll_interval=0.01,
         time_fn=clock.now,
         popen_factory=factory,
-        drain_stderr=True,  # The default, but explicit for clarity
+        drain_stderr=drain_stderr,
     )
-    _drive(clock, th, until=lambda: not th.is_alive())
-    assert not th.is_alive()
-    assert "e" not in holder, f"unexpected exception: {holder.get('e')}"
-    assert holder["out"] == '{"ok": true}'
-    proc = factory.instances[0]
-    # Assert all stderr was written by the proc and read by the consumer.
-    assert proc.stderr._schedule_idx == len(scheduled_err)
-    assert not proc.stderr._buffer, "stderr buffer was not fully drained"
 
-    # --- Case 2: Stderr NOT drained; deadlock detected. (Mutant Gate) ---
-    clock_mutant = _SyncClock()
-    factory_mutant = _make_factory(
-        clock_mutant,
-        scheduled_stdout=scheduled_out,
-        scheduled_stderr=scheduled_err,
-        stderr_capacity=2,
-        exit_at=1000.0,  # Long exit time to ensure deadlock is the cause
-    )
-    th_mutant, holder_mutant = _run_invoke_in_thread(
-        clock_mutant,
-        prompt="x",
-        codex_bin="codex",
-        timeout_seconds=60,
-        repo_root=repo_root,
-        schema_path=SCHEMA_PATH,
-        log_path=log_path,
-        anchors=_anchors(),
-        poll_interval=0.01,
-        time_fn=clock_mutant.now,
-        popen_factory=factory_mutant,
-        drain_stderr=False,  # the mutant: no stderr reader thread
-    )
-    # codex-v11510-wfb-1 codex-rev-001 (BLOCKING, integrated): prove the
-    # deadlock by DETERMINISTICALLY OBSERVING the backpressure state —
-    # NOT by waiting for _drive to hit _CEILING (that made the proof
-    # depend on the safety timeout = slow + a disguised hang, violating
-    # the no-timeout/deterministic-and-fast goal). All scheduled stderr
-    # is due at t=0, so on the runner's FIRST poll() the producer fills
-    # the cap-2 buffer and write() BLOCKS — no clock advance, no _drive.
-    # write() notify_all()s when it sets _writer_blocked, so this
-    # wait_for returns in ms; its internal _CEILING is only the
-    # universal lost-wakeup net, never the proof. The proc is created
-    # inside the runner thread, so guard instances[0] in the predicate
-    # (returns False until populated — no index race).
-    def _mutant_deadlocked():
-        if not factory_mutant.instances:
+    if expect_clean:
+        # Nominal: backpressure occurs but the live reader relieves it
+        # → the clean-exit contract HOLDS. (If production drain
+        # regressed, these assertions fail = the gate's teeth.)
+        _drive(clock, th, until=lambda: not th.is_alive())
+        assert not th.is_alive()
+        assert "e" not in holder, f"unexpected exception: {holder.get('e')}"
+        assert holder.get("out") == '{"ok": true}', (
+            "clean-exit contract BROKEN under a live stderr reader — "
+            "production stderr drain may have regressed"
+        )
+        proc = factory.instances[0]
+        assert proc.stderr._schedule_idx == len(scheduled_err)
+        assert not proc.stderr._buffer, "stderr buffer not fully drained"
+        assert proc.stderr._bytes_in_buffer() == 0
+        return
+
+    # Mutant: NO stderr reader. Deterministically + FAST establish that
+    # the producer is byte-backpressured (write() notify_all()s the
+    # instant it blocks — ms, not _CEILING, no _drive). The proc is
+    # created inside the runner thread → guard instances[0].
+    def _byte_backpressured():
+        if not factory.instances:
             return False
-        s = factory_mutant.instances[0].stderr
-        return s._writer_blocked and len(s._buffer) == s._capacity
+        s = factory.instances[0].stderr
+        return s._writer_blocked and s._bytes_in_buffer() <= s._capacity
 
-    deadlocked = clock_mutant.wait_for(_mutant_deadlocked)
-    assert deadlocked, (
-        "stderr writer never blocked on the full pipe — the backpressure "
-        "deadlock was NOT reproduced, so this gate would not catch a "
-        "stderr-drain regression"
+    blocked = clock.wait_for(_byte_backpressured)
+    assert blocked, (
+        "stderr writer never byte-backpressured with NO reader — the "
+        "deadlock surface is not modeled, so this gate would NOT catch "
+        "a stderr-drain regression"
     )
-    proc_mutant = factory_mutant.instances[0]
-    # Deadlock PROVEN by direct observation of saturated buffer +
-    # blocked writer. release_all() is now TEARDOWN (not the detector):
-    # assert the runner unwinds PROMPTLY, not at _CEILING.
+    # The dispatch is deadlocked → the clean-exit contract is BROKEN.
+    # Assert that FAILURE (the gate's point), then release_all() as
+    # TEARDOWN only, and prove the unwind is prompt (NOT _CEILING).
+    proc = factory.instances[0]
+    assert not proc._exited, "proc exited despite an undrained full stderr pipe"
     t0 = time.monotonic()
-    clock_mutant.release_all()
-    th_mutant.join(timeout=5)
-    assert not th_mutant.is_alive(), (
-        "runner did not unwind within 5s of release_all() — the "
-        "safeguard does not promptly bound the backpressure deadlock"
+    clock.release_all()
+    th.join(timeout=5)
+    elapsed = time.monotonic() - t0
+    assert not th.is_alive(), (
+        "runner did not unwind within 5s of release_all() — teardown "
+        "does not promptly bound the backpressure deadlock"
     )
-    assert time.monotonic() - t0 < _CEILING, (
-        "runner unwind took >= _CEILING — proof/teardown is "
-        "timeout-driven, not deterministic"
+    assert elapsed < _CEILING, (
+        f"unwind took {elapsed:.1f}s >= _CEILING — failure was "
+        "timeout-driven, not the deterministic observation"
     )
-    assert "out" not in holder_mutant, (
-        "mutant dispatch produced success output — the deadlock was "
-        "NOT fatal to the run"
+    assert "out" not in holder, (
+        "clean-exit contract HELD under no stderr drain — the mutant "
+        "gate has no teeth (a stderr-drain regression would slip)"
     )
