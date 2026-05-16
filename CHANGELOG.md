@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.15.9 - unreleased
+## 1.15.9 - 2026-05-16
 
 **Deterministic streaming-test harness — the v1.15.8 Q2(a) named
 follow-up, root-caused via Workflow A consult.** v1.15.8 shipped
@@ -128,16 +128,24 @@ self-certification would have shipped (governance scope;
 deadlock-invariant claim-vs-code; SIGTERM coverage; post-stream
 coverage; release_all-doesn't-terminate; operator mid-run
 determinism; reader-event waker; heartbeat interval-gate
-coverage). gemini cleared determinism/
-design 4×; codex traced control flow + coverage fidelity — the
-two priors were genuinely complementary, not redundant. Local
-after pass-4: streaming 8/8 deterministic ×6 (sub-0.21s); full
-suite re-verified. Audit trajectory: blocking → blocking →
-0-blocking(high) → converging. The provisional-until-proven
-≥3-consecutive-green-Windows-CI gate runs on the post-audit
-final commit; v1.15.9 is NOT cut until codex `goal_satisfied=
-true` (or only trivial) AND that gate passes (attempts-API
-verified).
+coverage; heartbeat startup-teardown + poll/float-safe gate),
+plus a unanimous scope-adjudication consult disposing the
+stderr-drain finding (pre-existing, not a regression — resolved
+in part + named follow-up, `docs/advisories.md` 2026-05-16).
+gemini was clean on ALL 8 passes (determinism/design prior);
+codex drove every finding (coverage-preservation + control-flow
+prior) — distinct, non-redundant priors; unanimity would have
+shipped a coverage-hollow harness. **Audit CONVERGED: pass-8
+codex `goal_satisfied=true`/0-findings, gemini clean ×8.**
+
+Verification discipline (provisional-until-proven): the
+audit-clean commit `0484cf5` passed the
+≥3-consecutive-green-Windows-CI gate — verified as **3 distinct
+completed/success run attempts** with distinct timestamps via
+the GitHub attempts API (NOT N polls of one run id). v1.15.9 is
+cut on the release-content commit, which re-runs the same gate
+so the proven artifact IS the tagged artifact (one green run is
+explicitly insufficient).
 
 ## 1.15.8 - 2026-05-15
 

@@ -58,8 +58,10 @@ deterministically / never hangs).
 
 ## Advisory 2026-05-15: v1.15.8 named follow-up — deterministic clock harness (Q2(a))
 
-**RESOLVED in v1.15.9** (pending the provisional-until-proven
-≥3-consecutive-green-Windows-CI gate on the v1.15.9 tag commit).
+**RESOLVED in v1.15.9.** The Workflow B audit converged (pass-8
+codex `goal_satisfied=true`/0-findings; gemini clean ×8) and the
+audit-clean commit passed the ≥3-distinct-green-Windows-CI gate
+(attempts-API verified); v1.15.9 cut on the gated release commit.
 The Q2(a) deterministic-harness rework landed via Workflow A
 consult `iteration-v1159-deterministic-clock-harness`: a private
 keyword-only `_invoke_codex(_sleep=)` seam (default `time.sleep`
