@@ -10,6 +10,52 @@ the entry stays for the historical record.
 
 ---
 
+## Advisory 2026-05-16: v1.15.9 named follow-up — OS pipe-buffer backpressure modeling
+
+**Affected versions:** `v1.15.9` (forward, until addressed).
+
+**Severity:** Tracked engineering follow-up — NOT a defect in
+shipped behavior, NOT a regression. The v1.15.9 deterministic
+streaming-harness rework (Workflow A, claude+codex+gemini; 8
+audit defects caught + integrated over 6 Workflow-B passes; the
+4 `@_FLAKY_WINDOWS_CI` skips deleted) is sound and proven.
+
+During pass-6, codex (`codex-v1159-wfb-6 codex-rev-001`) noted
+`test_stderr_drain_prevents_deadlock` does not model OS
+pipe-buffer **backpressure**: the fake proc exits on virtual
+time regardless of stderr consumption, so it would not, by
+itself, prove real codex cannot deadlock on a full stderr pipe.
+A focused **scope-adjudication consult** (claude+codex+gemini,
+weighted-synthesis; `iteration-v1159-stderr-scope`) verified
+**unanimously** — each independently checking `git show
+da62d54^:...` — that this weakness is **PRE-EXISTING and
+identical in the v1.15.8 baseline** (`exit_at=0.3`,
+assert-only-not-alive), i.e. NOT a regression introduced by the
+rewrite, and therefore **not a valid v1.15.9 blocker**.
+
+**Resolved-in-part in v1.15.9** (zero-determinism-risk, shipped):
+the test docstring no longer overclaims, and it now asserts
+production's REAL reader threads drained EVERY scheduled
+stdout+stderr line (`_FakePipeReader._idx == len(scheduled)`,
+post-run state) — so a regression that removes/breaks the stderr
+reader **fails the test deterministically**, satisfying codex's
+stated requirement without backpressure modeling.
+
+**Deferred (this follow-up):** true OS-pipe-buffer backpressure
+modeling. Concrete blocker for deferral: it is its own design
+surface with real Windows-CI determinism risk (the exact flake
+class v1.15.9 eliminated). Converged design seed for the future
+iteration (codex + gemini): finite-capacity `_FakePipeReader`;
+`StreamingFakeCodexPopen.poll()` does NOT exit while a pipe is
+"blocked"; `_SyncClock` deterministically unblocks on reader
+consumption; **MUST** integrate `release_all()`; **MUST** ship a
+mutant gate (normal passes / stderr-drain-removed fails
+deterministically / never hangs).
+
+**User action:** none. Recorded for the maintainer.
+
+---
+
 ## Advisory 2026-05-15: v1.15.8 named follow-up — deterministic clock harness (Q2(a))
 
 **RESOLVED in v1.15.9** (pending the provisional-until-proven
