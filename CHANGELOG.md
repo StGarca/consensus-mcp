@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.11 - unreleased
+
+_Development branch. No iteration scoped yet; release-cut Friday if any iter lands this week (release-cadence doctrine)._
+
 ## 1.15.10 - 2026-05-16
 
 **Stderr-pipe backpressure modeling — the v1.15.9 named
