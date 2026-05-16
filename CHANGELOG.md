@@ -1,12 +1,37 @@
 # Changelog
 
-## 1.15.10 - unreleased
+## 1.15.10 - 2026-05-16
 
-_Development branch. Candidate: the v1.15.9 named follow-up —
-OS pipe-buffer backpressure modeling for the streaming harness
-(finite-capacity reader + `release_all` integration + mutant
-gate; see `docs/advisories.md` 2026-05-16). Real design surface
-→ Workflow A._
+**Stderr-pipe backpressure modeling — the v1.15.9 named
+follow-up, Workflow A converged.** `test_stderr_drain_prevents_
+deadlock` now genuinely proves what its name claims: a real
+codex deadlocks if its stderr pipe fills and nobody drains it.
+
+- `_FakePipeReader` models a **byte-bounded** OS pipe buffer
+  (not line-count); `write()` is **non-blocking** (returns
+  buffered/would-overflow) so the runner never parks inside
+  `poll()` — it parks normally in the virtual clock, so nothing
+  can fall back to a real-time ceiling.
+- A private, default-on `_invoke_codex(_drain_stderr=…)` test
+  seam (mirrors the v1.15.9 `_sleep=` precedent — zero default
+  behaviour change) drives a **parametrized mutant gate**: with
+  the stderr reader the dispatch exits cleanly; without it the
+  same clean-exit contract **fails deterministically and fast**
+  (the deadlock is observed via a notify-driven wait, not a
+  timeout). The gate has teeth both ways — a production
+  stderr-drain regression now fails the test.
+- Workflow A consult + a multi-pass cross-AI Workflow B audit
+  (codex+gemini) that caught and fixed real defects across the
+  passes: a corrupted/incomplete handed-off implementation, an
+  unwired seam, a timeout-driven proof, a semantic-inversion in
+  the mutant gate, line-vs-byte capacity, and a blocking-poll
+  fallback. gemini clean on the model throughout; codex drove
+  the rigor — converged: codex `goal_satisfied=true`/0-findings,
+  gemini clean.
+
+Per provisional-until-proven, v1.15.10 is cut only after the
+release commit passes ≥3 distinct green Windows-CI run attempts
+(attempts-API verified). Full suite 969 passed / 1 skipped.
 
 ## 1.15.9 - 2026-05-16
 

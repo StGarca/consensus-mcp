@@ -12,7 +12,22 @@ the entry stays for the historical record.
 
 ## Advisory 2026-05-16: v1.15.9 named follow-up — OS pipe-buffer backpressure modeling
 
-**Affected versions:** `v1.15.9` (forward, until addressed).
+**RESOLVED in v1.15.10.** The deferred backpressure modeling
+landed via Workflow A consult `iteration-v11510-backpressure-
+harness`: `_FakePipeReader` is now byte-bounded with a
+non-blocking `write()`, `poll()` refuses clean exit while a pipe
+is byte-backpressured (runner parks normally — never inside
+poll(), so no real-time-ceiling fallback), and a parametrized
+mutant gate proves the clean-exit contract holds with the stderr
+reader and **fails deterministically + fast** without it. The
+Workflow B audit converged (codex `goal_satisfied=true`/
+0-findings, gemini clean) after catching+fixing a corrupted
+hand-off, an unwired seam, a timeout-driven proof, a
+semantic-inversion, line-vs-byte capacity, and a blocking-poll
+fallback. See CHANGELOG 1.15.10. Text below retained as the
+historical record of the v1.15.9 deferral.
+
+**Affected versions:** `v1.15.9` only (v1.15.10+ resolved).
 
 **Severity:** Tracked engineering follow-up — NOT a defect in
 shipped behavior, NOT a regression. The v1.15.9 deterministic
