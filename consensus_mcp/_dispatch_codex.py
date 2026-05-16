@@ -294,6 +294,7 @@ def _invoke_codex(
     popen_factory=None,
     *,
     _sleep=None,
+    _drain_stderr: bool = True,
 ) -> str:
     """Shell out to codex CLI via Popen + reader threads (iter-0037 bidirectional).
 
@@ -442,7 +443,14 @@ def _invoke_codex(
         t_stdout = threading.Thread(target=stdout_reader, daemon=True, name="codex-stdout-reader")
         t_stderr = threading.Thread(target=stderr_reader, daemon=True, name="codex-stderr-reader")
         t_stdout.start()
-        t_stderr.start()
+        # _drain_stderr defaults True (zero behaviour change — the
+        # stderr reader always runs in production). It is a private,
+        # keyword-only TEST seam (v1.15.9 `_sleep=` precedent): the
+        # backpressure mutant gate sets it False to NOT drain stderr,
+        # deterministically reproducing the full-pipe deadlock real
+        # codex would hit. Never exposed on the CLI/public contract.
+        if _drain_stderr:
+            t_stderr.start()
 
         start_ts = time_fn()
         last_heartbeat = start_ts
@@ -538,10 +546,14 @@ def _invoke_codex(
 
             _sleep(poll_interval)
 
-        # Process exited; drain reader threads.
+        # Process exited; drain reader threads. (Joining a never-
+        # started thread raises RuntimeError, so the t_stderr join +
+        # liveness check are guarded by the same _drain_stderr gate.)
         t_stdout.join(timeout=5)
-        t_stderr.join(timeout=5)
-        if t_stdout.is_alive() or t_stderr.is_alive():
+        if _drain_stderr:
+            t_stderr.join(timeout=5)
+        stderr_alive = _drain_stderr and t_stderr.is_alive()
+        if t_stdout.is_alive() or stderr_alive:
             # codex-rev-004 fix: still-alive reader after proc exit = invocation failure.
             raise CodexInvocationError(
                 "codex exited but reader thread did not drain within 5s; "
@@ -1223,3 +1235,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
