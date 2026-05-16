@@ -112,7 +112,18 @@ defects, integrated not dismissed):**
   `docs/advisories.md` 2026-05-16, with the converged design
   seed + mandatory `release_all`/mutant-gate.
 
-The multi-pass Workflow B audit caught **8 substantive defects**
+- Pass-7: codex-v1159-wfb-6 (stderr-drain) RESOLVED (bounded fix
+  + scope verdict accepted); gemini clean 7th. New blocking on
+  `_drive_heartbeats`: startup used a bare assert (teardown
+  bypass) + the half-interval gate missed a wrong-threshold
+  regression. Integrated codex's patch + refinements: startup
+  uses release_all()+join; `gap = max(interval/1000,
+  poll_interval*5)` (poll-safe + float-safe) checks no-emit at
+  interval-gap, crosses by 2*gap. (codex's exact-epsilon both
+  had a float edge AND was < poll_interval so the runner never
+  re-polled — caught via TDD.)
+
+The multi-pass Workflow B audit caught **9 substantive defects**
 self-certification would have shipped (governance scope;
 deadlock-invariant claim-vs-code; SIGTERM coverage; post-stream
 coverage; release_all-doesn't-terminate; operator mid-run
