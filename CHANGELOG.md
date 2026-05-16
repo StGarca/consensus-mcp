@@ -95,6 +95,23 @@ defects, integrated not dismissed):**
   Fixed: each round asserts NO heartbeat at +½interval, exactly
   one at the boundary.
 
+- Pass-6: codex 0 prior blocking re-raised; gemini clean 6th.
+  New blocking: `test_stderr_drain_prevents_deadlock` doesn't
+  model pipe backpressure. A focused **scope-adjudication
+  consult** (claude+codex+gemini, weighted-synthesis;
+  `iteration-v1159-stderr-scope`) verified UNANIMOUSLY — each
+  independently checking `git show da62d54^` — that this is a
+  PRE-EXISTING gap (identical in v1.15.8 baseline), NOT a
+  regression, NOT a valid v1.15.9 blocker. Resolved-in-part
+  (zero-risk, shipped): de-overclaimed docstring + an assertion
+  that production's real reader threads drained ALL scheduled
+  stdout/stderr (`_FakePipeReader._idx`), so a stderr-reader
+  regression now fails deterministically. Full OS-pipe
+  backpressure modeling = tracked follow-up with a concrete
+  blocker (its own determinism-risking design surface) — see
+  `docs/advisories.md` 2026-05-16, with the converged design
+  seed + mandatory `release_all`/mutant-gate.
+
 The multi-pass Workflow B audit caught **8 substantive defects**
 self-certification would have shipped (governance scope;
 deadlock-invariant claim-vs-code; SIGTERM coverage; post-stream
