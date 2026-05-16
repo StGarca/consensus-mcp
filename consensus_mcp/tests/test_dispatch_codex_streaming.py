@@ -1242,47 +1242,58 @@ def test_stderr_drain_prevents_deadlock(tmp_path):
         stderr_capacity=2,
         exit_at=1000.0,  # Long exit time to ensure deadlock is the cause
     )
-    # The deadlock's load-bearing contract is that the `release_all()`
-    # independent safeguard catches it LOUD and BOUNDED (<= _CEILING),
-    # never a hang. The exact `_drive` sub-site (startup vs per-round
-    # wait) is incidental — with no stderr reader the runner blocks
-    # inside poll()->write() and never parks, so it surfaces at the
-    # startup wait. Match the invariant ("release_all fired"), not the
-    # brittle sub-message.
-    with pytest.raises(AssertionError, match="release_all fired"):
-        th_mutant, holder_mutant = _run_invoke_in_thread(
-            clock_mutant,
-            prompt="x",
-            codex_bin="codex",
-            timeout_seconds=60,
-            repo_root=repo_root,
-            schema_path=SCHEMA_PATH,
-            log_path=log_path,
-            anchors=_anchors(),
-            poll_interval=0.01,
-            time_fn=clock_mutant.now,
-            popen_factory=factory_mutant,
-            drain_stderr=False,  # Disable the reader thread
-        )
-        # This will hit the _CEILING and raise, proving the deadlock.
-        _drive(clock_mutant, th_mutant, until=lambda: not th_mutant.is_alive())
+    th_mutant, holder_mutant = _run_invoke_in_thread(
+        clock_mutant,
+        prompt="x",
+        codex_bin="codex",
+        timeout_seconds=60,
+        repo_root=repo_root,
+        schema_path=SCHEMA_PATH,
+        log_path=log_path,
+        anchors=_anchors(),
+        poll_interval=0.01,
+        time_fn=clock_mutant.now,
+        popen_factory=factory_mutant,
+        drain_stderr=False,  # the mutant: no stderr reader thread
+    )
+    # codex-v11510-wfb-1 codex-rev-001 (BLOCKING, integrated): prove the
+    # deadlock by DETERMINISTICALLY OBSERVING the backpressure state —
+    # NOT by waiting for _drive to hit _CEILING (that made the proof
+    # depend on the safety timeout = slow + a disguised hang, violating
+    # the no-timeout/deterministic-and-fast goal). All scheduled stderr
+    # is due at t=0, so on the runner's FIRST poll() the producer fills
+    # the cap-2 buffer and write() BLOCKS — no clock advance, no _drive.
+    # write() notify_all()s when it sets _writer_blocked, so this
+    # wait_for returns in ms; its internal _CEILING is only the
+    # universal lost-wakeup net, never the proof. The proc is created
+    # inside the runner thread, so guard instances[0] in the predicate
+    # (returns False until populated — no index race).
+    def _mutant_deadlocked():
+        if not factory_mutant.instances:
+            return False
+        s = factory_mutant.instances[0].stderr
+        return s._writer_blocked and len(s._buffer) == s._capacity
 
-    # Verify the state that caused the deadlock.
+    deadlocked = clock_mutant.wait_for(_mutant_deadlocked)
+    assert deadlocked, (
+        "stderr writer never blocked on the full pipe — the backpressure "
+        "deadlock was NOT reproduced, so this gate would not catch a "
+        "stderr-drain regression"
+    )
     proc_mutant = factory_mutant.instances[0]
-    # DURABLE proof the backpressure deadlock occurred (every state
-    # release_all() does NOT undo — `_writer_blocked` and the schedule
-    # cursor are both reset/advanced by the released-teardown path, so
-    # they cannot be asserted post-teardown). The clean discriminator
-    # vs the nominal case: with a live reader the buffer is fully
-    # DRAINED (Case 1 asserts `not proc.stderr._buffer`); with NO
-    # reader it stays SATURATED at capacity — release_all never
-    # popleft()s it. Together with the `release_all fired` raise
-    # (deadlock caught, bounded, loud) and no success output, this
-    # proves: writer blocked on a full pipe → proc could not exit.
-    assert len(proc_mutant.stderr._buffer) == proc_mutant.stderr._capacity, (
-        f"stderr buffer not saturated: {len(proc_mutant.stderr._buffer)} "
-        f"!= capacity {proc_mutant.stderr._capacity} — backpressure did "
-        "not block the writer"
+    # Deadlock PROVEN by direct observation of saturated buffer +
+    # blocked writer. release_all() is now TEARDOWN (not the detector):
+    # assert the runner unwinds PROMPTLY, not at _CEILING.
+    t0 = time.monotonic()
+    clock_mutant.release_all()
+    th_mutant.join(timeout=5)
+    assert not th_mutant.is_alive(), (
+        "runner did not unwind within 5s of release_all() — the "
+        "safeguard does not promptly bound the backpressure deadlock"
+    )
+    assert time.monotonic() - t0 < _CEILING, (
+        "runner unwind took >= _CEILING — proof/teardown is "
+        "timeout-driven, not deterministic"
     )
     assert "out" not in holder_mutant, (
         "mutant dispatch produced success output — the deadlock was "
