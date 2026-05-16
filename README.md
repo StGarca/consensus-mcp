@@ -103,45 +103,31 @@ can override either.
 
 ## Does it actually work?
 
-consensus-mcp is built using itself — every change goes through its
-own cross-AI review. The original bootstrap deployment *measured*
-**38 real defects caught before commit, zero false positives**
-across 6 peer-reviewed subsystems (a race condition, a fail-open
+consensus-mcp is built using itself — every change goes through
+its own cross-AI review. The original bootstrap deployment
+measured **38 real defects caught before commit, zero false
+positives** across 6 subsystems (a race condition, a fail-open
 safety gate, a path-matching bug — each missed by single-AI
-review). It has been self-hosted continuously since: **70+
-consensus iterations** across the v1.13–v1.15 line, where cross-AI
-audits routinely caught blocking defects *pre-merge* — e.g. the
-v1.15.1 converged-plan enforcement gaps, the v1.15.2
-gemini-dispatch trust bug, and the v1.15.4 CI-dormancy /
-test-hermeticity bugs (see [`CHANGELOG.md`](CHANGELOG.md) and the
-Releases page). The "38" is the original *measured* baseline, not
-a running tally — deliberately not inflated to an uncounted
-number, because unfalsifiable metrics are exactly what this tool
-exists to catch. The point is the pattern held across 70+
-iterations.
+review). It's been self-hosted continuously since, across **70+
+consensus iterations** on the v1.13–v1.15 line, with cross-AI
+audits routinely catching blocking defects pre-merge.
+
+(38 is the original *measured* baseline, not a running tally — a
+tool built to catch inflated metrics shouldn't inflate its own.)
 
 ## Status
 
-**Current: v1.15.9.** v1.15.9 makes the streaming-dispatch test
-harness fully deterministic and removes the v1.15.8 Windows-CI
-skip — the four heartbeat/abort tests now run everywhere. The
-fix: a private, defaulted `_sleep` injection point so the test
-clock has an explicit happens-before with the runner instead of
-racing real wall-clock on loaded CI. It went through a Workflow A
-design consult and an exhaustive multi-pass cross-AI Workflow B
-audit that caught and fixed 9 substantive coverage/safety defects
-the rewrite would otherwise have silently introduced (gemini
-clean throughout on determinism; codex drove coverage-fidelity —
-distinct, non-redundant priors). Per the project's
-provisional-until-proven discipline, the tag is cut only after
-the release commit passes ≥3 **distinct** green Windows-CI run
-attempts (attempts-API verified — a single green run is
-explicitly insufficient). Full per-release detail is in
-[`CHANGELOG.md`](CHANGELOG.md); upgrade guidance for known-issue
-releases is in [`docs/advisories.md`](docs/advisories.md).
+**Current: v1.15.9 — stable.** ~970 regression tests, green on
+CI across Linux + Windows and Python 3.10–3.12. Self-hosted:
+every release is built through consensus-mcp's own cross-AI
+review.
 
-Extracted from the project that produced and stress-tested it, then
-restarted as a standalone tool. ~970 regression tests, green.
+- What changed in each release → [`CHANGELOG.md`](CHANGELOG.md)
+- Known-issue releases + which version to upgrade to →
+  [`docs/advisories.md`](docs/advisories.md)
+
+Extracted from the project that produced and stress-tested it,
+then restarted as a standalone tool.
 
 ## Learn more
 
