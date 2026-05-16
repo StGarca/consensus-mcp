@@ -521,6 +521,7 @@ def _drive_heartbeats(
     interval: float,
     steps: int,
     final_advance: float,
+    poll_interval: float,
 ):
     """Lockstep driver that PROVES the heartbeat interval gate
     (codex-v1159-wfb-5 codex-rev-001, integrated). Advancing exactly
@@ -547,21 +548,52 @@ def _drive_heartbeats(
                 "a timing flake"
             )
 
-    assert clock.wait_runner_parked(after_epoch=0), "runner never parked (startup)"
+    # codex-v1159-wfb-7 codex-rev-001 (BLOCKING, integrated): startup
+    # wait must use the SAME release_all()+join loud-fail path as the
+    # other drivers — a bare assert here bypasses the synthetic
+    # clock/process teardown (the teardown-bypass class of pass-2/4).
+    if not clock.wait_runner_parked(after_epoch=0):
+        clock.release_all()
+        th.join(timeout=5)
+        raise AssertionError(
+            "_drive_heartbeats: runner never parked (startup) — "
+            "release_all fired; handshake broken, NOT a timing flake"
+        )
+    # codex-v1159-wfb-7 codex-rev-001 (BLOCKING, integrated): check
+    # no-emit JUST BEFORE the boundary, not at half-interval — a
+    # regression emitting at e.g. 20s for a 30s interval slips past a
+    # half-interval (15s) check but is caught at interval-epsilon.
+    # Float-robustness refinement on codex's exact-boundary epsilon:
+    # the boundary advance overshoots by epsilon (total interval+eps)
+    # so `now - last_heartbeat >= interval` cannot be flipped False by
+    # ~1e-10 double error from landing EXACTLY on the interval.
+    # `gap` must exceed `poll_interval`: the production loop sleeps
+    # `poll_interval` between polls, so an advance < poll_interval
+    # never triggers another poll iteration (the runner would not emit
+    # — the bug a 2*epsilon=0.002 advance vs poll_interval=0.01 hit).
+    # gap stays << interval so the no-emit check remains a TIGHT gate
+    # (catches emit-every-poll and wrong-threshold regressions like
+    # "emit at 20s for a 30s interval": 20 < interval-gap → caught).
+    # Float margin = gap ≫ ~1e-10 double error, so the boundary
+    # comparison cannot be flipped by rounding.
+    gap = max(interval / 1000.0, poll_interval * 5.0)
+    pre_boundary = interval - gap
     for k in range(steps):
         before = _hb()
-        # (1) sub-interval: the interval gate MUST suppress emission.
-        e1 = clock.advance(interval * 0.5)
-        _sync(e1, f"round {k} sub-interval")
+        # (1) advance to interval-gap: the gate MUST suppress emission.
+        e1 = clock.advance(pre_boundary)
+        _sync(e1, f"round {k} pre-boundary")
         mid = _hb()
         assert mid == before, (
-            f"round {k}: heartbeat emitted at +{interval*0.5}s — BEFORE "
+            f"round {k}: heartbeat emitted at +{pre_boundary}s — BEFORE "
             f"the {interval}s interval elapsed: count {before}->{mid}. "
             "The interval gate is broken (regression: emit-every-poll / "
             "wrong threshold)."
         )
-        # (2) cross the boundary: EXACTLY one new heartbeat.
-        e2 = clock.advance(interval * 0.5)
+        # (2) cross the boundary by 2*gap (now-last_hb = interval+gap,
+        # unambiguously >= interval AND > poll_interval so the runner
+        # actually polls): EXACTLY one new heartbeat.
+        e2 = clock.advance(2.0 * gap)
         _sync(e2, f"round {k} boundary")
         after = _hb()
         assert after == before + 1, (
@@ -863,7 +895,10 @@ def test_heartbeat_fires_at_interval(tmp_path):
     )
     # 3 lockstep interval rounds — each PROVES the gate: no heartbeat
     # at +15s, exactly one at +30s (codex-v1159-wfb-5 codex-rev-001).
-    _drive_heartbeats(clock, th, log_path, interval=30.0, steps=3, final_advance=20.0)
+    _drive_heartbeats(
+        clock, th, log_path,
+        interval=30.0, steps=3, final_advance=20.0, poll_interval=0.01,
+    )
     assert "e" not in holder, f"unexpected exception: {holder.get('e')}"
 
     hb = _events(log_path, "dispatch_heartbeat")
