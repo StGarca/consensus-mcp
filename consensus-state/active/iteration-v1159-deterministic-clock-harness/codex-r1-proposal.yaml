@@ -1,0 +1,136 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-1
+pass_id: codex-v1159-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential/prior: this is a missing happens-before contract
+  between the virtual clock and the runner/readers, not a product timing defect. Verified
+  from the provided test artifact: `_ControllableClock` only exposes locked `now()`/`advance()`
+  with no wait/notify at line 65; `_FakePipeReader.readline()` still uses real `time.sleep(0.005)`
+  polling at line 119; the four skipped tests start `_invoke_codex` in background
+  threads and then rely on real sleeps plus `join(timeout=10)` at lines 438, 495,
+  557, and 618; the assertions already key on durable emitted `dispatch-log.jsonl`
+  events via `_read_log_events` at line 307. The best move is therefore to make the
+  test harness event-driven while keeping production behavior defaulted to real sleep.
+  This beats longer timeouts because it removes the race instead of stretching it.
+  It beats deleting/weakening assertions because these four tests are the only automated
+  proof of heartbeat cadence, silence abort, operator signal deletion/SIGTERM, and
+  wall-time hard ceiling. It beats a broad `_invoke_codex` state-machine refactor
+  because the verified defect surface is test coordination, and a keyword-only sleep
+  hook plus synchronizing fake is enough. It also beats scoping only the four skipped
+  tests because `_drive_clock_until_done` at line 286 and `test_clean_exit_returns_output`
+  at line 680 share the same real-sleep/advance-loop family, so leaving them unchanged
+  preserves a latent same-class flake. Root-cause claim is provisional for external
+  CI scheduling: the refuting observation would be a Windows GitHub Actions run where
+  the rewritten harness has no real sleep polling, the synchronizing clock records
+  runner wake/sleep handshakes correctly, but one of the four event assertions still
+  fails or hangs; that would point away from coordination-by-hope and toward product
+  logic or Windows file/process behavior.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: d6d9f19f030771d09c58e0bebbbf11271cdd7b71f68599658d0f9586b05139c3
+  output_sha256: e0835930416d2e1b74b5d8997ec6ff959ab7dbf4a691f11617d96478576c8ab3
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: 7e4bc2e2369b4f28a458ac4160c700352df2ad4a222ebd816a40a8f39a2ee83f
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 36ec502a0388608de23334e9a19695d39cdd4f57a32ee2d2b01e69852d835d2c
+  mode: proposal
+proposal:
+  selected_target: deterministic synchronizing streaming harness with an explicit
+    sleep hook, applied to the four skipped tests plus the shared same-family helper/users
+  rationale_vs_alternatives: 'Differential/prior: this is a missing happens-before
+    contract between the virtual clock and the runner/readers, not a product timing
+    defect. Verified from the provided test artifact: `_ControllableClock` only exposes
+    locked `now()`/`advance()` with no wait/notify at line 65; `_FakePipeReader.readline()`
+    still uses real `time.sleep(0.005)` polling at line 119; the four skipped tests
+    start `_invoke_codex` in background threads and then rely on real sleeps plus
+    `join(timeout=10)` at lines 438, 495, 557, and 618; the assertions already key
+    on durable emitted `dispatch-log.jsonl` events via `_read_log_events` at line
+    307. The best move is therefore to make the test harness event-driven while keeping
+    production behavior defaulted to real sleep. This beats longer timeouts because
+    it removes the race instead of stretching it. It beats deleting/weakening assertions
+    because these four tests are the only automated proof of heartbeat cadence, silence
+    abort, operator signal deletion/SIGTERM, and wall-time hard ceiling. It beats
+    a broad `_invoke_codex` state-machine refactor because the verified defect surface
+    is test coordination, and a keyword-only sleep hook plus synchronizing fake is
+    enough. It also beats scoping only the four skipped tests because `_drive_clock_until_done`
+    at line 286 and `test_clean_exit_returns_output` at line 680 share the same real-sleep/advance-loop
+    family, so leaving them unchanged preserves a latent same-class flake. Root-cause
+    claim is provisional for external CI scheduling: the refuting observation would
+    be a Windows GitHub Actions run where the rewritten harness has no real sleep
+    polling, the synchronizing clock records runner wake/sleep handshakes correctly,
+    but one of the four event assertions still fails or hangs; that would point away
+    from coordination-by-hope and toward product logic or Windows file/process behavior.'
+  deliverable_scope:
+    next_iteration_id: iteration-v1159-deterministic-clock-harness
+    files_in_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    - docs/advisories.md
+    files_out_of_scope:
+    - .github/workflows/*
+    - consensus_mcp/dispatch_templates/*
+    - packaging/release metadata
+    - public release tags or immutable v1.15.8 artifacts
+    - unrelated `_invoke_codex` abort semantics beyond adding a defaulted test hook
+    key_design_decisions:
+    - Add a private keyword-only sleep hook to `_invoke_codex`, defaulting to `time.sleep`,
+      so production callers keep current behavior while tests can block on a deterministic
+      condition instead of monkeypatching global `time.sleep`.
+    - 'Replace `_ControllableClock` with a condition-backed synchronizing clock: `now()`,
+      `advance()`, `sleep()`, `wait_for_runner_sleep()`, `wait_for(predicate)`, and
+      `release_all()` for failure cleanup.'
+    - Rewrite `_FakePipeReader.readline()` to wait on the synchronizing clock and
+      parent exit notification rather than real 5 ms polling; notify readers on `poll()`
+      exit, `terminate()`, and `kill()`.
+    - Replace arbitrary `time.sleep` loops and bare `join(timeout=10)` waits with
+      event/predicate waits against emitted log events, invoke completion, signal-file
+      deletion, and fake process termination.
+    - Delete `_FLAKY_WINDOWS_CI` in this iteration; no follow-up phase, because the
+      acceptance gates are concrete and the implementation cost is small.
+    - Update all same-family helper users, including `test_clean_exit_returns_output`;
+      preserve stderr drain coverage with real reader threads so the deadlock regression
+      test still proves stderr is drained.
+    - 'Add a root-cause-independent teardown safeguard: any failed wait releases the
+      synchronizing clock, terminates the fake process, joins runner/reader threads,
+      and fails with harness state, so a wrong diagnosis does not leave CI wedged.'
+    acceptance_gates:
+    - '`_FLAKY_WINDOWS_CI` and the Windows/GitHub Actions skip decorator are absent
+      from `consensus_mcp/tests/test_dispatch_codex_streaming.py`.'
+    - '`pytest consensus_mcp/tests/test_dispatch_codex_streaming.py -q` passes with
+      all streaming, heartbeat, abort, clean-exit, and stderr-drain tests collected
+      and run.'
+    - 'The four formerly skipped tests still assert the same durable outcomes: heartbeat
+      event cadence/monotonic age, `abort_source=watchdog_silence`, `abort_source=operator_signal_file`
+      plus signal-file deletion and termination, and `abort_source=wall_time_hard_ceiling`.'
+    - A Windows GitHub Actions run for the existing project channel, already evidenced
+      by the skip condition and v1.15.8 context in the provided test artifact, runs
+      these tests without skips before claiming the CI follow-up is complete.
+    - No docs or changelog text claims the immutable v1.15.8 artifact contains the
+      proper deterministic harness fix; v1.15.8 remains the interim skip release,
+      and the fix is attributed only to the new commit/tag once it exists.
+  risks:
+  - The sleep hook touches production code, even if defaulted; keep it keyword-only/private
+    and verify existing callers do not need changes.
+  - An over-faked harness could stop exercising reader-thread behavior; retain real
+    stdout/stderr reader threads and event-log assertions.
+  - Condition-based tests can deadlock if failure cleanup is weak; the helper must
+    always release waiters and join/terminate before failing.
+  - If the external Windows CI failure persists after deterministic handshakes, the
+    scheduling hypothesis is refuted and the next investigation should target Windows
+    process/file behavior rather than test timing.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-15T22:38:34Z'
+packet_sha256: 649faa338012d0720fd0b3fdcfbda3c787fe54787412749f2b6c1789e703b746

@@ -1,0 +1,594 @@
+defect_target:
+  files:
+  - consensus_mcp/tests/test_dispatch_codex_streaming.py
+  base_sha: ca007bc1e3b4de2ae851a0f8c6197b788a739b6c6432583372df3fa051e3ff16
+  touched_files_contents:
+    consensus_mcp/tests/test_dispatch_codex_streaming.py: "\"\"\"Regression tests\
+      \ for iter-0037 streaming/heartbeat/abort features of\n`_invoke_codex` in `consensus_mcp/_dispatch_codex.py`.\n\
+      \nv1.15.9 (iteration-v1159-deterministic-clock-harness, Workflow A\nconverged\
+      \ — claude+codex+gemini, weighted-synthesis): the harness is\nnow fully DETERMINISTIC.\
+      \ There are no real `time.sleep` waits on the\ndrive path and no \"advance the\
+      \ clock + hope the daemon runner is\nscheduled within a wall-clock budget +\
+      \ join(timeout)\" — the exact\npattern that flaked on loaded Windows GitHub\
+      \ runners and forced the\nv1.15.8 Q2(c) `@_FLAKY_WINDOWS_CI` interim skip (now\
+      \ DELETED).\n\nMechanism:\n  - `_SyncClock` — a `threading.Condition`-backed\
+      \ virtual clock.\n    `now()/advance()` are unchanged in spirit; `sleep(dt)`\
+      \ is\n    injected into production `_invoke_codex` via its private,\n    keyword-only\
+      \ `_sleep=` seam (defaults to `time.sleep`, so\n    production behavior is unchanged)\
+      \ so the poll loop has an\n    explicit happens-before with the test driver\
+      \ instead of racing\n    real time. `wait_runner_parked()` gives the heartbeat-cadence\n\
+      \    test lockstep; `wait_for(predicate)` keys on the durable\n    emitted `dispatch-log.jsonl`\
+      \ events the assertions already use;\n    `release_all()` is a root-cause-INDEPENDENT\
+      \ teardown safeguard:\n    any failed/timed-out wait releases every waiter,\
+      \ terminates the\n    fake process, and fails LOUD with harness state — a misdiagnosed\n\
+      \    or deadlocked harness can never wedge a CI job.\n  - `_FakePipeReader`\
+      \ waits on the same clock (no real 5 ms poll);\n    `StreamingFakeCodexPopen`\
+      \ notifies the clock on exit/terminate/\n    kill so reader threads are woken\
+      \ deterministically.\n  - `test_stderr_drain_prevents_deadlock` keeps REAL stdout/stderr\n\
+      \    reader threads (the behavior it exists to prove).\n\nDeadlock-free invariant:\
+      \ every blocking wait has a guaranteed\nwaker on EVERY path (advance, runner-parked,\
+      \ log-event, proc-exit,\nexception, and the absolute safety ceiling -> release_all()).\n\
+      \"\"\"\nfrom __future__ import annotations\n\nimport json as _json\nimport threading\n\
+      import time\nfrom pathlib import Path\n\nimport pytest\n\nREPO_ROOT = Path(__file__).resolve().parent.parent.parent\n\
+      \nfrom consensus_mcp import _dispatch_codex  # noqa: E402\n\n\nSCHEMA_PATH =\
+      \ REPO_ROOT / \"consensus_mcp\" / \"dispatch_templates\" / \"codex_review_schema.json\"\
+      \n\n# Absolute real-time safety ceiling for any harness wait. Dozens x\n# normal;\
+      \ under correct operation NO wait ever approaches it (every\n# wakeup is Condition-notify\
+      \ driven). If one is hit, the handshake is\n# broken -> release_all() fails\
+      \ the test LOUD and fast instead of\n# hanging CI. This is the converged independent_safeguard,\
+      \ not a\n# correctness-timing dependency.\n_CEILING = 20.0\n\n# Re-poll bound\
+      \ on every Condition.wait. The design is notify-driven\n# (advance / sleep progress-beat\
+      \ / proc-exit / thread-death all\n# notify_all), so under correct operation\
+      \ a waiter wakes in\n# microseconds. _REPOLL is purely a lost-wakeup SAFETY\
+      \ NET: a missed\n# notify self-heals in ~50 ms instead of stalling to _CEILING.\n\
+      # Correctness NEVER depends on it — every wait re-checks an exact\n# predicate;\
+      \ _REPOLL only bounds wakeup LATENCY, never pass/fail\n# (this is what keeps\
+      \ the harness deterministic, not wall-clock-timed).\n_REPOLL = 0.05\n\n\n# --------------------------------------------------------------------------\n\
+      # Test helpers\n# --------------------------------------------------------------------------\n\
+      \n\nclass _SyncClock:\n    \"\"\"Deterministic virtual clock with an explicit\
+      \ test<->runner\n    happens-before. Replaces the old real-sleep-polled\n  \
+      \  `_ControllableClock`.\"\"\"\n\n    def __init__(self, start: float = 1000.0):\n\
+      \        self.t = float(start)\n        self._cond = threading.Condition()\n\
+      \        self._epoch = 0          # bumped by every advance()\n        self._park_epoch\
+      \ = -1    # max epoch a sleep() caller parked under\n        self._sleepers\
+      \ = 0       # threads currently parked in sleep()\n        self._released =\
+      \ False\n\n    # -- production-facing (time_fn / _sleep injection) --------------\n\
+      \n    def now(self) -> float:\n        with self._cond:\n            return\
+      \ self.t\n\n    def sleep(self, _dt: float) -> None:\n        \"\"\"Injected\
+      \ as production `_invoke_codex(_sleep=...)`. Park the\n        caller until\
+      \ virtual time passes its wake target OR the clock\n        is released. Records\
+      \ the park epoch + sleeper count so the\n        driver can detect \"the runner\
+      \ consumed the latest advance\".\n        Emits a progress beat (notify) so\
+      \ `wait_for` re-checks its\n        predicate immediately after each poll iteration.\"\
+      \"\"\n        deadline = time.monotonic() + _CEILING\n        with self._cond:\n\
+      \            wake_at = self.t + float(_dt)\n            while self.t < wake_at\
+      \ and not self._released:\n                if time.monotonic() >= deadline:\n\
+      \                    return  # safety: never wedge the runner forever\n    \
+      \            self._sleepers += 1\n                self._park_epoch = max(self._park_epoch,\
+      \ self._epoch)\n                self._cond.notify_all()\n                self._cond.wait(_REPOLL)\n\
+      \                self._sleepers -= 1\n\n    # -- driver-facing ----------------------------------------------\n\
+      \n    def advance(self, dt: float) -> int:\n        with self._cond:\n     \
+      \       self.t += float(dt)\n            self._epoch += 1\n            self._cond.notify_all()\n\
+      \            return self._epoch\n\n    def wait_runner_parked(self, after_epoch:\
+      \ int) -> bool:\n        \"\"\"Lockstep: block until a sleep() caller has parked\
+      \ having\n        observed >= after_epoch (ran a full poll iteration after that\n\
+      \        advance). Guaranteed waker: sleep()'s notify, or the ceiling.\"\"\"\
+      \n        deadline = time.monotonic() + _CEILING\n        with self._cond:\n\
+      \            while not self._released and not (\n                self._sleepers\
+      \ > 0 and self._park_epoch >= after_epoch\n            ):\n                remaining\
+      \ = deadline - time.monotonic()\n                if remaining <= 0:\n      \
+      \              return False\n                self._cond.wait(min(remaining,\
+      \ _REPOLL))\n            return not self._released\n\n    def wait_for(self,\
+      \ predicate) -> bool:\n        \"\"\"Block until predicate() is true OR released\
+      \ OR ceiling.\n        predicate reads external state (dispatch-log/holder)\
+      \ and does\n        NOT take this lock. Re-checked on every notify — the runner\n\
+      \        emits a progress beat each poll iteration via sleep().\"\"\"\n    \
+      \    deadline = time.monotonic() + _CEILING\n        with self._cond:\n    \
+      \        while not self._released:\n                if predicate():\n      \
+      \              return True\n                remaining = deadline - time.monotonic()\n\
+      \                if remaining <= 0:\n                    return False\n    \
+      \            self._cond.wait(min(remaining, _REPOLL))\n            return predicate()\n\
+      \n    def wait_byte_due(self, sched_rel: float, t0: float, parent_exited) ->\
+      \ bool:\n        \"\"\"Reader-side wait: True when (now - t0) >= sched_rel;\
+      \ False\n        if the parent proc exited or the clock was released. Does NOT\n\
+      \        touch the sleeper/epoch state (that is the runner poll loop's\n   \
+      \     alone). Woken by advance()/terminate()/kill()/release_all().\"\"\"\n \
+      \       deadline = time.monotonic() + _CEILING\n        with self._cond:\n \
+      \           while not self._released:\n                if (self.t - t0) >= sched_rel:\n\
+      \                    return True\n                if parent_exited():\n    \
+      \                return False\n                remaining = deadline - time.monotonic()\n\
+      \                if remaining <= 0:\n                    return False\n    \
+      \            self._cond.wait(min(remaining, _REPOLL))\n            return (self.t\
+      \ - t0) >= sched_rel\n\n    def notify(self) -> None:\n        \"\"\"Wake all\
+      \ waiters (used on proc exit / runner-thread death).\"\"\"\n        with self._cond:\n\
+      \            self._cond.notify_all()\n\n    def is_released(self) -> bool:\n\
+      \        with self._cond:\n            return self._released\n\n    def release_all(self)\
+      \ -> None:\n        \"\"\"Independent safeguard: free EVERY waiter immediately\
+      \ so a\n        broken handshake fails fast/loud instead of wedging CI. The\n\
+      \        fake proc's poll() also observes is_released() and\n        self-terminates,\
+      \ so the production runner loop actually EXITS\n        (it does not just spin\
+      \ on a never-exiting proc) — without that,\n        release_all only unblocked\
+      \ the driver while leaking a spinning\n        daemon (codex-v1159-wfb-4 codex-rev-001,\
+      \ integrated).\"\"\"\n        with self._cond:\n            self._released =\
+      \ True\n            self._cond.notify_all()\n\n\nclass _FakeStdin:\n    \"\"\
+      \"Bytes-capturing stdin replacement; closed flag used to gate proc exit.\"\"\
+      \"\n\n    def __init__(self):\n        self.buf = bytearray()\n        self.closed\
+      \ = False\n\n    def write(self, data):\n        if self.closed:\n         \
+      \   raise BrokenPipeError(\"stdin closed\")\n        self.buf.extend(data)\n\
+      \        return len(data)\n\n    def close(self):\n        self.closed = True\n\
+      \n    def flush(self):\n        pass\n\n\nclass _FakePipeReader:\n    \"\"\"\
+      stdout/stderr replacement. `readline()` returns the next\n    scheduled `bytes`\
+      \ once the virtual clock has reached its scheduled\n    time, waiting deterministically\
+      \ on the `_SyncClock` (no real\n    polling). Returns `b\"\"` (EOF) when the\
+      \ parent proc has exited and\n    the schedule is drained, so production's `iter(readline,\
+      \ b\"\")`\n    reader threads terminate exactly like real Popen pipes.\"\"\"\
+      \n\n    def __init__(self, schedule, parent):\n        # schedule: list[tuple[float,\
+      \ bytes]] — clock-relative time + payload\n        self._schedule = list(schedule)\n\
+      \        self._idx = 0\n        self._parent = parent\n\n    def readline(self):\n\
+      \        # codex-v1159-wfb-4 codex-rev-003 (integrated): production's\n    \
+      \    # reader thread calls readline() in a tight `iter(readline,\n        #\
+      \ b\"\")` loop — so a call here happens-AFTER it processed the\n        # previous\
+      \ line into a `dispatch_streamed_line` event. Notify\n        # the clock so\
+      \ event-count waits (`_drive_streaming` /\n        # `_drive_post_stream`) have\
+      \ a TRUE happens-before waker for\n        # reader-thread-produced events,\
+      \ instead of falling back to\n        # the _REPOLL safety net (the reader does\
+      \ not otherwise notify;\n        # the runner's sleep()-beat is not ordered\
+      \ after this thread).\n        self._parent._clock.notify()\n        while True:\n\
+      \            if self._idx >= len(self._schedule):\n                # Schedule\
+      \ drained: EOF once the proc has exited.\n                if self._parent._exited:\n\
+      \                    return b\"\"\n                if not self._parent._clock.wait_for(\n\
+      \                    lambda: self._parent._exited\n                ):\n    \
+      \                return b\"\"  # released/ceiling -> behave as EOF\n       \
+      \         return b\"\"\n            sched_time, payload = self._schedule[self._idx]\n\
+      \            # A real pipe still yields bytes that were written BEFORE the\n\
+      \            # process exited: deliver any already-due scheduled line even\n\
+      \            # if the proc has since exited. Only a line whose scheduled\n \
+      \           # time had NOT arrived when the proc exited is \"never written\"\
+      \n            # → EOF. (Bug fixed v1.15.9: returning EOF on _exited before\n\
+      \            # draining due bytes silently lost streamed lines.)\n         \
+      \   if (self._parent._clock.now() - self._parent._t0) >= sched_time:\n     \
+      \           self._idx += 1\n                return payload\n            if self._parent._exited:\n\
+      \                return b\"\"  # proc exited before this byte's scheduled time\n\
+      \            due = self._parent._clock.wait_byte_due(\n                sched_time,\
+      \ self._parent._t0, lambda: self._parent._exited\n            )\n          \
+      \  if not due:\n                return b\"\"  # proc exited / released before\
+      \ this byte was due\n            self._idx += 1\n            return payload\n\
+      \n\nclass StreamingFakeCodexPopen:\n    \"\"\"Popen-shaped fake. Constructor\
+      \ uses Popen's positional shape so\n    production `popen_factory(cmd, stdin=...,\
+      \ stdout=..., stderr=...,\n    bufsize=...)` works unchanged. Exit state transitions\
+      \ notify the\n    `_SyncClock` so reader threads + the driver wake deterministically.\"\
+      \"\"\n\n    def __init__(\n        self,\n        cmd,\n        stdin=None,\n\
+      \        stdout=None,\n        stderr=None,\n        bufsize=0,\n        *,\n\
+      \        _scheduled_stdout=None,\n        _scheduled_stderr=None,\n        _returncode:\
+      \ int = 0,\n        _exit_at: float = 1.0,\n        _clock: _SyncClock,\n  \
+      \      _output_payload: str = '{\"ok\": true}',\n        **_popen_kwargs,  #\
+      \ iter-0039: absorb creationflags / start_new_session\n    ):\n        self._cmd\
+      \ = cmd\n        self._clock = _clock\n        self._t0 = _clock.now()\n   \
+      \     self._exit_at = float(_exit_at)\n        self._returncode_on_exit = int(_returncode)\n\
+      \        self._exited = False\n        # codex-v1159-wfb-3 codex-rev-001 (BLOCKING):\
+      \ record the\n        # SIGTERM/terminate side-effect so the operator-abort\
+      \ test can\n        # assert _terminate_process_tree actually ran (H2 names\
+      \ SIGTERM\n        # as required coverage — a regression that stopped killing\
+      \ the\n        # process must FAIL, not silently pass).\n        self._terminated\
+      \ = False\n        self.returncode = None\n        self._output_payload = _output_payload\n\
+      \        self._out_file = None\n        for i, tok in enumerate(cmd):\n    \
+      \        if tok == \"-o\" and i + 1 < len(cmd):\n                self._out_file\
+      \ = cmd[i + 1]\n                break\n        self.stdin = _FakeStdin()\n \
+      \       self.stdout = _FakePipeReader(_scheduled_stdout or [], self)\n     \
+      \   self.stderr = _FakePipeReader(_scheduled_stderr or [], self)\n\n    def\
+      \ _maybe_write_output(self):\n        if self._out_file and self._returncode_on_exit\
+      \ == 0:\n            try:\n                Path(self._out_file).write_text(self._output_payload,\
+      \ encoding=\"utf-8\")\n            except OSError:\n                pass\n\n\
+      \    def poll(self):\n        if self._exited:\n            return self.returncode\n\
+      \        # codex-v1159-wfb-4 codex-rev-001 (integrated): when the clock\n  \
+      \      # is released (a harness-timeout teardown), the fake proc MUST\n    \
+      \    # exit so the production poll loop terminates and the daemon\n        #\
+      \ runner thread actually dies — instead of _sleep returning\n        # immediately\
+      \ while proc.poll() stays None forever (a spinning\n        # leak after the\
+      \ driver raised). release_all() owns the single\n        # teardown signal;\
+      \ the fake observes it here (poll() is called\n        # every production iteration),\
+      \ so no second coordination\n        # surface / registration list is introduced.\n\
+      \        if self._clock.is_released():\n            self._terminated = True\n\
+      \            self._exited = True\n            self.returncode = -15\n      \
+      \      return self.returncode\n        now_rel = self._clock.now() - self._t0\n\
+      \        if now_rel >= self._exit_at:\n            self.returncode = self._returncode_on_exit\n\
+      \            self._exited = True\n            self._maybe_write_output()\n \
+      \           self._clock.notify()  # wake reader threads (EOF) + driver\n   \
+      \         return self.returncode\n        return None\n\n    def terminate(self):\n\
+      \        self._terminated = True\n        if not self._exited:\n           \
+      \ self.returncode = -15  # SIGTERM\n            self._exited = True\n      \
+      \      self._clock.notify()\n            # Do NOT stage output payload on termination\
+      \ — matches real codex.\n\n    def kill(self):\n        self._terminated = True\n\
+      \        if not self._exited:\n            self.returncode = -9\n          \
+      \  self._exited = True\n            self._clock.notify()\n\n    def send_signal(self,\
+      \ sig):\n        \"\"\"iter-0039: _terminate_process_tree calls send_signal(CTRL_BREAK_EVENT)\n\
+      \        on Windows and os.killpg on POSIX. The fake accepts any signal and\n\
+      \        treats it as terminate (the test cares about the exit path, not the\n\
+      \        signal-delivery mechanism).\"\"\"\n        self.terminate()\n\n   \
+      \ @property\n    def pid(self):\n        \"\"\"`_terminate_process_tree` does\
+      \ os.killpg(os.getpgid(proc.pid))\n        on POSIX. Return a synthetic, never-live\
+      \ PID so os.getpgid raises\n        ProcessLookupError and the production OSError-fallback\n\
+      \        (proc.terminate()) runs. (pid 0 == the caller's own process group\n\
+      \        — that previously made the abort path SIGTERM the pytest job\n    \
+      \    itself. The suite-wide conftest guard also neutralizes\n        os.killpg/os.getpgid.)\"\
+      \"\"\n        return 2_147_483_647\n\n    def wait(self, timeout=None):\n  \
+      \      # Exit is controlled via clock + terminate/kill; production only\n  \
+      \      # calls wait() after terminate/kill, by which point _exited is set.\n\
+      \        return self.returncode\n\n\ndef _make_factory(\n    clock: _SyncClock,\n\
+      \    *,\n    scheduled_stdout=None,\n    scheduled_stderr=None,\n    returncode:\
+      \ int = 0,\n    exit_at: float = 1.0,\n    output_payload: str = '{\"ok\": true}',\n\
+      ):\n    \"\"\"Build a popen_factory closure for injection into `_invoke_codex`.\n\
+      \n    `factory.instances` records every `StreamingFakeCodexPopen`\n    created\
+      \ so a test can assert process-side-effects (codex-v1159-\n    wfb-3 codex-rev-001:\
+      \ the operator-abort test must verify the\n    real SIGTERM/terminate happened,\
+      \ not just the log/signal-file).\"\"\"\n\n    instances: list = []\n\n    def\
+      \ factory(cmd, **kwargs):\n        p = StreamingFakeCodexPopen(\n          \
+      \  cmd,\n            _scheduled_stdout=scheduled_stdout,\n            _scheduled_stderr=scheduled_stderr,\n\
+      \            _returncode=returncode,\n            _exit_at=exit_at,\n      \
+      \      _clock=clock,\n            _output_payload=output_payload,\n        \
+      \    **kwargs,\n        )\n        instances.append(p)\n        return p\n\n\
+      \    factory.instances = instances\n    return factory\n\n\ndef _run_invoke_in_thread(clock:\
+      \ _SyncClock, **invoke_kwargs):\n    \"\"\"Run `_invoke_codex` in a daemon thread;\
+      \ return (thread, holder).\n\n    Injects `_sleep=clock.sleep` (the converged\
+      \ DI seam) so the\n    production poll loop is virtual-time-gated. The `finally`\
+      \ notifies\n    the clock so the driver's `wait_for` is woken the instant the\n\
+      \    runner thread dies — on EVERY path incl. exceptions (the universal\n  \
+      \  escape that makes the design deadlock-free).\n    \"\"\"\n    holder: dict\
+      \ = {}\n\n    def runner():\n        try:\n            holder[\"out\"] = _dispatch_codex._invoke_codex(\n\
+      \                _sleep=clock.sleep, **invoke_kwargs\n            )\n      \
+      \  except Exception as e:  # noqa: BLE001\n            holder[\"e\"] = e\n \
+      \       finally:\n            clock.notify()\n\n    th = threading.Thread(target=runner,\
+      \ daemon=True)\n    th.start()\n    return th, holder\n\n\ndef _drive(clock:\
+      \ _SyncClock, th: threading.Thread, *, until=None, chunk: float = 50.0,\n  \
+      \         max_rounds: int = 64):\n    \"\"\"Deterministic driver for terminal\
+      \ scenarios (stream/truncate/\n    clean-exit/stderr-drain/silence-abort/operator-signal).\n\
+      \n    The terminal condition is ALWAYS runner-thread death (proc exited\n  \
+      \  cleanly, or aborted/raised). It is intentionally NOT a mid-stream\n    observable:\
+      \ stopping early on e.g. \"a line was streamed\" while the\n    fake proc has\
+      \ not yet been advanced to its exit_at leaves the\n    production loop spinning\
+      \ on a proc that never exits → wedged. The\n    event assertions are checked\
+      \ by the caller AFTER thread death.\n\n    Fully park-synced (no t0-capture\
+      \ race, no real-sleep budget):\n    1. Wait for the runner's first park (prologue\
+      \ + the fake's\n       `_t0 = now()` capture complete) OR the runner already\
+      \ died.\n    2. Each round: advance one logical chunk, then wait until the\n\
+      \       runner parked again having observed this advance (still running)\n \
+      \      OR the runner thread died. Both are Condition-notified —\n       guaranteed\
+      \ waker on every path; ceiling → release_all() → loud\n       fast fail, never\
+      \ a wedged CI job. `until` is accepted for\n       call-site readability only\
+      \ and does not gate termination.\"\"\"\n    # Startup: wait until the runner\
+      \ has parked once (prologue + the\n    # fake's _t0=now() capture complete)\
+      \ OR the runner thread already\n    # died — an abort can fire on iteration\
+      \ 1 (e.g. operator-signal\n    # written before drive) BEFORE the loop ever\
+      \ reaches _sleep, so\n    # \"parked\" is not guaranteed; thread-death is the\
+      \ universal escape.\n    if not clock.wait_for(lambda: (not th.is_alive()) or\
+      \ clock._sleepers > 0):\n        clock.release_all()\n        th.join(timeout=5)\n\
+      \        raise AssertionError(\"_drive: runner neither parked nor exited at\
+      \ startup (release_all fired)\")\n\n    rounds = 0\n    while th.is_alive()\
+      \ and rounds < max_rounds:\n        e = clock.advance(chunk)\n        # codex-v1159-wfb-2\
+      \ codex-rev-001 (BLOCKING, integrated): the\n        # per-round wait return\
+      \ MUST be acted on. A False return means\n        # _CEILING elapsed with neither\
+      \ runner re-park (epoch>=e) nor\n        # thread death — under correct notify-driven\
+      \ operation that\n        # never happens (wakeups are sub-ms), so False ==\
+      \ a genuine\n        # wedge. Fire the release_all() safeguard and fail FAST/LOUD\n\
+      \        # here, not after max_rounds×_CEILING. This is what makes the\n   \
+      \     # claimed deadlock-free invariant actually true.\n        if not clock.wait_for(\n\
+      \            lambda e=e: (not th.is_alive())\n            or (clock._sleepers\
+      \ > 0 and clock._park_epoch >= e)\n        ):\n            clock.release_all()\n\
+      \            th.join(timeout=5)\n            raise AssertionError(\n       \
+      \         \"_drive: per-round wait hit _CEILING with no runner \"\n        \
+      \        \"progress — release_all fired. Deadlock/handshake or \"\n        \
+      \        \"product logic broken; NOT a timing flake.\"\n            )\n    \
+      \    rounds += 1\n\n    exhausted = th.is_alive() and rounds >= max_rounds\n\
+      \    clock.release_all()\n    th.join(timeout=5)\n    if th.is_alive() or exhausted:\n\
+      \        raise AssertionError(\n            f\"_drive: runner did not finish\
+      \ within max_rounds={max_rounds} \"\n            \"(release_all fired — deterministic\
+      \ handshake broke; NOT a \"\n            \"timing flake). max_rounds exhaustion\
+      \ is a HARD fail even if \"\n            \"release_all later lets the thread\
+      \ limp out.\"\n        )\n\n\ndef _drive_heartbeats(\n    clock: _SyncClock,\n\
+      \    th: threading.Thread,\n    log_path: Path,\n    *,\n    interval: float,\n\
+      \    steps: int,\n    final_advance: float,\n):\n    \"\"\"Lockstep driver that\
+      \ PROVES the heartbeat interval gate\n    (codex-v1159-wfb-5 codex-rev-001,\
+      \ integrated). Advancing exactly\n    `interval` per step with one poll/step\
+      \ only checks \"one per step\"\n    — a regression that emits EVERY poll (or\
+      \ uses a tiny threshold)\n    would still produce one-per-step and pass. So\
+      \ each round we:\n      (1) advance a SUB-interval amount, sync, and assert\
+      \ NO new\n          heartbeat (the interval gate held — premature emit fails);\n\
+      \      (2) advance the remainder to cross the boundary, sync, and\n        \
+      \  assert EXACTLY ONE new heartbeat.\n    This restores the cadence coverage\
+      \ the pre-rewrite test had via\n    its many sub-interval polls + loose count\
+      \ window.\"\"\"\n\n    def _hb():\n        return len(_events(log_path, \"dispatch_heartbeat\"\
+      ))\n\n    def _sync(e, where):\n        if not clock.wait_runner_parked(after_epoch=e):\n\
+      \            clock.release_all()\n            th.join(timeout=5)\n         \
+      \   raise AssertionError(\n                f\"_drive_heartbeats: runner did\
+      \ not consume advance \"\n                f\"({where}) — release_all fired;\
+      \ handshake broken, NOT \"\n                \"a timing flake\"\n           \
+      \ )\n\n    assert clock.wait_runner_parked(after_epoch=0), \"runner never parked\
+      \ (startup)\"\n    for k in range(steps):\n        before = _hb()\n        #\
+      \ (1) sub-interval: the interval gate MUST suppress emission.\n        e1 =\
+      \ clock.advance(interval * 0.5)\n        _sync(e1, f\"round {k} sub-interval\"\
+      )\n        mid = _hb()\n        assert mid == before, (\n            f\"round\
+      \ {k}: heartbeat emitted at +{interval*0.5}s — BEFORE \"\n            f\"the\
+      \ {interval}s interval elapsed: count {before}->{mid}. \"\n            \"The\
+      \ interval gate is broken (regression: emit-every-poll / \"\n            \"\
+      wrong threshold).\"\n        )\n        # (2) cross the boundary: EXACTLY one\
+      \ new heartbeat.\n        e2 = clock.advance(interval * 0.5)\n        _sync(e2,\
+      \ f\"round {k} boundary\")\n        after = _hb()\n        assert after == before\
+      \ + 1, (\n            f\"round {k}: expected exactly 1 heartbeat at the {interval}s\
+      \ \"\n            f\"boundary, got {after - before} (count {before}->{after})\"\
+      \n        )\n    clock.advance(final_advance)\n    ok = clock.wait_for(lambda:\
+      \ not th.is_alive())\n    clock.release_all()\n    th.join(timeout=5)\n    assert\
+      \ ok and not th.is_alive(), \"_drive_heartbeats: runner did not finish\"\n\n\
+      \ndef _drive_streaming(\n    clock: _SyncClock,\n    th: threading.Thread,\n\
+      \    log_path: Path,\n    *,\n    step: float,\n    until,\n    max_steps: int\
+      \ = 64,\n):\n    \"\"\"Lockstep driver for the wall-ceiling scenario: codex\
+      \ streams\n    continuously so silence-abort must NOT fire while virtual time\n\
+      \    accumulates past the hard ceiling. `step` < stall_silence_seconds;\n  \
+      \  after each advance, wait until production has actually PROCESSED a\n    new\
+      \ streamed line (the durable `dispatch_streamed_line` count rose)\n    — so\
+      \ `last_streamed_ts` is provably fresh at every silence check —\n    OR `until`\
+      \ (the wall abort) fired OR the runner died. This removes\n    the reader/processing\
+      \ race that a coarse jump would lose to\n    pre-first-line silence.\"\"\"\n\
+      \    if not clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers >\
+      \ 0):\n        clock.release_all()\n        th.join(timeout=5)\n        raise\
+      \ AssertionError(\"_drive_streaming: runner never started (release_all fired)\"\
+      )\n\n    steps = 0\n    while th.is_alive() and not until() and steps < max_steps:\n\
+      \        prev = len(_events(log_path, \"dispatch_streamed_line\"))\n       \
+      \ clock.advance(step)\n        # codex-v1159-wfb-2 codex-rev-001 (BLOCKING,\
+      \ integrated):\n        # act on the per-step wait return — False == _CEILING\
+      \ elapsed\n        # with no new processed line / abort / death = a genuine\
+      \ wedge;\n        # fire release_all() and fail FAST/LOUD, not after\n     \
+      \   # max_steps×_CEILING.\n        if not clock.wait_for(\n            lambda\
+      \ prev=prev: (not th.is_alive())\n            or until()\n            or len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) > prev\n        ):\n            clock.release_all()\n\
+      \            th.join(timeout=5)\n            raise AssertionError(\n       \
+      \         \"_drive_streaming: per-step wait hit _CEILING with no \"\n      \
+      \          \"progress — release_all fired. Deadlock/handshake or \"\n      \
+      \          \"product logic broken; NOT a timing flake.\"\n            )\n  \
+      \      steps += 1\n\n    exhausted = th.is_alive() and not until() and steps\
+      \ >= max_steps\n    clock.release_all()\n    th.join(timeout=5)\n    if th.is_alive()\
+      \ or exhausted:\n        raise AssertionError(\n            f\"_drive_streaming:\
+      \ did not reach terminal within \"\n            f\"max_steps={max_steps} (release_all\
+      \ fired — deterministic \"\n            \"handshake broke; NOT a timing flake).\
+      \ max_steps exhaustion \"\n            \"is a HARD fail even if release_all\
+      \ later frees the thread.\"\n        )\n\n\ndef _advance_until_streamed(\n \
+      \   clock: _SyncClock,\n    th: threading.Thread,\n    log_path: Path,\n   \
+      \ *,\n    min_streamed: int,\n    step: float,\n    max_steps: int = 64,\n):\n\
+      \    \"\"\"Lockstep small advances (`step` < stall_silence_seconds) until\n\
+      \    `min_streamed` `dispatch_streamed_line` events are PROCESSED and\n    the\
+      \ runner is back parked mid-run. Establishes a DETERMINISTIC\n    mid-run state:\
+      \ callers can then assert post-stream behaviour\n    (silence path) or inject\
+      \ a mid-run operator-abort signal — never\n    the startup/pre-first-line path\
+      \ (codex-v1159-wfb-3 codex-rev-002\n    silence; codex-v1159-wfb-4 codex-rev-002\
+      \ operator). Returns with\n    the runner alive + parked + ≥min_streamed events;\
+      \ raises LOUD\n    (release_all) on any wedge or shortfall.\"\"\"\n    if not\
+      \ clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers > 0):\n    \
+      \    clock.release_all()\n        th.join(timeout=5)\n        raise AssertionError(\"\
+      _advance_until_streamed: runner never started (release_all fired)\")\n\n   \
+      \ steps = 0\n    while (\n        th.is_alive()\n        and len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) < min_streamed\n        and steps < max_steps\n\
+      \    ):\n        e = clock.advance(step)\n        if not clock.wait_for(\n \
+      \           lambda e=e: (not th.is_alive())\n            or len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) >= min_streamed\n            or (clock._sleepers\
+      \ > 0 and clock._park_epoch >= e)\n        ):\n            clock.release_all()\n\
+      \            th.join(timeout=5)\n            raise AssertionError(\n       \
+      \         \"_advance_until_streamed: per-step wait hit _CEILING \"\n       \
+      \         \"(release_all fired; NOT a timing flake)\"\n            )\n     \
+      \   steps += 1\n\n    if len(_events(log_path, \"dispatch_streamed_line\"))\
+      \ < min_streamed:\n        clock.release_all()\n        th.join(timeout=5)\n\
+      \        raise AssertionError(\n            f\"_advance_until_streamed: only\
+      \ \"\n            f\"{len(_events(log_path, 'dispatch_streamed_line'))} of \"\
+      \n            f\"{min_streamed} lines processed — deterministic mid-run \"\n\
+      \            \"state NOT established (release_all fired)\"\n        )\n\n\n\
+      def _drive_post_stream(\n    clock: _SyncClock,\n    th: threading.Thread,\n\
+      \    log_path: Path,\n    *,\n    min_streamed: int,\n    step: float,\n):\n\
+      \    \"\"\"codex-v1159-wfb-3 codex-rev-002 (integrated): process\n    `min_streamed`\
+      \ lines first so `last_streamed_ts` is set and the\n    subsequent silence-abort\
+      \ exercises the POST-stream path (not\n    pre-first-line startup silence —\
+      \ the coverage the original test's\n    now-removed `time.sleep(0.1)` guaranteed),\
+      \ then drive to terminal.\"\"\"\n    _advance_until_streamed(clock, th, log_path,\
+      \ min_streamed=min_streamed, step=step)\n    _drive(clock, th)\n\n\ndef _read_log_events(log_path:\
+      \ Path) -> list[dict]:\n    if not log_path.exists():\n        return []\n \
+      \   out = []\n    for line in log_path.read_text(encoding=\"utf-8\").splitlines():\n\
+      \        line = line.strip()\n        if not line:\n            continue\n \
+      \       try:\n            out.append(_json.loads(line))\n        except _json.JSONDecodeError:\n\
+      \            # Defensive JSONL parse (v1.15.7 C): a telemetry-log reader\n \
+      \           # must never crash on a partial line. v1.15.8 made the\n       \
+      \     # production append OS-lock-atomic so torn lines should not\n        \
+      \    # occur; drop any anyway — the asserted events are whole.\n           \
+      \ continue\n    return out\n\n\ndef _setup_repo_root(tmp_path: Path) -> Path:\n\
+      \    (tmp_path / \"consensus-state\" / \"state\").mkdir(parents=True, exist_ok=True)\n\
+      \    return tmp_path\n\n\ndef _anchors():\n    return {\n        \"iteration_id\"\
+      : \"iter-test\",\n        \"reviewer_id\": \"codex-test\",\n        \"pass_id\"\
+      : \"codex-test-pass1\",\n    }\n\n\ndef _events(log_path, name):\n    return\
+      \ [e for e in _read_log_events(log_path) if e[\"event\"] == name]\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 1 — streamed lines appear in dispatch-log with correct seq + content\n\
+      # --------------------------------------------------------------------------\n\
+      \n\ndef test_streamed_lines_appear_in_dispatch_log(tmp_path):\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n    log_path = repo_root\
+      \ / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n    scheduled\
+      \ = [\n        (0.0, b\"line1\\n\"),\n        (0.0, b\"line2\\n\"),\n      \
+      \  (0.0, b\"line3\\n\"),\n        (0.0, b\"line4\\n\"),\n        (0.0, b\"line5\\\
+      n\"),\n    ]\n    factory = _make_factory(clock, scheduled_stdout=scheduled,\
+      \ exit_at=0.5)\n\n    th, holder = _run_invoke_in_thread(\n        clock,\n\
+      \        prompt=\"hi\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n\
+      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
+      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n\
+      \        poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive(clock, th, until=lambda: len(_events(log_path, \"dispatch_streamed_line\"\
+      )) >= 5)\n    assert not th.is_alive(), \"runner did not finish\"\n    assert\
+      \ \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\n    assert\
+      \ holder[\"out\"] == '{\"ok\": true}'\n\n    stream_events = _events(log_path,\
+      \ \"dispatch_streamed_line\")\n    assert len(stream_events) == 5, f\"expected\
+      \ 5 stream events, got {len(stream_events)}\"\n    for i, ev in enumerate(stream_events):\n\
+      \        assert ev[\"seq\"] == i, f\"event {i} seq={ev['seq']}\"\n        assert\
+      \ ev[\"line_truncated\"] == f\"line{i + 1}\"\n        assert ev[\"truncated\"\
+      ] is False\n        assert ev[\"stream\"] == \"stdout\"\n        assert ev[\"\
+      pass_id\"] == \"codex-test-pass1\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 2 — long lines truncated to 200 chars; full length recorded\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_long_lines_are_truncated_to_200_chars(tmp_path):\n    repo_root\
+      \ = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n    log_path = repo_root\
+      \ / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n    big = (\"\
+      A\" * 1000) + \"\\n\"\n    scheduled = [(0.0, big.encode(\"utf-8\"))]\n    factory\
+      \ = _make_factory(clock, scheduled_stdout=scheduled, exit_at=0.2)\n\n    th,\
+      \ holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"x\",\n \
+      \       codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive(clock, th, until=lambda: len(_events(log_path, \"dispatch_streamed_line\"\
+      )) >= 1)\n    assert not th.is_alive()\n    assert \"e\" not in holder, f\"\
+      unexpected exception: {holder.get('e')}\"\n\n    stream = _events(log_path,\
+      \ \"dispatch_streamed_line\")\n    assert len(stream) == 1\n    ev = stream[0]\n\
+      \    assert len(ev[\"line_truncated\"]) == 200\n    assert ev[\"line_full_length\"\
+      ] == 1000\n    assert ev[\"truncated\"] is True\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 3 — heartbeat fires at heartbeat_interval cadence\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_heartbeat_fires_at_interval(tmp_path):\n    \"\"\"Advance virtual\
+      \ time so codex appears to run ~95s with no stdout;\n    stall_silence_seconds=200\
+      \ so silence-abort never trips; with\n    heartbeat_interval=30 we deterministically\
+      \ see exactly 3 heartbeats\n    (at ~30, ~60, ~90) via lockstep advances.\"\"\
+      \"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n \
+      \   log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    factory = _make_factory(clock, scheduled_stdout=[], exit_at=95.0)\n\n\
+      \    th, holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"\
+      x\",\n        codex_bin=\"codex\",\n        timeout_seconds=300,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=200.0,\n  \
+      \      poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    # 3 lockstep interval rounds — each PROVES the gate: no heartbeat\n\
+      \    # at +15s, exactly one at +30s (codex-v1159-wfb-5 codex-rev-001).\n   \
+      \ _drive_heartbeats(clock, th, log_path, interval=30.0, steps=3, final_advance=20.0)\n\
+      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n\n    hb = _events(log_path, \"dispatch_heartbeat\")\n    assert len(hb) ==\
+      \ 3, f\"expected exactly 3 heartbeats, got {len(hb)}: {hb}\"\n    ages = [ev[\"\
+      age_seconds\"] for ev in hb]\n    assert ages == sorted(ages), f\"heartbeat\
+      \ ages not monotonic: {ages}\"\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 4 — heartbeat silence triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_heartbeat_silence_triggers_abort(tmp_path):\n    \"\"\"Codex emits\
+      \ 2 lines then goes silent; advancing virtual time past\n    stall_silence_seconds\
+      \ → `dispatch_aborted` with\n    `abort_source=\"watchdog_silence\"` and CodexInvocationError\
+      \ raised.\"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    scheduled = [(0.0, b\"a\\n\"), (0.0, b\"b\\n\")]\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=1000.0)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        clock,\n        prompt=\"x\",\n        codex_bin=\"codex\",\n     \
+      \   timeout_seconds=300,\n        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n\
+      \        log_path=log_path,\n        anchors=_anchors(),\n        heartbeat_interval=1000.0,\
+      \  # don't fire heartbeats\n        stall_silence_seconds=10.0,\n        poll_interval=0.01,\n\
+      \        time_fn=clock.now,\n        popen_factory=factory,\n    )\n    # codex-v1159-wfb-3\
+      \ codex-rev-002: process BOTH scheduled lines\n    # first (step=1.0 < stall_silence_seconds=10)\
+      \ so this exercises\n    # POST-stream silence, then advance past the threshold.\n\
+      \    _drive_post_stream(clock, th, log_path, min_streamed=2, step=1.0)\n   \
+      \ assert not th.is_alive(), \"runner did not abort\"\n    assert \"e\" in holder,\
+      \ \"expected CodexInvocationError\"\n    assert isinstance(holder[\"e\"], _dispatch_codex.CodexInvocationError)\n\
+      \n    aborts = _events(log_path, \"dispatch_aborted\")\n    assert len(aborts)\
+      \ == 1, f\"expected 1 abort event, got {aborts}\"\n    assert aborts[0][\"abort_source\"\
+      ] == \"watchdog_silence\"\n    # Proves the POST-stream silence path (not pre-first-line\
+      \ startup\n    # silence): the abort is tied to prior streamed output, so a\n\
+      \    # regression in last_streamed_ts handling is caught (codex-rev-002).\n\
+      \    assert aborts[0].get(\"last_streamed_line_age_seconds\") is not None, (\n\
+      \        \"silence abort was startup-silence, not post-stream — \"\n       \
+      \ \"last_streamed_line_age_seconds is null (codex-rev-002 coverage)\"\n    )\n\
+      \n\n# --------------------------------------------------------------------------\n\
+      # Test 5 — operator abort-signal file triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_operator_abort_signal_file_triggers_abort(tmp_path):\n    \"\"\"\
+      Mid-run `abort-dispatch-<pass_id>.signal` → wrapper SIGTERMs codex,\n    emits\
+      \ `dispatch_aborted` (`operator_signal_file`), deletes the signal\n    file,\
+      \ and raises.\"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock =\
+      \ _SyncClock()\n    log_path = repo_root / \"consensus-state\" / \"state\" /\
+      \ \"dispatch-log.jsonl\"\n\n    factory = _make_factory(clock, scheduled_stdout=[(0.0,\
+      \ b\"working\\n\")], exit_at=1000.0)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        clock,\n        prompt=\"x\",\n        codex_bin=\"codex\",\n     \
+      \   timeout_seconds=10000,\n        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n\
+      \        log_path=log_path,\n        anchors=_anchors(),\n        heartbeat_interval=10000.0,\n\
+      \        stall_silence_seconds=10000.0,  # don't fire silence-abort\n      \
+      \  poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    # codex-v1159-wfb-4 codex-rev-002 (integrated): establish a\n  \
+      \  # DETERMINISTIC mid-run state before writing the signal — wait\n    # until\
+      \ the scheduled \"working\" line is processed and the runner\n    # is parked\
+      \ mid-loop. Writing the signal before then could test\n    # startup-present-signal\
+      \ handling instead of the named H2 live\n    # mid-run operator-abort + termination\
+      \ path.\n    _advance_until_streamed(clock, th, log_path, min_streamed=1, step=1.0)\n\
+      \    signal_path = repo_root / \"consensus-state\" / \"state\" / \"abort-dispatch-codex-test-pass1.signal\"\
+      \n    signal_path.write_text(\"operator manual abort\", encoding=\"utf-8\")\n\
+      \    _drive(clock, th, until=lambda: len(_events(log_path, \"dispatch_aborted\"\
+      )) >= 1)\n    assert not th.is_alive(), \"runner did not abort\"\n    assert\
+      \ \"e\" in holder, \"expected CodexInvocationError\"\n    assert isinstance(holder[\"\
+      e\"], _dispatch_codex.CodexInvocationError)\n\n    aborts = _events(log_path,\
+      \ \"dispatch_aborted\")\n    assert len(aborts) == 1, f\"expected 1 abort event,\
+      \ got {aborts}\"\n    assert aborts[0][\"abort_source\"] == \"operator_signal_file\"\
+      \n    assert \"operator manual abort\" in aborts[0].get(\"abort_reason\", \"\
+      \")\n    assert not signal_path.exists(), \"abort signal file was not deleted\"\
+      \n    # codex-v1159-wfb-3 codex-rev-001 (BLOCKING): assert the actual\n    #\
+      \ SIGTERM/terminate side-effect. A regression that removed or broke\n    # _terminate_process_tree(proc)\
+      \ in the operator-signal branch would\n    # still emit the event, delete the\
+      \ signal file, and raise — passing\n    # every assertion above while leaving\
+      \ the real codex process ALIVE.\n    # H2 names SIGTERM as required coverage;\
+      \ assert it explicitly.\n    assert factory.instances, \"no codex process was\
+      \ ever created\"\n    assert factory.instances[0]._terminated, (\n        \"\
+      operator abort did NOT terminate/SIGTERM the codex process \"\n        \"(_terminate_process_tree\
+      \ regression would leak a live process)\"\n    )\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 6 — wall-time hard ceiling\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_wall_time_hard_ceiling(tmp_path):\n    \"\"\"Codex streams continuously\
+      \ (silence-abort never fires) but runs\n    past `timeout_seconds + stall_silence_seconds`\
+      \ → `dispatch_aborted`\n    with `abort_source=\"wall_time_hard_ceiling\"` +\
+      \ CodexInvocationError.\"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _SyncClock()\n    log_path = repo_root / \"consensus-state\" /\
+      \ \"state\" / \"dispatch-log.jsonl\"\n\n    scheduled = [(float(i), f\"keepalive{i}\\\
+      n\".encode(\"utf-8\")) for i in range(0, 200)]\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=10000.0)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        clock,\n        prompt=\"x\",\n        codex_bin=\"codex\",\n     \
+      \   timeout_seconds=10,  # wall = 10\n        repo_root=repo_root,\n       \
+      \ schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=1000.0,\n        stall_silence_seconds=5.0,  # grace\
+      \ = 5; hard ceiling at 15s\n        poll_interval=0.01,\n        time_fn=clock.now,\n\
+      \        popen_factory=factory,\n    )\n    # step (2.0) < stall_silence_seconds\
+      \ (5.0): each lockstep keepalive\n    # is processed (lst fresh) before the\
+      \ next advance, so silence never\n    # fires while virtual time accumulates\
+      \ to the 15s hard ceiling.\n    _drive_streaming(\n        clock, th, log_path,\
+      \ step=2.0,\n        until=lambda: len(_events(log_path, \"dispatch_aborted\"\
+      )) >= 1,\n    )\n    assert not th.is_alive(), \"runner did not abort\"\n  \
+      \  assert \"e\" in holder, \"expected CodexInvocationError\"\n    assert isinstance(holder[\"\
+      e\"], _dispatch_codex.CodexInvocationError)\n\n    aborts = _events(log_path,\
+      \ \"dispatch_aborted\")\n    assert len(aborts) == 1, f\"expected 1 abort, got\
+      \ {aborts}\"\n    assert aborts[0][\"abort_source\"] == \"wall_time_hard_ceiling\"\
+      \n\n\n# --------------------------------------------------------------------------\n\
+      # Test 7 — clean exit returns codex output payload\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_clean_exit_returns_output(tmp_path):\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _SyncClock()\n    log_path = repo_root / \"consensus-state\" /\
+      \ \"state\" / \"dispatch-log.jsonl\"\n\n    payload = '{\"findings\": [], \"\
+      verdict\": \"PASS\"}'\n    scheduled = [(0.0, b\"working...\\n\"), (0.0, b\"\
+      done\\n\")]\n    factory = _make_factory(\n        clock,\n        scheduled_stdout=scheduled,\n\
+      \        exit_at=0.3,\n        returncode=0,\n        output_payload=payload,\n\
+      \    )\n\n    th, holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"\
+      x\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive(clock, th, until=lambda: not th.is_alive())\n    assert not\
+      \ th.is_alive()\n    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == payload\n\n    assert _events(log_path, \"dispatch_aborted\"\
+      ) == [], \"clean exit produced abort events\"\n    assert len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) == 2\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 8 — stderr drain prevents deadlock (REAL reader threads retained)\n#\
+      \ --------------------------------------------------------------------------\n\
+      \n\ndef test_stderr_drain_prevents_deadlock(tmp_path):\n    \"\"\"codex emits\
+      \ ~100KB to stderr; without the stderr-reader thread\n    real codex would block\
+      \ on a full pipe buffer. The fake's stdout +\n    stderr `_FakePipeReader`s\
+      \ are still consumed by production's REAL\n    reader threads (the behavior\
+      \ this test exists to prove) — only the\n    clock is virtualized.\"\"\"\n \
+      \   repo_root = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n    log_path\
+      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
+      \    big_line = b\"E\" * 1000 + b\"\\n\"\n    scheduled_err = [(0.0, big_line)\
+      \ for _ in range(100)]\n    scheduled_out = [(0.0, b\"ok\\n\")]\n    factory\
+      \ = _make_factory(\n        clock,\n        scheduled_stdout=scheduled_out,\n\
+      \        scheduled_stderr=scheduled_err,\n        exit_at=0.3,\n    )\n\n  \
+      \  th, holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"x\"\
+      ,\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive(clock, th, until=lambda: not th.is_alive())\n    assert not\
+      \ th.is_alive()\n    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == '{\"ok\": true}'\n"
+schema_version: 1
+iteration_id: iteration-v1159-stderr-scope

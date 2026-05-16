@@ -1,0 +1,38 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: gemini-v1159-wfb-6
+pass_id: gemini-v1159-wfb-6-pass6
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The changes fully satisfy the goal. The introduction of
+  the `_SyncClock` and the associated deterministic test harness effectively eliminates
+  the timing-related flakiness in the targeted tests. The implementation is robust,
+  well-documented, and includes safeguards against deadlocks, directly addressing
+  the core issue described in H1. Coverage for the critical abort and heartbeat paths
+  (H2) is not only preserved but made more rigorous and reliable. The decision to
+  refactor related tests for consistency (H3) is also sound.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 588722879f24144ec37342a80d6738d1ccd325024fdd865d8f6c74212b6fd088
+  output_sha256: d6a86188c8621d4913392c0a8ffb3ce75b3eef514f4f35001480dfd9da3d8469
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 2a50ad54815c10dfb33e0f598a9a349812d4a4c2783ac1fba6c2edcd809095c4
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T23:57:53Z'
+packet_sha256: e7021ef9b4b29def684bc952e496fdcbaeebf365a592a9421511b0cecffd8426

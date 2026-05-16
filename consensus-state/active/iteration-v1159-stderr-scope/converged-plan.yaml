@@ -1,0 +1,100 @@
+iteration_id: iteration-v1159-stderr-scope
+converged_at_utc: '2026-05-16T00:15:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+shared_prior_self_check:
+  result: PASSED
+  reasoning: |
+    Fast 3/3 unanimity on the core verdict (pre-existing, not a
+    v1.15.9 regression, not a valid blocker, full modeling =
+    separate iteration). Per doctrine that is a verify-harder
+    flag, and codex EXPLICITLY named the risk ("if others use
+    the same prior, agreement is not independent proof"). It
+    passes anyway because the shared prior is an EMPIRICAL,
+    PRE-SPECIFIED, EXTERNAL artifact, not a laundered hunch: the
+    refuting observation was stated up front ("if `da62d54^`'s
+    stderr test DID gate exit on stderr consumption / assert the
+    stream drained → it IS a regression → in scope"), and all
+    three contributors independently checked `git show
+    da62d54^:...` and found `exit_at=0.3` + assert-only-not-
+    alive. Convergence followed a checkable fact past a
+    pre-registered falsifier — the anti-theater property holds.
+    Differentials still diverged on the REMAINDER (claude: bounded
+    assertion; codex: de-overclaim the docstring; gemini: pure
+    defer + design sketch), which is where the synthesis adds
+    value.
+
+q1_scope_verdict:
+  unanimous_core: "codex-v1159-wfb-6 codex-rev-001 is a PRE-EXISTING latent test-quality gap (identical in the v1.15.8 baseline da62d54^), NOT a regression introduced by the v1.15.9 deterministic rewrite, and NOT a valid blocker for v1.15.9. v1.15.9's ratified scope is regression-restoration + determinism + skip-removal, achieved (gemini clean 6x; codex confirms the 4 skip targets addressed)."
+  weighted_synthesis: |
+    SHIP v1.15.9 now (not blocked) WITH two bounded,
+    ZERO-determinism-risk additions — weighted-synthesis adopts
+    every good idea that carries no flake risk; defer only the
+    genuinely heavyweight part with a concrete named blocker:
+
+    - ADOPT codex (anti-over-claim, artifact-scoped-claims
+      doctrine): correct `test_stderr_drain_prevents_deadlock`'s
+      docstring/comments to state EXPLICITLY that the fake keeps
+      REAL stdout/stderr reader threads but does NOT simulate OS
+      pipe-buffer backpressure — so no comment overclaims what
+      the test proves.
+    - ADOPT claude (cheap real coverage gain, no babies with
+      bathwater): add `assert factory.instances[0].stderr._idx
+      == len(scheduled_err)` (and the stdout analog) — post-run
+      state read after thread death, zero timing/threads/scope
+      creep. This makes a regression that stops draining stderr
+      FAIL the test deterministically — materially resolving
+      codex pass-6's STATED concern ("the test should fail if
+      production stops draining stderr") WITHOUT backpressure
+      modeling. codex/gemini did not oppose this; it is strictly
+      within the preserve/observe envelope, not the deferred
+      design surface.
+    - DEFER (all 3 agree) full OS-pipe-backpressure modeling to a
+      separate named iteration. Concrete blocker (no-deferral
+      satisfied): pre-existing + outside v1.15.9's ratified
+      "preserve" scope + its own determinism-risking design
+      surface (codex: "needs focused Windows CI determinism
+      validation"). Carry forward gemini's design sketch +
+      codex's mutant-gate as the follow-up's converged seed:
+      finite-capacity `_FakePipeReader`; `poll()` does NOT exit
+      while a pipe is "blocked"; `_SyncClock` deterministically
+      unblocks on reader consumption; MUST integrate
+      `release_all()`; MUST ship a mutant gate (normal passes /
+      stderr-drain-removed fails deterministically / never
+      hangs).
+
+    codex-v1159-wfb-6 disposition: VALID finding, RESOLVED-IN-PART
+    here (bounded assertion + contract honesty), REMAINDER a
+    tracked follow-up with concrete blocker — dispositioned with
+    evidence, NOT dismissed, NOT a v1.15.9 blocker.
+
+convention:
+  convention_schema_version: 1
+  falsification:
+    hypothesis: "The stderr-drain backpressure gap is pre-existing (not a v1.15.9 regression) so it does not block v1.15.9; a bounded post-run _idx assertion + de-overclaimed docstring resolve the stated regression-detection concern without determinism risk; full backpressure modeling is a separate iteration."
+    falsifiable_from_artifacts: true
+    discriminating_experiment: "git show da62d54^:consensus_mcp/tests/test_dispatch_codex_streaming.py — inspect the pre-rewrite test_stderr_drain_prevents_deadlock."
+    refutation_observation: "if the pre-rewrite test gated proc exit on stderr consumption OR asserted the stderr stream was fully read — then the rewrite LOST that coverage = a regression = in scope = the bounded fix is insufficient. (Observed: exit_at=0.3, assert-only not-alive/out — NOT refuted; hypothesis holds.)"
+    empirical_status: proven
+  independent_safeguard:
+    applicable: true
+    mechanism: "The deferred follow-up MUST integrate _SyncClock.release_all() and ship a mutant gate (stderr-drain-removed fails deterministically, never hangs) — so any future backpressure model cannot wedge CI regardless of its correctness."
+    works_if_root_cause_wrong: true
+    why: "Even if the backpressure design is wrong, the mandated release_all integration + mutant gate make a broken model fail loud/fast rather than reintroduce the flake/deadlock class — protecting the determinism win regardless."
+    ships_with_fix: false
+  decisive_experiment_before_next_iteration: "the v1.15.9 >=3-consecutive-green-Windows-CI gate (attempts-API verified) on the post-bounded-fix commit, with the 4 formerly-skipped tests running"
+  cited_pass_ids: [claude-scope-1-pass1, codex-scope-1-pass1, gemini-scope-1-pass1]
+
+deliverable:
+  files:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py  # de-overclaim docstring + bounded stderr/stdout _idx drain assertion
+    - docs/advisories.md  # named follow-up: OS-pipe-backpressure modeling iteration
+  next_steps:
+    - "Implement the two bounded additions; re-verify (streaming 8/8 deterministic x6 + full suite)."
+    - "Workflow B pass-7 (codex must confirm codex-v1159-wfb-6 dispositioned acceptably; gemini parallel)."
+    - "Then the v1.15.9 >=3-consecutive-green-Windows-CI gate (attempts-API verified) on the final commit, then cut."
+  named_blockers: []
+  estimated_complexity: small

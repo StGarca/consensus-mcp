@@ -1,0 +1,109 @@
+iteration_id: iteration-v1159-stderr-scope
+reviewer_id: codex-scope-1
+pass_id: codex-scope-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential/prior: v1.15.9 scope is regression restoration,
+  not new coverage expansion: make the existing streaming/heartbeat/abort harness
+  deterministic everywhere, delete the v1.15.8 Windows CI skip, and preserve the coverage
+  those tests actually had. Verified via supplied baseline fact: `git show da62d54^:...test_dispatch_codex_streaming.py`
+  had the same stderr test shape, with virtual-time `exit_at=0.3` and only thread-completion/output
+  assertions. Therefore codex-v1159-wfb-6 is a real latent coverage gap, but not a
+  v1.15.9 regression and not a valid blocker for this iteration. Blocking v1.15.9
+  to build fake pipe-capacity/backpressure semantics has worse value because codex''s
+  own note says that needs focused Windows CI determinism validation. Ignoring the
+  finding is also worse because current comments can overclaim what the fake proves.
+  Best move: complete the current iteration by narrowing the stated contract, then
+  optionally open a focused follow-on. Convergence prior: this answer follows from
+  baseline/current scope equivalence; if others use the same prior, agreement is not
+  independent proof. Provisional external claim: backpressure modeling may reintroduce
+  Windows flake/deadlock risk; refuting observation would be a Windows CI run, verified
+  as relevant by the embedded v1.15.9 docstring''s Windows runner/skip context, where
+  a candidate harness repeatedly passes normally, fails a mutant that removes stderr
+  draining, and never hangs/timeouts.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 3fd753d43e5ff0646d2d375bad1e56ce4a5cfa9ef217aa0d69ce357e0618da20
+  output_sha256: 10b958fd6a8dbfd18377c93436b6c23499a3d4139225d92de8e5597751d9d9f4
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: fd5be325ab2197a07021f7c7e019c4a064654e39b210fa9fb28cfba148bde3d9
+  scope_signature: v1159-stderr-scope-adjudication
+  review_target_path: consensus-state/active/iteration-v1159-stderr-scope/review-packet.yaml
+  review_target_hash: 15298870ff36ca18fdbd822bf79ede12c93fef1264b60405953c3b5362d8e51c
+  mode: proposal
+proposal:
+  selected_target: Close v1.15.9 as non-blocked, correct the stderr test's proof boundary,
+    and track real pipe-backpressure modeling as a separate deterministic-harness
+    iteration.
+  rationale_vs_alternatives: 'Differential/prior: v1.15.9 scope is regression restoration,
+    not new coverage expansion: make the existing streaming/heartbeat/abort harness
+    deterministic everywhere, delete the v1.15.8 Windows CI skip, and preserve the
+    coverage those tests actually had. Verified via supplied baseline fact: `git show
+    da62d54^:...test_dispatch_codex_streaming.py` had the same stderr test shape,
+    with virtual-time `exit_at=0.3` and only thread-completion/output assertions.
+    Therefore codex-v1159-wfb-6 is a real latent coverage gap, but not a v1.15.9 regression
+    and not a valid blocker for this iteration. Blocking v1.15.9 to build fake pipe-capacity/backpressure
+    semantics has worse value because codex''s own note says that needs focused Windows
+    CI determinism validation. Ignoring the finding is also worse because current
+    comments can overclaim what the fake proves. Best move: complete the current iteration
+    by narrowing the stated contract, then optionally open a focused follow-on. Convergence
+    prior: this answer follows from baseline/current scope equivalence; if others
+    use the same prior, agreement is not independent proof. Provisional external claim:
+    backpressure modeling may reintroduce Windows flake/deadlock risk; refuting observation
+    would be a Windows CI run, verified as relevant by the embedded v1.15.9 docstring''s
+    Windows runner/skip context, where a candidate harness repeatedly passes normally,
+    fails a mutant that removes stderr draining, and never hangs/timeouts.'
+  deliverable_scope:
+    next_iteration_id: iteration-v1159-stderr-scope-closeout
+    files_in_scope:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    - consensus-state/active/iteration-v1159-stderr-scope/goal_packet.yaml
+    - consensus-state/active/iteration-v1159-stderr-scope/review-packet.yaml or the
+      workflow's decision-note artifact
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/dispatch_templates/*
+    - release metadata, registries, CI publishing, or other external distribution
+      channels
+    key_design_decisions:
+    - Classify codex-v1159-wfb-6 as pre-existing latent test-quality debt, not a v1.15.9
+      blocker.
+    - Clarify that `test_stderr_drain_prevents_deadlock` keeps real stdout/stderr
+      reader-thread consumption but does not simulate OS pipe-buffer backpressure.
+    - Do not add pipe-capacity simulation in this closeout iteration; that is its
+      own design surface with Windows determinism risk.
+    - 'If pursued next, require a mutant gate: normal code passes, disabling stderr
+      draining fails deterministically, and every blocking wait has a `release_all`-style
+      escape.'
+    - Make no fixed/shipped/distributed claims and touch no external channel without
+      project-file verification.
+    acceptance_gates:
+    - The stderr test docstring/comments explicitly state the fake does not model
+      OS pipe-buffer backpressure.
+    - The decision artifact records codex-v1159-wfb-6 as valid follow-on debt, not
+      a current blocker, citing the v1.15.8/current equivalence.
+    - The deterministic SyncClock harness remains intact and `_FLAKY_WINDOWS_CI` remains
+      absent.
+    - Focused streaming test module passes on the current tree.
+    - No production code or external release/distribution files are modified.
+  risks:
+  - Some reviewers may read 'deadlock surface' as automatically inside original scope;
+    mitigate with precise baseline-equivalence wording.
+  - A future backpressure simulator can itself become flaky unless designed with deterministic
+    wakeups, hard teardown, and mutant testing from the start.
+  - If comments stay broad, later notes may overclaim a pipe-backpressure fix no artifact
+    actually proves.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-16T00:08:03Z'
+packet_sha256: 779a113cbffc04bdc544a791ba76204fb7f9a8f5044894ca69133e7328185453

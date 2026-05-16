@@ -1,14 +1,14 @@
 iteration_id: iteration-v1159-deterministic-clock-harness
-reviewer_id: gemini-v1159-wfb-8
-pass_id: gemini-v1159-wfb-8-pass8
+reviewer_id: gemini-v1159-wfb-4
+pass_id: gemini-v1159-wfb-4-pass4
 findings: []
 goal_satisfied: true
-goal_satisfied_rationale: The proposed change directly addresses the root cause of
-  the timing-fragile tests by replacing the real-time-dependent harness with a fully
-  deterministic virtual clock implementation. The production code modification is
-  a minimal, non-invasive testing seam that preserves existing behavior. The new test
-  harness is robust, well-documented, and not only restores but improves the rigor
-  of the heartbeat and abort-path coverage, satisfying all stated goals.
+goal_satisfied_rationale: The change successfully refactors the timing-fragile streaming
+  tests into a deterministic harness using a synchronization-primitive-based virtual
+  clock (`_SyncClock`). This eliminates the race conditions that caused flakes on
+  Windows CI. The new harness is robust, includes safety mechanisms against deadlocks,
+  and improves test coverage by asserting process termination side-effects, fully
+  satisfying the goal.
 blocking_objections: []
 independence_attestation:
   method: auto_gemini_dispatch
@@ -23,15 +23,15 @@ independence_attestation:
 dispatch_provenance:
   gemini_version: 0.43.0-preview.0
   model: gemini-2.5-pro
-  prompt_sha256: f31934d7cb8dd7c68fbfbf8cd6889006530f32011bb9e95da05c37673d297086
-  output_sha256: c520fdaa7b11aa6c40080f49d359a3794ea5441bb1cd9c74ba89839b2835cae9
+  prompt_sha256: 1036dc1f41f96f19326e3abde9f649c95771fa08c8c37edf42ba90ea77c39b7a
+  output_sha256: 78409b7af41d3d1e7a75b0e4d570815ef7e71c364519f528b93d92a8a105283a
   goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
   scope_signature: v1159-deterministic-clock-harness
   review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
-  review_target_hash: 943ba880cc6fb5ea955d175a2d14665e83a4d4ddd3627bd25759aefb6581cd6c
+  review_target_hash: 11079ea230d65af8c6a567b2844f8561115374085c54ed0487969b1bc33b0f2c
   adapter: gemini
   mode: review
   proposal_schema_path: null
   proposal_schema_sha256: null
-sealed_at_utc: '2026-05-16T00:30:18Z'
-packet_sha256: 55ce633ef9787a5f3bd4571eda098654ee58d75dd34d79ebddbc2344434d0f9a
+sealed_at_utc: '2026-05-15T23:37:31Z'
+packet_sha256: 2cb735ce45d5afc1f4b90a32ee59f1b0379c76436be8d274e5bdf7081c4679cc

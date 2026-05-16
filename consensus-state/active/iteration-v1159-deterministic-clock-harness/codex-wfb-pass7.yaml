@@ -1,0 +1,77 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-wfb-7
+pass_id: codex-v1159-wfb-7-pass7
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: heartbeat driver still leaves deterministic guarantees and cadence coverage
+    incomplete
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:494
+  risk: The startup wait can fail without release_all(), leaving the synthetic clock/process
+    teardown path bypassed. The same helper only checks the negative heartbeat gate
+    at half the interval, so a regression that emits at 20s for a 30s interval would
+    still pass. That violates the Q2(a) requirements for deadlock-free harness behavior
+    and no loss of heartbeat-cadence coverage.
+  recommendation: Make the startup wait use the same release_all()+join loud-fail
+    path as the other drivers, and check just-before-boundary heartbeat suppression
+    before crossing the interval boundary.
+  patch_not_proposed_reason: null
+  patch_proposal:
+    patch_id: codex-rev-001-patch
+    applies_to_findings:
+    - codex-rev-001
+    base_sha: 6a018ad24153519ce81e7cfb26a70119651c8895a8b48b754accbc04678eb90e
+    unified_diff: "--- a/consensus_mcp/tests/test_dispatch_codex_streaming.py\n+++\
+      \ b/consensus_mcp/tests/test_dispatch_codex_streaming.py\n@@ -491,19 +491,27\
+      \ @@ def _drive_heartbeats(\n             )\n \n-    assert clock.wait_runner_parked(after_epoch=0),\
+      \ \"runner never parked (startup)\"\n+    if not clock.wait_runner_parked(after_epoch=0):\n\
+      +        clock.release_all()\n+        th.join(timeout=5)\n+        raise AssertionError(\n\
+      +            \"_drive_heartbeats: runner never parked (startup) \u2014 \"\n\
+      +            \"release_all fired; handshake broken, NOT a timing flake\"\n+\
+      \        )\n+    epsilon = min(0.001, interval / 1000.0)\n+    pre_boundary\
+      \ = interval - epsilon\n     for k in range(steps):\n         before = _hb()\n\
+      \         # (1) sub-interval: the interval gate MUST suppress emission.\n- \
+      \       e1 = clock.advance(interval * 0.5)\n-        _sync(e1, f\"round {k}\
+      \ sub-interval\")\n+        e1 = clock.advance(pre_boundary)\n+        _sync(e1,\
+      \ f\"round {k} pre-boundary\")\n         mid = _hb()\n         assert mid ==\
+      \ before, (\n-            f\"round {k}: heartbeat emitted at +{interval*0.5}s\
+      \ \u2014 BEFORE \"\n+            f\"round {k}: heartbeat emitted at +{pre_boundary}s\
+      \ \u2014 BEFORE \"\n             f\"the {interval}s interval elapsed: count\
+      \ {before}->{mid}. \"\n             \"The interval gate is broken (regression:\
+      \ emit-every-poll / \"\n             \"wrong threshold).\"\n         )\n   \
+      \      # (2) cross the boundary: EXACTLY one new heartbeat.\n-        e2 = clock.advance(interval\
+      \ * 0.5)\n+        e2 = clock.advance(epsilon)\n         _sync(e2, f\"round\
+      \ {k} boundary\")\n         after = _hb()\n"
+    files_touched:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    expected_tests:
+    - pytest consensus_mcp/tests/test_dispatch_codex_streaming.py::test_heartbeat_fires_at_interval
+    unified_diff_sha256: 69a0f26e8a0c2e68451ae1031e6b4cc4270074559b43a47f82f5c7143f97e3b2
+goal_satisfied: false
+goal_satisfied_rationale: 'Differential/prior used: I treated H1-H3 as verified high-confidence
+  prior and reviewed only the embedded iter-0021 contents against the v1.15.8 real-sleep/join
+  flake class. The _sleep seam fixes the main runner/sleep race, but _drive_heartbeats
+  still fails the deadlock-free and no-coverage-loss requirements.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: f7a0cdc609cfa68176049b687249d99d59cdda486516a33a45c80cbe45f1d357
+  output_sha256: c817b1d4602465946b425dfd0af7b9e8344841928fd8336d12cbb684040d1042
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: bdcf942015282002b3e9a66eab4cf7abb916b9b726083b12621ce49e741deff0
+  mode: review
+sealed_at_utc: '2026-05-16T00:22:49Z'
+packet_sha256: 728e6ef41706deeec3c6bd8083517940bd84d0ac1f7ce5c728ee6fddc97c5d53

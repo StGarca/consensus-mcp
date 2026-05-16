@@ -1,0 +1,95 @@
+iteration_id: iteration-v1159-stderr-scope
+reviewer_id: gemini-scope-1
+pass_id: gemini-scope-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "The primary goal of v1.15.9 was to eliminate timing-fragile\
+  \ tests, and it has succeeded. The identified coverage gap in `test_stderr_drain_prevents_deadlock`\
+  \ is a PRE-EXISTING latent weakness, not a regression introduced by the v1.15.9\
+  \ rewrite (verified via `git show da62d54^`). Attempting to fix it now would constitute\
+  \ scope creep and, more importantly, would introduce significant, unbounded risk\
+  \ of re-destabilizing the CI environment \u2014 the very problem this iteration\
+  \ was chartered to solve. Codex's own analysis notes a real fix 'need[s] focused\
+  \ validation against the Windows CI determinism constraints'. The prudent, risk-averse,\
+  \ and scope-adherent path is to ship the proven stability win of the current iteration\
+  \ immediately and create a new, focused work item to correctly and safely model\
+  \ pipe backpressure. This treats the finding as what it is: a newly discovered issue\
+  \ with the old test suite, not a blocking defect for the current deliverable."
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: c6f9e3227f2567a656f1eeae23931b5ab4cf057402c8a5f9faff235b6a681c71
+  output_sha256: bd21491a5895de1cb2a28e4667feb6979033f9db516bc017c43584f00af788df
+  goal_packet_sha256: fd5be325ab2197a07021f7c7e019c4a064654e39b210fa9fb28cfba148bde3d9
+  scope_signature: v1159-stderr-scope-adjudication
+  review_target_path: consensus-state/active/iteration-v1159-stderr-scope/review-packet.yaml
+  review_target_hash: 15298870ff36ca18fdbd822bf79ede12c93fef1264b60405953c3b5362d8e51c
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: 'Acknowledge and defer: Ship v1.15.9 to lock in stability gains;
+    scope backpressure modeling to a new, dedicated iteration.'
+  rationale_vs_alternatives: "The primary goal of v1.15.9 was to eliminate timing-fragile\
+    \ tests, and it has succeeded. The identified coverage gap in `test_stderr_drain_prevents_deadlock`\
+    \ is a PRE-EXISTING latent weakness, not a regression introduced by the v1.15.9\
+    \ rewrite (verified via `git show da62d54^`). Attempting to fix it now would constitute\
+    \ scope creep and, more importantly, would introduce significant, unbounded risk\
+    \ of re-destabilizing the CI environment \u2014 the very problem this iteration\
+    \ was chartered to solve. Codex's own analysis notes a real fix 'need[s] focused\
+    \ validation against the Windows CI determinism constraints'. The prudent, risk-averse,\
+    \ and scope-adherent path is to ship the proven stability win of the current iteration\
+    \ immediately and create a new, focused work item to correctly and safely model\
+    \ pipe backpressure. This treats the finding as what it is: a newly discovered\
+    \ issue with the old test suite, not a blocking defect for the current deliverable."
+  deliverable_scope:
+    next_iteration_id: iter-v1160-backpressure-harness
+    files_in_scope:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - All other files not directly related to the test harness implementation.
+    key_design_decisions:
+    - The `_FakePipeReader` will be enhanced to have a finite buffer capacity.
+    - When the buffer is full, the reader will signal a 'blocked' state.
+    - The `StreamingFakeCodexPopen` will be modified so that its `poll()` method checks
+      the 'blocked' state of its stderr/stdout pipes. If a pipe is blocked, the process
+      will not exit based on its `_exit_at` timer.
+    - The `_SyncClock`'s wait/notify mechanism will be used to unblock the process
+      once the corresponding reader thread consumes data from the pipe, making it
+      deterministic.
+    - The new backpressure mechanism MUST integrate with the existing `release_all()`
+      safety-net to ensure a deadlocked test harness can never wedge CI.
+    acceptance_gates:
+    - A new test is added where a fake process is scheduled to exit early but also
+      scheduled to write more data to stderr than the pipe's buffer capacity.
+    - The test must assert that the fake process does NOT exit at its scheduled `exit_at`
+      time while the pipe is full.
+    - The test must then drive the stderr reader to consume the data.
+    - The test must then assert that the process exits cleanly AFTER the pipe buffer
+      has been drained.
+    - The new implementation must pass all existing tests in `test_dispatch_codex_streaming.py`
+      across all platforms (Windows, Linux, macOS).
+    - The new test must demonstrate no flakiness across multiple CI runs.
+  risks:
+  - The primary risk is re-introducing timing-based flakiness. The backpressure simulation
+    logic is complex and could inadvertently create new race conditions or deadlocks
+    if not designed carefully within the deterministic `_SyncClock` framework.
+  - 'Risk of over-engineering: The solution should be the minimum necessary to model
+    the backpressure-deadlock surface, not a comprehensive process/pipe simulator.'
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-16T00:06:54Z'
+packet_sha256: 7ef07e538376e2d16f575317794417fdbe7e06a2c5d8261aefdf15ddf74034e9

@@ -1,0 +1,63 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-wfb-3
+pass_id: codex-v1159-wfb-3-pass3
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: operator abort test does not verify the required SIGTERM/process-termination
+    side effect
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:557
+  risk: A regression that removes or breaks _terminate_process_tree(proc) in the operator-signal
+    branch would still emit dispatch_aborted, delete the signal file, raise CodexInvocationError,
+    and pass this test while leaving the real codex process running.
+  recommendation: Record fake process instances and a termination/signal flag in StreamingFakeCodexPopen,
+    then assert test_operator_abort_signal_file_triggers_abort observed terminate/send_signal/kill
+    in addition to the log event and signal-file deletion.
+  patch_not_proposed_reason: Sealed review only; localized harness fix described in
+    recommendation.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: silence-abort test can pass through pre-first-line startup silence instead
+    of post-stream silence
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:495
+  risk: The test schedules two stdout lines but _drive advances 50s past a 10s silence
+    threshold without first synchronizing on the two dispatch_streamed_line events.
+    If the reader thread has not processed those lines yet, the abort still passes
+    with last_streamed_ts unset, so a regression in streamed-line timestamp handling
+    would not be caught.
+  recommendation: Before advancing beyond stall_silence_seconds, wait for and assert
+    the two dispatch_streamed_line events, or assert the abort event has a non-null
+    last_streamed_line_age_seconds tied to prior streamed output.
+  patch_not_proposed_reason: Sealed review only; localized harness fix described in
+    recommendation.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'Prior/differential used: H1 makes the product loop a low-prior
+  defect and the harness coordination the main review surface. The SyncClock design
+  addresses the Windows scheduling flake directionally, but H2 coverage is not fully
+  preserved because operator SIGTERM is unasserted and streamed-silence coverage can
+  degrade to startup-silence coverage.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 09240f8e01ec8ccab49f5eecc6be8522df1e3f9abbeafb1e5f5c3a7bd538c37d
+  output_sha256: daa324d8efffec7b71d280c2d2d760f29a26848189fffbc796a29f612f55cffe
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 55284b1fd325aeef1a407d1cca71c65bbb48b4ac301a52e3b76e0206828e4330
+  mode: review
+sealed_at_utc: '2026-05-15T23:30:44Z'
+packet_sha256: ee6ab71f6b67ab30cf0ad22b7ae220687721d4bc3c9bce13c1325e4370953a35

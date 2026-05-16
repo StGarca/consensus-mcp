@@ -124,9 +124,20 @@ goal:
   type: design_consult
 allowed_files:
   - consensus_mcp/tests/test_dispatch_codex_streaming.py
+  # Reconciled post-convergence (codex-v1159-wfb-1 codex-rev-001,
+  # integrated not dismissed): the `non_goals` clause above
+  # pre-authorized "a single justified+bounded observability seam
+  # in _invoke_codex (Q1 decides)", and Q1 weighted-synthesis +
+  # deliverable.files of converged-plan.yaml RATIFIED exactly that
+  # seam in _dispatch_codex.py. The round-1 forbidden_files entry
+  # was an un-reconciled pre-convergence default contradicting the
+  # goal_packet's own non_goals carve-out; the converged plan is
+  # the superseding authorization. Scope = ONLY the private
+  # keyword-only `_sleep=` seam (default time.sleep, zero behavior
+  # change), nothing else in this file.
+  - consensus_mcp/_dispatch_codex.py
 forbidden_files:
   - consensus_mcp/_dispatch_gemini.py
-  - consensus_mcp/_dispatch_codex.py
 max_iterations: 3
 fix_author_policy: permissive
 acceptance_gates:

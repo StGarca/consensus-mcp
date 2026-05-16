@@ -1,0 +1,48 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-wfb-6
+pass_id: codex-v1159-wfb-6-pass6
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: stderr-drain test no longer models pipe backpressure, so it can pass even
+    if stderr is never drained
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:338
+  risk: A regression that removes or breaks the stderr reader thread would still let
+    the fake process exit on virtual time and write its output. Real codex can deadlock
+    on a full stderr pipe, so this loses coverage for the release-line deadlock risk
+    the harness claims to preserve.
+  recommendation: Make the fake process depend on stderr consumption for exit, or
+    assert that the scheduled stderr stream was fully read. The test should fail if
+    production stops draining stderr.
+  patch_not_proposed_reason: 'Patch not proposed because the right fix is a harness
+    design choice: either backpressure-aware fake pipes or a real OS pipe fixture.
+    Both need focused validation against the Windows CI determinism constraints.'
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'Differential/prior used: H1-H3 imply a harness-only coordination
+  fix with coverage preservation as the key success criterion. The four skip targets
+  are addressed, but the submitted harness still has a blocking coverage hole around
+  the stated deadlock surface.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 9d5ee9e58f41908e43316b1214753b6896c89ba5db3e2f8116a6f5d254d38389
+  output_sha256: 498a4692ab164f4f900649931f66cdb1e85ea91cc63b468d5b6af528345cfd31
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 2a50ad54815c10dfb33e0f598a9a349812d4a4c2783ac1fba6c2edcd809095c4
+  mode: review
+sealed_at_utc: '2026-05-16T00:01:58Z'
+packet_sha256: 99a9bbcd3b538ed36be7a4f870f2701583f7600ead0925f74d3cb4612ec4baee

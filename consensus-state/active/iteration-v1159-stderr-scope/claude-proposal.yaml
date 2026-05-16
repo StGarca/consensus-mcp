@@ -1,0 +1,89 @@
+pass_id: claude-scope-1-pass1
+contributor: claude
+role: orchestrator
+goal_satisfied: true
+blocking_objections: []
+
+differential_prior: |
+  I reason from two priors held together: (1) the converged plan
+  is the ratified SCOPE authority and it says "preserve the
+  coverage they exist for" — preserve, not retrofit coverage that
+  never existed; (2) convergence≠correctness's corollary that an
+  unbounded "more coverage is always possible" bar prevents an
+  iteration from ever converging, so the load-bearing
+  distinguisher is REGRESSION (rewrite introduced/worsened the
+  gap) vs PRE-EXISTING (latent, unchanged). Verified from the
+  artifact: `da62d54^` (v1.15.8 baseline, pre-rewrite) has the
+  identical `test_stderr_drain_prevents_deadlock` —
+  `exit_at=0.3`, asserts only `not th.is_alive()` /
+  `holder["out"]`, docstring admits it just "asserts that
+  _invoke_codex returns cleanly". The fake ALWAYS exited on
+  virtual time; it NEVER modeled backpressure. v1.15.8 SHIPPED
+  with this exact gap and was Workflow-B-audited clean. So this
+  is pre-existing, not a v1.15.9 regression.
+
+positions:
+  Q1_scope:
+    stance: "(c)-bounded as PRIMARY (do the zero-risk part now), with (a) for the heavyweight remainder (named follow-up). NOT (b)."
+    reasoning: |
+      codex pass-6's CONCERN is valid and precisely stated: "the
+      test should fail if production stops draining stderr." That
+      concern can be fully satisfied by a BOUNDED, ZERO-
+      DETERMINISM-RISK assertion — NOT by backpressure-modeling
+      the fake. The harness already records every fake proc
+      (`factory.instances`) and `_FakePipeReader._idx` advances
+      once per delivered line. So one assertion —
+      `factory.instances[0].stderr._idx == len(scheduled_err)` —
+      makes the test FAIL iff production's stderr reader thread
+      did not drain all scheduled stderr (remove/break the reader
+      → nothing calls `stderr.readline()` → `_idx == 0` → fail).
+      That is exactly codex's "fail if production stops draining
+      stderr", with: no new threads, no blocking pipe, no proc-
+      exit-gated-on-consumption, no real OS pipe fixture — zero
+      added flake/deadlock surface. ~2 lines.
+
+      Why this is the synthesis, not a dodge: it ADOPTS codex's
+      valid finding (closes the regression-detection gap NOW) and
+      DEFERS only the heavyweight true-backpressure model (fake
+      proc blocked on a full stderr pipe / real OS pipe), which
+      codex itself says "need[s] focused validation against the
+      Windows CI determinism constraints" — i.e. it is its own
+      design surface that directly risks the flake class v1.15.9
+      exists to eliminate. no-deferral PERMITS deferral with a
+      concrete blocker; the blocker is concrete: (i) pre-existing
+      / out of the ratified "preserve" scope, (ii) the full fix is
+      a determinism-risking design iteration of its own. (b)
+      "integrate full backpressure now" fails the no-deferral
+      completion test (open design surface + real determinism
+      risk = legitimately a separate iteration) and would gate a
+      done, 6x-gemini-clean deterministic deliverable on
+      unbounded coverage expansion. Pure (a) under-delivers: it
+      defers something that has a cheap, zero-risk 80% available
+      now — leaving a real regression-detection gap unaddressed
+      when closing it is nearly free.
+    wrong_if: |
+      If `da62d54^` had shown the pre-rewrite test DID gate proc
+      exit on stderr consumption or asserted the stderr stream was
+      fully read — then the rewrite LOST that coverage, it would
+      be a regression, fully in scope, and (b) integrate-now would
+      be right. It does not (verified: exit_at=0.3, assert-only-
+      not-alive). Also wrong if the bounded `_idx` assertion is
+      not actually deterministic — but it reads post-run state
+      after thread death (no timing), so it cannot flake.
+
+recommended_converged_shape: |
+  v1.15.9 ships: the deterministic rewrite + skip removal (DONE;
+  gemini clean 6x; codex confirms the 4 skip targets addressed) +
+  the 8 already-integrated audit fixes + the BOUNDED stderr-drain
+  assertion (`factory.instances[0].stderr._idx ==
+  len(scheduled_err)`, zero determinism risk, ~2 lines) which
+  materially resolves codex-v1159-wfb-6 codex-rev-001's stated
+  concern (regression in stderr draining now FAILS the test). The
+  full backpressure-MODELING fix (proc-exit-gated-on-consumption
+  / real OS pipe fixture) is a SEPARATE named follow-up
+  (advisory + concrete blocker: pre-existing, out of the ratified
+  "preserve" scope, and its own determinism-risking design
+  surface) — NOT a v1.15.9 blocker. Then: re-audit pass-7 on the
+  bounded fix, >=3-green Windows-CI gate (attempts-API verified),
+  cut.
+cited_pass_ids: [claude-scope-1-pass1]

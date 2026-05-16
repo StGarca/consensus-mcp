@@ -1,0 +1,48 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-wfb-5
+pass_id: codex-v1159-wfb-5-pass5
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: heartbeat cadence test still passes if production emits heartbeats too
+    early
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:343
+  risk: The only heartbeat-cadence regression test advances exactly by heartbeat_interval
+    each step and only checks total count plus monotonic ages. A regression that emits
+    every poll, or uses a much smaller threshold, still produces one heartbeat per
+    30s driver step and passes, so H2 heartbeat cadence coverage is not preserved.
+  recommendation: Drive at least one sub-interval poll before each boundary and assert
+    no heartbeat is emitted until the interval is crossed, then assert exactly one
+    heartbeat appears at the boundary before advancing again.
+  patch_not_proposed_reason: Patch not proposed in sealed review because the safest
+    fix is a small test-harness edit, but the review output only needs to identify
+    the coverage hole for quorum comparison.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'Differential prior used: H1 says the product loop is sound
+  and the fix should only remove scheduling-by-hope while preserving H2 observable-event
+  coverage. The deterministic clock removes the skip, but the heartbeat test no longer
+  proves the interval gate, so the desired end state is not fully met.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 488448a07dcb11b7483946e34577f9a633ae995f8e408ccea1119faaf9b5041d
+  output_sha256: 9bb091069be6316f2578db56e29466349d70aed8785de8da20ef1716d8773176
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 91d8a1b0c10d2fcafbb0b6cf489245cfb91890d7082a412122af46e95150696b
+  mode: review
+sealed_at_utc: '2026-05-15T23:52:24Z'
+packet_sha256: 4cf24cc34bc2780698dffa975b6f822c126f7a4084ed3aaffe40698760b60ac4

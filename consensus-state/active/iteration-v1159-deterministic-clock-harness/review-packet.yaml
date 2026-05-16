@@ -1,93 +1,927 @@
 defect_target:
   files:
+  - consensus_mcp/_dispatch_codex.py
   - consensus_mcp/tests/test_dispatch_codex_streaming.py
-  base_sha: 7cf589275f86345e231047c5bbb2b0102c039777b268bfa8b9331d54ec970534
+  base_sha: 02ad8515a2f4a80bc9511392184b866c65f39d2fa386440cb3696088532320c7
   touched_files_contents:
+    consensus_mcp/_dispatch_codex.py: "\"\"\"Phase 4 v1.1 — auto-codex-dispatch helper\
+      \ (codex adapter).\n\nReplaces the operator paste-buffer flow for codex reviews.\
+      \ Reads a goal_packet\nfor context, substitutes a markdown prompt template,\
+      \ shells out to `codex` CLI,\nparses the JSON response (constrained via codex's\
+      \ --output-schema), wraps it in\na sealed-packet outer structure, and calls\
+      \ T6 (review.write_and_seal) directly.\nWrites a richly-attributed audit trail\
+      \ to consensus-state/state/dispatch-log.jsonl.\n\niter-0010 (v1.14.0): generic\
+      \ dispatch helpers (repo-root resolution, path\nnormalization, goal_packet/template\
+      \ loading, prompt building, process-tree\ntermination, per-patch base_sha, sealing,\
+      \ dispatch-log writing) live in\nconsensus_mcp/_dispatch_base.py and are reused\
+      \ by every reviewer adapter.\nThis module keeps only codex-specific code: CLI\
+      \ invocation, version probe,\nbinary resolution, codex-output JSON parsing +\
+      \ patch_proposal validation,\nand the codex CLI entrypoint. Codex behavior is\
+      \ preserved bit-for-bit.\n\nNOT an MCP tool. CLI-only. Per Phase 3 anti-scope,\
+      \ consensus_mcp/tools/*\nis FROZEN; this helper is in the package root and calls\
+      \ T6's handle in-process.\n\nUSAGE\n-----\n  python -m consensus_mcp._dispatch_codex\
+      \ \\\\\n      --goal-packet <path/to/goal_packet.yaml> \\\\\n      --iteration-dir\
+      \ <path/to/iteration-XXXX/> \\\\\n      [--reviewer-id codex-iterXXXX-N] \\\\\
+      \n      [--pass-id codex-iterXXXX-N-passN] \\\\\n      [--prompt-template <path>]\
+      \ \\\\\n      [--schema <path>] \\\\\n      [--codex-bin <path>] \\\\\n    \
+      \  [--timeout-seconds 600] \\\\\n      [--smoke]\n\nExit 0 = sealed pass produced;\
+      \ non-zero = failure (codex error, parse fail,\nschema fail, seal fail). JSON\
+      \ to stdout on success.\n\"\"\"\nfrom __future__ import annotations\n\nimport\
+      \ argparse\nimport hashlib\nimport json\nimport os\nimport re\nimport shutil\n\
+      import subprocess\nimport sys\nimport tempfile\nimport threading\nimport time\n\
+      from pathlib import Path\n\nimport yaml\n\n# iter-0010: generic dispatch helpers\
+      \ extracted to _dispatch_base.py per\n# iter-0009 verdict Q1: F1b. Re-imported\
+      \ into this module's namespace so\n# (a) existing call sites in _invoke_codex\
+      \ / _validate_patch_proposal /\n# main don't need to be rewritten and (b) tests\
+      \ that access these via\n# `_dispatch_codex.<name>` continue to resolve through\
+      \ the import binding.\nfrom consensus_mcp._dispatch_base import (\n    _REPO_ROOT_MARKERS,\n\
+      \    RepoRootResolutionError,\n    _has_repo_markers,\n    _resolve_repo_root,\n\
+      \    OutsideRepoPathError,\n    _normalize_for_compare,\n    _normalize_relative_to_repo,\n\
+      \    _load_goal_packet,\n    _load_template,\n    _FENCE_LANG_BY_EXT,\n    _format_touched_files_contents,\n\
+      \    _build_prompt,\n    _terminate_process_tree,\n    _compute_per_patch_base_sha,\n\
+      \    _sha256_str,\n    _build_sealed_packet,\n    _seal_via_t6,\n    _log_dispatch,\n\
+      \    # iter-0010 codex-rev-001 fix: patch_proposal validation moved to base.\n\
+      \    _PATCH_PROPOSAL_REQUIRED,\n    _PATCH_PROPOSAL_OPTIONAL,\n    _PATCH_PROPOSAL_ALLOWED,\n\
+      \    _PATCH_ID_PATTERN,\n    _DIFF_FILE_HEADER_RE,\n    _APPLY_PATCH_BEGIN_MARKER,\n\
+      \    _APPLY_PATCH_UPDATE_MARKER,\n    _validate_patch_proposal as _base_validate_patch_proposal,\n\
+      )\n\n\ndef _validate_patch_proposal(\n    finding_index: int,\n    finding_id:\
+      \ str,\n    pp: dict,\n    all_finding_ids: set,\n    goal_packet: dict | None,\n\
+      \    review_packet: dict | None = None,\n    repo_root: Path | None = None,\n\
+      ) -> None:\n    \"\"\"Codex adapter wrapper: forwards to base validator with\
+      \ CodexOutputParseError.\n\n    The base helper accepts an ``error_class`` kwarg\
+      \ defaulting to ValueError;\n    codex callers want CodexOutputParseError to\
+      \ preserve the existing test\n    contract (``pytest.raises(CodexOutputParseError)``).\
+      \ This wrapper threads\n    the codex error class through so test imports of\n\
+      \    ``_dispatch_codex._validate_patch_proposal`` continue to behave identically\n\
+      \    to the pre-extraction state.\n    \"\"\"\n    _base_validate_patch_proposal(\n\
+      \        finding_index=finding_index,\n        finding_id=finding_id,\n    \
+      \    pp=pp,\n        all_finding_ids=all_finding_ids,\n        goal_packet=goal_packet,\n\
+      \        review_packet=review_packet,\n        repo_root=repo_root,\n      \
+      \  error_class=CodexOutputParseError,\n    )\n\n\n_VALID_SEVERITIES = {\"low\"\
+      , \"medium\", \"high\", \"blocking\", \"critical\"}\n_FINDING_ID_PATTERN = re.compile(r\"\
+      ^codex-rev-\\d+$\")\n_REQUIRED_FINDING_FIELDS = (\"id\", \"severity\", \"summary\"\
+      , \"citation\", \"risk\", \"recommendation\")\n# Per Task #24 (iter-0014): patch_proposal\
+      \ is the optional finding key.\n# iter-0018 Finding 4: patch_not_proposed_reason\
+      \ is added — used in strict mode\n# to record why a patch wasn't authored. Mutually\
+      \ exclusive with patch_proposal\n# (a finding can't both have a patch and a\
+      \ reason for not having one).\n# Anti-self-verification: verified / self_verified\
+      \ / correct / approved / confirmed\n# are NOT in this set; they remain rejected\
+      \ by the unknown-key gate as before.\n_ALLOWED_FINDING_KEYS = set(_REQUIRED_FINDING_FIELDS)\
+      \ | {\"patch_proposal\", \"patch_not_proposed_reason\"}\n_ALLOWED_TOP_LEVEL_KEYS\
+      \ = {\"findings\", \"goal_satisfied\", \"blocking_objections\", \"goal_satisfied_rationale\"\
+      }\n_BLOCKING_SEVERITIES = {\"blocking\", \"critical\"}\n\n# iter-0010: patch_proposal\
+      \ validation constants moved to _dispatch_base.py\n# and re-imported above (per\
+      \ iter-0010 codex-rev-001 blocking finding).\n# _PATCH_PROPOSAL_REQUIRED / _PATCH_PROPOSAL_OPTIONAL\
+      \ / _PATCH_PROPOSAL_ALLOWED /\n# _PATCH_ID_PATTERN / _DIFF_FILE_HEADER_RE /\
+      \ _APPLY_PATCH_BEGIN_MARKER /\n# _APPLY_PATCH_UPDATE_MARKER all live in _dispatch_base.py\
+      \ now and are\n# accessible as `_dispatch_codex.<name>` via the import binding\
+      \ above for\n# backward compat with tests.\n\n\nclass CodexInvocationError(RuntimeError):\n\
+      \    \"\"\"Raised when the codex CLI exits non-zero, times out, or is not found.\"\
+      \"\"\n\n\nclass CodexOutputParseError(ValueError):\n    \"\"\"Raised when codex\
+      \ output is not parseable JSON or lacks the expected top-level shape.\"\"\"\n\
+      \n\ndef _resolve_codex_bin(codex_bin: str) -> str:\n    \"\"\"Resolve a codex\
+      \ binary spec to an actual executable file path.\n\n    Per v1.10.3 Windows\
+      \ hardening (real-codex smoke 2026-05-09):\n      - Python's subprocess on Windows\
+      \ does NOT apply PATHEXT lookup to bare\n        names, so `codex` (which is\
+      \ on PATH only as `codex.cmd`/`.ps1`/etc.)\n        fails with \"binary not\
+      \ found\". `shutil.which(\"codex\")` DOES apply\n        PATHEXT and returns\
+      \ the resolved path.\n      - On Windows, `shutil.which` returns the FIRST PATHEXT\
+      \ match by default;\n        order is `.COM; .EXE; .BAT; .CMD; .VBS; .JS; .WS;\
+      \ .PS1`. npm-installed\n        CLIs ship `<name>.cmd` (directly executable\
+      \ by CreateProcess) AND\n        `<name>.ps1` (needs powershell.exe wrapper).\
+      \ Without intervention,\n        `shutil.which(\"codex\")` could return `.ps1`\
+      \ (in some PATH orders) and\n        Python's subprocess would fail with WinError\
+      \ 193 (\"not a valid Win32\n        application\"). Prefer `.cmd` explicitly\
+      \ when the bare-name resolution\n        lands on a script Python can't exec.\n\
+      \n    Returns the resolved path. If no resolution is possible (codex_bin already\n\
+      \    looks like an absolute path OR shutil.which returns nothing), returns the\n\
+      \    input unchanged so subprocess.run produces a clear \"binary not found\"\
+      .\n    Per iter-0039 xplat-rev-008 + codex-iter0039-1 codex-rev-001 refinement:\n\
+      \      - MSYS-style `/c/foo/bar` paths converted to `C:\\\\foo\\\\bar` on Windows.\n\
+      \        Conversion gated on `codex_bin[1].isalpha()` so unrelated POSIX-shaped\n\
+      \        absolute paths like `/tmp/x` or `/_/y` aren't mangled into `T:\\\\\
+      x` /\n        `_:\\\\y`.\n      - Bare names with no extension on Windows: try\
+      \ .exe, .cmd, .bat, .ps1\n        in PATH explicitly so callers don't get bitten\
+      \ by PATHEXT ordering\n        ambiguity.\n      - App Execution Alias stub\
+      \ rejection on Windows: 0-byte files in\n        `%LOCALAPPDATA%\\\\Microsoft\\\
+      \\WindowsApps` are App Aliases that\n        subprocess cannot exec; raise a\
+      \ clear error rather than the cryptic\n        WinError 193 / file-not-found\
+      \ that bare exec produces.\n    \"\"\"\n    # iter-0039 xplat-rev-008: MSYS-style\
+      \ drive-path conversion on Windows.\n    # Only convert if char[1] is a real\
+      \ drive letter (codex-iter0039-1\n    # codex-rev-001 refinement: don't mangle\
+      \ /tmp, /_/foo, etc.).\n    if (\n        sys.platform == \"win32\"\n      \
+      \  and len(codex_bin) >= 3\n        and codex_bin[0] == \"/\"\n        and codex_bin[1].isalpha()\n\
+      \        and codex_bin[2] == \"/\"\n    ):\n        drive = codex_bin[1].upper()\n\
+      \        rest = codex_bin[3:].replace(\"/\", \"\\\\\")\n        codex_bin =\
+      \ f\"{drive}:\\\\{rest}\"\n\n    # If caller already gave a full path that exists,\
+      \ use it as-is.\n    if os.path.sep in codex_bin or (len(codex_bin) > 1 and\
+      \ codex_bin[1] == \":\"):\n        # iter-0039 xplat-rev-008: App Execution\
+      \ Alias check on Windows.\n        # 0-byte stub in WindowsApps cannot be exec'd\
+      \ by subprocess.\n        if sys.platform == \"win32\":\n            p = Path(codex_bin)\n\
+      \            try:\n                if p.exists() and p.stat().st_size == 0:\n\
+      \                    windows_apps = (\n                        os.environ.get(\"\
+      LOCALAPPDATA\", \"\")\n                        + r\"\\Microsoft\\WindowsApps\"\
+      \n                    )\n                    if windows_apps and str(p).lower().startswith(windows_apps.lower()):\n\
+      \                        raise CodexInvocationError(\n                     \
+      \       f\"codex binary {codex_bin!r} is a Windows App Execution \"\n      \
+      \                      f\"Alias stub (0-byte file in WindowsApps). subprocess\
+      \ cannot \"\n                            f\"exec App Aliases — install the real\
+      \ codex CLI binary or \"\n                            f\"adjust PATH so a non-stub\
+      \ variant is preferred.\"\n                        )\n            except OSError:\n\
+      \                pass  # stat failed; treat as not-stub and let subprocess fail\
+      \ downstream\n        return codex_bin\n\n    # iter-0039 xplat-rev-008: bare-name\
+      \ resolution on Windows. If the name\n    # has no extension, try common Windows-executable\
+      \ extensions explicitly\n    # so we don't depend on PATHEXT ordering producing\
+      \ the right hit.\n    if sys.platform == \"win32\" and \".\" not in Path(codex_bin).name:\n\
+      \        for ext in (\".exe\", \".cmd\", \".bat\", \".ps1\"):\n            cand\
+      \ = shutil.which(codex_bin + ext)\n            if cand:\n                # Recurse\
+      \ for the App-Alias / .ps1 quirks.\n                return _resolve_codex_bin(cand)\n\
+      \n    resolved = shutil.which(codex_bin)\n    if resolved is None:\n       \
+      \ return codex_bin\n    # On Windows, prefer .cmd over .ps1 (Python's subprocess\
+      \ can directly exec\n    # .cmd via CreateProcess but not .ps1 which needs powershell.exe).\n\
+      \    if sys.platform == \"win32\" and resolved.lower().endswith(\".ps1\"):\n\
+      \        cmd_alt = shutil.which(codex_bin + \".cmd\")\n        if cmd_alt:\n\
+      \            resolved = cmd_alt\n    # iter-0039 xplat-rev-008: App Execution\
+      \ Alias check post-PATH-resolution.\n    if sys.platform == \"win32\":\n   \
+      \     p = Path(resolved)\n        try:\n            if p.exists() and p.stat().st_size\
+      \ == 0:\n                windows_apps = (\n                    os.environ.get(\"\
+      LOCALAPPDATA\", \"\")\n                    + r\"\\Microsoft\\WindowsApps\"\n\
+      \                )\n                if windows_apps and str(p).lower().startswith(windows_apps.lower()):\n\
+      \                    raise CodexInvocationError(\n                        f\"\
+      codex binary resolved to {resolved!r} which is a Windows \"\n              \
+      \          f\"App Execution Alias stub (0-byte file in WindowsApps). \"\n  \
+      \                      f\"subprocess cannot exec App Aliases — install the real\
+      \ \"\n                        f\"codex CLI binary or adjust PATH so a non-stub\
+      \ variant is \"\n                        f\"preferred.\"\n                 \
+      \   )\n        except OSError:\n            pass\n    return resolved\n\n\n\
+      def _get_codex_version(codex_bin: str) -> str:\n    \"\"\"Best-effort: shell\
+      \ out to `<codex> --version` and return the version string.\n\n    Returns 'unknown'\
+      \ on any failure (FileNotFoundError, non-zero exit, parse fail).\n    Used for\
+      \ audit-log provenance only; never blocks dispatch.\n    \"\"\"\n    try:\n\
+      \        result = subprocess.run(\n            [_resolve_codex_bin(codex_bin),\
+      \ \"--version\"],\n            capture_output=True,\n            text=True,\n\
+      \            encoding=\"utf-8\",\n            errors=\"replace\",\n        \
+      \    timeout=10,\n        )\n        if result.returncode == 0:\n          \
+      \  return result.stdout.strip() or \"unknown\"\n    except (FileNotFoundError,\
+      \ subprocess.TimeoutExpired, OSError):\n        pass\n    return \"unknown\"\
+      \n\n\ndef _invoke_codex(\n    prompt: str,\n    codex_bin: str,\n    timeout_seconds:\
+      \ int,\n    repo_root: Path,\n    schema_path: Path,\n    log_path=None,\n \
+      \   anchors=None,\n    heartbeat_interval: float = 30.0,\n    stall_silence_seconds:\
+      \ float = 180.0,\n    poll_interval: float = 0.5,\n    time_fn=None,\n    popen_factory=None,\n\
+      \    *,\n    _sleep=None,\n) -> str:\n    \"\"\"Shell out to codex CLI via Popen\
+      \ + reader threads (iter-0037 bidirectional).\n\n    Per iter-0036 lesson +\
+      \ iter-0037 codex pre-review (codex-iter0037-1):\n      - Replace blocking subprocess.run\
+      \ with Popen + 2 reader threads (stdout\n        + stderr; both drained to prevent\
+      \ pipe-buffer deadlock — codex-rev-001).\n      - Emit dispatch_streamed_line\
+      \ per stdout line (truncated to 200 chars)\n        and dispatch_heartbeat every\
+      \ heartbeat_interval seconds.\n      - Auto-abort on heartbeat-silence (no stdout\
+      \ for stall_silence_seconds);\n        wall-time is a soft ceiling that raises\
+      \ but does NOT terminate\n        preemptively (codex-rev-002 — operator preference).\n\
+      \      - Silence check fires on EVERY poll, not just heartbeat tick\n      \
+      \  (codex-rev-003) so the 90s threshold actually bounds the recovery time.\n\
+      \      - stdout_buf / stderr_buf / streaming counters protected by state_lock\n\
+      \        (codex-rev-004); still-alive reader after proc exit = failure.\n\n\
+      \    log_path + anchors are optional for back-compat with callers that don't\n\
+      \    have them (tests using the legacy mock pattern). When None: streaming\n\
+      \    events / heartbeats / abort-signal-file are all disabled and the function\n\
+      \    still returns the final output.\n\n    Verified codex-cli 0.129.0 CLI shape\
+      \ unchanged from prior subprocess.run\n    invocation: `codex exec --skip-git-repo-check\
+      \ --cd <REPO> --sandbox\n    read-only --output-schema <FILE> -o <OUT> -` (prompt\
+      \ via stdin).\n    \"\"\"\n    if time_fn is None:\n        time_fn = time.time\n\
+      \    if popen_factory is None:\n        popen_factory = subprocess.Popen\n \
+      \   # Private, keyword-only sleep seam (v1.15.9 converged plan\n    # q1_sync_mechanism).\
+      \ Defaults to `time.sleep` → ZERO change to\n    # production behavior. The\
+      \ streaming test harness injects a\n    # SyncClock-backed blocker so the poll\
+      \ loop has a deterministic\n    # happens-before with the test driver instead\
+      \ of racing real\n    # wall-clock on loaded CI runners. Chosen over monkeypatching\n\
+      \    # global `time.sleep` (no global-state leak — see the\n    # monkeypatch-pollution\
+      \ lesson).\n    if _sleep is None:\n        _sleep = time.sleep\n    can_log\
+      \ = log_path is not None and anchors is not None\n\n    # iter-0007 F4 (deferred\
+      \ infra): allow env-var override of the stall-\n    # silence threshold so operators\
+      \ with large prompts / slow models can\n    # extend without code change. Codex\
+      \ cold-start on 50KB+ prompts often\n    # exceeds the 180s default.\n    env_silence\
+      \ = os.environ.get(\"CONSENSUS_MCP_STALL_SILENCE_SECONDS\")\n    if env_silence:\n\
+      \        try:\n            stall_silence_seconds = float(env_silence)\n    \
+      \    except ValueError:\n            pass  # keep default\n\n    with tempfile.NamedTemporaryFile(mode=\"\
+      w\", suffix=\".json\", delete=False, encoding=\"utf-8\") as tmp:\n        out_file\
+      \ = tmp.name\n    try:\n        cmd = [\n            _resolve_codex_bin(codex_bin),\n\
+      \            \"exec\",\n            \"--skip-git-repo-check\",\n           \
+      \ \"--cd\", str(repo_root),\n            \"--sandbox\", \"read-only\",\n   \
+      \         \"--output-schema\", str(schema_path),\n            \"-o\", out_file,\n\
+      \            \"-\",\n        ]\n        # iter-0039 xplat-rev-002: spawn codex\
+      \ in its own process group so\n        # _terminate_process_tree can signal\
+      \ the whole tree (codex spawns\n        # Node descendants that orphan otherwise).\n\
+      \        if sys.platform == \"win32\":\n            popen_kwargs = {\"creationflags\"\
+      : subprocess.CREATE_NEW_PROCESS_GROUP}\n        else:\n            popen_kwargs\
+      \ = {\"start_new_session\": True}\n        try:\n            proc = popen_factory(\n\
+      \                cmd,\n                stdin=subprocess.PIPE,\n            \
+      \    stdout=subprocess.PIPE,\n                stderr=subprocess.PIPE,\n    \
+      \            bufsize=0,\n                **popen_kwargs,\n            )\n  \
+      \      except FileNotFoundError:\n            raise CodexInvocationError(f\"\
+      codex binary not found: {codex_bin}\") from None\n\n        # Write prompt +\
+      \ close stdin. Binary mode preserves UTF-8 bytes verbatim\n        # (per v1.10.3\
+      \ Windows hardening — text-mode \\n→\\r\\n translation corrupts\n        # multibyte\
+      \ sequences).\n        try:\n            proc.stdin.write(prompt.encode(\"utf-8\"\
+      ))\n            proc.stdin.close()\n        except (BrokenPipeError, OSError):\n\
+      \            # codex died before we finished writing; failure will surface via\n\
+      \            # returncode check after process exits.\n            pass\n\n \
+      \       state_lock = threading.Lock()\n        stdout_buf: list = []\n     \
+      \   stderr_buf: list = []\n        last_streamed_ts: list = [None]    # 1-element\
+      \ list for nonlocal mutability\n        streamed_seq: list = [0]\n\n       \
+      \ abort_path = None\n        if can_log:\n            abort_path = repo_root\
+      \ / \"consensus-state\" / \"state\" / f\"abort-dispatch-{anchors['pass_id']}.signal\"\
+      \n\n        def stdout_reader():\n            try:\n                for raw_line\
+      \ in iter(proc.stdout.readline, b\"\"):\n                    if not raw_line:\n\
+      \                        break\n                    with state_lock:\n     \
+      \                   stdout_buf.append(raw_line)\n                        seq\
+      \ = streamed_seq[0]\n                        streamed_seq[0] = seq + 1\n   \
+      \                     last_streamed_ts[0] = time_fn()\n                    if\
+      \ can_log:\n                        line_str = raw_line.decode(\"utf-8\", errors=\"\
+      replace\").rstrip(\"\\r\\n\")\n                        full_len = len(line_str)\n\
+      \                        _log_dispatch(log_path, {\n                       \
+      \     \"event\": \"dispatch_streamed_line\",\n                            **anchors,\n\
+      \                            \"stream\": \"stdout\",\n                     \
+      \       \"line_truncated\": line_str[:200],\n                            \"\
+      line_full_length\": full_len,\n                            \"truncated\": full_len\
+      \ > 200,\n                            \"seq\": seq,\n                      \
+      \  })\n            except Exception:\n                pass  # reader exits silently;\
+      \ main loop sees proc.poll()\n\n        def stderr_reader():\n            \"\
+      \"\"codex-rev-001 fix: drain stderr to prevent pipe-buffer deadlock.\n     \
+      \       Codex's --output-schema config + prompt echo go to stderr first,\n \
+      \           then any error tail. ~64KB pipe buffer would block codex's write\n\
+      \            if not drained, deadlocking the dispatch.\n            \"\"\"\n\
+      \            try:\n                for raw_line in iter(proc.stderr.readline,\
+      \ b\"\"):\n                    if not raw_line:\n                        break\n\
+      \                    with state_lock:\n                        stderr_buf.append(raw_line)\n\
+      \            except Exception:\n                pass\n\n        t_stdout = threading.Thread(target=stdout_reader,\
+      \ daemon=True, name=\"codex-stdout-reader\")\n        t_stderr = threading.Thread(target=stderr_reader,\
+      \ daemon=True, name=\"codex-stderr-reader\")\n        t_stdout.start()\n   \
+      \     t_stderr.start()\n\n        start_ts = time_fn()\n        last_heartbeat\
+      \ = start_ts\n\n        while proc.poll() is None:\n            now = time_fn()\n\
+      \n            # 1) Operator abort-signal file (polled every iteration).\n  \
+      \          if abort_path is not None and abort_path.exists():\n            \
+      \    try:\n                    abort_reason = abort_path.read_text(encoding=\"\
+      utf-8\").strip() or \"operator_signal_file\"\n                except OSError:\n\
+      \                    abort_reason = \"operator_signal_file (unreadable)\"\n\
+      \                _terminate_process_tree(proc)\n                with state_lock:\n\
+      \                    silence_age = (now - last_streamed_ts[0]) if last_streamed_ts[0]\
+      \ is not None else None\n                if can_log:\n                    _log_dispatch(log_path,\
+      \ {\n                        \"event\": \"dispatch_aborted\",\n            \
+      \            **anchors,\n                        \"abort_source\": \"operator_signal_file\"\
+      ,\n                        \"abort_reason\": abort_reason,\n               \
+      \         \"age_seconds\": now - start_ts,\n                        \"last_streamed_line_age_seconds\"\
+      : silence_age,\n                    })\n                try:\n             \
+      \       abort_path.unlink()\n                except OSError:\n             \
+      \       pass\n                raise CodexInvocationError(f\"dispatch aborted\
+      \ by operator: {abort_reason}\")\n\n            # 2) Heartbeat-silence check\
+      \ on EVERY poll (codex-rev-003 fix).\n            # Only fires after codex has\
+      \ emitted at least one line; if nothing\n            # streamed yet, fall back\
+      \ to age-since-start so a startup-stuck\n            # codex still gets caught.\n\
+      \            with state_lock:\n                lst = last_streamed_ts[0]\n \
+      \               seq_snap = streamed_seq[0]\n            if lst is not None:\n\
+      \                silence_age = now - lst\n                silence_trigger_threshold\
+      \ = stall_silence_seconds\n            else:\n                silence_age =\
+      \ now - start_ts\n                # Pre-first-line silence: same threshold as\
+      \ post-first-line.\n                silence_trigger_threshold = stall_silence_seconds\n\
+      \n            if silence_age >= silence_trigger_threshold:\n               \
+      \ _terminate_process_tree(proc)\n                if can_log:\n             \
+      \       _log_dispatch(log_path, {\n                        \"event\": \"dispatch_aborted\"\
+      ,\n                        **anchors,\n                        \"abort_source\"\
+      : \"watchdog_silence\",\n                        \"abort_reason\": f\"no codex\
+      \ stdout for {silence_age:.0f}s (threshold {silence_trigger_threshold:.0f}s)\"\
+      ,\n                        \"age_seconds\": now - start_ts,\n              \
+      \          \"last_streamed_line_age_seconds\": silence_age if lst is not None\
+      \ else None,\n                    })\n                raise CodexInvocationError(\n\
+      \                    f\"codex stuck: no output for {silence_age:.0f}s\"\n  \
+      \              )\n\n            # 3) Heartbeat emission on heartbeat_interval\
+      \ cadence.\n            if now - last_heartbeat >= heartbeat_interval:\n   \
+      \             if can_log:\n                    _log_dispatch(log_path, {\n \
+      \                       \"event\": \"dispatch_heartbeat\",\n               \
+      \         **anchors,\n                        \"age_seconds\": now - start_ts,\n\
+      \                        \"last_streamed_line_age_seconds\": silence_age if\
+      \ lst is not None else None,\n                        \"last_streamed_line_seq\"\
+      : seq_snap - 1 if seq_snap > 0 else None,\n                    })\n        \
+      \        last_heartbeat = now\n\n            # 4) Wall-time soft ceiling (codex-rev-002\
+      \ fix: no preemptive\n            # terminate per operator preference; heartbeat-silence\
+      \ is the only\n            # auto-killer. But we cannot wait forever — raise\
+      \ after wall_time\n            # + grace if codex is somehow streaming-but-runaway).\n\
+      \            if now - start_ts >= timeout_seconds + stall_silence_seconds:\n\
+      \                # Hard ceiling reached. Tree-terminate to avoid zombie + raise.\n\
+      \                _terminate_process_tree(proc)\n                if can_log:\n\
+      \                    _log_dispatch(log_path, {\n                        \"event\"\
+      : \"dispatch_aborted\",\n                        **anchors,\n              \
+      \          \"abort_source\": \"wall_time_hard_ceiling\",\n                 \
+      \       \"abort_reason\": f\"wall_time={now - start_ts:.0f}s exceeded timeout_seconds={timeout_seconds}s\
+      \ + grace={stall_silence_seconds}s\",\n                        \"age_seconds\"\
+      : now - start_ts,\n                        \"last_streamed_line_age_seconds\"\
+      : silence_age if lst is not None else None,\n                    })\n      \
+      \          raise CodexInvocationError(\n                    f\"codex exceeded\
+      \ {timeout_seconds}s wall timeout + {stall_silence_seconds}s grace\"\n     \
+      \           )\n\n            _sleep(poll_interval)\n\n        # Process exited;\
+      \ drain reader threads.\n        t_stdout.join(timeout=5)\n        t_stderr.join(timeout=5)\n\
+      \        if t_stdout.is_alive() or t_stderr.is_alive():\n            # codex-rev-004\
+      \ fix: still-alive reader after proc exit = invocation failure.\n          \
+      \  raise CodexInvocationError(\n                \"codex exited but reader thread\
+      \ did not drain within 5s; \"\n                \"possible partial output or\
+      \ pipe-handling defect\"\n            )\n\n        with state_lock:\n      \
+      \      stdout_bytes = b\"\".join(stdout_buf)\n            stderr_bytes = b\"\
+      \".join(stderr_buf)\n\n        if proc.returncode != 0:\n            stderr_str\
+      \ = stderr_bytes.decode(\"utf-8\", errors=\"replace\")\n            stdout_str\
+      \ = stdout_bytes.decode(\"utf-8\", errors=\"replace\")\n            stderr_tail\
+      \ = stderr_str.strip()[-4000:]\n            stdout_hint = (\n              \
+      \  f\"; stdout_tail={stdout_str.strip()[-500:]!r}\"\n                if stdout_str.strip()\n\
+      \                else \"\"\n            )\n            raise CodexInvocationError(\n\
+      \                f\"codex exit={proc.returncode}; stderr_tail={stderr_tail!r}{stdout_hint}\"\
+      \n            )\n        try:\n            return Path(out_file).read_text(encoding=\"\
+      utf-8\")\n        except OSError as exc:\n            raise CodexInvocationError(f\"\
+      codex output file unreadable: {exc}\") from exc\n    finally:\n        try:\n\
+      \            Path(out_file).unlink()\n        except OSError:\n            pass\n\
+      \n\ndef _parse_codex_output(\n    text: str,\n    goal_packet: dict | None =\
+      \ None,\n    review_packet: dict | None = None,\n    repo_root: Path | None\
+      \ = None,\n) -> dict:\n    \"\"\"Parse codex's structured JSON output + locally\
+      \ validate the shape.\n\n    Codex is invoked with --output-schema; the final\
+      \ assistant message MUST be JSON\n    matching the schema. This function adds\
+      \ defense-in-depth validation per\n    codex review F2 (2026-05-09) AND v1.10.2\
+      \ hardening F2/F3:\n      - root is a JSON object\n      - top-level keys are\
+      \ EXACTLY {findings, goal_satisfied, blocking_objections}\n        (+ optional\
+      \ goal_satisfied_rationale); unknown keys rejected\n      - findings is a list;\
+      \ each finding has ALL 6 required fields (id, severity,\n        summary, citation,\
+      \ risk, recommendation) — citation/risk/recommendation are\n        REQUIRED\
+      \ per F3 to prevent weak/non-actionable reviews\n      - each finding has NO\
+      \ extra keys (additionalProperties:false enforcement);\n        only optional\
+      \ NEW key allowed is patch_proposal (Task #24 / iter-0014).\n        Anti-self-verification:\
+      \ verified / self_verified / correct / approved /\n        confirmed are NOT\
+      \ in the allowed set; they remain rejected.\n      - severity in {low,medium,high,blocking,critical}\
+      \ enum\n      - id matches ^codex-rev-\\\\d+$\n      - all string fields (id,\
+      \ severity, summary, citation, risk, recommendation,\n        goal_satisfied_rationale)\
+      \ are actual strings (per F2)\n      - goal_satisfied is bool\n      - blocking_objections\
+      \ is a list of STRINGS (per F2 — list-items typed)\n      - blocking_objections\
+      \ invariant (per F3): set(blocking_objections) ==\n        set(f.id for f in\
+      \ findings if f.severity in {\"blocking\", \"critical\"})\n      - if a finding\
+      \ has patch_proposal: its keys/types/content-binding are\n        validated,\
+      \ and (when goal_packet is supplied) files_touched paths must\n        be in\
+      \ allowed_files and not in forbidden_files (Task #24 / iter-0014).\n\n    goal_packet\
+      \ is OPTIONAL for backward-compat / unit-level testing; the main\n    pipeline\
+      \ always supplies it so scope checks run.\n\n    Per iter-0022: ``review_packet``\
+      \ is OPTIONAL. When supplied AND it carries\n    a string ``defect_target.base_sha``,\
+      \ every parsed patch_proposal has its\n    ``base_sha`` field OVERWRITTEN with\
+      \ that canonical operator-stamped value.\n    The schema permits codex to emit\
+      \ any string for ``base_sha``; the helper\n    authoritatively replaces it post-parse.\
+      \ Backward compat: when review_packet\n    is None or lacks a string defect_target.base_sha,\
+      \ codex's emission is kept.\n    \"\"\"\n    try:\n        parsed = json.loads(text)\n\
+      \    except json.JSONDecodeError as exc:\n        raise CodexOutputParseError(f\"\
+      codex output is not valid JSON: {exc}\") from exc\n\n    if not isinstance(parsed,\
+      \ dict):\n        raise CodexOutputParseError(\n            f\"codex output\
+      \ JSON root must be an object, got {type(parsed).__name__}\"\n        )\n\n\
+      \    # Reject unknown top-level keys (F2)\n    unknown_top = set(parsed.keys())\
+      \ - _ALLOWED_TOP_LEVEL_KEYS\n    if unknown_top:\n        raise CodexOutputParseError(\n\
+      \            f\"codex output JSON has unexpected top-level keys: {sorted(unknown_top)}\"\
+      \n        )\n\n    # Required top-level keys\n    # Per v1.10.4 F4: validator\
+      \ now requires goal_satisfied_rationale, mirroring\n    # the schema (which\
+      \ requires it for OpenAI structured-output strictness).\n    # Prior: optional\
+      \ + type-checked-if-present; new: required + type-checked.\n    for required\
+      \ in (\"findings\", \"goal_satisfied\", \"blocking_objections\", \"goal_satisfied_rationale\"\
+      ):\n        if required not in parsed:\n            raise CodexOutputParseError(f\"\
+      codex output JSON missing required key: {required!r}\")\n\n    # Type checks\
+      \ on top-level\n    if not isinstance(parsed[\"findings\"], list):\n       \
+      \ raise CodexOutputParseError(\"'findings' must be an array\")\n    if not isinstance(parsed[\"\
+      goal_satisfied\"], bool):\n        raise CodexOutputParseError(\n          \
+      \  f\"'goal_satisfied' must be boolean, got {type(parsed['goal_satisfied']).__name__}\"\
+      \n        )\n    if not isinstance(parsed[\"blocking_objections\"], list):\n\
+      \        raise CodexOutputParseError(\n            f\"'blocking_objections'\
+      \ must be an array, got {type(parsed['blocking_objections']).__name__}\"\n \
+      \       )\n\n    # blocking_objections items must all be strings (F2)\n    for\
+      \ i, item in enumerate(parsed[\"blocking_objections\"]):\n        if not isinstance(item,\
+      \ str):\n            raise CodexOutputParseError(\n                f\"blocking_objections[{i}]\
+      \ must be string, got {type(item).__name__}\"\n            )\n\n    # Per v1.10.4\
+      \ F4: goal_satisfied_rationale is now REQUIRED (not optional);\n    # presence\
+      \ already enforced above. Type-check it here.\n    if not isinstance(parsed[\"\
+      goal_satisfied_rationale\"], str):\n        raise CodexOutputParseError(\n \
+      \           f\"'goal_satisfied_rationale' must be string, got \"\n         \
+      \   f\"{type(parsed['goal_satisfied_rationale']).__name__}\"\n        )\n\n\
+      \    # Per-finding validation\n    # First, collect all finding IDs (for patch_proposal.applies_to_findings\
+      \ cross-check)\n    all_finding_ids: set = set()\n    for i, finding in enumerate(parsed[\"\
+      findings\"]):\n        if isinstance(finding, dict) and isinstance(finding.get(\"\
+      id\"), str):\n            all_finding_ids.add(finding[\"id\"])\n\n    blocking_finding_ids\
+      \ = []\n    for i, finding in enumerate(parsed[\"findings\"]):\n        if not\
+      \ isinstance(finding, dict):\n            raise CodexOutputParseError(\n   \
+      \             f\"findings[{i}] must be an object, got {type(finding).__name__}\"\
+      \n            )\n        # Reject unknown finding keys (F2). _ALLOWED_FINDING_KEYS\
+      \ now includes\n        # patch_proposal as the ONLY new optional key (Task\
+      \ #24 / iter-0014).\n        # Anti-self-verification fields (verified / self_verified\
+      \ / correct /\n        # approved / confirmed) remain rejected here.\n     \
+      \   unknown_keys = set(finding.keys()) - _ALLOWED_FINDING_KEYS\n        if unknown_keys:\n\
+      \            raise CodexOutputParseError(\n                f\"findings[{i}]\
+      \ has unexpected keys: {sorted(unknown_keys)}\"\n            )\n        # Required\
+      \ finding fields (F3: citation/risk/recommendation now required)\n        for\
+      \ required in _REQUIRED_FINDING_FIELDS:\n            if required not in finding:\n\
+      \                raise CodexOutputParseError(\n                    f\"findings[{i}]\
+      \ missing required field: {required!r}\"\n                )\n        # All required\
+      \ string fields must be actual strings (F2)\n        for str_field in (\"id\"\
+      , \"severity\", \"summary\", \"citation\", \"risk\", \"recommendation\"):\n\
+      \            if not isinstance(finding[str_field], str):\n                raise\
+      \ CodexOutputParseError(\n                    f\"findings[{i}].{str_field} must\
+      \ be string, got \"\n                    f\"{type(finding[str_field]).__name__}\"\
+      \n                )\n        # Severity enum\n        if finding[\"severity\"\
+      ] not in _VALID_SEVERITIES:\n            raise CodexOutputParseError(\n    \
+      \            f\"findings[{i}] has invalid severity {finding['severity']!r};\
+      \ \"\n                f\"must be one of {sorted(_VALID_SEVERITIES)}\"\n    \
+      \        )\n        # ID pattern\n        if not _FINDING_ID_PATTERN.match(finding[\"\
+      id\"]):\n            raise CodexOutputParseError(\n                f\"findings[{i}]\
+      \ id {finding['id']!r} does not match pattern \"\n                f\"^codex-rev-\\\
+      \\d+$\"\n            )\n        # Optional patch_proposal validation (Task #24\
+      \ / iter-0014).\n        # Schema permits null; treat null as absent.\n    \
+      \    pp = finding.get(\"patch_proposal\")\n        if pp is not None:\n    \
+      \        _validate_patch_proposal(\n                finding_index=i,\n     \
+      \           finding_id=finding[\"id\"],\n                pp=pp,\n          \
+      \      all_finding_ids=all_finding_ids,\n                goal_packet=goal_packet,\n\
+      \                review_packet=review_packet,\n                repo_root=repo_root,\n\
+      \            )\n        # iter-0018 Finding 4: patch_not_proposed_reason field\
+      \ validation.\n        # When present, must be a non-empty string. Mutually\
+      \ exclusive with\n        # patch_proposal — a finding can't have both.\n  \
+      \      reason = finding.get(\"patch_not_proposed_reason\")\n        if reason\
+      \ is not None:\n            if not isinstance(reason, str):\n              \
+      \  raise CodexOutputParseError(\n                    f\"findings[{i}].patch_not_proposed_reason\
+      \ must be string, \"\n                    f\"got {type(reason).__name__}\"\n\
+      \                )\n            if not reason.strip():\n                raise\
+      \ CodexOutputParseError(\n                    f\"findings[{i}].patch_not_proposed_reason\
+      \ must be non-empty\"\n                )\n            if pp is not None:\n \
+      \               raise CodexOutputParseError(\n                    f\"findings[{i}]:\
+      \ patch_proposal and patch_not_proposed_reason \"\n                    f\"are\
+      \ mutually exclusive (both provided)\"\n                )\n        # Track blocking-class\
+      \ findings for invariant check\n        if finding[\"severity\"] in _BLOCKING_SEVERITIES:\n\
+      \            blocking_finding_ids.append(finding[\"id\"])\n\n    # iter-0018\
+      \ Finding 4: strict fix_author_policy enforcement.\n    # When goal_packet.fix_author_policy\
+      \ == \"strict\", every finding MUST have\n    # either a patch_proposal OR a\
+      \ patch_not_proposed_reason. Permissive (the\n    # default + only prior behavior)\
+      \ does not require either. Unrecognized\n    # policy values are rejected.\n\
+      \    if goal_packet is not None:\n        policy = goal_packet.get(\"fix_author_policy\"\
+      , \"permissive\")\n        if policy not in (\"permissive\", \"strict\"):\n\
+      \            raise CodexOutputParseError(\n                f\"goal_packet.fix_author_policy={policy!r}\
+      \ is not a recognized \"\n                f\"value; allowed: 'permissive' (default),\
+      \ 'strict'\"\n            )\n        if policy == \"strict\":\n            for\
+      \ i, finding in enumerate(parsed[\"findings\"]):\n                has_patch\
+      \ = isinstance(finding.get(\"patch_proposal\"), dict)\n                has_reason\
+      \ = bool(finding.get(\"patch_not_proposed_reason\"))\n                if not\
+      \ (has_patch or has_reason):\n                    raise CodexOutputParseError(\n\
+      \                        f\"fix_author_policy=strict: findings[{i}] (id={finding.get('id')!r})\
+      \ \"\n                        f\"must have either patch_proposal OR patch_not_proposed_reason;\
+      \ \"\n                        f\"neither present\"\n                    )\n\n\
+      \    # Blocking objections invariant (F3): set must match blocking-class finding\
+      \ ids\n    expected_blocking = set(blocking_finding_ids)\n    actual_blocking\
+      \ = set(parsed[\"blocking_objections\"])\n    if expected_blocking != actual_blocking:\n\
+      \        missing = expected_blocking - actual_blocking\n        extra = actual_blocking\
+      \ - expected_blocking\n        msg_parts = [\"blocking_objections invariant\
+      \ violated:\"]\n        if missing:\n            msg_parts.append(f\"missing\
+      \ finding ids: {sorted(missing)}\")\n        if extra:\n            msg_parts.append(f\"\
+      unexpected ids (not blocking/critical findings): {sorted(extra)}\")\n      \
+      \  msg_parts.append(\n            f\"expected = {{f.id : f.severity in {{blocking,\
+      \ critical}}}} = {sorted(expected_blocking)}\"\n        )\n        msg_parts.append(f\"\
+      actual = {sorted(actual_blocking)}\")\n        raise CodexOutputParseError(\"\
+      ; \".join(msg_parts))\n\n    return parsed\n\n\n_CODEX_PROPOSAL_SCHEMA_PATH\
+      \ = (\n    Path(__file__).parent / \"dispatch_templates\" / \"codex_proposal_schema.json\"\
+      \n)\n\n\ndef _parse_codex_proposal_output(text: str, schema_path: Path | None\
+      \ = None) -> dict:\n    \"\"\"Parse + validate codex proposal-mode output (iter-0028).\n\
+      \n    Validation runs against `schema_path` (operator override via --schema)\n\
+      \    when provided, else against the built-in `codex_proposal_schema.json`.\n\
+      \    The override contract from the dispatcher CLI must thread through here\n\
+      \    so a custom schema actually constrains the validator (codex pass-3\n  \
+      \  rev-001: previously this was hard-coded, breaking the override\n    promise).\n\
+      \n    selected_target and deliverable_scope may be null when\n    structural_abstention\
+      \ is true; required to be non-null when\n    structural_abstention is false.\
+      \ The schema allows null but the\n    cross-field semantic check enforces presence.\n\
+      \n    Raises CodexOutputParseError on shape mismatch.\n    \"\"\"\n    try:\n\
+      \        parsed = json.loads(text)\n    except json.JSONDecodeError as exc:\n\
+      \        raise CodexOutputParseError(\n            f\"codex proposal output\
+      \ is not valid JSON: {exc}\"\n        ) from exc\n\n    if not isinstance(parsed,\
+      \ dict):\n        raise CodexOutputParseError(\n            f\"codex proposal\
+      \ output root must be a JSON object; got {type(parsed).__name__}\"\n       \
+      \ )\n\n    effective_schema_path = schema_path or _CODEX_PROPOSAL_SCHEMA_PATH\n\
+      \    try:\n        import jsonschema\n    except ImportError as exc:\n     \
+      \   raise CodexOutputParseError(\n            f\"jsonschema package required\
+      \ for proposal-mode validation; \"\n            f\"install with `pip install\
+      \ jsonschema` or reinstall consensus-mcp: {exc}\"\n        ) from exc\n    try:\n\
+      \        schema = json.loads(Path(effective_schema_path).read_text(encoding=\"\
+      utf-8\"))\n        jsonschema.validate(parsed, schema)\n    except jsonschema.ValidationError\
+      \ as exc:\n        raise CodexOutputParseError(\n            f\"codex proposal\
+      \ output failed schema validation at \"\n            f\"{'/'.join(str(p) for\
+      \ p in exc.absolute_path) or '<root>'}: {exc.message}\"\n        ) from exc\n\
+      \    except FileNotFoundError as exc:\n        raise CodexOutputParseError(\n\
+      \            f\"proposal schema not found at {effective_schema_path}: {exc}\"\
+      \n        ) from exc\n\n    # Parser-level invariants (codex pass-4 rev-002\
+      \ + pass-6 rev-001):\n    # defense-in-depth against operator-supplied schemas\
+      \ that relax these.\n    # The built-in schema enforces them, but an override\
+      \ could weaken\n    # minLength on rationale, omit structural_abstention entirely,\
+      \ or\n    # let through a non-boolean truthy value. Enforce here regardless\
+      \ of\n    # which schema is in effect.\n    if not isinstance(parsed.get(\"\
+      rationale_vs_alternatives\"), str) or not parsed[\"rationale_vs_alternatives\"\
+      ].strip():\n        raise CodexOutputParseError(\n            \"rationale_vs_alternatives\
+      \ must be a non-empty string (parser invariant)\"\n        )\n    if \"structural_abstention\"\
+      \ not in parsed or not isinstance(parsed[\"structural_abstention\"], bool):\n\
+      \        raise CodexOutputParseError(\n            \"structural_abstention must\
+      \ be present and boolean (parser invariant)\"\n        )\n\n    # Cross-field\
+      \ semantic check the schema can't express:\n    # when NOT abstaining, selected_target\
+      \ and deliverable_scope must be non-null.\n    if not parsed[\"structural_abstention\"\
+      ]:\n        if parsed[\"selected_target\"] is None:\n            raise CodexOutputParseError(\n\
+      \                \"selected_target is required when structural_abstention is\
+      \ false\"\n            )\n        if parsed[\"deliverable_scope\"] is None:\n\
+      \            raise CodexOutputParseError(\n                \"deliverable_scope\
+      \ is required when structural_abstention is false\"\n            )\n\n    return\
+      \ parsed\n\n\ndef main(argv: list[str] | None = None) -> int:\n    p = argparse.ArgumentParser(\n\
+      \        prog=\"consensus_mcp._dispatch_codex\",\n        description=\"Auto-dispatch\
+      \ codex CLI as the second reviewer; auto-seal via T6.\",\n    )\n    p.add_argument(\"\
+      --goal-packet\", required=True)\n    p.add_argument(\"--iteration-dir\", required=True)\n\
+      \    p.add_argument(\"--reviewer-id\", default=None)\n    p.add_argument(\"\
+      --pass-id\", default=None)\n    p.add_argument(\"--prompt-template\", default=None)\n\
+      \    p.add_argument(\"--schema\", default=None, help=\"Path to JSON output schema\
+      \ (default: dispatch_templates/codex_review_schema.json)\")\n    p.add_argument(\"\
+      --mode\", default=\"review\", choices=[\"review\", \"proposal\"],\n        \
+      \           help=(\"Dispatch mode (iter-0028 per iter-0027 converged plan).\
+      \ \"\n                         \"'review' (default): use codex_review_template.md\
+      \ + schema \"\n                         \"for code-review tasks. 'proposal':\
+      \ use codex_proposal_template.md \"\n                         \"+ schema for\
+      \ design-consult / workflow #4 proposal tasks. \"\n                        \
+      \ \"--prompt-template and --schema overrides take precedence over --mode.\"\
+      ))\n    p.add_argument(\"--codex-bin\", default=\"codex\")\n    p.add_argument(\"\
+      --timeout-seconds\", type=int, default=600)\n    p.add_argument(\"--review-target\"\
+      , default=None,\n                   help=\"Optional path to a file containing\
+      \ the review input \"\n                        \"(diff, patch, etc.); helper\
+      \ computes sha256 and \"\n                        \"passes both path + hash\
+      \ to the prompt for codex.\")\n    p.add_argument(\"--smoke\", action=\"store_true\"\
+      ,\n                   help=\"Smoke mode: gated by CONSENSUS_MCP_RUN_REAL_CODEX_SMOKE=1\
+      \ env var (codex review #3)\")\n\n    ns = p.parse_args(argv)\n\n    # Per v1.10.4\
+      \ F1: fail-closed if repo_root can't be validated.\n    try:\n        repo_root\
+      \ = _resolve_repo_root()\n    except RepoRootResolutionError as exc:\n     \
+      \   # We don't have a valid log_path yet; print error to stderr-equivalent JSON.\n\
+      \        print(json.dumps({\"ok\": False, \"error\": str(exc), \"error_type\"\
+      : \"RepoRootResolutionError\"}))\n        return 4\n\n    # iter-0033 codex-rev-001/002:\
+      \ compute log_path immediately after repo_root\n    # resolves so preflight\
+      \ failures can emit a structured dispatch_failed\n    # event. Derive PROVISIONAL\
+      \ reviewer/pass identifiers from --iteration-dir\n    # so early-fail events\
+      \ have anchors; these get RECOMPUTED below once\n    # iter_dir.name canonicalizes\
+      \ (e.g., when --iteration-dir is \".\" or a\n    # symlink). Codex iter-0033\
+      \ review feedback: use _pre_iter_id ONLY for\n    # the early failure event;\
+      \ recompute canonical reviewer_id/pass_id from\n    # iter_dir.name after normalization\
+      \ succeeds.\n    log_path = repo_root / \"consensus-state\" / \"state\" / \"\
+      dispatch-log.jsonl\"\n    _pre_iter_id = Path(ns.iteration_dir).name or \"unknown-iteration\"\
+      \n    _pre_reviewer_id = ns.reviewer_id or f\"codex-{_pre_iter_id}-1\"\n   \
+      \ _pre_pass_id = ns.pass_id or f\"{_pre_reviewer_id}-pass1\"\n\n    # Per v1.10.4\
+      \ F5: normalize all operator-supplied relative paths against\n    # repo_root,\
+      \ NOT the process cwd. The codex subprocess runs with --cd repo_root,\n    #\
+      \ so all path frames must agree.\n    # iter-0033 codex-rev-001: wrap in try/except\
+      \ so containment rejections\n    # AND OSError filesystem failures (e.g., unwritable\
+      \ iter_dir) emit a\n    # structured dispatch_failed event instead of an uncaught\
+      \ traceback.\n    try:\n        iter_dir = _normalize_relative_to_repo(ns.iteration_dir,\
+      \ repo_root)\n        iter_dir.mkdir(parents=True, exist_ok=True)\n        iteration_id\
+      \ = iter_dir.name\n\n        # iter-0028: mode selects the default template/schema\
+      \ pair when no\n        # explicit overrides are passed. --prompt-template and\
+      \ --schema\n        # overrides still win, preserving backward compatibility.\n\
+      \        _default_template_name = (\n            \"codex_proposal_template.md\"\
+      \ if ns.mode == \"proposal\"\n            else \"codex_review_template.md\"\n\
+      \        )\n        _default_schema_name = (\n            \"codex_proposal_schema.json\"\
+      \ if ns.mode == \"proposal\"\n            else \"codex_review_schema.json\"\n\
+      \        )\n        template_path = (\n            _normalize_relative_to_repo(ns.prompt_template,\
+      \ repo_root)\n            if ns.prompt_template\n            else (Path(__file__).parent\
+      \ / \"dispatch_templates\" / _default_template_name)\n        )\n        schema_path\
+      \ = (\n            _normalize_relative_to_repo(ns.schema, repo_root)\n     \
+      \       if ns.schema\n            else (Path(__file__).parent / \"dispatch_templates\"\
+      \ / _default_schema_name)\n        )\n        goal_packet_path = _normalize_relative_to_repo(ns.goal_packet,\
+      \ repo_root)\n        review_target_normalized = _normalize_relative_to_repo(ns.review_target,\
+      \ repo_root)\n    except (OutsideRepoPathError, OSError) as exc:\n        error_type\
+      \ = type(exc).__name__\n        _log_dispatch(log_path, {\n            \"event\"\
+      : \"dispatch_failed\",\n            \"error_type\": error_type,\n          \
+      \  \"error\": str(exc),\n            \"reviewer_id\": _pre_reviewer_id,\n  \
+      \          \"pass_id\": _pre_pass_id,\n            \"iteration_id\": _pre_iter_id,\n\
+      \            \"timeout_seconds\": ns.timeout_seconds,\n        })\n        print(json.dumps({\"\
+      ok\": False, \"error\": str(exc), \"error_type\": error_type}))\n        return\
+      \ 5\n\n    # v1.10.5: compute review_target_path display string (relative to\
+      \ repo_root\n    # when possible) up front, so dispatch_start / dispatch_failed\
+      \ / dispatch_done\n    # all see the same value. Hash is computed inside the\
+      \ try block (requires\n    # reading the file).\n    review_target_path_str:\
+      \ str | None = None\n    if review_target_normalized is not None:\n        try:\n\
+      \            review_target_path_str = str(\n                review_target_normalized.relative_to(repo_root.resolve())\n\
+      \            ).replace(\"\\\\\", \"/\")\n        except ValueError:\n      \
+      \      review_target_path_str = str(review_target_normalized)\n\n    # iter-0033\
+      \ codex-rev-002: recompute canonical reviewer_id/pass_id from\n    # the now-normalized\
+      \ iteration_id. The pre-normalize values were used only\n    # for the early-fail\
+      \ event above.\n    reviewer_id = ns.reviewer_id or f\"codex-{iteration_id}-1\"\
+      \n    pass_id = ns.pass_id or f\"{reviewer_id}-pass1\"\n\n    # Per codex review\
+      \ F3 (2026-05-09): if --smoke is passed without the env-gate set,\n    # refuse\
+      \ before invoking codex. Operators/automation that pass --smoke are signaling\n\
+      \    # \"this is a deliberate real-codex smoke run\"; the env var is the explicit\
+      \ consent.\n    if ns.smoke and os.environ.get(\"CONSENSUS_MCP_RUN_REAL_CODEX_SMOKE\"\
+      ) != \"1\":\n        refuse_msg = (\n            \"--smoke requires CONSENSUS_MCP_RUN_REAL_CODEX_SMOKE=1\
+      \ in the environment. \"\n            \"This gate prevents accidental real-codex\
+      \ invocation under cost/auth/session \"\n            \"side effects. Set the\
+      \ env var explicitly to opt in, or drop --smoke for \"\n            \"normal\
+      \ (non-smoke) usage.\"\n        )\n        _log_dispatch(log_path, {\n     \
+      \       \"event\": \"dispatch_refused\",\n            \"error_type\": \"smoke_env_gate\"\
+      ,\n            \"error\": refuse_msg,\n            \"reviewer_id\": reviewer_id,\n\
+      \            \"pass_id\": pass_id,\n        })\n        print(json.dumps({\"\
+      ok\": False, \"error\": refuse_msg, \"error_type\": \"smoke_env_gate\"}))\n\
+      \        return 3\n\n    # Audit-log dispatch_start with the inputs that don't\
+      \ require codex execution\n    _log_dispatch(log_path, {\n        \"event\"\
+      : \"dispatch_start\",\n        \"iteration_id\": iteration_id,\n        \"reviewer_id\"\
+      : reviewer_id,\n        \"pass_id\": pass_id,\n        \"smoke\": ns.smoke,\n\
+      \        \"timeout_seconds\": ns.timeout_seconds,\n        \"codex_bin\": ns.codex_bin,\n\
+      \        \"schema_path\": str(schema_path),\n        # v1.10.5: visibility TUI\
+      \ / stall watchdog read this to display what\n        # the current dispatch\
+      \ is reviewing. Hash isn't available yet (file\n        # hasn't been read);\
+      \ it lands in dispatch_done / dispatch_failed.\n        \"review_target_path\"\
+      : review_target_path_str,\n    })\n\n    # Per v1.10.4 F3: initialize provenance\
+      \ vars to None BEFORE try block so\n    # dispatch_failed paths can include\
+      \ whatever was computed before failure.\n    prompt_sha: str | None = None\n\
+      \    schema_sha: str | None = None\n    goal_packet_sha: str | None = None\n\
+      \    scope_sig: str | None = None\n    codex_version: str | None = None\n  \
+      \  output_sha: str | None = None\n    # v1.10.5: review_target_hash gets stamped\
+      \ after the file is read; init to\n    # None so dispatch_failed includes it\
+      \ even when the read never happened.\n    review_target_hash: str | None = None\n\
+      \n    def _failed_event(error_type: str, error: str) -> dict:\n        \"\"\"\
+      Per v1.10.4 F3: dispatch_failed events carry every provenance field\n      \
+      \  that was successfully computed before the failure, plus reviewer/pass ids.\n\
+      \        Never logs raw prompt / output / goal_packet content.\"\"\"\n     \
+      \   ev = {\n            \"event\": \"dispatch_failed\",\n            \"error_type\"\
+      : error_type,\n            \"error\": error,\n            \"reviewer_id\": reviewer_id,\n\
+      \            \"pass_id\": pass_id,\n            \"iteration_id\": iteration_id,\n\
+      \            \"timeout_seconds\": ns.timeout_seconds,\n        }\n        #\
+      \ Include only the hashes that were actually computed.\n        for k, v in\
+      \ (\n            (\"codex_version\", codex_version),\n            (\"prompt_sha256\"\
+      , prompt_sha),\n            (\"output_sha256\", output_sha),\n            (\"\
+      schema_sha256\", schema_sha),\n            (\"goal_packet_sha256\", goal_packet_sha),\n\
+      \            (\"scope_signature\", scope_sig),\n            # v1.10.5: review-target\
+      \ identity so dispatch_failed events can be\n            # correlated to the\
+      \ target that was being reviewed when the failure\n            # fired. Path\
+      \ is known pre-try; hash only after the file is read.\n            (\"review_target_path\"\
+      , review_target_path_str),\n            (\"review_target_hash\", review_target_hash),\n\
+      \        ):\n            if v is not None:\n                ev[k] = v\n    \
+      \    return ev\n\n    try:\n        # iter-0010 codex-rev-001 (medium): route\
+      \ goal_packet parsing through\n        # the shared _load_goal_packet helper\
+      \ so root-type validation is the\n        # single source of truth across all\
+      \ adapters. text is read separately\n        # because provenance needs the\
+      \ raw bytes for goal_packet_sha256.\n        goal_packet_text = goal_packet_path.read_text(encoding=\"\
+      utf-8\")\n        goal_packet = _load_goal_packet(goal_packet_path)\n      \
+      \  template_text = _load_template(template_path)\n\n        # review_target_hash\
+      \ is pre-initialized to None outside the try block\n        # (v1.10.5) so dispatch_failed\
+      \ events can include it.\n        review_packet_data: dict | None = None\n \
+      \       if review_target_normalized is not None:\n            review_target_text\
+      \ = review_target_normalized.read_text(encoding=\"utf-8\")\n            review_target_hash\
+      \ = _sha256_str(review_target_text)\n            # iter-0021: when --review-target\
+      \ points at a YAML review-packet\n            # (the new convention), parse\
+      \ it so {touched_files_contents_block}\n            # can be substituted in\
+      \ _build_prompt. If parsing fails (e.g., the\n            # operator passed\
+      \ a raw .diff or .patch file), silently fall back\n            # to the legacy\
+      \ behavior — the prompt still renders, just without\n            # embedded\
+      \ file contents.\n            if review_target_normalized.suffix.lower() in\
+      \ (\".yaml\", \".yml\"):\n                try:\n                    candidate\
+      \ = yaml.safe_load(review_target_text)\n                    if isinstance(candidate,\
+      \ dict):\n                        review_packet_data = candidate\n         \
+      \       except yaml.YAMLError:\n                    review_packet_data = None\n\
+      \n        prompt = _build_prompt(\n            goal_packet,\n            template_text,\n\
+      \            iteration_dir=str(iter_dir),\n            review_packet_path=str(goal_packet_path),\n\
+      \            review_target_path=str(review_target_normalized) if review_target_normalized\
+      \ else None,\n            review_target_hash=review_target_hash,\n         \
+      \   review_packet=review_packet_data,\n        )\n        schema_text = schema_path.read_text(encoding=\"\
+      utf-8\")\n\n        # Compute provenance hashes BEFORE codex call (so we have\
+      \ them even if codex fails)\n        prompt_sha = _sha256_str(prompt)\n    \
+      \    schema_sha = _sha256_str(schema_text)\n        goal_packet_sha = _sha256_str(goal_packet_text)\n\
+      \        scope_sig = ((goal_packet or {}).get(\"authorization\", {}) or {}).get(\"\
+      scope_signature\", \"\")\n\n        codex_version = _get_codex_version(ns.codex_bin)\n\
+      \        codex_output = _invoke_codex(\n            prompt=prompt,\n       \
+      \     codex_bin=ns.codex_bin,\n            timeout_seconds=ns.timeout_seconds,\n\
+      \            repo_root=repo_root,\n            schema_path=schema_path,\n  \
+      \          # iter-0037: pass log_path + anchors so streaming events + heartbeats\n\
+      \            # + abort-signal-file polling fire. Tests that don't supply these\n\
+      \            # operate in legacy mode (subprocess.run-compat, no streaming events).\n\
+      \            log_path=log_path,\n            anchors={\n                \"iteration_id\"\
+      : iteration_id,\n                \"reviewer_id\": reviewer_id,\n           \
+      \     \"pass_id\": pass_id,\n            },\n        )\n        output_sha =\
+      \ _sha256_str(codex_output)\n\n        # Per Task #24 (iter-0014): pass goal_packet\
+      \ so patch_proposal scope\n        # checks (allowed_files / forbidden_files)\
+      \ can run.\n        # Per iter-0022: pass review_packet so helper stamps patch_proposal.base_sha\n\
+      \        # from review_packet.defect_target.base_sha (canonical operator-stamped\
+      \ value)\n        # instead of trusting codex's hallucinated emission.\n   \
+      \     # iter-0026 F1: pass repo_root so the per-patch base_sha stamp uses\n\
+      \        # disk bytes (matches apply.codex_patch's bundle_sha contract; eliminates\n\
+      \        # the CRLF mismatch surfaced in iter-0025).\n        # iter-0028: route\
+      \ output parsing based on --mode. Review mode uses\n        # the existing review-shape\
+      \ parser; proposal mode uses a separate\n        # proposal-shape parser that\
+      \ validates against codex_proposal_schema.\n        if ns.mode == \"proposal\"\
+      :\n            # Thread the operator's effective --schema override through so\n\
+      \            # a custom proposal schema actually constrains the validator.\n\
+      \            extracted = _parse_codex_proposal_output(codex_output, schema_path=schema_path)\n\
+      \        else:\n            extracted = _parse_codex_output(\n             \
+      \   codex_output,\n                goal_packet=goal_packet,\n              \
+      \  review_packet=review_packet_data,\n                repo_root=repo_root,\n\
+      \            )\n        # v1.10.5: persist review_target_path + review_target_hash\
+      \ in sealed\n        # provenance so audit reconstruction and the visibility\
+      \ TUI can show\n        # which target was reviewed. (path is computed pre-try\
+      \ at function\n        # top; hash was computed at line ~1340 after reading\
+      \ review_target.)\n        provenance = {\n            \"codex_version\": codex_version,\n\
+      \            \"prompt_sha256\": prompt_sha,\n            \"output_sha256\":\
+      \ output_sha,\n            \"schema_sha256\": schema_sha,\n            \"goal_packet_sha256\"\
+      : goal_packet_sha,\n            \"scope_signature\": scope_sig,\n          \
+      \  \"review_target_path\": review_target_path_str,\n            \"review_target_hash\"\
+      : review_target_hash,\n            # iter-0028 codex pass-6 rev-002: record\
+      \ mode for parity with gemini.\n            \"mode\": ns.mode,\n        }\n\
+      \        packet = _build_sealed_packet(extracted, iteration_id, reviewer_id,\
+      \ pass_id, provenance=provenance)\n        result = _seal_via_t6(packet, iter_dir)\n\
+      \    except (CodexInvocationError, CodexOutputParseError) as exc:\n        _log_dispatch(log_path,\
+      \ _failed_event(type(exc).__name__, str(exc)))\n        print(json.dumps({\"\
+      ok\": False, \"error\": str(exc), \"error_type\": type(exc).__name__}))\n  \
+      \      return 1\n    except Exception as exc:\n        _log_dispatch(log_path,\
+      \ _failed_event(type(exc).__name__, str(exc)))\n        print(json.dumps({\"\
+      ok\": False, \"error\": str(exc), \"error_type\": type(exc).__name__}))\n  \
+      \      return 2\n\n    # Per v1.10.4 F2: dispatch_done logs the IMMUTABLE archive\
+      \ path + the audit\n    # event id, in addition to the local mirror path. The\
+      \ local mirror is\n    # overwritten by each successful re-run; the archive\
+      \ copy is the audit anchor.\n    _log_dispatch(log_path, {\n        \"event\"\
+      : \"dispatch_done\",\n        \"iteration_id\": iteration_id,\n        \"reviewer_id\"\
+      : reviewer_id,\n        \"pass_id\": pass_id,\n        \"codex_version\": codex_version,\n\
+      \        \"timeout_seconds\": ns.timeout_seconds,\n        \"exit_code\": 0,\n\
+      \        \"prompt_sha256\": prompt_sha,\n        \"output_sha256\": output_sha,\n\
+      \        \"schema_sha256\": schema_sha,\n        \"goal_packet_sha256\": goal_packet_sha,\n\
+      \        \"scope_signature\": scope_sig,\n        # v1.10.5: review-target identity\
+      \ in the audit event so the visibility\n        # TUI / watchdog / log scanners\
+      \ can identify what was reviewed without\n        # opening the sealed packet.\n\
+      \        \"review_target_path\": review_target_path_str,\n        \"review_target_hash\"\
+      : review_target_hash,\n        \"packet_sha256\": result.get(\"packet_sha256\"\
+      ),\n        \"archive_sealed_path\": result.get(\"archive_sealed_path\"),  #\
+      \ F2: immutable T6 archive\n        \"local_mirror_path\": result.get(\"sealed_path\"\
+      ),            # F2: convenience copy\n        \"sealed_path\": result.get(\"\
+      sealed_path\"),                  # backcompat\n        \"t6_audit_event_id\"\
+      : result.get(\"audit_event_id\"),         # F2: T6's own audit anchor\n    })\n\
+      \    print(json.dumps({\"ok\": True, \"pass_id\": pass_id, **result}))\n   \
+      \ return 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
     consensus_mcp/tests/test_dispatch_codex_streaming.py: "\"\"\"Regression tests\
       \ for iter-0037 streaming/heartbeat/abort features of\n`_invoke_codex` in `consensus_mcp/_dispatch_codex.py`.\n\
-      \nThese tests use:\n  - `_ControllableClock` — manual `time_fn` substitute;\
-      \ tests advance the\n    clock to drive heartbeat / silence / wall-time logic\
-      \ without real waits.\n  - `StreamingFakeCodexPopen` — Popen-shaped fake; `stdout.readline()`\
-      \ returns\n    scheduled bytes when the controllable clock has reached the scheduled\n\
-      \    time, else blocks briefly (real time, not mocked) until either the next\n\
-      \    schedule time is reached or the proc is told to exit.\n\nReal `time.sleep(poll_interval)`\
-      \ is left as actual time. Tests use a tiny\npoll_interval (0.01s) plus short\
-      \ real sleeps between clock-advances so the\nreader thread can drain. This is\
-      \ acceptable: the *decision* logic in\n_invoke_codex is driven entirely by `time_fn`;\
-      \ we only need a few ms of\nreal time for thread scheduling.\n\"\"\"\nfrom __future__\
-      \ import annotations\n\nimport json as _json\nimport os\nimport sys\nimport\
-      \ threading\nimport time\nfrom pathlib import Path\n\nimport pytest\n\nREPO_ROOT\
-      \ = Path(__file__).resolve().parent.parent.parent\n\nfrom consensus_mcp import\
-      \ _dispatch_codex  # noqa: E402\n\n\nSCHEMA_PATH = REPO_ROOT / \"consensus_mcp\"\
-      \ / \"dispatch_templates\" / \"codex_review_schema.json\"\n\n\n# v1.15.8 Q2(c)\
-      \ interim (Workflow A converged:\n# iteration-v1158-flaky-ci-and-locked-append).\
-      \ These tests drive the\n# `_invoke_codex` runner in a daemon thread and advance\
-      \ a controllable\n# clock with real `time.sleep` ticks, then `join` and assert\
-      \ the thread\n# finished/aborted. On loaded Windows GitHub-Actions runners the\
-      \ runner\n# thread is not scheduled enough within the wall-clock budget → \"\
-      runner\n# did not finish\" (same commit green on Linux CI + local; the logic\
-      \ is\n# driven by the INJECTED time_fn, so it is NOT a Windows product path\
-      \ —\n# purely runner scheduling). Skipped ONLY on Windows + GitHub Actions:\n\
-      # Linux CI runs them every push and local Windows dev still runs them,\n# so\
-      \ the regression coverage is retained. NAMED FOLLOW-UP: rework\n# `_ControllableClock`\
-      \ into a deterministic synchronizing clock\n# (test↔runner handshake, no real\
-      \ sleeps) so these run everywhere and\n# this skip can be dropped. Tracked:\
-      \ docs/advisories.md 2026-05-15.\n_FLAKY_WINDOWS_CI = pytest.mark.skipif(\n\
-      \    sys.platform == \"win32\" and os.environ.get(\"GITHUB_ACTIONS\") == \"\
-      true\",\n    reason=\"v1.15.8 Q2(c): clock.advance + real time.sleep + thread-join\
-      \ \"\n    \"timing race on loaded Windows GitHub runners (not a product defect;\
-      \ \"\n    \"green on Linux CI + local). Named follow-up: deterministic \"\n\
-      \    \"synchronizing _ControllableClock.\",\n)\n\n\n# --------------------------------------------------------------------------\n\
+      \nv1.15.9 (iteration-v1159-deterministic-clock-harness, Workflow A\nconverged\
+      \ — claude+codex+gemini, weighted-synthesis): the harness is\nnow fully DETERMINISTIC.\
+      \ There are no real `time.sleep` waits on the\ndrive path and no \"advance the\
+      \ clock + hope the daemon runner is\nscheduled within a wall-clock budget +\
+      \ join(timeout)\" — the exact\npattern that flaked on loaded Windows GitHub\
+      \ runners and forced the\nv1.15.8 Q2(c) `@_FLAKY_WINDOWS_CI` interim skip (now\
+      \ DELETED).\n\nMechanism:\n  - `_SyncClock` — a `threading.Condition`-backed\
+      \ virtual clock.\n    `now()/advance()` are unchanged in spirit; `sleep(dt)`\
+      \ is\n    injected into production `_invoke_codex` via its private,\n    keyword-only\
+      \ `_sleep=` seam (defaults to `time.sleep`, so\n    production behavior is unchanged)\
+      \ so the poll loop has an\n    explicit happens-before with the test driver\
+      \ instead of racing\n    real time. `wait_runner_parked()` gives the heartbeat-cadence\n\
+      \    test lockstep; `wait_for(predicate)` keys on the durable\n    emitted `dispatch-log.jsonl`\
+      \ events the assertions already use;\n    `release_all()` is a root-cause-INDEPENDENT\
+      \ teardown safeguard:\n    any failed/timed-out wait releases every waiter,\
+      \ terminates the\n    fake process, and fails LOUD with harness state — a misdiagnosed\n\
+      \    or deadlocked harness can never wedge a CI job.\n  - `_FakePipeReader`\
+      \ waits on the same clock (no real 5 ms poll);\n    `StreamingFakeCodexPopen`\
+      \ notifies the clock on exit/terminate/\n    kill so reader threads are woken\
+      \ deterministically.\n  - `test_stderr_drain_prevents_deadlock` keeps REAL stdout/stderr\n\
+      \    reader threads (the behavior it exists to prove).\n\nDeadlock-free invariant:\
+      \ every blocking wait has a guaranteed\nwaker on EVERY path (advance, runner-parked,\
+      \ log-event, proc-exit,\nexception, and the absolute safety ceiling -> release_all()).\n\
+      \"\"\"\nfrom __future__ import annotations\n\nimport json as _json\nimport threading\n\
+      import time\nfrom pathlib import Path\n\nimport pytest\n\nREPO_ROOT = Path(__file__).resolve().parent.parent.parent\n\
+      \nfrom consensus_mcp import _dispatch_codex  # noqa: E402\n\n\nSCHEMA_PATH =\
+      \ REPO_ROOT / \"consensus_mcp\" / \"dispatch_templates\" / \"codex_review_schema.json\"\
+      \n\n# Absolute real-time safety ceiling for any harness wait. Dozens x\n# normal;\
+      \ under correct operation NO wait ever approaches it (every\n# wakeup is Condition-notify\
+      \ driven). If one is hit, the handshake is\n# broken -> release_all() fails\
+      \ the test LOUD and fast instead of\n# hanging CI. This is the converged independent_safeguard,\
+      \ not a\n# correctness-timing dependency.\n_CEILING = 20.0\n\n# Re-poll bound\
+      \ on every Condition.wait. The design is notify-driven\n# (advance / sleep progress-beat\
+      \ / proc-exit / thread-death all\n# notify_all), so under correct operation\
+      \ a waiter wakes in\n# microseconds. _REPOLL is purely a lost-wakeup SAFETY\
+      \ NET: a missed\n# notify self-heals in ~50 ms instead of stalling to _CEILING.\n\
+      # Correctness NEVER depends on it — every wait re-checks an exact\n# predicate;\
+      \ _REPOLL only bounds wakeup LATENCY, never pass/fail\n# (this is what keeps\
+      \ the harness deterministic, not wall-clock-timed).\n_REPOLL = 0.05\n\n\n# --------------------------------------------------------------------------\n\
       # Test helpers\n# --------------------------------------------------------------------------\n\
-      \n\nclass _ControllableClock:\n    \"\"\"Manually-advanced monotonic clock for\
-      \ `time_fn=` injection.\"\"\"\n\n    def __init__(self, start: float = 1000.0):\n\
-      \        self.t = float(start)\n        self._lock = threading.Lock()\n\n  \
-      \  def now(self) -> float:\n        with self._lock:\n            return self.t\n\
-      \n    def advance(self, dt: float) -> None:\n        with self._lock:\n    \
-      \        self.t += float(dt)\n\n\nclass _FakeStdin:\n    \"\"\"Bytes-capturing\
-      \ stdin replacement; closed flag used to gate proc exit.\"\"\"\n\n    def __init__(self):\n\
-      \        self.buf = bytearray()\n        self.closed = False\n\n    def write(self,\
-      \ data):\n        if self.closed:\n            raise BrokenPipeError(\"stdin\
-      \ closed\")\n        self.buf.extend(data)\n        return len(data)\n\n   \
-      \ def close(self):\n        self.closed = True\n\n    def flush(self):\n   \
-      \     pass\n\n\nclass _FakePipeReader:\n    \"\"\"stdout/stderr replacement.\n\
-      \n    `readline()` returns the next scheduled `bytes` when the controllable\n\
-      \    clock has reached the scheduled time. Until then it sleeps (real time)\
-      \ in\n    short ticks. When the parent fake proc is marked exited and the schedule\n\
-      \    is drained, `readline()` returns `b\"\"` so `iter(readline, b\"\")` exits\
-      \ the\n    reader thread (matching real Popen pipe behavior).\n    \"\"\"\n\n\
-      \    def __init__(self, schedule, parent):\n        # schedule: list[tuple[float,\
-      \ bytes]] — clock-relative-to-start time + payload\n        # parent: StreamingFakeCodexPopen\
-      \ — for clock + exit state.\n        self._schedule = list(schedule)\n     \
-      \   self._idx = 0\n        self._parent = parent\n        self._real_tick =\
-      \ 0.005\n\n    def readline(self):\n        while True:\n            # If proc\
-      \ has exited and we've drained the schedule, EOF.\n            if self._idx\
-      \ >= len(self._schedule):\n                if self._parent._exited:\n      \
-      \              return b\"\"\n                # Wait for either more schedule\
-      \ entries (none coming) or exit.\n                time.sleep(self._real_tick)\n\
-      \                continue\n            sched_time, payload = self._schedule[self._idx]\n\
-      \            now_rel = self._parent._clock.now() - self._parent._t0\n      \
-      \      if now_rel >= sched_time:\n                self._idx += 1\n         \
-      \       return payload\n            # Not yet time; brief real sleep, then re-check.\n\
-      \            # Also bail out if proc was terminated mid-wait.\n            if\
-      \ self._parent._exited:\n                return b\"\"\n            time.sleep(self._real_tick)\n\
-      \n\nclass StreamingFakeCodexPopen:\n    \"\"\"Popen-shaped fake.\n\n    On instantiation,\
-      \ captures the `-o <out_file>` arg so `.close_stdin_writes_output`\n    can\
-      \ stage a payload there at exit time (mimicking real codex's output-file write).\n\
-      \n    Constructor uses Popen's positional shape so the real production code's\n\
-      \    `popen_factory(cmd, stdin=..., stdout=..., stderr=..., bufsize=...)` call\n\
-      \    works unchanged.\n    \"\"\"\n\n    def __init__(\n        self,\n    \
-      \    cmd,\n        stdin=None,\n        stdout=None,\n        stderr=None,\n\
-      \        bufsize=0,\n        *,\n        _scheduled_stdout=None,\n        _scheduled_stderr=None,\n\
-      \        _returncode: int = 0,\n        _exit_at: float = 1.0,\n        _clock:\
-      \ _ControllableClock,\n        _output_payload: str = '{\"ok\": true}',\n  \
-      \      **_popen_kwargs,  # iter-0039: absorb creationflags / start_new_session\n\
-      \    ):\n        self._cmd = cmd\n        self._clock = _clock\n        self._t0\
-      \ = _clock.now()\n        self._exit_at = float(_exit_at)\n        self._returncode_on_exit\
-      \ = int(_returncode)\n        self._exited = False\n        self.returncode\
-      \ = None\n        self._output_payload = _output_payload\n        # Find -o\
-      \ <out_file> in cmd.\n        self._out_file = None\n        for i, tok in enumerate(cmd):\n\
-      \            if tok == \"-o\" and i + 1 < len(cmd):\n                self._out_file\
+      \n\nclass _SyncClock:\n    \"\"\"Deterministic virtual clock with an explicit\
+      \ test<->runner\n    happens-before. Replaces the old real-sleep-polled\n  \
+      \  `_ControllableClock`.\"\"\"\n\n    def __init__(self, start: float = 1000.0):\n\
+      \        self.t = float(start)\n        self._cond = threading.Condition()\n\
+      \        self._epoch = 0          # bumped by every advance()\n        self._park_epoch\
+      \ = -1    # max epoch a sleep() caller parked under\n        self._sleepers\
+      \ = 0       # threads currently parked in sleep()\n        self._released =\
+      \ False\n\n    # -- production-facing (time_fn / _sleep injection) --------------\n\
+      \n    def now(self) -> float:\n        with self._cond:\n            return\
+      \ self.t\n\n    def sleep(self, _dt: float) -> None:\n        \"\"\"Injected\
+      \ as production `_invoke_codex(_sleep=...)`. Park the\n        caller until\
+      \ virtual time passes its wake target OR the clock\n        is released. Records\
+      \ the park epoch + sleeper count so the\n        driver can detect \"the runner\
+      \ consumed the latest advance\".\n        Emits a progress beat (notify) so\
+      \ `wait_for` re-checks its\n        predicate immediately after each poll iteration.\"\
+      \"\"\n        deadline = time.monotonic() + _CEILING\n        with self._cond:\n\
+      \            wake_at = self.t + float(_dt)\n            while self.t < wake_at\
+      \ and not self._released:\n                if time.monotonic() >= deadline:\n\
+      \                    return  # safety: never wedge the runner forever\n    \
+      \            self._sleepers += 1\n                self._park_epoch = max(self._park_epoch,\
+      \ self._epoch)\n                self._cond.notify_all()\n                self._cond.wait(_REPOLL)\n\
+      \                self._sleepers -= 1\n\n    # -- driver-facing ----------------------------------------------\n\
+      \n    def advance(self, dt: float) -> int:\n        with self._cond:\n     \
+      \       self.t += float(dt)\n            self._epoch += 1\n            self._cond.notify_all()\n\
+      \            return self._epoch\n\n    def wait_runner_parked(self, after_epoch:\
+      \ int) -> bool:\n        \"\"\"Lockstep: block until a sleep() caller has parked\
+      \ having\n        observed >= after_epoch (ran a full poll iteration after that\n\
+      \        advance). Guaranteed waker: sleep()'s notify, or the ceiling.\"\"\"\
+      \n        deadline = time.monotonic() + _CEILING\n        with self._cond:\n\
+      \            while not self._released and not (\n                self._sleepers\
+      \ > 0 and self._park_epoch >= after_epoch\n            ):\n                remaining\
+      \ = deadline - time.monotonic()\n                if remaining <= 0:\n      \
+      \              return False\n                self._cond.wait(min(remaining,\
+      \ _REPOLL))\n            return not self._released\n\n    def wait_for(self,\
+      \ predicate) -> bool:\n        \"\"\"Block until predicate() is true OR released\
+      \ OR ceiling.\n        predicate reads external state (dispatch-log/holder)\
+      \ and does\n        NOT take this lock. Re-checked on every notify — the runner\n\
+      \        emits a progress beat each poll iteration via sleep().\"\"\"\n    \
+      \    deadline = time.monotonic() + _CEILING\n        with self._cond:\n    \
+      \        while not self._released:\n                if predicate():\n      \
+      \              return True\n                remaining = deadline - time.monotonic()\n\
+      \                if remaining <= 0:\n                    return False\n    \
+      \            self._cond.wait(min(remaining, _REPOLL))\n            return predicate()\n\
+      \n    def wait_byte_due(self, sched_rel: float, t0: float, parent_exited) ->\
+      \ bool:\n        \"\"\"Reader-side wait: True when (now - t0) >= sched_rel;\
+      \ False\n        if the parent proc exited or the clock was released. Does NOT\n\
+      \        touch the sleeper/epoch state (that is the runner poll loop's\n   \
+      \     alone). Woken by advance()/terminate()/kill()/release_all().\"\"\"\n \
+      \       deadline = time.monotonic() + _CEILING\n        with self._cond:\n \
+      \           while not self._released:\n                if (self.t - t0) >= sched_rel:\n\
+      \                    return True\n                if parent_exited():\n    \
+      \                return False\n                remaining = deadline - time.monotonic()\n\
+      \                if remaining <= 0:\n                    return False\n    \
+      \            self._cond.wait(min(remaining, _REPOLL))\n            return (self.t\
+      \ - t0) >= sched_rel\n\n    def notify(self) -> None:\n        \"\"\"Wake all\
+      \ waiters (used on proc exit / runner-thread death).\"\"\"\n        with self._cond:\n\
+      \            self._cond.notify_all()\n\n    def is_released(self) -> bool:\n\
+      \        with self._cond:\n            return self._released\n\n    def release_all(self)\
+      \ -> None:\n        \"\"\"Independent safeguard: free EVERY waiter immediately\
+      \ so a\n        broken handshake fails fast/loud instead of wedging CI. The\n\
+      \        fake proc's poll() also observes is_released() and\n        self-terminates,\
+      \ so the production runner loop actually EXITS\n        (it does not just spin\
+      \ on a never-exiting proc) — without that,\n        release_all only unblocked\
+      \ the driver while leaking a spinning\n        daemon (codex-v1159-wfb-4 codex-rev-001,\
+      \ integrated).\"\"\"\n        with self._cond:\n            self._released =\
+      \ True\n            self._cond.notify_all()\n\n\nclass _FakeStdin:\n    \"\"\
+      \"Bytes-capturing stdin replacement; closed flag used to gate proc exit.\"\"\
+      \"\n\n    def __init__(self):\n        self.buf = bytearray()\n        self.closed\
+      \ = False\n\n    def write(self, data):\n        if self.closed:\n         \
+      \   raise BrokenPipeError(\"stdin closed\")\n        self.buf.extend(data)\n\
+      \        return len(data)\n\n    def close(self):\n        self.closed = True\n\
+      \n    def flush(self):\n        pass\n\n\nclass _FakePipeReader:\n    \"\"\"\
+      stdout/stderr replacement. `readline()` returns the next\n    scheduled `bytes`\
+      \ once the virtual clock has reached its scheduled\n    time, waiting deterministically\
+      \ on the `_SyncClock` (no real\n    polling). Returns `b\"\"` (EOF) when the\
+      \ parent proc has exited and\n    the schedule is drained, so production's `iter(readline,\
+      \ b\"\")`\n    reader threads terminate exactly like real Popen pipes.\"\"\"\
+      \n\n    def __init__(self, schedule, parent):\n        # schedule: list[tuple[float,\
+      \ bytes]] — clock-relative time + payload\n        self._schedule = list(schedule)\n\
+      \        self._idx = 0\n        self._parent = parent\n\n    def readline(self):\n\
+      \        # codex-v1159-wfb-4 codex-rev-003 (integrated): production's\n    \
+      \    # reader thread calls readline() in a tight `iter(readline,\n        #\
+      \ b\"\")` loop — so a call here happens-AFTER it processed the\n        # previous\
+      \ line into a `dispatch_streamed_line` event. Notify\n        # the clock so\
+      \ event-count waits (`_drive_streaming` /\n        # `_drive_post_stream`) have\
+      \ a TRUE happens-before waker for\n        # reader-thread-produced events,\
+      \ instead of falling back to\n        # the _REPOLL safety net (the reader does\
+      \ not otherwise notify;\n        # the runner's sleep()-beat is not ordered\
+      \ after this thread).\n        self._parent._clock.notify()\n        while True:\n\
+      \            if self._idx >= len(self._schedule):\n                # Schedule\
+      \ drained: EOF once the proc has exited.\n                if self._parent._exited:\n\
+      \                    return b\"\"\n                if not self._parent._clock.wait_for(\n\
+      \                    lambda: self._parent._exited\n                ):\n    \
+      \                return b\"\"  # released/ceiling -> behave as EOF\n       \
+      \         return b\"\"\n            sched_time, payload = self._schedule[self._idx]\n\
+      \            # A real pipe still yields bytes that were written BEFORE the\n\
+      \            # process exited: deliver any already-due scheduled line even\n\
+      \            # if the proc has since exited. Only a line whose scheduled\n \
+      \           # time had NOT arrived when the proc exited is \"never written\"\
+      \n            # → EOF. (Bug fixed v1.15.9: returning EOF on _exited before\n\
+      \            # draining due bytes silently lost streamed lines.)\n         \
+      \   if (self._parent._clock.now() - self._parent._t0) >= sched_time:\n     \
+      \           self._idx += 1\n                return payload\n            if self._parent._exited:\n\
+      \                return b\"\"  # proc exited before this byte's scheduled time\n\
+      \            due = self._parent._clock.wait_byte_due(\n                sched_time,\
+      \ self._parent._t0, lambda: self._parent._exited\n            )\n          \
+      \  if not due:\n                return b\"\"  # proc exited / released before\
+      \ this byte was due\n            self._idx += 1\n            return payload\n\
+      \n\nclass StreamingFakeCodexPopen:\n    \"\"\"Popen-shaped fake. Constructor\
+      \ uses Popen's positional shape so\n    production `popen_factory(cmd, stdin=...,\
+      \ stdout=..., stderr=...,\n    bufsize=...)` works unchanged. Exit state transitions\
+      \ notify the\n    `_SyncClock` so reader threads + the driver wake deterministically.\"\
+      \"\"\n\n    def __init__(\n        self,\n        cmd,\n        stdin=None,\n\
+      \        stdout=None,\n        stderr=None,\n        bufsize=0,\n        *,\n\
+      \        _scheduled_stdout=None,\n        _scheduled_stderr=None,\n        _returncode:\
+      \ int = 0,\n        _exit_at: float = 1.0,\n        _clock: _SyncClock,\n  \
+      \      _output_payload: str = '{\"ok\": true}',\n        **_popen_kwargs,  #\
+      \ iter-0039: absorb creationflags / start_new_session\n    ):\n        self._cmd\
+      \ = cmd\n        self._clock = _clock\n        self._t0 = _clock.now()\n   \
+      \     self._exit_at = float(_exit_at)\n        self._returncode_on_exit = int(_returncode)\n\
+      \        self._exited = False\n        # codex-v1159-wfb-3 codex-rev-001 (BLOCKING):\
+      \ record the\n        # SIGTERM/terminate side-effect so the operator-abort\
+      \ test can\n        # assert _terminate_process_tree actually ran (H2 names\
+      \ SIGTERM\n        # as required coverage — a regression that stopped killing\
+      \ the\n        # process must FAIL, not silently pass).\n        self._terminated\
+      \ = False\n        self.returncode = None\n        self._output_payload = _output_payload\n\
+      \        self._out_file = None\n        for i, tok in enumerate(cmd):\n    \
+      \        if tok == \"-o\" and i + 1 < len(cmd):\n                self._out_file\
       \ = cmd[i + 1]\n                break\n        self.stdin = _FakeStdin()\n \
       \       self.stdout = _FakePipeReader(_scheduled_stdout or [], self)\n     \
       \   self.stderr = _FakePipeReader(_scheduled_stderr or [], self)\n\n    def\
@@ -95,271 +929,461 @@ defect_target:
       \ == 0:\n            try:\n                Path(self._out_file).write_text(self._output_payload,\
       \ encoding=\"utf-8\")\n            except OSError:\n                pass\n\n\
       \    def poll(self):\n        if self._exited:\n            return self.returncode\n\
-      \        now_rel = self._clock.now() - self._t0\n        if now_rel >= self._exit_at:\n\
-      \            self.returncode = self._returncode_on_exit\n            self._exited\
-      \ = True\n            self._maybe_write_output()\n            return self.returncode\n\
-      \        return None\n\n    def terminate(self):\n        if not self._exited:\n\
-      \            self.returncode = -15  # SIGTERM\n            self._exited = True\n\
-      \            # Do NOT stage output payload on termination — matches real codex.\n\
-      \n    def kill(self):\n        if not self._exited:\n            self.returncode\
-      \ = -9\n            self._exited = True\n\n    def send_signal(self, sig):\n\
-      \        \"\"\"iter-0039: _terminate_process_tree calls send_signal(CTRL_BREAK_EVENT)\n\
+      \        # codex-v1159-wfb-4 codex-rev-001 (integrated): when the clock\n  \
+      \      # is released (a harness-timeout teardown), the fake proc MUST\n    \
+      \    # exit so the production poll loop terminates and the daemon\n        #\
+      \ runner thread actually dies — instead of _sleep returning\n        # immediately\
+      \ while proc.poll() stays None forever (a spinning\n        # leak after the\
+      \ driver raised). release_all() owns the single\n        # teardown signal;\
+      \ the fake observes it here (poll() is called\n        # every production iteration),\
+      \ so no second coordination\n        # surface / registration list is introduced.\n\
+      \        if self._clock.is_released():\n            self._terminated = True\n\
+      \            self._exited = True\n            self.returncode = -15\n      \
+      \      return self.returncode\n        now_rel = self._clock.now() - self._t0\n\
+      \        if now_rel >= self._exit_at:\n            self.returncode = self._returncode_on_exit\n\
+      \            self._exited = True\n            self._maybe_write_output()\n \
+      \           self._clock.notify()  # wake reader threads (EOF) + driver\n   \
+      \         return self.returncode\n        return None\n\n    def terminate(self):\n\
+      \        self._terminated = True\n        if not self._exited:\n           \
+      \ self.returncode = -15  # SIGTERM\n            self._exited = True\n      \
+      \      self._clock.notify()\n            # Do NOT stage output payload on termination\
+      \ — matches real codex.\n\n    def kill(self):\n        self._terminated = True\n\
+      \        if not self._exited:\n            self.returncode = -9\n          \
+      \  self._exited = True\n            self._clock.notify()\n\n    def send_signal(self,\
+      \ sig):\n        \"\"\"iter-0039: _terminate_process_tree calls send_signal(CTRL_BREAK_EVENT)\n\
       \        on Windows and os.killpg on POSIX. The fake accepts any signal and\n\
       \        treats it as terminate (the test cares about the exit path, not the\n\
       \        signal-delivery mechanism).\"\"\"\n        self.terminate()\n\n   \
       \ @property\n    def pid(self):\n        \"\"\"`_terminate_process_tree` does\
       \ os.killpg(os.getpgid(proc.pid))\n        on POSIX. Return a synthetic, never-live\
       \ PID so os.getpgid raises\n        ProcessLookupError and the production OSError-fallback\n\
-      \        (proc.terminate()) runs. The previous value `0` was WRONG — pid 0\n\
-      \        means \"the caller's own process group\", so on Linux CI this fake\n\
-      \        made the abort path SIGTERM the pytest/runner job itself\n        (\"\
-      operation canceled\"). Belt-and-suspenders: the suite-wide\n        conftest\
-      \ guard also neutralizes os.killpg/os.getpgid.\"\"\"\n        return 2_147_483_647\n\
-      \n    def wait(self, timeout=None):\n        # We control exit via clock + terminate/kill;\
-      \ this is a no-op.\n        # The production code only calls wait() after terminate/kill,\
-      \ by which\n        # point _exited is already True. Return returncode.\n  \
-      \      return self.returncode\n\n\ndef _make_factory(\n    clock: _ControllableClock,\n\
+      \        (proc.terminate()) runs. (pid 0 == the caller's own process group\n\
+      \        — that previously made the abort path SIGTERM the pytest job\n    \
+      \    itself. The suite-wide conftest guard also neutralizes\n        os.killpg/os.getpgid.)\"\
+      \"\"\n        return 2_147_483_647\n\n    def wait(self, timeout=None):\n  \
+      \      # Exit is controlled via clock + terminate/kill; production only\n  \
+      \      # calls wait() after terminate/kill, by which point _exited is set.\n\
+      \        return self.returncode\n\n\ndef _make_factory(\n    clock: _SyncClock,\n\
       \    *,\n    scheduled_stdout=None,\n    scheduled_stderr=None,\n    returncode:\
       \ int = 0,\n    exit_at: float = 1.0,\n    output_payload: str = '{\"ok\": true}',\n\
-      ):\n    \"\"\"Build a popen_factory closure for injection into `_invoke_codex`.\"\
-      \"\"\n\n    def factory(cmd, **kwargs):\n        return StreamingFakeCodexPopen(\n\
-      \            cmd,\n            _scheduled_stdout=scheduled_stdout,\n       \
-      \     _scheduled_stderr=scheduled_stderr,\n            _returncode=returncode,\n\
-      \            _exit_at=exit_at,\n            _clock=clock,\n            _output_payload=output_payload,\n\
-      \            **kwargs,\n        )\n\n    return factory\n\n\ndef _run_invoke_in_thread(**invoke_kwargs):\n\
-      \    \"\"\"Run `_invoke_codex` in a background thread; return (thread, holder).\n\
-      \n    `holder` is a dict that, after `thread.join()`, contains either:\n   \
-      \   - `out`: the codex output (success), or\n      - `e`: the exception raised\
-      \ (failure).\n    \"\"\"\n    holder: dict = {}\n\n    def runner():\n     \
-      \   try:\n            holder[\"out\"] = _dispatch_codex._invoke_codex(**invoke_kwargs)\n\
-      \        except Exception as e:  # noqa: BLE001\n            holder[\"e\"] =\
-      \ e\n\n    th = threading.Thread(target=runner, daemon=True)\n    th.start()\n\
-      \    return th, holder\n\n\ndef _drive_clock_until_done(\n    clock: _ControllableClock,\n\
-      \    thread: threading.Thread,\n    *,\n    step: float = 0.05,\n    real_sleep:\
-      \ float = 0.01,\n    max_iterations: int = 2000,\n):\n    \"\"\"Advance `clock`\
-      \ by `step` until `thread` finishes or `max_iterations` hit.\n\n    A small\
-      \ real sleep between advances gives the reader threads + main poll\n    loop\
-      \ scheduler time. Total real wall <= max_iterations * real_sleep.\n    \"\"\"\
-      \n    i = 0\n    while thread.is_alive() and i < max_iterations:\n        clock.advance(step)\n\
-      \        time.sleep(real_sleep)\n        i += 1\n    thread.join(timeout=5)\n\
-      \n\ndef _read_log_events(log_path: Path) -> list[dict]:\n    if not log_path.exists():\n\
-      \        return []\n    out = []\n    for line in log_path.read_text(encoding=\"\
-      utf-8\").splitlines():\n        line = line.strip()\n        if not line:\n\
-      \            continue\n        try:\n            out.append(_json.loads(line))\n\
-      \        except _json.JSONDecodeError:\n            # v1.15.7 (C): defensive\
-      \ JSONL parse. A torn line can only\n            # appear if an append was interrupted\
-      \ mid-write; v1.15.7 (A)\n            # makes the production append OS-lock-atomic\
-      \ so this should\n            # no longer occur — but a telemetry-log reader\
-      \ must never\n            # crash on a partial line regardless (windows-py3.10\
-      \ abort-\n            # teardown surfaced this). Drop the torn line; the events\n\
-      \            # this helper's assertions care about are written whole.\n    \
-      \        continue\n    return out\n\n\ndef _setup_repo_root(tmp_path: Path)\
-      \ -> Path:\n    (tmp_path / \"consensus-state\" / \"state\").mkdir(parents=True,\
-      \ exist_ok=True)\n    return tmp_path\n\n\ndef _anchors():\n    return {\n \
-      \       \"iteration_id\": \"iter-test\",\n        \"reviewer_id\": \"codex-test\"\
-      ,\n        \"pass_id\": \"codex-test-pass1\",\n    }\n\n\n# --------------------------------------------------------------------------\n\
+      ):\n    \"\"\"Build a popen_factory closure for injection into `_invoke_codex`.\n\
+      \n    `factory.instances` records every `StreamingFakeCodexPopen`\n    created\
+      \ so a test can assert process-side-effects (codex-v1159-\n    wfb-3 codex-rev-001:\
+      \ the operator-abort test must verify the\n    real SIGTERM/terminate happened,\
+      \ not just the log/signal-file).\"\"\"\n\n    instances: list = []\n\n    def\
+      \ factory(cmd, **kwargs):\n        p = StreamingFakeCodexPopen(\n          \
+      \  cmd,\n            _scheduled_stdout=scheduled_stdout,\n            _scheduled_stderr=scheduled_stderr,\n\
+      \            _returncode=returncode,\n            _exit_at=exit_at,\n      \
+      \      _clock=clock,\n            _output_payload=output_payload,\n        \
+      \    **kwargs,\n        )\n        instances.append(p)\n        return p\n\n\
+      \    factory.instances = instances\n    return factory\n\n\ndef _run_invoke_in_thread(clock:\
+      \ _SyncClock, **invoke_kwargs):\n    \"\"\"Run `_invoke_codex` in a daemon thread;\
+      \ return (thread, holder).\n\n    Injects `_sleep=clock.sleep` (the converged\
+      \ DI seam) so the\n    production poll loop is virtual-time-gated. The `finally`\
+      \ notifies\n    the clock so the driver's `wait_for` is woken the instant the\n\
+      \    runner thread dies — on EVERY path incl. exceptions (the universal\n  \
+      \  escape that makes the design deadlock-free).\n    \"\"\"\n    holder: dict\
+      \ = {}\n\n    def runner():\n        try:\n            holder[\"out\"] = _dispatch_codex._invoke_codex(\n\
+      \                _sleep=clock.sleep, **invoke_kwargs\n            )\n      \
+      \  except Exception as e:  # noqa: BLE001\n            holder[\"e\"] = e\n \
+      \       finally:\n            clock.notify()\n\n    th = threading.Thread(target=runner,\
+      \ daemon=True)\n    th.start()\n    return th, holder\n\n\ndef _drive(clock:\
+      \ _SyncClock, th: threading.Thread, *, until=None, chunk: float = 50.0,\n  \
+      \         max_rounds: int = 64):\n    \"\"\"Deterministic driver for terminal\
+      \ scenarios (stream/truncate/\n    clean-exit/stderr-drain/silence-abort/operator-signal).\n\
+      \n    The terminal condition is ALWAYS runner-thread death (proc exited\n  \
+      \  cleanly, or aborted/raised). It is intentionally NOT a mid-stream\n    observable:\
+      \ stopping early on e.g. \"a line was streamed\" while the\n    fake proc has\
+      \ not yet been advanced to its exit_at leaves the\n    production loop spinning\
+      \ on a proc that never exits → wedged. The\n    event assertions are checked\
+      \ by the caller AFTER thread death.\n\n    Fully park-synced (no t0-capture\
+      \ race, no real-sleep budget):\n    1. Wait for the runner's first park (prologue\
+      \ + the fake's\n       `_t0 = now()` capture complete) OR the runner already\
+      \ died.\n    2. Each round: advance one logical chunk, then wait until the\n\
+      \       runner parked again having observed this advance (still running)\n \
+      \      OR the runner thread died. Both are Condition-notified —\n       guaranteed\
+      \ waker on every path; ceiling → release_all() → loud\n       fast fail, never\
+      \ a wedged CI job. `until` is accepted for\n       call-site readability only\
+      \ and does not gate termination.\"\"\"\n    # Startup: wait until the runner\
+      \ has parked once (prologue + the\n    # fake's _t0=now() capture complete)\
+      \ OR the runner thread already\n    # died — an abort can fire on iteration\
+      \ 1 (e.g. operator-signal\n    # written before drive) BEFORE the loop ever\
+      \ reaches _sleep, so\n    # \"parked\" is not guaranteed; thread-death is the\
+      \ universal escape.\n    if not clock.wait_for(lambda: (not th.is_alive()) or\
+      \ clock._sleepers > 0):\n        clock.release_all()\n        th.join(timeout=5)\n\
+      \        raise AssertionError(\"_drive: runner neither parked nor exited at\
+      \ startup (release_all fired)\")\n\n    rounds = 0\n    while th.is_alive()\
+      \ and rounds < max_rounds:\n        e = clock.advance(chunk)\n        # codex-v1159-wfb-2\
+      \ codex-rev-001 (BLOCKING, integrated): the\n        # per-round wait return\
+      \ MUST be acted on. A False return means\n        # _CEILING elapsed with neither\
+      \ runner re-park (epoch>=e) nor\n        # thread death — under correct notify-driven\
+      \ operation that\n        # never happens (wakeups are sub-ms), so False ==\
+      \ a genuine\n        # wedge. Fire the release_all() safeguard and fail FAST/LOUD\n\
+      \        # here, not after max_rounds×_CEILING. This is what makes the\n   \
+      \     # claimed deadlock-free invariant actually true.\n        if not clock.wait_for(\n\
+      \            lambda e=e: (not th.is_alive())\n            or (clock._sleepers\
+      \ > 0 and clock._park_epoch >= e)\n        ):\n            clock.release_all()\n\
+      \            th.join(timeout=5)\n            raise AssertionError(\n       \
+      \         \"_drive: per-round wait hit _CEILING with no runner \"\n        \
+      \        \"progress — release_all fired. Deadlock/handshake or \"\n        \
+      \        \"product logic broken; NOT a timing flake.\"\n            )\n    \
+      \    rounds += 1\n\n    exhausted = th.is_alive() and rounds >= max_rounds\n\
+      \    clock.release_all()\n    th.join(timeout=5)\n    if th.is_alive() or exhausted:\n\
+      \        raise AssertionError(\n            f\"_drive: runner did not finish\
+      \ within max_rounds={max_rounds} \"\n            \"(release_all fired — deterministic\
+      \ handshake broke; NOT a \"\n            \"timing flake). max_rounds exhaustion\
+      \ is a HARD fail even if \"\n            \"release_all later lets the thread\
+      \ limp out.\"\n        )\n\n\ndef _drive_heartbeats(\n    clock: _SyncClock,\n\
+      \    th: threading.Thread,\n    log_path: Path,\n    *,\n    interval: float,\n\
+      \    steps: int,\n    final_advance: float,\n    poll_interval: float,\n):\n\
+      \    \"\"\"Lockstep driver that PROVES the heartbeat interval gate\n    (codex-v1159-wfb-5\
+      \ codex-rev-001, integrated). Advancing exactly\n    `interval` per step with\
+      \ one poll/step only checks \"one per step\"\n    — a regression that emits\
+      \ EVERY poll (or uses a tiny threshold)\n    would still produce one-per-step\
+      \ and pass. So each round we:\n      (1) advance a SUB-interval amount, sync,\
+      \ and assert NO new\n          heartbeat (the interval gate held — premature\
+      \ emit fails);\n      (2) advance the remainder to cross the boundary, sync,\
+      \ and\n          assert EXACTLY ONE new heartbeat.\n    This restores the cadence\
+      \ coverage the pre-rewrite test had via\n    its many sub-interval polls + loose\
+      \ count window.\"\"\"\n\n    def _hb():\n        return len(_events(log_path,\
+      \ \"dispatch_heartbeat\"))\n\n    def _sync(e, where):\n        if not clock.wait_runner_parked(after_epoch=e):\n\
+      \            clock.release_all()\n            th.join(timeout=5)\n         \
+      \   raise AssertionError(\n                f\"_drive_heartbeats: runner did\
+      \ not consume advance \"\n                f\"({where}) — release_all fired;\
+      \ handshake broken, NOT \"\n                \"a timing flake\"\n           \
+      \ )\n\n    # codex-v1159-wfb-7 codex-rev-001 (BLOCKING, integrated): startup\n\
+      \    # wait must use the SAME release_all()+join loud-fail path as the\n   \
+      \ # other drivers — a bare assert here bypasses the synthetic\n    # clock/process\
+      \ teardown (the teardown-bypass class of pass-2/4).\n    if not clock.wait_runner_parked(after_epoch=0):\n\
+      \        clock.release_all()\n        th.join(timeout=5)\n        raise AssertionError(\n\
+      \            \"_drive_heartbeats: runner never parked (startup) — \"\n     \
+      \       \"release_all fired; handshake broken, NOT a timing flake\"\n      \
+      \  )\n    # codex-v1159-wfb-7 codex-rev-001 (BLOCKING, integrated): check\n\
+      \    # no-emit JUST BEFORE the boundary, not at half-interval — a\n    # regression\
+      \ emitting at e.g. 20s for a 30s interval slips past a\n    # half-interval\
+      \ (15s) check but is caught at interval-epsilon.\n    # Float-robustness refinement\
+      \ on codex's exact-boundary epsilon:\n    # the boundary advance overshoots\
+      \ by epsilon (total interval+eps)\n    # so `now - last_heartbeat >= interval`\
+      \ cannot be flipped False by\n    # ~1e-10 double error from landing EXACTLY\
+      \ on the interval.\n    # `gap` must exceed `poll_interval`: the production\
+      \ loop sleeps\n    # `poll_interval` between polls, so an advance < poll_interval\n\
+      \    # never triggers another poll iteration (the runner would not emit\n  \
+      \  # — the bug a 2*epsilon=0.002 advance vs poll_interval=0.01 hit).\n    #\
+      \ gap stays << interval so the no-emit check remains a TIGHT gate\n    # (catches\
+      \ emit-every-poll and wrong-threshold regressions like\n    # \"emit at 20s\
+      \ for a 30s interval\": 20 < interval-gap → caught).\n    # Float margin = gap\
+      \ ≫ ~1e-10 double error, so the boundary\n    # comparison cannot be flipped\
+      \ by rounding.\n    gap = max(interval / 1000.0, poll_interval * 5.0)\n    pre_boundary\
+      \ = interval - gap\n    for k in range(steps):\n        before = _hb()\n   \
+      \     # (1) advance to interval-gap: the gate MUST suppress emission.\n    \
+      \    e1 = clock.advance(pre_boundary)\n        _sync(e1, f\"round {k} pre-boundary\"\
+      )\n        mid = _hb()\n        assert mid == before, (\n            f\"round\
+      \ {k}: heartbeat emitted at +{pre_boundary}s — BEFORE \"\n            f\"the\
+      \ {interval}s interval elapsed: count {before}->{mid}. \"\n            \"The\
+      \ interval gate is broken (regression: emit-every-poll / \"\n            \"\
+      wrong threshold).\"\n        )\n        # (2) cross the boundary by 2*gap (now-last_hb\
+      \ = interval+gap,\n        # unambiguously >= interval AND > poll_interval so\
+      \ the runner\n        # actually polls): EXACTLY one new heartbeat.\n      \
+      \  e2 = clock.advance(2.0 * gap)\n        _sync(e2, f\"round {k} boundary\"\
+      )\n        after = _hb()\n        assert after == before + 1, (\n          \
+      \  f\"round {k}: expected exactly 1 heartbeat at the {interval}s \"\n      \
+      \      f\"boundary, got {after - before} (count {before}->{after})\"\n     \
+      \   )\n    clock.advance(final_advance)\n    ok = clock.wait_for(lambda: not\
+      \ th.is_alive())\n    clock.release_all()\n    th.join(timeout=5)\n    assert\
+      \ ok and not th.is_alive(), \"_drive_heartbeats: runner did not finish\"\n\n\
+      \ndef _drive_streaming(\n    clock: _SyncClock,\n    th: threading.Thread,\n\
+      \    log_path: Path,\n    *,\n    step: float,\n    until,\n    max_steps: int\
+      \ = 64,\n):\n    \"\"\"Lockstep driver for the wall-ceiling scenario: codex\
+      \ streams\n    continuously so silence-abort must NOT fire while virtual time\n\
+      \    accumulates past the hard ceiling. `step` < stall_silence_seconds;\n  \
+      \  after each advance, wait until production has actually PROCESSED a\n    new\
+      \ streamed line (the durable `dispatch_streamed_line` count rose)\n    — so\
+      \ `last_streamed_ts` is provably fresh at every silence check —\n    OR `until`\
+      \ (the wall abort) fired OR the runner died. This removes\n    the reader/processing\
+      \ race that a coarse jump would lose to\n    pre-first-line silence.\"\"\"\n\
+      \    if not clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers >\
+      \ 0):\n        clock.release_all()\n        th.join(timeout=5)\n        raise\
+      \ AssertionError(\"_drive_streaming: runner never started (release_all fired)\"\
+      )\n\n    steps = 0\n    while th.is_alive() and not until() and steps < max_steps:\n\
+      \        prev = len(_events(log_path, \"dispatch_streamed_line\"))\n       \
+      \ clock.advance(step)\n        # codex-v1159-wfb-2 codex-rev-001 (BLOCKING,\
+      \ integrated):\n        # act on the per-step wait return — False == _CEILING\
+      \ elapsed\n        # with no new processed line / abort / death = a genuine\
+      \ wedge;\n        # fire release_all() and fail FAST/LOUD, not after\n     \
+      \   # max_steps×_CEILING.\n        if not clock.wait_for(\n            lambda\
+      \ prev=prev: (not th.is_alive())\n            or until()\n            or len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) > prev\n        ):\n            clock.release_all()\n\
+      \            th.join(timeout=5)\n            raise AssertionError(\n       \
+      \         \"_drive_streaming: per-step wait hit _CEILING with no \"\n      \
+      \          \"progress — release_all fired. Deadlock/handshake or \"\n      \
+      \          \"product logic broken; NOT a timing flake.\"\n            )\n  \
+      \      steps += 1\n\n    exhausted = th.is_alive() and not until() and steps\
+      \ >= max_steps\n    clock.release_all()\n    th.join(timeout=5)\n    if th.is_alive()\
+      \ or exhausted:\n        raise AssertionError(\n            f\"_drive_streaming:\
+      \ did not reach terminal within \"\n            f\"max_steps={max_steps} (release_all\
+      \ fired — deterministic \"\n            \"handshake broke; NOT a timing flake).\
+      \ max_steps exhaustion \"\n            \"is a HARD fail even if release_all\
+      \ later frees the thread.\"\n        )\n\n\ndef _advance_until_streamed(\n \
+      \   clock: _SyncClock,\n    th: threading.Thread,\n    log_path: Path,\n   \
+      \ *,\n    min_streamed: int,\n    step: float,\n    max_steps: int = 64,\n):\n\
+      \    \"\"\"Lockstep small advances (`step` < stall_silence_seconds) until\n\
+      \    `min_streamed` `dispatch_streamed_line` events are PROCESSED and\n    the\
+      \ runner is back parked mid-run. Establishes a DETERMINISTIC\n    mid-run state:\
+      \ callers can then assert post-stream behaviour\n    (silence path) or inject\
+      \ a mid-run operator-abort signal — never\n    the startup/pre-first-line path\
+      \ (codex-v1159-wfb-3 codex-rev-002\n    silence; codex-v1159-wfb-4 codex-rev-002\
+      \ operator). Returns with\n    the runner alive + parked + ≥min_streamed events;\
+      \ raises LOUD\n    (release_all) on any wedge or shortfall.\"\"\"\n    if not\
+      \ clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers > 0):\n    \
+      \    clock.release_all()\n        th.join(timeout=5)\n        raise AssertionError(\"\
+      _advance_until_streamed: runner never started (release_all fired)\")\n\n   \
+      \ steps = 0\n    while (\n        th.is_alive()\n        and len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) < min_streamed\n        and steps < max_steps\n\
+      \    ):\n        e = clock.advance(step)\n        if not clock.wait_for(\n \
+      \           lambda e=e: (not th.is_alive())\n            or len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) >= min_streamed\n            or (clock._sleepers\
+      \ > 0 and clock._park_epoch >= e)\n        ):\n            clock.release_all()\n\
+      \            th.join(timeout=5)\n            raise AssertionError(\n       \
+      \         \"_advance_until_streamed: per-step wait hit _CEILING \"\n       \
+      \         \"(release_all fired; NOT a timing flake)\"\n            )\n     \
+      \   steps += 1\n\n    if len(_events(log_path, \"dispatch_streamed_line\"))\
+      \ < min_streamed:\n        clock.release_all()\n        th.join(timeout=5)\n\
+      \        raise AssertionError(\n            f\"_advance_until_streamed: only\
+      \ \"\n            f\"{len(_events(log_path, 'dispatch_streamed_line'))} of \"\
+      \n            f\"{min_streamed} lines processed — deterministic mid-run \"\n\
+      \            \"state NOT established (release_all fired)\"\n        )\n\n\n\
+      def _drive_post_stream(\n    clock: _SyncClock,\n    th: threading.Thread,\n\
+      \    log_path: Path,\n    *,\n    min_streamed: int,\n    step: float,\n):\n\
+      \    \"\"\"codex-v1159-wfb-3 codex-rev-002 (integrated): process\n    `min_streamed`\
+      \ lines first so `last_streamed_ts` is set and the\n    subsequent silence-abort\
+      \ exercises the POST-stream path (not\n    pre-first-line startup silence —\
+      \ the coverage the original test's\n    now-removed `time.sleep(0.1)` guaranteed),\
+      \ then drive to terminal.\"\"\"\n    _advance_until_streamed(clock, th, log_path,\
+      \ min_streamed=min_streamed, step=step)\n    _drive(clock, th)\n\n\ndef _read_log_events(log_path:\
+      \ Path) -> list[dict]:\n    if not log_path.exists():\n        return []\n \
+      \   out = []\n    for line in log_path.read_text(encoding=\"utf-8\").splitlines():\n\
+      \        line = line.strip()\n        if not line:\n            continue\n \
+      \       try:\n            out.append(_json.loads(line))\n        except _json.JSONDecodeError:\n\
+      \            # Defensive JSONL parse (v1.15.7 C): a telemetry-log reader\n \
+      \           # must never crash on a partial line. v1.15.8 made the\n       \
+      \     # production append OS-lock-atomic so torn lines should not\n        \
+      \    # occur; drop any anyway — the asserted events are whole.\n           \
+      \ continue\n    return out\n\n\ndef _setup_repo_root(tmp_path: Path) -> Path:\n\
+      \    (tmp_path / \"consensus-state\" / \"state\").mkdir(parents=True, exist_ok=True)\n\
+      \    return tmp_path\n\n\ndef _anchors():\n    return {\n        \"iteration_id\"\
+      : \"iter-test\",\n        \"reviewer_id\": \"codex-test\",\n        \"pass_id\"\
+      : \"codex-test-pass1\",\n    }\n\n\ndef _events(log_path, name):\n    return\
+      \ [e for e in _read_log_events(log_path) if e[\"event\"] == name]\n\n\n# --------------------------------------------------------------------------\n\
       # Test 1 — streamed lines appear in dispatch-log with correct seq + content\n\
       # --------------------------------------------------------------------------\n\
       \n\ndef test_streamed_lines_appear_in_dispatch_log(tmp_path):\n    repo_root\
-      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
-      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
-      \    # 5 lines scheduled at t = 0.0 (all immediately available); proc exits\
-      \ at t=0.5.\n    scheduled = [\n        (0.0, b\"line1\\n\"),\n        (0.0,\
-      \ b\"line2\\n\"),\n        (0.0, b\"line3\\n\"),\n        (0.0, b\"line4\\n\"\
-      ),\n        (0.0, b\"line5\\n\"),\n    ]\n    factory = _make_factory(clock,\
-      \ scheduled_stdout=scheduled, exit_at=0.5)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \ = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n    log_path = repo_root\
+      \ / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n    scheduled\
+      \ = [\n        (0.0, b\"line1\\n\"),\n        (0.0, b\"line2\\n\"),\n      \
+      \  (0.0, b\"line3\\n\"),\n        (0.0, b\"line4\\n\"),\n        (0.0, b\"line5\\\
+      n\"),\n    ]\n    factory = _make_factory(clock, scheduled_stdout=scheduled,\
+      \ exit_at=0.5)\n\n    th, holder = _run_invoke_in_thread(\n        clock,\n\
       \        prompt=\"hi\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n\
       \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
       \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n\
       \        poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
-      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive(),\
-      \ \"runner did not finish\"\n    assert \"e\" not in holder, f\"unexpected exception:\
-      \ {holder.get('e')}\"\n    assert holder[\"out\"] == '{\"ok\": true}'\n\n  \
-      \  events = _read_log_events(log_path)\n    stream_events = [e for e in events\
-      \ if e[\"event\"] == \"dispatch_streamed_line\"]\n    assert len(stream_events)\
-      \ == 5, f\"expected 5 stream events, got {len(stream_events)}\"\n    for i,\
-      \ ev in enumerate(stream_events):\n        assert ev[\"seq\"] == i, f\"event\
-      \ {i} seq={ev['seq']}\"\n        assert ev[\"line_truncated\"] == f\"line{i\
-      \ + 1}\"\n        assert ev[\"truncated\"] is False\n        assert ev[\"stream\"\
-      ] == \"stdout\"\n        assert ev[\"pass_id\"] == \"codex-test-pass1\"\n\n\n\
-      # --------------------------------------------------------------------------\n\
+      \    )\n    _drive(clock, th, until=lambda: len(_events(log_path, \"dispatch_streamed_line\"\
+      )) >= 5)\n    assert not th.is_alive(), \"runner did not finish\"\n    assert\
+      \ \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\n    assert\
+      \ holder[\"out\"] == '{\"ok\": true}'\n\n    stream_events = _events(log_path,\
+      \ \"dispatch_streamed_line\")\n    assert len(stream_events) == 5, f\"expected\
+      \ 5 stream events, got {len(stream_events)}\"\n    for i, ev in enumerate(stream_events):\n\
+      \        assert ev[\"seq\"] == i, f\"event {i} seq={ev['seq']}\"\n        assert\
+      \ ev[\"line_truncated\"] == f\"line{i + 1}\"\n        assert ev[\"truncated\"\
+      ] is False\n        assert ev[\"stream\"] == \"stdout\"\n        assert ev[\"\
+      pass_id\"] == \"codex-test-pass1\"\n\n\n# --------------------------------------------------------------------------\n\
       # Test 2 — long lines truncated to 200 chars; full length recorded\n# --------------------------------------------------------------------------\n\
       \n\ndef test_long_lines_are_truncated_to_200_chars(tmp_path):\n    repo_root\
-      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
-      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
-      \    big = (\"A\" * 1000) + \"\\n\"\n    scheduled = [(0.0, big.encode(\"utf-8\"\
-      ))]\n    factory = _make_factory(clock, scheduled_stdout=scheduled, exit_at=0.2)\n\
-      \n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n        codex_bin=\"\
-      codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n      \
-      \  schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
-      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
-      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
-      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
-      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
-      \n\n    events = _read_log_events(log_path)\n    stream = [e for e in events\
-      \ if e[\"event\"] == \"dispatch_streamed_line\"]\n    assert len(stream) ==\
-      \ 1\n    ev = stream[0]\n    assert len(ev[\"line_truncated\"]) == 200\n   \
-      \ assert ev[\"line_full_length\"] == 1000\n    assert ev[\"truncated\"] is True\n\
-      \n\n# --------------------------------------------------------------------------\n\
-      # Test 3 — heartbeat fires at heartbeat_interval cadence\n# --------------------------------------------------------------------------\n\
-      \n\n@_FLAKY_WINDOWS_CI\ndef test_heartbeat_fires_at_interval(tmp_path):\n  \
-      \  \"\"\"Advance time so codex appears to run for ~95s with no stdout; with\n\
-      \    stall_silence_seconds=200 we don't trip silence-abort; with\n    heartbeat_interval=30\
-      \ we should see ~3 heartbeats (at ~30, ~60, ~90).\n\n    NOTE: pre-first-line\
-      \ silence falls back to `now - start_ts`. So we set\n    `stall_silence_seconds`\
-      \ high enough (200s) to not trip silence-abort,\n    and emit no stdout, just\
-      \ heartbeats.\n    \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock\
-      \ = _ControllableClock()\n    log_path = repo_root / \"consensus-state\" / \"\
-      state\" / \"dispatch-log.jsonl\"\n\n    # No stdout; proc exits at clock_rel\
-      \ = 95s.\n    factory = _make_factory(clock, scheduled_stdout=[], exit_at=95.0)\n\
-      \n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n        codex_bin=\"\
-      codex\",\n        timeout_seconds=300,  # so wall-time hard ceiling isn't hit\n\
-      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
-      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=200.0,\
-      \  # don't trip silence-abort\n        poll_interval=0.01,\n        time_fn=clock.now,\n\
-      \        popen_factory=factory,\n    )\n\n    # Advance the clock in 1s ticks\
-      \ up to ~100s (past exit_at=95s), with\n    # short real sleeps so the main\
-      \ loop body can iterate, observe the\n    # advanced clock, and emit heartbeats.\n\
-      \    for _ in range(100):\n        clock.advance(1.0)\n        time.sleep(0.01)\n\
-      \    th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not finish\"\
-      \n    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
-      \n\n    events = _read_log_events(log_path)\n    hb = [e for e in events if\
-      \ e[\"event\"] == \"dispatch_heartbeat\"]\n    # Expect heartbeats at ~30, 60,\
-      \ 90 → 3 events (could be 2 or 4 depending\n    # on scheduler timing; assert\
-      \ in window).\n    assert 2 <= len(hb) <= 4, f\"expected ~3 heartbeats, got\
-      \ {len(hb)}: {hb}\"\n    # Ages should be monotonically increasing.\n    ages\
-      \ = [ev[\"age_seconds\"] for ev in hb]\n    assert ages == sorted(ages), f\"\
-      heartbeat ages not monotonic: {ages}\"\n\n\n# --------------------------------------------------------------------------\n\
-      # Test 4 — heartbeat silence triggers abort\n# --------------------------------------------------------------------------\n\
-      \n\n@_FLAKY_WINDOWS_CI\ndef test_heartbeat_silence_triggers_abort(tmp_path):\n\
-      \    \"\"\"Codex emits 2 lines at t=0, then goes silent; advance clock past\n\
-      \    stall_silence_seconds → expect `dispatch_aborted` with\n    `abort_source=\"\
-      watchdog_silence\"` and CodexInvocationError raised.\n    \"\"\"\n    repo_root\
-      \ = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n    log_path\
-      \ = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n\
-      \    scheduled = [\n        (0.0, b\"a\\n\"),\n        (0.0, b\"b\\n\"),\n \
-      \   ]\n    # Proc would exit at 1000s but we'll terminate via silence-abort\
-      \ first.\n    factory = _make_factory(clock, scheduled_stdout=scheduled, exit_at=1000.0)\n\
-      \n    exc_holder = {}\n\n    def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
-      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
-      \           timeout_seconds=300,\n                repo_root=repo_root,\n   \
-      \             schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
-      \                anchors=_anchors(),\n                heartbeat_interval=1000.0,\
-      \  # don't fire heartbeats\n                stall_silence_seconds=10.0,\n  \
-      \              poll_interval=0.01,\n                time_fn=clock.now,\n   \
-      \             popen_factory=factory,\n            )\n        except Exception\
-      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
-      \ daemon=True)\n    th.start()\n    # Let the reader thread consume the 2 scheduled\
-      \ lines.\n    time.sleep(0.1)\n    # Now advance the clock 15s — past the 10s\
-      \ stall_silence_seconds since\n    # last_streamed_ts was set when those lines\
-      \ were read (at clock=1000.0).\n    clock.advance(15.0)\n    th.join(timeout=10)\n\
-      \    assert not th.is_alive(), \"runner did not abort\"\n\n    assert \"e\"\
-      \ in exc_holder, \"expected CodexInvocationError\"\n    assert isinstance(exc_holder[\"\
-      e\"], _dispatch_codex.CodexInvocationError)\n\n    events = _read_log_events(log_path)\n\
-      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
-      \    assert len(aborts) == 1, f\"expected 1 abort event, got {aborts}\"\n  \
-      \  assert aborts[0][\"abort_source\"] == \"watchdog_silence\"\n\n\n# --------------------------------------------------------------------------\n\
-      # Test 5 — operator abort-signal file triggers abort\n# --------------------------------------------------------------------------\n\
-      \n\n@_FLAKY_WINDOWS_CI\ndef test_operator_abort_signal_file_triggers_abort(tmp_path):\n\
-      \    \"\"\"Mid-run, write `consensus-state/state/abort-dispatch-<pass_id>.signal`;\n\
-      \    expect wrapper to SIGTERM codex, emit `dispatch_aborted` with\n    `abort_source=\"\
-      operator_signal_file\"`, delete the signal file, and raise.\n    \"\"\"\n  \
-      \  repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
-      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
-      \n\n    # Codex would run a long time; we'll abort externally.\n    factory\
-      \ = _make_factory(clock, scheduled_stdout=[(0.0, b\"working\\n\")], exit_at=1000.0)\n\
-      \n    exc_holder = {}\n\n    def runner():\n        try:\n            _dispatch_codex._invoke_codex(\n\
-      \                prompt=\"x\",\n                codex_bin=\"codex\",\n     \
-      \           timeout_seconds=10000,\n                repo_root=repo_root,\n \
-      \               schema_path=SCHEMA_PATH,\n                log_path=log_path,\n\
-      \                anchors=_anchors(),\n                heartbeat_interval=10000.0,\n\
-      \                stall_silence_seconds=10000.0,  # don't fire silence-abort\n\
-      \                poll_interval=0.01,\n                time_fn=clock.now,\n \
-      \               popen_factory=factory,\n            )\n        except Exception\
-      \ as e:  # noqa: BLE001\n            exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner,\
-      \ daemon=True)\n    th.start()\n    # Wait a beat so the loop is running.\n\
-      \    time.sleep(0.1)\n    signal_path = repo_root / \"consensus-state\" / \"\
-      state\" / \"abort-dispatch-codex-test-pass1.signal\"\n    signal_path.write_text(\"\
-      operator manual abort\", encoding=\"utf-8\")\n    th.join(timeout=10)\n    assert\
-      \ not th.is_alive(), \"runner did not abort\"\n\n    assert \"e\" in exc_holder,\
-      \ \"expected CodexInvocationError\"\n    assert isinstance(exc_holder[\"e\"\
-      ], _dispatch_codex.CodexInvocationError)\n\n    events = _read_log_events(log_path)\n\
-      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
-      \    assert len(aborts) == 1, f\"expected 1 abort event, got {aborts}\"\n  \
-      \  assert aborts[0][\"abort_source\"] == \"operator_signal_file\"\n    assert\
-      \ \"operator manual abort\" in aborts[0].get(\"abort_reason\", \"\")\n\n   \
-      \ # Signal file should be deleted.\n    assert not signal_path.exists(), \"\
-      abort signal file was not deleted\"\n\n\n# --------------------------------------------------------------------------\n\
-      # Test 6 — wall-time hard ceiling\n# --------------------------------------------------------------------------\n\
-      \n\n@_FLAKY_WINDOWS_CI\ndef test_wall_time_hard_ceiling(tmp_path):\n    \"\"\
-      \"Codex streams continuously (so silence-abort never fires) but runs\n    past\
-      \ `timeout_seconds + stall_silence_seconds` → expect dispatch_aborted\n    with\
-      \ abort_source=\"wall_time_hard_ceiling\" and CodexInvocationError.\n    \"\"\
-      \"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
-      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
-      \n\n    # Stream a line every 1s of clock-time forever, so silence never fires.\n\
-      \    # The reader thread reads scheduled bytes as clock advances past them.\n\
-      \    scheduled = [(float(i), f\"keepalive{i}\\n\".encode(\"utf-8\")) for i in\
-      \ range(0, 200)]\n    factory = _make_factory(clock, scheduled_stdout=scheduled,\
-      \ exit_at=10000.0)\n\n    exc_holder = {}\n\n    def runner():\n        try:\n\
-      \            _dispatch_codex._invoke_codex(\n                prompt=\"x\",\n\
-      \                codex_bin=\"codex\",\n                timeout_seconds=10, \
-      \ # wall = 10\n                repo_root=repo_root,\n                schema_path=SCHEMA_PATH,\n\
-      \                log_path=log_path,\n                anchors=_anchors(),\n \
-      \               heartbeat_interval=1000.0,\n                stall_silence_seconds=5.0,\
-      \  # grace = 5; hard ceiling at 15s\n                poll_interval=0.01,\n \
-      \               time_fn=clock.now,\n                popen_factory=factory,\n\
-      \            )\n        except Exception as e:  # noqa: BLE001\n           \
-      \ exc_holder[\"e\"] = e\n\n    th = threading.Thread(target=runner, daemon=True)\n\
-      \    th.start()\n\n    # Advance clock in 1s steps; reader drains scheduled\
-      \ keepalives as we go,\n    # so silence_age stays low. After ~16s of clock\
-      \ advance, wall-time hard\n    # ceiling (10 + 5 = 15s) should trip.\n    for\
-      \ _ in range(20):\n        clock.advance(1.0)\n        time.sleep(0.02)\n  \
-      \  th.join(timeout=10)\n    assert not th.is_alive(), \"runner did not abort\"\
-      \n\n    assert \"e\" in exc_holder, \"expected CodexInvocationError\"\n    assert\
-      \ isinstance(exc_holder[\"e\"], _dispatch_codex.CodexInvocationError)\n\n  \
-      \  events = _read_log_events(log_path)\n    aborts = [e for e in events if e[\"\
-      event\"] == \"dispatch_aborted\"]\n    assert len(aborts) == 1, f\"expected\
-      \ 1 abort, got {aborts}\"\n    assert aborts[0][\"abort_source\"] == \"wall_time_hard_ceiling\"\
-      \n\n\n# --------------------------------------------------------------------------\n\
-      # Test 7 — clean exit returns codex output payload\n# --------------------------------------------------------------------------\n\
-      \n\ndef test_clean_exit_returns_output(tmp_path):\n    repo_root = _setup_repo_root(tmp_path)\n\
-      \    clock = _ControllableClock()\n    log_path = repo_root / \"consensus-state\"\
-      \ / \"state\" / \"dispatch-log.jsonl\"\n\n    payload = '{\"findings\": [],\
-      \ \"verdict\": \"PASS\"}'\n    scheduled = [(0.0, b\"working...\\n\"), (0.0,\
-      \ b\"done\\n\")]\n    factory = _make_factory(\n        clock,\n        scheduled_stdout=scheduled,\n\
-      \        exit_at=0.3,\n        returncode=0,\n        output_payload=payload,\n\
-      \    )\n\n    th, holder = _run_invoke_in_thread(\n        prompt=\"x\",\n \
+      \ = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n    log_path = repo_root\
+      \ / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\n\n    big = (\"\
+      A\" * 1000) + \"\\n\"\n    scheduled = [(0.0, big.encode(\"utf-8\"))]\n    factory\
+      \ = _make_factory(clock, scheduled_stdout=scheduled, exit_at=0.2)\n\n    th,\
+      \ holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"x\",\n \
       \       codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
       \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
       \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
       \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
-      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
-      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
-      \n    assert holder[\"out\"] == payload\n\n    events = _read_log_events(log_path)\n\
-      \    aborts = [e for e in events if e[\"event\"] == \"dispatch_aborted\"]\n\
-      \    assert aborts == [], f\"clean exit produced abort events: {aborts}\"\n\
-      \    stream = [e for e in events if e[\"event\"] == \"dispatch_streamed_line\"\
-      ]\n    assert len(stream) == 2\n\n\n# --------------------------------------------------------------------------\n\
-      # Optional 8th — stderr drain prevents deadlock\n# --------------------------------------------------------------------------\n\
-      \n\ndef test_stderr_drain_prevents_deadlock(tmp_path):\n    \"\"\"codex emits\
-      \ ~100KB to stderr; without the stderr-reader thread real\n    codex would block\
-      \ on a full pipe buffer. With the drain in place,\n    dispatch completes normally.\n\
-      \n    In this fake we simulate by scheduling many stderr lines; the test\n \
-      \   asserts that _invoke_codex returns cleanly within the test budget.\n   \
-      \ \"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _ControllableClock()\n\
+      \    )\n    _drive(clock, th, until=lambda: len(_events(log_path, \"dispatch_streamed_line\"\
+      )) >= 1)\n    assert not th.is_alive()\n    assert \"e\" not in holder, f\"\
+      unexpected exception: {holder.get('e')}\"\n\n    stream = _events(log_path,\
+      \ \"dispatch_streamed_line\")\n    assert len(stream) == 1\n    ev = stream[0]\n\
+      \    assert len(ev[\"line_truncated\"]) == 200\n    assert ev[\"line_full_length\"\
+      ] == 1000\n    assert ev[\"truncated\"] is True\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 3 — heartbeat fires at heartbeat_interval cadence\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_heartbeat_fires_at_interval(tmp_path):\n    \"\"\"Advance virtual\
+      \ time so codex appears to run ~95s with no stdout;\n    stall_silence_seconds=200\
+      \ so silence-abort never trips; with\n    heartbeat_interval=30 we deterministically\
+      \ see exactly 3 heartbeats\n    (at ~30, ~60, ~90) via lockstep advances.\"\"\
+      \"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n \
+      \   log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    factory = _make_factory(clock, scheduled_stdout=[], exit_at=95.0)\n\n\
+      \    th, holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"\
+      x\",\n        codex_bin=\"codex\",\n        timeout_seconds=300,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=200.0,\n  \
+      \      poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    # 3 lockstep interval rounds — each PROVES the gate: no heartbeat\n\
+      \    # at +15s, exactly one at +30s (codex-v1159-wfb-5 codex-rev-001).\n   \
+      \ _drive_heartbeats(\n        clock, th, log_path,\n        interval=30.0, steps=3,\
+      \ final_advance=20.0, poll_interval=0.01,\n    )\n    assert \"e\" not in holder,\
+      \ f\"unexpected exception: {holder.get('e')}\"\n\n    hb = _events(log_path,\
+      \ \"dispatch_heartbeat\")\n    assert len(hb) == 3, f\"expected exactly 3 heartbeats,\
+      \ got {len(hb)}: {hb}\"\n    ages = [ev[\"age_seconds\"] for ev in hb]\n   \
+      \ assert ages == sorted(ages), f\"heartbeat ages not monotonic: {ages}\"\n\n\
+      \n# --------------------------------------------------------------------------\n\
+      # Test 4 — heartbeat silence triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_heartbeat_silence_triggers_abort(tmp_path):\n    \"\"\"Codex emits\
+      \ 2 lines then goes silent; advancing virtual time past\n    stall_silence_seconds\
+      \ → `dispatch_aborted` with\n    `abort_source=\"watchdog_silence\"` and CodexInvocationError\
+      \ raised.\"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n\
       \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
-      \n\n    big_line = b\"E\" * 1000 + b\"\\n\"\n    # ~100 lines × 1001 bytes ≈\
-      \ 100KB on stderr.\n    scheduled_err = [(0.0, big_line) for _ in range(100)]\n\
-      \    scheduled_out = [(0.0, b\"ok\\n\")]\n    factory = _make_factory(\n   \
-      \     clock,\n        scheduled_stdout=scheduled_out,\n        scheduled_stderr=scheduled_err,\n\
-      \        exit_at=0.3,\n    )\n\n    th, holder = _run_invoke_in_thread(\n  \
-      \      prompt=\"x\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n\
-      \        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n\
-      \        anchors=_anchors(),\n        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n\
-      \        poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
-      \    )\n    _drive_clock_until_done(clock, th)\n    assert not th.is_alive()\n\
-      \    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
-      \n    assert holder[\"out\"] == '{\"ok\": true}'\n"
+      \n\n    scheduled = [(0.0, b\"a\\n\"), (0.0, b\"b\\n\")]\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=1000.0)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        clock,\n        prompt=\"x\",\n        codex_bin=\"codex\",\n     \
+      \   timeout_seconds=300,\n        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n\
+      \        log_path=log_path,\n        anchors=_anchors(),\n        heartbeat_interval=1000.0,\
+      \  # don't fire heartbeats\n        stall_silence_seconds=10.0,\n        poll_interval=0.01,\n\
+      \        time_fn=clock.now,\n        popen_factory=factory,\n    )\n    # codex-v1159-wfb-3\
+      \ codex-rev-002: process BOTH scheduled lines\n    # first (step=1.0 < stall_silence_seconds=10)\
+      \ so this exercises\n    # POST-stream silence, then advance past the threshold.\n\
+      \    _drive_post_stream(clock, th, log_path, min_streamed=2, step=1.0)\n   \
+      \ assert not th.is_alive(), \"runner did not abort\"\n    assert \"e\" in holder,\
+      \ \"expected CodexInvocationError\"\n    assert isinstance(holder[\"e\"], _dispatch_codex.CodexInvocationError)\n\
+      \n    aborts = _events(log_path, \"dispatch_aborted\")\n    assert len(aborts)\
+      \ == 1, f\"expected 1 abort event, got {aborts}\"\n    assert aborts[0][\"abort_source\"\
+      ] == \"watchdog_silence\"\n    # Proves the POST-stream silence path (not pre-first-line\
+      \ startup\n    # silence): the abort is tied to prior streamed output, so a\n\
+      \    # regression in last_streamed_ts handling is caught (codex-rev-002).\n\
+      \    assert aborts[0].get(\"last_streamed_line_age_seconds\") is not None, (\n\
+      \        \"silence abort was startup-silence, not post-stream — \"\n       \
+      \ \"last_streamed_line_age_seconds is null (codex-rev-002 coverage)\"\n    )\n\
+      \n\n# --------------------------------------------------------------------------\n\
+      # Test 5 — operator abort-signal file triggers abort\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_operator_abort_signal_file_triggers_abort(tmp_path):\n    \"\"\"\
+      Mid-run `abort-dispatch-<pass_id>.signal` → wrapper SIGTERMs codex,\n    emits\
+      \ `dispatch_aborted` (`operator_signal_file`), deletes the signal\n    file,\
+      \ and raises.\"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock =\
+      \ _SyncClock()\n    log_path = repo_root / \"consensus-state\" / \"state\" /\
+      \ \"dispatch-log.jsonl\"\n\n    factory = _make_factory(clock, scheduled_stdout=[(0.0,\
+      \ b\"working\\n\")], exit_at=1000.0)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        clock,\n        prompt=\"x\",\n        codex_bin=\"codex\",\n     \
+      \   timeout_seconds=10000,\n        repo_root=repo_root,\n        schema_path=SCHEMA_PATH,\n\
+      \        log_path=log_path,\n        anchors=_anchors(),\n        heartbeat_interval=10000.0,\n\
+      \        stall_silence_seconds=10000.0,  # don't fire silence-abort\n      \
+      \  poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    # codex-v1159-wfb-4 codex-rev-002 (integrated): establish a\n  \
+      \  # DETERMINISTIC mid-run state before writing the signal — wait\n    # until\
+      \ the scheduled \"working\" line is processed and the runner\n    # is parked\
+      \ mid-loop. Writing the signal before then could test\n    # startup-present-signal\
+      \ handling instead of the named H2 live\n    # mid-run operator-abort + termination\
+      \ path.\n    _advance_until_streamed(clock, th, log_path, min_streamed=1, step=1.0)\n\
+      \    signal_path = repo_root / \"consensus-state\" / \"state\" / \"abort-dispatch-codex-test-pass1.signal\"\
+      \n    signal_path.write_text(\"operator manual abort\", encoding=\"utf-8\")\n\
+      \    _drive(clock, th, until=lambda: len(_events(log_path, \"dispatch_aborted\"\
+      )) >= 1)\n    assert not th.is_alive(), \"runner did not abort\"\n    assert\
+      \ \"e\" in holder, \"expected CodexInvocationError\"\n    assert isinstance(holder[\"\
+      e\"], _dispatch_codex.CodexInvocationError)\n\n    aborts = _events(log_path,\
+      \ \"dispatch_aborted\")\n    assert len(aborts) == 1, f\"expected 1 abort event,\
+      \ got {aborts}\"\n    assert aborts[0][\"abort_source\"] == \"operator_signal_file\"\
+      \n    assert \"operator manual abort\" in aborts[0].get(\"abort_reason\", \"\
+      \")\n    assert not signal_path.exists(), \"abort signal file was not deleted\"\
+      \n    # codex-v1159-wfb-3 codex-rev-001 (BLOCKING): assert the actual\n    #\
+      \ SIGTERM/terminate side-effect. A regression that removed or broke\n    # _terminate_process_tree(proc)\
+      \ in the operator-signal branch would\n    # still emit the event, delete the\
+      \ signal file, and raise — passing\n    # every assertion above while leaving\
+      \ the real codex process ALIVE.\n    # H2 names SIGTERM as required coverage;\
+      \ assert it explicitly.\n    assert factory.instances, \"no codex process was\
+      \ ever created\"\n    assert factory.instances[0]._terminated, (\n        \"\
+      operator abort did NOT terminate/SIGTERM the codex process \"\n        \"(_terminate_process_tree\
+      \ regression would leak a live process)\"\n    )\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 6 — wall-time hard ceiling\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_wall_time_hard_ceiling(tmp_path):\n    \"\"\"Codex streams continuously\
+      \ (silence-abort never fires) but runs\n    past `timeout_seconds + stall_silence_seconds`\
+      \ → `dispatch_aborted`\n    with `abort_source=\"wall_time_hard_ceiling\"` +\
+      \ CodexInvocationError.\"\"\"\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _SyncClock()\n    log_path = repo_root / \"consensus-state\" /\
+      \ \"state\" / \"dispatch-log.jsonl\"\n\n    scheduled = [(float(i), f\"keepalive{i}\\\
+      n\".encode(\"utf-8\")) for i in range(0, 200)]\n    factory = _make_factory(clock,\
+      \ scheduled_stdout=scheduled, exit_at=10000.0)\n\n    th, holder = _run_invoke_in_thread(\n\
+      \        clock,\n        prompt=\"x\",\n        codex_bin=\"codex\",\n     \
+      \   timeout_seconds=10,  # wall = 10\n        repo_root=repo_root,\n       \
+      \ schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=1000.0,\n        stall_silence_seconds=5.0,  # grace\
+      \ = 5; hard ceiling at 15s\n        poll_interval=0.01,\n        time_fn=clock.now,\n\
+      \        popen_factory=factory,\n    )\n    # step (2.0) < stall_silence_seconds\
+      \ (5.0): each lockstep keepalive\n    # is processed (lst fresh) before the\
+      \ next advance, so silence never\n    # fires while virtual time accumulates\
+      \ to the 15s hard ceiling.\n    _drive_streaming(\n        clock, th, log_path,\
+      \ step=2.0,\n        until=lambda: len(_events(log_path, \"dispatch_aborted\"\
+      )) >= 1,\n    )\n    assert not th.is_alive(), \"runner did not abort\"\n  \
+      \  assert \"e\" in holder, \"expected CodexInvocationError\"\n    assert isinstance(holder[\"\
+      e\"], _dispatch_codex.CodexInvocationError)\n\n    aborts = _events(log_path,\
+      \ \"dispatch_aborted\")\n    assert len(aborts) == 1, f\"expected 1 abort, got\
+      \ {aborts}\"\n    assert aborts[0][\"abort_source\"] == \"wall_time_hard_ceiling\"\
+      \n\n\n# --------------------------------------------------------------------------\n\
+      # Test 7 — clean exit returns codex output payload\n# --------------------------------------------------------------------------\n\
+      \n\ndef test_clean_exit_returns_output(tmp_path):\n    repo_root = _setup_repo_root(tmp_path)\n\
+      \    clock = _SyncClock()\n    log_path = repo_root / \"consensus-state\" /\
+      \ \"state\" / \"dispatch-log.jsonl\"\n\n    payload = '{\"findings\": [], \"\
+      verdict\": \"PASS\"}'\n    scheduled = [(0.0, b\"working...\\n\"), (0.0, b\"\
+      done\\n\")]\n    factory = _make_factory(\n        clock,\n        scheduled_stdout=scheduled,\n\
+      \        exit_at=0.3,\n        returncode=0,\n        output_payload=payload,\n\
+      \    )\n\n    th, holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"\
+      x\",\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive(clock, th, until=lambda: not th.is_alive())\n    assert not\
+      \ th.is_alive()\n    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == payload\n\n    assert _events(log_path, \"dispatch_aborted\"\
+      ) == [], \"clean exit produced abort events\"\n    assert len(_events(log_path,\
+      \ \"dispatch_streamed_line\")) == 2\n\n\n# --------------------------------------------------------------------------\n\
+      # Test 8 — stderr drain prevents deadlock (REAL reader threads retained)\n#\
+      \ --------------------------------------------------------------------------\n\
+      \n\ndef test_stderr_drain_prevents_deadlock(tmp_path):\n    \"\"\"Production\
+      \ must keep a REAL stderr reader thread draining\n    codex's stderr (real codex\
+      \ deadlocks on a full stderr pipe).\n\n    SCOPE OF THIS TEST (v1.15.9 scope\
+      \ consult — claude+codex+gemini,\n    weighted-synthesis): the fake's stdout/stderr\
+      \ `_FakePipeReader`s\n    are consumed by production's REAL reader threads,\
+      \ and this test\n    asserts production actually drained ALL scheduled stderr\
+      \ (so a\n    regression that removes/breaks the stderr reader FAILS here). It\n\
+      \    does NOT model OS pipe-buffer BACKPRESSURE — the fake proc exits\n    on\
+      \ virtual time regardless of consumption; it never blocks on a\n    full pipe.\
+      \ That is a PRE-EXISTING limitation (identical in the\n    v1.15.8 baseline\
+      \ `da62d54^`, not introduced by the deterministic\n    rewrite). True backpressure\
+      \ modeling is a tracked follow-up\n    (docs/advisories.md — finite-buffer reader\
+      \ + release_all +\n    mutant gate); deliberately deferred, NOT a v1.15.9 blocker.\"\
+      \"\"\n    repo_root = _setup_repo_root(tmp_path)\n    clock = _SyncClock()\n\
+      \    log_path = repo_root / \"consensus-state\" / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n    big_line = b\"E\" * 1000 + b\"\\n\"\n    scheduled_err = [(0.0, big_line)\
+      \ for _ in range(100)]\n    scheduled_out = [(0.0, b\"ok\\n\")]\n    factory\
+      \ = _make_factory(\n        clock,\n        scheduled_stdout=scheduled_out,\n\
+      \        scheduled_stderr=scheduled_err,\n        exit_at=0.3,\n    )\n\n  \
+      \  th, holder = _run_invoke_in_thread(\n        clock,\n        prompt=\"x\"\
+      ,\n        codex_bin=\"codex\",\n        timeout_seconds=60,\n        repo_root=repo_root,\n\
+      \        schema_path=SCHEMA_PATH,\n        log_path=log_path,\n        anchors=_anchors(),\n\
+      \        heartbeat_interval=30.0,\n        stall_silence_seconds=90.0,\n   \
+      \     poll_interval=0.01,\n        time_fn=clock.now,\n        popen_factory=factory,\n\
+      \    )\n    _drive(clock, th, until=lambda: not th.is_alive())\n    assert not\
+      \ th.is_alive()\n    assert \"e\" not in holder, f\"unexpected exception: {holder.get('e')}\"\
+      \n    assert holder[\"out\"] == '{\"ok\": true}'\n    # Bounded zero-determinism-risk\
+      \ coverage (v1.15.9 scope consult,\n    # weighted-synthesis of claude+codex):\
+      \ assert production's REAL\n    # reader threads drained EVERY scheduled stdout+stderr\
+      \ line.\n    # Post-run state read after thread death — no timing, no new\n\
+      \    # threads, no backpressure modeling. A regression that removes\n    # or\
+      \ breaks the stderr reader leaves `_idx == 0` here → FAIL,\n    # which is exactly\
+      \ codex-v1159-wfb-6's stated requirement\n    # (\"the test should fail if production\
+      \ stops draining stderr\").\n    proc = factory.instances[0]\n    assert proc.stderr._idx\
+      \ == len(scheduled_err), (\n        f\"production did NOT drain all stderr:\
+      \ read {proc.stderr._idx} \"\n        f\"of {len(scheduled_err)} scheduled lines\
+      \ (stderr-reader \"\n        \"regression — real codex would deadlock on the\
+      \ full pipe)\"\n    )\n    assert proc.stdout._idx == len(scheduled_out), (\n\
+      \        f\"production did NOT drain all stdout: read {proc.stdout._idx} \"\n\
+      \        f\"of {len(scheduled_out)} scheduled lines\"\n    )\n"
 schema_version: 1
 iteration_id: iteration-v1159-deterministic-clock-harness

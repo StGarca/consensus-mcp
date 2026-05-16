@@ -1,0 +1,49 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-wfb-2
+pass_id: codex-v1159-wfb-2-pass2
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: Timed-out driver waits are ignored, so the harness is not actually deadlock-free
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:428; consensus_mcp/tests/test_dispatch_codex_streaming.py:499
+  risk: If the runner stops parking or a predicate never becomes true, wait_for returns
+    False after the 20s ceiling, but _drive and _drive_streaming continue looping
+    until max_rounds/max_steps before release_all. That contradicts the stated deadlock-free
+    invariant and can turn a broken harness into a long CI wedge instead of a fast
+    deterministic failure.
+  recommendation: Check the return value of every per-step wait_for call. On False,
+    call release_all(), join, and raise immediately; also raise when max_rounds/max_steps
+    is exhausted even if release_all later makes the runner thread exit.
+  patch_not_proposed_reason: Patch not proposed because the sealed review input provides
+    final file contents only; a safe fix should update both driver helpers and their
+    failure messages against the actual review diff/base in the apply loop.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'Differential/prior used: reviewed as a Workflow A replacement
+  for the v1.15.8 Windows skip workaround, with the prior that any remaining harness
+  wait that can wedge CI is release-blocking. The clock injection addresses the original
+  coordination-by-hope, but the timeout paths in the new drivers do not meet the deadlock-free
+  requirement.'
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 55c39e5388efcc0ca779c7e95c654358c6752f7b95ffd7d5aa1b4efa7df8eb2e
+  output_sha256: f84e34b452b85a518073c526e15444eb2f90da4abedbc0a5ed818122265b4038
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 481eb3b267a239eb8b445d7bef51b6673cec8946985019a56e633fc8a2fe1afb
+  mode: review
+sealed_at_utc: '2026-05-15T23:21:13Z'
+packet_sha256: 346f22097ff30be4d00cb9f2df7d7a14667929b809153830cdd4cd99ce172f36

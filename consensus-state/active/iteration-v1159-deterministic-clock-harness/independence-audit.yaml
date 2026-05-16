@@ -30,3 +30,251 @@ audit_log:
     - prompt_template (substituted by _build_prompt)
     - review_target (path passed via --review-target; may be unspecified)
     see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:09:27Z'
+  event_id: 2026-05-15T23:09:27Z_review_returned_and_sealed_codex-v1159-wfb-1
+  actor: codex-v1159-wfb-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-1-codex-v1159-wfb-1-pass1-pass.yaml
+  sha256: d8483f1adc6a5a9cdeac44e6f9118fb78ac8129eb30b5028e7540fed3a4a7d0f
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:09:45Z'
+  event_id: 2026-05-15T23:09:45Z_review_returned_and_sealed_gemini-v1159-wfb-1
+  actor: gemini-v1159-wfb-1
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-1-gemini-v1159-wfb-1-pass1-pass.yaml
+  sha256: 61362020501f51c5e6abe1c917dbe7f926e950e05c51cf7466dc71ed2a43f367
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:12:37Z'
+  event_id: 2026-05-15T23:12:37Z_review_returned_and_sealed_gemini-v1159-wfb-2
+  actor: gemini-v1159-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-2-gemini-v1159-wfb-2-pass2-pass.yaml
+  sha256: c4640ca33fb49d0de5e4bc234782ce01984c6a77712516a62e2cbf7f9325edf0
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:21:14Z'
+  event_id: 2026-05-15T23:21:14Z_review_returned_and_sealed_codex-v1159-wfb-2
+  actor: codex-v1159-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-2-codex-v1159-wfb-2-pass2-pass.yaml
+  sha256: 346f22097ff30be4d00cb9f2df7d7a14667929b809153830cdd4cd99ce172f36
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:26:56Z'
+  event_id: 2026-05-15T23:26:56Z_review_returned_and_sealed_gemini-v1159-wfb-3
+  actor: gemini-v1159-wfb-3
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-3-gemini-v1159-wfb-3-pass3-pass.yaml
+  sha256: 3b724be0aae9a1440cd6d762c4b714beb2631636e370537a05499797a49aebe8
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:30:44Z'
+  event_id: 2026-05-15T23:30:44Z_review_returned_and_sealed_codex-v1159-wfb-3
+  actor: codex-v1159-wfb-3
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-3-codex-v1159-wfb-3-pass3-pass.yaml
+  sha256: ee6ab71f6b67ab30cf0ad22b7ae220687721d4bc3c9bce13c1325e4370953a35
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:37:31Z'
+  event_id: 2026-05-15T23:37:31Z_review_returned_and_sealed_gemini-v1159-wfb-4
+  actor: gemini-v1159-wfb-4
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-4-gemini-v1159-wfb-4-pass4-pass.yaml
+  sha256: 2cb735ce45d5afc1f4b90a32ee59f1b0379c76436be8d274e5bdf7081c4679cc
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:41:41Z'
+  event_id: 2026-05-15T23:41:41Z_review_returned_and_sealed_codex-v1159-wfb-4
+  actor: codex-v1159-wfb-4
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-4-codex-v1159-wfb-4-pass4-pass.yaml
+  sha256: a0774b6b6c06a63571dcf3d30b8cffaa2078746a8f77165c45d649efbf524fd7
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:49:05Z'
+  event_id: 2026-05-15T23:49:05Z_review_returned_and_sealed_gemini-v1159-wfb-5
+  actor: gemini-v1159-wfb-5
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-5-gemini-v1159-wfb-5-pass5-pass.yaml
+  sha256: 5f8c761bd7dcaef6e98a70d9542e264be6f0e17fa6285693e777ecbff959c091
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:52:24Z'
+  event_id: 2026-05-15T23:52:24Z_review_returned_and_sealed_codex-v1159-wfb-5
+  actor: codex-v1159-wfb-5
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-5-codex-v1159-wfb-5-pass5-pass.yaml
+  sha256: 4cf24cc34bc2780698dffa975b6f822c126f7a4084ed3aaffe40698760b60ac4
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-15T23:57:54Z'
+  event_id: 2026-05-15T23:57:54Z_review_returned_and_sealed_gemini-v1159-wfb-6
+  actor: gemini-v1159-wfb-6
+  artifact: consensus-state/archive/review-passes/2026-05-15-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-6-gemini-v1159-wfb-6-pass6-pass.yaml
+  sha256: e7021ef9b4b29def684bc952e496fdcbaeebf365a592a9421511b0cecffd8426
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T00:01:58Z'
+  event_id: 2026-05-16T00:01:58Z_review_returned_and_sealed_codex-v1159-wfb-6
+  actor: codex-v1159-wfb-6
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-6-codex-v1159-wfb-6-pass6-pass.yaml
+  sha256: 99a9bbcd3b538ed36be7a4f870f2701583f7600ead0925f74d3cb4612ec4baee
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T00:18:21Z'
+  event_id: 2026-05-16T00:18:21Z_review_returned_and_sealed_gemini-v1159-wfb-7
+  actor: gemini-v1159-wfb-7
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-7-gemini-v1159-wfb-7-pass7-pass.yaml
+  sha256: 54fb52e431652c05150ce09a50547071d917f0d928d9446eae92f1b611d18c52
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T00:22:50Z'
+  event_id: 2026-05-16T00:22:50Z_review_returned_and_sealed_codex-v1159-wfb-7
+  actor: codex-v1159-wfb-7
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-7-codex-v1159-wfb-7-pass7-pass.yaml
+  sha256: 728e6ef41706deeec3c6bd8083517940bd84d0ac1f7ce5c728ee6fddc97c5d53
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T00:30:18Z'
+  event_id: 2026-05-16T00:30:18Z_review_returned_and_sealed_gemini-v1159-wfb-8
+  actor: gemini-v1159-wfb-8
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v1159-deterministic-clock-harness-gemini-v1159-wfb-8-gemini-v1159-wfb-8-pass8-pass.yaml
+  sha256: 55ce633ef9787a5f3bd4571eda098654ee58d75dd34d79ebddbc2344434d0f9a
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T00:33:30Z'
+  event_id: 2026-05-16T00:33:30Z_review_returned_and_sealed_codex-v1159-wfb-8
+  actor: codex-v1159-wfb-8
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v1159-deterministic-clock-harness-codex-v1159-wfb-8-codex-v1159-wfb-8-pass8-pass.yaml
+  sha256: b5fb838e10a2a0c94431a398d7c8eb2e2aa1d6e2bfb1521f90d72e1cb1327e2a
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

@@ -1,0 +1,46 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-wfb-1
+pass_id: codex-v1159-wfb-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: Harness still needs an out-of-scope production seam to run deterministically
+  citation: consensus_mcp/_dispatch_codex.py:244
+  risk: 'The goal packet authorizes only `consensus_mcp/tests/test_dispatch_codex_streaming.py`,
+    but the deterministic design depends on adding `_sleep` to `_invoke_codex`; applying
+    only the allowed test-file change will fail with `TypeError: _invoke_codex() got
+    an unexpected keyword argument ''_sleep''`, while applying the production-file
+    change violates the sealed scope.'
+  recommendation: Either amend the goal packet allowed_files to include `consensus_mcp/_dispatch_codex.py`
+    and treat the `_sleep` seam as part of the reviewed change, or redesign the harness
+    to avoid modifying production code under the current authorization.
+  patch_not_proposed_reason: 'No in-scope patch can fix this: deleting `_sleep` from
+    the test helper would restore the original timing flake, while keeping deterministic
+    injection requires changing the out-of-scope production file.'
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The harness design is substantively deterministic, but the
+  submitted review surface violates the allowed-files scope because its core dependency
+  is an out-of-scope production change.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 688cf9397c2d118659d992dd1af54d6b8dc52a0e238ab8f467552dda629ff407
+  output_sha256: 13ccd8ae5b55e95f8facfcb1bef6861a2f939b39e7e6c13a449f6701d7ad6e7b
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 7e4bc2e2369b4f28a458ac4160c700352df2ad4a222ebd816a40a8f39a2ee83f
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 481eb3b267a239eb8b445d7bef51b6673cec8946985019a56e633fc8a2fe1afb
+  mode: review
+sealed_at_utc: '2026-05-15T23:09:27Z'
+packet_sha256: d8483f1adc6a5a9cdeac44e6f9118fb78ac8129eb30b5028e7540fed3a4a7d0f

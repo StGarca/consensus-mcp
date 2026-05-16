@@ -1,0 +1,85 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: codex-v1159-wfb-4
+pass_id: codex-v1159-wfb-4-pass4
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: release_all does not terminate the fake process it is supposed to make
+    safe
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:174
+  risk: On a harness timeout before virtual time reaches a fake exit or abort threshold,
+    release_all only flips _released and notifies waiters. The injected sleep then
+    returns immediately on subsequent poll-loop iterations while proc.poll() can remain
+    None, leaving the daemon runner spinning after the driver raises. That violates
+    the stated deadlock-free safeguard for this release line.
+  recommendation: Make release_all propagate to the fake process, either through registered
+    release hooks/processes or by making StreamingFakeCodexPopen.poll() exit/terminate
+    when the clock is released, then keep the existing join/assertion as the loud
+    failure path.
+  patch_not_proposed_reason: Patch not authored because the right fix should choose
+    one harness-wide ownership model for fake-process release hooks; proposing a partial
+    cleanup path risks adding a second coordination surface.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: operator abort test does not deterministically establish a mid-run abort
+    condition
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:557
+  risk: The signal file is written immediately after starting the runner, before the
+    test waits for the fake codex process to enter the polling loop or emit its scheduled
+    working line. Depending on scheduling, the test can exercise startup-present signal
+    handling instead of the mid-run operator-abort path, weakening the named H2 coverage
+    for live signal-file detection plus termination.
+  recommendation: Wait for a deterministic in-run observable, such as the first dispatch_streamed_line
+    or a runner park after process creation, then write abort-dispatch-<pass_id>.signal
+    and drive to the abort. Keep the deletion and _terminated assertions.
+  patch_not_proposed_reason: Patch not authored because this should be adjusted together
+    with the release/notify cleanup so the new mid-run wait does not depend on another
+    ad hoc timing predicate.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: medium
+  summary: event-based waits are not actually woken by log events
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:139
+  risk: The design claims wait_for keys on dispatch-log events with a guaranteed log-event
+    waker, but stdout_reader writes dispatch-log events without notifying the SyncClock
+    condition. In event-count waits such as the wall-ceiling and post-stream drivers,
+    success can therefore depend on the 50 ms repoll safety net rather than a true
+    happens-before notification, leaving a small real-time polling dependency in the
+    nominal path.
+  recommendation: Add an explicit test-side notification after the observable event
+    is produced, or restructure the drivers to synchronize on runner progress and
+    then read the log outside the condition wait so _REPOLL remains only a lost-wakeup
+    safety net.
+  patch_not_proposed_reason: 'Patch not authored because the clean fix depends on
+    where the harness wants event notification ownership to live: fake pipe delivery,
+    runner progress, or a test-only log wrapper.'
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: 'Prior used: H1-H3 from the sealed packet as first-hand
+  facts, with the differential being the embedded v1.15.9 deterministic harness against
+  the v1.15.8 skipped real-sleep harness. The proposal deletes the skip and adds a
+  real clock seam, but the independent deadlock safeguard and two coverage synchronization
+  points are still weaker than the stated Workflow A goal.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 722b372fae514f16675bd504e076c07fee16f6694849e0e735d579f797233960
+  output_sha256: 29cda07dcc0862d8a40eaaffed954303beb28da6d6b781495cdff4734cfee1d1
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 11079ea230d65af8c6a567b2844f8561115374085c54ed0487969b1bc33b0f2c
+  mode: review
+sealed_at_utc: '2026-05-15T23:41:41Z'
+packet_sha256: a0774b6b6c06a63571dcf3d30b8cffaa2078746a8f77165c45d649efbf524fd7

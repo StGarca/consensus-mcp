@@ -1,0 +1,106 @@
+schema_version: 1
+pilot_id: iteration-v1159-stderr-scope
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    NARROW SCOPE-ADJUDICATION CONSULT (bounded; one decision).
+
+    Context: v1.15.9 (iteration-v1159-deterministic-clock-harness)
+    replaced the timing-fragile streaming-test harness with a
+    deterministic SyncClock and removed the v1.15.8
+    @_FLAKY_WINDOWS_CI skip. Its converged-plan scope is, verbatim:
+    "make the harness deterministic so the four tests run
+    EVERYWHERE and the skip is deleted — WITHOUT losing the
+    abort/heartbeat coverage they exist for". A multi-pass
+    Workflow B audit (codex+gemini) has run 6 passes; gemini clean
+    6x; codex caught + we integrated 8 substantive defects (real
+    regressions/claim-vs-code the rewrite introduced).
+
+    THE DECISION: codex pass-6 raised a NEW blocking finding
+    (codex-v1159-wfb-6 codex-rev-001): `test_stderr_drain_prevents_
+    deadlock` does not model pipe backpressure — the fake process
+    exits on virtual time regardless of whether stderr is drained,
+    so a regression removing production's stderr-reader thread
+    would still pass. codex calls this a blocking coverage hole on
+    the "deadlock surface".
+
+    VERIFIED FACT (reason from this; state your differential):
+    `git show da62d54^:...test_dispatch_codex_streaming.py` (the
+    v1.15.8 baseline, BEFORE this rewrite) shows the SAME test with
+    `exit_at=0.3` and assertions `assert not th.is_alive()` /
+    `assert holder["out"] == '{"ok": true}'` only — its docstring
+    states "In this fake we simulate by scheduling many stderr
+    lines; the test asserts that _invoke_codex returns cleanly".
+    i.e. it NEVER modeled real pipe backpressure; the fake always
+    exited on virtual time. The weakness is identical pre- and
+    post-rewrite. It is NOT a regression introduced by v1.15.9; it
+    is a pre-existing latent test-quality gap. codex's own
+    patch_not_proposed_reason says a real fix "need[s] focused
+    validation against the Windows CI determinism constraints" —
+    i.e. backpressure modeling is its own design surface that
+    risks reintroducing the flake/deadlock class v1.15.9 exists to
+    eliminate.
+
+  question: |
+    State the differential/prior you reason from. Single question,
+    justified vs the strongest counter, + the observation that
+    would show you WRONG.
+
+    Q1 — Is integrating a stderr-backpressure-modeling fix IN
+    SCOPE for v1.15.9, or is it a SEPARATE named follow-up
+    iteration? Options:
+      (a) Out of scope -> named follow-up. v1.15.9's converged
+          scope is "preserve existing coverage + deterministic
+          rewrite + remove skip". This coverage never existed
+          (pre-existing, identical in v1.15.8), so the rewrite
+          did not lose it; the iteration goal is met. Document an
+          advisory + concrete follow-up; the blocking objection is
+          dispositioned as out-of-scope-with-evidence (not
+          dismissed). Proceed to the >=3-green gate + cut.
+      (b) In scope -> integrate now. Coverage-preservation should
+          be read as coverage-CORRECTNESS for any test the rewrite
+          touched; ship the backpressure fix in v1.15.9 even
+          though it is new coverage + new design surface, accepting
+          the added determinism risk and an audit pass-7.
+      (c) Other: a bounded middle (e.g. a minimal assertion that
+          the scheduled stderr was fully read, WITHOUT
+          backpressure-modeling the fake) if it is genuinely
+          zero-determinism-risk and bounded.
+    Which, and why does your differential not just rationalize the
+    faster path? Note the project doctrines in tension:
+    no-deferral (defer only with a concrete blocker),
+    convergence!=correctness (don't let "more coverage is always
+    possible" prevent convergence on the actual goal), and
+    artifact-scoped-claims (don't over/under-claim what shipped).
+
+  non_goals:
+    - "re-litigating the 8 already-integrated audit findings"
+    - "designing the backpressure fix itself (only the SCOPE call)"
+    - "questioning the deterministic rewrite's correctness (gemini clean 6x; codex confirms the 4 skip targets are addressed)"
+  type: design_consult
+allowed_files:
+  - consensus_mcp/tests/test_dispatch_codex_streaming.py
+forbidden_files:
+  - consensus_mcp/_dispatch_gemini.py
+max_iterations: 3
+fix_author_policy: permissive
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml with the scope verdict + rationale + dispositioned blocking objection
+    check: 'true'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-16T00:10:00Z'
+  scope_signature: 'v1159-stderr-scope-adjudication'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis

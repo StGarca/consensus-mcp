@@ -1,0 +1,39 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: gemini-v1159-wfb-3
+pass_id: gemini-v1159-wfb-3-pass3
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The proposed change successfully replaces the timing-fragile
+  test harness with a fully deterministic, `threading.Condition`-based virtual clock
+  (`_SyncClock`). This directly addresses the root cause of the flaky tests on Windows
+  CI by creating an explicit happens-before relationship between the test driver and
+  the production code's poll loop. The production change is a minimal, clean injection
+  seam (`_sleep` kwarg) with zero impact on runtime behavior. The new test harness
+  is robust, includes deadlock-avoidance safeguards, and correctly maintains coverage
+  for the critical abort/heartbeat logic.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 8a3ed956cfb25a6d571d3ea534141e11cc49450419def4f5189cc44d442a41d9
+  output_sha256: 4334e73817b6b77107ecce39d1da9a75b51c3fb77caa89e0ab9f30c297ecd5b6
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 55284b1fd325aeef1a407d1cca71c65bbb48b4ac301a52e3b76e0206828e4330
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T23:26:56Z'
+packet_sha256: 3b724be0aae9a1440cd6d762c4b714beb2631636e370537a05499797a49aebe8

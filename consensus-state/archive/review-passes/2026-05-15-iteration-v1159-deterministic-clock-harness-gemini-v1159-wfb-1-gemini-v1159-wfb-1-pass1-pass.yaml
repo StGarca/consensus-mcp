@@ -1,0 +1,38 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: gemini-v1159-wfb-1
+pass_id: gemini-v1159-wfb-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The change successfully replaces the timing-fragile test
+  harness with a fully deterministic one based on a virtual clock and `threading.Condition`.
+  This robustly resolves the race conditions that caused flakiness on Windows CI.
+  The new implementation is of high quality, well-documented, and safely gated behind
+  a private test-only seam in the production code, with no change to production behavior.
+  The fix was also applied consistently to other tests in the same file, addressing
+  the concern in H3.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 155ed2d2a6eb465076d0bb9c8b2011abb83ff4a78ef06879187593782b97e0a6
+  output_sha256: cda543c15341ab33ed3c554b2b88b2ffa50bf30d6e9a4ddfd597c0914b485107
+  goal_packet_sha256: 7e4bc2e2369b4f28a458ac4160c700352df2ad4a222ebd816a40a8f39a2ee83f
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: 481eb3b267a239eb8b445d7bef51b6673cec8946985019a56e633fc8a2fe1afb
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-15T23:09:45Z'
+packet_sha256: 61362020501f51c5e6abe1c917dbe7f926e950e05c51cf7466dc71ed2a43f367

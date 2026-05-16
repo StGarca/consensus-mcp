@@ -1,0 +1,38 @@
+iteration_id: iteration-v1159-deterministic-clock-harness
+reviewer_id: gemini-v1159-wfb-7
+pass_id: gemini-v1159-wfb-7-pass7
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The proposed changes successfully replace the timing-fragile
+  test harness with a deterministic, `threading.Condition`-based clock (`_SyncClock`).
+  This directly addresses the root cause of the Windows CI flakes described in the
+  goal by eliminating real `time.sleep` calls in the test driver. The new harness
+  preserves and improves coverage for all abort scenarios (heartbeat silence, operator
+  signal, wall-time), and the `@_FLAKY_WINDOWS_CI` skip can now be removed. The implementation
+  is robust and includes safeguards against deadlocks, fully satisfying the requirements.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 7ea4d5a5909e0dc32066b599f7adaac14b22ba4d77edf7e0bd8dba5d00b4aaf3
+  output_sha256: f2c8c0a2987202e84c780b252936ecb61349b79484b0b2e9085519306587942d
+  goal_packet_sha256: c5c49a5ea6b20ebeba9846dbca23ec58fa4d5674a075565ccf5e4eacd200aa4a
+  scope_signature: v1159-deterministic-clock-harness
+  review_target_path: consensus-state/active/iteration-v1159-deterministic-clock-harness/review-packet.yaml
+  review_target_hash: bdcf942015282002b3e9a66eab4cf7abb916b9b726083b12621ce49e741deff0
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-16T00:18:21Z'
+packet_sha256: 54fb52e431652c05150ce09a50547071d917f0d928d9446eae92f1b611d18c52
