@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.15.10 - unreleased
+
+_Development branch. Candidate: the v1.15.9 named follow-up —
+OS pipe-buffer backpressure modeling for the streaming harness
+(finite-capacity reader + `release_all` integration + mutant
+gate; see `docs/advisories.md` 2026-05-16). Real design surface
+→ Workflow A._
+
 ## 1.15.9 - 2026-05-16
 
 **Deterministic streaming-test harness — the v1.15.8 Q2(a) named
