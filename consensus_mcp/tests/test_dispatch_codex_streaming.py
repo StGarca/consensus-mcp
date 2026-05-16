@@ -1082,11 +1082,21 @@ def test_clean_exit_returns_output(tmp_path):
 
 
 def test_stderr_drain_prevents_deadlock(tmp_path):
-    """codex emits ~100KB to stderr; without the stderr-reader thread
-    real codex would block on a full pipe buffer. The fake's stdout +
-    stderr `_FakePipeReader`s are still consumed by production's REAL
-    reader threads (the behavior this test exists to prove) — only the
-    clock is virtualized."""
+    """Production must keep a REAL stderr reader thread draining
+    codex's stderr (real codex deadlocks on a full stderr pipe).
+
+    SCOPE OF THIS TEST (v1.15.9 scope consult — claude+codex+gemini,
+    weighted-synthesis): the fake's stdout/stderr `_FakePipeReader`s
+    are consumed by production's REAL reader threads, and this test
+    asserts production actually drained ALL scheduled stderr (so a
+    regression that removes/breaks the stderr reader FAILS here). It
+    does NOT model OS pipe-buffer BACKPRESSURE — the fake proc exits
+    on virtual time regardless of consumption; it never blocks on a
+    full pipe. That is a PRE-EXISTING limitation (identical in the
+    v1.15.8 baseline `da62d54^`, not introduced by the deterministic
+    rewrite). True backpressure modeling is a tracked follow-up
+    (docs/advisories.md — finite-buffer reader + release_all +
+    mutant gate); deliberately deferred, NOT a v1.15.9 blocker."""
     repo_root = _setup_repo_root(tmp_path)
     clock = _SyncClock()
     log_path = repo_root / "consensus-state" / "state" / "dispatch-log.jsonl"
@@ -1120,3 +1130,21 @@ def test_stderr_drain_prevents_deadlock(tmp_path):
     assert not th.is_alive()
     assert "e" not in holder, f"unexpected exception: {holder.get('e')}"
     assert holder["out"] == '{"ok": true}'
+    # Bounded zero-determinism-risk coverage (v1.15.9 scope consult,
+    # weighted-synthesis of claude+codex): assert production's REAL
+    # reader threads drained EVERY scheduled stdout+stderr line.
+    # Post-run state read after thread death — no timing, no new
+    # threads, no backpressure modeling. A regression that removes
+    # or breaks the stderr reader leaves `_idx == 0` here → FAIL,
+    # which is exactly codex-v1159-wfb-6's stated requirement
+    # ("the test should fail if production stops draining stderr").
+    proc = factory.instances[0]
+    assert proc.stderr._idx == len(scheduled_err), (
+        f"production did NOT drain all stderr: read {proc.stderr._idx} "
+        f"of {len(scheduled_err)} scheduled lines (stderr-reader "
+        "regression — real codex would deadlock on the full pipe)"
+    )
+    assert proc.stdout._idx == len(scheduled_out), (
+        f"production did NOT drain all stdout: read {proc.stdout._idx} "
+        f"of {len(scheduled_out)} scheduled lines"
+    )
