@@ -1,0 +1,154 @@
+iteration_id: iteration-v11510-backpressure-harness
+converged_at_utc: '2026-05-16T01:50:00Z'
+convergence_rule: weighted-synthesis
+contributors_responsive: [claude, codex, gemini]
+blocking_objections: []
+all_substantive: true
+
+shared_prior_self_check:
+  result: PASSED
+  reasoning: |
+    Fast 3/3 convergence on the mechanism (finite-capacity buffer
+    in `_FakePipeReader`; `poll()` refuses exit while a pipe is
+    blocked; reader consumption notify-unblocks; mutant via a
+    private defaulted seam; minimal scope; no real OS pipes) — a
+    verify-harder flag. It passes: the DIFFERENTIALS were distinct
+    (claude: "reuse the v1.15.9 proven primitive, add ZERO new
+    synchronization surface"; codex: "deterministically reproduce
+    the ONE omitted failure mode, line-atomic byte-capacity is
+    sufficient, NOT a general OS simulator"; gemini: "a blocked
+    writer on a full finite buffer, strictly within the harness
+    confines, no real OS pipes"), and the proposals genuinely
+    DIVERGED on representation (claude: derived predicate;
+    codex: explicit byte-count+blocked-flag state; gemini:
+    `deque(maxlen=)`) and on the existing test (codex/claude:
+    add a focused test, leave 7; gemini: REWRITE the misnamed
+    `test_stderr_drain_prevents_deadlock` + add a mutant test).
+    Divergence-within-convergence from independently sealed
+    proposals (claude blind; codex/gemini auto-isolated) is the
+    signature of real agreement, not laundered unanimity.
+
+q1_backpressure_mechanism:
+  weighted_synthesis: |
+    `_FakePipeReader` gets an explicit bounded buffer:
+    `capacity_bytes` (default a sentinel = UNBOUNDED so the other
+    7 streaming tests are byte-identical — backward compatible),
+    a buffered-byte count, and an observable `writer_blocked`
+    flag. Representation = codex's explicit state (the mutant
+    MUST be able to ASSERT `writer_blocked`, which claude's
+    pure-derived-predicate could not expose); `deque`-style
+    line-atomic payloads (gemini) — payloads kept < capacity so
+    line-atomic is faithful for the full-buffer-blocks-writer
+    failure (codex's bound; a partial-byte kernel emulator is
+    explicitly out of scope).
+    `StreamingFakeCodexPopen.poll()` (already called every
+    production iteration) pumps due scheduled writes into the
+    buffer, sets `writer_blocked` when a write would exceed
+    `capacity_bytes`, and RETURNS None (proc not exited) while
+    any pipe is `writer_blocked` — EVEN IF `now >= exit_at`
+    (codex+gemini; = claude's "predicate gates exit"). Production's
+    REAL reader thread calling `_FakePipeReader.readline()`
+    drains bytes → clears `writer_blocked` → calls the existing
+    `_SyncClock.notify()` (the v1.15.9 codex-rev-003 waker — NO
+    new notify path, NO new thread, NO new lock). `release_all()`
+    remains the FIRST override in `poll()` (v1.15.9 codex-rev-001)
+    so a wedged harness still exits LOUD/FAST.
+    Deadlock-free: every wait is an EXISTING `_SyncClock` wait
+    proven in v1.15.9 (advance / readline-notify / proc-exit /
+    thread-death / release_all / _CEILING). The only new logic is
+    a predicate + a flag inside `poll()` — no new blocking
+    primitive ⇒ no new deadlock surface. Determinism: buffer
+    occupancy is a pure function of virtual `now` + `_idx`; no
+    real time; `_REPOLL` stays a pure lost-wakeup net.
+
+q2_mutant_gate:
+  weighted_synthesis: |
+    Private, keyword-only, DEFAULTED seam on `_invoke_codex`
+    mirroring the v1.15.9 `_sleep=` precedent EXACTLY: name
+    `_drain_stderr: bool = True` (claude/codex; semantically
+    clearer than gemini's `_start_stderr_reader` — names the
+    effect; gemini's "skip the stderr reader thread" is the
+    mechanism). Default True ⇒ ZERO production behaviour change
+    (still starts+joins the stderr reader exactly as today).
+    `_drain_stderr=False` (test-only) does NOT spawn the stderr
+    reader thread = the faithful mutant.
+    Tests:
+    - REWRITE `test_stderr_drain_prevents_deadlock` (gemini's
+      strong point: it is THE test whose name promises this and
+      has never proved it) to use a BOUNDED stderr capacity with
+      scheduled stderr > capacity; nominal (`_drain_stderr=True`)
+      MUST: proc exits, `holder["out"]=='{"ok": true}'`, all
+      stdout+stderr drained (`_idx==len`), `writer_blocked`
+      cleared.
+    - ADD `test_stderr_backpressure_deadlock_detected`
+      (`_drain_stderr=False`): stderr never drained ⇒
+      `writer_blocked` becomes True with virtual time at/after
+      `exit_at` ⇒ `poll()` cannot exit ⇒ the test asserts
+      `proc.stderr.writer_blocked` is observed AND the dispatch
+      does NOT return success; `_drive`'s `release_all()`+join is
+      the never-hang backstop (its firing is itself a loud
+      deterministic FAIL, never a timeout/hang).
+    GOVERNANCE (v1.15.9 codex-rev-001 lesson, claude-flagged):
+    the seam touches `consensus_mcp/_dispatch_codex.py`, which
+    the round-1 `goal_packet.allowed_files` did NOT list.
+    RECONCILED here: `deliverable.files` includes it; the
+    goal_packet allowed_files is corrected to match BEFORE the
+    Workflow B audit (codex listed it in files_in_scope —
+    converged).
+
+q3_scope_and_verification:
+  weighted_synthesis: |
+    Complete in THIS iteration — no deferral (all 3: gates
+    concrete + small). Scope: `_FakePipeReader` bounded buffer +
+    `poll()` pump/block + `_drain_stderr=` seam + the rewritten
+    test + the new mutant test. The other 7 streaming tests stay
+    on the UNBOUNDED default (zero migration, zero blast radius;
+    if a constructor default makes a tiny mechanical touch
+    necessary it is behaviour-preserving).
+    PROVISIONAL-UNTIL-PROVEN gate (strictest union of all three):
+    (a) nominal rewritten test passes; (b) the mutant test FAILS
+    deterministically when stderr drain is off (asserts
+    `writer_blocked` + non-success) and NEVER hangs (release_all
+    bound); (c) a production-side mutant — skipping
+    `t_stderr.start()` / forcing `_drain_stderr=False` for the
+    nominal test — makes it FAIL deterministically (codex's
+    must-fail bar), proving the test really detects the deadlock;
+    (d) ≥10 consecutive targeted backpressure-test runs + ≥3
+    consecutive full-module runs locally, all deterministic
+    (codex); (e) ≥3 CONSECUTIVE DISTINCT green Windows-CI run
+    attempts of the SAME release commit, attempts-API verified
+    with distinct timestamps — NOT N polls of one run id
+    (claude; the codified rerun-trap discipline). ARTIFACT-
+    SCOPED: do NOT claim v1.15.9 is fixed — it shipped the
+    documented limitation; the fix is attributed only to the new
+    v1.15.10 commit/tag (all 3).
+
+convention:
+  convention_schema_version: 1
+  falsification:
+    hypothesis: "A finite-capacity buffer in _FakePipeReader + poll()-gated-exit-while-blocked + a defaulted _drain_stderr seam deterministically reproduces the stderr-pipe-backpressure deadlock and proves the production stderr reader prevents it, with no real OS pipes and no new synchronization surface."
+    falsifiable_from_artifacts: false
+    discriminating_experiment: "the mutant gate: nominal (_drain_stderr=True) returns clean output with all stderr drained; mutant (_drain_stderr=False) deterministically reaches writer_blocked at/after exit_at and does NOT succeed; plus a production-side mutant (skip t_stderr.start()) that makes the nominal test FAIL deterministically; across >=10 targeted + >=3 full-module local runs and >=3 distinct green Windows-CI attempts."
+    refutation_observation: "any run where the mutant test passes (deadlock NOT detected) OR the nominal test flakes OR _drive's release_all/_CEILING has to fire in the NOMINAL case (a real hang, not a clean exit) OR a Windows-CI attempt is red."
+    empirical_status: pending
+  independent_safeguard:
+    applicable: true
+    mechanism: "release_all() remains the FIRST override in poll() and the _drive/_CEILING bound; any backpressure-model wedge fails LOUD/FAST instead of hanging CI."
+    works_if_root_cause_wrong: true
+    why: "Even if the backpressure model is wrong, release_all-first + the absolute _CEILING guarantee a misdesigned harness fails fast with diagnostics rather than reintroducing the v1.15.x hang class — protecting the determinism win regardless of the hypothesis."
+    ships_with_fix: true
+  decisive_experiment_before_next_iteration: "the >=3-distinct-green-Windows-CI-attempts gate (attempts-API verified) on the v1.15.10 release commit, with the nominal+mutant backpressure tests running"
+  cited_pass_ids: [claude-v11510-1-pass1, codex-v11510-1-pass1, gemini-v11510-1-pass1]
+
+deliverable:
+  files:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py  # bounded _FakePipeReader + poll() pump/block; rewrite test_stderr_drain + add mutant test
+    - consensus_mcp/_dispatch_codex.py  # private keyword-only _drain_stderr=True seam (default = zero behaviour change; v1.15.9 _sleep= precedent)
+    - docs/advisories.md  # flip the 2026-05-16 backpressure follow-up to RESOLVED-in-v1.15.10 (artifact-scoped) AFTER the tag exists
+  next_steps:
+    - "Reconcile goal_packet.allowed_files to add consensus_mcp/_dispatch_codex.py (governance, pre-audit)."
+    - "Implement per synthesis, TDD; mutant gate + >=10 targeted / >=3 full-module local repeats."
+    - "Workflow B audit (codex + gemini)."
+    - "Cut v1.15.10 only after the provisional-until-proven gate (mutant gate + >=3 distinct green Windows-CI attempts, attempts-API verified)."
+  named_blockers: []
+  estimated_complexity: medium

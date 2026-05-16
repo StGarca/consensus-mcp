@@ -1,0 +1,141 @@
+pass_id: claude-v11510-1-pass1
+contributor: claude
+role: orchestrator
+goal_satisfied: true
+blocking_objections: []
+
+differential_prior: |
+  I reason from the v1.15.9 hard-won invariant: a deterministic
+  harness is correct iff every blocking wait has a GUARANTEED
+  waker on every path and no correctness depends on real time
+  (_REPOLL is a pure lost-wakeup net). Backpressure is just
+  another state machine on the SAME single `_SyncClock`
+  Condition — model it with that discipline and it cannot
+  reintroduce the flake class; model it with a new lock/thread
+  and it will. Distinct-from-shared-prior check: this is NOT the
+  "preserve coverage" prior codex drove in v1.15.9; it is a
+  "reuse the proven concurrency primitive, add zero new
+  synchronization surface" prior. Falsifier stated per question.
+
+positions:
+  Q1_backpressure_mechanism:
+    stance: "Model the pipe as a finite backlog computed from EXISTING state, gating `poll()` — NO new thread, NO new lock, NO production change for the mechanism itself. Reuse the `_SyncClock` Condition."
+    reasoning: |
+      The fake already has everything needed. Define, per pipe,
+      `due = count(scheduled bytes with sched_time <= now)` and
+      `unread = due - _idx`. `unread` IS the pipe-buffer
+      occupancy (produced-but-not-readline()'d). Add a per-reader
+      `capacity` (default `inf` → existing 8 tests unchanged,
+      backward-compatible).
+      - WRITER BLOCK: `StreamingFakeCodexPopen.poll()` already
+        runs every production iteration. It returns None (proc
+        NOT exited — "blocked writing a full pipe") while ANY
+        pipe has `unread > capacity`, EVEN IF `now >= exit_at`.
+        The proc can only exit once every pipe's `unread <=
+        capacity` AND `now >= exit_at`. This is the real
+        semantic: codex cannot finish while blocked on a full
+        stderr pipe nobody drains.
+      - UNBLOCK: production's REAL reader thread calling
+        `_FakePipeReader.readline()` advances `_idx` → `unread`
+        drops → on its next `poll()` the proc can progress/exit.
+        readline() already notifies the clock (v1.15.9
+        codex-rev-003) → the writer/`poll()` waiter is woken.
+        No new notify path.
+      - DEADLOCK-FREE: every wait is the SAME `_SyncClock` waits
+        that v1.15.9 proved (advance / readline-notify /
+        proc-exit / thread-death / release_all / _CEILING). The
+        only NEW thing is a pure predicate (`unread > capacity`)
+        evaluated inside `poll()` — no new blocking primitive, so
+        no new deadlock surface. `release_all()` already forces
+        `poll()` to terminate (v1.15.9 codex-rev-001) → a wedged
+        backpressure model still fails LOUD/FAST.
+      Determinism: `unread` is a function of `now` + `_idx`, both
+      already deterministic; no real time. `_REPOLL` stays a net.
+    wrong_if: |
+      If production's stderr reader thread's `readline()` cadence
+      relative to the proc-write schedule cannot be made a pure
+      function of virtual time (e.g. production reads in a way the
+      fake can't observe deterministically) — then a predicate in
+      `poll()` is insufficient and an explicit blocked/notify
+      handshake is needed. Refuter: a Windows-CI run where the
+      nominal backpressure test's drain completes but `poll()`
+      ordering vs the reader makes `unread` nondeterministic
+      (test flakes) — then this is wrong.
+
+  Q2_mutant_gate:
+    stance: "Bounded private defaulted production seam `_drain_stderr: bool = True` on `_invoke_codex`, mirroring the v1.15.9 `_sleep=` precedent EXACTLY. Test-only sets it False to NOT spawn the stderr reader thread = the faithful mutant."
+    reasoning: |
+      The mutant must reproduce "the stderr drain is
+      broken/absent" — which is inherently a production-behaviour
+      variation; it cannot be faked purely in the test object
+      because production owns the reader-thread loop. The
+      v1.15.9-sanctioned, monkeypatch-free way is a private,
+      keyword-only, DEFAULTED seam (zero default behaviour
+      change), identical in shape and justification to `_sleep=`.
+      A parametrized test asserts:
+      - nominal (`_drain_stderr=True`): proc exits cleanly,
+        `holder["out"]` set, drain assertion holds.
+      - mutant (`_drain_stderr=False`): stderr never drained →
+        `unread` exceeds capacity forever → proc cannot exit →
+        production's OWN watchdog (wall-time/silence) raises
+        `CodexInvocationError` (the real deadlock-becomes-abort);
+        the test ASSERTS that abort/raise occurs AND that the
+        driver's `release_all()` ceiling never had to fire (the
+        production watchdog caught it, deterministically, before
+        any hang). If `release_all` DID fire, that itself is a
+        loud deterministic FAIL — never a hang.
+      GOVERNANCE FLAG (v1.15.9 codex-rev-001 lesson): this seam
+      touches `consensus_mcp/_dispatch_codex.py`, which the
+      round-1 goal_packet `allowed_files` does NOT list (it lists
+      only the test file). If convergence adopts the seam, the
+      converged-plan `deliverable.files` MUST include
+      `_dispatch_codex.py` and `allowed_files` be reconciled
+      BEFORE the Workflow B audit — decide explicitly, do not
+      let the pre-convergence scope silently forbid the ratified
+      mechanism.
+    wrong_if: |
+      If a faithful mutant is achievable with NO production seam
+      (e.g. a fake `stderr` whose `readline()` production still
+      calls but which models a dead reader) that ALSO proves the
+      deadlock deterministically — then the seam is unnecessary
+      scope expansion and that is the right answer. State it.
+
+  Q3_scope_and_verification:
+    stance: "Minimal: ONE new parametrized test + backward-compatible buffered reader (default capacity=inf) + the `_drain_stderr` seam. Do NOT refactor the existing 8 tests."
+    reasoning: |
+      Capacity defaulting to `inf` makes the buffered reader a
+      strict superset — the 8 existing tests are byte-identical
+      in behaviour, zero migration, zero new blast radius
+      (no-deferral is satisfied because the remaining work IS
+      small and bounded; refactoring 8 passing tests would be
+      gratuitous and risk the determinism we just proved). The
+      new test `test_stderr_backpressure_*` carries both the
+      nominal and mutant cases. PROVISIONAL-UNTIL-PROVEN gate:
+      (i) the mutant gate behaves exactly as specified (nominal
+      pass / mutant deterministic-fail / never hang) locally
+      across repeated runs; AND (ii) >=3 CONSECUTIVE DISTINCT
+      green Windows-CI run attempts of the same commit, verified
+      via the GitHub attempts API + distinct timestamps (NOT N
+      polls of one run id — the codified rerun-trap discipline).
+    wrong_if: |
+      If a bounded-capacity reader cannot be made backward
+      compatible at `inf` without touching the 8 tests (some
+      test depends on the unbounded delivery semantics in a way
+      `inf` doesn't preserve) — then scope necessarily widens to
+      those tests and "minimal" is wrong; name them explicitly.
+
+recommended_converged_shape: |
+  Finite-`capacity` `_FakePipeReader` (default `inf`,
+  backward-compatible); `StreamingFakeCodexPopen.poll()` gates
+  exit on `unread <= capacity` per pipe (reusing the existing
+  `_SyncClock` waits + `release_all` — no new thread/lock/notify,
+  no production change for the mechanism); a private defaulted
+  `_invoke_codex(_drain_stderr=True)` seam (v1.15.9 `_sleep=`
+  precedent) for the faithful mutant; ONE new parametrized test
+  (nominal clean-exit + mutant production-watchdog-abort, with
+  `release_all` as the never-hang backstop). Reconcile
+  `allowed_files` to include `_dispatch_codex.py` in the
+  converged plan if the seam is adopted (v1.15.9 governance
+  lesson). Prove via the mutant gate + >=3 distinct green
+  Windows-CI attempts (attempts-API verified).
+cited_pass_ids: [claude-v11510-1-pass1]

@@ -1,0 +1,125 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T01:32:10Z'
+  event_id: 2026-05-16T01:32:10Z_review_returned_and_sealed_codex-v11510-1
+  actor: codex-v11510-1
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-codex-v11510-1-codex-v11510-1-pass1-pass.yaml
+  sha256: 28505b2add53a8c6c3378d96b986ee438b3f8f868c2d65902a6fcd09d40eb04f
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T01:44:39Z'
+  event_id: 2026-05-16T01:44:39Z_review_returned_and_sealed_gemini-v11510-1
+  actor: gemini-v11510-1
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-gemini-v11510-1-gemini-v11510-1-pass1-pass.yaml
+  sha256: 4671dfe444da51ad8e403ab730224cf76871619a84b151c89223af9f73b73082
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T02:06:10Z'
+  event_id: 2026-05-16T02:06:10Z_review_returned_and_sealed_gemini-v11510-wfb-1
+  actor: gemini-v11510-wfb-1
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-gemini-v11510-wfb-1-gemini-v11510-wfb-1-pass1-pass.yaml
+  sha256: a981160a563c638c003ab0c5b4ef8db59b127f192e6499f0da44564fe6fa36a7
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T02:08:23Z'
+  event_id: 2026-05-16T02:08:23Z_review_returned_and_sealed_codex-v11510-wfb-1
+  actor: codex-v11510-wfb-1
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-codex-v11510-wfb-1-codex-v11510-wfb-1-pass1-pass.yaml
+  sha256: 9a8678e4a8afc28b51a9795331c76f14aee49bdb077ea8f3b117085c410388c8
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T02:15:13Z'
+  event_id: 2026-05-16T02:15:13Z_review_returned_and_sealed_gemini-v11510-wfb-2
+  actor: gemini-v11510-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-gemini-v11510-wfb-2-gemini-v11510-wfb-2-pass2-pass.yaml
+  sha256: ba70b6ac9434f9d26c037f9c8991e5cc74f694f450b317f0451f6b6fa372676f
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T02:32:45Z'
+  event_id: 2026-05-16T02:32:45Z_review_returned_and_sealed_codex-v11510-wfb-2
+  actor: codex-v11510-wfb-2
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-codex-v11510-wfb-2-codex-v11510-wfb-2-pass2-pass.yaml
+  sha256: 7bc573e4d557c925f96a305060a4ff8dc04f2549631aa3b69d400b6af81a8f73
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T02:41:38Z'
+  event_id: 2026-05-16T02:41:38Z_review_returned_and_sealed_gemini-v11510-wfb-3
+  actor: gemini-v11510-wfb-3
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-gemini-v11510-wfb-3-gemini-v11510-wfb-3-pass3-pass.yaml
+  sha256: dfa1c511f7b32a16704892cfc59928f8b4bcca1a0be3742b41b46ca1cf452d4b
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-16T02:42:30Z'
+  event_id: 2026-05-16T02:42:30Z_review_returned_and_sealed_codex-v11510-wfb-3
+  actor: codex-v11510-wfb-3
+  artifact: consensus-state/archive/review-passes/2026-05-16-iteration-v11510-backpressure-harness-codex-v11510-wfb-3-codex-v11510-wfb-3-pass3-pass.yaml
+  sha256: d7a69c2a1852b9f5d955dc27c98a6c019ade1754c35fdb17161f66a2488326b9
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

@@ -1,0 +1,137 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: codex-v11510-1
+pass_id: codex-v11510-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential/prior: the valuable proof is not a general
+  OS pipe simulator; it is a deterministic reproduction of the one failure mode the
+  current harness omits: a writer cannot finish because stderr is not drained. Current
+  evidence says v1.15.9 deliberately kept real reader threads but did not model backpressure
+  (verified via docs/advisories.md:23-53 and consensus_mcp/tests/test_dispatch_codex_streaming.py:214-262,322-342).
+  The better move is a finite byte-capacity buffer inside _FakePipeReader, pumped
+  by StreamingFakeCodexPopen.poll(), where poll refuses exit while any pipe is blocked,
+  and reader consumption notify-unblocks the writer. This beats a real subprocess/OS-pipe
+  integration because that reintroduces scheduler and platform timing risk the goal
+  forbids (verified via goal_packet.yaml:44-46). It beats a partial-byte pipe emulator
+  because line-atomic payloads are sufficient to prove drain/no-drain behavior while
+  avoiding a broader process simulator explicitly out of scope (verified via goal_packet.yaml:87-90).
+  It beats only strengthening _idx assertions because docs/advisories.md:44-53 names
+  true backpressure modeling plus release_all plus mutant gate as the deferred follow-up.
+  Root-cause mechanism note: the real OS claim is provisional from these artifacts;
+  the pre-specified external refuting observation would be a target Windows CI subprocess
+  writing more than the pipe capacity to stderr with no reader, yet exiting and joining
+  normally before stderr is consumed.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: e83871880c89097edbc80495b7c1f71cf5d82fafa2bc9e054b158b170691a725
+  output_sha256: b02eb8672fea96de65333330e5eeb3ba659c35e059c7574861cbf5371756f48b
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: b5644c1f2ec4b529435bdf5b0a704ee61403838cdd8ecd1c2e04f404ed957d9e
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: 1c2222b626b51348342903511c3ae809dfee60711d0f7759baf3764c3b049bbb
+  mode: proposal
+proposal:
+  selected_target: Implement bounded, line-atomic pipe backpressure in the existing
+    streaming test fake, plus a private default-on stderr-drain seam and committed
+    mutant gate in iteration-v11510-backpressure-harness.
+  rationale_vs_alternatives: 'Differential/prior: the valuable proof is not a general
+    OS pipe simulator; it is a deterministic reproduction of the one failure mode
+    the current harness omits: a writer cannot finish because stderr is not drained.
+    Current evidence says v1.15.9 deliberately kept real reader threads but did not
+    model backpressure (verified via docs/advisories.md:23-53 and consensus_mcp/tests/test_dispatch_codex_streaming.py:214-262,322-342).
+    The better move is a finite byte-capacity buffer inside _FakePipeReader, pumped
+    by StreamingFakeCodexPopen.poll(), where poll refuses exit while any pipe is blocked,
+    and reader consumption notify-unblocks the writer. This beats a real subprocess/OS-pipe
+    integration because that reintroduces scheduler and platform timing risk the goal
+    forbids (verified via goal_packet.yaml:44-46). It beats a partial-byte pipe emulator
+    because line-atomic payloads are sufficient to prove drain/no-drain behavior while
+    avoiding a broader process simulator explicitly out of scope (verified via goal_packet.yaml:87-90).
+    It beats only strengthening _idx assertions because docs/advisories.md:44-53 names
+    true backpressure modeling plus release_all plus mutant gate as the deferred follow-up.
+    Root-cause mechanism note: the real OS claim is provisional from these artifacts;
+    the pre-specified external refuting observation would be a target Windows CI subprocess
+    writing more than the pipe capacity to stderr with no reader, yet exiting and
+    joining normally before stderr is consumed.'
+  deliverable_scope:
+    next_iteration_id: iteration-v11510-backpressure-harness
+    files_in_scope:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    - consensus_mcp/_dispatch_codex.py
+    - docs/advisories.md
+    - consensus-state/active/iteration-v11510-backpressure-harness/converged-plan.yaml
+    files_out_of_scope:
+    - consensus_mcp/server.py
+    - consensus_mcp/dispatch_templates/codex_review_schema.json
+    - consensus_mcp/dispatch_templates/codex_proposal_schema.json
+    - packaging/release files
+    - any CI workflow or distribution channel
+    key_design_decisions:
+    - Keep implementation local and complete in the current iteration; no follow-up
+      deferral because Q1-Q4 gates are concrete and small.
+    - 'Add bounded-buffer state to _FakePipeReader: write index, read/drain index,
+      buffered byte count, blocked-writer flag, and capacity_bytes defaulting to unbounded
+      for existing tests.'
+    - Have StreamingFakeCodexPopen.poll() pump due pipe writes before exit checks
+      and return None while any pipe is blocked; release_all remains the first override
+      so teardown exits fast (release_all behavior verified via consensus_mcp/tests/test_dispatch_codex_streaming.py:181-190
+      and poll release path via consensus_mcp/tests/test_dispatch_codex_streaming.py:322-342).
+    - Reader consumption removes bytes, pumps the next due payload if capacity frees,
+      and calls _SyncClock.notify(); no correctness path depends on _REPOLL or wall-clock
+      sleeps.
+    - Add private keyword-only _drain_stderr=True to _invoke_codex, mirroring the
+      existing private _sleep seam (verified via consensus_mcp/_dispatch_codex.py:282-296,324-335).
+      Default behavior still starts and joins the stderr reader exactly as today (verified
+      via consensus_mcp/_dispatch_codex.py:427-445,541-548).
+    - 'Minimal test scope: update or add one focused backpressure test while leaving
+      the other seven streaming tests on default unbounded pipe behavior unless a
+      tiny constructor default change is mechanically necessary.'
+    - 'Mutant gate: nominal default drain must return output and drain all stdout/stderr;
+      injected no-drain case must observe stderr writer_blocked with virtual time
+      at/after exit_at, poll unable to exit, then release_all terminates the runner
+      without hanging.'
+    acceptance_gates:
+    - 'Nominal targeted pytest passes: consensus_mcp/tests/test_dispatch_codex_streaming.py::test_stderr_drain_prevents_deadlock
+      with bounded stderr capacity, scheduled stderr volume greater than capacity,
+      holder[''out''] == ''{"ok": true}'', and stdout/stderr fully consumed.'
+    - 'Committed mutant gate passes as a harness proof: calling _invoke_codex with
+      _drain_stderr=False reaches proc.stderr.writer_blocked deterministically, does
+      not produce successful output, and release_all plus join leaves no live runner
+      thread.'
+    - 'Temporary production mutant gate fails deterministically: skipping t_stderr.start()
+      or forcing _drain_stderr=False for the nominal test makes test_stderr_drain_prevents_deadlock
+      fail on blocked backpressure or max_rounds release_all, not hang or timeout.'
+    - Full streaming test module passes repeatedly, with at least 10 consecutive targeted
+      runs of the backpressure test and 3 consecutive runs of the full consensus_mcp/tests/test_dispatch_codex_streaming.py
+      module on the local Windows workspace.
+    - converged-plan.yaml records the per-Q design, deadlock-free waker table, mutant-gate
+      procedure, and the provisional external-refuting observation; docs/advisories.md
+      is updated from 'deferred follow-up' to the implemented version/commit only
+      after the implementation commit/tag exists, explicitly naming which artifacts
+      contain the fix and which older v1.15.9 artifacts do not.
+  risks:
+  - Line-atomic buffering is intentionally narrower than kernel byte-stream semantics;
+    acceptable only because payload size is kept below capacity and the target failure
+    is full-buffer writer blocking, not partial-line reads.
+  - Adding a private _drain_stderr seam touches production code shape; risk is bounded
+    by default True, no public CLI exposure, and tests proving existing stderr reader
+    behavior remains default.
+  - A misordered notify could create a harness wedge; release_all-first poll behavior,
+    exact condition predicates, and repeated no-hang mutant runs are mandatory gates.
+  - Do not claim v1.15.9 is fixed; current verified docs say v1.15.9 contains the
+    limitation until addressed, so closure must name the new version plus commit/tag
+    and artifact split.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-16T01:32:09Z'
+packet_sha256: 28505b2add53a8c6c3378d96b986ee438b3f8f868c2d65902a6fcd09d40eb04f

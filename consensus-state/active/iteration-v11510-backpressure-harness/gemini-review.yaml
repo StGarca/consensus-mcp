@@ -1,0 +1,41 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: gemini-v11510-wfb-3
+pass_id: gemini-v11510-wfb-3-pass3
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'The changes fully satisfy the goal. The new test harness
+  components (`_FakePipeReader`, `StreamingFakeCodexPopen`) correctly model backpressure
+  from a finite-capacity byte buffer. `StreamingFakeCodexPopen.poll()` correctly prevents
+  the process from exiting while its output pipes are blocked. The `test_stderr_drain_prevents_deadlock`
+  mutant gate is implemented exactly as specified: it passes when the stderr drain
+  is enabled and fails deterministically and quickly when the drain is disabled, proving
+  the harness can detect the deadlock surface it was designed to model. The entire
+  implementation is coordinated via `_SyncClock` and its `release_all` safeguard,
+  ensuring deterministic, deadlock-free execution that is not dependent on wall-clock
+  timing, thus meeting the non-negotiable requirement to avoid CI flakiness.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: ed052cee9a5058329b135090d012662cf3220c7d534867b675a9726075083294
+  output_sha256: 4290aad1935b098552ed28d9910a1df856b52b61bb4f650544b2f932be176dad
+  goal_packet_sha256: 3425162004a9153a827dd63c1b3088e980ba435c73d447d32c8e98e80aef702a
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: 55b1ee552e477cf01b553ef701c6d38398e39f1ffedef90a896fd3ae25b335f3
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-16T02:41:38Z'
+packet_sha256: dfa1c511f7b32a16704892cfc59928f8b4bcca1a0be3742b41b46ca1cf452d4b

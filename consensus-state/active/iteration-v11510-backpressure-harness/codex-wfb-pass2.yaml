@@ -1,0 +1,71 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: codex-v11510-wfb-2
+pass_id: codex-v11510-wfb-2-pass2
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: The mutant branch treats the disabled-stderr deadlock as a passing condition
+    instead of a deterministic test failure.
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:887
+  risk: 'The required mutant gate is inverted: running with `drain_stderr=False` can
+    satisfy the test by observing `_writer_blocked`, so the sealed gate does not enforce
+    the stated requirement that stderr-drain-disabled execution fails deterministically.'
+  recommendation: Make the disabled-stderr path assert a fast deterministic failure
+    of the dispatch/harness, not a successful observation of deadlock state; keep
+    `release_all()` as teardown, not the success condition.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: The fake pipe capacity is line-count bounded, not byte-capacity bounded
+    like an OS pipe buffer.
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:192
+  risk: The harness can miss byte-volume backpressure cases because it only blocks
+    after a fixed number of queued payloads; a few oversized stderr writes would not
+    model the real full-pipe surface accurately.
+  recommendation: Track buffered bytes and block when appending the next payload would
+    exceed the configured byte capacity; set the test capacity below the scheduled
+    stderr byte volume.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+- id: codex-rev-003
+  severity: high
+  summary: The fake writer blocks inside `poll()`, so normal driver teardown can still
+    depend on the real-time ceiling when stderr is not drained.
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:333
+  risk: If the production drain regresses in the main pass, the runner can park inside
+    `proc.poll()` before `_drive` observes a runner sleep/progress point, turning
+    the failure path back into a `_CEILING` wait rather than a fast deterministic
+    gate.
+  recommendation: Represent blocked writes as fake-process state and have `poll()`
+    return `None` while blocked; let reader consumption or `release_all()` advance/unblock
+    the state machine without parking the runner inside `poll()`.
+  patch_not_proposed_reason: null
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The proposal adds a bounded pipe concept, but it does not
+  satisfy the mandatory mutant-fails gate and still leaves important backpressure
+  behavior modeled in a way that can fall back to timeout-driven failure.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: eec976d12e6733a4a2d92651c604b3b2c73c22acaf838c941be30859d40f6016
+  output_sha256: 271388cfedad004233f98609f8001f7ff8733e5e199ad0c52947a601bb3b6d77
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 3425162004a9153a827dd63c1b3088e980ba435c73d447d32c8e98e80aef702a
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: e7435f3e86295ab45948ae6be3260f39a7bd29c83e5ae4918a00ce655b0f5ea7
+  mode: review
+sealed_at_utc: '2026-05-16T02:32:45Z'
+packet_sha256: 7bc573e4d557c925f96a305060a4ff8dc04f2549631aa3b69d400b6af81a8f73

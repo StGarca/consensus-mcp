@@ -1,0 +1,48 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: codex-v11510-wfb-1
+pass_id: codex-v11510-wfb-1-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: mutant gate still relies on the real-time ceiling to prove the no-stderr-reader
+    deadlock
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:777
+  risk: 'The required mutant gate is timeout-driven: the disabled-stderr path waits
+    for `_drive` to hit `_CEILING` before `release_all()` fires. That violates the
+    goal''s no-hang/no-timeout constraint and makes the proof depend on the safety
+    timeout instead of deterministically observing pipe backpressure.'
+  recommendation: Drive the mutant branch to the explicit backpressure state, e.g.
+    wait on the clock condition until the fake stderr buffer is saturated and `_writer_blocked`
+    is true, then call `release_all()` and assert the runner unwinds without waiting
+    for `_CEILING`.
+  patch_not_proposed_reason: The safe fix is a targeted harness rewrite of the mutant
+    driver path; I am reporting the blocking review finding without authoring a speculative
+    diff against the embedded sealed packet.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The implementation models bounded stderr buffering, but
+  the required mutant gate is still ceiling-timeout based rather than deterministic
+  and fast.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: d1644b31a0ab9705c918a28c9f47aa255188d0d47c661a93c7b4a4a8b84affe8
+  output_sha256: 700f2b29bcef6af3516777a2e905c734a802851f4307ae8ad2141f3f1e1e2cbe
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 3425162004a9153a827dd63c1b3088e980ba435c73d447d32c8e98e80aef702a
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: fffdab8b51998e05a067db781797782b1dbdebb0aed95d417426152d26d5739f
+  mode: review
+sealed_at_utc: '2026-05-16T02:08:23Z'
+packet_sha256: 9a8678e4a8afc28b51a9795331c76f14aee49bdb077ea8f3b117085c410388c8

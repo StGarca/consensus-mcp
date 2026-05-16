@@ -1,0 +1,120 @@
+schema_version: 1
+pilot_id: iteration-v11510-backpressure-harness
+workflow_mode: propose-converge
+independence: blind-first-reveal
+goal:
+  summary: |
+    The v1.15.9 NAMED FOLLOW-UP (docs/advisories.md 2026-05-16):
+    model OS pipe-buffer BACKPRESSURE in the streaming-dispatch
+    test harness so `test_stderr_drain_prevents_deadlock` actually
+    proves what its name claims.
+
+    STATE TODAY (verified — read the embedded harness): v1.15.9's
+    `_FakePipeReader` delivers scheduled bytes on a virtual
+    `_SyncClock`; `StreamingFakeCodexPopen.poll()` exits purely on
+    virtual time (`exit_at`) regardless of whether stderr was
+    consumed. `test_stderr_drain_prevents_deadlock` keeps REAL
+    production stdout/stderr reader threads and asserts production
+    drained ALL scheduled lines (`_FakePipeReader._idx ==
+    len(scheduled)`) — so a regression that REMOVES the stderr
+    reader fails deterministically. But the fake never BLOCKS on a
+    full pipe: it does not reproduce the real failure where codex,
+    writing to a stderr pipe nobody drains, blocks on a full OS
+    buffer and the whole dispatch deadlocks. That backpressure is
+    the actual deadlock surface; today it is unmodeled (this is
+    pre-existing, unanimously adjudicated NOT a v1.15.9 regression
+    — iteration-v1159-stderr-scope).
+
+    MANDATORY converged design seed (from the v1.15.9 scope
+    consult — claude+codex+gemini weighted-synthesis; these are
+    CONSTRAINTS, not open questions):
+    - finite-capacity `_FakePipeReader` (a bounded buffer);
+    - `StreamingFakeCodexPopen.poll()` MUST NOT exit while a pipe
+      is "blocked" (buffer full + writer waiting);
+    - `_SyncClock` deterministically UNBLOCKS the writer when the
+      reader thread consumes — no real sleep, no scheduling hope;
+    - MUST integrate the existing `_SyncClock.release_all()`
+      teardown safeguard so a deadlocked/misdesigned harness fails
+      LOUD/FAST and can never wedge CI;
+    - MUST ship a MUTANT GATE: with the production stderr drain
+      intact the test passes; with stderr draining disabled the
+      test FAILS DETERMINISTICALLY (proving it really detects the
+      deadlock); and in NO case does it hang/timeout.
+
+    NON-NEGOTIABLE: do not reintroduce the Windows-CI flake/
+    deadlock class v1.15.9 spent 7 audit passes eliminating. Any
+    design not provably deterministic + deadlock-free is out.
+
+  question: |
+    State the differential/prior you reason from. Per question:
+    stance, justified vs the strongest counter, + the concrete
+    observation that would show you WRONG. structural_abstention
+    OK per question.
+
+    Q1 — BACKPRESSURE MECHANISM. Design the finite-buffer +
+    block + deterministic-unblock model within the existing
+    `_SyncClock`/`_FakePipeReader`/`StreamingFakeCodexPopen`
+    primitives. Specifically: where does the writer "block"
+    (the fake proc producing scheduled bytes), how does the
+    reader thread's consumption signal "space freed", and how is
+    every wait condition-notified with a guaranteed waker on
+    EVERY path (buffer-full, reader-consumes, proc-exit, abort,
+    release_all)? Prove it is deadlock-free (every blocking wait
+    has a guaranteed waker) and deterministic (no correctness
+    dependence on real time / `_REPOLL` — `_REPOLL` stays a pure
+    lost-wakeup net). Is a production change needed, or is this
+    entirely in the test fake (preferred)?
+
+    Q2 — MUTANT GATE. How is "stderr drain disabled" injected
+    without touching production behavior by default (a test-only
+    knob / monkeypatch-free seam, consistent with v1.15.9's
+    `_sleep=` DI precedent), such that the test FAILS
+    deterministically (not flakily) when the drain is off and
+    never hangs (release_all bounds it)? What exactly does the
+    test assert in the mutant vs nominal case?
+
+    Q3 — SCOPE & VERIFICATION. Minimal converged deliverable:
+    one new backpressure test + the harness changes, or also a
+    refactor of the existing 8 tests onto the buffered reader?
+    (no-deferral if bounded; name a CONCRETE blocker if you
+    defer any of it). Provisional-until-proven gate: a flaky/
+    deadlock-prone fix is NOT proven by one green run — define
+    it (the mutant gate behaviour + N consecutive distinct green
+    Windows-CI attempts of the same commit, attempts-API
+    verified per the rerun-trap discipline).
+
+  non_goals:
+    - "re-litigating v1.15.9 (shipped, audit-converged, gate-proven)"
+    - "changing production _invoke_codex behaviour by default — at most a test-only defaulted seam, mirroring the v1.15.9 _sleep= precedent"
+    - "reintroducing real time.sleep / scheduling-hope on the drive path"
+    - "a general process/pipe simulator — model ONLY the stderr-backpressure deadlock surface (gemini's over-engineering caution)"
+  type: design_consult
+allowed_files:
+  - consensus_mcp/tests/test_dispatch_codex_streaming.py
+  # Reconciled per converged-plan q2 (v1.15.9 codex-rev-001
+  # governance lesson): the private defaulted _drain_stderr= seam
+  # is the ratified mutant mechanism; allowed BEFORE the audit.
+  - consensus_mcp/_dispatch_codex.py
+forbidden_files:
+  - consensus_mcp/_dispatch_gemini.py
+max_iterations: 3
+fix_author_policy: permissive
+acceptance_gates:
+  - id: A1
+    description: converged-plan.yaml with per-Q weighted synthesis + deadlock-free argument + mutant-gate spec + provisional-until-proven gate
+    check: 'true'
+  - id: A2
+    description: at least 2 substantive proposals sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+  - non_convergence_after_3_rounds
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-16T01:00:00Z'
+  scope_signature: 'v11510-backpressure-harness'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: weighted-synthesis

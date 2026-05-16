@@ -1,0 +1,102 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: gemini-v11510-1
+pass_id: gemini-v11510-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The proposed design directly implements the mandatory converged
+  design seed from the v1.15.9 scope consult. It models backpressure by introducing
+  a finite-capacity buffer into `_FakePipeReader` and making `StreamingFakeCodexPopen.poll()`
+  aware of a "blocked writer" state. This mechanism integrates cleanly with the existing
+  `_SyncClock`'s `threading.Condition`, ensuring the harness remains deterministic
+  and deadlock-free, as required. An alternative of using real OS pipes is explicitly
+  non-negotiable as it would reintroduce the platform-specific flakiness the v1.15.9
+  rewrite eliminated. This approach is superior because it simulates the specific
+  deadlock condition (a blocked writer on a full pipe) within the confines of the
+  virtual clock, providing deterministic and fast-failing test coverage for the exact
+  failure mode described in the goal, without external dependencies or race conditions.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: c8849757f92e366d3a0680b6eb7f68ff779b729c29f743fec0f2616232c4e728
+  output_sha256: e3f6017d71a1f45a221555169261461c3be34e96f402f6e4991971e58ceeac3c
+  goal_packet_sha256: b5644c1f2ec4b529435bdf5b0a704ee61403838cdd8ecd1c2e04f404ed957d9e
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: 1c2222b626b51348342903511c3ae809dfee60711d0f7759baf3764c3b049bbb
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\<you>\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: impl-harness-backpressure-v1.15.10
+  rationale_vs_alternatives: The proposed design directly implements the mandatory
+    converged design seed from the v1.15.9 scope consult. It models backpressure by
+    introducing a finite-capacity buffer into `_FakePipeReader` and making `StreamingFakeCodexPopen.poll()`
+    aware of a "blocked writer" state. This mechanism integrates cleanly with the
+    existing `_SyncClock`'s `threading.Condition`, ensuring the harness remains deterministic
+    and deadlock-free, as required. An alternative of using real OS pipes is explicitly
+    non-negotiable as it would reintroduce the platform-specific flakiness the v1.15.9
+    rewrite eliminated. This approach is superior because it simulates the specific
+    deadlock condition (a blocked writer on a full pipe) within the confines of the
+    virtual clock, providing deterministic and fast-failing test coverage for the
+    exact failure mode described in the goal, without external dependencies or race
+    conditions.
+  deliverable_scope:
+    next_iteration_id: iteration-v11510-backpressure-harness
+    files_in_scope:
+    - consensus_mcp/tests/test_dispatch_codex_streaming.py
+    - consensus_mcp/_dispatch_codex.py
+    files_out_of_scope:
+    - All other files not directly related to the codex dispatch harness.
+    key_design_decisions:
+    - Modify `_FakePipeReader` to include a finite-capacity buffer (e.g., `collections.deque(maxlen=...)`)
+      and a flag to indicate when a writer is blocked.
+    - The `_FakePipeReader`'s `readline` method will now consume from this buffer
+      and `notify()` the `_SyncClock`'s condition variable to wake a potentially blocked
+      writer.
+    - The `StreamingFakeCodexPopen` will now be responsible for actively 'writing'
+      its scheduled output into the `_FakePipeReader` buffer within its `poll()` method.
+    - Modify `StreamingFakeCodexPopen.poll()` to check if a pipe is blocked after
+      a write attempt. If blocked, `poll()` must not exit the process, even if `_exit_at`
+      has been reached. It will wait on the `_SyncClock`'s condition until unblocked
+      by a reader.
+    - 'Introduce a new keyword-only, test-seam argument `_start_stderr_reader: bool
+      = True` to `_dispatch_codex._invoke_codex` to allow deterministically disabling
+      the stderr reader thread for the mutant gate test.'
+    - The `_SyncClock.release_all()` mechanism will serve as the root-cause-independent
+      safeguard, ensuring that any test deadlock (in production code or the harness
+      itself) results in a fast, loud failure rather than a CI hang.
+    acceptance_gates:
+    - The existing `test_stderr_drain_prevents_deadlock` will be rewritten to use
+      the new backpressure-aware fakes. With the stderr reader enabled, it must continue
+      to pass, proving that a draining reader prevents a deadlock.
+    - A new 'mutant gate' test must be created, duplicating the above test but calling
+      `_invoke_codex` with `_start_stderr_reader=False`.
+    - This new mutant test MUST FAIL deterministically. The `_drive` function's timeout
+      will be hit because the fake process will block forever on the full stderr pipe,
+      and `_drive` will raise an `AssertionError`, proving the harness detects the
+      deadlock condition.
+    - At no point will the test suite hang or timeout; failure will be via the harness's
+      explicit `_CEILING` and `release_all` mechanisms.
+    - All other tests in `test_dispatch_codex_streaming.py` must pass without modification.
+  risks:
+  - The primary risk is introducing a new, unintentional deadlock in the test harness
+    logic due to incorrect handling of the `threading.Condition` between the simulated
+    writer (`poll`) and reader (`readline`). The `_SyncClock.release_all()` safeguard
+    is the primary mitigation; it's designed to break any such wedge and fail the
+    test loudly instead of hanging CI.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-16T01:44:38Z'
+packet_sha256: 4671dfe444da51ad8e403ab730224cf76871619a84b151c89223af9f73b73082

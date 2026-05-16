@@ -1,0 +1,70 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: gemini-v11510-wfb-2
+pass_id: gemini-v11510-wfb-2-pass2
+findings:
+- id: gemini-rev-001
+  severity: medium
+  summary: The mutant gate test for backpressure deadlock is missing an assertion
+    to verify that `_invoke_codex` fails with the expected exception.
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:1053
+  risk: The test correctly proves that a deadlock occurs and that the dispatch does
+    not succeed. However, it does not verify the exact failure mechanism. If the `_invoke_codex`
+    function's error handling were to regress and exit silently instead of raising
+    an exception in this deadlock scenario, this test would still pass, masking the
+    regression. The test should explicitly assert that a `CodexInvocationError` is
+    raised to ensure the failure contract is maintained.
+  recommendation: After `th_mutant.join(timeout=5)`, add an assertion to confirm that
+    an exception was raised and stored in `holder_mutant`, and that it is of type
+    `_dispatch_codex.CodexInvocationError`. This makes the test's validation of the
+    failure mode more explicit and robust.
+  patch_proposal: null
+  patch_not_proposed_reason: Gemini is in review-only mode for this release.
+- id: gemini-rev-002
+  severity: low
+  summary: The docstring for `test_stderr_drain_prevents_deadlock` is out of sync
+    with its implementation for the mutant gate case.
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:989-1004
+  risk: The misleading comment could cause confusion for future developers trying
+    to understand how the deadlock detection works. It incorrectly describes a timeout-based
+    detection mechanism ('_drive' hits its ceiling) while the implementation uses
+    a much more sophisticated and deterministic state-based detection (`wait_for(_mutant_deadlocked)`).
+  recommendation: 'Update the docstring to accurately describe the mutant gate''s
+    test strategy: that it deterministically waits for the `_writer_blocked` state
+    on a full buffer, asserts this deadlock state is reached, and then gracefully
+    tears down the test. This replaces the outdated description of relying on `_drive`
+    to hit a timeout.'
+  patch_proposal: null
+  patch_not_proposed_reason: Gemini is in review-only mode for this release.
+goal_satisfied: true
+goal_satisfied_rationale: The changes successfully implement the required backpressure
+  model in the test harness, meeting all converged design constraints. The new harness
+  is deterministic and correctly models pipe-buffer deadlocks. The included mutant
+  gate proves the fix is effective. The identified findings are minor issues in the
+  test implementation (a weak assertion and a stale comment) that do not undermine
+  the core correctness of the solution, so the goal is satisfied.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: c07179453b380e671b6a1713a8f361777a40905ac9f82195cc1107e3ffe60c83
+  output_sha256: a7cd6cfe63764e8d277f6c273938e50be67328bbfc53db0a64153d72a2d72ca8
+  goal_packet_sha256: 3425162004a9153a827dd63c1b3088e980ba435c73d447d32c8e98e80aef702a
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: 48cce66d6713ce99eab4bbe573b998d3b34e9523918a048cf838db53ae6d492b
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-16T02:15:13Z'
+packet_sha256: ba70b6ac9434f9d26c037f9c8991e5cc74f694f450b317f0451f6b6fa372676f

@@ -1,0 +1,31 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: codex-v11510-wfb-3
+pass_id: codex-v11510-wfb-3-pass3
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The reviewed harness models finite byte-buffer backpressure,
+  prevents clean exit while a pipe is blocked, uses _SyncClock/release_all for deterministic
+  progress and teardown, and includes a nominal plus no-drain mutant gate that does
+  not rely on hanging CI.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 201fb7c939563dbd1db4174b42eda248358b07b6365cc5e8f34c216127540a6c
+  output_sha256: f9cd5cf115aa38355643d8a6419c4820b5131264c8e000c5c4d520d552deaeef
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 3425162004a9153a827dd63c1b3088e980ba435c73d447d32c8e98e80aef702a
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: 55b1ee552e477cf01b553ef701c6d38398e39f1ffedef90a896fd3ae25b335f3
+  mode: review
+sealed_at_utc: '2026-05-16T02:42:30Z'
+packet_sha256: d7a69c2a1852b9f5d955dc27c98a6c019ade1754c35fdb17161f66a2488326b9

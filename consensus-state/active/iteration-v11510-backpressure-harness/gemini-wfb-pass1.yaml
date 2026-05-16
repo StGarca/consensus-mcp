@@ -1,0 +1,53 @@
+iteration_id: iteration-v11510-backpressure-harness
+reviewer_id: gemini-v11510-wfb-1
+pass_id: gemini-v11510-wfb-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: low
+  summary: Unused `_SyncClock.wait_byte_due` method in test harness
+  citation: consensus_mcp/tests/test_dispatch_codex_streaming.py:168
+  risk: Adds minor conceptual overhead to the test harness. A future developer might
+    spend time trying to understand its purpose or mistakenly assume it's part of
+    the active synchronization logic, as it appears to be a mechanism for timing-based
+    data production.
+  recommendation: Remove the unused `_SyncClock.wait_byte_due` method. The current
+    backpressure model is implemented directly via `Condition` waits in `_FakePipeReader.write()`
+    and `readline()`, and the old schedule-based producer logic that this method supported
+    has been fully replaced.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+goal_satisfied: true
+goal_satisfied_rationale: The implementation successfully models OS pipe-buffer backpressure
+  in the test harness. The new `_FakePipeReader` correctly uses a bounded buffer and
+  blocks writers when full, and `StreamingFakeCodexPopen` respects this blocked state.
+  The 'mutant gate' test, `test_stderr_drain_prevents_deadlock`, deterministically
+  proves that failing to drain stderr leads to a deadlock, while the test passes when
+  the drain is active. The changes are confined to the test harness and a private
+  test seam in the dispatch helper, with no change to production behavior. All mandatory
+  design constraints from the goal have been met.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 0291783005d622f6237a7c5ed9a643fdbc010c4d9a33fd3a2f752e9d10b956c9
+  output_sha256: 0ea1116f66d6d2663941e7837cb98de49c342c2666b7bf65ab581559e247a7b9
+  goal_packet_sha256: 3425162004a9153a827dd63c1b3088e980ba435c73d447d32c8e98e80aef702a
+  scope_signature: v11510-backpressure-harness
+  review_target_path: consensus-state/active/iteration-v11510-backpressure-harness/review-packet.yaml
+  review_target_hash: fffdab8b51998e05a067db781797782b1dbdebb0aed95d417426152d26d5739f
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-16T02:06:10Z'
+packet_sha256: a981160a563c638c003ab0c5b4ef8db59b127f192e6499f0da44564fe6fa36a7
