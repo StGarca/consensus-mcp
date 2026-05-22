@@ -188,6 +188,10 @@ consensus_get_iteration_outcome.register(registry)
 from consensus_mcp.tools import delivery_gate  # noqa: E402
 delivery_gate.register(registry)
 
+# 1.19.0: read-only project scorecard rollup over results-v1.jsonl.
+from consensus_mcp.tools import results  # noqa: E402
+results.register(registry)
+
 
 # ---------------------------------------------------------------------------
 # Boot-time disposition check

@@ -143,6 +143,31 @@ SCHEMA = {
             "governance_milestone_closed": {"type": ["string", "null"]},
             "next_constraint": {"type": ["string", "null"]},
             "staged_files": {"type": ["array", "null"]},
+            # v1.19.0 result-logging — ADDITIVE optional fields.
+            # apply_step_landed may carry which findings a fix addressed.
+            "finding_ids": {
+                "type": ["array", "null"],
+                "description": (
+                    "v1.19.0: optional on apply_step_landed; finding ids this "
+                    "fix addresses (drives results-log fixes_applied)."
+                ),
+            },
+            "files_touched": {
+                "type": ["array", "null"],
+                "description": "v1.19.0: optional on apply_step_landed; files the fix touched.",
+            },
+            "fix_summary": {
+                "type": ["string", "null"],
+                "description": "v1.19.0: optional on apply_step_landed; one-line fix description.",
+            },
+            # iteration_closed may carry per-finding dispositions.
+            "finding_dispositions": {
+                "type": ["array", "null"],
+                "description": (
+                    "v1.19.0: optional on iteration_closed; "
+                    "[{id, disposition, evidence_ref?}] for the results log."
+                ),
+            },
             "extra_fields": {
                 "type": ["object", "null"],
                 "description": (
@@ -214,6 +239,11 @@ def handle(
     governance_milestone_closed=None,
     next_constraint=None,
     staged_files=None,
+    # v1.19.0 result-logging — ADDITIVE optional fields (backward-compatible).
+    finding_ids=None,          # optional on: apply_step_landed
+    files_touched=None,        # optional on: apply_step_landed
+    fix_summary=None,          # optional on: apply_step_landed
+    finding_dispositions=None, # optional on: iteration_closed
     # Catch-all for unspecified extensions only; prefer named fields above.
     extra_fields: dict = None,
 ) -> dict:
@@ -388,6 +418,11 @@ def handle(
         "governance_milestone_closed": governance_milestone_closed,
         "next_constraint": next_constraint,
         "staged_files": staged_files,
+        # v1.19.0 result-logging additive fields.
+        "finding_ids": finding_ids,
+        "files_touched": files_touched,
+        "fix_summary": fix_summary,
+        "finding_dispositions": finding_dispositions,
     }
     for k, v in _named.items():
         if v is not None:
@@ -423,7 +458,37 @@ def handle(
             )
 
     post_sha = _canonical_sha256(audit_path)
-    return {"event_id": event_id, "audit_yaml_post_sha256": post_sha}
+    result: dict = {"event_id": event_id, "audit_yaml_post_sha256": post_sha}
+
+    # --- v1.19.0: author the per-iteration results record on iteration_closed ---
+    # Runs AFTER the closure invariant + closure-certificate, mirroring the
+    # certificate author's non-fatal-but-warns pattern: a results-logging
+    # failure must NEVER break a valid close and must NEVER be silently
+    # skipped. Reuses this call's single-writer position (one orchestrator per
+    # iteration). The audit log is already written, so the record derives from
+    # the just-persisted state.
+    if event_type == "iteration_closed":
+        try:
+            from consensus_mcp import _results_log
+            _results_log.write_results_record(
+                iteration_dir,
+                finding_dispositions=finding_dispositions,
+                source_audit_event_id=event_id,
+                source_audit_yaml_post_sha256=post_sha,
+            )
+        except Exception as exc:
+            # Non-fatal: the close already succeeded (invariant passed,
+            # certificate authored). Surface the failure to stderr AND on the
+            # result so neither the operator nor a programmatic caller can miss
+            # that the results record was not written.
+            warn = (
+                f"iteration-results authoring failed for iteration "
+                f"{iteration_id}: {type(exc).__name__}: {exc}"
+            )
+            print(f"WARN: {warn}", file=sys.stderr)
+            result["results_log_warning"] = warn
+
+    return result
 
 
 def _detect_working_tree_changes(repo_root: Path) -> list[str]:

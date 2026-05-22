@@ -16,9 +16,10 @@ can add any other AI just by writing a short config profile (no code).
 ## Why
 
 AI coding assistants are fast, but they're confident even when they're
-wrong — they invent functions, misremember files, and skip
-assumptions. An AI reviewing its *own* work shares the exact blind
-spots that caused the mistake.
+wrong — they invent functions, misremember files, and act on unstated
+assumptions (a function's signature, that a file or dependency exists,
+what "done" even means) instead of surfacing them. An AI reviewing its
+*own* work shares the exact blind spots that caused the mistake.
 
 Different AI models fail in different ways. When two of them disagree
 about what a piece of code does, at least one is wrong — and that

@@ -20,6 +20,8 @@ consensus-mcp = "consensus_mcp.server:main"
 consensus-mcp-dispatch-codex = "consensus_mcp._dispatch_codex:main"
 consensus-mcp-dispatch-gemini = "consensus_mcp._dispatch_gemini:main"
 consensus-init = "consensus_mcp._init_wizard:main"
+# v1.19.0: read-only project scorecard rollup over results-v1.jsonl.
+consensus-results = "consensus_mcp._results_rollup:main"
 # iter-0040 bonus per iter-0039 converged plan Q6: alias so `consensus init`
 # (with a SPACE) also works at the shell, matching the natural mental model.
 consensus = "consensus_mcp._init_wizard:main"
