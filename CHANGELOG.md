@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.1 - unreleased
+
+_Unreleased._
+
 ## 1.20.0 - 2026-05-22
 
 **Host-family specialist agents.** A same-family blind SWE-reviewer you can add as
