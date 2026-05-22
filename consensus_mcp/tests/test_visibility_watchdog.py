@@ -21,6 +21,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from consensus_mcp import _visibility_watchdog  # noqa: E402
 
 
+def _recent_ts(seconds_ago: float = 60.0) -> str:
+    """A UTC dispatch-event timestamp ``seconds_ago`` in the past.
+
+    Relative to now so the seeded event stays inside the watchdog's
+    ``--window-days`` filter (default 7d). A hardcoded absolute date ages out of
+    that window and silently disables stale detection — the time-bomb that broke
+    the main()-level tests once real time advanced ~7 days past 2026-05-11.
+    """
+    return (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
 def _start_event(pass_id: str, iteration_id: str, timestamp: str, **kw) -> dict:
     base = {
         "event": "dispatch_start",
@@ -225,7 +238,7 @@ def test_main_report_mode_does_not_mutate_log(tmp_path, capsys):
     """--action=report writes no events to the log."""
     log_path = _scaffold_state_dir(tmp_path)
     log_path.write_text(
-        json.dumps(_start_event("p1", "iter-001", "2026-05-11T03:00:00Z")) + "\n",
+        json.dumps(_start_event("p1", "iter-001", _recent_ts(60))) + "\n",
         encoding="utf-8",
     )
     pre_bytes = log_path.read_bytes()
@@ -249,7 +262,7 @@ def test_main_mark_mode_appends_dispatch_stalled(tmp_path, capsys):
     """--action=mark appends exactly one dispatch_stalled per orphan."""
     log_path = _scaffold_state_dir(tmp_path)
     log_path.write_text(
-        json.dumps(_start_event("p2", "iter-002", "2026-05-11T03:00:00Z")) + "\n",
+        json.dumps(_start_event("p2", "iter-002", _recent_ts(60))) + "\n",
         encoding="utf-8",
     )
     rc = _visibility_watchdog.main([
@@ -277,7 +290,7 @@ def test_main_mark_is_idempotent(tmp_path, capsys):
     """
     log_path = _scaffold_state_dir(tmp_path)
     log_path.write_text(
-        json.dumps(_start_event("p3", "iter-003", "2026-05-11T03:00:00Z")) + "\n",
+        json.dumps(_start_event("p3", "iter-003", _recent_ts(60))) + "\n",
         encoding="utf-8",
     )
     # First mark: appends.
@@ -309,8 +322,8 @@ def test_main_returns_0_when_no_orphans(tmp_path, capsys):
     """Clean state → rc=0."""
     log_path = _scaffold_state_dir(tmp_path)
     log_path.write_text(
-        json.dumps(_start_event("p4", "iter-004", "2026-05-11T03:00:00Z")) + "\n"
-        + json.dumps(_done_event("p4", "iter-004", "2026-05-11T03:05:00Z")) + "\n",
+        json.dumps(_start_event("p4", "iter-004", _recent_ts(120))) + "\n"
+        + json.dumps(_done_event("p4", "iter-004", _recent_ts(60))) + "\n",
         encoding="utf-8",
     )
     rc = _visibility_watchdog.main([
@@ -346,7 +359,7 @@ def test_recommended_redispatch_uses_external_codex_cli(tmp_path, capsys):
     # (production dispatch_start events always carry reviewer_id).
     log_path.write_text(
         json.dumps(_start_event(
-            "p5", "iter-005", "2026-05-11T03:00:00Z",
+            "p5", "iter-005", _recent_ts(60),
             reviewer_id="codex-iter-005-1",
         )) + "\n",
         encoding="utf-8",
@@ -366,6 +379,33 @@ def test_recommended_redispatch_uses_external_codex_cli(tmp_path, capsys):
     assert "--iteration-dir consensus-state/active/iter-005" in cmd
     assert "--reviewer-id codex-iter-005-1" in cmd
     assert "codex-iter-005-1-pass2" in cmd, "pass_id must be bumped to avoid collision"
+
+
+def test_main_skips_orphan_older_than_window(tmp_path, capsys):
+    """An orphan older than --window-days is intentionally NOT flagged (the
+    window skips ancient history); --window-days 0 disables the filter and the
+    same orphan IS flagged. Documents the semantics the _recent_ts fix relies
+    on (regression guard against the time-bomb returning).
+    """
+    log_path = _scaffold_state_dir(tmp_path)
+    old_ts = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    log_path.write_text(
+        json.dumps(_start_event("pw", "iter-win", old_ts)) + "\n", encoding="utf-8")
+
+    rc_windowed = _visibility_watchdog.main([
+        "--repo-root", str(tmp_path), "--stall-after", "1", "--action", "report",
+    ])
+    parsed_windowed = json.loads(capsys.readouterr().out)
+    assert rc_windowed == 0 and parsed_windowed["stale_count"] == 0, \
+        "an orphan older than the default 7d window must be skipped"
+
+    rc_unfiltered = _visibility_watchdog.main([
+        "--repo-root", str(tmp_path), "--stall-after", "1",
+        "--window-days", "0", "--action", "report",
+    ])
+    parsed_unfiltered = json.loads(capsys.readouterr().out)
+    assert rc_unfiltered == 1 and parsed_unfiltered["stale_count"] == 1, \
+        "--window-days 0 disables filtering; the ancient orphan is then flagged"
 
 
 # ---- perf-rev-005: streaming reader + time-window cutoff -----------------
