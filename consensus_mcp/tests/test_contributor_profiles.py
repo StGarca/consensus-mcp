@@ -290,3 +290,51 @@ def test_merge_empty_config_returns_builtins():
     builtin = cp.load_builtin_profiles()
     merged = cp.merge_profiles(builtin, {})
     assert set(merged) == BUILTIN_NAMES
+
+
+# ---------- v1.20.1 profile-kind helpers ----------
+
+def _profiles():
+    return {
+        "claude": {"name": "claude", "kind": "host"},
+        "codex": {"name": "codex", "kind": "cli_reviewer"},
+        "gemini": {"name": "gemini", "kind": "cli_reviewer"},
+        "claude-swe-reviewer": {
+            "name": "claude-swe-reviewer", "kind": "host_peer", "family": "claude",
+        },
+    }
+
+
+def test_resolve_kind_known_and_unknown():
+    p = _profiles()
+    assert cp.resolve_kind("codex", p) == "cli_reviewer"
+    assert cp.resolve_kind("claude-swe-reviewer", p) == "host_peer"
+    assert cp.resolve_kind("some-custom-ai", p) is None
+
+
+def test_independent_count_excludes_host_peer_counts_unknown():
+    p = _profiles()
+    assert cp.independent_count(["claude", "codex"], p) == 2
+    assert cp.independent_count(["claude", "claude-swe-reviewer"], p) == 1
+    assert cp.independent_count(["claude", "codex", "claude-swe-reviewer"], p) == 2
+    assert cp.independent_count(["claude", "my-ai"], p) == 2
+
+
+def test_host_family_host_and_host_peer():
+    p = _profiles()
+    assert cp.host_family("claude", p) == "claude"
+    assert cp.host_family("claude-swe-reviewer", p) == "claude"
+    assert cp.host_family("codex", p) is None
+
+
+def test_matching_host_peers():
+    p = _profiles()
+    assert cp.matching_host_peers("claude", p) == ["claude-swe-reviewer"]
+    assert cp.matching_host_peers("codex", p) == []
+
+
+def test_orphan_host_peers():
+    p = _profiles()
+    assert cp.orphan_host_peers(["claude", "claude-swe-reviewer"], p) == []
+    assert cp.orphan_host_peers(["codex", "claude-swe-reviewer"], p) == ["claude-swe-reviewer"]
+    assert cp.orphan_host_peers(["claude", "codex"], p) == []

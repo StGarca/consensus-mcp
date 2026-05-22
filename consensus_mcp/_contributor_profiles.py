@@ -243,3 +243,62 @@ def validate_profile(name: str, d: dict) -> None:
             f"profile {name!r} invoke.transport=stdin requires "
             f"invoke.prompt_flag to be null/absent; got {prompt_flag!r}"
         )
+
+
+# === v1.20.1 profile-kind helpers ===
+
+def resolve_kind(name: str, profiles: dict) -> str | None:
+    """Return the kind of an enabled contributor name, or None if it has no
+    profile (an unknown/open contributor). Never raises."""
+    p = profiles.get(name)
+    return p.get("kind") if isinstance(p, dict) else None
+
+
+def independent_count(enabled: list[str], profiles: dict) -> int:
+    """Count INDEPENDENT contributors: everything except a known host_peer.
+    Unknown names (no profile) count as independent — config.py keeps its open
+    model; constructibility stays engine_factory's fail-closed job."""
+    return sum(1 for n in enabled if resolve_kind(n, profiles) != KIND_HOST_PEER)
+
+
+def host_family(name: str, profiles: dict) -> str | None:
+    """The host-family key a name belongs to. host_peer -> its `family`; host ->
+    its explicit `family` or, by convention, its own name; anything else -> None."""
+    p = profiles.get(name)
+    if not isinstance(p, dict):
+        return None
+    kind = p.get("kind")
+    if kind == KIND_HOST_PEER:
+        return p.get("family")
+    if kind == KIND_HOST:
+        return p.get("family") or p.get("name") or name
+    return None
+
+
+def matching_host_peers(host_name: str, profiles: dict) -> list[str]:
+    """host_peer profile names whose `family` matches host_name's family.
+    Sorted for determinism. Empty if host_name is not a host or has no peers."""
+    fam = host_family(host_name, profiles)
+    if fam is None:
+        return []
+    return sorted(
+        n for n, p in profiles.items()
+        if isinstance(p, dict)
+        and p.get("kind") == KIND_HOST_PEER
+        and p.get("family") == fam
+    )
+
+
+def orphan_host_peers(enabled: list[str], profiles: dict) -> list[str]:
+    """Enabled host_peers whose host family is NOT also enabled (a host_peer
+    requires its host). Order follows `enabled`."""
+    enabled_host_families = {
+        host_family(n, profiles)
+        for n in enabled
+        if resolve_kind(n, profiles) == KIND_HOST
+    }
+    return [
+        n for n in enabled
+        if resolve_kind(n, profiles) == KIND_HOST_PEER
+        and (profiles.get(n) or {}).get("family") not in enabled_host_families
+    ]
