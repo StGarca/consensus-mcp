@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.17.2 - 2026-05-22
+
+**Fixes from the 1.17 consensus code review** (4-way: claude+codex+gemini+kimi —
+the changes were independently audited, not self-shipped). Each fix has a test
+that proves it (not vacuous).
+
+### Fixed
+- **Anchoring audit fails LOUD, not open** (codex-001 / gemini-001 / kimi-001,
+  unanimous top finding): a crash in the lint previously returned `[]`,
+  indistinguishable from "no bias found." It now surfaces an explicit
+  `anchoring_audit_error` in the packet + a loud stderr line. An anti-bias gate
+  must never silently disable itself.
+- **`build_adapters` read the wrong config key** (codex-002): it read
+  `contributors.config` (never populated) instead of `contributors.adapters`
+  (what `default_config()` + `validate()` use), so per-contributor config (e.g.
+  model overrides) was silently always empty. Now reads `.adapters` (legacy
+  `.config` honored as fallback).
+- **`validate()` rejects whitespace-only contributor names** (kimi-004).
+
+### Changed
+- **Acceptance test now goes through the REAL `register_contributor` +
+  `build_adapters` path** (codex-003 / kimi-002,003), N=50 actually BUILDS (not
+  just validates), and a NEGATIVE convergence case (blocking minority ⇒ no
+  convergence) was added. Tests unregister in `finally` (registry isolation,
+  codex-005).
+
+### Note (schema $id)
+- v1.17.1 changed `converged_plan_convention.schema.json` `$id` from a personal
+  absolute URL to a neutral relative id (it is not `$ref`'d internally). If any
+  EXTERNAL consumer keyed on the old `https://example.org/...` id, update to
+  the relative id `consensus_mcp/schemas/converged_plan_convention.schema.json`
+  (unanimous low finding: codex-006 / gemini-003 / kimi-005).
+
 ## 1.17.1 - 2026-05-22
 
 **Public-readiness sanitization (code/schema personal-info).** Removes

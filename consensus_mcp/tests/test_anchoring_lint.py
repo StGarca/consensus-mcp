@@ -82,3 +82,24 @@ def test_kimi_anchoring_caught_via_real_fallback(tmp_path):
     audit = arp._anchoring_audit(tmp_path, None)  # real fallback set
     assert any(a["skewed_to"] == "kimi" for a in audit), (
         f"kimi-anchoring not caught via the real fallback: {audit}")
+
+
+def test_anchoring_audit_fails_LOUD_not_open(tmp_path, monkeypatch):
+    """1.17 review top finding (codex-001/gemini-001/kimi-001): a crash in the
+    anchoring audit must NOT silently look like 'no bias found'. It must surface
+    as an explicit `anchoring_audit_error` in the packet."""
+    import yaml
+    from consensus_mcp import _author_review_packet as arp
+    from consensus_mcp import _anchoring_lint
+    iter_dir = tmp_path / "iter"; iter_dir.mkdir()
+    (iter_dir / "goal_packet.yaml").write_text("goal:\n  summary: x\n", encoding="utf-8")
+    (tmp_path / "f.txt").write_text("x", encoding="utf-8")
+    # Force the linter to crash.
+    monkeypatch.setattr(_anchoring_lint, "detect_anchoring",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    rp = arp.author_review_packet(iter_dir, ["f.txt"], tmp_path)
+    out = yaml.safe_load(rp.read_text(encoding="utf-8"))
+    assert "anchoring_audit_error" in out, (
+        "audit crash was swallowed silently (fail-open) — must surface an error")
+    assert "boom" in out["anchoring_audit_error"]
+    assert "anchoring_audit" not in out  # not a false 'clean' result

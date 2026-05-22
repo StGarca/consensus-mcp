@@ -171,7 +171,20 @@ def author_review_packet(
     # skew at author time + embed the report so contributors (and the operator)
     # see it WITHOUT relying on anyone noticing. Contributor set comes from
     # config (never hardcoded — that would be the bias under guard).
-    anchoring = _anchoring_audit(iteration_dir, repo_root)
+    # FAIL-LOUD, not fail-open (1.17 consensus review, unanimous top finding:
+    # codex-001/gemini-001/kimi-001). An anti-bias gate that silently returns
+    # "no anchoring" on a crash is indistinguishable from a clean result and lets
+    # bias through unseen. So a real audit FAILURE is surfaced as an explicit
+    # `anchoring_audit_error` key in the packet (distinguishable from clean) plus
+    # a loud stderr line — never a silent empty result.
+    try:
+        anchoring = _anchoring_audit(iteration_dir, repo_root)
+    except Exception as exc:
+        merged["anchoring_audit_error"] = f"{type(exc).__name__}: {exc}"
+        sys.stderr.write(
+            f"[anchoring-lint] AUDIT FAILED — bias was NOT checked: "
+            f"{type(exc).__name__}: {exc}\n")
+        anchoring = None
     if anchoring:
         merged["anchoring_audit"] = anchoring
         for a in anchoring:
@@ -223,21 +236,19 @@ def _anchoring_audit(iteration_dir: Path, repo_root: Path | None = None) -> list
     contributors = _configured_contributors(repo_root)
     if len(contributors) < 2:
         return []
-    try:
-        from consensus_mcp._anchoring_lint import detect_anchoring
-        text = gp.read_text(encoding="utf-8")
-        flags = detect_anchoring(text, {"contributors": contributors})
-        return [
-            {"group": f.group, "skewed_to": f.skewed_to,
-             "skew_fraction": f.skew_fraction, "counts": f.counts,
-             "never_mentioned": f.never_mentioned, "detail": f.detail}
-            for f in flags
-        ]
-    except Exception as exc:
-        # Don't silently no-op — a real failure must be distinguishable from
-        # "no anchoring found" (QA finding 2026-05-22).
-        sys.stderr.write(f"[anchoring-lint] audit failed ({type(exc).__name__}: {exc})\n")
-        return []
+    # NO broad except here (1.17 review): real failures must PROPAGATE to the
+    # caller, which records `anchoring_audit_error` (fail-loud). Swallowing here
+    # would re-introduce the silent fail-open. The empty early-returns above are
+    # legitimate "nothing to audit", not errors.
+    from consensus_mcp._anchoring_lint import detect_anchoring
+    text = gp.read_text(encoding="utf-8")
+    flags = detect_anchoring(text, {"contributors": contributors})
+    return [
+        {"group": f.group, "skewed_to": f.skewed_to,
+         "skew_fraction": f.skew_fraction, "counts": f.counts,
+         "never_mentioned": f.never_mentioned, "detail": f.detail}
+        for f in flags
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
