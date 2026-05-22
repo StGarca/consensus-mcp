@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.18.0 - unreleased
+
+In progress: extensible, cross-platform contributor selection at `consensus init`
+— config-driven AI profiles (add an AI without code), interactive multi-select
+(min 2, Claude optional), and OS-aware detect-and-guide for missing CLIs. Plus a
+cross-platform committed `.mcp.json` (drop the Windows-only `py -3.11`) and
+`requires-python >=3.11`. Design via the 4-way Workflow A consult.
+
 ## 1.17.5 - 2026-05-22
 
 Gates/state + orchestration clusters from the 2026-05-22 code review
