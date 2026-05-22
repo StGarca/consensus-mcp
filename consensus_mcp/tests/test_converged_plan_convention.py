@@ -68,6 +68,9 @@ def _good_convention(**overrides) -> dict:
 
 def _three_contributor_config() -> dict:
     c = deepcopy(cfg.default_config())
+    # Pin to 3 named contributors (helper is "three_contributor"); default_config
+    # now derives a dynamic 4-AI independent set (incl kimi).
+    c["contributors"]["enabled"] = ["claude", "codex", "gemini"]
     c["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
     c["convergence"]["rule"] = cfg.CONVERGE_STRICT_MAJ
     c["convergence"]["finding_disposition"] = cfg.DISPOSITION_ALL_OR_NOTHING

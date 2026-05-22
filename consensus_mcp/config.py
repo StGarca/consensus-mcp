@@ -434,9 +434,6 @@ def validate(config: dict) -> None:
     )
     _merged = merge_profiles(load_builtin_profiles(), contributors.get("profiles") or {})
     n_independent = independent_count(enabled, _merged)
-    # Keep raw count for checks that are logically about total list size (e.g.
-    # uniqueness, non-empty) — those are already done above.
-    n_contributors = len(enabled)
 
     # Rule: a host_peer may be enabled only if its host family is also enabled.
     _orphans = orphan_host_peers(enabled, _merged)
