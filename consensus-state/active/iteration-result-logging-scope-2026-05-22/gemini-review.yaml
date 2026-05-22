@@ -1,0 +1,117 @@
+iteration_id: iteration-result-logging-scope-2026-05-22
+reviewer_id: gemini-logscope-1
+pass_id: gemini-logscope-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: This proposal directly addresses all seven design questions
+  in the brief with a coherent, fail-closed, and forward-looking system. It favors
+  creating a new, trustworthy data source over attempting a complex and likely unreliable
+  backfill of inconsistent historical data. By hooking into the existing `iteration_closed`
+  event in `audit_append_event.py`, the creation of the result log becomes an automatic,
+  non-intrusive part of the existing workflow, ensuring data capture is consistent.
+  A dedicated `run-result.yaml` file per iteration is the cleanest approach; it co-locates
+  the result with the iteration's other artifacts and is guaranteed to be gitignored
+  by existing rules. A new schema file (`run_result.v1.schema.json`) and a version
+  number in the document itself make the system maintainable and extensible, directly
+  preventing the 'uncountable eras' problem. A new, separate aggregation tool (`consensus-mcp
+  results`) provides the requested project-level scorecard without bloating existing
+  tools. This approach is superior to alternatives like trying to query the disparate
+  existing files (`*-review.yaml`, prose summaries) at runtime, which the brief demonstrates
+  has already failed.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.42.0
+  model: gemini-2.5-pro
+  prompt_sha256: 2a1a468a38cacfe63051a86926a4fb4a03d25e75e46d0e9c8cbeb3a7007a7608
+  output_sha256: 9ab3051fe8d1b676f0d8aac22ac7ef685fd33f751bab166a7272a6e90156b661
+  goal_packet_sha256: 5fe460156a44558d02867a04ddd6f7d8e86cca2ba5df4d67861826cdd963773b
+  scope_signature: c691e29381efebf5b634ad633472ef9b09385637f8857ec27b7d1017d61fe57a
+  review_target_path: consensus-state/active/iteration-result-logging-scope-2026-05-22/review-packet.yaml
+  review_target_hash: 24534e2a1cfedae056f04a828efebcb5eb704c405ab2b8c7eedd1f2aec3140e2
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: /mnt/c/Users/steve/Downloads/consensus-mcp/consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Propose and implement a new, versioned, per-iteration result-logging
+    mechanism and an associated aggregation tool.
+  rationale_vs_alternatives: This proposal directly addresses all seven design questions
+    in the brief with a coherent, fail-closed, and forward-looking system. It favors
+    creating a new, trustworthy data source over attempting a complex and likely unreliable
+    backfill of inconsistent historical data. By hooking into the existing `iteration_closed`
+    event in `audit_append_event.py`, the creation of the result log becomes an automatic,
+    non-intrusive part of the existing workflow, ensuring data capture is consistent.
+    A dedicated `run-result.yaml` file per iteration is the cleanest approach; it
+    co-locates the result with the iteration's other artifacts and is guaranteed to
+    be gitignored by existing rules. A new schema file (`run_result.v1.schema.json`)
+    and a version number in the document itself make the system maintainable and extensible,
+    directly preventing the 'uncountable eras' problem. A new, separate aggregation
+    tool (`consensus-mcp results`) provides the requested project-level scorecard
+    without bloating existing tools. This approach is superior to alternatives like
+    trying to query the disparate existing files (`*-review.yaml`, prose summaries)
+    at runtime, which the brief demonstrates has already failed.
+  deliverable_scope:
+    next_iteration_id: iter-0037-result-logging-and-scorecard
+    files_in_scope:
+    - consensus_mcp/tools/audit_append_event.py
+    - consensus_mcp/_result_author.py
+    - consensus_mcp/_results_aggregator.py
+    - consensus_mcp/schemas/run_result.v1.schema.json
+    - pyproject.toml
+    - tests/test_result_author.py
+    - tests/test_results_aggregator.py
+    files_out_of_scope:
+    - Any script or tool for backfilling historical run data.
+    - consensus_mcp/contributors/*
+    key_design_decisions:
+    - A new, versioned YAML schema (`run_result.v1.schema.json`) will be created for
+      the per-iteration result log.
+    - The result log for an iteration will be written to `consensus-state/active/{iteration_id}/run-result.yaml`,
+      ensuring it is project-local and gitignored.
+    - The `handle` function in `consensus_mcp/tools/audit_append_event.py` will be
+      modified to call a new authoring function upon receiving the `iteration_closed`
+      event.
+    - A new module, `consensus_mcp/_result_author.py`, will contain the logic to read
+      the iteration's artifacts (reviews, converged plan, audit log) and generate
+      the `run-result.yaml` file.
+    - Disposition for each finding (e.g., 'validated_fix_applied', 'dismissed_refuted')
+      will be determined by analyzing the `converged-plan.yaml` and `apply_step_landed`
+      audit events.
+    - A new CLI command, `consensus-mcp results`, will be created. Its logic will
+      live in `consensus_mcp/_results_aggregator.py`. It will scan all active and
+      archived iterations for `run-result.yaml` files and generate a scorecard.
+    - Historical data will NOT be backfilled. The new system will only apply to runs
+      going forward to ensure the integrity and trustworthiness of the aggregated
+      scorecard.
+    acceptance_gates:
+    - After a consensus run successfully closes, a `run-result.yaml` file exists in
+      the corresponding iteration directory (`consensus-state/active/{iteration_id}/`).
+    - The generated `run-result.yaml` file successfully validates against `consensus_mcp/schemas/run_result.v1.schema.json`.
+    - The content of `run-result.yaml` accurately reflects the findings, dispositions,
+      convergence outcome, and applied fixes from the iteration.
+    - The new CLI command `consensus-mcp results` executes without error and prints
+      a scorecard summarizing data from one or more completed runs.
+    - The command `consensus-mcp results --format json` produces valid, machine-readable
+      JSON output.
+    - '`git status` confirms that `run-result.yaml` is not tracked by git.'
+  risks:
+  - The logic for determining a finding's final disposition by cross-referencing review
+    packets, the converged plan, and audit logs could be complex, and edge cases might
+    be missed initially.
+  - If the `iteration_closed` event in `audit_append_event.py` fails for any reason,
+    the result log will not be generated, leading to missing data. This is fail-closed
+    by design, but the failure needs to be made highly visible to the operator.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:01:31Z'
+packet_sha256: e35a5904460f392ce300248dc4f0f47d12187c77956d311aafa66daa54288c45

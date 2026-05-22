@@ -1,0 +1,403 @@
+defect_target:
+  files:
+  - consensus-state/active/iteration-result-logging-scope-2026-05-22/logging-scope-brief.md
+  - consensus_mcp/tools/audit_append_event.py
+  base_sha: a9289f6e819e24645f467dd71579f77054d588da99118ee09d925057762ff05a
+  touched_files_contents:
+    consensus-state/active/iteration-result-logging-scope-2026-05-22/logging-scope-brief.md: "#\
+      \ Consult: scope a per-run RESULT-LOGGING feature for consensus-mcp\n\nYou are\
+      \ one of several AI contributors in a Workflow A (propose-converge) consult.\n\
+      PROPOSE the design for a new consensus-mcp capability: a machine-readable record\n\
+      of the RESULTS of every consensus run, so that all findings — every run — can\
+      \ be\naggregated at the project level into a trustworthy scorecard.\n\n## Why\
+      \ (the problem, demonstrated)\nconsensus-mcp seals every review pass with provenance\
+      \ (great for audit), but it\ndoes NOT record run RESULTS in a consistent, queryable\
+      \ form. Evidence: across\nthree real projects, aggregating \"bugs found / fixed\
+      \ / validated\" failed —\n- findings live as structured review items (with `severity`)\
+      \ in sealed passes,\n  AND as synthesized items in converged-plans, AND as PROSE\
+      \ in iteration\n  summaries — three incompatible shapes;\n- design-consult/proposal\
+      \ outputs pollute naive `findings` counts;\n- code corrections (\"fixes applied\"\
+      ) are NOT logged as events anywhere\n  (apply-event scan returned 0 in all three\
+      \ projects);\n- different projects/eras use different formats, so one extractor\
+      \ can't count\n  them all (one project was undercounted 4 vs >=88 passes).\n\
+      Net: the history exists but is not aggregatable. There is no per-run results\n\
+      record and no project-level rollup.\n\n## Verified constraints (must hold)\n\
+      - **Project-specific:** each project already has its own `consensus-state/`\n\
+      \  (confirmed across 3 projects). The results record lives there, per project\
+      \ —\n  NOT global, NOT cross-project-merged on disk.\n- **Gitignored:** verified\
+      \ `.gitignore` already excludes the run artifacts —\n  `consensus-state/active/iteration-*/`,\
+      \ `consensus-state/state/*`,\n  `consensus-state/archive/review-passes/*.yaml`.\
+      \ Only `archive/index.yaml` +\n  test fixtures are tracked. The new results\
+      \ record MUST be gitignored too\n  (project-local, uncommitted) — match this\
+      \ pattern; do NOT commit run results\n  into the project's git history.\n\n\
+      ## Current relevant surfaces (for your design)\n- Sealed review passes already\
+      \ carry: `findings[]` (each: id, severity, summary,\n  citation, risk, recommendation),\
+      \ `blocking_objections`, `goal_satisfied`,\n  `dispatch_provenance`, `iteration_id`,\
+      \ `reviewer_id`, `pass_id`, `sealed_at_utc`.\n- `tools/audit_append_event.py`\
+      \ appends sealed audit events (incl. apply/closure\n  events) to an iteration's\
+      \ `independence-audit.yaml` — the natural hook for\n  logging \"fix applied\"\
+      \ + disposition events.\n- `converged-plan.yaml` synthesizes per-iteration decisions/dispositions.\n\
+      - `_snapshot_state.py` snapshots `consensus-state/` to an orphan branch.\n\n\
+      ## Design questions to answer in your proposal\n1. **Schema** of the per-run\
+      \ / per-iteration results record: what fields capture\n   findings raised (by\
+      \ severity), each finding's DISPOSITION\n   (validated/accepted-and-fixed vs\
+      \ dismissed/refuted-with-evidence vs deferred),\n   fixes/corrections applied,\
+      \ convergence outcome, reviewers + families, dates.\n2. **Where it lives** (path\
+      \ under `consensus-state/`) and confirmation it's\n   gitignored + project-local.\n\
+      3. **How it's written**: at seal time / close time, via which existing hook\n\
+      \   (audit_append_event? a new emitter?) so it's automatic + fail-closed, not\n\
+      \   manual prose.\n4. **Project-level aggregation**: a rollup (tool/CLI, e.g.\
+      \ `consensus results`)\n   that reads the per-run records and emits a project\
+      \ scorecard\n   (total findings by severity, validated vs dismissed, fixes applied,\n\
+      \   iterations, convergence rate). Machine-readable + human summary.\n5. **Disposition\
+      \ tracking**: how a finding's outcome (real-and-fixed vs\n   refuted-with-evidence)\
+      \ gets recorded — this is the \"validated/invalidated\"\n   signal that's currently\
+      \ prose-only.\n6. **Backfill**: do we backfill existing history (best-effort)\
+      \ or only log going\n   forward? Argue it.\n7. **Cross-format**: how to avoid\
+      \ the current trap where different eras/projects\n   are uncountable — versioned\
+      \ schema.\n\nKeep it minimal, fail-closed, and consistent with the existing\
+      \ sealed-provenance\nmodel. Put the design in your proposal's deliverable_scope\
+      \ (files to touch, key\ndecisions, acceptance gates, risks).\n"
+    consensus_mcp/tools/audit_append_event.py: "\"\"\"audit.append_event MCP tool.\
+      \ Phase 1 G1 partial.\n\nAppends events to consensus-state/active/<iteration_id>/independence-audit.yaml.\n\
+      Validates event_type against canonical list (claude-rev-045 enforcement\ncode-side).\
+      \ Validates required fields per event type.\n\niter-0018 hardening (codex 2026-05-10\
+      \ v5):\n- Finding 3: at iteration_closed time, refuse if working-tree paths\
+      \ exist\n  that are NOT in any apply_step_landed event's files_touched set\n\
+      \  (unaudited_mutation_detected).\n- Finding 5: when apply_step_landed events\
+      \ exist but the closure invariant\n  evaluator returns None or raises, REFUSE\
+      \ (closure_invariant_evaluation_failed).\n  Treat un-evaluable as failed (fail-closed).\n\
+      \nEvent-specific required fields are first-class kwargs and input_schema\nproperties\
+      \ (sealed_inputs, staging_dir, validator, effect, closing_state).\nPass them\
+      \ as top-level arguments — not via extra_fields.\nextra_fields is a catch-all\
+      \ for unspecified extensions only.\n\nCONCURRENCY (v1.0 limitation): the implementation\
+      \ is **read-modify-write**,\nnot true atomic append. Each call:\n  1. yaml.safe_load()\
+      \ the entire independence-audit.yaml\n  2. append an event to the in-memory\
+      \ audit_log list\n  3. write the full file back via write_text() (which is os.replace-atomic\n\
+      \     for the file write step itself, but the read+write across calls is\n \
+      \    not serialized).\nConcurrent invocations on the same iteration_id can race\
+      \ and drop events.\nThe consensus pipeline is single-writer by design (one orchestrator\
+      \ at a time);\nconcurrent invocations are a programming error, not a supported\
+      \ case.\n**Do not invoke concurrently for the same iteration_id.** Per-iteration\n\
+      filelock is deferred to Phase 1.x.\n\"\"\"\nfrom __future__ import annotations\n\
+      import hashlib\nimport sys\nfrom datetime import datetime, timezone\nfrom pathlib\
+      \ import Path\n\nimport yaml\n\nfrom consensus_mcp._paths import project_root,\
+      \ active_dir\n\n# iter-0036 (Phase B step 9 per iter-0024 plan, HIGH-impact\
+      \ audit trail\n# tool): migrated from module-level REPO_ROOT/ACTIVE_DIR captures\
+      \ to lazy\n# `_paths` resolvers. Tests redirect paths via `monkeypatch.setenv`\n\
+      # (CONSENSUS_MCP_REPO_ROOT / CONSENSUS_MCP_STATE_ROOT), NOT\n# `monkeypatch.setattr`\
+      \ on this module — the latter is unsafe because\n# pytest's monkeypatch saves\
+      \ __getattr__-synthesized values into __dict__\n# at teardown, permanently shadowing\
+      \ the lazy resolver for subsequent\n# tests. iter_0018 already uses the setenv\
+      \ pattern; closure_invariant\n# was updated to match in this iteration. PEP\
+      \ 562 `__getattr__` still\n# provides backward compat for any external read\
+      \ of `module.REPO_ROOT`\n# / `module.ACTIVE_DIR`.\n\n\ndef __getattr__(name:\
+      \ str):\n    \"\"\"PEP 562 backward compat for external `module.REPO_ROOT` /\n\
+      \    `module.ACTIVE_DIR` reads. Internal code should call `project_root()`\n\
+      \    / `active_dir()` directly.\"\"\"\n    if name == \"REPO_ROOT\":\n     \
+      \   return project_root()\n    if name == \"ACTIVE_DIR\":\n        return active_dir()\n\
+      \    raise AttributeError(f\"module {__name__!r} has no attribute {name!r}\"\
+      )\n\n\nclass GitUnavailableError(RuntimeError):\n    \"\"\"Raised when NO git\
+      \ command could be executed (git binary missing,\n    timeout, or OS error on\
+      \ every sub-command).\n\n    iter-0018 H-5: consensus-mcp is inherently git-based\
+      \ — the closure\n    invariant uses SHAs and snapshots use git. There is no\
+      \ \"git is optional /\n    not a git repo\" design. When git is wholly unavailable\
+      \ the\n    mutation-completeness gate cannot be verified, so the gate must FAIL\
+      \ CLOSED\n    (refuse the close) rather than allow-empty (fail-open).\"\"\"\n\
+      \nCANONICAL_EVENT_TYPES: dict[str, dict] = {\n    \"review_packet_built\": {\"\
+      required\": [\"artifact\", \"sha256\"], \"optional\": []},\n    \"reviewer_invoked\"\
+      : {\"required\": [\"actor\", \"artifact\", \"independence_attestation\"], \"\
+      optional\": [\"invocation_protocol\"]},\n    \"review_returned_and_sealed\"\
+      : {\"required\": [\"actor\", \"artifact\", \"sha256\", \"independence_attestation\"\
+      ], \"optional\": [\"validator_status\"]},\n    \"reviewer_invocation_pending\"\
+      : {\"required\": [\"actor\"], \"optional\": [\"next_constraint\"]},\n    \"\
+      sealed_inputs_recorded\": {\"required\": [\"sealed_inputs\"], \"optional\":\
+      \ []},\n    \"both_reviews_sealed\": {\"required\": [\"actor\"], \"optional\"\
+      : [\"note\"]},\n    \"consensus_built\": {\"required\": [\"artifact\", \"sha256\"\
+      ], \"optional\": [\"consensus_state\"]},\n    \"operator_authorization_received\"\
+      : {\"required\": [\"actor\"], \"optional\": [\"authorization_form_response\"\
+      , \"interpretation\"]},\n    \"staged_changes\": {\"required\": [\"staging_dir\"\
+      ], \"optional\": [\"staged_files\"]},\n    \"canonical_006_dry_run_executed\"\
+      : {\"required\": [\"validator\"], \"optional\": [\"findings\", \"gate_decision\"\
+      ]},\n    \"apply_step_landed\": {\"required\": [\"effect\"], \"optional\": [\"\
+      files_modified\"]},\n    \"iteration_closed\": {\"required\": [\"closing_state\"\
+      ], \"optional\": [\"governance_milestone_closed\"]},\n}\n\n# Per-agent-prefixed\
+      \ names grandfathered at validator level but REJECTED by this tool.\nFORBIDDEN_PER_AGENT_PREFIXED:\
+      \ dict[str, str] = {\n    \"codex_reviewer_invoked\": \"reviewer_invoked\",\n\
+      \    \"claude_reviewer_invoked\": \"reviewer_invoked\",\n    \"codex_review_returned_and_sealed\"\
+      : \"review_returned_and_sealed\",\n    \"claude_review_returned_and_sealed\"\
+      : \"review_returned_and_sealed\",\n    \"codex_reviewer_invocation_pending\"\
+      : \"reviewer_invocation_pending\",\n    \"claude_reviewer_invocation_pending\"\
+      : \"reviewer_invocation_pending\",\n}\n\nSCHEMA = {\n    \"name\": \"audit.append_event\"\
+      ,\n    \"description\": \"Append canonical event to an iteration's independence-audit.yaml.\"\
+      ,\n    \"input_schema\": {\n        \"type\": \"object\",\n        \"properties\"\
+      : {\n            \"iteration_id\": {\"type\": \"string\"},\n            \"event_type\"\
+      : {\"type\": \"string\"},\n            \"actor\": {\"type\": \"string\"},\n\
+      \            \"artifact\": {\"type\": [\"string\", \"null\"]},\n           \
+      \ \"sha256\": {\"type\": [\"string\", \"null\"]},\n            \"independence_attestation\"\
+      : {\"type\": [\"object\", \"null\"]},\n            \"sealed_inputs\": {\n  \
+      \              \"type\": [\"object\", \"null\"],\n                \"description\"\
+      : \"required for sealed_inputs_recorded; the sealed input set\",\n         \
+      \   },\n            \"staging_dir\": {\n                \"type\": [\"string\"\
+      , \"null\"],\n                \"description\": \"required for staged_changes;\
+      \ path to the staging directory\",\n            },\n            \"validator\"\
+      : {\n                \"type\": [\"string\", \"null\"],\n                \"description\"\
+      : \"required for canonical_006_dry_run_executed; validator identifier\",\n \
+      \           },\n            \"effect\": {\n                \"type\": [\"string\"\
+      , \"null\"],\n                \"description\": \"required for apply_step_landed;\
+      \ description of the landed effect\",\n            },\n            \"closing_state\"\
+      : {\n                \"type\": [\"string\", \"null\"],\n                \"description\"\
+      : \"required for iteration_closed; terminal state of the iteration\",\n    \
+      \        },\n            \"note\": {\"type\": [\"string\", \"null\"]},\n   \
+      \         \"validator_status\": {\"type\": [\"string\", \"null\"]},\n      \
+      \      \"invocation_protocol\": {\"type\": [\"string\", \"null\"]},\n      \
+      \      \"consensus_state\": {\"type\": [\"string\", \"null\"]},\n          \
+      \  \"authorization_form_response\": {\"type\": [\"string\", \"null\"]},\n  \
+      \          \"interpretation\": {\"type\": [\"string\", \"null\"]},\n       \
+      \     \"files_modified\": {\"type\": [\"array\", \"null\"]},\n            \"\
+      findings\": {\"type\": [\"string\", \"null\"]},\n            \"gate_decision\"\
+      : {\"type\": [\"string\", \"null\"]},\n            \"governance_milestone_closed\"\
+      : {\"type\": [\"string\", \"null\"]},\n            \"next_constraint\": {\"\
+      type\": [\"string\", \"null\"]},\n            \"staged_files\": {\"type\": [\"\
+      array\", \"null\"]},\n            \"extra_fields\": {\n                \"type\"\
+      : [\"object\", \"null\"],\n                \"description\": (\n            \
+      \        \"catch-all for unspecified extensions only; \"\n                 \
+      \   \"use named top-level fields when present in input_schema\"\n          \
+      \      ),\n            },\n        },\n        \"required\": [\"iteration_id\"\
+      , \"event_type\"],\n        \"additionalProperties\": False,\n    },\n    \"\
+      output_schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n\
+      \            \"event_id\": {\"type\": \"string\"},\n            \"audit_yaml_post_sha256\"\
+      : {\"type\": \"string\"},\n        },\n        \"required\": [\"event_id\",\
+      \ \"audit_yaml_post_sha256\"],\n    },\n}\n\n\ndef _now_utc() -> str:\n    return\
+      \ (\n        datetime.now(timezone.utc)\n        .replace(microsecond=0)\n \
+      \       .isoformat()\n        .replace(\"+00:00\", \"Z\")\n    )\n\n\ndef _canonical_sha256(path:\
+      \ Path) -> str:\n    \"\"\"Return SHA-256 of the YAML file in canonical (sorted-keys\
+      \ safe_dump) form.\n\n    NOTE: this is the canonical_yaml_sha256 per spec section\
+      \ 7 — it hashes the\n    re-serialized form, NOT raw file bytes. External consumers\
+      \ must re-canonicalize\n    (yaml.safe_dump(yaml.safe_load(raw), sort_keys=True))\
+      \ before comparing hashes.\n    \"\"\"\n    raw = path.read_bytes()\n    loaded\
+      \ = yaml.safe_load(raw)\n    return hashlib.sha256(\n        yaml.safe_dump(loaded,\
+      \ sort_keys=True).encode(\"utf-8\")\n    ).hexdigest()\n\n\ndef handle(\n  \
+      \  iteration_id: str,\n    event_type: str,\n    actor: str = None,\n    artifact=None,\n\
+      \    sha256=None,\n    independence_attestation=None,\n    # Event-specific\
+      \ required fields — pass as top-level args, not via extra_fields.\n    sealed_inputs=None,\
+      \       # required for: sealed_inputs_recorded\n    staging_dir=None,      \
+      \   # required for: staged_changes\n    validator=None,           # required\
+      \ for: canonical_006_dry_run_executed\n    effect=None,              # required\
+      \ for: apply_step_landed\n    closing_state=None,       # required for: iteration_closed\n\
+      \    # Optional named fields for common event types.\n    note=None,\n    validator_status=None,\n\
+      \    invocation_protocol=None,\n    consensus_state=None,\n    authorization_form_response=None,\n\
+      \    interpretation=None,\n    files_modified=None,\n    findings=None,\n  \
+      \  gate_decision=None,\n    governance_milestone_closed=None,\n    next_constraint=None,\n\
+      \    staged_files=None,\n    # Catch-all for unspecified extensions only; prefer\
+      \ named fields above.\n    extra_fields: dict = None,\n) -> dict:\n    \"\"\"\
+      Append event to <iteration>/independence-audit.yaml.\n\n    Event-specific required\
+      \ fields (sealed_inputs, staging_dir, validator,\n    effect, closing_state)\
+      \ must be passed as top-level kwargs. extra_fields\n    is reserved for future\
+      \ extensions not yet in input_schema.\n\n    Returns:\n      {event_id: <utc-ts\
+      \ + event_type + actor>, audit_yaml_post_sha256: <sha>}\n\n    Errors (returned\
+      \ as {\"error\": \"...\"}):\n      - non-canonical event_type\n      - per-agent-prefixed\
+      \ event_type (with hint)\n      - missing required field for the given event_type\n\
+      \      - iteration directory does not exist\n    \"\"\"\n    # --- validate\
+      \ event_type ---\n    if event_type in FORBIDDEN_PER_AGENT_PREFIXED:\n     \
+      \   canonical = FORBIDDEN_PER_AGENT_PREFIXED[event_type]\n        return {\n\
+      \            \"error\": (\n                f\"per-agent-prefixed event_type\
+      \ '{event_type}' is not allowed \"\n                f\"(post-canonical-pin);\
+      \ use canonical name '{canonical}' instead\"\n            )\n        }\n\n \
+      \   if event_type not in CANONICAL_EVENT_TYPES:\n        allowed = \", \".join(sorted(CANONICAL_EVENT_TYPES))\n\
+      \        return {\n            \"error\": (\n                f\"non-canonical\
+      \ event_type '{event_type}'; \"\n                f\"allowed: {allowed}\"\n \
+      \           )\n        }\n\n    # --- validate iteration dir ---\n    iteration_dir\
+      \ = active_dir() / iteration_id\n    if not iteration_dir.is_dir():\n      \
+      \  return {\"error\": f\"iteration directory not found: {iteration_dir}\"}\n\
+      \n    audit_path = iteration_dir / \"independence-audit.yaml\"\n\n    # ---\
+      \ validate required fields ---\n    spec = CANONICAL_EVENT_TYPES[event_type]\n\
+      \    # Build a flat dict of all supplied values so we can check required fields.\n\
+      \    supplied: dict = {}\n    if actor is not None:\n        supplied[\"actor\"\
+      ] = actor\n    if artifact is not None:\n        supplied[\"artifact\"] = artifact\n\
+      \    if sha256 is not None:\n        supplied[\"sha256\"] = sha256\n    if independence_attestation\
+      \ is not None:\n        supplied[\"independence_attestation\"] = independence_attestation\n\
+      \    if sealed_inputs is not None:\n        supplied[\"sealed_inputs\"] = sealed_inputs\n\
+      \    if staging_dir is not None:\n        supplied[\"staging_dir\"] = staging_dir\n\
+      \    if validator is not None:\n        supplied[\"validator\"] = validator\n\
+      \    if effect is not None:\n        supplied[\"effect\"] = effect\n    if closing_state\
+      \ is not None:\n        supplied[\"closing_state\"] = closing_state\n    if\
+      \ extra_fields:\n        supplied.update(extra_fields)\n\n    missing = [f for\
+      \ f in spec[\"required\"] if f not in supplied]\n    if missing:\n        return\
+      \ {\n            \"error\": (\n                f\"event_type '{event_type}'\
+      \ requires fields: {missing}; \"\n                f\"provided: {sorted(supplied)}\"\
+      \n            )\n        }\n\n    # --- load existing audit or start fresh ---\n\
+      \    if audit_path.exists():\n        raw = audit_path.read_bytes()\n      \
+      \  data = yaml.safe_load(raw) or {}\n    else:\n        data = {}\n\n    audit_log:\
+      \ list = data.get(\"audit_log\", [])\n\n    # --- Task #28: closure-cross-verification-and-freshness\
+      \ invariant ---\n    # T6 is the LAST gate; refuse to record `iteration_closed`\
+      \ when invariant\n    # fails. Defense-in-depth pairs with the _self_drive stop\
+      \ rule and\n    # loop.run_goal transition guard.\n    invariant_result = None\n\
+      \    if event_type == \"iteration_closed\":\n        # iter-0018 Finding 3:\
+      \ mutation-completeness check. If the working tree\n        # has paths that\
+      \ are NOT in any apply_step_landed event's files_touched\n        # set, refuse.\
+      \ Conservative-fail-closed for manual edits.\n        # iter-0018 H-5: if git\
+      \ is wholly unavailable the gate cannot be\n        # verified — FAIL CLOSED\
+      \ rather than allow-empty (fail-open). Scoped to\n        # only this call so\
+      \ it does not swallow the separate closure-invariant\n        # try/except below.\n\
+      \        try:\n            unaudited = _detect_unaudited_mutation(audit_log,\
+      \ project_root())\n        except GitUnavailableError as exc:\n            return\
+      \ {\"error\": f\"mutation_completeness_unverifiable: {exc}\"}\n        if unaudited:\n\
+      \            return {\n                \"error\": (\n                    f\"\
+      unaudited_mutation_detected: working-tree paths not \"\n                   \
+      \ f\"covered by any apply_step_landed event: {sorted(unaudited)}\"\n       \
+      \         ),\n            }\n\n        # iter-0018 Finding 5: fail-closed when\
+      \ invariant evaluator returns\n        # None or raises AND the audit log carries\
+      \ apply_step_landed events.\n        # Treat un-evaluable as failed.\n     \
+      \   has_apply_events = any(\n            isinstance(e, dict) and e.get(\"event\"\
+      ) == \"apply_step_landed\"\n            for e in audit_log\n        )\n    \
+      \    try:\n            invariant_result = _evaluate_closure_invariant(audit_log,\
+      \ iteration_dir)\n        except Exception as exc:\n            if has_apply_events:\n\
+      \                return {\n                    \"error\": (\n              \
+      \          f\"closure_invariant_evaluation_failed: evaluator raised \"\n   \
+      \                     f\"{type(exc).__name__}: {exc}\"\n                   \
+      \ ),\n                }\n            invariant_result = None\n        if invariant_result\
+      \ is None and has_apply_events:\n            return {\n                \"error\"\
+      : (\n                    \"closure_invariant_evaluation_failed: evaluator returned\
+      \ \"\n                    \"None despite apply_step_landed events being present\"\
+      \n                ),\n            }\n        if invariant_result is not None\
+      \ and not invariant_result[\"ok\"]:\n            return {\n                \"\
+      error\": (\n                    f\"closure_cross_verification_failed: {invariant_result['reason']}\"\
+      \n                ),\n                \"checks\": invariant_result[\"checks\"\
+      ],\n            }\n\n    # --- build event record ---\n    timestamp = _now_utc()\n\
+      \    actor_tag = actor or \"anon\"\n    event_id = f\"{timestamp}_{event_type}_{actor_tag}\"\
+      \n\n    record: dict = {\"event\": event_type, \"timestamp_utc\": timestamp,\
+      \ \"event_id\": event_id}\n    # Write all non-None fields into the record (preserves\
+      \ field order: common first).\n    _named = {\n        \"actor\": actor,\n \
+      \       \"artifact\": artifact,\n        \"sha256\": sha256,\n        \"independence_attestation\"\
+      : independence_attestation,\n        \"sealed_inputs\": sealed_inputs,\n   \
+      \     \"staging_dir\": staging_dir,\n        \"validator\": validator,\n   \
+      \     \"effect\": effect,\n        \"closing_state\": closing_state,\n     \
+      \   \"note\": note,\n        \"validator_status\": validator_status,\n     \
+      \   \"invocation_protocol\": invocation_protocol,\n        \"consensus_state\"\
+      : consensus_state,\n        \"authorization_form_response\": authorization_form_response,\n\
+      \        \"interpretation\": interpretation,\n        \"files_modified\": files_modified,\n\
+      \        \"findings\": findings,\n        \"gate_decision\": gate_decision,\n\
+      \        \"governance_milestone_closed\": governance_milestone_closed,\n   \
+      \     \"next_constraint\": next_constraint,\n        \"staged_files\": staged_files,\n\
+      \    }\n    for k, v in _named.items():\n        if v is not None:\n       \
+      \     record[k] = v\n    if extra_fields:\n        record.update(extra_fields)\n\
+      \n    audit_log.append(record)\n    data[\"audit_log\"] = audit_log\n\n    #\
+      \ --- write back (read-modify-write; single-writer per iteration) ---\n    audit_path.write_text(yaml.safe_dump(data,\
+      \ sort_keys=False), encoding=\"utf-8\")\n\n    # --- Task #28: author closure-certificate.yaml\
+      \ on PASS for iteration_closed ---\n    if event_type == \"iteration_closed\"\
+      \ and invariant_result is not None and invariant_result[\"ok\"]:\n        try:\n\
+      \            _author_closure_certificate(\n                iteration_dir,\n\
+      \                iteration_id,\n                invariant_result,\n        \
+      \        timestamp,\n            )\n        except Exception as exc:\n     \
+      \       # Non-fatal: invariant gate already passed; certificate authoring\n\
+      \            # failure is a follow-up concern, not a close-blocker. BUT log\
+      \ to\n            # stderr so the operator notices when their primary close-validity\n\
+      \            # artifact (closure-certificate.yaml) failed to author. Silent\n\
+      \            # failure here = operator reviews a non-existent certificate.\n\
+      \            print(\n                f\"WARN: closure-certificate.yaml authoring\
+      \ failed for \"\n                f\"iteration {iteration_id}: {type(exc).__name__}:\
+      \ {exc}\",\n                file=sys.stderr,\n            )\n\n    post_sha\
+      \ = _canonical_sha256(audit_path)\n    return {\"event_id\": event_id, \"audit_yaml_post_sha256\"\
+      : post_sha}\n\n\ndef _detect_working_tree_changes(repo_root: Path) -> list[str]:\n\
+      \    \"\"\"Return repo-relative paths that have working-tree or staged changes.\n\
+      \n    Used by iter-0018 Finding 3 (mutation-completeness check). Implementation\n\
+      \    runs `git diff --name-only HEAD` (covers both staged and unstaged) plus\n\
+      \    `git ls-files --others --exclude-standard` (untracked files) and returns\n\
+      \    the union.\n\n    A single sub-command that fails (non-zero exit, or raises\n\
+      \    FileNotFoundError/TimeoutExpired/OSError) is tolerated via `continue` so\n\
+      \    that one odd sub-command does not nuke the whole check while the other\n\
+      \    still succeeds. BUT if NO sub-command succeeds at all — git is wholly\n\
+      \    unavailable — this raises `GitUnavailableError` instead of returning [].\n\
+      \    iter-0018 H-5: consensus-mcp is inherently git-based, so an unverifiable\n\
+      \    mutation-completeness gate must FAIL CLOSED at the caller, never silently\n\
+      \    pass on an empty set (fail-open).\n\n    Tests can monkeypatch this function\
+      \ to inject simulated working-tree\n    state without needing a real git repo.\n\
+      \    \"\"\"\n    import subprocess\n    paths: set[str] = set()\n    any_ok\
+      \ = False\n    for cmd in (\n        [\"git\", \"diff\", \"--name-only\", \"\
+      HEAD\"],\n        [\"git\", \"ls-files\", \"--others\", \"--exclude-standard\"\
+      ],\n    ):\n        try:\n            result = subprocess.run(\n           \
+      \     cmd,\n                cwd=str(repo_root),\n                capture_output=True,\n\
+      \                text=True,\n                encoding=\"utf-8\",\n         \
+      \       errors=\"replace\",\n                timeout=15,\n            )\n  \
+      \          if result.returncode != 0:\n                continue\n          \
+      \  any_ok = True\n            for line in result.stdout.splitlines():\n    \
+      \            line = line.strip()\n                if line:\n               \
+      \     paths.add(line)\n        except (FileNotFoundError, subprocess.TimeoutExpired,\
+      \ OSError):\n            continue\n    if not any_ok:\n        raise GitUnavailableError(\n\
+      \            \"no git command succeeded (git missing, timed out, or errored\
+      \ on \"\n            \"every sub-command); cannot verify mutation-completeness\"\
+      \n        )\n    return sorted(paths)\n\n\ndef _detect_unaudited_mutation(audit_log:\
+      \ list, repo_root: Path) -> list[str]:\n    \"\"\"Return working-tree paths\
+      \ NOT covered by any apply_step_landed event.\n\n    Iter-0018 Finding 3: if\
+      \ code is changed OUTSIDE apply.codex_patch (manual\n    edit, direct write),\
+      \ the audit log has no apply_step_landed event for it,\n    so the closure invariant\
+      \ trivially passes (\"no mutation = no gate\"). But\n    there WAS a mutation.\
+      \ This helper computes the set difference:\n      working_tree_paths - audited_paths\n\
+      \    and returns the unaudited subset. Empty list means nothing unaudited.\n\
+      \    \"\"\"\n    audited: set[str] = set()\n    for e in audit_log or []:\n\
+      \        if not isinstance(e, dict):\n            continue\n        if e.get(\"\
+      event\") != \"apply_step_landed\":\n            continue\n        # Top-level\
+      \ files_touched (post-#28 emitter shape)\n        ft = e.get(\"files_touched\"\
+      )\n        if isinstance(ft, list):\n            audited.update(str(p) for p\
+      \ in ft)\n        # Top-level files_modified (legacy shape preserved for compat)\n\
+      \        fm = e.get(\"files_modified\")\n        if isinstance(fm, list):\n\
+      \            audited.update(str(p) for p in fm)\n        # Nested last_mutation.files_touched\
+      \ (apply_codex_patch shape)\n        nested = e.get(\"last_mutation\")\n   \
+      \     if isinstance(nested, dict):\n            nft = nested.get(\"files_touched\"\
+      )\n            if isinstance(nft, list):\n                audited.update(str(p)\
+      \ for p in nft)\n\n    working = set(_detect_working_tree_changes(repo_root))\n\
+      \    return sorted(working - audited)\n\n\ndef _evaluate_closure_invariant(audit_log:\
+      \ list, iteration_dir: Path) -> dict | None:\n    \"\"\"Run check_closure_invariant\
+      \ against the iteration state.\n\n    Returns None when no enforcement should\
+      \ occur (no last_mutation, or no\n    closing-verdict review came after last_mutation\
+      \ timestamp). Returns the\n    invariant result dict otherwise.\n    \"\"\"\n\
+      \    try:\n        from consensus_mcp._closure_invariant import (\n        \
+      \    check_closure_invariant,\n            last_mutation_from_audit,\n     \
+      \   )\n    except Exception:\n        return None\n\n    last_mutation = last_mutation_from_audit(audit_log)\n\
+      \    if last_mutation is None:\n        return None\n\n    lm_ts = last_mutation.get(\"\
+      timestamp\") or last_mutation.get(\"timestamp_utc\") or \"\"\n    candidates\
+      \ = []\n    for review_name in (\"claude-review.yaml\", \"codex-review.yaml\"\
+      ):\n        review_path = iteration_dir / review_name\n        if review_path.exists():\n\
+      \            try:\n                review = yaml.safe_load(review_path.read_text(encoding=\"\
+      utf-8\")) or {}\n            except Exception:\n                continue\n \
+      \           if not isinstance(review, dict):\n                continue\n   \
+      \         closer_ts = review.get(\"created_at_utc\")\n            if closer_ts\
+      \ and closer_ts > lm_ts:\n                candidates.append((closer_ts, review))\n\
+      \    if not candidates:\n        # No fresh closing verdict yet; nothing to\
+      \ gate on. Refuse to author\n        # iteration_closed when the audit shows\
+      \ mutation but no fresh review\n        # has been authored — this prevents\
+      \ a silent close on stale or\n        # missing review data.\n        return\
+      \ {\n            \"ok\": False,\n            \"checks\": {\n               \
+      \ \"cross_family\": False,\n                \"hash_match\": False,\n       \
+      \         \"freshness\": False,\n            },\n            \"reason\": (\n\
+      \                \"no closing-verdict review (claude-review.yaml or codex-review.yaml)\
+      \ \"\n                \"found with created_at_utc > last_mutation.timestamp\"\
+      \n            ),\n            \"_last_mutation\": last_mutation,\n        }\n\
+      \    candidates.sort(key=lambda x: x[0], reverse=True)\n    _, closer_verdict\
+      \ = candidates[0]\n    result = check_closure_invariant(last_mutation, closer_verdict)\n\
+      \    result[\"_last_mutation\"] = last_mutation\n    result[\"_closer_verdict\"\
+      ] = closer_verdict\n    return result\n\n\ndef _author_closure_certificate(\n\
+      \    iteration_dir: Path,\n    iteration_id: str,\n    invariant_result: dict,\n\
+      \    timestamp: str,\n) -> None:\n    \"\"\"Write iteration_dir/closure-certificate.yaml\
+      \ summarizing close validity.\n\n    Operator reviews ONE artifact for close\
+      \ validity, not the full audit log.\n    \"\"\"\n    last_mutation = invariant_result.get(\"\
+      _last_mutation\") or {}\n    closer_verdict = invariant_result.get(\"_closer_verdict\"\
+      ) or {}\n\n    def _yes_no(b: bool) -> str:\n        return \"PASS\" if b else\
+      \ \"FAIL\"\n\n    checks = invariant_result.get(\"checks\", {}) or {}\n    cert\
+      \ = {\n        \"schema_version\": 1,\n        \"iteration_id\": iteration_id,\n\
+      \        \"last_mutation\": last_mutation,\n        \"closing_verdict\": {\n\
+      \            \"actor\": closer_verdict.get(\"actor\"),\n            \"review_target_hash\"\
+      : closer_verdict.get(\"review_target_hash\"),\n            \"created_at_utc\"\
+      : closer_verdict.get(\"created_at_utc\"),\n            \"review_scope_hash\"\
+      : closer_verdict.get(\"review_scope_hash\"),\n        },\n        \"invariant_checks\"\
+      : {\n            \"cross_family\": _yes_no(bool(checks.get(\"cross_family\"\
+      ))),\n            \"hash_match\": _yes_no(bool(checks.get(\"hash_match\"))),\n\
+      \            \"freshness\": _yes_no(bool(checks.get(\"freshness\"))),\n    \
+      \    },\n        \"overall\": \"PASS\" if invariant_result.get(\"ok\") else\
+      \ \"FAIL\",\n        \"generated_utc\": timestamp,\n    }\n    cert_path = iteration_dir\
+      \ / \"closure-certificate.yaml\"\n    cert_path.write_text(yaml.safe_dump(cert,\
+      \ sort_keys=False), encoding=\"utf-8\")\n\n\ndef register(registry) -> None:\n\
+      \    registry.register(SCHEMA[\"name\"], SCHEMA, handle)\n"
+schema_version: 1
+iteration_id: iteration-result-logging-scope-2026-05-22

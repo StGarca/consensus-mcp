@@ -1,0 +1,160 @@
+iteration_id: iteration-result-logging-scope-2026-05-22
+reviewer_id: codex-logscope-1
+pass_id: codex-logscope-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential/prior: the durable unit should be the existing
+  canonical event stream, not another prose summary, because the demonstrated failure
+  is format drift between sealed passes, converged plans, and summaries. A single
+  append/update results ledger under consensus-state/state preserves project locality
+  and aggregation without committing run results. This path is verified gitignored
+  by .gitignore:42-43 (`consensus-state/state/*.jsonl`, `consensus-state/state/*.yaml`)
+  and project-specific by the brief''s verified constraint that each project has its
+  own consensus-state/. I prefer this over writing only per-iteration files under
+  active/ because active artifacts are lifecycle-bound and harder to roll up; over
+  committing archive artifacts because the brief explicitly forbids committing run
+  results; and over a standalone manual CLI because the gap is caused by prose-only/manual
+  signals. CLI exposure should use the existing installed console-script surface,
+  verified via pyproject.toml:18-25 (`[project.scripts]`, `consensus-mcp`, `consensus`),
+  not an inferred registry or distribution channel. Mechanism claim falsifiability:
+  the claim that audit events are the right automatic hook is falsifiable from artifacts;
+  the external refuting observation would be a real consensus run that reaches closure
+  without invoking audit.append_event for review_returned_and_sealed, consensus_built,
+  apply_step_landed, or iteration_closed. Until such an observation, this is the best
+  minimal integration point.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.132.0
+  prompt_sha256: 79a4ea222bd1e1f7699d69beb87f3291a4f717b773be072cab1c24bf8b07278c
+  output_sha256: 5b1542a03b53b3d9df568957209932b7690e0f4a00ae22eb1662559548f610fb
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: 5fe460156a44558d02867a04ddd6f7d8e86cca2ba5df4d67861826cdd963773b
+  scope_signature: c691e29381efebf5b634ad633472ef9b09385637f8857ec27b7d1017d61fe57a
+  review_target_path: consensus-state/active/iteration-result-logging-scope-2026-05-22/review-packet.yaml
+  review_target_hash: 24534e2a1cfedae056f04a828efebcb5eb704c405ab2b8c7eedd1f2aec3140e2
+  mode: proposal
+proposal:
+  selected_target: Add a schema-versioned project-local results ledger at consensus-state/state/results-v1.jsonl,
+    maintained automatically from canonical audit events and closed by iteration_closed.
+  rationale_vs_alternatives: 'Differential/prior: the durable unit should be the existing
+    canonical event stream, not another prose summary, because the demonstrated failure
+    is format drift between sealed passes, converged plans, and summaries. A single
+    append/update results ledger under consensus-state/state preserves project locality
+    and aggregation without committing run results. This path is verified gitignored
+    by .gitignore:42-43 (`consensus-state/state/*.jsonl`, `consensus-state/state/*.yaml`)
+    and project-specific by the brief''s verified constraint that each project has
+    its own consensus-state/. I prefer this over writing only per-iteration files
+    under active/ because active artifacts are lifecycle-bound and harder to roll
+    up; over committing archive artifacts because the brief explicitly forbids committing
+    run results; and over a standalone manual CLI because the gap is caused by prose-only/manual
+    signals. CLI exposure should use the existing installed console-script surface,
+    verified via pyproject.toml:18-25 (`[project.scripts]`, `consensus-mcp`, `consensus`),
+    not an inferred registry or distribution channel. Mechanism claim falsifiability:
+    the claim that audit events are the right automatic hook is falsifiable from artifacts;
+    the external refuting observation would be a real consensus run that reaches closure
+    without invoking audit.append_event for review_returned_and_sealed, consensus_built,
+    apply_step_landed, or iteration_closed. Until such an observation, this is the
+    best minimal integration point.'
+  deliverable_scope:
+    next_iteration_id: iteration-result-ledger-v1-2026-05-22
+    files_in_scope:
+    - consensus_mcp/tools/audit_append_event.py
+    - consensus_mcp/_results_log.py
+    - consensus_mcp/_results_scorecard.py
+    - consensus_mcp/server.py
+    - consensus_mcp/_smoke_test.py
+    - consensus_mcp/tests/test_results_log.py
+    - consensus-state/state/results-v1.jsonl
+    files_out_of_scope:
+    - consensus-state/archive/index.yaml
+    - consensus-state/archive/review-passes/*.yaml
+    - sealed historical review pass formats except read-only optional backfill input
+    - package publication or external distribution configuration
+    - global cross-project results storage
+    key_design_decisions:
+    - Use `consensus-state/state/results-v1.jsonl` as the authoritative project-local
+      ledger; verified gitignored via .gitignore:42-43, so records stay uncommitted
+      and per project.
+    - 'Schema version `consensus_results_schema_version: 1` on every JSONL record.
+      Each line is one iteration/run snapshot keyed by `iteration_id`, `run_id`, `record_updated_utc`,
+      `source_audit_event_id`, and `source_audit_yaml_post_sha256`. The schema includes
+      `dates` (`started_utc`, `sealed_utc`, `closed_utc`), `reviewers` (`reviewer_id`,
+      `family`, `pass_id`, `sealed_at_utc`), `findings` with `finding_id`, `source_pass_id`,
+      `severity`, `summary`, `citation`, `disposition` enum (`validated-and-fixed`,
+      `dismissed-with-evidence`, `deferred`, `unresolved`), `disposition_evidence`,
+      `fixed_by` event ids, and `files_touched`, plus `fixes_applied`, `convergence_outcome`,
+      and `closure_state`.'
+    - 'Keep the ledger derived and append-safe: `_results_log.py` reads existing JSONL,
+      rewrites atomically with one current snapshot per iteration, and validates schema
+      before replace. If validation or write fails during a close-relevant audit event,
+      `audit_append_event.handle` returns an error and refuses the event, preserving
+      fail-closed behavior.'
+    - 'Extend canonical audit event support minimally with structured result fields
+      rather than prose-only notes: `apply_step_landed` may carry `finding_ids`, `files_touched`,
+      and `fix_summary`; `iteration_closed` may carry `finding_dispositions` as structured
+      evidence. Existing `extra_fields` remains compatibility-only, but the results
+      emitter only counts named structured fields.'
+    - 'Disposition tracking is explicit: a finding is countable as validated only
+      when a structured disposition links it to an `apply_step_landed` event or a
+      closure-time `finding_dispositions` item with evidence; dismissed requires `dismissed-with-evidence`
+      plus citation/evidence text; otherwise it remains `deferred` or `unresolved`
+      and is not silently counted as fixed.'
+    - 'Implement `consensus results` / MCP tool equivalent through the existing console-script
+      surface verified in pyproject.toml:18-25. The rollup reads only `consensus-state/state/results-v1.jsonl`
+      and emits both JSON and a compact human summary: totals by severity, dispositions,
+      fixes applied, iterations, reviewer families, and convergence rate.'
+    - 'Backfill is optional and explicitly marked. Add `--backfill-existing --best-effort`
+      to populate records from existing active/archive artifacts only with `backfilled:
+      true` and `confidence: best-effort`; default behavior is forward-only. This
+      avoids mixing inferred historical prose with trustworthy v1 records while still
+      allowing exploratory local scorecards.'
+    - No external publication, registry, or cross-project sync is in scope; no fixed/shipped
+      claim should be made until a concrete commit/tag is named, and this proposal
+      names none.
+    acceptance_gates:
+    - Creating or closing an iteration through `audit.append_event` writes or updates
+      exactly one schema-valid v1 JSONL record for that iteration under `consensus-state/state/results-v1.jsonl`.
+    - If the results ledger cannot be parsed, validated, or atomically rewritten during
+      `iteration_closed`, `audit.append_event` refuses closure with a clear `results_log_write_failed`
+      or `results_schema_validation_failed` error.
+    - A sealed review pass with findings produces countable finding entries by severity
+      without counting design-consult proposal fields as review findings.
+    - An `apply_step_landed` event linked to finding ids changes those findings to
+      `validated-and-fixed` only when closure-time disposition evidence confirms them;
+      unlinked fixes are listed under `fixes_applied` but do not inflate finding validation
+      counts.
+    - A closure event with `dismissed-with-evidence` records evidence and counts the
+      finding as dismissed, while missing disposition leaves the finding unresolved/deferred.
+    - '`consensus results --json` emits machine-readable totals for findings by severity,
+      validated, dismissed, deferred/unresolved, fixes applied, iterations, and convergence
+      rate; the default command emits the same information as a human-readable scorecard.'
+    - Tests verify the ledger path is project-local and gitignored by matching `.gitignore`
+      rules for `consensus-state/state/*.jsonl`.
+    - 'Backfill records, if generated, are clearly marked `backfilled: true` and excluded
+      from strict trust totals unless the CLI is invoked with an include-backfill
+      option.'
+  risks:
+  - Read-modify-write ledger updates inherit the existing single-writer assumption
+    from audit_append_event; concurrent orchestrators could still race unless a later
+    filelock iteration is justified.
+  - Historical backfill can never be as trustworthy as forward structured logging,
+    so scorecards must separate v1 native records from best-effort inferred records.
+  - Finding identity needs deterministic normalization across reviewer ids and converged-plan
+    ids; the first version should preserve source ids and avoid deduplicating beyond
+    explicit convergence mappings.
+  - Fail-closed integration can block iteration closure if the ledger is corrupt;
+    that is intended, but recovery tooling may be needed if operators manually damage
+    the local state file.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:01:56Z'
+packet_sha256: ba317317cda18f8b6cbb5315a428e72edcbaaff3e4ee672726d6e5ceef9547b7

@@ -1,0 +1,222 @@
+iteration_id: iteration-metrics-verify-readme-2026-05-22
+reviewer_id: kimi-metrics-1
+pass_id: kimi-metrics-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "=== TASK 1 \u2014 VERDICT ON THE METRICS ===\n\n**Differential\
+  \ / prior:** I am reasoning from the embedded extraction script and results table\
+  \ as the authoritative source, treating the README's older figures (244 passes /\
+  \ 74 iterations / 232 findings) as stale unless explicitly reconciled. The script's\
+  \ logic is inspectable; the README's current prose is not.\n\n**Agree with the orchestrator\
+  \ on the big picture:** A clean cross-project total is impossible today, and 305\
+  \ is honestly a floor. However, I identify additional deviations and one important\
+  \ non-falsifiable claim.\n\n**Where counts likely deviate:**\n1. **Project A (230/60):\
+  \ DEFENSIBLE with caveats.** The severity buckets sum correctly (5+55+41+82+47 =\
+  \ 230). The orchestrator's claim of \"two independent counts agree\" is strong converging\
+  \ evidence. BUT: the severity-only filter is still a schema-dependent gate. Any\
+  \ finding from an older format, a prose-only review, or a design consult that identified\
+  \ a real defect without using the `severity` key is silently dropped. So 230 is\
+  \ a defensible **floor** for Project A, not necessarily a complete count. The 60\
+  \ blocking/critical is defensible because it is a strict subset with unambiguous\
+  \ criteria.\n2. **Project B (60/26): LIKELY UNDER-COUNTED.** Labeled \"APPROXIMATE\
+  \ \u2014 older format.\" The severity-only filter and the sealed-pass filter both\
+  \ discard output from eras before the structured schema was stable. The true finding\
+  \ count is probably higher; we just can't quantify by how much from the embedded\
+  \ brief alone.\n3. **Project C (15/1): SEVERELY UNDER-COUNTED \u2014 the methodology\
+  \ flaw is here.** The `is_pass` filter requires `dispatch_provenance` or `reviewer_id+pass_id`.\
+  \ Project C's reviews live in a non-sealed `*-out.yaml` format that lacks these\
+  \ fields. The brief itself says >=88 pass-like files exist; only 4 were counted.\
+  \ This is not a minor variance \u2014 it's an order-of-magnitude blind spot.\n4.\
+  \ **`fixes_applied=0` is a methodology failure, not a finding of zero fixes.** The\
+  \ audit-log event set `{apply_step_landed,patch_applied,codex_patch_apply,apply_consensus_patch}`\
+  \ does not capture manual edits, design-consult resolutions, or fixes applied through\
+  \ non-audit paths. The README currently claims \"every one resolved before its change\
+  \ merged\" \u2014 this is a non-falsifiable claim from the artifacts in evidence\
+  \ (we can't refute it without reading every commit message, which we don't have).\
+  \ It should be softened to \"addressed\" (fixed or dismissed with evidence) rather\
+  \ than \"resolved.\"\n5. **Dedup by `(reviewer_id, pass_id)` is mostly sound** but\
+  \ could miss duplicates if a re-run produces identical content under a different\
+  \ pass_id while lacking a content hash \u2014 though the OR logic with `packet_sha256`\
+  \ mitigates this.\n\n**Is presenting 305 as a floor honest?** Yes, it is honest,\
+  \ but the table format (a \"TOTAL\" row in a results table) visually invites readers\
+  \ to treat it as approximately complete. A more honest presentation would be to\
+  \ omit the total row entirely or replace it with a range/uncertainty annotation.\
+  \ Project C alone adds an unknown but large increment (>=88 files, of which some\
+  \ unknown fraction contain findings).\n\n**Pre-specified refuting observation for\
+  \ the \"230 is a complete count\" hypothesis:** If a manual audit of Project A's\
+  \ 220 sealed passes found even one review file containing a valid bug finding that\
+  \ lacks a `severity` key, the hypothesis that 230 equals the true finding count\
+  \ is falsified. I expect this would be found.\n\n**Root-cause-independent safeguard:**\
+  \ The README should never cite a cross-project total or a fixes_applied count, because\
+  \ even if my specific hypotheses about under-counting are wrong, the logging methodology\
+  \ is known to be incomplete across formats.\n\n\n=== TASK 2 \u2014 PROPOSED README\
+  \ SECTION ===\n\n```markdown\n## Does it actually work?\n\nThe history is sealed\
+  \ to disk with content hashes, so it's auditable:\n[`consensus-state/archive/review-passes/`](consensus-state/archive/review-passes).\n\
+  \nIn 76 iterations of reviewing its own code, the panel found **230 issues,\n60\
+  \ of them blocking or critical** \u2014 each addressed before the change\nmerged.\
+  \ The same setup is also in active use on other real, separate\ncodebases. Because\
+  \ those projects use different log formats, we don't\nyet combine their counts into\
+  \ one headline number; every figure you see\nhere is drawn from the sealed artifacts.\n\
+  ```\n\n**Why this version over alternatives:**\n- It grounds every claim in Project\
+  \ A's defensible numbers (230/60 across 76 iterations) and the sealed/auditable\
+  \ property.\n- It replaces \"resolved\" (implies fixed, which the event log can't\
+  \ verify) with \"addressed\" (covers both fixes and evidence-based dismissals, which\
+  \ the sealed process does guarantee).\n- It mentions other codebases honestly without\
+  \ citing unreliable Project B/C counts or a fabricated cross-project total.\n- It\
+  \ removes all project names, project-specific feature terms, and the banned words.\n\
+  - It is 9 lines \u2014 within the 6-12 line constraint and significantly more concise\
+  \ than the current 33-line section, reducing the chance that a reader skims past\
+  \ it.\n\n**Rejected alternatives:**\n- Keeping the current paragraph about the external\
+  \ project (neural TTS, emotion engine, ~100 iterations) \u2014 violates the project-name\
+  \ and feature-term bans; also those numbers come from Project B/C which the brief\
+  \ flags as approximate/under-counted.\n- Citing 305 as a cross-project floor \u2014\
+  \ honest per the brief, but the brief itself says the README must NOT lean on it.\
+  \ A floor in a headline number is still a precise-sounding number that invites false\
+  \ confidence.\n- Claiming \"all 60 blocking findings were fixed\" \u2014 the fixes_applied=0\
+  \ methodology gap makes this non-falsifiable and potentially misleading. \"Addressed\"\
+  \ is the defensible formulation.\n- Dropping the \"other codebases\" mention entirely\
+  \ \u2014 weaker than acknowledging real usage elsewhere while honestly disclaiming\
+  \ aggregation."
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: kimi, version 1.44.0
+  model: gemini-2.5-pro
+  prompt_sha256: cad7d25d3f06242737fce698ee5523899cc60683418376b6452d3714ce8ff02a
+  output_sha256: 7aba4ab1d7468799c729d894b67b40c4c1bac3d9e47885cff344e27b871b926a
+  goal_packet_sha256: c9da1a7d40cfba113044582226876944bef50f7ebfcd0cb7814cedf0a6888474
+  scope_signature: 28a99f348be37ee8068cee8b58a1c46caf04c2e7d93cf07af29b00c7e50e9811
+  review_target_path: consensus-state/active/iteration-metrics-verify-readme-2026-05-22/review-packet.yaml
+  review_target_hash: 3fe9fd460209ecba625a60be6251265f079b3e54f9192e0bd2391f27de66a707
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: /mnt/c/Users/steve/Downloads/consensus-mcp/consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Replace README.md 'Does it actually work?' section with a defensible,
+    sealed-artifact-grounded summary (~9 lines), removing project-specific names,
+    unreliable cross-project totals, and unverifiable fix counts.
+  rationale_vs_alternatives: "=== TASK 1 \u2014 VERDICT ON THE METRICS ===\n\n**Differential\
+    \ / prior:** I am reasoning from the embedded extraction script and results table\
+    \ as the authoritative source, treating the README's older figures (244 passes\
+    \ / 74 iterations / 232 findings) as stale unless explicitly reconciled. The script's\
+    \ logic is inspectable; the README's current prose is not.\n\n**Agree with the\
+    \ orchestrator on the big picture:** A clean cross-project total is impossible\
+    \ today, and 305 is honestly a floor. However, I identify additional deviations\
+    \ and one important non-falsifiable claim.\n\n**Where counts likely deviate:**\n\
+    1. **Project A (230/60): DEFENSIBLE with caveats.** The severity buckets sum correctly\
+    \ (5+55+41+82+47 = 230). The orchestrator's claim of \"two independent counts\
+    \ agree\" is strong converging evidence. BUT: the severity-only filter is still\
+    \ a schema-dependent gate. Any finding from an older format, a prose-only review,\
+    \ or a design consult that identified a real defect without using the `severity`\
+    \ key is silently dropped. So 230 is a defensible **floor** for Project A, not\
+    \ necessarily a complete count. The 60 blocking/critical is defensible because\
+    \ it is a strict subset with unambiguous criteria.\n2. **Project B (60/26): LIKELY\
+    \ UNDER-COUNTED.** Labeled \"APPROXIMATE \u2014 older format.\" The severity-only\
+    \ filter and the sealed-pass filter both discard output from eras before the structured\
+    \ schema was stable. The true finding count is probably higher; we just can't\
+    \ quantify by how much from the embedded brief alone.\n3. **Project C (15/1):\
+    \ SEVERELY UNDER-COUNTED \u2014 the methodology flaw is here.** The `is_pass`\
+    \ filter requires `dispatch_provenance` or `reviewer_id+pass_id`. Project C's\
+    \ reviews live in a non-sealed `*-out.yaml` format that lacks these fields. The\
+    \ brief itself says >=88 pass-like files exist; only 4 were counted. This is not\
+    \ a minor variance \u2014 it's an order-of-magnitude blind spot.\n4. **`fixes_applied=0`\
+    \ is a methodology failure, not a finding of zero fixes.** The audit-log event\
+    \ set `{apply_step_landed,patch_applied,codex_patch_apply,apply_consensus_patch}`\
+    \ does not capture manual edits, design-consult resolutions, or fixes applied\
+    \ through non-audit paths. The README currently claims \"every one resolved before\
+    \ its change merged\" \u2014 this is a non-falsifiable claim from the artifacts\
+    \ in evidence (we can't refute it without reading every commit message, which\
+    \ we don't have). It should be softened to \"addressed\" (fixed or dismissed with\
+    \ evidence) rather than \"resolved.\"\n5. **Dedup by `(reviewer_id, pass_id)`\
+    \ is mostly sound** but could miss duplicates if a re-run produces identical content\
+    \ under a different pass_id while lacking a content hash \u2014 though the OR\
+    \ logic with `packet_sha256` mitigates this.\n\n**Is presenting 305 as a floor\
+    \ honest?** Yes, it is honest, but the table format (a \"TOTAL\" row in a results\
+    \ table) visually invites readers to treat it as approximately complete. A more\
+    \ honest presentation would be to omit the total row entirely or replace it with\
+    \ a range/uncertainty annotation. Project C alone adds an unknown but large increment\
+    \ (>=88 files, of which some unknown fraction contain findings).\n\n**Pre-specified\
+    \ refuting observation for the \"230 is a complete count\" hypothesis:** If a\
+    \ manual audit of Project A's 220 sealed passes found even one review file containing\
+    \ a valid bug finding that lacks a `severity` key, the hypothesis that 230 equals\
+    \ the true finding count is falsified. I expect this would be found.\n\n**Root-cause-independent\
+    \ safeguard:** The README should never cite a cross-project total or a fixes_applied\
+    \ count, because even if my specific hypotheses about under-counting are wrong,\
+    \ the logging methodology is known to be incomplete across formats.\n\n\n=== TASK\
+    \ 2 \u2014 PROPOSED README SECTION ===\n\n```markdown\n## Does it actually work?\n\
+    \nThe history is sealed to disk with content hashes, so it's auditable:\n[`consensus-state/archive/review-passes/`](consensus-state/archive/review-passes).\n\
+    \nIn 76 iterations of reviewing its own code, the panel found **230 issues,\n\
+    60 of them blocking or critical** \u2014 each addressed before the change\nmerged.\
+    \ The same setup is also in active use on other real, separate\ncodebases. Because\
+    \ those projects use different log formats, we don't\nyet combine their counts\
+    \ into one headline number; every figure you see\nhere is drawn from the sealed\
+    \ artifacts.\n```\n\n**Why this version over alternatives:**\n- It grounds every\
+    \ claim in Project A's defensible numbers (230/60 across 76 iterations) and the\
+    \ sealed/auditable property.\n- It replaces \"resolved\" (implies fixed, which\
+    \ the event log can't verify) with \"addressed\" (covers both fixes and evidence-based\
+    \ dismissals, which the sealed process does guarantee).\n- It mentions other codebases\
+    \ honestly without citing unreliable Project B/C counts or a fabricated cross-project\
+    \ total.\n- It removes all project names, project-specific feature terms, and\
+    \ the banned words.\n- It is 9 lines \u2014 within the 6-12 line constraint and\
+    \ significantly more concise than the current 33-line section, reducing the chance\
+    \ that a reader skims past it.\n\n**Rejected alternatives:**\n- Keeping the current\
+    \ paragraph about the external project (neural TTS, emotion engine, ~100 iterations)\
+    \ \u2014 violates the project-name and feature-term bans; also those numbers come\
+    \ from Project B/C which the brief flags as approximate/under-counted.\n- Citing\
+    \ 305 as a cross-project floor \u2014 honest per the brief, but the brief itself\
+    \ says the README must NOT lean on it. A floor in a headline number is still a\
+    \ precise-sounding number that invites false confidence.\n- Claiming \"all 60\
+    \ blocking findings were fixed\" \u2014 the fixes_applied=0 methodology gap makes\
+    \ this non-falsifiable and potentially misleading. \"Addressed\" is the defensible\
+    \ formulation.\n- Dropping the \"other codebases\" mention entirely \u2014 weaker\
+    \ than acknowledging real usage elsewhere while honestly disclaiming aggregation."
+  deliverable_scope:
+    next_iteration_id: iteration-metrics-verify-readme-2026-05-22-apply
+    files_in_scope:
+    - README.md
+    files_out_of_scope:
+    - consensus-state/
+    - docs/
+    - CHANGELOG.md
+    key_design_decisions:
+    - Replace the ~33-line 'Does it actually work?' section with a ~9-line sealed-artifact-grounded
+      summary.
+    - Remove all references to external project specifics (names, feature codenames,
+      'emotion engine', TTS domain).
+    - Remove the cross-project total (305) and the unreliable Project B/C precise
+      counts.
+    - Soften 'resolved/fixed' to 'addressed' to reflect the fixes_applied=0 logging
+      gap.
+    - Keep the auditable-trail link to consensus-state/archive/review-passes/ as the
+      primary trust mechanism.
+    acceptance_gates:
+    - The new section is 6-12 lines.
+    - The new section cites only Project A's numbers (230 findings, 60 blocking/critical,
+      76 iterations) and the sealed/auditable property.
+    - No project names, no project-specific feature terms, and no occurrence of 'ebook',
+      'audiobook', or 'narration'.
+    - No cross-project total (305 or similar) is presented as a precise number.
+    - The prose is readable by a non-expert with no workflow jargon.
+  risks:
+  - The 76 iterations / 230 findings count may drift again if the extraction is re-run
+    with different parameters (the README's current 74/232 already disagrees with
+    the brief). The proposal should use whichever figure the converged consult validates.
+  - Saying 'other real, separate codebases' without naming them may feel vague to
+    readers; this is the cost of honesty given the aggregation barriers.
+  - "If the README section is ever expanded again (e.g., to add testimonials or screenshots),\
+    \ the concise constraint may be re-broken \u2014 a note in AGENTS.md or a README\
+    \ style guide would prevent regression."
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:03:10Z'
+packet_sha256: d3a1f07b89576e82d61679df4bb0dc92dc3aff0b61647ccdb541e759a55ad44b

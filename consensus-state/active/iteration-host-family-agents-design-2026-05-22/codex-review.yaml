@@ -1,0 +1,170 @@
+iteration_id: iteration-host-family-agents-design-2026-05-22
+reviewer_id: codex-agents-1
+pass_id: codex-agents-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential/prior: the safest design is the one that preserves
+  the existing contributor abstraction while adding the least new invocation surface.
+  The verified project surface already routes contributors through `ContributorAdapter.dispatch(packet)
+  -> SealedArtifact` (verified via `contributors/base.py`: `ContributorAdapter`, `DispatchPacket`,
+  `SealedArtifact`) and builds contributors from config/profile resolution (verified
+  via `_engine_factory.py`: registered/built-in/profile resolution). The verified
+  host channel is an in-process artifact callback, not a Claude CLI (verified via
+  `_engine_factory.py`: `build_adapters(..., claude_artifact_callback=...)` and the
+  `key == "claude"` special case). Therefore the right move is not a raw second `claude_artifact_callback`
+  hidden inside existing Claude behavior, because that under-exposes config/provenance/weighting/gate
+  exclusion. It is also not direct host-spawned subagent as the engine mechanism,
+  because no host-spawn API is verified in the embedded project artifacts; that can
+  be the host''s implementation behind the callback, but not the engine contract.
+  `kind: host_peer` gives the same open contributor/profile ergonomics as `kind: cli_reviewer`
+  while failing closed when the host callback is absent. Mechanism claim caveat: the
+  guarantee that the host callback truly creates a fresh context is not fully falsifiable
+  from these embedded Python artifacts alone; it depends on the host runtime. Pre-specified
+  external refuting observation: if the callback returns a sealed artifact whose required
+  `fresh_context_attestation.context_id` equals the orchestrator context id, or whose
+  transcript/input manifest contains revealed peer proposals during the blind propose
+  dispatch, the fresh-context hypothesis is false.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.132.0
+  prompt_sha256: fd3c2eac22e050a4ef73e80cf47892e05a07c5418f919054420772079126796f
+  output_sha256: 89ae98dde04d4ca9a78b0ff2db7456a83006e0604ff4041d8db9e4b6e8f0269e
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: ffba55cea02663cb979ca2415b52150b03e31d75f11529c54fa1b8176697aad7
+  scope_signature: 51e632404623999f7bed08d070c706aec563927f696ed9d540e6ff0a1de58315
+  review_target_path: consensus-state/active/iteration-host-family-agents-design-2026-05-22/review-packet.yaml
+  review_target_hash: 9a80c496c8e60501c7790490cc304645df2b89434e55af1f7720390868a4d4fd
+  mode: proposal
+proposal:
+  selected_target: '(b) profile-backed `kind: host_peer` adapter, implemented as a
+    first-class `HostPeerAdapter` that calls a host-supplied fresh-context artifact
+    callback'
+  rationale_vs_alternatives: 'Differential/prior: the safest design is the one that
+    preserves the existing contributor abstraction while adding the least new invocation
+    surface. The verified project surface already routes contributors through `ContributorAdapter.dispatch(packet)
+    -> SealedArtifact` (verified via `contributors/base.py`: `ContributorAdapter`,
+    `DispatchPacket`, `SealedArtifact`) and builds contributors from config/profile
+    resolution (verified via `_engine_factory.py`: registered/built-in/profile resolution).
+    The verified host channel is an in-process artifact callback, not a Claude CLI
+    (verified via `_engine_factory.py`: `build_adapters(..., claude_artifact_callback=...)`
+    and the `key == "claude"` special case). Therefore the right move is not a raw
+    second `claude_artifact_callback` hidden inside existing Claude behavior, because
+    that under-exposes config/provenance/weighting/gate exclusion. It is also not
+    direct host-spawned subagent as the engine mechanism, because no host-spawn API
+    is verified in the embedded project artifacts; that can be the host''s implementation
+    behind the callback, but not the engine contract. `kind: host_peer` gives the
+    same open contributor/profile ergonomics as `kind: cli_reviewer` while failing
+    closed when the host callback is absent. Mechanism claim caveat: the guarantee
+    that the host callback truly creates a fresh context is not fully falsifiable
+    from these embedded Python artifacts alone; it depends on the host runtime. Pre-specified
+    external refuting observation: if the callback returns a sealed artifact whose
+    required `fresh_context_attestation.context_id` equals the orchestrator context
+    id, or whose transcript/input manifest contains revealed peer proposals during
+    the blind propose dispatch, the fresh-context hypothesis is false.'
+  deliverable_scope:
+    next_iteration_id: iteration-host-peer-adapter-2026-05-22
+    files_in_scope:
+    - consensus_mcp/_contributor_profiles.py
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/contributors/base.py
+    - consensus_mcp/contributors/host_peer.py
+    - consensus_mcp/workflow_engine.py
+    - consensus_mcp/config.py
+    - consensus_mcp/dispatch_templates/host_peer_swe_reviewer.md
+    - consensus_mcp/dispatch_templates/orchestrator_role.md
+    - tests/test_host_peer_adapter.py
+    - tests/test_engine_factory_host_peer.py
+    - tests/test_cross_family_gate_excludes_host_peer.py
+    - tests/test_blind_first_reveal_host_peer.py
+    files_out_of_scope:
+    - consensus_mcp/contributors/profile_adapter.py except shared profile-kind constants
+      if unavoidable
+    - consensus_mcp/contributor_profiles/kimi.yaml
+    - any npm/CLI/PyPI/GitHub Actions release wiring; no distribution channel is verified
+      in the embedded evidence
+    key_design_decisions:
+    - Add profile kind `host_peer` beside existing verified `cli_reviewer`/reserved
+      `host` kinds. `host_peer` is constructible only when `build_engine`/`build_adapters`
+      receives a `host_peer_artifact_callback`; otherwise config validation/build
+      fails closed.
+    - 'Implement `HostPeerAdapter(ContributorAdapter)` with normal `dispatch(packet)`
+      semantics and sealed `SealedArtifact` output. It must never shell out. It invokes
+      the callback with a reviewer-role packet, a required `fresh_context_required:
+      true` flag, and no revealed peer artifacts during `phase == propose`.'
+    - Keep orchestrator and reviewer roles split. The in-process host/orchestrator
+      remains responsible for neutral scoping, synthesis, gate enforcement, and anti-anchoring;
+      the `host_peer` contributor is only the blind SWE-reviewer. The same logical
+      actor must not both synthesize and blind-review the same synthesis.
+    - 'Prompt split: orchestrator prompt is neutral and procedural: define scope,
+      preserve blind-first-reveal, synthesize after reveal, enforce gates, label same-family
+      artifacts as supplementary, and actively avoid anchoring. SWE-reviewer prompt
+      is adversarial and fresh-context: spec conformance, edge cases, provenance/closure
+      checks, no peer proposals in blind phase, no synthesis role.'
+    - 'Provenance must include `family: <host family>`, `contributor: <host_peer name>`,
+      `adapter: host_peer`, `role: swe_reviewer`, `weight: supplementary`, `gate_eligible:
+      false`, `fresh_context_attestation`, `prompt_sha256`, `output_sha256`, `goal_packet_sha256`,
+      and review target hash where applicable. Existing sealed-provenance pattern
+      is verified via `profile_adapter.py` building explicit provenance and `_seal_via_t6`.'
+    - 'Gate exclusion is explicit data, not naming convention. Cross-family closure
+      logic must ignore any artifact with `gate_eligible: false` or `family == mutator_family`,
+      and tests must prove a host_peer approval cannot satisfy different-family signoff.'
+    - 'Config surface uses profile model where possible: e.g. `contributors.profiles.claude-swe-reviewer:
+      {kind: host_peer, family: claude, role: swe_reviewer, sealed_filename: claude-swe-review.yaml,
+      id_prefix: claude-swe-rev}` plus `contributors.enabled`. This follows the verified
+      lazy merged profile path in `_engine_factory.py` while adding a new supported
+      kind.'
+    - 'Fresh-context and blindness are enforced at the engine boundary: during blind
+      propose, callback input includes only the problem/goal/review target allowed
+      by `DispatchPacket`; no revealed sibling artifacts are passed. The callback
+      must return an attestation and input-source manifest; missing or contradictory
+      attestation is a dispatch failure.'
+    - Supplementary weighting is recorded in artifact metadata and consumed by convergence/synthesis
+      reporting, but it does not change the cross-family closure invariant.
+    acceptance_gates:
+    - 'A config enabling a `kind: host_peer` contributor builds a `HostPeerAdapter`
+      only when a host peer callback is provided; without the callback, `build_adapters`
+      raises a fail-closed `EngineFactoryError`.'
+    - A host_peer propose dispatch writes a sealed YAML artifact with contributor
+      name, `family == host`, `role == swe_reviewer`, `weight == supplementary`, `gate_eligible
+      == false`, packet/prompt/output hashes, and independence/fresh-context attestation.
+    - 'Blind-first-reveal test: in propose phase, the callback receives no sibling
+      proposal paths/content; in converge phase, normal revealed packets remain available
+      only to convergence actors, not to a blind reviewer retroactively.'
+    - 'Cross-family closure test: with mutator family equal to host family, a host_peer
+      approval plus no different-family approval fails closure; adding codex/gemini/kimi
+      approval can pass if other gates pass.'
+    - 'Role-split test: orchestrator synthesis code does not dispatch the same host_peer
+      artifact as its own signoff, and host_peer artifacts are excluded from closure
+      signer selection.'
+    - 'Profile validation accepts `kind: host_peer` with required fields and rejects
+      unsupported/missing `family`, `role`, or sealed filename/id prefix.'
+    - 'No heavy dependency and Python-only gate: implementation uses existing dataclasses,
+      callbacks, YAML sealing helpers, and tests only.'
+    - 'Regression gate: existing `kind: cli_reviewer` profile behavior for kimi remains
+      unchanged; `kimi.yaml` continues to route through `ProfileAdapter` as verified
+      by its `kind: cli_reviewer` profile.'
+  risks:
+  - The actual fresh-context creation is host-runtime-dependent; Python can require
+    attestations and input manifests, but cannot prove memory isolation without an
+    external callback implementation that exposes context identity/transcript boundaries.
+  - 'Adding profile kind `host_peer` touches validation and engine wiring, so weak
+    tests could accidentally loosen the existing `kind: host` reserved-host fail-closed
+    behavior verified in `_engine_factory.py`.'
+  - If gate exclusion is implemented only by contributor name, future renamed host
+    peers could accidentally satisfy closure; the design must use explicit provenance
+    fields.
+  - Supplementary weighting may be misunderstood as voting weight in convergence;
+    docs/templates should state that host_peer is advisory and closure-ineligible.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:39:55Z'
+packet_sha256: dce1baecb1c34e9c68ad7e7f0a1b47a32f2afe84526f16a54efd6dd5bed7da01

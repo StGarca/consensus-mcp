@@ -1,0 +1,148 @@
+iteration_id: iteration-host-family-agents-design-2026-05-22
+reviewer_id: gemini-agents-1
+pass_id: gemini-agents-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'My proposal is reasoned from the differential that extending
+  existing, successful architectural patterns is superior to creating one-off mechanisms.
+  The `ProfileAdapter` and `kind` system (v1.18.0) is the project''s established pattern
+  for adding new contributors in a configurable, low-code-impact way. Option (b) fully
+  embraces this.
+
+
+  - **vs. (a) Second `claude_artifact_callback`:** While seemingly simple, this option
+  lacks architectural clarity. It overloads the existing host callback without a formal
+  representation of the reviewer in the contributor model. This would lead to ad-hoc
+  logic inside the callback handler to differentiate orchestrator vs. reviewer invocations,
+  making it brittle.
+
+
+  - **vs. (c) Host-spawned subagent:** This directly contradicts the core constraint
+  that the host is an in-process orchestrator with no corresponding CLI for dispatch.
+  It''s a non-starter.
+
+
+  - **vs. (d) Other (e.g., two `ClaudeAdapter` instances):** This is closer, but `kind:
+  host_peer` provides a more explicit and self-documenting configuration contract.
+  It formally distinguishes a ''peer'' from the primary ''host'', making configuration
+  and system behavior easier to reason about, especially for gate exclusion logic.
+
+
+  Option (b) allows the same-family reviewer to be a first-class citizen in the profile-driven
+  contributor model. It can have its own name, model specification, and metadata (`supplementary:
+  true`), which can be read by the engine for configuration and gate logic. This provides
+  a clean separation of concerns and aligns perfectly with the project''s evolution
+  towards a universal, profile-driven contributor system.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.42.0
+  model: gemini-2.5-pro
+  prompt_sha256: 21394b2addce45346ee8028578f9837cbed509960599784114848c0778bc1522
+  output_sha256: 89745ae96d750ddf3d1cfd05f12d25256d5bc724b44118dc93454a38fb7bcad5
+  goal_packet_sha256: ffba55cea02663cb979ca2415b52150b03e31d75f11529c54fa1b8176697aad7
+  scope_signature: 51e632404623999f7bed08d070c706aec563927f696ed9d540e6ff0a1de58315
+  review_target_path: consensus-state/active/iteration-host-family-agents-design-2026-05-22/review-packet.yaml
+  review_target_hash: 9a80c496c8e60501c7790490cc304645df2b89434e55af1f7720390868a4d4fd
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: /mnt/c/Users/steve/Downloads/consensus-mcp/consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: 'Option (b): A new adapter `kind: host_peer` in _engine_factory
+    the host fulfills via a fresh sub-invocation of its own family.'
+  rationale_vs_alternatives: 'My proposal is reasoned from the differential that extending
+    existing, successful architectural patterns is superior to creating one-off mechanisms.
+    The `ProfileAdapter` and `kind` system (v1.18.0) is the project''s established
+    pattern for adding new contributors in a configurable, low-code-impact way. Option
+    (b) fully embraces this.
+
+
+    - **vs. (a) Second `claude_artifact_callback`:** While seemingly simple, this
+    option lacks architectural clarity. It overloads the existing host callback without
+    a formal representation of the reviewer in the contributor model. This would lead
+    to ad-hoc logic inside the callback handler to differentiate orchestrator vs.
+    reviewer invocations, making it brittle.
+
+
+    - **vs. (c) Host-spawned subagent:** This directly contradicts the core constraint
+    that the host is an in-process orchestrator with no corresponding CLI for dispatch.
+    It''s a non-starter.
+
+
+    - **vs. (d) Other (e.g., two `ClaudeAdapter` instances):** This is closer, but
+    `kind: host_peer` provides a more explicit and self-documenting configuration
+    contract. It formally distinguishes a ''peer'' from the primary ''host'', making
+    configuration and system behavior easier to reason about, especially for gate
+    exclusion logic.
+
+
+    Option (b) allows the same-family reviewer to be a first-class citizen in the
+    profile-driven contributor model. It can have its own name, model specification,
+    and metadata (`supplementary: true`), which can be read by the engine for configuration
+    and gate logic. This provides a clean separation of concerns and aligns perfectly
+    with the project''s evolution towards a universal, profile-driven contributor
+    system.'
+  deliverable_scope:
+    next_iteration_id: iter-host-family-agents-impl-2026-05-22
+    files_in_scope:
+    - consensus_mcp/_contributor_profiles.py
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/contributors/host_peer_adapter.py
+    - consensus_mcp/contributor_profiles/claude-reviewer.yaml
+    - consensus_mcp/workflow_engine.py
+    - docs/architecture/contributor-model.md
+    files_out_of_scope:
+    - consensus_mcp/contributors/codex.py
+    - consensus_mcp/contributors/gemini.py
+    - consensus_mcp/contributors/claude.py
+    key_design_decisions:
+    - 'A new profile `kind: host_peer` will be introduced to designate an in-process,
+      same-family reviewer.'
+    - A new `HostPeerAdapter` will be created. It will be instantiated by `_engine_factory`
+      for `host_peer` profiles and will receive the `claude_artifact_callback` to
+      delegate invocation back to the host process.
+    - The host process (specifically, the `claude_artifact_callback` handler) is responsible
+      for guaranteeing a fresh, non-polluted context for each `host_peer` dispatch
+      to ensure blindness.
+    - 'A `supplementary: true` boolean field will be added to the contributor profile
+      schema. The cross-family closure gate will be updated to ignore any contributor
+      with this flag when checking for a different-family signer.'
+    - 'The Orchestrator (`kind: host`) and SWE-Reviewer (`kind: host_peer`) are formally
+      separated into distinct roles, configured as separate contributors with different
+      system prompts and responsibilities.'
+    - 'A default built-in profile for `claude-reviewer` will be added with `kind:
+      host_peer` and `supplementary: true`.'
+    acceptance_gates:
+    - 'When a contributor with `kind: host_peer` is enabled, the `WorkflowEngine`
+      dispatches to it during proposal/review phases.'
+    - The sealed artifact produced by the `host_peer` has correct provenance (contributor
+      name, model) derived from its profile.
+    - The invocation of a `host_peer` is verifiably blind and uses a fresh context,
+      confirmed via logs in the callback handler.
+    - 'The cross-family closure gate MUST fail if a change is only approved by the
+      original author and one or more `supplementary: true` contributors.'
+    - The cross-family closure gate MUST pass if a change is approved by the author,
+      a `supplementary` reviewer, and a non-supplementary reviewer from a different
+      family.
+  risks:
+  - The blindness/fresh-context guarantee for the `host_peer` depends on disciplined
+    implementation within the host's `claude_artifact_callback` handler. A bug could
+    cause context leakage, compromising the integrity of the blind review. This seam
+    requires rigorous testing.
+  - If the roles of orchestrator and reviewer are not sufficiently differentiated
+    at the prompt level, their outputs may exhibit similar biases, reducing the value
+    of the supplementary review. Prompts must be explicitly adversarial vs. neutral.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:42:01Z'
+packet_sha256: 1d37122a719dc1c99b1829387448b6b4681cf44c3d0698e8f5514225176dc845

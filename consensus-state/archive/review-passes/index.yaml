@@ -1463,4 +1463,64 @@ passes:
   packet_sha256: 9c72f8b70035da069af2527611d73cf76cac165001a03a6c3ec4086cf12db414
   iteration_id: iteration-v1180-impl-audit-2026-05-22
   reviewer_id: kimi-v1180impl-1
-last_updated_utc: '2026-05-22T17:29:19Z'
+- id: gemini-metrics-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-metrics-verify-readme-2026-05-22-gemini-metrics-1-gemini-metrics-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:01:28Z'
+  packet_sha256: 6bf84ca6296002bebeffe359c84001a02c0363ad8932fd2fac10fc1a400921de
+  iteration_id: iteration-metrics-verify-readme-2026-05-22
+  reviewer_id: gemini-metrics-1
+- id: gemini-logscope-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-result-logging-scope-2026-05-22-gemini-logscope-1-gemini-logscope-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:01:31Z'
+  packet_sha256: e35a5904460f392ce300248dc4f0f47d12187c77956d311aafa66daa54288c45
+  iteration_id: iteration-result-logging-scope-2026-05-22
+  reviewer_id: gemini-logscope-1
+- id: codex-metrics-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-metrics-verify-readme-2026-05-22-codex-metrics-1-codex-metrics-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:01:34Z'
+  packet_sha256: 96c07d538dc37c9bdd255f38d7d4dddf59e97ee3420e9f20dfc52d3caf792cb2
+  iteration_id: iteration-metrics-verify-readme-2026-05-22
+  reviewer_id: codex-metrics-1
+- id: codex-logscope-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-result-logging-scope-2026-05-22-codex-logscope-1-codex-logscope-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:01:56Z'
+  packet_sha256: ba317317cda18f8b6cbb5315a428e72edcbaaff3e4ee672726d6e5ceef9547b7
+  iteration_id: iteration-result-logging-scope-2026-05-22
+  reviewer_id: codex-logscope-1
+- id: kimi-metrics-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-metrics-verify-readme-2026-05-22-kimi-metrics-1-kimi-metrics-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:03:10Z'
+  packet_sha256: d3a1f07b89576e82d61679df4bb0dc92dc3aff0b61647ccdb541e759a55ad44b
+  iteration_id: iteration-metrics-verify-readme-2026-05-22
+  reviewer_id: kimi-metrics-1
+- id: kimi-logscope-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-result-logging-scope-2026-05-22-kimi-logscope-1-kimi-logscope-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:06:44Z'
+  packet_sha256: ae8de4618d5f73f051fdd57ca69b6e23d7e1291185da9c3c9a78bf91552533d5
+  iteration_id: iteration-result-logging-scope-2026-05-22
+  reviewer_id: kimi-logscope-1
+- id: codex-agents-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-host-family-agents-design-2026-05-22-codex-agents-1-codex-agents-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:39:55Z'
+  packet_sha256: dce1baecb1c34e9c68ad7e7f0a1b47a32f2afe84526f16a54efd6dd5bed7da01
+  iteration_id: iteration-host-family-agents-design-2026-05-22
+  reviewer_id: codex-agents-1
+- id: gemini-agents-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-host-family-agents-design-2026-05-22-gemini-agents-1-gemini-agents-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:42:01Z'
+  packet_sha256: 1d37122a719dc1c99b1829387448b6b4681cf44c3d0698e8f5514225176dc845
+  iteration_id: iteration-host-family-agents-design-2026-05-22
+  reviewer_id: gemini-agents-1
+- id: kimi-agents-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-host-family-agents-design-2026-05-22-kimi-agents-1-kimi-agents-pass1-pass.yaml
+  sealed_at: '2026-05-22T19:43:26Z'
+  packet_sha256: e965dd69f516c54c48a1f76f13a4a9767d23e1cd0f1863890c2fb458bf93f303
+  iteration_id: iteration-host-family-agents-design-2026-05-22
+  reviewer_id: kimi-agents-1
+- id: codex-v1200-review-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-v1200-host-peer-codex-review-2026-05-22-codex-v1200-review-1-codex-v1200-review-pass1-pass.yaml
+  sealed_at: '2026-05-22T20:04:34Z'
+  packet_sha256: f67e78bc0f48273e42d6b5644851a02d2796f917650f19f4330758026826ba1a
+  iteration_id: iteration-v1200-host-peer-codex-review-2026-05-22
+  reviewer_id: codex-v1200-review-1
+last_updated_utc: '2026-05-22T20:04:34Z'

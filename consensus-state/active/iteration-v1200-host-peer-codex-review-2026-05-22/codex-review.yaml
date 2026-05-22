@@ -1,0 +1,34 @@
+iteration_id: iteration-v1200-host-peer-codex-review-2026-05-22
+reviewer_id: codex-v1200-review-1
+pass_id: codex-v1200-review-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'The embedded diff matches the converged design: the closure
+  invariant excludes only literal gate_eligible=false closers before cross-family
+  evaluation, leaving hash/freshness and existing gate-eligible or absent-key closers
+  unchanged; HostPeerAdapter is callback-only, structurally blind, stamps non-overridable
+  supplementary gate-ineligible provenance, is routed only via a dedicated callback,
+  and results/wizard handling surface host_peer as same-family supplementary rather
+  than independent consensus.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.132.0
+  prompt_sha256: e9065c2133c4e95763c334c704a0cde24db18205c1f4c136f070b83a3d3eabec
+  output_sha256: 4fc0d7fe6e0656892d56cbb1eb4ea5e4410c3345af104bcde9da5971285795e8
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 75c9d9db36d03e8cb3e69f4facc09996ef60a943bac330601c1699afa9975740
+  scope_signature: fcda535724d020375b5b57a39741cc79c60f2d817657e5ffd47418baa82b12d8
+  review_target_path: consensus-state/active/iteration-v1200-host-peer-codex-review-2026-05-22/review-packet.yaml
+  review_target_hash: 5c6087846493e471e5380bf744510398d76bd443868c302bf05482827210ca2b
+  mode: review
+sealed_at_utc: '2026-05-22T20:04:34Z'
+packet_sha256: f67e78bc0f48273e42d6b5644851a02d2796f917650f19f4330758026826ba1a

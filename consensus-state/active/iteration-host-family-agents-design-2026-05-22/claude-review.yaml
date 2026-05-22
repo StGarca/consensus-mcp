@@ -1,0 +1,72 @@
+iteration_id: iteration-host-family-agents-design-2026-05-22
+reviewer_id: claude-agents-1
+pass_id: claude-agents-pass1
+mode: proposal
+note: orchestrator blind round-1 proposal (authored before reading peers).
+differential_prior: >-
+  My prior: the host is Claude IN-PROCESS (no claude CLI), so a same-family agent
+  can't reuse the codex/gemini shell-dispatch path; it must be invoked via a host
+  CALLBACK. The two failure modes to engineer against are (1) fake independence
+  (the reviewer secretly inherits the orchestrator's context) and (2) closure-gate
+  laundering (same-family agreement treated as a cross-family sign-off). The
+  existing claude_artifact_callback is the precedent for "host injects its own
+  family's artifact"; a reviewer needs a SEPARATE, fresh-context callback.
+proposal:
+  selected_target: >-
+    (b)+(a) hybrid: a new adapter `kind: host_peer` resolved in _engine_factory,
+    fulfilled by a DEDICATED `host_peer_review_callback` (distinct from the
+    orchestrator's claude_artifact_callback) that the host implements with a
+    GUARANTEED-FRESH context + an adversarial SWE-reviewer system prompt. It
+    produces a normally-sealed review artifact tagged family==host,
+    role=swe_reviewer; it is structurally + explicitly excluded from the
+    cross-family closure invariant. NOT a CLI/subagent shell-out (the host has no
+    claude CLI; keep it in-process via the callback seam).
+  rationale_vs_alternatives: |
+    vs (a) reuse claude_artifact_callback: NO — that callback is the orchestrator's
+    OWN voice (its Workflow-A proposal / synthesis). Reusing it to also "review"
+    would have the integrator grade its own homework + risks context bleed. The
+    reviewer needs a SEPARATE callback with a fresh context so the orchestrator's
+    reasoning never leaks in.
+    vs (c) host-spawned subagent: viable as the host's IMPLEMENTATION of the
+    callback (Claude Code can fulfill host_peer_review_callback by spawning a fresh
+    subagent), but the consensus-mcp CONTRACT should be the callback seam, not a
+    hard dependency on a specific harness's subagent feature (consensus-mcp runs as
+    a standalone MCP server too). So: callback contract; subagent is one allowed
+    fulfillment.
+    Role split (answer): YES, two distinct host-family roles. The ORCHESTRATOR
+    (existing host loop) scopes/dispatches/synthesizes/applies/gates + casts its
+    own Workflow-A proposal via claude_artifact_callback; give it an explicit
+    neutral, anti-anchoring orchestrator system prompt (the anchoring linter
+    already targets its framing bias). The HOST_PEER SWE-REVIEWER is a SEPARATE
+    fresh-context blind reviewer in the review phase. The integrator must never be
+    the blind reviewer of its own synthesis — enforced by separate callbacks +
+    fresh context, not by trust.
+  deliverable_scope:
+    next_iteration_id: iteration-host-peer-agent-impl
+    files_in_scope:
+      - consensus_mcp/contributors/host_peer_adapter.py   # NEW: ContributorAdapter that calls host_peer_review_callback, seals via _dispatch_base/T6, family==host, role=swe_reviewer
+      - consensus_mcp/_engine_factory.py                  # recognize kind:host_peer; thread a host_peer_review_callback param; build only if callback provided (graceful)
+      - consensus_mcp/contributor_profiles/host-peer.yaml # NEW profile kind:host_peer (model/family inherit host; reviewer template ref)
+      - consensus_mcp/dispatch_templates/host_peer_review_template.md  # NEW adversarial SWE-reviewer prompt (correctness/spec/edge cases), JSON-only review schema
+      - consensus_mcp/dispatch_templates/orchestrator_role.md          # NEW orchestrator persona: neutral scoping/synthesis/gate-discipline/anti-anchoring
+      - consensus_mcp/_closure_invariant.py (or the cross-family gate)  # explicit guard: a host_peer review can NEVER satisfy the different-family-signer requirement
+      - consensus_mcp/_results_log.py                     # tag host_peer findings same-family + supplementary in the v1.19.0 results record
+      - tests
+    key_design_decisions:
+      - "kind:host_peer; family = host family; closing_eligible=false. The cross-family closure invariant already requires signer.family != mutator.family; ADD an explicit guard that role=swe_reviewer/kind=host_peer is never counted as the cross-family closer even if families coincidentally differ. Regression test: a panel of [host, host_peer] cannot close a host-authored change — a real different family is still required."
+      - "Invocation = host_peer_review_callback(review_packet) -> review JSON. Distinct from claude_artifact_callback. The callback receives ONLY the sealed review packet (touched-file contents), NOT the orchestrator's conversation — the fresh-context contract. If no callback is wired, host_peer is silently not built (graceful, no failure)."
+      - "Independence: independence_attestation records method=host_peer_callback, fresh_context=true, no_peer_review_visible_at_dispatch=true; provenance: adapter=host_peer, family=<host>, model=<host model>, role=swe_reviewer. Surfaced as SAME-FAMILY so a host_peer's agreement is never laundered as independent cross-family confirmation."
+      - "Weighting: supplementary — appears in the review set + as a non-blocking voice, but the CLOSURE decision stays family-based (host_peer can't close). A host_peer DISAGREEMENT is the useful signal; agreement barely moves confidence."
+      - "Role split: orchestrator_role.md (neutral/anti-anchoring) governs the host loop + its claude_artifact_callback proposal; host_peer_review_template.md (adversarial) governs the reviewer. Separate prompts + separate fresh contexts so the synthesizer never reviews itself."
+      - "Config surface: a profile kind:host_peer + a config toggle (contributors.enabled may include the host_peer name); fits the v1.18.0 open-contributor/profile model."
+    acceptance_gates:
+      - "host_peer produces a sealed, schema-valid review tagged family==host, role=swe_reviewer; visible in results as same-family + supplementary."
+      - "Cross-family closure invariant UNCHANGED: a change cannot close on host + host_peer alone; a genuinely different family is still required (regression test)."
+      - "The reviewer callback is invoked with only the review packet (fresh context); a test asserts the orchestrator's context is not passed."
+      - "No callback wired -> host_peer simply absent (graceful); existing flows unaffected."
+    risks:
+      - "Fresh-context is a CONTRACT the host must honor; if a host fulfills the callback by reusing its own context, independence is fake. Mitigate: document the contract loudly + attest fresh_context; consider a guard that the reviewer payload excludes orchestrator state."
+      - "Same-family agreement laundering — mitigate via explicit family tagging + supplementary weighting + results surfacing."
+      - "Scope creep into the orchestrator persona — keep orchestrator_role.md a prompt/doc, not a new dispatch layer."
+  estimated_complexity: medium
+  structural_abstention: false

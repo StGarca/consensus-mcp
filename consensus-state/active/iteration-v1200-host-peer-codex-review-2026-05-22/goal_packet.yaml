@@ -1,0 +1,40 @@
+schema_version: 1
+pilot_id: iteration-v1200-host-peer-codex-review-2026-05-22
+goal:
+  summary: >-
+    Codex diff review of the v1.20.0 host-family specialist-agents feature
+    (commit 0e47cb6) to verify it landed as designed — especially that the
+    cross-family closure invariant is NOT weakened by the host_peer gate
+    exclusion.
+  desired_end_state: |
+    Read the embedded codex-review-brief.md, the feature diff
+    (v1.20.0-feature.diff), and the converged design (v1.20.0-host-peer-agent.md).
+    Verify the 5 review items in the brief; the load-bearing one: a same-family
+    host_peer (gate_eligible=false) can NEVER satisfy cross-family closure, even
+    when its family differs from the mutator, and the _closure_invariant change is
+    purely additive (existing closers unchanged). Report findings with severity +
+    file:line + recommended fix; confirm explicitly where everything landed
+    correctly.
+  non_goals:
+    - redesign the feature (the design is converged)
+allowed_files:
+  - consensus_mcp/
+allowed_sections: []
+forbidden_files: []
+max_iterations: 1
+max_patch_size: 2000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex confirms the closure invariant is not weakened + flags any deviation/bug
+    check: 'manual — orchestrator integrates findings'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - blocking_finding
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: fcda535724d020375b5b57a39741cc79c60f2d817657e5ffd47418baa82b12d8

@@ -1,0 +1,174 @@
+iteration_id: iteration-result-logging-scope-2026-05-22
+reviewer_id: kimi-logscope-1
+pass_id: kimi-logscope-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "The core gap is not a missing database table \u2014 it\
+  \ is that findings, fixes, and dispositions live in 3+ incompatible shapes (sealed\
+  \ review passes, converged-plan prose, iteration-outcome schemas that vary by era)\
+  \ and are never normalized at a single point. Three alternatives were considered:\n\
+  \n**Alternative A: Extend iteration-outcome.yaml.** Rejected because iteration-outcome.yaml\
+  \ already has schema drift across workflow modes (old v1 shape vs newer post-review\
+  \ shape). Adding aggregation fields to a workflow-specific file would compound the\
+  \ uncountability problem we are solving. A dedicated, versioned artifact with a\
+  \ single schema is the fix, not more polymorphism.\n\n**Alternative B: Centralized\
+  \ JSONL stream in consensus-state/state/results.jsonl.** Rejected because it would\
+  \ require a new gitignore line (not project-local by inheritance) and append-only\
+  \ semantics make corrections hard. The existing per-iteration pattern (self-contained\
+  \ dirs under consensus-state/active/iteration-*/) is already gitignored (verified\
+  \ .gitignore:41) and proven for audit isolation.\n\n**Alternative C: Manual results\
+  \ tool that the operator runs after close.** Rejected because manual logging is\
+  \ exactly why the current history is uncountable. The recording must be automatic\
+  \ at the close boundary.\n\nThe selected approach introduces a new canonical file,\
+  \ iteration-results.yaml, written automatically inside each iteration directory\
+  \ at iteration_closed time by hooking the existing audit_append_event.py gate. This\
+  \ reuses the only automatic, fail-closed boundary in the pipeline (the close gate\
+  \ already refuses unaudited mutations and cross-verification failures). A new CLI\
+  \ `consensus results` rolls up all iteration-results.yaml files into a trustworthy\
+  \ scorecard. The schema is versioned from day 1 so future eras remain countable."
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: kimi, version 1.44.0
+  model: gemini-2.5-pro
+  prompt_sha256: 2a1a468a38cacfe63051a86926a4fb4a03d25e75e46d0e9c8cbeb3a7007a7608
+  output_sha256: ec3bb48ab8d5f5bd5f779e798f7928a48f719831bf413454c8b321a44a16104f
+  goal_packet_sha256: 5fe460156a44558d02867a04ddd6f7d8e86cca2ba5df4d67861826cdd963773b
+  scope_signature: c691e29381efebf5b634ad633472ef9b09385637f8857ec27b7d1017d61fe57a
+  review_target_path: consensus-state/active/iteration-result-logging-scope-2026-05-22/review-packet.yaml
+  review_target_hash: 24534e2a1cfedae056f04a828efebcb5eb704c405ab2b8c7eedd1f2aec3140e2
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: /mnt/c/Users/steve/Downloads/consensus-mcp/consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: Per-run result-logging via auto-authored iteration-results.yaml
+    + project-level `consensus results` CLI
+  rationale_vs_alternatives: "The core gap is not a missing database table \u2014\
+    \ it is that findings, fixes, and dispositions live in 3+ incompatible shapes\
+    \ (sealed review passes, converged-plan prose, iteration-outcome schemas that\
+    \ vary by era) and are never normalized at a single point. Three alternatives\
+    \ were considered:\n\n**Alternative A: Extend iteration-outcome.yaml.** Rejected\
+    \ because iteration-outcome.yaml already has schema drift across workflow modes\
+    \ (old v1 shape vs newer post-review shape). Adding aggregation fields to a workflow-specific\
+    \ file would compound the uncountability problem we are solving. A dedicated,\
+    \ versioned artifact with a single schema is the fix, not more polymorphism.\n\
+    \n**Alternative B: Centralized JSONL stream in consensus-state/state/results.jsonl.**\
+    \ Rejected because it would require a new gitignore line (not project-local by\
+    \ inheritance) and append-only semantics make corrections hard. The existing per-iteration\
+    \ pattern (self-contained dirs under consensus-state/active/iteration-*/) is already\
+    \ gitignored (verified .gitignore:41) and proven for audit isolation.\n\n**Alternative\
+    \ C: Manual results tool that the operator runs after close.** Rejected because\
+    \ manual logging is exactly why the current history is uncountable. The recording\
+    \ must be automatic at the close boundary.\n\nThe selected approach introduces\
+    \ a new canonical file, iteration-results.yaml, written automatically inside each\
+    \ iteration directory at iteration_closed time by hooking the existing audit_append_event.py\
+    \ gate. This reuses the only automatic, fail-closed boundary in the pipeline (the\
+    \ close gate already refuses unaudited mutations and cross-verification failures).\
+    \ A new CLI `consensus results` rolls up all iteration-results.yaml files into\
+    \ a trustworthy scorecard. The schema is versioned from day 1 so future eras remain\
+    \ countable."
+  deliverable_scope:
+    next_iteration_id: iter-0042-result-logging
+    files_in_scope:
+    - "consensus_mcp/schemas/iteration_results.schema.json \u2014 JSON Schema for\
+      \ iteration-results.yaml (versioned, strict)"
+    - "consensus_mcp/tools/results_record_iteration.py \u2014 MCP tool that reads\
+      \ an iteration dir and writes iteration-results.yaml"
+    - "consensus_mcp/tools/results_rollup_project.py \u2014 MCP tool + CLI entry point\
+      \ for project-level aggregation"
+    - "consensus_mcp/tools/audit_append_event.py \u2014 add `results_recorded` canonical\
+      \ event type and auto-invoke results recorder at iteration_closed time"
+    - "pyproject.toml \u2014 add `consensus-results = consensus_mcp.tools.results_rollup_project:main`\
+      \ console script (the `consensus` alias already exists for init; `consensus\
+      \ results` can be dispatched via argparse subcommand or a standalone entry point)"
+    - "consensus_mcp/tests/test_results_record_iteration.py \u2014 unit tests for\
+      \ extraction logic and disposition classification"
+    - "consensus_mcp/tests/test_results_rollup_project.py \u2014 unit tests for aggregation,\
+      \ schema-version skipping, and scorecard output"
+    files_out_of_scope:
+    - "consensus-state/archive/review-passes/index.yaml \u2014 read-only by rollup,\
+      \ no changes"
+    - "_snapshot_state.py \u2014 no changes; snapshots already capture active/ recursively"
+    - "Existing iteration-outcome.yaml formats \u2014 not modified; we write a NEW\
+      \ file rather than migrate old schemas"
+    - "Dispatch templates (codex/gemini review/proposal schemas) \u2014 no changes;\
+      \ this is a post-close internal feature"
+    key_design_decisions:
+    - 'Schema: iteration-results.yaml carries schema_version: 1, findings[] (with
+      severity, source_reviewer, source_pass_id), disposition (validated-and-fixed
+      | dismissed-with-evidence | deferred | open), fixes_applied[], convergence{},
+      closure{}. Distinct from iteration-outcome and independence-audit.'
+    - "Location: consensus-state/active/<iteration_id>/iteration-results.yaml \u2014\
+      \ inherits gitignore automatically via .gitignore:41 `consensus-state/active/iteration-*/`.\
+      \ Verified project-local and uncommitted."
+    - 'Auto-write hook: audit_append_event.py''s iteration_closed handler calls a
+      new _author_iteration_results() function synchronously after closure invariant
+      passes and closure-certificate authoring. Follows the same non-fatal-but-warns
+      pattern as _author_closure_certificate (stderr warning on failure, does not
+      block close because the audit log remains primary).'
+    - "Disposition tracking: extracted at close time by cross-referencing (a) sealed\
+      \ review pass findings, (b) apply_step_landed events in independence-audit.yaml\
+      \ (for validated-and-fixed), (c) converged-plan.yaml agreement_summary / final_design\
+      \ accept/reject markers (for dismissed-with-evidence or deferred), (d) iteration-outcome.yaml\
+      \ blocker resolution (for review-mode workflows). Unmatched findings default\
+      \ to open \u2014 never false-positive closure."
+    - 'No backfill: forward-only from the iteration where the feature ships. Backfilling
+      from heterogeneous old schemas and prose summaries would produce untrustworthy
+      counts (the exact problem this feature solves). Historical data remains accessible
+      in original form; the scorecard starts trustworthy from iter-0042 onward.'
+    - 'Versioned schema: iteration-results.yaml declares schema_version. The rollup
+      tool skips records with unknown schema_version and emits a warning. Future schema
+      bumps are explicit and countable.'
+    - 'CLI / machine-readable dual output: `consensus results` prints a human scorecard;
+      `consensus results --json` emits machine-readable rollup. Both are read-only
+      over existing iteration artifacts.'
+    acceptance_gates:
+    - 'AG-1: After any iteration closes, consensus-state/active/<iteration_id>/iteration-results.yaml
+      exists and passes JSON Schema validation with schema_version 1.'
+    - 'AG-2: `consensus results` emits a human-readable scorecard showing total iterations,
+      findings by severity, disposition breakdown (validated/dismissed/deferred/open),
+      fixes applied count, and convergence rate.'
+    - 'AG-3: `consensus results --json` emits machine-readable JSON containing the
+      same aggregates plus a per-iteration array.'
+    - 'AG-4: The results file is gitignored: `git check-ignore consensus-state/active/<any-iter>/iteration-results.yaml`
+      returns the path.'
+    - 'AG-5: Disposition tracking captures all four states: validated-and-fixed, dismissed-with-evidence,
+      deferred, open. At least one finding in a test fixture is classified into each
+      bucket.'
+    - 'AG-6: Rollup tool future-proofing: when a mock iteration-results.yaml with
+      schema_version 99 is present, the tool skips it with a warning and does not
+      crash.'
+  risks:
+  - 'RISK-1 Schema drift: future workflow modes may introduce finding shapes not captured
+    by schema v1. Mitigation: schema_version bump + aggregator explicit skip/upgrade
+    path; raw sealed passes remain primary.'
+  - 'RISK-2 Extraction heuristics: disposition classification relies on correlating
+    apply_step_landed events and converged-plan markers with findings. If correlation
+    is imperfect, findings may be mis-classified as open. Mitigation: open is the
+    conservative default; the scorecard shows ''open'' explicitly so operators can
+    investigate. The refuting observation that would prove this hypothesis wrong is:
+    manual count of sealed passes across 10 post-feature iterations shows findings
+    that the automatic extractor missed.'
+  - "RISK-3 Write failure at close time: disk-full or permission errors could prevent\
+    \ iteration-results.yaml authoring. Mitigation: follows existing closure-certificate\
+    \ pattern \u2014 failure is logged to stderr but does not block the close. The\
+    \ audit log and sealed passes are still primary; the operator can re-run the results\
+    \ recorder manually if needed."
+  - 'RISK-4 Single-writer race: like audit_append_event.py, results recording is read-modify-write
+    per iteration. Concurrent close attempts on the same iteration could drop events.
+    Mitigation: the consensus pipeline is single-writer by design; this is documented
+    as a known limitation consistent with the existing audit tool.'
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:06:44Z'
+packet_sha256: ae8de4618d5f73f051fdd57ca69b6e23d7e1291185da9c3c9a78bf91552533d5

@@ -1,0 +1,545 @@
+defect_target:
+  files:
+  - consensus-state/active/iteration-host-family-agents-design-2026-05-22/agents-brief.md
+  - consensus_mcp/contributors/base.py
+  - consensus_mcp/_engine_factory.py
+  - consensus_mcp/contributors/profile_adapter.py
+  - consensus_mcp/contributor_profiles/kimi.yaml
+  base_sha: 59ad66faa29f9033c8eceec3961dc305ce6eeefd8b16e3ad4a42ad35b75994e0
+  touched_files_contents:
+    consensus-state/active/iteration-host-family-agents-design-2026-05-22/agents-brief.md: "#\
+      \ Consult: focus the host-family specialist-agent writeup (Workflow A)\n\nYou\
+      \ are one of several AI contributors in a propose-converge consult. PROPOSE\
+      \ the\nfocused DESIGN for adding host-family specialist agents to consensus-mcp,\
+      \ correct\nfor this project's strict, Python-only, sealed-provenance architecture.\
+      \ The\nSETTLED decisions below are not up for debate — focus on HOW to build\
+      \ it right.\n\n## Settled (do not relitigate)\nA same-family **specialist software-engineer\
+      \ reviewer** (host's own AI family,\ne.g. Claude when Claude hosts) is worth\
+      \ adding as a SUPPLEMENTARY contributor:\n- blind (no peer output visible at\
+      \ dispatch) + FRESH/independent context (NOT the\n  host's polluted conversation),\n\
+      - distinct reviewer system prompt (adversarial correctness / spec-conformance\
+      \ /\n  edge-case focus),\n- **provenance-tagged as same-family**, **weighted\
+      \ as supplementary**, and\n  **EXCLUDED from the cross-family closure invariant**\
+      \ (it can never be the\n  different-family signer-off — same family shares blind\
+      \ spots; same-family\n  agreement is the shared-prior trap, low information).\
+      \ It augments cross-family\n  review, never replaces it.\n\n## The CRUX to resolve\
+      \ — invocation + integration mechanism\nThe host (Claude running the loop) is\
+      \ the IN-PROCESS orchestrator; there is no\n`claude` CLI dispatch the way codex/gemini\
+      \ have shell binaries. So: **how does a\nsame-family agent get invoked, produce\
+      \ a SEALED, provenance-tagged review\nartifact like every other contributor,\
+      \ satisfy blind-first-reveal, and stay\nexcluded from the cross-family gate?**\
+      \ Weigh concrete options against the embedded\ncode (contributors/base.py =\
+      \ the ContributorAdapter/DispatchPacket interface;\n_engine_factory.py = build_adapters\
+      \ + the registry + _BUILTIN_ADAPTERS;\nprofile_adapter.py = the v1.18.0 generic\
+      \ ProfileAdapter precedent; kimi.yaml = a\nbuilt-in profile):\n- (a) a `claude_artifact_callback`-style\
+      \ host callback invoked a SECOND time with\n  a reviewer prompt + a guaranteed-fresh\
+      \ context;\n- (b) a new adapter `kind: host_peer` in _engine_factory the host\
+      \ fulfills via a\n  fresh sub-invocation of its own family;\n- (c) the host\
+      \ spawns a subagent (fresh context + reviewer system prompt) whose\n  output\
+      \ is sealed as a contributor artifact;\n- (d) something else.\nName the integration\
+      \ point, the fresh-context guarantee, the blindness guarantee,\nthe provenance\
+      \ tagging (family == host), and the gate-exclusion wiring.\n\n## Role split\
+      \ question (answer it)\nShould the host ALSO run as a distinct specialized **orchestrator\
+      \ agent** (role:\nneutral scoping, synthesis, gate-enforcement, anti-anchoring)\
+      \ — SEPARATE from the\nSWE-reviewer agent — so the agent that authors/synthesizes\
+      \ is not the one that\nblind-reviews? How do orchestrator-role and reviewer-role\
+      \ relate within the host\nfamily? (The project already has an anchoring linter\
+      \ for orchestrator framing\nbias — factor that in.)\n\n## Strict-system constraints\
+      \ (MUST hold)\n- Sealed provenance for every review artifact (hashes, independence_attestation).\n\
+      - The cross-family closure invariant (a DIFFERENT family than the mutator signs\n\
+      \  off) MUST NOT be weakened — host_peer cannot satisfy it.\n- Blind-first-reveal\
+      \ independence (no peer visible at dispatch).\n- Conform to the open-contributor\
+      \ / profile model (config-driven where possible).\n- Fail-closed gates; minimal,\
+      \ consistent with existing patterns.\n- 100% Python; no new heavy deps.\n\n\
+      ## Your task\nPropose ONE focused design: the invocation/integration mechanism\
+      \ (pick from\na/b/c/d + justify), the role prompts (orchestrator vs SWE-reviewer),\
+      \ the\nfresh-context + blindness + provenance + gate-exclusion wiring, config\
+      \ surface,\nand whether/how to split orchestrator vs reviewer roles. Put it\
+      \ in\ndeliverable_scope (files to touch, key decisions, acceptance gates, risks).\
+      \ State\nthe differential you reason from. Honest structural_abstention beats\
+      \ confabulation.\n"
+    consensus_mcp/contributors/base.py: "\"\"\"ContributorAdapter abstract base +\
+      \ supporting types.\n\nPer iter-0015 converged-plan Section C, every contributor\
+      \ (claude, codex,\ngemini, future AIs) implements this interface. The workflow\
+      \ engine calls\n`dispatch(phase, packet)` to get a sealed artifact regardless\
+      \ of how the\nunderlying contributor works (in-process for claude, subprocess\
+      \ for codex/\ngemini, RPC for future remote AIs).\n\nPhases:\n  - PROPOSE: contributor\
+      \ writes its own design/plan against a problem statement\n    (workflow #4 blind\
+      \ phase). Receives only the problem statement; no peer\n    proposals visible.\n\
+      \  - REVIEW: contributor evaluates an already-written change against acceptance\n\
+      \    gates (workflow #3 post-review, or convergence in advisory mode).\n  -\
+      \ CONVERGE: contributor sees all sibling proposals revealed and proposes the\n\
+      \    synthesized plan (workflow #4 reveal phase).\n\nThe packet structure passed\
+      \ to `dispatch` mirrors the existing goal_packet +\nreview_packet pair used\
+      \ by the dispatch helpers, but with phase-specific\nfields that the engine fills\
+      \ in.\n\"\"\"\nfrom __future__ import annotations\n\nfrom abc import ABC, abstractmethod\n\
+      from dataclasses import dataclass\nfrom pathlib import Path\nfrom typing import\
+      \ Literal\n\n\n# Phase identifiers as Literal type alias.\nPhase = Literal[\"\
+      propose\", \"review\", \"converge\"]\n\nPHASE_PROPOSE: Phase = \"propose\"\n\
+      PHASE_REVIEW: Phase = \"review\"\nPHASE_CONVERGE: Phase = \"converge\"\n\n\n\
+      class DispatchError(RuntimeError):\n    \"\"\"Raised when a contributor's dispatch\
+      \ fails (subprocess error, parse fail,\n    file IO error, etc.). The engine\
+      \ decides how to handle (per timeout_policy).\"\"\"\n\n\n@dataclass(frozen=True)\n\
+      class SealedArtifact:\n    \"\"\"The outcome of a successful contributor dispatch.\n\
+      \n    Mirrors the dict shape returned by `reviewer.dispatch_codex` MCP tool\n\
+      \    plus the engine's normalization. `sealed_path` is the on-disk YAML the\n\
+      \    contributor wrote; `parsed` is the loaded dict (findings, goal_satisfied,\
+      \ ...).\n    \"\"\"\n    contributor: str            # 'claude' | 'codex' |\
+      \ 'gemini' | future\n    phase: Phase\n    pass_id: str\n    sealed_path: Path\n\
+      \    archive_sealed_path: Path | None\n    packet_sha256: str\n    parsed: dict\n\
+      \n\n@dataclass(frozen=True)\nclass DispatchPacket:\n    \"\"\"Input to a contributor's\
+      \ dispatch.\n\n    Carries the phase-specific configuration the engine has assembled.\n\
+      \    \"\"\"\n    phase: Phase\n    contributor: str\n    iteration_dir: Path\n\
+      \    goal_packet_path: Path\n    review_target_path: Path | None\n    reviewer_id:\
+      \ str | None     # if None, contributor adapter derives\n    pass_id: str |\
+      \ None         # if None, contributor adapter derives\n    timeout_seconds:\
+      \ int = 600\n    # Phase-specific extras (e.g., {model: 'gemini-2.5-pro'} for\
+      \ gemini)\n    adapter_options: dict | None = None\n\n\nclass ContributorAdapter(ABC):\n\
+      \    \"\"\"Abstract base for all contributors.\n\n    Concrete subclasses override\
+      \ `dispatch` (and conventionally expose\n    `propose`, `review`, `converge`\
+      \ thin wrappers that build the packet and\n    call `dispatch` with the right\
+      \ phase).\n    \"\"\"\n\n    #: Stable identifier — used in reviewer_id derivation,\
+      \ config matching, etc.\n    name: str = \"\"\n\n    def __init__(self, adapter_config:\
+      \ dict | None = None):\n        \"\"\"`adapter_config` is the sub-dict from\
+      \ `.consensus/config.yaml`'s\n        `contributors.adapters.<name>` block (or\
+      \ None for synthetic tests).\"\"\"\n        self.adapter_config = adapter_config\
+      \ or {}\n\n    @abstractmethod\n    def dispatch(self, packet: DispatchPacket)\
+      \ -> SealedArtifact:\n        \"\"\"Run the contributor for the given phase\
+      \ + packet. Return sealed result.\n\n        Must raise DispatchError on any\
+      \ failure (subprocess crash, parse fail,\n        watchdog timeout, etc.). The\
+      \ engine handles fallout per\n        `workflow.timeout_policy`.\n        \"\
+      \"\"\n\n    # ----- Phase-specific helpers (default implementations build a\
+      \ packet\n    # and call dispatch). Subclasses MAY override for adapter-specific\
+      \ quirks. -----\n\n    def propose(\n        self,\n        iteration_dir: Path,\n\
+      \        goal_packet_path: Path,\n        problem_statement_path: Path,\n  \
+      \      *,\n        timeout_seconds: int = 600,\n    ) -> SealedArtifact:\n \
+      \       \"\"\"Workflow #4 BLIND PROPOSAL phase. `problem_statement_path` is\
+      \ the\n        shared design challenge; no peer proposals visible.\"\"\"\n \
+      \       packet = DispatchPacket(\n            phase=PHASE_PROPOSE,\n       \
+      \     contributor=self.name,\n            iteration_dir=iteration_dir,\n   \
+      \         goal_packet_path=goal_packet_path,\n            review_target_path=problem_statement_path,\n\
+      \            reviewer_id=None,\n            pass_id=None,\n            timeout_seconds=timeout_seconds,\n\
+      \            adapter_options=None,\n        )\n        return self.dispatch(packet)\n\
+      \n    def review(\n        self,\n        iteration_dir: Path,\n        goal_packet_path:\
+      \ Path,\n        review_target_path: Path,\n        *,\n        timeout_seconds:\
+      \ int = 600,\n    ) -> SealedArtifact:\n        \"\"\"Workflow #3 / post-review\
+      \ phase. Existing review-shaped dispatch.\"\"\"\n        packet = DispatchPacket(\n\
+      \            phase=PHASE_REVIEW,\n            contributor=self.name,\n     \
+      \       iteration_dir=iteration_dir,\n            goal_packet_path=goal_packet_path,\n\
+      \            review_target_path=review_target_path,\n            reviewer_id=None,\n\
+      \            pass_id=None,\n            timeout_seconds=timeout_seconds,\n \
+      \           adapter_options=None,\n        )\n        return self.dispatch(packet)\n\
+      \n    def converge(\n        self,\n        iteration_dir: Path,\n        goal_packet_path:\
+      \ Path,\n        convergence_packet_path: Path,\n        round_number: int =\
+      \ 1,\n        *,\n        timeout_seconds: int = 600,\n    ) -> SealedArtifact:\n\
+      \        \"\"\"Workflow #4 REVEAL phase. `convergence_packet_path` contains\
+      \ all\n        revealed sibling proposals.\"\"\"\n        packet = DispatchPacket(\n\
+      \            phase=PHASE_CONVERGE,\n            contributor=self.name,\n   \
+      \         iteration_dir=iteration_dir,\n            goal_packet_path=goal_packet_path,\n\
+      \            review_target_path=convergence_packet_path,\n            reviewer_id=None,\n\
+      \            pass_id=None,\n            timeout_seconds=timeout_seconds,\n \
+      \           adapter_options={\"round_number\": round_number},\n        )\n \
+      \       return self.dispatch(packet)\n\n\nclass FakeAlwaysApprove(ContributorAdapter):\n\
+      \    \"\"\"Test adapter that always returns a clean approval. Used in engine\
+      \ tests.\"\"\"\n\n    name = \"fake-approve\"\n\n    def dispatch(self, packet:\
+      \ DispatchPacket) -> SealedArtifact:\n        from consensus_mcp.contributors.base\
+      \ import SealedArtifact\n        out_path = packet.iteration_dir / f\"{self.name}-{packet.phase}.yaml\"\
+      \n        parsed = {\n            \"iteration_id\": packet.iteration_dir.name,\n\
+      \            \"reviewer_id\": f\"{self.name}-{packet.contributor}-1\",\n   \
+      \         \"pass_id\": f\"{self.name}-{packet.contributor}-1-pass1\",\n    \
+      \        \"findings\": [],\n            \"goal_satisfied\": True,\n        \
+      \    \"goal_satisfied_rationale\": f\"FakeAlwaysApprove for {packet.phase}\"\
+      ,\n            \"blocking_objections\": [],\n        }\n        import yaml\n\
+      \        out_path.write_text(yaml.safe_dump(parsed, sort_keys=False, default_flow_style=False),\
+      \ encoding=\"utf-8\")\n        import hashlib\n        return SealedArtifact(\n\
+      \            contributor=self.name,\n            phase=packet.phase,\n     \
+      \       pass_id=parsed[\"pass_id\"],\n            sealed_path=out_path,\n  \
+      \          archive_sealed_path=None,\n            packet_sha256=hashlib.sha256(out_path.read_bytes()).hexdigest(),\n\
+      \            parsed=parsed,\n        )\n\n\nclass FakeAlwaysBlock(ContributorAdapter):\n\
+      \    \"\"\"Test adapter that always returns a blocking finding.\"\"\"\n\n  \
+      \  name = \"fake-block\"\n\n    def dispatch(self, packet: DispatchPacket) ->\
+      \ SealedArtifact:\n        out_path = packet.iteration_dir / f\"{self.name}-{packet.phase}.yaml\"\
+      \n        finding_id = f\"{self.name}-rev-001\"\n        parsed = {\n      \
+      \      \"iteration_id\": packet.iteration_dir.name,\n            \"reviewer_id\"\
+      : f\"{self.name}-{packet.contributor}-1\",\n            \"pass_id\": f\"{self.name}-{packet.contributor}-1-pass1\"\
+      ,\n            \"findings\": [{\n                \"id\": finding_id,\n     \
+      \           \"severity\": \"blocking\",\n                \"summary\": f\"FakeAlwaysBlock\
+      \ objects to {packet.phase}\",\n                \"citation\": \"<fake>\",\n\
+      \                \"risk\": \"test-only\",\n                \"recommendation\"\
+      : \"do not ship\",\n            }],\n            \"goal_satisfied\": False,\n\
+      \            \"goal_satisfied_rationale\": \"FakeAlwaysBlock by construction\"\
+      ,\n            \"blocking_objections\": [finding_id],\n        }\n        import\
+      \ yaml\n        out_path.write_text(yaml.safe_dump(parsed, sort_keys=False,\
+      \ default_flow_style=False), encoding=\"utf-8\")\n        import hashlib\n \
+      \       return SealedArtifact(\n            contributor=self.name,\n       \
+      \     phase=packet.phase,\n            pass_id=parsed[\"pass_id\"],\n      \
+      \      sealed_path=out_path,\n            archive_sealed_path=None,\n      \
+      \      packet_sha256=hashlib.sha256(out_path.read_bytes()).hexdigest(),\n  \
+      \          parsed=parsed,\n        )\n\n\nclass FakeRaisesDispatchError(ContributorAdapter):\n\
+      \    \"\"\"Test adapter that always raises DispatchError. For timeout-policy\
+      \ tests.\"\"\"\n\n    name = \"fake-raise\"\n\n    def dispatch(self, packet:\
+      \ DispatchPacket) -> SealedArtifact:\n        raise DispatchError(f\"FakeRaisesDispatchError\
+      \ for {packet.phase} (by construction)\")\n"
+    consensus_mcp/_engine_factory.py: "\"\"\"Factory for assembling a WorkflowEngine\
+      \ from a `.consensus/config.yaml`.\n\nSingle source of truth for \"given a validated\
+      \ config + repo root, return a\nready-to-run WorkflowEngine with all enabled\
+      \ contributors instantiated\".\n\nReusable from Python and from the `consensus_run_iteration`\
+      \ MCP tool wrapper\nso both entry points construct identical adapter pools.\n\
+      \"\"\"\nfrom __future__ import annotations\n\nfrom pathlib import Path\nfrom\
+      \ typing import Callable\n\nfrom consensus_mcp import config as cfg\nfrom consensus_mcp\
+      \ import _contributor_profiles as profiles\nfrom consensus_mcp.contributors\
+      \ import ContributorAdapter\nfrom consensus_mcp.contributors.base import DispatchPacket\n\
+      from consensus_mcp.contributors.claude import ClaudeAdapter\nfrom consensus_mcp.contributors.codex\
+      \ import CodexAdapter\nfrom consensus_mcp.contributors.gemini import GeminiAdapter\n\
+      from consensus_mcp.contributors.profile_adapter import ProfileAdapter\nfrom\
+      \ consensus_mcp.workflow_engine import WorkflowEngine, WorkflowError\n\n\nclass\
+      \ EngineFactoryError(RuntimeError):\n    \"\"\"Raised when a config requests\
+      \ a contributor we can't construct.\"\"\"\n\n\n# Registry of built-in contributor\
+      \ keys → adapter constructors.\n# Each adapter takes `adapter_config: dict |\
+      \ None` at construction time and\n# receives per-dispatch context (repo_root,\
+      \ iteration_dir, paths) via the\n# DispatchPacket passed to dispatch().\n_BUILTIN_ADAPTERS:\
+      \ dict[str, type[ContributorAdapter]] = {\n    \"claude\": ClaudeAdapter,\n\
+      \    \"codex\": CodexAdapter,\n    \"gemini\": GeminiAdapter,\n}\n\n# OPEN contributor\
+      \ registry (2026-05-22, \"2-or-20-or-200 AIs\" acceptance). The\n# built-ins\
+      \ above are NOT a closed set — ANY number of contributors with ANY\n# names\
+      \ can be registered with ZERO code changes, so a clean install supports\n# min-2\
+      \ / max-N / any-combination. A registered name shadows a same-named\n# built-in\
+      \ (host swaps an impl).\n_REGISTERED_ADAPTERS: dict[str, type[ContributorAdapter]]\
+      \ = {}\n\n\ndef register_contributor(name: str, adapter_cls: type[ContributorAdapter])\
+      \ -> None:\n    \"\"\"Register a contributor adapter under `name` (any name).\
+      \ The no-classes,\n    open-set extension point: adding the Nth AI is this one\
+      \ call, identical for\n    the 2nd or the 200th — no special-casing, no enum\
+      \ edit.\"\"\"\n    if not name or not isinstance(name, str):\n        raise\
+      \ EngineFactoryError(f\"contributor name must be a non-empty string; got {name!r}\"\
+      )\n    if not (isinstance(adapter_cls, type) and issubclass(adapter_cls, ContributorAdapter)):\n\
+      \        raise EngineFactoryError(\n            f\"adapter for {name!r} must\
+      \ subclass ContributorAdapter; got {adapter_cls!r}\")\n    _REGISTERED_ADAPTERS[name]\
+      \ = adapter_cls\n\n\ndef unregister_contributor(name: str) -> None:\n    \"\"\
+      \"Remove a registered adapter (test isolation / host reconfiguration).\"\"\"\
+      \n    _REGISTERED_ADAPTERS.pop(name, None)\n\n\ndef known_contributor_keys()\
+      \ -> list[str]:\n    \"\"\"All currently-CONSTRUCTIBLE contributor keys (built-in\
+      \ + registered).\n\n    This is the set `build_adapters()` can actually instantiate;\
+      \ it powers the\n    fail-closed error message there and is a public API for\
+      \ a host to query what\n    it can run. NOTE: it is NOT the anchoring linter's\
+      \ name set — the linter\n    sources contributor NAMES from the project config\
+      \ (or `KNOWN_CONTRIBUTORS`\n    as a static fallback), because in a CLI/author\
+      \ context no adapters are\n    registered yet, so this set would understate\
+      \ the real contributor list.\"\"\"\n    return sorted(set(_BUILTIN_ADAPTERS)\
+      \ | set(_REGISTERED_ADAPTERS))\n\n\ndef _resolve_adapter(key: str) -> \"type[ContributorAdapter]\
+      \ | None\":\n    return _REGISTERED_ADAPTERS.get(key) or _BUILTIN_ADAPTERS.get(key)\n\
+      \n\ndef build_adapters(\n    config: dict,\n    *,\n    claude_artifact_callback:\
+      \ Callable[[DispatchPacket], dict] | None = None,\n) -> dict[str, ContributorAdapter]:\n\
+      \    \"\"\"Build a {contributor_key: ContributorAdapter} dict from a validated\
+      \ config.\n\n    For each key in `contributors.enabled`, instantiate the matching\
+      \ adapter\n    using the per-contributor adapter_config block. Unknown keys\
+      \ raise\n    EngineFactoryError (caller should validate config first via cfg.validate()\n\
+      \    to catch these earlier, but we fail-closed here too).\n\n    `claude_artifact_callback`:\
+      \ required for workflow modes where ClaudeAdapter\n    is dispatched (workflow\
+      \ #4 propose-converge; advisory). For workflow #3\n    post-review the ClaudeAdapter\
+      \ is registered but not invoked, so the\n    callback may be None.\n    \"\"\
+      \"\n    enabled = config.get(\"contributors\", {}).get(\"enabled\", [])\n  \
+      \  if not enabled:\n        raise EngineFactoryError(\"config.contributors.enabled\
+      \ is empty\")\n\n    # 1.17 review (codex-002): read per-contributor config\
+      \ from `contributors.\n    # adapters` — the key default_config() + validate()\
+      \ actually use. The old\n    # `contributors.config` key was never populated,\
+      \ so adapter_config (e.g.\n    # model overrides) was silently always empty.\
+      \ Fall back to the legacy\n    # `.config` key for any pre-existing config that\
+      \ used it.\n    contributors_block = config.get(\"contributors\", {}) or {}\n\
+      \    per_contributor = (contributors_block.get(\"adapters\")\n             \
+      \          or contributors_block.get(\"config\")\n                       or\
+      \ {})\n\n    # v1.18.0 B-routing (converged-plan decision.engine_factory): resolution\n\
+      \    # order per enabled key is (a) _REGISTERED_ADAPTERS, (b) _BUILTIN_ADAPTERS\n\
+      \    # (claude/codex/gemini → existing classes), (c) merged profiles. Only step\n\
+      \    # (c) needs the profile map, so it is loaded LAZILY (and at most once)\
+      \ — a\n    # config with only built-in classes (the R8 case) never touches profile\
+      \ IO.\n    _merged_profiles_cache: dict | None = None\n\n    def _merged_profiles()\
+      \ -> dict:\n        nonlocal _merged_profiles_cache\n        if _merged_profiles_cache\
+      \ is None:\n            _merged_profiles_cache = profiles.merge_profiles(\n\
+      \                profiles.load_builtin_profiles(),\n                contributors_block.get(\"\
+      profiles\") or {},\n            )\n        return _merged_profiles_cache\n\n\
+      \    adapters: dict[str, ContributorAdapter] = {}\n    for key in enabled:\n\
+      \        adapter_config = per_contributor.get(key) or {}\n\n        # (a) +\
+      \ (b): a registered or built-in adapter CLASS wins. This keeps\n        # claude/codex/gemini\
+      \ on their existing classes (R8) even though they\n        # also carry metadata-only\
+      \ profiles.\n        ctor = _resolve_adapter(key)\n        if ctor is not None:\n\
+      \            if key == \"claude\":\n                adapters[key] = ctor(\n\
+      \                    adapter_config=adapter_config,\n                    artifact_callback=claude_artifact_callback,\n\
+      \                )\n            else:\n                adapters[key] = ctor(adapter_config=adapter_config)\n\
+      \            continue\n\n        # (c): no class for this key — fall back to\
+      \ the merged profiles.\n        profile = _merged_profiles().get(key)\n    \
+      \    if profile is not None:\n            kind = profile.get(\"kind\")\n   \
+      \         if kind == profiles.KIND_HOST:\n                # kind:host is reserved\
+      \ for the in-process orchestrator (claude),\n                # which always\
+      \ resolves via _BUILTIN_ADAPTERS above. A host\n                # profile under\
+      \ any other name must NOT be spun up as a\n                # subprocess — fail\
+      \ closed.\n                raise EngineFactoryError(\n                    f\"\
+      contributor {key!r} has profile kind={profiles.KIND_HOST!r} \"\n           \
+      \         f\"but no built-in host adapter. kind:host is reserved for the \"\n\
+      \                    f\"in-process orchestrator (claude); it is never dispatched\
+      \ as a \"\n                    f\"subprocess. Use kind:{profiles.KIND_CLI_REVIEWER!r}\
+      \ for a \"\n                    f\"CLI contributor, or remove {key!r} from contributors.enabled.\"\
+      \n                )\n            if kind == profiles.KIND_CLI_REVIEWER:\n  \
+      \              adapters[key] = ProfileAdapter(profile, adapter_config=adapter_config)\n\
+      \                continue\n            raise EngineFactoryError(\n         \
+      \       f\"contributor {key!r} profile has unsupported kind {kind!r}; \"\n \
+      \               f\"expected {profiles.KIND_CLI_REVIEWER!r} (or {profiles.KIND_HOST!r}\
+      \ \"\n                f\"for the reserved host).\"\n            )\n\n      \
+      \  # Nothing matched: unknown contributor. Fail closed.\n        known_profile_names\
+      \ = sorted(_merged_profiles().keys())\n        raise EngineFactoryError(\n \
+      \           f\"unknown contributor key {key!r}; \"\n            f\"constructible\
+      \ classes: {known_contributor_keys()}; \"\n            f\"profile names: {known_profile_names}.\
+      \ \"\n            f\"Register a custom contributor via \"\n            f\"engine_factory.register_contributor(name,\
+      \ AdapterClass), or add a \"\n            f\"kind:cli_reviewer profile under\
+      \ contributors.profiles.\"\n        )\n    return adapters\n\n\ndef build_engine(\n\
+      \    config: dict,\n    repo_root: Path,\n    *,\n    claude_artifact_callback:\
+      \ Callable[[DispatchPacket], dict] | None = None,\n) -> WorkflowEngine:\n  \
+      \  \"\"\"Convenience: validate config, build adapters, return a WorkflowEngine.\n\
+      \n    schema_version=0 is a legacy-synthesis sentinel per config.synthesize_\n\
+      \    legacy_config(); skip validation for legacy-mode dicts so the engine can\n\
+      \    still run against pre-iter-0015 repos without a .consensus/config.yaml.\n\
+      \    \"\"\"\n    if config.get(\"schema_version\") != 0:\n        cfg.validate(config)\n\
+      \    adapters = build_adapters(\n        config,\n        claude_artifact_callback=claude_artifact_callback,\n\
+      \    )\n    try:\n        return WorkflowEngine(config, adapters, repo_root)\n\
+      \    except WorkflowError as exc:\n        raise EngineFactoryError(str(exc))\
+      \ from exc\n"
+    consensus_mcp/contributors/profile_adapter.py: "\"\"\"Generic, profile-driven\
+      \ contributor adapter (v1.18.0).\n\nPer the converged plan (iteration-v1180-contributor-design-2026-05-22):\n\
+      **B-ROUTING + UNIVERSAL PROFILES.** claude/codex/gemini keep their existing\n\
+      adapter classes; ``ProfileAdapter`` is the ONE generic adapter that dispatches\n\
+      any ``kind: cli_reviewer`` contributor described purely by a profile dict —\
+      \ kimi\ntoday, plus any user-added AI with ZERO new Python classes.\n\nProfileAdapter\
+      \ is the live replacement (in spirit) for the parent project's kimi\nmonkeypatch\
+      \ wrapper. That wrapper monkeypatched ``_dispatch_gemini._invoke_gemini``\n\
+      and ``_seal_via_t6`` and — critically — left the gemini provenance defaults\
+      \ in\nplace, so a kimi review sealed with ``model='gemini-2.5-pro'``. ProfileAdapter\n\
+      fixes this by building ``dispatch_provenance`` EXPLICITLY from the resolved\n\
+      profile (model/contributor/bin/attestation_method), never copying another\n\
+      adapter's defaults (converged-plan ``decision.provenance``; regression gate:\
+      \ a\nkimi seal must NOT contain ``model='gemini-2.5-pro'``).\n\nReuse, don't\
+      \ reimplement\n------------------------\nThe dispatch pipeline mirrors ``_dispatch_gemini.main``\
+      \ but is parameterized by\nthe profile. It reuses the shared ``_dispatch_base``\
+      \ machinery for everything\nthat is NOT CLI-shape-specific:\n\n  * ``_load_goal_packet``\
+      \ / ``_load_template`` — read goal_packet + prompt template\n  * ``_build_prompt``\
+      \ — substitute placeholders (same template the gemini adapter uses)\n  * ``_sha256_str``\
+      \ — provenance hashes\n  * ``_build_sealed_packet`` — wrap findings in the T6\
+      \ outer structure\n  * ``_seal_via_t6`` — write the sealed YAML through review.write_and_seal\
+      \ (NOT reimplemented)\n\nThe ONLY profile-specific steps are:\n  * the CLI invocation\
+      \ (``_invoke``: transport, base_args, prompt_flag,\n    workdir_flag, model_flag,\
+      \ env, timeout)\n  * output chrome removal (``output.strip_patterns``) before\
+      \ JSON parse\n\nThe parser intentionally reuses gemini's lenient extractor +\
+      \ shape validator\n(``_dispatch_gemini._parse_gemini_output`` via ``_extract_json_from_text``):\n\
+      a non-codex cli_reviewer (kimi/custom) does not enforce a JSON schema natively\n\
+      (``output.schema_enforced: false``), so it needs the same fence/prose-tolerant\n\
+      extraction gemini uses. Finding-ID prefix enforcement is gemini-specific, so\
+      \ we\ndo NOT route through gemini's id-pattern check; we use ``json.loads``\
+      \ on the\nstripped+extracted text and a minimal structural guard.\n\"\"\"\n\
+      from __future__ import annotations\n\nimport json\nimport os\nimport re\nimport\
+      \ subprocess\nimport sys\nimport time\nfrom pathlib import Path\n\nfrom consensus_mcp\
+      \ import _contributor_profiles as _profiles\nfrom consensus_mcp._dispatch_base\
+      \ import (\n    _build_prompt,\n    _build_sealed_packet,\n    _load_goal_packet,\n\
+      \    _load_template,\n    _seal_via_t6,\n    _sha256_str,\n)\nfrom consensus_mcp._dispatch_gemini\
+      \ import _extract_json_from_text\nfrom consensus_mcp.contributors.base import\
+      \ (\n    ContributorAdapter,\n    DispatchError,\n    DispatchPacket,\n    SealedArtifact,\n\
+      )\n\n# Default prompt template (shared with the gemini adapter). A profile-driven\n\
+      # cli_reviewer is a review/proposal contributor exactly like gemini; it consumes\n\
+      # the same goal_packet-substituted template. Future profiles MAY name their\
+      \ own\n# template, but v1.18.0 keeps a single shared default.\n_DISPATCH_TEMPLATES_DIR\
+      \ = (\n    Path(__file__).resolve().parent.parent / \"dispatch_templates\"\n\
+      )\n_DEFAULT_REVIEW_TEMPLATE = _DISPATCH_TEMPLATES_DIR / \"gemini_review_template.md\"\
+      \n\n\nclass ProfileAdapter(ContributorAdapter):\n    \"\"\"Profile-driven cli_reviewer\
+      \ adapter.\n\n    Construct with a single ``profile`` dict (a merged built-in/override\
+      \ entry\n    from ``_contributor_profiles``). The profile MUST validate and\
+      \ be\n    ``kind: cli_reviewer``; a ``kind: host`` profile (claude) is rejected\
+      \ — the\n    host is never a subprocess.\n    \"\"\"\n\n    def __init__(self,\
+      \ profile: dict, adapter_config: dict | None = None):\n        super().__init__(adapter_config)\n\
+      \        if not isinstance(profile, dict):\n            raise ValueError(\n\
+      \                f\"ProfileAdapter requires a profile dict; got {type(profile).__name__}\"\
+      \n            )\n        name = profile.get(\"name\")\n        # Validate the\
+      \ profile up front (raises ValueError on any violation).\n        _profiles.validate_profile(name\
+      \ or \"<unnamed>\", profile)\n        if profile.get(\"kind\") != _profiles.KIND_CLI_REVIEWER:\n\
+      \            raise ValueError(\n                f\"ProfileAdapter only dispatches\
+      \ kind={_profiles.KIND_CLI_REVIEWER!r} \"\n                f\"profiles; profile\
+      \ {name!r} has kind={profile.get('kind')!r}. \"\n                f\"A host (claude)\
+      \ is the in-process orchestrator, never a subprocess.\"\n            )\n   \
+      \     self.profile = profile\n        self.name = name\n\n    # ----- profile\
+      \ accessors -------------------------------------------------\n\n    @property\n\
+      \    def _invoke_cfg(self) -> dict:\n        return self.profile.get(\"invoke\"\
+      ) or {}\n\n    @property\n    def _timeout_seconds(self) -> int:\n        return\
+      \ int(self.profile.get(\"timeout_seconds\", 1800))\n\n    @property\n    def\
+      \ _sealed_filename(self) -> str:\n        return self.profile.get(\"sealed_filename\"\
+      ) or f\"{self.name}-review.yaml\"\n\n    @property\n    def _bin(self) -> str:\n\
+      \        return (self.profile.get(\"detect\") or {}).get(\"command\") or self.name\n\
+      \n    @property\n    def _model(self) -> str:\n        return self.profile.get(\"\
+      model\") or \"\"\n\n    # ----- CLI invocation (the ONE profile-specific step)\
+      \ --------------------\n\n    def _build_cmd(self, prompt: str, repo_root: Path)\
+      \ -> tuple[list[str], bool]:\n        \"\"\"Build the argv from the profile.\
+      \ Returns (cmd, stdin_prompt).\n\n        transport=stdin → prompt delivered\
+      \ via stdin; NO prompt_flag in argv.\n        transport=flag  → prompt delivered\
+      \ as the value following prompt_flag.\n\n        base_args, workdir_flag (+\
+      \ repo_root value), and model_flag (+ model\n        value) are wired in per\
+      \ the profile. model_flag is only added when the\n        profile carries a\
+      \ non-empty model.\n        \"\"\"\n        invoke = self._invoke_cfg\n    \
+      \    transport = invoke.get(\"transport\")\n        cmd: list[str] = [self._bin]\n\
+      \        cmd.extend(list(invoke.get(\"base_args\") or []))\n\n        workdir_flag\
+      \ = invoke.get(\"workdir_flag\")\n        if workdir_flag:\n            cmd.extend([workdir_flag,\
+      \ str(repo_root)])\n\n        model_flag = invoke.get(\"model_flag\")\n    \
+      \    if model_flag and self._model:\n            cmd.extend([model_flag, self._model])\n\
+      \n        stdin_prompt = transport == _profiles.TRANSPORT_STDIN\n        if\
+      \ transport == _profiles.TRANSPORT_FLAG:\n            prompt_flag = invoke.get(\"\
+      prompt_flag\")\n            cmd.extend([prompt_flag, prompt])\n        return\
+      \ cmd, stdin_prompt\n\n    def _subprocess_env(self) -> dict:\n        \"\"\"\
+      Parent env + the profile's injected env vars (e.g.\n        GEMINI_CLI_TRUST_WORKSPACE).\
+      \ Returns a COPY; never mutates os.environ.\"\"\"\n        env = os.environ.copy()\n\
+      \        for key, value in (self.profile.get(\"env\") or {}).items():\n    \
+      \        env[str(key)] = str(value)\n        return env\n\n    def _invoke(\n\
+      \        self,\n        *,\n        cmd: list[str],\n        prompt: str,\n\
+      \        stdin_prompt: bool,\n        env: dict,\n        cwd: str,\n      \
+      \  timeout_seconds: int,\n    ) -> str:\n        \"\"\"Shell out to the profile's\
+      \ CLI and return raw stdout.\n\n        This is the seam tests monkeypatch (mirrors\
+      \ the kimi wrapper's\n        ``_invoke_kimi`` and the test_dispatch_gemini\
+      \ fake-invoke pattern). The\n        real implementation runs the CLI non-interactively,\
+      \ piping the prompt\n        via stdin when ``stdin_prompt`` is True. Raises\
+      \ DispatchError on any\n        subprocess failure so the engine's timeout/failure\
+      \ policy applies.\n        \"\"\"\n        popen_input = prompt if stdin_prompt\
+      \ else None\n        _t0 = time.perf_counter()\n        try:\n            result\
+      \ = subprocess.run(\n                cmd,\n                input=popen_input,\n\
+      \                capture_output=True,\n                text=True,\n        \
+      \        timeout=timeout_seconds,\n                cwd=cwd,\n              \
+      \  env=env,\n            )\n        except subprocess.TimeoutExpired as exc:\n\
+      \            raise DispatchError(\n                f\"{self.name} CLI timed\
+      \ out after {timeout_seconds}s\"\n            ) from exc\n        except FileNotFoundError\
+      \ as exc:\n            raise DispatchError(\n                f\"{self.name}\
+      \ CLI binary not found: {self._bin!r}\"\n            ) from exc\n        except\
+      \ OSError as exc:\n            raise DispatchError(\n                f\"{self.name}\
+      \ CLI invocation failed ({type(exc).__name__}): {exc}\"\n            ) from\
+      \ exc\n        if result.returncode != 0:\n            _el = time.perf_counter()\
+      \ - _t0\n            raise DispatchError(\n                f\"{self.name} CLI\
+      \ exited {result.returncode} after {_el:.0f}s; \"\n                f\"stderr\
+      \ tail: {(result.stderr or '')[-500:]!r}\"\n            )\n        return result.stdout\
+      \ or \"\"\n\n    # ----- output chrome removal --------------------------------------------\n\
+      \n    def _strip_chrome(self, text: str) -> str:\n        \"\"\"Apply the profile's\
+      \ output.strip_patterns (regexes) to remove CLI\n        chrome (resume footers,\
+      \ banners) BEFORE JSON parse. Patterns are applied\n        in declared order;\
+      \ MULTILINE + DOTALL match the kimi wrapper's\n        _RESUME_FOOTER_RE semantics.\"\
+      \"\"\n        out = text\n        for pattern in (self.profile.get(\"output\"\
+      ) or {}).get(\"strip_patterns\") or []:\n            out = re.sub(pattern, \"\
+      \", out, flags=re.MULTILINE | re.DOTALL)\n        return out.strip()\n\n   \
+      \ # ----- parse ------------------------------------------------------------\n\
+      \n    def _parse(self, raw: str) -> dict:\n        \"\"\"Strip chrome, extract\
+      \ a JSON object, parse + minimally validate shape.\n\n        cli_reviewer profiles\
+      \ (kimi/custom) do NOT enforce a JSON schema\n        natively, so this reuses\
+      \ gemini's prose/fence-tolerant\n        ``_extract_json_from_text`` before\
+      \ ``json.loads``. The structural guard\n        keeps it adapter-agnostic (no\
+      \ gemini-rev id-prefix check): the parsed\n        object must be a mapping\
+      \ with the standard review keys.\n        \"\"\"\n        stripped = self._strip_chrome(raw)\n\
+      \        candidate = _extract_json_from_text(stripped)\n        try:\n     \
+      \       parsed = json.loads(candidate)\n        except json.JSONDecodeError\
+      \ as exc:\n            raise DispatchError(\n                f\"{self.name}\
+      \ output is not valid JSON: {exc}; \"\n                f\"first 300 chars: {stripped[:300]!r}\"\
+      \n            ) from exc\n        if not isinstance(parsed, dict):\n       \
+      \     raise DispatchError(\n                f\"{self.name} output JSON root\
+      \ must be an object, \"\n                f\"got {type(parsed).__name__}\"\n\
+      \            )\n        for required in (\"findings\", \"goal_satisfied\", \"\
+      blocking_objections\"):\n            if required not in parsed:\n          \
+      \      raise DispatchError(\n                    f\"{self.name} output JSON\
+      \ missing required key: {required!r}\"\n                )\n        if not isinstance(parsed[\"\
+      findings\"], list):\n            raise DispatchError(f\"{self.name} output 'findings'\
+      \ must be an array\")\n        return parsed\n\n    # ----- dispatch ---------------------------------------------------------\n\
+      \n    def dispatch(self, packet: DispatchPacket) -> SealedArtifact:\n      \
+      \  iter_dir = Path(packet.iteration_dir)\n        iteration_id = iter_dir.name\n\
+      \        reviewer_id = (\n            packet.reviewer_id\n            or f\"\
+      {self.name}-{iteration_id}-{packet.phase}-1\"\n        )\n        pass_id =\
+      \ packet.pass_id or f\"{reviewer_id}-pass1\"\n        timeout_seconds = packet.timeout_seconds\
+      \ or self._timeout_seconds\n\n        # The CLI's working directory = the PROJECT\
+      \ ROOT (where it loads project\n        # context like AGENTS.md / CLAUDE.md).\
+      \ Iteration dirs live at\n        # <repo>/consensus-state/active/<iter>, so\
+      \ the repo root is the parent of\n        # the `consensus-state` ancestor —\
+      \ NOT iter_dir.parent (which would be\n        # consensus-state/active). codex-rev-002\
+      \ (v1.18.0 impl audit). Fall back\n        # to iter_dir.parent for iteration\
+      \ dirs not nested under consensus-state.\n        repo_root = iter_dir.parent\n\
+      \        for _anc in iter_dir.parents:\n            if _anc.name == \"consensus-state\"\
+      :\n                repo_root = _anc.parent\n                break\n\n      \
+      \  try:\n            goal_packet_text = Path(packet.goal_packet_path).read_text(encoding=\"\
+      utf-8\")\n            goal_packet = _load_goal_packet(Path(packet.goal_packet_path))\n\
+      \            template_text = _load_template(_DEFAULT_REVIEW_TEMPLATE)\n\n  \
+      \          review_target_hash = None\n            review_packet_data = None\n\
+      \            if packet.review_target_path is not None:\n                rt =\
+      \ Path(packet.review_target_path)\n                review_target_text = rt.read_text(encoding=\"\
+      utf-8\")\n                review_target_hash = _sha256_str(review_target_text)\n\
+      \                if rt.suffix.lower() in (\".yaml\", \".yml\"):\n          \
+      \          import yaml\n                    try:\n                        candidate\
+      \ = yaml.safe_load(review_target_text)\n                        if isinstance(candidate,\
+      \ dict):\n                            review_packet_data = candidate\n     \
+      \               except yaml.YAMLError:\n                        review_packet_data\
+      \ = None\n\n            prompt = _build_prompt(\n                goal_packet,\n\
+      \                template_text,\n                iteration_dir=str(iter_dir),\n\
+      \                review_packet_path=str(packet.goal_packet_path),\n        \
+      \        review_target_path=(\n                    str(packet.review_target_path)\n\
+      \                    if packet.review_target_path is not None\n            \
+      \        else None\n                ),\n                review_target_hash=review_target_hash,\n\
+      \                review_packet=review_packet_data,\n            )\n        \
+      \    prompt_sha = _sha256_str(prompt)\n            goal_packet_sha = _sha256_str(goal_packet_text)\n\
+      \            scope_sig = (\n                (goal_packet or {}).get(\"authorization\"\
+      , {}) or {}\n            ).get(\"scope_signature\", \"\")\n\n            cmd,\
+      \ stdin_prompt = self._build_cmd(prompt, repo_root)\n            raw_output\
+      \ = self._invoke(\n                cmd=cmd,\n                prompt=prompt,\n\
+      \                stdin_prompt=stdin_prompt,\n                env=self._subprocess_env(),\n\
+      \                cwd=str(repo_root),\n                timeout_seconds=timeout_seconds,\n\
+      \            )\n            extracted = self._parse(raw_output)\n          \
+      \  output_sha = _sha256_str(raw_output)\n        except DispatchError:\n   \
+      \         raise\n        except Exception as exc:\n            raise DispatchError(\n\
+      \                f\"{self.name} dispatch failed ({type(exc).__name__}): {exc}\"\
+      \n            ) from exc\n\n        # PROVENANCE — built EXPLICITLY from the\
+      \ profile. Never copy another\n        # adapter's defaults (converged-plan\
+      \ decision.provenance). This is the\n        # regression fix for the kimi wrapper's\
+      \ gemini-2.5-pro mislabel.\n        provenance = {\n            \"model\": self._model,\n\
+      \            \"adapter\": \"profile\",\n            \"contributor\": self.name,\n\
+      \            \"bin\": self._bin,\n            \"attestation_method\": f\"auto_{self.name}_dispatch\"\
+      ,\n            \"prompt_sha256\": prompt_sha,\n            \"output_sha256\"\
+      : output_sha,\n            \"goal_packet_sha256\": goal_packet_sha,\n      \
+      \      \"schema_sha256\": None,\n            \"scope_signature\": scope_sig,\n\
+      \            \"review_target_hash\": review_target_hash,\n        }\n\n    \
+      \    attestation_method = f\"auto_{self.name}_dispatch\"\n        sealed_packet\
+      \ = _build_sealed_packet(\n            extracted,\n            iteration_id,\n\
+      \            reviewer_id,\n            pass_id,\n            provenance=provenance,\n\
+      \            attestation_method=attestation_method,\n            attestation_input_sources=[\n\
+      \                \"goal_packet (path passed via packet.goal_packet_path)\",\n\
+      \                \"prompt_template (substituted by _build_prompt)\",\n     \
+      \           \"review_target (path passed via packet.review_target_path; may\
+      \ be unspecified)\",\n                f\"profile (name={self.name}, model={self._model},\
+      \ bin={self._bin})\",\n            ],\n        )\n\n        try:\n         \
+      \   result = _seal_via_t6(\n                sealed_packet, iter_dir, sealed_filename=self._sealed_filename\n\
+      \            )\n        except Exception as exc:\n            raise DispatchError(\n\
+      \                f\"{self.name} T6 seal failed ({type(exc).__name__}): {exc}\"\
+      \n            ) from exc\n\n        return SealedArtifact(\n            contributor=self.name,\n\
+      \            phase=packet.phase,\n            pass_id=pass_id,\n           \
+      \ sealed_path=Path(result[\"sealed_path\"]),\n            archive_sealed_path=(\n\
+      \                Path(result[\"archive_sealed_path\"])\n                if result.get(\"\
+      archive_sealed_path\")\n                else None\n            ),\n        \
+      \    packet_sha256=result.get(\"packet_sha256\", \"\"),\n            parsed=sealed_packet,\n\
+      \        )\n"
+    consensus_mcp/contributor_profiles/kimi.yaml: "# Built-in contributor profile:\
+      \ kimi (Moonshot Kimi CLI).\n#\n# kimi IS consumed by ProfileAdapter — the ONLY\
+      \ built-in routed through the new\n# generic adapter in v1.18.0 (codex/gemini/claude\
+      \ keep their existing classes).\n# This profile is therefore the live invocation\
+      \ contract, not just metadata.\n#\n# Provenance regression fix: the parent project's\
+      \ kimi monkeypatch wrapper\n# mislabeled model='gemini-2.5-pro'. ProfileAdapter\
+      \ seals model from THIS field,\n# so the label below must be accurate (see converged-plan\
+      \ provenance gate).\n#\n# install/auth strings VERIFIED 2026-05-22 (do NOT invent):\n\
+      #   pipx package: kimi-cli ; auth: `kimi login` (OAuth/subscription, interactive).\n\
+      #   stdin transport (NOT -p), --quiet --thinking, -w sets workdir for project\
+      \ ctx.\nname: kimi\nkind: cli_reviewer\nmodel: \"kimi-code/kimi-for-coding (managed,\
+      \ +thinking)\"\ndetect:\n  command: kimi\ninvoke:\n  transport: stdin      \
+      \   # kimi reads the prompt from stdin (NOT a -p flag)\n  base_args:\n    -\
+      \ \"--quiet\"\n    - \"--thinking\"\n  prompt_flag: null        # stdin transport\
+      \ → no prompt flag\n  workdir_flag: \"-w\"       # sets cwd so the CLI loads\
+      \ project context\n  model_flag: null\nenv: {}\noutput:\n  strip_patterns:\n\
+      \    - \"\\\\n*To resume this session:\\\\s*kimi -r \\\\S+\\\\s*$\"\n  schema_enforced:\
+      \ false   # kimi does not enforce the review JSON natively\nsealed_filename:\
+      \ kimi-review.yaml\nid_prefix: kimi-rev\ninstall:\n  windows: \"pipx install\
+      \ kimi-cli\"\n  linux: \"pipx install kimi-cli\"\nauth:\n  command: \"kimi login\"\
+      \n  env_vars: []\n  note: \"OAuth/subscription login (interactive)\"\ninstructions:\n\
+      \  filename: AGENTS.md       # codex AND kimi both read AGENTS.md → dedupe to\
+      \ one file\ntimeout_seconds: 1800\n"
+schema_version: 1
+iteration_id: iteration-host-family-agents-design-2026-05-22

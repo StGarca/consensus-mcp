@@ -1,0 +1,3 @@
+[kimi-timing] landed in 260s (ceiling 1800s)
+{"ok": true, "pass_id": "kimi-agents-pass1", "sealed_path": "/mnt/c/Users/steve/Downloads/consensus-mcp/consensus-state/active/iteration-host-family-agents-design-2026-05-22/kimi-review.yaml", "archive_sealed_path": "/mnt/c/Users/steve/Downloads/consensus-mcp/consensus-state/archive/review-passes/2026-05-22-iteration-host-family-agents-design-2026-05-22-kimi-agents-1-kimi-agents-pass1-pass.yaml", "packet_sha256": "e965dd69f516c54c48a1f76f13a4a9767d23e1cd0f1863890c2fb458bf93f303", "index_updated": true, "audit_event_id": "2026-05-22T19:43:26Z_review_returned_and_sealed_kimi-agents-1"}
+kimi rc=0

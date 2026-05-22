@@ -1,0 +1,1327 @@
+diff --git a/consensus_mcp/_closure_invariant.py b/consensus_mcp/_closure_invariant.py
+index 6e50602..251ffaf 100644
+--- a/consensus_mcp/_closure_invariant.py
++++ b/consensus_mcp/_closure_invariant.py
+@@ -259,12 +259,23 @@ def check_closure_invariant(
+     closer_family = _actor_model_family(closing_verdict.get("actor"))
+     lm_family = _actor_model_family(last_mutation.get("actor"))
+ 
++    # v1.20.0 host_peer gate exclusion (ADDITIVE, minimal): a closer tagged
++    # gate_eligible == False (a same-family blind SWE-reviewer / host_peer) can
++    # NEVER be the different-family signer that closes a mutation — even when its
++    # model_family differs from the mutator's. The host is not independent of its
++    # own orchestration, so its supplementary review augments cross-family review
++    # but can never satisfy it. Only the LITERAL boolean False excludes; absent /
++    # None / any non-false value means gate-eligible (default), preserving every
++    # existing closer's behavior unchanged.
++    closer_gate_excluded = closing_verdict.get("gate_eligible") is False
++
+     # v5 Finding 1: cross-family check (BOTH families must be present AND
+     # different). actor.id difference is necessary (a node cannot close its
+     # own work) but not sufficient — same-family-different-actor doesn't
+     # buy independence.
+     cross_family = (
+-        closer_family is not None
++        not closer_gate_excluded
++        and closer_family is not None
+         and lm_family is not None
+         and closer_family != lm_family
+         and closer_actor_id is not None
+@@ -293,10 +304,15 @@ def check_closure_invariant(
+     ok = cross_family and hash_match and freshness
+     reasons: list[str] = []
+     if not cross_family:
++        excluded_note = (
++            " [closer gate_eligible=False (host_peer/supplementary): excluded "
++            "from cross-family signoff]"
++            if closer_gate_excluded else ""
++        )
+         reasons.append(
+             f"cross_family: closer.actor.model_family={closer_family!r}/"
+             f"id={closer_actor_id!r} vs last_mutation.actor.model_family={lm_family!r}/"
+-            f"id={lm_actor_id!r}"
++            f"id={lm_actor_id!r}{excluded_note}"
+         )
+     if not hash_match:
+         reasons.append(
+diff --git a/consensus_mcp/_contributor_profiles.py b/consensus_mcp/_contributor_profiles.py
+index d7b02a7..e44134f 100644
+--- a/consensus_mcp/_contributor_profiles.py
++++ b/consensus_mcp/_contributor_profiles.py
+@@ -54,7 +54,12 @@ import yaml
+ # === Schema vocabulary ===
+ KIND_HOST = "host"
+ KIND_CLI_REVIEWER = "cli_reviewer"
+-VALID_KINDS = {KIND_HOST, KIND_CLI_REVIEWER}
++# v1.20.0: a same-family blind SWE-reviewer run via a dedicated host review
++# callback (no CLI). Like KIND_HOST it has no detect/invoke/output; it
++# additionally REQUIRES `family` + `role` and is supplementary +
++# gate-ineligible by contract.
++KIND_HOST_PEER = "host_peer"
++VALID_KINDS = {KIND_HOST, KIND_CLI_REVIEWER, KIND_HOST_PEER}
+ 
+ TRANSPORT_STDIN = "stdin"
+ TRANSPORT_FLAG = "flag"
+@@ -176,6 +181,31 @@ def validate_profile(name: str, d: dict) -> None:
+     if kind == KIND_HOST:
+         return
+ 
++    # host_peer (v1.20.0): a same-family blind SWE-reviewer run via a dedicated
++    # host review callback. Like host it has NO CLI detect/invoke/output, but it
++    # REQUIRES `family` + `role`. `weight` and `gate_eligible` are allowed
++    # (optional) — the adapter stamps the canonical supplementary /
++    # gate_eligible=False provenance regardless, so the profile fields are
++    # advisory metadata only.
++    if kind == KIND_HOST_PEER:
++        family = d.get("family")
++        if not family or not isinstance(family, str):
++            raise ValueError(
++                f"profile {name!r} (kind=host_peer) missing required field 'family'"
++            )
++        role = d.get("role")
++        if not role or not isinstance(role, str):
++            raise ValueError(
++                f"profile {name!r} (kind=host_peer) missing required field 'role'"
++            )
++        gate_eligible = d.get("gate_eligible")
++        if gate_eligible is not None and not isinstance(gate_eligible, bool):
++            raise ValueError(
++                f"profile {name!r} (kind=host_peer) 'gate_eligible' must be a "
++                f"boolean when present, got {type(gate_eligible).__name__}"
++            )
++        return
++
+     # === cli_reviewer-specific required fields ===
+     detect = d.get("detect")
+     if not isinstance(detect, dict) or not detect.get("command"):
+diff --git a/consensus_mcp/_engine_factory.py b/consensus_mcp/_engine_factory.py
+index 970b163..747dcf5 100644
+--- a/consensus_mcp/_engine_factory.py
++++ b/consensus_mcp/_engine_factory.py
+@@ -18,6 +18,7 @@ from consensus_mcp.contributors.base import DispatchPacket
+ from consensus_mcp.contributors.claude import ClaudeAdapter
+ from consensus_mcp.contributors.codex import CodexAdapter
+ from consensus_mcp.contributors.gemini import GeminiAdapter
++from consensus_mcp.contributors.host_peer_adapter import HostPeerAdapter
+ from consensus_mcp.contributors.profile_adapter import ProfileAdapter
+ from consensus_mcp.workflow_engine import WorkflowEngine, WorkflowError
+ 
+@@ -81,6 +82,7 @@ def build_adapters(
+     config: dict,
+     *,
+     claude_artifact_callback: Callable[[DispatchPacket], dict] | None = None,
++    host_peer_review_callback: Callable[[DispatchPacket], dict] | None = None,
+ ) -> dict[str, ContributorAdapter]:
+     """Build a {contributor_key: ContributorAdapter} dict from a validated config.
+ 
+@@ -93,6 +95,12 @@ def build_adapters(
+     is dispatched (workflow #4 propose-converge; advisory). For workflow #3
+     post-review the ClaudeAdapter is registered but not invoked, so the
+     callback may be None.
++
++    `host_peer_review_callback` (v1.20.0): a DEDICATED fresh-context host review
++    callback, SEPARATE from `claude_artifact_callback`. Required to build a
++    `kind: host_peer` contributor (the same-family blind SWE-reviewer). If it is
++    not provided, any enabled host_peer profile is gracefully NOT built — every
++    existing (non-host_peer) flow is unaffected.
+     """
+     enabled = config.get("contributors", {}).get("enabled", [])
+     if not enabled:
+@@ -161,9 +169,32 @@ def build_adapters(
+             if kind == profiles.KIND_CLI_REVIEWER:
+                 adapters[key] = ProfileAdapter(profile, adapter_config=adapter_config)
+                 continue
++            if kind == profiles.KIND_HOST_PEER:
++                # v1.20.0: a same-family blind SWE-reviewer. Build it ONLY when a
++                # dedicated host_peer_review_callback is wired; otherwise skip it
++                # gracefully (no failure) so existing flows that enable a
++                # host_peer profile but run in a context without the callback
++                # (e.g. CLI/author, workflow #3 post-review) are unaffected.
++                if host_peer_review_callback is None:
++                    continue
++                # The adapter's `family` MUST be the host family from the
++                # profile (NOT operator-overridable per-dispatch adapter_config
++                # alone); merge so the profile's family/role authoritatively
++                # seed the adapter while still allowing adapter_config extras.
++                hp_config = {
++                    **adapter_config,
++                    "family": profile.get("family"),
++                    "role": profile.get("role"),
++                }
++                adapters[key] = HostPeerAdapter(
++                    adapter_config=hp_config,
++                    host_peer_review_callback=host_peer_review_callback,
++                )
++                continue
+             raise EngineFactoryError(
+                 f"contributor {key!r} profile has unsupported kind {kind!r}; "
+-                f"expected {profiles.KIND_CLI_REVIEWER!r} (or {profiles.KIND_HOST!r} "
++                f"expected {profiles.KIND_CLI_REVIEWER!r} or "
++                f"{profiles.KIND_HOST_PEER!r} (or {profiles.KIND_HOST!r} "
+                 f"for the reserved host)."
+             )
+ 
+@@ -185,18 +216,24 @@ def build_engine(
+     repo_root: Path,
+     *,
+     claude_artifact_callback: Callable[[DispatchPacket], dict] | None = None,
++    host_peer_review_callback: Callable[[DispatchPacket], dict] | None = None,
+ ) -> WorkflowEngine:
+     """Convenience: validate config, build adapters, return a WorkflowEngine.
+ 
+     schema_version=0 is a legacy-synthesis sentinel per config.synthesize_
+     legacy_config(); skip validation for legacy-mode dicts so the engine can
+     still run against pre-iter-0015 repos without a .consensus/config.yaml.
++
++    `host_peer_review_callback` (v1.20.0): dedicated fresh-context host review
++    callback; threaded to build_adapters so a kind:host_peer contributor is
++    built only when the callback is wired (graceful absence otherwise).
+     """
+     if config.get("schema_version") != 0:
+         cfg.validate(config)
+     adapters = build_adapters(
+         config,
+         claude_artifact_callback=claude_artifact_callback,
++        host_peer_review_callback=host_peer_review_callback,
+     )
+     try:
+         return WorkflowEngine(config, adapters, repo_root)
+diff --git a/consensus_mcp/_init_wizard.py b/consensus_mcp/_init_wizard.py
+index a57683c..155c86b 100644
+--- a/consensus_mcp/_init_wizard.py
++++ b/consensus_mcp/_init_wizard.py
+@@ -377,10 +377,12 @@ def _ordered_profile_names(profiles: dict) -> list[str]:
+ def _profile_installed(profile: dict) -> bool:
+     """True if the contributor is usable on this host.
+ 
+-    host (claude) is the running environment — always available. cli_reviewers
++    host (claude) is the running environment — always available. host_peer
++    (v1.20.0: a same-family blind SWE-reviewer run via the host callback) is
++    likewise always usable on the host — it has no CLI to detect. cli_reviewers
+     are available iff their detect.command resolves on PATH.
+     """
+-    if profile.get("kind") == profiles_mod.KIND_HOST:
++    if profile.get("kind") in (profiles_mod.KIND_HOST, profiles_mod.KIND_HOST_PEER):
+         return True
+     command = (profile.get("detect") or {}).get("command")
+     if not command:
+@@ -388,6 +390,24 @@ def _profile_installed(profile: dict) -> bool:
+     return shutil.which(command) is not None
+ 
+ 
++def _contributor_option_note(profile: dict) -> str:
++    """Plain-language caveat shown next to a contributor in the multi-select.
++
++    A host_peer (v1.20.0: a same-model blind SWE-reviewer run via the host) is a
++    genuinely useful EXTRA opinion, but it runs the SAME model as the host/
++    orchestrator, so it shares the same blind spots and does NOT count as
++    independent cross-AI consensus. Surface that trade-off at selection time so
++    the choice is informed. Empty for real cross-family reviewers + the host.
++    """
++    if profile.get("kind") == profiles_mod.KIND_HOST_PEER:
++        return (
++            "optional same-model second opinion — a useful extra check if you "
++            "have the tokens to spare, but NOT independent multi-AI consensus "
++            "(it uses the same model as the host/orchestrator)"
++        )
++    return ""
++
++
+ def _select_contributors_interactive(profiles: dict) -> list[str]:
+     """Numbered multi-select over merged profiles (no TUI dep).
+ 
+@@ -405,7 +425,9 @@ def _select_contributors_interactive(profiles: dict) -> list[str]:
+     for idx, name in enumerate(names, start=1):
+         status = "✓ installed" if installed[name] else "✗ missing"
+         mark = "x" if installed[name] else " "
+-        print(f"  [{mark}] {idx}. {name} ({status})")
++        note = _contributor_option_note(profiles[name])
++        suffix = f"\n        ↳ {note}" if note else ""
++        print(f"  [{mark}] {idx}. {name} ({status}){suffix}")
+     default_hint = ",".join(str(names.index(n) + 1) for n in prechecked) or "none"
+ 
+     while True:
+diff --git a/consensus_mcp/_results_log.py b/consensus_mcp/_results_log.py
+index 87f22a5..e7f21e4 100644
+--- a/consensus_mcp/_results_log.py
++++ b/consensus_mcp/_results_log.py
+@@ -45,13 +45,50 @@ SCHEMA_VERSION = 1
+ 
+ # Sealed review-pass files, mapped to their reviewer family. Mirrors
+ # consensus_get_iteration_outcome._KNOWN_CONTRIB_FILES.
+-_REVIEW_FILES: dict[str, str] = {
++#
++# v1.20.0: host-peer-review.yaml is a SAME-FAMILY supplementary blind
++# SWE-reviewer. Its `family` is taken from the sealed actor.model_family (the
++# host family, e.g. claude) at read time rather than hardcoded here, because the
++# host family is host-dependent; the static default below is None.
++_REVIEW_FILES: dict[str, str | None] = {
+     "claude-review.yaml": "claude",
+     "claude-proposal.yaml": "claude",
+     "codex-review.yaml": "codex",
+     "gemini-review.yaml": "gemini",
++    "host-peer-review.yaml": None,
+ }
+ 
++
++def _is_supplementary(parsed: dict) -> bool:
++    """A sealed pass is a supplementary (host_peer / same-family) reviewer when
++    it is explicitly weight=supplementary OR gate_eligible=false. Content-driven
++    so a host_peer enabled under any profile name is detected, not just the
++    built-in filename."""
++    if not isinstance(parsed, dict):
++        return False
++    if parsed.get("weight") == "supplementary":
++        return True
++    if parsed.get("gate_eligible") is False:
++        return True
++    prov = parsed.get("dispatch_provenance")
++    if isinstance(prov, dict):
++        if prov.get("weight") == "supplementary" or prov.get("gate_eligible") is False:
++            return True
++        if prov.get("adapter") == "host_peer":
++            return True
++    return False
++
++
++def _family_for_pass(parsed: dict, static_family: str | None) -> str | None:
++    """Resolve a pass's reviewer family: prefer the sealed actor.model_family
++    (authoritative — host_peer's family is host-dependent), else the static
++    per-file default."""
++    if isinstance(parsed, dict):
++        actor = parsed.get("actor")
++        if isinstance(actor, dict) and actor.get("model_family"):
++            return actor.get("model_family")
++    return static_family
++
+ _VALID_SEVERITIES = {"low", "medium", "high", "blocking", "critical"}
+ _DEFAULT_SEVERITY = "medium"
+ 
+@@ -112,6 +149,8 @@ def _collect_findings_from_passes(iter_dir: Path) -> dict[str, dict]:
+             if isinstance(actor, dict):
+                 reviewer = actor.get("id")
+         pass_id = parsed.get("pass_id")
++        resolved_family = _family_for_pass(parsed, family)
++        supplementary = _is_supplementary(parsed)
+         findings = parsed.get("findings")
+         if not isinstance(findings, list):
+             continue
+@@ -128,7 +167,8 @@ def _collect_findings_from_passes(iter_dir: Path) -> dict[str, dict]:
+                     "severity": severity,
+                     "source_reviewer": reviewer,
+                     "source_pass_id": pass_id,
+-                    "_family": family,
++                    "_family": resolved_family,
++                    "_supplementary": supplementary,
+                 }
+             else:
+                 # Dedup: keep first provenance, but upgrade a defaulted severity
+@@ -173,8 +213,15 @@ def _convergence_from_plan(iter_dir: Path) -> dict | None:
+ 
+ 
+ def _reviewers_from_passes(findings_by_id: dict[str, dict], iter_dir: Path) -> list[dict]:
+-    """Distinct reviewers (name + family) seen across sealed passes."""
+-    seen: dict[str, str | None] = {}
++    """Distinct reviewers (name + family [+ supplementary]) across sealed passes.
++
++    v1.20.0: a same-family supplementary host_peer reviewer is tagged
++    `supplementary: true` so the scorecard can separate its (same-family)
++    findings from independent cross-family review. The flag is only emitted when
++    true, keeping the record shape unchanged for the existing cross-family
++    reviewers.
++    """
++    seen: dict[str, dict] = {}
+     for fname, family in _REVIEW_FILES.items():
+         fpath = iter_dir / fname
+         if not fpath.exists():
+@@ -190,8 +237,17 @@ def _reviewers_from_passes(findings_by_id: dict[str, dict], iter_dir: Path) -> l
+         if not isinstance(name, str) or not name:
+             continue
+         if name not in seen:
+-            seen[name] = family
+-    return [{"name": n, "family": f} for n, f in seen.items()]
++            seen[name] = {
++                "family": _family_for_pass(parsed, family),
++                "supplementary": _is_supplementary(parsed),
++            }
++    reviewers: list[dict] = []
++    for n, meta in seen.items():
++        entry: dict = {"name": n, "family": meta["family"]}
++        if meta["supplementary"]:
++            entry["supplementary"] = True
++        reviewers.append(entry)
++    return reviewers
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/consensus_mcp/contributor_profiles/claude-swe-reviewer.yaml b/consensus_mcp/contributor_profiles/claude-swe-reviewer.yaml
+new file mode 100644
+index 0000000..da10830
+--- /dev/null
++++ b/consensus_mcp/contributor_profiles/claude-swe-reviewer.yaml
+@@ -0,0 +1,27 @@
++# Built-in contributor profile: claude-swe-reviewer (v1.20.0 host_peer).
++#
++# kind=host_peer: a SAME-FAMILY blind SWE-reviewer that runs the host's own AI
++# family (claude) as a fresh-context, adversarial code reviewer via a DEDICATED
++# host review callback (NOT a subprocess, NOT the orchestrator's own voice). It
++# is SUPPLEMENTARY and EXCLUDED from the cross-family closure invariant: its
++# sealed artifact carries gate_eligible=false, so it can NEVER be the
++# different-family signer that closes a mutation. It augments cross-family
++# review; it never replaces it.
++#
++# Like kind=host it has NO CLI to detect, NO install command, and NO auth step —
++# detect / invoke / install / auth are intentionally absent. The adapter
++# (HostPeerAdapter) stamps the canonical role/weight/gate_eligible/attestation
++# provenance regardless of the advisory fields below.
++#
++# The name is chosen to avoid colliding with a likely user-authored profile.
++name: claude-swe-reviewer
++kind: host_peer
++family: claude
++role: swe_reviewer
++weight: supplementary
++gate_eligible: false
++model: "claude (host SWE-reviewer)"
++sealed_filename: host-peer-review.yaml
++id_prefix: claude-swe-rev
++instructions:
++  filename: CLAUDE.md
+diff --git a/consensus_mcp/contributors/host_peer_adapter.py b/consensus_mcp/contributors/host_peer_adapter.py
+new file mode 100644
+index 0000000..22073f3
+--- /dev/null
++++ b/consensus_mcp/contributors/host_peer_adapter.py
+@@ -0,0 +1,197 @@
++"""Host-peer contributor adapter — same-family blind SWE-reviewer (v1.20.0).
++
++Per docs/design-consults/v1.20.0-host-peer-agent.md (converged design): a
++`kind: host_peer` contributor runs the host's OWN AI family (e.g. claude when
++claude hosts) as a *fresh-context, adversarial* code reviewer. It is:
++
++  * **supplementary** — it augments cross-family review, never replaces it; and
++  * **EXCLUDED from the cross-family closure invariant** — its sealed artifact
++    carries `gate_eligible == False`, so `_closure_invariant.check_closure_invariant`
++    can never treat it as the different-family signer (even when its family
++    differs from the mutator's — the host is not independent of its own
++    orchestration).
++
++Like ClaudeAdapter it does NOT shell out: it accepts a DEDICATED host review
++callback (separate from the orchestrator's `claude_artifact_callback`) so the
++reviewer seam is explicitly a fresh-context blind reviewer, never the
++orchestrator's own voice/context. `dispatch(packet)` invokes the callback with
++ONLY the phase DispatchPacket (structural blindness — no peer artifacts), then
++stamps the canonical host_peer provenance and seals a normal SealedArtifact via
++the shared T6 (review.write_and_seal) path.
++
++Fresh-context isolation is a host-runtime CONTRACT (consensus-mcp cannot prove
++memory isolation) — recorded via the independence_attestation, documented as a
++contract, not a mechanical guarantee.
++"""
++from __future__ import annotations
++
++import shutil
++from pathlib import Path
++from typing import Callable
++
++from consensus_mcp.contributors.base import (
++    ContributorAdapter,
++    DispatchError,
++    DispatchPacket,
++    SealedArtifact,
++)
++
++# Canonical, non-negotiable provenance for a host_peer artifact. The adapter
++# stamps these regardless of any profile-supplied values so a host_peer can
++# NEVER be laundered as an independent cross-family signer.
++_ROLE_SWE_REVIEWER = "swe_reviewer"
++_WEIGHT_SUPPLEMENTARY = "supplementary"
++
++
++class HostPeerAdapter(ContributorAdapter):
++    """Same-family blind SWE-reviewer. No subprocess; uses a dedicated host
++    review callback to materialize the review artifact, then seals it with the
++    canonical supplementary / gate_eligible=False provenance.
++    """
++
++    name = "host_peer"
++
++    def __init__(
++        self,
++        adapter_config: dict | None = None,
++        *,
++        host_peer_review_callback: Callable[[DispatchPacket], dict] | None = None,
++    ):
++        super().__init__(adapter_config)
++        self.host_peer_review_callback = host_peer_review_callback
++        # `family` + `role` come from the profile/adapter config; `family`
++        # MUST be the host family (the engine factory passes the profile's
++        # `family`). `role` defaults to swe_reviewer.
++        self.family = self.adapter_config.get("family")
++        self.role = self.adapter_config.get("role") or _ROLE_SWE_REVIEWER
++
++    def dispatch(self, packet: DispatchPacket) -> SealedArtifact:
++        if self.host_peer_review_callback is None:
++            raise DispatchError(
++                "HostPeerAdapter has no host_peer_review_callback set; cannot "
++                "dispatch. The engine factory only builds host_peer when a "
++                "dedicated callback is wired; tests pass a fake."
++            )
++        if not self.family:
++            raise DispatchError(
++                "HostPeerAdapter requires a 'family' in adapter_config (the host "
++                "model family); none was provided."
++            )
++
++        # --- Structural blindness: invoke the callback with ONLY the packet ---
++        # No peer artifacts, no revealed proposals, no orchestrator context.
++        try:
++            artifact_dict = self.host_peer_review_callback(packet)
++        except Exception as exc:
++            raise DispatchError(
++                f"host_peer review callback raised ({type(exc).__name__}): {exc}"
++            ) from exc
++
++        if not isinstance(artifact_dict, dict):
++            raise DispatchError(
++                f"host_peer review callback must return dict; got "
++                f"{type(artifact_dict).__name__}"
++            )
++
++        # Required fields per sealed-artifact contract (same as ClaudeAdapter).
++        for required in ("findings", "goal_satisfied", "blocking_objections"):
++            if required not in artifact_dict:
++                raise DispatchError(
++                    f"host_peer artifact missing required field {required!r}"
++                )
++
++        # --- Identifiers ---
++        reviewer_id = packet.reviewer_id or artifact_dict.get(
++            "reviewer_id",
++            f"{packet.contributor}-{packet.iteration_dir.name}-{packet.phase}-1",
++        )
++        pass_id = packet.pass_id or artifact_dict.get(
++            "pass_id", f"{reviewer_id}-pass1"
++        )
++        iteration_id = artifact_dict.get("iteration_id", packet.iteration_dir.name)
++
++        # --- Canonical host_peer provenance (authoritative; overrides callback) ---
++        independence_attestation = {
++            "method": "host_peer_callback",
++            "fresh_context": True,
++            "no_peer_review_visible_at_dispatch": True,
++        }
++        dispatch_provenance = {
++            "adapter": "host_peer",
++            "family": self.family,
++            "role": self.role,
++            "weight": _WEIGHT_SUPPLEMENTARY,
++            "gate_eligible": False,
++            "independence_attestation": independence_attestation,
++        }
++
++        # Spread the callback dict first, then assign canonical fields LAST so
++        # they authoritatively override anything the callback emitted. The
++        # `actor` carries model_family + role so the closure invariant + results
++        # log can identify the same-family supplementary reviewer; the top-level
++        # `gate_eligible`/`weight` are what the closure invariant keys on when
++        # this artifact is the closing verdict.
++        full_artifact = {
++            **artifact_dict,
++            "iteration_id": iteration_id,
++            "reviewer_id": reviewer_id,
++            "pass_id": pass_id,
++            "actor": {
++                "id": reviewer_id,
++                "model_family": self.family,
++                "role": self.role,
++                "pass_id": pass_id,
++            },
++            "gate_eligible": False,
++            "weight": _WEIGHT_SUPPLEMENTARY,
++            "role": self.role,
++            "independence_attestation": independence_attestation,
++            "dispatch_provenance": dispatch_provenance,
++        }
++
++        # --- Seal via T6 (review.write_and_seal) — shared seal path ---
++        from consensus_mcp.tools.review_write_and_seal import handle as t6_handle
++        t6_result = t6_handle(
++            iteration_id=iteration_id,
++            reviewer_id=reviewer_id,
++            pass_id=pass_id,
++            packet=full_artifact,
++        )
++        if "error" in t6_result:
++            raise DispatchError(
++                f"host_peer T6 seal failed: {t6_result.get('error')!r}"
++            )
++
++        archive_path = Path(t6_result["sealed_path"]).resolve()
++        # Confinement check mirroring ClaudeAdapter: the returned sealed_path
++        # MUST be a regular file AND its filename MUST encode the iteration_id +
++        # reviewer_id we asked T6 to seal, so a misconfigured/tampered T6 cannot
++        # leak an arbitrary file into the iteration via the trusted-path return.
++        if not archive_path.is_file():
++            raise DispatchError(
++                f"host_peer T6 returned a non-file sealed_path: {archive_path}"
++            )
++        fname = archive_path.name
++        for token in (iteration_id, reviewer_id):
++            if token and token not in fname:
++                raise DispatchError(
++                    f"host_peer T6 sealed_path filename {fname!r} does not contain "
++                    f"expected token {token!r}; refusing to copy unverified file "
++                    f"into iteration_dir (potential confinement violation)"
++                )
++
++        # Mirror the sealed file into the iteration dir for symmetric on-disk
++        # layout (named distinctly from claude-<phase>.yaml so the orchestrator's
++        # own review and the host_peer review never collide).
++        local_path = packet.iteration_dir / f"host-peer-{packet.phase}.yaml"
++        shutil.copyfile(str(archive_path), str(local_path))
++
++        return SealedArtifact(
++            contributor=self.name,
++            phase=packet.phase,
++            pass_id=pass_id,
++            sealed_path=local_path,
++            archive_sealed_path=archive_path,
++            packet_sha256=t6_result.get("packet_sha256", ""),
++            parsed=full_artifact,
++        )
+diff --git a/consensus_mcp/dispatch_templates/host_peer_review_template.md b/consensus_mcp/dispatch_templates/host_peer_review_template.md
+new file mode 100644
+index 0000000..f0e35a2
+--- /dev/null
++++ b/consensus_mcp/dispatch_templates/host_peer_review_template.md
+@@ -0,0 +1,94 @@
++You are a FRESH-CONTEXT, ADVERSARIAL software-engineering reviewer. You share
++the host's AI family (e.g. you are Claude when Claude hosts), but you are running
++as an INDEPENDENT review pass with NO memory of the orchestrator's reasoning,
++synthesis, or prior decisions. You have NOT seen any other reviewer's findings.
++
++Your job is to find what the anchored author missed: correctness bugs,
++spec-conformance gaps, and edge cases. You are SUPPLEMENTARY — your review
++augments the cross-family reviewers, it does NOT close the loop and is NOT
++counted as cross-family signoff. Review honestly and adversarially; do not
++rubber-stamp.
++
++# Goal
++
++{goal_summary}
++
++# Touched-file contents (authoritative source)
++
++The current contents of the files under review are embedded below. Read these
++AS IF they are the actual repository state. Do NOT attempt to read files from
++disk. Use ONLY the embedded contents below as your authoritative source.
++
++{touched_files_contents_block}
++
++# Desired end state
++
++{desired_end_state}
++
++# Allowed files (in-scope; everything else is OUT of scope)
++
++{allowed_files}
++
++# Acceptance gates
++
++{acceptance_gates}
++
++# Review target
++
++iteration_dir: {iteration_dir}
++review_target_path: {review_target_path}
++review_target_hash (sha256): {review_target_hash}
++
++You MUST review ONLY the content at review_target_path / the embedded touched
++files. Do not infer the review surface from a dirty repository.
++
++# What to look for (adversarial SWE review)
++
++1. **Correctness** — logic bugs, off-by-one, wrong conditionals, mishandled
++   None/empty/error paths, race conditions, resource leaks, incorrect data flow.
++2. **Spec-conformance** — does the change actually meet `desired_end_state`?
++   Silent scope drift? Missing requirements? Behavior that contradicts the goal?
++3. **Edge cases** — boundary inputs, empty collections, unicode/encoding,
++   concurrency, platform differences, failure-mode/fail-closed behavior.
++4. **Test adequacy** — do the tests actually exercise the change? Coverage shed
++   by a rewrite? Assertions that can't fail?
++
++Cite file:line for every finding. Do NOT manufacture findings to look diligent —
++an empty findings list is a valid review.
++
++# Output format — STRICT (JSON only)
++
++Your final message MUST be a single JSON object matching the shared review
++schema shape below. No prose outside the JSON.
++
++```json
++{
++  "findings": [
++    {
++      "id": "claude-swe-rev-NNN",          // REQUIRED, e.g. claude-swe-rev-001
++      "severity": "low|medium|high|blocking|critical",
++      "summary": "<one-line description>",
++      "citation": "<file:line>",
++      "risk": "<impact statement>",
++      "recommendation": "<action>"
++    }
++  ],
++  "goal_satisfied": true,                    // REQUIRED, boolean
++  "goal_satisfied_rationale": "<why>",       // REQUIRED, non-empty string
++  "blocking_objections": []                  // REQUIRED, list of finding IDs
++                                             // (the SET of ids with severity
++                                             //  blocking|critical)
++}
++```
++
++Rules:
++- `id` is a canonical identifier (`claude-swe-rev-<digits>`), NOT narrative text.
++- `blocking_objections` == the set of finding ids whose severity is
++  `blocking` or `critical`.
++- `goal_satisfied: true` REQUIRES `blocking_objections: []`.
++- If you have no findings: `findings: []`, `blocking_objections: []`,
++  `goal_satisfied: true`, with a one-sentence rationale.
++
++You are a reviewer only. Do NOT author patches, do NOT mark anything verified,
++and do NOT claim cross-family signoff — your verdict is supplementary by
++construction.
+diff --git a/consensus_mcp/dispatch_templates/orchestrator_role.md b/consensus_mcp/dispatch_templates/orchestrator_role.md
+new file mode 100644
+index 0000000..b20557a
+--- /dev/null
++++ b/consensus_mcp/dispatch_templates/orchestrator_role.md
+@@ -0,0 +1,46 @@
++You are the ORCHESTRATOR (the in-process host running the consensus loop). This
++role is NEUTRAL and PROCEDURAL. It is deliberately SEPARATE from the host_peer
++SWE-reviewer role: the integrator must never blind-review its own synthesis.
++
++# Your responsibilities
++
++1. **Scope** — author and hold the goal_packet scope (allowed_files /
++   forbidden_files / acceptance_gates). Keep every contributor inside scope;
++   flag scope drift as a governance matter, not as a substantive finding.
++
++2. **Preserve blind-first-reveal** — dispatch the blind PROPOSE / REVIEW phase
++   FIRST: each contributor sees only the problem statement / change under
++   review, NEVER a peer's artifact. Reveal sibling proposals ONLY in the
++   explicit CONVERGE phase. Do not leak one contributor's output into another's
++   blind phase.
++
++3. **Synthesize AFTER reveal** — perform weighted synthesis (weigh all good
++   ideas) only once every blind artifact is sealed and revealed. Do not pre-
++   commit to one contributor's framing before the reveal.
++
++4. **Enforce gates** — apply the cross-family closure invariant: the closer's
++   model_family MUST differ from the last mutator's, the review_target_hash MUST
++   bind to the post-mutation state, and the verdict MUST be fresh. A
++   supplementary same-family reviewer (host_peer, `gate_eligible=false`) can
++   NEVER satisfy cross-family signoff — a genuinely external, gate-eligible
++   family is always required.
++
++5. **Anti-anchoring** — do not let the first or loudest proposal anchor the
++   outcome. Treat fast unanimity as a verify-harder flag (convergence measures
++   agreement, not truth), not as confirmation.
++
++6. **Label same-family artifacts** — when a host_peer or other same-family
++   reviewer contributes, surface its findings as SUPPLEMENTARY / same-family in
++   the results record. Same-family agreement must never be laundered as
++   independent cross-family confirmation.
++
++# What this role is NOT
++
++- You are NOT the adversarial SWE-reviewer. That is a distinct, fresh-context
++  role with its own prompt (host_peer_review_template.md) and its own context.
++- You do NOT blind-review your own synthesis.
++- You do NOT count your own voice as cross-family independence.
++
++Operate procedurally. Your output is orchestration state and synthesis, sealed
++through the normal artifact path — not a closing verdict that substitutes for a
++cross-family signer.
+diff --git a/consensus_mcp/schemas/results-v1.schema.json b/consensus_mcp/schemas/results-v1.schema.json
+index 0a9f7bd..5672541 100644
+--- a/consensus_mcp/schemas/results-v1.schema.json
++++ b/consensus_mcp/schemas/results-v1.schema.json
+@@ -19,7 +19,8 @@
+         "required": ["name"],
+         "properties": {
+           "name": {"type": "string"},
+-          "family": {"type": ["string", "null"]}
++          "family": {"type": ["string", "null"]},
++          "supplementary": {"type": ["boolean", "null"], "description": "v1.20.0: true when this reviewer is a same-family supplementary host_peer (gate-ineligible); the scorecard separates its findings from independent cross-family review."}
+         }
+       }
+     },
+diff --git a/consensus_mcp/tests/test_closure_invariant.py b/consensus_mcp/tests/test_closure_invariant.py
+index 59da53d..5b00ee5 100644
+--- a/consensus_mcp/tests/test_closure_invariant.py
++++ b/consensus_mcp/tests/test_closure_invariant.py
+@@ -559,6 +559,99 @@ def test_no_mutation_yet_close_not_gated():
+     assert res["ok"] is True
+ 
+ 
++# ---------------------------------------------------------------------------
++# v1.20.0 host_peer LOAD-BEARING REGRESSION:
++# the cross-family closure invariant must NOT be weakened. A same-family blind
++# SWE-reviewer (host_peer) carries gate_eligible=false in its closing verdict
++# and can NEVER be the different-family signer that closes a mutation —
++# regardless of whether its family matches the mutator's. A genuinely
++# different, gate-eligible family is still required.
++# ---------------------------------------------------------------------------
++
++
++def _make_host_peer_verdict(*, actor_id, model_family, target_hash, ts_offset=0):
++    """A host_peer closing verdict: cross-family-DIFFERENT actor but tagged
++    gate_eligible=false + weight=supplementary (a same-family blind reviewer)."""
++    v = _make_verdict(
++        actor_id=actor_id, model_family=model_family,
++        target_hash=target_hash, ts_offset=ts_offset,
++    )
++    v["gate_eligible"] = False
++    v["weight"] = "supplementary"
++    v["independence_attestation"] = {
++        "method": "host_peer_callback",
++        "fresh_context": True,
++        "no_peer_review_visible_at_dispatch": True,
++    }
++    return v
++
++
++def test_claude_mutator_claude_host_peer_cannot_close():
++    """host_peer is SAME family as the mutator (claude+claude) — must NOT close.
++
++    This already fails on the existing cross_family check (same family); the
++    gate_eligible=false tag is belt-and-suspenders. Pins that [host + host_peer]
++    cannot close a host-authored change.
++    """
++    lm = _make_lm(actor_id="claude-iter1200-1", model_family="claude",
++                  post_sha="POST", ts_offset=-100)
++    v = _make_host_peer_verdict(actor_id="claude-swe-reviewer-iter1200",
++                                model_family="claude",
++                                target_hash="POST", ts_offset=0)
++    res = _closure_invariant.check_closure_invariant(lm, v)
++    assert res["ok"] is False
++    assert res["checks"]["cross_family"] is False
++
++
++def test_codex_mutator_claude_host_peer_cannot_close_despite_different_family():
++    """THE load-bearing case: a claude host_peer reviewing a CODEX-authored
++    change is cross-family-DIFFERENT, hash-matched, and fresh — yet because it
++    is gate_eligible=false it STILL must NOT satisfy cross-family signoff.
++
++    Without the gate_eligible exclusion this would WRONGLY pass (different
++    families). It must fail: the host is not independent of its own
++    orchestration, so a genuinely external gate-eligible family is required.
++    """
++    lm = _make_lm(actor_id="codex-iter1200-1", model_family="codex",
++                  post_sha="POST", ts_offset=-100)
++    v = _make_host_peer_verdict(actor_id="claude-swe-reviewer-iter1200",
++                                model_family="claude",
++                                target_hash="POST", ts_offset=0)
++    res = _closure_invariant.check_closure_invariant(lm, v)
++    assert res["ok"] is False, (
++        "a gate_eligible=false host_peer must NOT satisfy cross-family signoff "
++        "even when its family differs from the mutator"
++    )
++    assert res["checks"]["cross_family"] is False
++
++
++def test_codex_mutator_genuine_claude_closer_still_passes():
++    """Invariant NOT weakened: a REAL (gate-eligible) claude closer over a codex
++    mutation still passes. The gate_eligible exclusion only blocks the
++    supplementary host_peer, never the genuine cross-family signer."""
++    lm = _make_lm(actor_id="codex-iter1200-1", model_family="codex",
++                  post_sha="POST", ts_offset=-100)
++    v = _make_verdict(actor_id="claude-iter1200-2", model_family="claude",
++                      target_hash="POST", ts_offset=0)
++    # No gate_eligible key (absent) means gate-eligible by default.
++    res = _closure_invariant.check_closure_invariant(lm, v)
++    assert res["ok"] is True
++    assert res["checks"]["cross_family"] is True
++
++
++def test_gate_eligible_true_closer_unaffected():
++    """An explicit gate_eligible=true closer is treated exactly like a normal
++    closer (the exclusion only triggers on the literal false)."""
++    lm = _make_lm(actor_id="codex-iter1200-1", model_family="codex",
++                  post_sha="POST", ts_offset=-100)
++    v = _make_verdict(actor_id="claude-iter1200-2", model_family="claude",
++                      target_hash="POST", ts_offset=0)
++    v["gate_eligible"] = True
++    res = _closure_invariant.check_closure_invariant(lm, v)
++    assert res["ok"] is True
++    assert res["checks"]["cross_family"] is True
++
++
+ def test_closure_certificate_authored_on_pass(tmp_path, monkeypatch):
+     """#9 When invariant passes and iteration_closed is recorded, closure-certificate.yaml is authored.
+ 
+diff --git a/consensus_mcp/tests/test_consensus_run_iteration.py b/consensus_mcp/tests/test_consensus_run_iteration.py
+index 1317927..808c739 100644
+--- a/consensus_mcp/tests/test_consensus_run_iteration.py
++++ b/consensus_mcp/tests/test_consensus_run_iteration.py
+@@ -53,7 +53,10 @@ def test_run_iteration_workflow_4_with_fakes(tmp_path, monkeypatch):
+         FakeAlwaysApprove, FakeAlwaysBlock, FakeRaisesDispatchError,
+     )
+ 
+-    def _fake_build_adapters(config, *, claude_artifact_callback=None):
++    def _fake_build_adapters(config, *, claude_artifact_callback=None, **_kwargs):
++        # **_kwargs absorbs additive callbacks (e.g. v1.20.0
++        # host_peer_review_callback) so the fake stays forward-compatible with
++        # build_engine threading new optional callbacks through build_adapters.
+         return {
+             "claude": FakeAlwaysApprove(),
+             "codex": FakeAlwaysApprove(),
+diff --git a/consensus_mcp/tests/test_contributor_profiles.py b/consensus_mcp/tests/test_contributor_profiles.py
+index 10059bf..979bdb6 100644
+--- a/consensus_mcp/tests/test_contributor_profiles.py
++++ b/consensus_mcp/tests/test_contributor_profiles.py
+@@ -21,12 +21,13 @@ import pytest
+ from consensus_mcp import _contributor_profiles as cp
+ 
+ 
+-BUILTIN_NAMES = {"claude", "codex", "gemini", "kimi"}
++# v1.20.0: claude-swe-reviewer (kind=host_peer) joins the built-in set.
++BUILTIN_NAMES = {"claude", "codex", "gemini", "kimi", "claude-swe-reviewer"}
+ 
+ 
+ # ---------- load_builtin_profiles ----------
+ 
+-def test_load_builtin_returns_the_four():
++def test_load_builtin_returns_the_builtins():
+     profiles = cp.load_builtin_profiles()
+     assert isinstance(profiles, dict)
+     assert set(profiles) == BUILTIN_NAMES
+@@ -193,6 +194,62 @@ def test_host_kind_needs_no_detect_or_invoke():
+     cp.validate_profile("claude", d)  # must not raise
+ 
+ 
++# ---------- v1.20.0 host_peer kind ----------
++
++def _minimal_host_peer() -> dict:
++    return {
++        "name": "claude-swe-reviewer",
++        "kind": "host_peer",
++        "family": "claude",
++        "role": "swe_reviewer",
++        "weight": "supplementary",
++        "gate_eligible": False,
++    }
++
++
++def test_builtin_claude_swe_reviewer_is_host_peer():
++    profiles = cp.load_builtin_profiles()
++    p = profiles["claude-swe-reviewer"]
++    assert p["kind"] == "host_peer"
++    assert p["family"] == "claude"
++    assert p["role"] == "swe_reviewer"
++    assert p["gate_eligible"] is False
++    assert p["weight"] == "supplementary"
++
++
++def test_host_peer_needs_no_detect_or_invoke():
++    """host_peer (like host) needs no detect/invoke/output."""
++    cp.validate_profile("claude-swe-reviewer", _minimal_host_peer())  # must not raise
++
++
++def test_host_peer_requires_family():
++    d = _minimal_host_peer()
++    del d["family"]
++    with pytest.raises(ValueError, match="family"):
++        cp.validate_profile("claude-swe-reviewer", d)
++
++
++def test_host_peer_requires_role():
++    d = _minimal_host_peer()
++    del d["role"]
++    with pytest.raises(ValueError, match="role"):
++        cp.validate_profile("claude-swe-reviewer", d)
++
++
++def test_host_peer_gate_eligible_must_be_bool_when_present():
++    d = _minimal_host_peer()
++    d["gate_eligible"] = "false"  # string, not bool
++    with pytest.raises(ValueError, match="gate_eligible"):
++        cp.validate_profile("claude-swe-reviewer", d)
++
++
++def test_host_peer_weight_and_gate_eligible_optional():
++    d = _minimal_host_peer()
++    del d["weight"]
++    del d["gate_eligible"]
++    cp.validate_profile("claude-swe-reviewer", d)  # must not raise
++
++
+ # ---------- merge_profiles ----------
+ 
+ def test_merge_override_by_name():
+diff --git a/consensus_mcp/tests/test_host_peer_adapter.py b/consensus_mcp/tests/test_host_peer_adapter.py
+new file mode 100644
+index 0000000..509e6a4
+--- /dev/null
++++ b/consensus_mcp/tests/test_host_peer_adapter.py
+@@ -0,0 +1,213 @@
++"""v1.20.0 HostPeerAdapter tests (TDD: RED -> GREEN).
++
++The host_peer contributor is a SAME-FAMILY blind SWE-reviewer:
++
++  * It runs the host's own AI family (e.g. claude when claude hosts) as a
++    fresh-context adversarial reviewer via a DEDICATED host review callback
++    (NOT the orchestrator's claude_artifact_callback).
++  * Its sealed artifact provenance MUST carry: family == host family,
++    role == swe_reviewer, weight == supplementary, gate_eligible == False, and
++    an independence_attestation{method, fresh_context, no_peer_review_visible_at_dispatch}.
++  * It is EXCLUDED from the cross-family closure invariant — see
++    test_closure_invariant.py for the load-bearing regression.
++
++Conventions mirror test_engine_factory.py / test_results_log.py: redirect the
++state root via CONSENSUS_MCP_STATE_ROOT (so T6 seals land in a tmp dir), and
++build a fake host review callback that returns a deterministic review dict.
++"""
++from __future__ import annotations
++
++from copy import deepcopy
++from pathlib import Path
++from unittest.mock import patch
++
++import pytest
++import yaml
++
++from consensus_mcp import _engine_factory as factory
++from consensus_mcp import config as cfg
++from consensus_mcp.contributors.base import DispatchPacket, DispatchError, PHASE_REVIEW
++from consensus_mcp.contributors.host_peer_adapter import HostPeerAdapter
++
++
++# ---------------------------------------------------------------------------
++# Fixtures
++# ---------------------------------------------------------------------------
++
++
++def _fake_t6_factory(tmp_path: Path):
++    """Mock T6 (review.write_and_seal) the way the ClaudeAdapter tests do: write
++    a 4-token (date, iteration_id, reviewer_id, pass_id) archive file so the
++    adapter's confinement check passes. Keeps the adapter unit test focused on
++    the adapter, not the real seal pipeline."""
++    def fake_t6(iteration_id, reviewer_id, pass_id, packet):
++        archive_path = tmp_path / f"2026-05-22-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml"
++        archive_path.write_text(yaml.safe_dump(packet), encoding="utf-8")
++        return {"sealed_path": str(archive_path), "packet_sha256": "fakehash"}
++    return fake_t6
++
++
++def _make_packet(iter_dir: Path) -> DispatchPacket:
++    iter_dir.mkdir(parents=True, exist_ok=True)
++    goal_packet = iter_dir / "goal_packet.yaml"
++    goal_packet.write_text(yaml.safe_dump({"goal": {"summary": "x"}}), encoding="utf-8")
++    review_target = iter_dir / "review-target.md"
++    review_target.write_text("the change under review\n", encoding="utf-8")
++    return DispatchPacket(
++        phase=PHASE_REVIEW,
++        contributor="claude-swe-reviewer",
++        iteration_dir=iter_dir,
++        goal_packet_path=goal_packet,
++        review_target_path=review_target,
++        reviewer_id=None,
++        pass_id=None,
++    )
++
++
++def _clean_review_callback(packet: DispatchPacket) -> dict:
++    """A fake host review callback returning a clean (no-finding) review."""
++    return {
++        "findings": [],
++        "goal_satisfied": True,
++        "goal_satisfied_rationale": "no defects from fresh-context review",
++        "blocking_objections": [],
++    }
++
++
++# ---------------------------------------------------------------------------
++# Provenance + sealing
++# ---------------------------------------------------------------------------
++
++
++def test_host_peer_seals_artifact_with_supplementary_provenance(tmp_path):
++    """HostPeerAdapter with a fake callback produces a sealed artifact whose
++    provenance is family==host, role=swe_reviewer, gate_eligible=False,
++    weight=supplementary."""
++    iter_dir = tmp_path / "active" / "iteration-host-peer-1"
++    packet = _make_packet(iter_dir)
++
++    adapter = HostPeerAdapter(
++        adapter_config={"family": "claude", "role": "swe_reviewer"},
++        host_peer_review_callback=_clean_review_callback,
++    )
++    with patch("consensus_mcp.tools.review_write_and_seal.handle",
++               side_effect=_fake_t6_factory(tmp_path)):
++        sealed = adapter.dispatch(packet)
++
++    parsed = sealed.parsed
++    prov = parsed.get("dispatch_provenance") or {}
++    assert prov.get("family") == "claude"
++    assert prov.get("role") == "swe_reviewer"
++    assert prov.get("weight") == "supplementary"
++    assert prov.get("gate_eligible") is False
++    # Top-level provenance the closure invariant + results-log key on.
++    assert parsed.get("gate_eligible") is False
++    assert parsed.get("weight") == "supplementary"
++    actor = parsed.get("actor") or {}
++    assert actor.get("model_family") == "claude"
++    assert actor.get("role") == "swe_reviewer"
++
++    att = prov.get("independence_attestation") or parsed.get("independence_attestation") or {}
++    assert att.get("method") == "host_peer_callback"
++    assert att.get("fresh_context") is True
++    assert att.get("no_peer_review_visible_at_dispatch") is True
++
++    assert sealed.sealed_path.exists()
++
++
++def test_host_peer_callback_receives_only_packet_no_peer_artifacts(tmp_path):
++    """Structural blindness: the callback is invoked with ONLY the DispatchPacket
++    (no revealed peer artifacts)."""
++    iter_dir = tmp_path / "active" / "iteration-host-peer-blind"
++    packet = _make_packet(iter_dir)
++
++    seen = {}
++
++    def _spy_callback(p):
++        seen["arg"] = p
++        return _clean_review_callback(p)
++
++    adapter = HostPeerAdapter(
++        adapter_config={"family": "claude", "role": "swe_reviewer"},
++        host_peer_review_callback=_spy_callback,
++    )
++    with patch("consensus_mcp.tools.review_write_and_seal.handle",
++               side_effect=_fake_t6_factory(tmp_path)):
++        adapter.dispatch(packet)
++
++    # The single argument is the packet itself — nothing else.
++    assert seen["arg"] is packet
++    assert isinstance(seen["arg"], DispatchPacket)
++
++
++def test_host_peer_no_callback_raises(tmp_path):
++    """No callback wired -> dispatch raises DispatchError (the engine factory
++    never builds it in this case, but the adapter itself must fail closed)."""
++    iter_dir = tmp_path / "active" / "iteration-host-peer-nocb"
++    packet = _make_packet(iter_dir)
++    adapter = HostPeerAdapter(adapter_config={"family": "claude", "role": "swe_reviewer"})
++    with pytest.raises(DispatchError):
++        adapter.dispatch(packet)
++
++
++# ---------------------------------------------------------------------------
++# Engine-factory routing + graceful absence
++# ---------------------------------------------------------------------------
++
++
++def _config_with_host_peer():
++    c = deepcopy(cfg.default_config())
++    c["contributors"]["enabled"] = ["claude", "codex", "gemini", "claude-swe-reviewer"]
++    c["contributors"]["profiles"] = {
++        "claude-swe-reviewer": {
++            "name": "claude-swe-reviewer",
++            "kind": "host_peer",
++            "family": "claude",
++            "role": "swe_reviewer",
++            "weight": "supplementary",
++            "gate_eligible": False,
++        }
++    }
++    return c
++
++
++def test_engine_factory_routes_host_peer_when_callback_wired(tmp_path):
++    """When host_peer_review_callback is provided, kind:host_peer -> HostPeerAdapter."""
++    config = _config_with_host_peer()
++    adapters = factory.build_adapters(
++        config,
++        claude_artifact_callback=lambda p: {
++            "findings": [], "goal_satisfied": True, "blocking_objections": []},
++        host_peer_review_callback=_clean_review_callback,
++    )
++    assert "claude-swe-reviewer" in adapters
++    assert isinstance(adapters["claude-swe-reviewer"], HostPeerAdapter)
++
++
++def test_engine_factory_skips_host_peer_when_no_callback(tmp_path):
++    """No host_peer_review_callback -> host_peer is gracefully NOT built; the
++    other (existing) contributors are unaffected."""
++    config = _config_with_host_peer()
++    adapters = factory.build_adapters(
++        config,
++        claude_artifact_callback=lambda p: {
++            "findings": [], "goal_satisfied": True, "blocking_objections": []},
++        # host_peer_review_callback intentionally omitted
++    )
++    assert "claude-swe-reviewer" not in adapters
++    # Existing flows unaffected.
++    assert set(adapters.keys()) == {"claude", "codex", "gemini"}
++
++
++def test_existing_config_build_unchanged(tmp_path):
++    """A config WITHOUT any host_peer builds exactly as before (no new key)."""
++    c = deepcopy(cfg.default_config())
++    c["contributors"]["enabled"] = ["claude", "codex", "gemini"]
++    cfg.validate(c)
++    adapters = factory.build_adapters(
++        c,
++        claude_artifact_callback=lambda p: {
++            "findings": [], "goal_satisfied": True, "blocking_objections": []},
++        host_peer_review_callback=_clean_review_callback,  # present but unused
++    )
++    assert set(adapters.keys()) == {"claude", "codex", "gemini"}
+diff --git a/consensus_mcp/tests/test_init_wizard_contributors.py b/consensus_mcp/tests/test_init_wizard_contributors.py
+index 237f0b3..98c32c4 100644
+--- a/consensus_mcp/tests/test_init_wizard_contributors.py
++++ b/consensus_mcp/tests/test_init_wizard_contributors.py
+@@ -141,12 +141,15 @@ def test_interactive_overrides_fresh_wires_numbered_multiselect(tmp_path, monkey
+     # Deterministic install detection regardless of host PATH.
+     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
+ 
+-    # Display order is [claude, codex, gemini, kimi]; "2,3" picks codex+gemini
+-    # (claude-optional). Remaining answers ("") accept each later dimension's
+-    # default. interactive_overrides prompts 8 more dimensions after contributors.
++    # Display order is host-first then alphabetical:
++    # [claude, claude-swe-reviewer, codex, gemini, kimi] (v1.20.0 added the
++    # host_peer built-in claude-swe-reviewer at index 2). "3,4" picks
++    # codex+gemini (claude-optional). Remaining answers ("") accept each later
++    # dimension's default. interactive_overrides prompts 8 more dimensions after
++    # contributors.
+     monkeypatch.setattr(
+         builtins, "input",
+-        _stub_input(["2,3", "", "", "", "", "", "", "", ""]),
++        _stub_input(["3,4", "", "", "", "", "", "", "", ""]),
+     )
+ 
+     wiz.interactive_overrides(args, tmp_path, base, fresh=True)
+@@ -362,3 +365,49 @@ def test_init_provisions_instruction_files_by_default(tmp_path, monkeypatch):
+     assert (tmp_path / "CLAUDE.md").exists()
+     assert (tmp_path / "AGENTS.md").exists()   # codex
+     assert (tmp_path / "GEMINI.md").exists()
++
++
++# ---------- v1.20.0: host_peer selection annotation ----------
++
++def test_contributor_option_note_explains_host_peer_is_not_true_consensus():
++    """A host_peer option must carry a plain-language note: a same-model second
++    opinion (extra tokens) that is NOT independent cross-AI consensus."""
++    note = wiz._contributor_option_note(
++        {"kind": cfg_profiles_kind_host_peer()}
++    )
++    low = note.lower()
++    assert note, "host_peer must have an explanatory selection note"
++    # mentions it's the same model as the host/orchestrator
++    assert "same" in low and ("model" in low or "ai" in low or "host" in low)
++    # mentions the token cost trade-off
++    assert "token" in low
++    # is explicit that it is NOT true multi-AI consensus
++    assert "not" in low and "consensus" in low
++
++
++def test_contributor_option_note_empty_for_cross_family_reviewer():
++    """Genuine cross-family CLI reviewers (and the host) get no caveat note."""
++    assert wiz._contributor_option_note({"kind": "cli_reviewer"}) == ""
++    assert wiz._contributor_option_note({"kind": "host"}) == ""
++
++
++def test_interactive_list_shows_host_peer_note(capsys, monkeypatch):
++    """The note is surfaced in the numbered multi-select so it's visible when
++    choosing options (not buried in docs)."""
++    profiles = {
++        "codex": {"kind": "cli_reviewer", "detect": {"command": "codex"}},
++        "claude-swe-reviewer": {"kind": cfg_profiles_kind_host_peer()},
++    }
++    monkeypatch.setattr(wiz, "_profile_installed", lambda p: True)
++    monkeypatch.setattr(builtins, "input", _stub_input(["1,2"]))
++    wiz._select_contributors_interactive(profiles)
++    out = capsys.readouterr().out
++    # exactly one caveat line, and it's the host_peer's (codex gets none)
++    caveat_lines = [l for l in out.splitlines() if "↳" in l]
++    assert len(caveat_lines) == 1
++    assert "token" in caveat_lines[0].lower() and "consensus" in caveat_lines[0].lower()
++
++
++def cfg_profiles_kind_host_peer():
++    from consensus_mcp import _contributor_profiles as p
++    return p.KIND_HOST_PEER
+diff --git a/consensus_mcp/tests/test_results_log.py b/consensus_mcp/tests/test_results_log.py
+index 9eca2bb..2e7c898 100644
+--- a/consensus_mcp/tests/test_results_log.py
++++ b/consensus_mcp/tests/test_results_log.py
+@@ -144,6 +144,68 @@ def test_build_record_validates_against_schema(tmp_path):
+     assert by_src["codex-rev-001"]["severity"] == "high"
+ 
+ 
++def _write_host_peer_review(
++    iter_dir: Path,
++    reviewer_id: str,
++    pass_id: str,
++    findings: list[dict],
++    model_family: str = "claude",
++) -> None:
++    """Write a v1.20.0 host_peer (same-family supplementary) sealed review file."""
++    review = {
++        "iteration_id": iter_dir.name,
++        "reviewer_id": reviewer_id,
++        "pass_id": pass_id,
++        "sealed_at_utc": _now_iso(-150),
++        "findings": findings,
++        "goal_satisfied": not findings,
++        "actor": {"id": reviewer_id, "model_family": model_family, "role": "swe_reviewer"},
++        "gate_eligible": False,
++        "weight": "supplementary",
++        "role": "swe_reviewer",
++        "independence_attestation": {
++            "method": "host_peer_callback",
++            "fresh_context": True,
++            "no_peer_review_visible_at_dispatch": True,
++        },
++        "dispatch_provenance": {"adapter": "host_peer", "family": model_family,
++                                "gate_eligible": False, "weight": "supplementary"},
++    }
++    (iter_dir / "host-peer-review.yaml").write_text(yaml.safe_dump(review), encoding="utf-8")
++
++
++def test_host_peer_reviewer_tagged_supplementary(tmp_path):
++    """v1.20.0: a host_peer (same-family) reviewer is collected and tagged
++    supplementary in reviewers[]; its findings carry source_reviewer provenance.
++    The record still validates against the schema."""
++    state_root = tmp_path / "consensus-state"
++    iter_dir = _make_iter_dir(state_root, "iteration-host-peer-results")
++
++    # A genuine cross-family reviewer plus the supplementary host_peer.
++    _write_review(
++        iter_dir, "codex-review.yaml", "codex-1", "codex-1-pass1",
++        [_finding("codex-rev-001", "high")], model_family="codex",
++    )
++    _write_host_peer_review(
++        iter_dir, "claude-swe-reviewer-1", "claude-swe-reviewer-1-pass1",
++        [_finding("claude-swe-rev-001", "medium")], model_family="claude",
++    )
++    _write_audit(iter_dir, [])
++
++    record = _results_log.build_results_record(iter_dir)
++    _validate(record)
++
++    revs = {r["name"]: r for r in record["reviewers"]}
++    assert revs["codex-1"].get("supplementary") in (None, False)
++    assert revs["claude-swe-reviewer-1"]["supplementary"] is True
++    assert revs["claude-swe-reviewer-1"]["family"] == "claude"
++
++    by_id = {f["id"]: f for f in record["findings"]}
++    assert by_id["claude-swe-rev-001"]["source_reviewer"] == "claude-swe-reviewer-1"
++    # The cross-family reviewer is NOT tagged supplementary.
++    assert "supplementary" not in revs["codex-1"]
++
++
+ def test_disposition_validated_fixed_when_apply_links_finding(tmp_path):
+     state_root = tmp_path / "consensus-state"
+     iter_dir = _make_iter_dir(state_root, "iteration-results-fixed")

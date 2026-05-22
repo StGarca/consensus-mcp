@@ -1,0 +1,107 @@
+iteration_id: iteration-host-family-agents-design-2026-05-22
+authored_by: claude-agents-1 (orchestrator)
+convergence_model: weighted-synthesis
+status: SCOPED — implementation scope for the next iteration (v1.20.0). Workflow B skipped per operator.
+question: How to add a same-family blind SWE-reviewer + a distinct orchestrator role to consensus-mcp's strict architecture.
+
+agreement: >-
+  UNANIMOUS on option (b): a new profile `kind: host_peer` + a HostPeerAdapter
+  (ContributorAdapter) invoked via a host artifact callback (in-process, no CLI),
+  sealed normally, family-tagged == host, role=swe_reviewer, SUPPLEMENTARY, and
+  EXCLUDED from the cross-family closure invariant. Orchestrator and reviewer are
+  distinct roles with distinct prompts; the integrator never blind-reviews its own
+  synthesis. Fresh context is a host-runtime CONTRACT + attestation (consensus-mcp
+  cannot mechanically prove memory isolation — all four flagged this).
+
+decision:
+  kind: >-
+    Add KIND_HOST_PEER='host_peer' to _contributor_profiles (beside cli_reviewer +
+    reserved host). Requires family + role fields. Constructible ONLY when the
+    engine receives a host-peer review callback; otherwise build fails closed (or,
+    if not enabled, simply not built — graceful).
+  adapter: >-
+    HostPeerAdapter(ContributorAdapter): dispatch(packet) -> calls the host
+    callback with a reviewer-role packet (fresh_context_required=true, NO revealed
+    peer artifacts), seals a normal SealedArtifact via the shared T6 path. NEVER
+    shells out. Injects actor.model_family == host family into the artifact so the
+    closure invariant sees it as same-family.
+  callback: >-
+    Use a DEDICATED host-peer review callback (codex + claude), SEPARATE from the
+    orchestrator's claude_artifact_callback — so the reviewer seam is explicitly
+    "fresh-context blind reviewer", never the orchestrator's own voice/context.
+    (gemini/kimi would reuse claude_artifact_callback; rejected to prevent context
+    bleed + role conflation.) The callback receives ONLY the DispatchPacket for its
+    phase (problem/goal/review-target) — structural blindness, same as codex/gemini.
+  gate_exclusion: >-
+    TWO layers (belt-and-suspenders): (1) EXPLICIT DATA — every host_peer artifact
+    carries gate_eligible=false; the cross-family closure check MUST ignore any
+    artifact with gate_eligible==false when looking for a different-family signer
+    (codex: explicit data, NOT naming). (2) AUTOMATIC — host_peer family==host, so
+    when the host is also the mutator the existing cross_family check already fails
+    closed (kimi). Layer 1 is load-bearing because it also blocks the edge case
+    where the mutator is a DIFFERENT family (e.g. codex mutates, claude host_peer
+    reviews): host_peer is the HOST's own family + the host orchestrates, so it is
+    NOT independent enough to be a load-bearing closer — it can never close.
+    REGRESSION TEST: a panel of [claude(host) + claude host_peer] cannot close a
+    claude-authored change, AND a claude host_peer cannot satisfy cross-family
+    signoff for a codex-authored change — a genuinely external family is required.
+  role_split: >-
+    Orchestrator (kind:host) and SWE-reviewer (kind:host_peer) are distinct roles
+    with distinct prompts. PRIMARY enforcement = separate prompts + separate
+    contexts + the adapter kind (low-risk). The dormant can_propose/can_review/
+    can_converge config flags (kimi) are a NICE-TO-HAVE: wire them only if it does
+    NOT change dispatch semantics for existing adapters (kimi flagged regression
+    risk) — otherwise defer. Orchestrator never blind-reviews its own synthesis.
+  prompts: >-
+    NEW templates: dispatch_templates/host_peer_review_template.md (adversarial:
+    correctness, spec-conformance, edge cases; JSON-only review schema; fresh
+    context) and dispatch_templates/orchestrator_role.md (neutral/procedural:
+    scope, preserve blind-first-reveal, synthesize AFTER reveal, enforce gates,
+    label same-family artifacts supplementary, actively avoid anchoring).
+  provenance: >-
+    dispatch_provenance: adapter=host_peer, contributor=<name>, family=<host>,
+    role=swe_reviewer, weight=supplementary, gate_eligible=false,
+    fresh_context_attestation, prompt/output/goal sha256s. Surfaced same-family so
+    agreement is never laundered as independent cross-family confirmation.
+  weighting: >-
+    Supplementary: included in convergence/synthesis REPORTING as an advisory
+    voice, but does NOT count toward the cross-family closure quorum. Docs/templates
+    must state host_peer is advisory + closure-ineligible (codex risk).
+  config: >-
+    Profile model: contributors.profiles.<name>: {kind: host_peer, family: claude,
+    role: swe_reviewer, sealed_filename, id_prefix, weight: supplementary} +
+    contributors.enabled. Ship a built-in profile (name chosen to avoid colliding
+    with a likely user profile; document the merge-by-name behavior).
+  fresh_context: >-
+    Engine passes only the phase DispatchPacket (no peer artifacts). Actual
+    fresh-context is a HOST-RUNTIME contract — recorded via
+    independence_attestation{method:host_peer_callback, fresh_context:true,
+    no_peer_review_visible_at_dispatch:true}. consensus-mcp cannot prove memory
+    isolation; the host honoring the contract is the external observation. Document
+    loudly.
+
+deliverable_scope:
+  next_iteration_id: iteration-host-peer-impl
+  files_in_scope:
+    - consensus_mcp/_contributor_profiles.py            # KIND_HOST_PEER + validation
+    - consensus_mcp/contributors/host_peer_adapter.py   # NEW HostPeerAdapter
+    - consensus_mcp/_engine_factory.py                  # route kind:host_peer; thread host-peer review callback; graceful if absent
+    - consensus_mcp/_closure_invariant.py               # honor gate_eligible=false (explicit) — never close on host_peer
+    - consensus_mcp/contributor_profiles/<host-peer>.yaml  # built-in profile
+    - consensus_mcp/dispatch_templates/host_peer_review_template.md   # adversarial SWE reviewer prompt
+    - consensus_mcp/dispatch_templates/orchestrator_role.md          # orchestrator persona/anti-anchoring
+    - consensus_mcp/_results_log.py                     # tag host_peer same-family + supplementary
+    - docs/design-consults/v1.20.0-host-peer-agent.md   # tracked spec
+    - tests
+  acceptance_gates:
+    - "host_peer produces a sealed, schema-valid review tagged family==host, role=swe_reviewer, gate_eligible=false; visible in results as same-family + supplementary."
+    - "CROSS-FAMILY CLOSURE INVARIANT NOT WEAKENED: [host + host_peer] cannot close a host-authored change; a claude host_peer cannot satisfy cross-family signoff for a codex-authored change. A genuinely external family is always required. (Hard regression test — load-bearing safety.)"
+    - "host_peer callback receives only the phase DispatchPacket (no peer artifacts); test asserts no orchestrator context/peer output is passed."
+    - "No callback wired -> host_peer absent (graceful); existing flows + full suite unaffected."
+    - "Distinct orchestrator + reviewer prompts exist; the synthesizer is not the blind reviewer."
+  risks:
+    - "Fresh-context is a host contract, not mechanically enforceable — attest + document; do not overclaim independence."
+    - "Touching _closure_invariant is the highest-risk change (core safety) — minimal, additive, with a load-bearing regression test; review the diff line-by-line (no Workflow B this run)."
+    - "Wiring can_* flags could regress existing dispatch — keep role split prompt/kind-based unless can_* is provably inert for existing configs."
+    - "Built-in host_peer profile name could collide with a user profile (merge replaces by name) — pick a clear name + document."
+estimated_complexity: medium

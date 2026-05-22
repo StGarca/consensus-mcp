@@ -1,0 +1,54 @@
+schema_version: 1
+pilot_id: iteration-metrics-verify-readme-2026-05-22
+goal:
+  summary: >-
+    Workflow A consult: (1) independently verify the orchestrator's cross-project
+    consensus-mcp usage metrics + methodology and say where the counts deviate;
+    (2) propose a concise, layman-readable README "Does it actually work?" section
+    grounded only in defensible numbers.
+  desired_end_state: |
+    Read the embedded metrics-brief.md (methodology, the extraction script, the
+    per-project results table, and the orchestrator's reliability calls).
+
+    TASK 1 — verdict on the metrics: is the methodology sound? Where do counts
+    likely over/under-state? Is Project A's 230 findings / 60 blocking-or-critical
+    defensible? Is presenting 305 as a FLOOR (not a clean total) honest? Name any
+    methodology flaw (dedup, severity-only filter, the is_pass filter that
+    undercounts Project C, fixes_applied=0).
+
+    TASK 2 — propose the README section (concise, ~6-12 lines, plain language).
+    Put the proposed markdown in rationale_vs_alternatives, clearly delimited.
+    HARD CONSTRAINTS: ground claims ONLY in defensible numbers (Project A's
+    230/60 across 76 iterations; sealed/auditable; also used on other separate
+    real codebases); do NOT cite the unreliable cross-project total or Project
+    B/C bug counts as precise; do NOT name any project; do NOT use project-
+    specific feature terms (e.g. "emotion engine"); do NOT use the words ebook,
+    audiobook, or narration. Omitting a cross-project number is acceptable if you
+    argue it.
+
+    Convergence: orchestrator synthesizes the verdicts + the best README section.
+  non_goals:
+    - re-run the filesystem scan (you only have the embedded brief)
+    - fabricate a precise cross-project aggregate
+allowed_files:
+  - README.md
+allowed_sections: []
+forbidden_files:
+  - consensus-state/
+max_iterations: 1
+max_patch_size: 2000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: each contributor returns a metrics verdict + a constraint-compliant README proposal
+    check: 'manual — orchestrator synthesis'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - no_convergence
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 28a99f348be37ee8068cee8b58a1c46caf04c2e7d93cf07af29b00c7e50e9811

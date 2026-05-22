@@ -1,0 +1,182 @@
+iteration_id: iteration-host-family-agents-design-2026-05-22
+reviewer_id: kimi-agents-1
+pass_id: kimi-agents-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "Differential: I reason from the verified architecture that\
+  \ (1) there is NO claude CLI for subprocess dispatch (ClaudeAdapter is callback-based,\
+  \ verified in contributors/claude.py:1-14), (2) the profile+adapter factory already\
+  \ supports open contributor extension via kind:cli_reviewer (ProfileAdapter) and\
+  \ kind:host (reserved for orchestrator), and (3) the cross-family closure invariant\
+  \ is enforced by comparing actor.model_family (_closure_invariant.py:266-273), so\
+  \ any artifact tagged with the same family automatically fails the gate \u2014 no\
+  \ special-case wiring needed.\n\nWhy (b) beats (a): Option (a) reuses ClaudeAdapter\
+  \ for a second callback invocation, but ClaudeAdapter is hard-coded to key==\"claude\"\
+  \ in build_adapters (_engine_factory.py:265-267). Reusing it for a second contributor\
+  \ key (e.g., \"claude-swe\") requires factory special-casing that is MORE intrusive\
+  \ than adding a dedicated HostPeerAdapter, and it conflates the orchestrator adapter\
+  \ with the reviewer adapter in a way that makes provenance tagging and role differentiation\
+  \ fragile. Option (a) also has no clean config surface \u2014 the second invocation\
+  \ is invisible to the operator.\n\nWhy (b) beats (c): Option (c) assumes the host\
+  \ can \"spawn a subagent\" with fresh context. Verified: there is no claude CLI\
+  \ binary in this project (no detect.command for claude; claude is in-process). A\
+  \ subprocess spawn is impossible without inventing an external distribution mechanism,\
+  \ which violates the verification-first mandate. Any \"subagent\" would still be\
+  \ a host-runtime construct accessed via callback, making (c) semantically identical\
+  \ to (b) but with misleading naming.\n\nWhy (b) beats (d): A true \"other\" (e.g.,\
+  \ RPC to a hosted Claude service) would require network credentials, API keys, and\
+  \ heavy deps \u2014 violating the 100% Python / no heavy deps constraint and the\
+  \ verification-first mandate (no such channel exists in the project).\n\nThe HostPeerAdapter\
+  \ design is the minimal extension: it mirrors ClaudeAdapter's callback contract,\
+  \ integrates into the existing B-routing factory (_engine_factory.py step (c) for\
+  \ profiles), produces SealedArtifact with symmetric T6 sealing, and tags provenance\
+  \ with the host's model_family so the existing cross-family invariant naturally\
+  \ excludes it. The config surface is a profile with kind:host_peer, which keeps\
+  \ the open-contributor model intact \u2014 an operator can add zero, one, or multiple\
+  \ host-peer specialists with zero code changes beyond the initial adapter class."
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: kimi, version 1.44.0
+  model: gemini-2.5-pro
+  prompt_sha256: 21394b2addce45346ee8028578f9837cbed509960599784114848c0778bc1522
+  output_sha256: 1dab7a36eed4e1c81f35bb93751f3aabea1060c0f316b184a4f2b5521ad28900
+  goal_packet_sha256: ffba55cea02663cb979ca2415b52150b03e31d75f11529c54fa1b8176697aad7
+  scope_signature: 51e632404623999f7bed08d070c706aec563927f696ed9d540e6ff0a1de58315
+  review_target_path: consensus-state/active/iteration-host-family-agents-design-2026-05-22/review-packet.yaml
+  review_target_hash: 9a80c496c8e60501c7790490cc304645df2b89434e55af1f7720390868a4d4fd
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: /mnt/c/Users/steve/Downloads/consensus-mcp/consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: (b) adapter kind:host_peer with callback parameterization, combined
+    with engine phase-gate wiring for role split
+  rationale_vs_alternatives: "Differential: I reason from the verified architecture\
+    \ that (1) there is NO claude CLI for subprocess dispatch (ClaudeAdapter is callback-based,\
+    \ verified in contributors/claude.py:1-14), (2) the profile+adapter factory already\
+    \ supports open contributor extension via kind:cli_reviewer (ProfileAdapter) and\
+    \ kind:host (reserved for orchestrator), and (3) the cross-family closure invariant\
+    \ is enforced by comparing actor.model_family (_closure_invariant.py:266-273),\
+    \ so any artifact tagged with the same family automatically fails the gate \u2014\
+    \ no special-case wiring needed.\n\nWhy (b) beats (a): Option (a) reuses ClaudeAdapter\
+    \ for a second callback invocation, but ClaudeAdapter is hard-coded to key==\"\
+    claude\" in build_adapters (_engine_factory.py:265-267). Reusing it for a second\
+    \ contributor key (e.g., \"claude-swe\") requires factory special-casing that\
+    \ is MORE intrusive than adding a dedicated HostPeerAdapter, and it conflates\
+    \ the orchestrator adapter with the reviewer adapter in a way that makes provenance\
+    \ tagging and role differentiation fragile. Option (a) also has no clean config\
+    \ surface \u2014 the second invocation is invisible to the operator.\n\nWhy (b)\
+    \ beats (c): Option (c) assumes the host can \"spawn a subagent\" with fresh context.\
+    \ Verified: there is no claude CLI binary in this project (no detect.command for\
+    \ claude; claude is in-process). A subprocess spawn is impossible without inventing\
+    \ an external distribution mechanism, which violates the verification-first mandate.\
+    \ Any \"subagent\" would still be a host-runtime construct accessed via callback,\
+    \ making (c) semantically identical to (b) but with misleading naming.\n\nWhy\
+    \ (b) beats (d): A true \"other\" (e.g., RPC to a hosted Claude service) would\
+    \ require network credentials, API keys, and heavy deps \u2014 violating the 100%\
+    \ Python / no heavy deps constraint and the verification-first mandate (no such\
+    \ channel exists in the project).\n\nThe HostPeerAdapter design is the minimal\
+    \ extension: it mirrors ClaudeAdapter's callback contract, integrates into the\
+    \ existing B-routing factory (_engine_factory.py step (c) for profiles), produces\
+    \ SealedArtifact with symmetric T6 sealing, and tags provenance with the host's\
+    \ model_family so the existing cross-family invariant naturally excludes it. The\
+    \ config surface is a profile with kind:host_peer, which keeps the open-contributor\
+    \ model intact \u2014 an operator can add zero, one, or multiple host-peer specialists\
+    \ with zero code changes beyond the initial adapter class."
+  deliverable_scope:
+    next_iteration_id: iter-host-family-impl-2026-05-22
+    files_in_scope:
+    - consensus_mcp/contributors/host_peer_adapter.py
+    - consensus_mcp/contributors/__init__.py
+    - consensus_mcp/_contributor_profiles.py
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/workflow_engine.py
+    - consensus_mcp/config.py
+    - consensus_mcp/contributor_profiles/claude-swe.yaml
+    - consensus_mcp/dispatch_templates/claude_swe_review_template.md
+    - consensus_mcp/tests/test_host_peer_adapter.py
+    - consensus_mcp/tests/test_workflow_engine_phase_gates.py
+    - consensus_mcp/tests/test_closure_invariant_host_peer.py
+    files_out_of_scope:
+    - consensus_mcp/_closure_invariant.py
+    - consensus_mcp/_validate_closure_invariant.py
+    - consensus_mcp/_anchoring_lint.py
+    - consensus_mcp/contributors/claude.py
+    - consensus_mcp/contributors/codex.py
+    - consensus_mcp/contributors/gemini.py
+    - consensus_mcp/contributors/profile_adapter.py
+    - docs/roadmap/*
+    key_design_decisions:
+    - Add KIND_HOST_PEER = 'host_peer' to _contributor_profiles schema. host_peer
+      is like host (in-process, no CLI) but is NOT the orchestrator; it requires a
+      family tag and a role field.
+    - Create HostPeerAdapter that accepts artifact_callback like ClaudeAdapter but
+      injects actor.model_family into the artifact dict before T6 seal, ensuring the
+      closure invariant sees it as same-family.
+    - Engine factory B-routing step (c) resolves kind:host_peer profiles to HostPeerAdapter
+      and passes claude_artifact_callback to it (factory checks ctor signature or
+      explicit kind).
+    - 'Role split enforced by engine respecting can_propose/can_review/can_converge
+      flags (currently in config schema but unused by engine). Orchestrator key: can_converge=true,
+      can_review=false. Host-peer key: can_review=true, can_converge=false. Both can
+      propose in workflow #4.'
+    - "Fresh-context guarantee is contractual: HostPeerAdapter.dispatch emits an independence_attestation\
+      \ block with context_isolation:'host_peer_fresh_context_contract'. The host\
+      \ implementation (outside consensus-mcp) is the external refuting observation\
+      \ \u2014 if the host callback reuses polluted context, the attestation is false\
+      \ and the operator can detect it."
+    - Supplementary weighting via adapter_config.weight (default 'full', opt-in 'supplementary').
+      Convergence evaluator includes supplementary votes in synthesis but they do
+      NOT count toward cross-family closure quorum.
+    - 'Gate exclusion is root-cause-independent: because host_peer provenance carries
+      the same model_family as the host mutator, the existing _closure_invariant.check_closure_invariant
+      cross_family check fails closed automatically. No weakening, no special-case
+      bypass.'
+    - "Blindness is structural: HostPeerAdapter receives only the DispatchPacket for\
+      \ its phase. In PROPOSE/REVIEW phases the packet contains only the problem statement\
+      \ or review target \u2014 same blindness guarantee as codex/gemini. The host\
+      \ callback must not inject peer outputs; this is enforced by convention + packet\
+      \ structure."
+    acceptance_gates:
+    - HostPeerAdapter produces a SealedArtifact with T6 archive path, correct packet_sha256,
+      and contributor name matching the profile key
+    - 'Engine workflow #4 skips converge phase for host-peer when can_converge=false;
+      workflow #3 skips review for orchestrator when can_review=false'
+    - validate_profile accepts a well-formed host_peer profile and rejects host_peer
+      with missing family tag
+    - A host-peer review artifact with model_family='claude' fails cross_family check
+      against a claude mutator in _closure_invariant.check_closure_invariant (existing
+      behavior, regression guard)
+    - _validate_closure_invariant CLI correctly derives family from host-peer sealed
+      artifact and produces non_compliant when same-family closes
+    - config.validate accepts contributors.enabled containing a host_peer profile
+      name and rejects weight values outside {'full','supplementary'}
+  risks:
+  - "Host callback freshness is NOT mechanically enforceable by consensus-mcp \u2014\
+    \ it depends on the host runtime honoring the contract. The safeguard is the attestation\
+    \ + operator visibility, not code-level isolation."
+  - 'Engine phase-gate wiring (can_*) is currently unimplemented; adding it changes
+    dispatch semantics for all adapters. Risk of regression if existing configs have
+    inconsistent can_* flags (e.g., legacy configs with can_converge=false on codex).
+    Mitigation: default to current behavior when can_* is absent.'
+  - "Adding a new built-in profile (claude-swe.yaml) may surprise operators who already\
+    \ have a custom 'claude-swe' profile in contributors.profiles. Profile merge uses\
+    \ whole-profile replacement, so operator overlay wins \u2014 acceptable."
+  - If the host family model is generalized beyond 'claude' in future (e.g., kimi
+    hosts), the host_peer adapter must dynamically read the family from the host adapter
+    rather than hard-coding 'claude'. Design should use adapter_config or profile
+    field, not hard-coded string.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:43:26Z'
+packet_sha256: e965dd69f516c54c48a1f76f13a4a9767d23e1cd0f1863890c2fb458bf93f303

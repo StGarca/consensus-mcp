@@ -1,0 +1,102 @@
+iteration_id: iteration-result-logging-scope-2026-05-22
+authored_by: claude-logscope-1 (orchestrator)
+convergence_model: weighted-synthesis
+status: SCOPED — this is the design for the NEXT consensus-mcp iteration (result-logging impl)
+question: >-
+  Scope a per-run RESULT-LOGGING feature so all findings (every run) aggregate
+  into a trustworthy project-level scorecard — the gap that made cross-project
+  metrics uncountable (fixes_applied=0; findings scattered across sealed passes,
+  converged-plans, and prose).
+
+contributors: [claude, codex, gemini, kimi]
+agreement: >-
+  UNANIMOUS on the core: a versioned per-run results record, written AUTOMATICALLY
+  at iteration_closed via the audit hook (same non-fatal-but-warns pattern as the
+  closure-certificate author), project-local + gitignored, with per-finding
+  disposition (validated-and-fixed / dismissed-with-evidence / deferred) derived
+  from sealed passes + apply events + converged-plan, plus a `consensus results`
+  rollup CLI (human + --json). All four independently confirmed the constraints
+  (project-local + gitignored) hold.
+
+divergences_resolved:
+  storage: >-
+    codex → single durable JSONL ledger consensus-state/state/results-v1.jsonl;
+    gemini/kimi/claude → per-iteration file in the iter dir. SYNTHESIS: do BOTH —
+    the DURABLE AUTHORITATIVE ledger is consensus-state/state/results-v1.jsonl
+    (gitignored via .gitignore:42 `consensus-state/state/*.jsonl`; survives the
+    cleanup of gitignored active/iteration-*/ dirs; one-file rollup), and a
+    co-located human-readable iteration-results.yaml is ALSO written into the
+    iter dir for detail. The rollup reads the ledger (durable), not the scattered
+    per-iter files. Rationale: the aggregation goal needs persistence the
+    per-iter-only approach loses when active/ is cleaned/snapshotted.
+  backfill: >-
+    gemini/kimi → no backfill (heterogeneous old schemas = untrustworthy, the
+    exact problem this solves); codex/claude → optional best-effort, marked.
+    SYNTHESIS: forward-only is AUTHORITATIVE; an optional `--backfill
+    --best-effort` may populate findings-RAISED from existing sealed passes, but
+    every backfilled record is flagged `backfilled: true, confidence: best-effort`
+    and the rollup REPORTS IT SEPARATELY so it never contaminates the trustworthy
+    forward count. Default = forward-only.
+  disposition_capture: >-
+    codex's key addition (adopted): capture disposition + fix as STRUCTURED AUDIT
+    FIELDS at event time, not re-derived from prose later — this is the concrete
+    fix for fixes_applied=0. apply_step_landed carries {finding_ids, files_touched,
+    fix_summary}; iteration_closed carries {finding_dispositions:[{id, disposition,
+    evidence_ref}]}. The close-time author then cross-references these.
+
+decision:
+  schema: |
+    consensus_results_schema_version: 1 on every record. Per-iteration snapshot:
+    iteration_id, run_id, dates, reviewers[{name, family}],
+    convergence{rule, converged, goal_satisfied_by},
+    findings[{id, severity, source_reviewer, source_pass_id,
+              disposition: validated_fixed|dismissed_refuted|deferred|open,
+              evidence_ref (commit/experiment for dismissed_refuted),
+              fix{patch_id, files} (for validated_fixed)}],
+    counts{by_severity, validated, dismissed, deferred, fixes_applied},
+    source_audit_event_id + source_audit_yaml_post_sha256 (provenance link).
+  storage:
+    authoritative: consensus-state/state/results-v1.jsonl   # gitignored (.gitignore:42), durable, one snapshot/iteration_id, atomic rewrite + schema-validate
+    detail: consensus-state/active/<iteration_id>/iteration-results.yaml  # gitignored (.gitignore:41), co-located human-readable
+    project_local: true
+    gitignored: true   # VERIFIED — matches the existing run-artifact pattern; do NOT commit run results
+  write_hook: >-
+    audit_append_event.py iteration_closed handler calls a new _results_log.author()
+    AFTER the closure invariant + closure-certificate, fail-loud-not-fail-open (warn
+    + surface error; never silently skip). Single-writer read-modify-write per
+    iteration (same lock discipline as audit_append_event).
+  audit_event_extension: >-
+    apply_step_landed += {finding_ids, files_touched, fix_summary};
+    iteration_closed += {finding_dispositions:[{id, disposition, evidence_ref}]}.
+    These make validated/dismissed/fixed machine-recorded at the moment they happen.
+  rollup: >-
+    `consensus results` (console-script + MCP tool) reads results-v1.jsonl → project
+    scorecard: total findings by severity, validated vs dismissed-with-evidence vs
+    deferred, fixes applied, iterations, convergence rate, date span. Human table +
+    `--json`. Read-only. Skips/warns records with unknown schema_version.
+  backfill: forward-only authoritative; optional `--backfill --best-effort` (flagged + segregated).
+
+deliverable_scope:
+  next_iteration_id: iteration-result-logging-impl
+  files_in_scope:
+    - consensus_mcp/_results_log.py            # NEW: author per-iteration record + update results-v1.jsonl; schema validate; atomic
+    - consensus_mcp/_results_rollup.py          # NEW: read ledger -> scorecard (human + json)
+    - consensus_mcp/tools/audit_append_event.py # extend apply_step_landed + iteration_closed fields; call _results_log at close
+    - consensus_mcp/schemas/results-v1.schema.json  # NEW: versioned schema
+    - consensus_mcp/server.py / pyproject.toml  # register `consensus results` CLI + MCP tool
+    - .gitignore                                # confirm state/*.jsonl + iteration-results.yaml covered (already are)
+    - docs/                                     # result-logging spec
+    - tests
+  acceptance_gates:
+    - "Closing an iteration writes a schema-valid record to results-v1.jsonl (one snapshot/iteration) + a co-located iteration-results.yaml; both gitignored (git check-ignore passes)."
+    - "apply_step_landed + iteration_closed carry the new structured fields; fixes_applied is now > 0 when fixes happen (the gap is closed)."
+    - "`consensus results` aggregates the ledger into a scorecard matching hand counts on a fixture project; --json is machine-readable."
+    - "Findings deduped by id within an iteration (no re-review double-count)."
+    - "Optional backfill records are flagged backfilled+best-effort and reported separately; default run is forward-only."
+    - "Unknown schema_version records are skipped with a warning (forward-compat)."
+  risks:
+    - "Disposition classification correlates apply events + converged-plan markers with findings; mis-correlation → wrong disposition. Mitigate: require explicit finding_dispositions at close; derive only as fallback."
+    - "Close-time write failure (disk/permission) — follow closure-certificate's non-fatal-warn pattern; never block close silently."
+    - "Single-writer race on concurrent close of same iteration — reuse audit_append_event's lock."
+    - "Schema drift across future workflow modes — schema_version + aggregator skip/warn."
+estimated_complexity: medium

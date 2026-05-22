@@ -1,0 +1,65 @@
+iteration_id: iteration-metrics-verify-readme-2026-05-22
+reviewer_id: claude-metrics-1
+pass_id: claude-metrics-pass1
+mode: proposal
+note: orchestrator blind round-1 proposal (authored before reading peers).
+proposal:
+  selected_target: >-
+    Rest the README on Project A's reliable, cross-checked numbers (230 findings /
+    60 blocking-or-critical across 76 iterations); state "also used on other
+    separate real codebases" WITHOUT a cross-project total or per-project bug
+    counts; note the per-run aggregation is the next build. Do not cite 305.
+  rationale_vs_alternatives: |
+    METRICS VERDICT:
+    - Methodology is sound for the MODERN sealed format: dedup by packet_sha256
+      and counting only severity-bearing findings from sealed passes correctly
+      excludes the 583 design-consult/proposal items that polluted the naive
+      count. Project A (the tool) = 230 findings / 60 blocking-or-critical is
+      DEFENSIBLE — two independent counts agree (this run + the earlier README
+      run both gave ~230 / 60).
+    - The same extractor UNDERCOUNTS Project C (4 passes / 15 findings) because
+      its reviews are in a non-sealed `*-out.yaml` format that fails the is_pass
+      filter; true count is far higher. Project B is APPROXIMATE (single date,
+      no converged-plans → older format). So the 305 cross-project total is a
+      FLOOR, not a real number — honest to present it as such, dishonest to
+      present it as a total.
+    - fixes_applied=0 in all three is real: corrections aren't logged as events.
+      So "bugs fixed" and "validated vs dismissed" are NOT machine-countable today
+      (they live in prose). This is the gap consult #2 scopes.
+    - Conclusion holds: README must not lean on the cross-project total; use
+      Project A's numbers + an honest "used on other real codebases" line.
+
+    PROPOSED README SECTION (layman; no project names / feature codenames / the
+    words ebook|audiobook|narration):
+
+    ## Does it actually work?
+
+    consensus-mcp reviews its own code with the very panel of AIs it gives you,
+    and every review is saved with a tamper-evident hash — so its track record is
+    something you can open and read, not a number you have to take on trust. In
+    this project's own history that comes to **230 issues caught across 76 review
+    rounds, 60 of them serious (blocking or critical)** — each raised by an
+    independent AI, recorded on disk, and resolved before the change shipped.
+
+    Two things keep those numbers honest. Real bugs are fixed before merge; and
+    when a reviewer is *wrong*, that's recorded too — the claim is dismissed
+    alongside the evidence that disproves it, so the panel can't pad its own
+    score. The same setup has reviewed several other separate, real codebases the
+    same way.
+
+    (Those per-run results aren't yet rolled up into a single cross-project
+    figure — that aggregation is the next thing being built.)
+  deliverable_scope:
+    next_iteration_id: iteration-metrics-verify-readme-2026-05-22
+    files_in_scope: [README.md]
+    files_out_of_scope: [consensus-state/]
+    key_design_decisions:
+      - "README cites only Project A's cross-checked 230/60; no fabricated aggregate."
+      - "Honesty hooks: catch + dismiss-with-evidence; per-run rollup is future work."
+    acceptance_gates:
+      - "No project name, no feature codename, no ebook/audiobook/narration."
+      - "Every number traceable to a defensible count."
+  risks:
+    - "Even 230/60 is one project; if a reader expects cross-project totals, the honest 'next build' note must stay."
+  estimated_complexity: small
+  structural_abstention: false

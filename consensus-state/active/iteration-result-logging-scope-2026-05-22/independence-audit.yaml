@@ -1,0 +1,48 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T19:01:31Z'
+  event_id: 2026-05-22T19:01:31Z_review_returned_and_sealed_gemini-logscope-1
+  actor: gemini-logscope-1
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-result-logging-scope-2026-05-22-gemini-logscope-1-gemini-logscope-1-pass1-pass.yaml
+  sha256: e35a5904460f392ce300248dc4f0f47d12187c77956d311aafa66daa54288c45
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T19:01:56Z'
+  event_id: 2026-05-22T19:01:56Z_review_returned_and_sealed_codex-logscope-1
+  actor: codex-logscope-1
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-result-logging-scope-2026-05-22-codex-logscope-1-codex-logscope-1-pass1-pass.yaml
+  sha256: ba317317cda18f8b6cbb5315a428e72edcbaaff3e4ee672726d6e5ceef9547b7
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T19:06:44Z'
+  event_id: 2026-05-22T19:06:44Z_review_returned_and_sealed_kimi-logscope-1
+  actor: kimi-logscope-1
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-result-logging-scope-2026-05-22-kimi-logscope-1-kimi-logscope-1-pass1-pass.yaml
+  sha256: ae8de4618d5f73f051fdd57ca69b6e23d7e1291185da9c3c9a78bf91552533d5
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true

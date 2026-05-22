@@ -1,0 +1,61 @@
+schema_version: 1
+pilot_id: iteration-host-family-agents-design-2026-05-22
+goal:
+  summary: >-
+    Workflow A consult: focus the design for host-family specialist agents in
+    consensus-mcp — a same-family blind SWE-reviewer (supplementary, excluded from
+    the cross-family closure gate) and a distinct orchestrator role — correct for
+    the strict, Python-only, sealed-provenance architecture.
+  desired_end_state: |
+    Read the embedded agents-brief.md (settled decisions + the CRUX + constraints)
+    and the embedded code (contributors/base.py, _engine_factory.py,
+    profile_adapter.py, kimi.yaml). Propose ONE focused design:
+      1. Invocation/integration mechanism for a SAME-FAMILY agent given the host
+         is the in-process orchestrator with no claude CLI dispatch — pick from
+         (a) second claude_artifact_callback w/ fresh context, (b) adapter
+         kind:host_peer, (c) host-spawned subagent, (d) other — and justify.
+         It MUST produce a sealed, provenance-tagged (family==host) review
+         artifact, satisfy blind-first-reveal, and be EXCLUDED from the
+         cross-family closure invariant (cannot be the different-family signer).
+      2. Role prompts: orchestrator (neutral scoping/synthesis/gate/anti-anchoring)
+         vs SWE-reviewer (adversarial, fresh context, blind).
+      3. Whether/how to SPLIT orchestrator-role from reviewer-role within the host
+         family (the integrator must not blind-review its own synthesis).
+      4. Fresh-context guarantee, blindness, provenance, supplementary weighting,
+         gate-exclusion wiring, and the config surface (profile model where possible).
+    Constraints (MUST hold): sealed provenance; cross-family closure invariant NOT
+    weakened; blind-first-reveal; open-contributor/profile model; fail-closed;
+    100% Python, no heavy deps. State the differential you reason from. Honest
+    abstention beats confabulation. This becomes the implementation scope for the
+    next iteration.
+  non_goals:
+    - relitigate the settled supplementary/excluded-from-gate decisions
+    - weaken the cross-family closure invariant
+    - implement now (this is a scoping/design consult)
+allowed_files:
+  - consensus_mcp/contributors/
+  - consensus_mcp/_engine_factory.py
+  - consensus_mcp/config.py
+  - consensus_mcp/contributor_profiles/
+  - consensus_mcp/_anchoring_lint.py
+  - consensus_mcp/tools/audit_append_event.py
+  - docs/
+allowed_sections: []
+forbidden_files: []
+max_iterations: 1
+max_patch_size: 4000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged design for host-family specialist agents (mechanism + role split) honoring all strict constraints
+    check: 'manual — orchestrator authors converged-plan'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - no_convergence
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 51e632404623999f7bed08d070c706aec563927f696ed9d540e6ff0a1de58315

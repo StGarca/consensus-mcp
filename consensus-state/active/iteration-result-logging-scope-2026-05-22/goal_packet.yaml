@@ -1,0 +1,58 @@
+schema_version: 1
+pilot_id: iteration-result-logging-scope-2026-05-22
+goal:
+  summary: >-
+    Workflow A consult: scope a per-run RESULT-LOGGING feature for consensus-mcp
+    so all findings (every run) aggregate into a trustworthy project-level
+    scorecard — the gap that made cross-project metrics uncountable.
+  desired_end_state: |
+    Read the embedded logging-scope-brief.md (the demonstrated problem, the
+    VERIFIED constraints — project-specific + gitignored — and the current
+    surfaces). Propose the design, answering: (1) schema of the per-run/
+    per-iteration results record (findings by severity; each finding's
+    disposition = validated-and-fixed / dismissed-with-evidence / deferred; fixes
+    applied; convergence outcome; reviewers+families; dates); (2) where it lives
+    under consensus-state/ and confirmation it is gitignored + project-local;
+    (3) how it's written automatically + fail-closed (which hook —
+    audit_append_event or a new emitter); (4) the project-level aggregation
+    rollup (a tool/CLI emitting a scorecard: findings by severity, validated vs
+    dismissed, fixes applied, iterations, convergence rate); (5) disposition
+    tracking (the validated/invalidated signal that's currently prose-only);
+    (6) backfill of existing history — yes/no, argued; (7) a versioned schema so
+    future eras stay countable.
+
+    Constraints: minimal, fail-closed, consistent with the existing sealed-
+    provenance model; the results record MUST be project-specific + gitignored
+    (do not commit run results to project git history). Put the design in
+    deliverable_scope (files to touch, key decisions, acceptance gates, risks).
+    This becomes the next consensus-mcp iteration; pick ONE coherent approach.
+  non_goals:
+    - implement now (this is a scoping/design consult)
+    - a global cross-project database (results stay per-project on disk)
+allowed_files:
+  - consensus_mcp/tools/audit_append_event.py
+  - consensus_mcp/_snapshot_state.py
+  - consensus_mcp/config.py
+  - consensus_mcp/server.py
+  - consensus-state/
+  - .gitignore
+  - docs/
+allowed_sections: []
+forbidden_files: []
+max_iterations: 1
+max_patch_size: 4000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: a converged design for per-run result logging + project-level rollup, gitignored + project-local
+    check: 'manual — orchestrator authors converged-plan'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - no_convergence
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: c691e29381efebf5b634ad633472ef9b09385637f8857ec27b7d1017d61fe57a

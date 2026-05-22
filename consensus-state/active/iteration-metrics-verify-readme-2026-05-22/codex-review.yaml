@@ -1,0 +1,216 @@
+iteration_id: iteration-metrics-verify-readme-2026-05-22
+reviewer_id: codex-metrics-1
+pass_id: codex-metrics-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Differential / prior: I am reasoning from an evidence-audit
+  model, not a marketing model. A README claim should be based on the strongest reproducible
+  artifact, and mixed-era telemetry should be disclosed as incomplete rather than
+  normalized into a single headline number.
+
+
+  Verdict on metrics: the methodology is sound for the narrow thing it actually measures:
+  sealed, structured review findings with a `severity` key, deduped by packet hash
+  or reviewer/pass identity. It is not sound as a complete cross-project productivity
+  or defect-remediation metric. Project A''s 230 findings and 60 blocking-or-critical
+  findings across 76 iterations is defensible because the brief says it uses the modern
+  sealed format and matches an independent count. That does not prove every finding
+  was correct or fixed; it proves the count of auditable severitied findings is reliable.
+  Project B is approximate: older/sparser format, single-date history, and no converged
+  plans make it less comparable. Project C is materially undercounted because the
+  `is_pass` filter skips its non-sealed `*-out.yaml` pass-like files; the table''s
+  4 review passes / 15 findings should not be presented as a project result. The `severity`-only
+  filter undercounts design-consult value and prose-only findings while also excluding
+  non-review proposals by design. Dedup by content hash or reviewer/pass identity
+  is reasonable but can undercount repeated independent confirmations with identical
+  packets, or overcount if the same substantive finding appears in distinct wording.
+  `fixes_logged=0` is not evidence that no fixes were applied; it is evidence that
+  apply/fix events were not logged through the counted audit events. Presenting 305
+  as a floor is honest only if phrased as an incomplete lower bound from heterogeneous
+  logs; it should not appear in README copy because readers will treat it as a clean
+  total.
+
+
+  External-system verification: this proposal does not recommend publishing to PyPI/npm/GitHub
+  Releases/docs hosting or any other external distribution channel, so no external-channel
+  step is proposed. The only artifact to touch is the repository README. No fixed/shipped
+  claim is made.
+
+
+  Root-cause falsifiability: the claim that Project C is undercounted due to the pass
+  filter is provisional because the embedded brief, not the filesystem, is the evidence
+  here. External refuting observation: running the extractor against Project C with
+  an expanded pass detector that includes `*-out.yaml` files returns the same 4 review
+  passes and 15 severitied findings, with no additional severitied findings in the
+  >=88 pass-like files.
+
+
+  Proposed README markdown:
+
+
+  ```markdown
+
+  ## Does it actually work?
+
+
+  Yes, and the evidence is auditable.
+
+
+  On this codebase, consensus-mcp has been used across 76 iterations. Those sealed
+  runs recorded 230 review findings, including 60 marked blocking or critical.
+
+
+  Each contributor''s answer is saved before the group result is chosen, so the record
+  can be checked later instead of relying on a chat transcript.
+
+
+  The same workflow has also been used on other separate, real codebases. Those histories
+  are useful evidence, but they were logged in different formats, so they are not
+  yet rolled into one clean cross-project total.
+
+  ```
+
+
+  This is better than alternatives that headline 305 or cite Project B/C precise counts
+  because it avoids converting a known floor into marketing certainty. It is also
+  better than omitting evidence entirely because it preserves the strongest defensible
+  numeric claim: 230 total findings and 60 blocking-or-critical findings over 76 iterations,
+  in sealed auditable runs.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.132.0
+  prompt_sha256: 9cccc20b1e98e3be1a33670474f0fb81845dcc66fe6623fac1bdf73e0e5a2a09
+  output_sha256: 3e2e58fc285bec2e1342dc48202584809acf45864700ed24252fd4011c864aed
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: c9da1a7d40cfba113044582226876944bef50f7ebfcd0cb7814cedf0a6888474
+  scope_signature: 28a99f348be37ee8068cee8b58a1c46caf04c2e7d93cf07af29b00c7e50e9811
+  review_target_path: consensus-state/active/iteration-metrics-verify-readme-2026-05-22/review-packet.yaml
+  review_target_hash: 3fe9fd460209ecba625a60be6251265f079b3e54f9192e0bd2391f27de66a707
+  mode: proposal
+proposal:
+  selected_target: README evidence section grounded in the reliable Project A count
+    plus non-numeric cross-project usage
+  rationale_vs_alternatives: 'Differential / prior: I am reasoning from an evidence-audit
+    model, not a marketing model. A README claim should be based on the strongest
+    reproducible artifact, and mixed-era telemetry should be disclosed as incomplete
+    rather than normalized into a single headline number.
+
+
+    Verdict on metrics: the methodology is sound for the narrow thing it actually
+    measures: sealed, structured review findings with a `severity` key, deduped by
+    packet hash or reviewer/pass identity. It is not sound as a complete cross-project
+    productivity or defect-remediation metric. Project A''s 230 findings and 60 blocking-or-critical
+    findings across 76 iterations is defensible because the brief says it uses the
+    modern sealed format and matches an independent count. That does not prove every
+    finding was correct or fixed; it proves the count of auditable severitied findings
+    is reliable. Project B is approximate: older/sparser format, single-date history,
+    and no converged plans make it less comparable. Project C is materially undercounted
+    because the `is_pass` filter skips its non-sealed `*-out.yaml` pass-like files;
+    the table''s 4 review passes / 15 findings should not be presented as a project
+    result. The `severity`-only filter undercounts design-consult value and prose-only
+    findings while also excluding non-review proposals by design. Dedup by content
+    hash or reviewer/pass identity is reasonable but can undercount repeated independent
+    confirmations with identical packets, or overcount if the same substantive finding
+    appears in distinct wording. `fixes_logged=0` is not evidence that no fixes were
+    applied; it is evidence that apply/fix events were not logged through the counted
+    audit events. Presenting 305 as a floor is honest only if phrased as an incomplete
+    lower bound from heterogeneous logs; it should not appear in README copy because
+    readers will treat it as a clean total.
+
+
+    External-system verification: this proposal does not recommend publishing to PyPI/npm/GitHub
+    Releases/docs hosting or any other external distribution channel, so no external-channel
+    step is proposed. The only artifact to touch is the repository README. No fixed/shipped
+    claim is made.
+
+
+    Root-cause falsifiability: the claim that Project C is undercounted due to the
+    pass filter is provisional because the embedded brief, not the filesystem, is
+    the evidence here. External refuting observation: running the extractor against
+    Project C with an expanded pass detector that includes `*-out.yaml` files returns
+    the same 4 review passes and 15 severitied findings, with no additional severitied
+    findings in the >=88 pass-like files.
+
+
+    Proposed README markdown:
+
+
+    ```markdown
+
+    ## Does it actually work?
+
+
+    Yes, and the evidence is auditable.
+
+
+    On this codebase, consensus-mcp has been used across 76 iterations. Those sealed
+    runs recorded 230 review findings, including 60 marked blocking or critical.
+
+
+    Each contributor''s answer is saved before the group result is chosen, so the
+    record can be checked later instead of relying on a chat transcript.
+
+
+    The same workflow has also been used on other separate, real codebases. Those
+    histories are useful evidence, but they were logged in different formats, so they
+    are not yet rolled into one clean cross-project total.
+
+    ```
+
+
+    This is better than alternatives that headline 305 or cite Project B/C precise
+    counts because it avoids converting a known floor into marketing certainty. It
+    is also better than omitting evidence entirely because it preserves the strongest
+    defensible numeric claim: 230 total findings and 60 blocking-or-critical findings
+    over 76 iterations, in sealed auditable runs.'
+  deliverable_scope:
+    next_iteration_id: iteration-metrics-readme-evidence-2026-05-22
+    files_in_scope:
+    - README.md
+    files_out_of_scope:
+    - consensus-state/**
+    - project-specific sealed run artifacts
+    - packaging metadata
+    - release tags
+    - external registries or publishing workflows
+    key_design_decisions:
+    - Complete the README replacement in the current iteration; no follow-up phase
+      is needed because the target copy and acceptance gates are clear and small.
+    - 'Use only Project A''s defensible numbers: 76 iterations, 230 severitied findings,
+      60 blocking-or-critical findings.'
+    - Avoid the cross-project total and Project B/C precise bug counts in public copy
+      because the embedded methodology marks them approximate or undercounted.
+    - Mention other real codebases only qualitatively, with the caveat that logs are
+      not yet normalized into one clean total.
+    - Do not make fix-rate, shipped-version, or external distribution claims.
+    acceptance_gates:
+    - 'README section contains exactly the defensible numeric claims: 76 iterations,
+      230 review findings, and 60 blocking-or-critical findings.'
+    - README section does not include 305, 87, Project B/C counts, project names,
+      or project-specific feature terms.
+    - README section avoids the prohibited words ebook, audiobook, and narration.
+    - README section states sealed/auditable recordkeeping in plain language.
+    - README section says other separate real codebases exist without presenting an
+      unreliable aggregate.
+    - No external publishing, package registry, release, or tag claim is added.
+  risks:
+  - A reader may still infer that all 230 findings were valid and fixed; the wording
+    should keep the claim to recorded findings, not resolved defects.
+  - The Project A count is defensible only to the degree the embedded assertion about
+    an independent matching count is accurate; contributors were instructed not to
+    rescan, so this cannot be revalidated here.
+  - The phrase 'blocking or critical' may still be technical for some readers, but
+    it is short and directly tied to the available metric.
+  estimated_complexity: small
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T19:01:34Z'
+packet_sha256: 96c07d538dc37c9bdd255f38d7d4dddf59e97ee3420e9f20dfc52d3caf792cb2

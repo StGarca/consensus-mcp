@@ -1,0 +1,49 @@
+iteration_id: iteration-result-logging-scope-2026-05-22
+reviewer_id: claude-logscope-1
+pass_id: claude-logscope-pass1
+mode: proposal
+note: orchestrator blind round-1 proposal (authored before reading peers).
+proposal:
+  selected_target: >-
+    A per-iteration, gitignored, versioned `results.yaml` emitted at close time by
+    the existing audit/close hook, plus a `consensus results` rollup CLI that
+    aggregates them into a project-level scorecard. Disposition + fix events are
+    logged as first-class audit events so validated-vs-dismissed and
+    fixes-applied stop being prose.
+  rationale_vs_alternatives: |
+    The history exists but isn't aggregatable because results are scattered
+    (sealed-pass findings + converged-plan synthesis + prose) and fixes/
+    dispositions aren't events. Fix it at the SEAL/CLOSE boundary so logging is
+    automatic + fail-closed, not manual. Match the existing gitignore pattern.
+  deliverable_scope:
+    next_iteration_id: iteration-result-logging-impl
+    files_in_scope:
+      - consensus_mcp/_results_log.py          # NEW: write/update per-iteration results.yaml; schema_version
+      - consensus_mcp/tools/audit_append_event.py  # emit finding-disposition + fix-applied events; call results writer at iteration_closed
+      - consensus_mcp/_results_rollup.py        # NEW: read consensus-state/results/*.yaml -> project scorecard (JSON + human)
+      - consensus_mcp/server.py                 # register `consensus results` / a results MCP tool
+      - .gitignore                              # add consensus-state/results/  (gitignored, project-local)
+      - pyproject.toml                          # entry point for the rollup CLI
+      - docs/                                   # results-logging spec
+      - tests for each
+    files_out_of_scope:
+      - any cross-project/global database (results stay per-project on disk)
+    key_design_decisions:
+      - "Storage: consensus-state/results/<iteration_id>.yaml, GITIGNORED + project-local (add `consensus-state/results/` to .gitignore; mirrors active/ + review-passes/ being ignored). A rolled-up scorecard is generated on demand by the CLI, not committed."
+      - "Schema (schema_version: 1): iteration_id, dates, reviewers[{name,family}], convergence{rule,converged,goal_satisfied_by}, findings[{id,severity,reviewer,disposition}] where disposition in {validated_fixed, dismissed_refuted, deferred, open} + evidence_ref (commit/experiment) for dismissed_refuted, + fix{patch_id,files} for validated_fixed; counts{by_severity, validated, dismissed, deferred, fixes_applied}."
+      - "Write hook: at audit_append_event iteration_closed, derive findings from the iteration's sealed passes, dispositions from the converged-plan/disposition-ledger, fixes from apply events; write results.yaml. Fail-closed: if it can't be built, surface an error, don't silently skip."
+      - "Disposition + fix as EVENTS: add audit event types finding_disposed{id,disposition,evidence_ref} and fix_applied{patch_id,files,finding_ids} so the validated/dismissed/fixed signal is machine-recorded at the moment it happens (today fixes_applied=0 because nothing emits them)."
+      - "Rollup: `consensus results` (CLI + MCP tool) reads results/*.yaml -> project scorecard: total findings by severity, validated vs dismissed-with-evidence vs deferred, fixes applied, iterations, convergence rate, date span. JSON + a short human table."
+      - "Backfill: best-effort one-shot backfill of findings-RAISED (by severity) from existing sealed passes; mark pre-feature dispositions/fixes as 'unknown' (they're prose-only and not reliably recoverable). Going-forward records are authoritative; backfill is labeled approximate."
+      - "Versioned schema so future format changes stay countable (the trap that made cross-project counts fail)."
+    acceptance_gates:
+      - "Closing an iteration writes a schema-valid results.yaml; `consensus results` aggregates them into a scorecard matching hand counts on a fixture project."
+      - "consensus-state/results/ is gitignored (git check-ignore passes) and project-local."
+      - "finding_disposed + fix_applied events are emitted + reflected in the results record (fixes_applied no longer 0)."
+      - "Backfill produces findings-raised counts == the verified extractor on this project; dispositions/fixes marked unknown for pre-feature iterations."
+    risks:
+      - "Deriving disposition reliably requires the converged-plan/ledger to actually record it — may need a small disposition-capture step at convergence."
+      - "Backfill of dispositions is not reliably possible (prose); be honest it's findings-raised only."
+      - "Don't double-count findings across re-review passes — dedup by finding id within an iteration."
+  estimated_complexity: medium
+  structural_abstention: false
