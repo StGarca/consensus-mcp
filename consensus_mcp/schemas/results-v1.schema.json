@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "consensus-mcp per-iteration results record (v1)",
+  "description": "One snapshot per iteration_id. Lines in consensus-state/state/results-v1.jsonl are objects of this shape; the same object is also written human-readably to consensus-state/active/<iteration_id>/iteration-results.yaml. See docs/design-consults/v1.19.0-result-logging.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["consensus_results_schema_version", "iteration_id", "findings", "counts"],
+  "properties": {
+    "consensus_results_schema_version": {"const": 1},
+    "iteration_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": ["string", "null"]},
+    "record_updated_utc": {"type": ["string", "null"]},
+    "sealed_at_utc": {"type": ["string", "null"]},
+    "reviewers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "family": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "convergence": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "rule": {"type": ["string", "null"]},
+        "converged": {"type": ["boolean", "null"]},
+        "goal_satisfied_by": {"type": ["array", "null"], "items": {"type": "string"}}
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "disposition"],
+        "properties": {
+          "id": {"type": "string"},
+          "severity": {"type": "string", "enum": ["low", "medium", "high", "blocking", "critical"]},
+          "source_reviewer": {"type": ["string", "null"]},
+          "source_pass_id": {"type": ["string", "null"]},
+          "disposition": {"type": "string", "enum": ["validated_fixed", "dismissed_refuted", "deferred", "open"]},
+          "evidence_ref": {"type": ["string", "null"], "description": "commit sha / experiment ref; REQUIRED in spirit for dismissed_refuted"},
+          "fix": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "patch_id": {"type": ["string", "null"]},
+              "files": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by_severity", "validated", "dismissed", "deferred", "fixes_applied"],
+      "properties": {
+        "by_severity": {"type": "object", "additionalProperties": {"type": "integer"}},
+        "validated": {"type": "integer"},
+        "dismissed": {"type": "integer"},
+        "deferred": {"type": "integer"},
+        "open": {"type": "integer"},
+        "fixes_applied": {"type": "integer"}
+      }
+    },
+    "source_audit_event_id": {"type": ["string", "null"]},
+    "source_audit_yaml_post_sha256": {"type": ["string", "null"]},
+    "backfilled": {"type": "boolean", "default": false},
+    "confidence": {"type": ["string", "null"], "enum": ["authoritative", "best-effort", null]}
+  }
+}
