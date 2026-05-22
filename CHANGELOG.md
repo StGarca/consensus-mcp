@@ -1,12 +1,40 @@
 # Changelog
 
-## 1.20.0 - unreleased
+## 1.20.0 - 2026-05-22
 
-In progress: **host-family specialist agents** — a new `kind: host_peer`
-contributor (a same-family blind SWE-reviewer, supplementary + excluded from the
-cross-family closure gate) and a distinct orchestrator role. Designed via a 4-way
-Workflow A consult (`docs/design-consults/v1.20.0-host-peer-agent.md`); Workflow B
-skipped per operator.
+**Host-family specialist agents.** A same-family blind SWE-reviewer you can add as
+a supplementary "second opinion", plus a distinct orchestrator role — without
+weakening the cross-family closure invariant. Designed via a 4-way Workflow A
+consult (`docs/design-consults/v1.20.0-host-peer-agent.md`); codex diff-reviewed
+the landed change (clean, 0 findings). Full suite 1096 passed / 1 skipped.
+
+### Added
+- **`kind: host_peer` contributor** — a blind, fresh-context, adversarial
+  SWE-reviewer that runs the host's own AI family (e.g. Claude when Claude hosts),
+  invoked in-process via a dedicated host review callback (no CLI). It's
+  **supplementary** and **excluded from the cross-family closure invariant** — it
+  augments cross-family review, never replaces it (same model = same blind spots).
+- **`consensus init` option** for the same-model second opinion, clearly labelled:
+  "a useful extra check if you have the tokens, but NOT independent multi-AI
+  consensus (same model as the host/orchestrator)."
+- Distinct **orchestrator role** prompt (neutral scoping/synthesis/gate-
+  enforcement/anti-anchoring) + an adversarial SWE-reviewer prompt, so the
+  integrator never blind-reviews its own synthesis.
+
+### Changed
+- `_closure_invariant`: a closer tagged `gate_eligible: false` (host_peer /
+  supplementary) can **never** be the different-family signer — even when its
+  family differs from the mutator. Minimal + additive: only the literal `False`
+  excludes, so every existing closer is unchanged. (A RED test caught a real hole:
+  a codex-authored change + claude host_peer would have wrongly closed.)
+- Results record + schema tag supplementary same-family reviewers separately from
+  independent cross-family review.
+
+### Note
+The host_peer **seam** ships here; actually running it requires the host runtime to
+wire the `host_peer_review_callback` with a guaranteed-fresh context. Without it,
+host_peer is gracefully absent. Fresh-context is a host-runtime contract (recorded
+via attestation), not something consensus-mcp can mechanically prove.
 
 ## 1.19.0 - 2026-05-22
 
