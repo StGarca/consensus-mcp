@@ -489,6 +489,21 @@ def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes
     return None
 
 
+def _reconfigure_contributors(base: dict, profiles: dict) -> None:
+    """Reconfigure path: pre-seed the multi-select with the existing INDEPENDENT
+    selection (the >=2 loop guides the user to fix an invalid legacy config), then
+    offer the supplemental follow-up defaulting to its CURRENT state (preserve a
+    legacy host_peer)."""
+    existing = list((base.get("contributors") or {}).get("enabled") or [])
+    existing_independent = [n for n in existing if profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST_PEER]
+    had_host_peer = any(profiles_mod.resolve_kind(n, profiles) == profiles_mod.KIND_HOST_PEER for n in existing)
+    selection = _select_contributors_interactive(profiles, preselected=existing_independent)
+    hp = _prompt_host_peer_followup(selection, profiles, default_yes=had_host_peer)
+    if hp:
+        selection.append(hp)
+    base["contributors"]["enabled"] = selection
+
+
 def _validate_contributor_selection(selection: list[str], profiles: dict) -> list[str]:
     """Validate a name list: known names only (wizard layer holds the profile
     set), >=2 INDEPENDENT, and no orphan host_peer."""
@@ -733,11 +748,8 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
                 selection.append(hp)
             base["contributors"]["enabled"] = selection
         else:
-            # Reconfigure: preserve the existing enabled list as the default via
-            # the comma-separated free-text prompt (unchanged behavior/tests).
-            default = ",".join(base["contributors"]["enabled"])
-            choice = _prompt("Enabled contributors (comma-separated)", default)
-            base["contributors"]["enabled"] = [c.strip() for c in choice.split(",") if c.strip()]
+            profiles = _load_merged_profiles((base.get("contributors") or {}).get("profiles"))
+            _reconfigure_contributors(base, profiles)
     n_contributors = len(base["contributors"]["enabled"])
 
     # Workflow mode.
