@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.17.3 - 2026-05-22
+
+**Public-readiness sanitization (round 2): removed remaining host-project name
+references** that had shipped publicly in 1.16.x/1.17.x. The internal project
+name appeared in code comments (`_delivery_readiness.py`), docs
+(`delivery-gate.md`, `architecture/orchestration-spec.md`,
+`architecture/phase-1-completion.md`, `spec_template.md`),
+`validators/scope_check.py`, this CHANGELOG, AND the GitHub release notes for
+v1.16.0 / v1.16.1 — all scrubbed to neutral wording ("internal project" /
+"host-project" / generic media examples). No functional change.
+
+### Still outstanding (maintainer decisions, NOT auto-done)
+- `consensus-state/archive/imported-from-parent/` (~89 files) still contains the
+  parent project's name/paths — removal is deletion of maintainer historical
+  data.
+- Two historical commit *messages* (v1.16.0 / v1.16.1) name the internal
+  project + all commits carry a personal author email; scrubbing those needs a
+  git history rewrite + force-push (destructive) — left for an explicit decision.
+
 ## 1.17.2 - 2026-05-22
 
 **Fixes from the 1.17 consensus code review** (4-way: claude+codex+gemini+kimi —
