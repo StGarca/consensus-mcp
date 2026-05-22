@@ -51,7 +51,7 @@ agree."
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.15.10
+pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.17.4
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
