@@ -528,6 +528,7 @@ def test_interactive_user_overrides_workflow(tmp_path, monkeypatch):
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     monkeypatch.setattr(builtins, "input", _stub_input([
         "1,2,3",                         # contributors (claude,codex,gemini)
+        "",                              # host_peer follow-up (decline)
         cfg.WORKFLOW_POST_REVIEW,       # workflow
         cfg.CONVERGE_STRICT_MAJ,        # convergence
         cfg.INDEPENDENCE_VISIBLE,       # independence (workflow #3 needs visible)
@@ -550,6 +551,7 @@ def test_interactive_prompts_all_nine_dimensions(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     monkeypatch.setattr(builtins, "input", _stub_input([
         "1,2,3",                         # contributors (claude,codex,gemini)
+        "",                              # host_peer follow-up (decline)
         cfg.WORKFLOW_PROPOSE_CONVERGE,  # workflow
         cfg.CONVERGE_STRICT_MAJ,        # convergence
         cfg.INDEPENDENCE_BLIND,         # independence
@@ -576,7 +578,7 @@ def test_interactive_defaults_reflect_cli_overrides(tmp_path, monkeypatch, capsy
     captured_prompts: list[str] = []
     # First answer is a numeric multi-select (1,2,3 → claude,codex,gemini) now
     # that the fresh contributor dimension is the wired numbered multi-select.
-    queue = ["1,2,3", "", "", "", "", "", "", ""]
+    queue = ["1,2,3", "", "", "", "", "", "", "", ""]  # extra "" declines host_peer follow-up
     def _capturing_input(prompt=""):
         captured_prompts.append(prompt)
         if not queue:
