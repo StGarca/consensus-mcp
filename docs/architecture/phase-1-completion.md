@@ -144,7 +144,7 @@ Plus one **canonical-iter0006-008** finding noted-not-blocking: codex reviewer u
 
 **Not ready.** Two pieces of work remain before the toolchain can be copied out as a standalone tool:
 
-- **Decouple from audiobook paths** (deferred): `REPO_ROOT` discovery is hardcoded `__file__.parent.parent.parent.parent` (4 levels up); `consensus-state/active|state|archive` paths are baked in. Operator deferred this until tool is otherwise complete.
+- **Decouple from host-project paths** (deferred): `REPO_ROOT` discovery is hardcoded `__file__.parent.parent.parent.parent` (4 levels up); `consensus-state/active|state|archive` paths are baked in. Operator deferred this until tool is otherwise complete.
 - **Package as installable** (deferred): no `pyproject.toml` yet; no `console_scripts` entry points; bundle of validators (`consensus_mcp/validators/`) + MCP server (`consensus_mcp/`) is operator-stated scope.
 
 ### Spec / governance
@@ -234,8 +234,8 @@ claude-iter0006-004 carried both as Phase 1.x test-coverage debt. But Phase 1.x 
 
 ### Q4 — Standalone extraction: when does it happen, and does decouple come before or after package?
 
-Per operator: "we will then copy it out of audiobook creator so it can be a standalone tool" — operator-manual move. Two preceding tasks were deferred:
-- T9 decouple from audiobook paths (configurable REPO_ROOT + artifact dirs)
+Per operator: "we will then copy it out of the host project so it can be a standalone tool" — operator-manual move. Two preceding tasks were deferred:
+- T9 decouple from host-project paths (configurable REPO_ROOT + artifact dirs)
 - T10 package as installable (pyproject.toml, console_scripts, bundle agent_loop validators + consensus_mcp server)
 
 Both still pending. T9 logically precedes T10 (decoupling makes the package layout clean).

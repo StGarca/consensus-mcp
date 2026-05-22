@@ -1,7 +1,7 @@
 """Delivery-readiness gate — fail-closed enforcement that an operator-facing
 artifact has been CONSENSUS-VETTED, not self-judged.
 
-Origin: abkgen anti-stall consensus (iteration-antistall-impl-2026-05-22, 4/4).
+Origin: internal anti-stall consensus (iteration-antistall-impl-2026-05-22, 4/4).
 Problem fixed: an agent kept FAILING TO INVOKE/UTILIZE consensus-mcp — building
 before vetting, self-judging soundness ("I tested it myself, it's sound"), and
 delivering before it was checked. Memories did not bind the agent; only a

@@ -680,7 +680,7 @@ revision_history:
 
       What this enables:
         - per operator project guidance: redirect attention to render
-          outcomes (the operator the source project audiobook chapters; archetype
+          outcomes (the operator the host-project media outputs; archetype
           anchors; audio QA)
         - OR design Phase 1 MCP integration (lift validators into
           pre-commit hooks; enforce gates as code rather than honor-system);
@@ -813,7 +813,7 @@ revision_history:
         - Phase 1 MCP design spec status: shelved-pending-operational-signal
           (sibling path: docs/architecture/phase-1-completion.md)
         - consensus pipeline v1.8.x continues to operate on Phase 0 honor-system gates
-        - render outcomes (the source project audiobook chapters; archetype
+        - render outcomes (the host-project media outputs; archetype
           anchors; audio QA) get full operator + claude attention
         - the current loop = guardrails only, not the work itself
         - consensus pipeline self-construction phase ENDED with v1.8.2
@@ -4151,7 +4151,7 @@ deferred:
   - {id: codex-rev-044-self-mod-audit-for-consensus-patches}
   - {id: codex-rev-045-executor-provider-abstraction}
   - {id: codex-rev-046-read-only-dashboard-later-not-now}
-  - {id: codex-rev-048-audiobook-specialist-workers}
+  - {id: codex-rev-048-domain-specialist-workers}
   # iteration-0000 deferred
   - {id: cf-002}
   - {id: cf-006}

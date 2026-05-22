@@ -10,7 +10,7 @@ deliverables and work stoppage.
 An agent repeatedly failed to *invoke/utilize* consensus-mcp: it built before
 vetting, **self-judged soundness** ("I tested it myself, it's sound"), and
 delivered before it was checked. Behavioral memories did not bind it. Only a
-mechanism does. Source: abkgen consensus iterations
+mechanism does. Source: internal consensus iterations
 `iteration-antistall-protocol-2026-05-22` (4/4) +
 `iteration-antistall-impl-2026-05-22` (4/4).
 
