@@ -1,8 +1,40 @@
 # Changelog
 
-## 1.20.1 - unreleased
+## 1.20.1 - 2026-05-22
 
-_Unreleased._
+**`consensus init` contributor-selection redesign.** Setup now offers the
+independent AIs as the panel and treats a same-model reviewer as an explicit
+0.5 supplemental, with the "≥2 independent" floor enforced in config validation
+and contributor detection made fully dynamic (no hardcoded AI lists). Designed
+via a 3-way Workflow A consult
+(`docs/design-consults/init-contributor-selection-supplemental-review.md`), built
+subagent-driven with per-task spec + quality review. Full suite 1118 passed /
+1 skipped; the consensus gate is unchanged.
+
+### Changed
+- **Main multi-select lists independent AIs only** (claude/codex/gemini/kimi + any
+  operator profile). The same-model claude reviewer (`claude-swe-reviewer`,
+  `kind: host_peer`) is no longer a flat list item — it is a **conditional opt-in
+  follow-up**, offered only when the host AI is on the panel (default No on fresh
+  setup; defaults to its current state on reconfigure, preserving a legacy choice).
+- **The "≥2 contributors" floor now means ≥2 _independent_ contributors**, enforced
+  in `config` validation — the authoritative gate for every entry path (interactive,
+  `--contributors`, reconfigure, non-interactive defaults). A same-model supplemental
+  never counts toward the floor.
+- **Contributor detection is dynamic** — init derives the available panel and the
+  default enabled set from the profile set, so kimi and any operator-added AI are
+  picked up automatically (no hardcoded name lists).
+- End-of-init panel summary shows the weighted count, e.g.
+  `2.5 reviewers — 2 independent + 0.5 supplemental same-model`.
+
+### Added
+- Orphan-supplemental rejection: a `host_peer` can be enabled only when its host
+  AI is also enabled (rejected on every entry path).
+
+### Note
+The consensus gate, convergence, and engine are untouched: a same-model supplemental
+stays `gate_eligible=false` and can never close consensus — but its findings are
+still weighed on merit (good ideas are always applied).
 
 ## 1.20.0 - 2026-05-22
 
