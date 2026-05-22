@@ -1,11 +1,48 @@
 # Changelog
 
-## 1.17.5 - unreleased
+## 1.17.5 - 2026-05-22
 
-In progress: the gates/state (H-1, H-4–H-7) and orchestration (H-3, H-8, M-11)
-clusters from the 2026-05-22 code review (`docs/code-review-2026-05-22.md`), plus
-the 4 pre-existing `test_visibility_watchdog` failures — one consensus-audited
-batch.
+Gates/state + orchestration clusters from the 2026-05-22 code review
+(`docs/code-review-2026-05-22.md`), one consensus-audited batch. Each finding was
+independently re-verified before fixing (H-1 had already been dismissed as a
+false finding; H-8's HIGH framing proved unsupported). Strict TDD; full suite
+977 passed / 1 skipped / 0 failed (+24 tests).
+
+### Fixed
+- **H-3** `self_drive.cmd_close` emitted 5 JSON blobs (4 sub-commands + its own)
+  → now suppresses the children's stdout and emits a single
+  `{can_close, components}` object, so machine consumers can parse `close` again.
+- **H-4** `_snapshot_state` dirty-detection hashed raw working-tree bytes, so
+  under `core.autocrlf=true` every text file read as dirty on Windows → now uses
+  `git hash-object` (applies the clean filter; matches the indexed blob).
+- **H-5** the `iteration_closed` mutation-completeness gate returned `[]` (pass)
+  on any git failure → now fails CLOSED with `mutation_completeness_unverifiable`
+  when git inspection is unavailable (no git-optional mode exists, so this is
+  non-configurable).
+- **H-6** release gates passed on literal test-count strings (`"95 passed"`,
+  `"60/60 tests passed"`) — brittle, and already failing (the suite had grown to
+  96) → now parsed robustly (returncode + no failure word + `passed >= floor`).
+  Also fixed a dead `scripts/` path that made the dispatch-codex gate a no-op.
+- **H-7** under `timeout_policy=blocking`, a timed-out contributor counted toward
+  `n_block` but did not veto a majority rule → it now does, while a responsive
+  "soft no" still does not (majority semantics preserved). Convergence rationale
+  now reports `n_block`.
+- **M-11** `self_drive.cmd_transition` persisted nothing while its docstrings
+  claimed it "records" transitions → contract corrected to stateless (the
+  disposition ledger keeps its single authorized writer).
+- **H-8** narrowed `_resume.py` bare `except Exception` to the established
+  IO/parse set so programmer errors propagate (parity with `_self_drive`,
+  iter-0036). The review's "silent nothing-in-flight" framing was not supported —
+  the dispatch-log read already surfaces a warning.
+- The four pre-existing `test_visibility_watchdog` failures (a time-bomb test)
+  were de-time-bombed earlier on this branch.
+
+### Audit
+Workflow B consensus audit (codex-cli 0.132.0 + gemini-2.5-pro + kimi 1.44.0):
+gemini and kimi clean (kimi endorsed all four design-judgment calls); codex's
+lone HIGH finding (codex-rev-001 — claiming `git hash-object` skips clean
+filters) was dismissed by a decisive experiment showing `git hash-object`
+matches the stored normalized blob OID, refuting the premise.
 
 ## 1.17.4 - 2026-05-22
 
