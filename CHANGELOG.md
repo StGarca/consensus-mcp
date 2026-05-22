@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.1 - unreleased
+
+_Unreleased._
+
 ## 1.19.0 - 2026-05-22
 
 **Result logging.** consensus-mcp now records the RESULTS of every run, not just
