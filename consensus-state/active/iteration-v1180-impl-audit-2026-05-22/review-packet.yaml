@@ -1,0 +1,1675 @@
+defect_target:
+  files:
+  - consensus-state/active/iteration-v1180-impl-audit-2026-05-22/v1.18.0-impl.diff
+  - consensus-state/active/iteration-v1180-impl-audit-2026-05-22/rationale.md
+  base_sha: 7c667f25f0f376f19d48ac961d9aef43782db00adf96a00bac375c068233ee0c
+  touched_files_contents:
+    consensus-state/active/iteration-v1180-impl-audit-2026-05-22/v1.18.0-impl.diff: "diff\
+      \ --git a/.mcp.json b/.mcp.json\nindex 40164ad..879f101 100644\n--- a/.mcp.json\n\
+      +++ b/.mcp.json\n@@ -1,8 +1,7 @@\n {\n   \"mcpServers\": {\n     \"consensus-mcp\"\
+      : {\n-      \"command\": \"py\",\n-      \"args\": [\"-3.11\", \"-m\", \"consensus_mcp.server\"\
+      ]\n+      \"command\": \"consensus-mcp\"\n     }\n   }\n }\ndiff --git a/consensus_mcp/_contributor_profiles.py\
+      \ b/consensus_mcp/_contributor_profiles.py\nnew file mode 100644\nindex 0000000..d7b02a7\n\
+      --- /dev/null\n+++ b/consensus_mcp/_contributor_profiles.py\n@@ -0,0 +1,215\
+      \ @@\n+\"\"\"Contributor profile data foundation (v1.18.0).\n+\n+Per converged-plan.yaml\
+      \ (iteration-v1180-contributor-design-2026-05-22):\n+**B-ROUTING + UNIVERSAL\
+      \ PROFILES.** Every built-in AI (claude/codex/gemini/kimi)\n+has a YAML *profile*\
+      \ — a pure-data description of how to detect, invoke, parse,\n+install, and\
+      \ authenticate one contributor. Profiles supply:\n+\n+  * the wizard's selectable\
+      \ list,\n+  * detect+guide install/auth strings (printed, never executed),\n\
+      +  * model/provenance labels sealed into the T6 review (fixes the parent kimi\n\
+      +    wrapper's ``gemini-2.5-pro`` mislabel), and\n+  * forward-compat docs for\
+      \ a future option-A dispatcher refactor.\n+\n+This module is the **data layer\
+      \ ONLY**: it loads the packaged built-ins, merges\n+operator overrides from\
+      \ ``contributors.profiles``, and validates the schema. It\n+does NOT dispatch\
+      \ (``ProfileAdapter`` + ``_engine_factory`` own routing), does\n+NOT run the\
+      \ wizard, and does NOT touch the network.\n+\n+Dispatch routing note (B-routing):\
+      \ the codex/gemini built-in *adapters* stay\n+unchanged; their profiles here\
+      \ are METADATA-ONLY (wizard/detect/provenance).\n+Only ``kimi`` (and future\
+      \ user-added cli_reviewers) is consumed by\n+``ProfileAdapter`` in v1.18.0.\n\
+      +\n+Schema (converged-plan ``decision.profile_schema``)::\n+\n+    name: str\
+      \                 # contributor id; matches the yaml stem / dict key\n+    kind:\
+      \ host | cli_reviewer # claude=host (in-process); others=cli_reviewer\n+   \
+      \ model: str                # label sealed into dispatch_provenance.model\n\
+      +    detect: {command: str}    # binary resolved via shutil.which (cli_reviewer)\n\
+      +    invoke:\n+      transport: stdin | flag\n+      base_args: [str]\n+   \
+      \   prompt_flag: str|null   # transport=flag → the flag; stdin → null\n+   \
+      \   workdir_flag: str       # optional, e.g. -w\n+      model_flag: str    \
+      \     # optional, e.g. --model\n+    env: {KEY: str}           # injected into\
+      \ the subprocess\n+    output:\n+      strip_patterns: [regex] # chrome removed\
+      \ before JSON parse\n+      schema_enforced: bool   # codex enforces JSON natively;\
+      \ gemini/kimi do not\n+    sealed_filename: str      # default <name>-review.yaml\n\
+      +    id_prefix: str            # rev-id prefix, e.g. codex-rev / kimi-rev\n\
+      +    install: {windows, linux, darwin}   # detect+guide ONLY, never executed\n\
+      +    auth: {command, env_vars: [str], note}\n+    instructions: {filename} \
+      \ # per-AI convention file (CLAUDE.md/AGENTS.md/...)\n+    timeout_seconds:\
+      \ int      # default 1800\n+\"\"\"\n+from __future__ import annotations\n+\n\
+      +from copy import deepcopy\n+from pathlib import Path\n+\n+import yaml\n+\n\
+      +# === Schema vocabulary ===\n+KIND_HOST = \"host\"\n+KIND_CLI_REVIEWER = \"\
+      cli_reviewer\"\n+VALID_KINDS = {KIND_HOST, KIND_CLI_REVIEWER}\n+\n+TRANSPORT_STDIN\
+      \ = \"stdin\"\n+TRANSPORT_FLAG = \"flag\"\n+VALID_TRANSPORTS = {TRANSPORT_STDIN,\
+      \ TRANSPORT_FLAG}\n+\n+# Keys allowed in an install map. Mirrors the os names\
+      \ sys.platform maps onto\n+# (win32→windows, linux→linux, darwin→darwin) per\
+      \ detect+guide.\n+VALID_INSTALL_OS_KEYS = {\"windows\", \"linux\", \"darwin\"\
+      }\n+\n+# Directory holding the packaged built-in profile YAMLs. Resolved relative\
+      \ to\n+# THIS module's __file__ so it works both source-tree and pip-installed\n\
+      +# (mirrors the dispatch_templates resolution in _dispatch_codex/_dispatch_gemini).\n\
+      +_PROFILE_DIR = Path(__file__).parent / \"contributor_profiles\"\n+\n+\n+def\
+      \ load_builtin_profiles() -> dict:\n+    \"\"\"Load every ``consensus_mcp/contributor_profiles/*.yaml``\
+      \ built-in profile.\n+\n+    Returns a dict keyed by the profile's ``name``\
+      \ field (which equals the yaml\n+    file stem for the built-ins). Resolves\
+      \ the directory relative to this\n+    module's ``__file__`` so it works when\
+      \ pip-installed.\n+\n+    Raises:\n+      ValueError if a profile lacks a ``name``\
+      \ or two profiles collide on name.\n+    \"\"\"\n+    profiles: dict = {}\n\
+      +    for path in sorted(_PROFILE_DIR.glob(\"*.yaml\")):\n+        data = yaml.safe_load(path.read_text(encoding=\"\
+      utf-8\"))\n+        if not isinstance(data, dict):\n+            raise ValueError(\n\
+      +                f\"built-in profile {path.name} must be a YAML mapping, \"\n\
+      +                f\"got {type(data).__name__}\"\n+            )\n+        name\
+      \ = data.get(\"name\")\n+        if not name:\n+            raise ValueError(f\"\
+      built-in profile {path.name} is missing 'name'\")\n+        if name in profiles:\n\
+      +            raise ValueError(\n+                f\"duplicate built-in profile\
+      \ name {name!r} (file {path.name})\"\n+            )\n+        profiles[name]\
+      \ = data\n+    return profiles\n+\n+\n+def merge_profiles(builtin: dict, config_profiles:\
+      \ dict) -> dict:\n+    \"\"\"Overlay ``config_profiles`` onto ``builtin``.\n\
+      +\n+    Config overrides a built-in by the same name (whole-profile replacement,\n\
+      +    consistent with config's list-replace semantics) and may add new names.\n\
+      +    Neither input is mutated.\n+\n+    Args:\n+      builtin: the packaged\
+      \ built-in profiles (from ``load_builtin_profiles``).\n+      config_profiles:\
+      \ the operator's ``contributors.profiles`` map (may be\n+        empty or None).\n\
+      +\n+    Returns:\n+      A new merged dict.\n+    \"\"\"\n+    merged = deepcopy(builtin)\n\
+      +    if not config_profiles:\n+        return merged\n+    if not isinstance(config_profiles,\
+      \ dict):\n+        raise ValueError(\n+            f\"contributors.profiles\
+      \ must be a mapping, \"\n+            f\"got {type(config_profiles).__name__}\"\
+      \n+        )\n+    for name, prof in config_profiles.items():\n+        merged[name]\
+      \ = deepcopy(prof)\n+    return merged\n+\n+\n+def validate_profile(name: str,\
+      \ d: dict) -> None:\n+    \"\"\"Validate a single profile dict. Raises ``ValueError``\
+      \ on any violation.\n+\n+    Checks (per converged-plan ``decision.profile_schema``):\n\
+      +      * ``d`` is a mapping with a non-empty ``name`` and a valid ``kind``.\n\
+      +      * ``kind == cli_reviewer`` additionally requires ``detect.command``,\n\
+      +        ``invoke.transport`` (valid enum), and ``output``.\n+      * ``invoke.transport\
+      \ == flag`` requires a non-null ``invoke.prompt_flag``.\n+      * ``invoke.transport\
+      \ == stdin`` requires ``prompt_flag`` null/absent.\n+      * any ``install``\
+      \ map's keys must be a subset of {windows, linux, darwin}.\n+      * ``kind\
+      \ == host`` (claude) need not carry detect/invoke/output.\n+    \"\"\"\n+  \
+      \  if not isinstance(d, dict):\n+        raise ValueError(\n+            f\"\
+      profile {name!r} must be a mapping, got {type(d).__name__}\"\n+        )\n+\n\
+      +    # --- name ---\n+    pname = d.get(\"name\")\n+    if not pname or not\
+      \ isinstance(pname, str):\n+        raise ValueError(f\"profile {name!r} missing\
+      \ required field 'name'\")\n+\n+    # --- kind ---\n+    kind = d.get(\"kind\"\
+      )\n+    if kind not in VALID_KINDS:\n+        raise ValueError(\n+         \
+      \   f\"profile {name!r} has invalid kind {kind!r}; \"\n+            f\"must\
+      \ be one of {sorted(VALID_KINDS)}\"\n+        )\n+\n+    # --- install map (any\
+      \ kind may declare it; detect+guide only) ---\n+    install = d.get(\"install\"\
+      )\n+    if install is not None:\n+        if not isinstance(install, dict):\n\
+      +            raise ValueError(\n+                f\"profile {name!r} 'install'\
+      \ must be a mapping, \"\n+                f\"got {type(install).__name__}\"\n\
+      +            )\n+        bad_keys = set(install) - VALID_INSTALL_OS_KEYS\n+\
+      \        if bad_keys:\n+            raise ValueError(\n+                f\"\
+      profile {name!r} 'install' has invalid OS key(s) \"\n+                f\"{sorted(bad_keys)};\
+      \ allowed: {sorted(VALID_INSTALL_OS_KEYS)}\"\n+            )\n+\n+    # host\
+      \ (claude) needs no detect/invoke/output — it is the in-process env.\n+    if\
+      \ kind == KIND_HOST:\n+        return\n+\n+    # === cli_reviewer-specific required\
+      \ fields ===\n+    detect = d.get(\"detect\")\n+    if not isinstance(detect,\
+      \ dict) or not detect.get(\"command\"):\n+        raise ValueError(\n+     \
+      \       f\"profile {name!r} (kind=cli_reviewer) missing required \"\n+     \
+      \       f\"'detect.command'\"\n+        )\n+\n+    invoke = d.get(\"invoke\"\
+      )\n+    if not isinstance(invoke, dict):\n+        raise ValueError(\n+    \
+      \        f\"profile {name!r} (kind=cli_reviewer) missing required 'invoke'\"\
+      \n+        )\n+    transport = invoke.get(\"transport\")\n+    if transport\
+      \ not in VALID_TRANSPORTS:\n+        raise ValueError(\n+            f\"profile\
+      \ {name!r} has invalid invoke.transport {transport!r}; \"\n+            f\"\
+      must be one of {sorted(VALID_TRANSPORTS)}\"\n+        )\n+\n+    if \"output\"\
+      \ not in d or not isinstance(d.get(\"output\"), dict):\n+        raise ValueError(\n\
+      +            f\"profile {name!r} (kind=cli_reviewer) missing required 'output'\"\
+      \n+        )\n+\n+    # transport / prompt_flag consistency\n+    prompt_flag\
+      \ = invoke.get(\"prompt_flag\")\n+    if transport == TRANSPORT_FLAG and not\
+      \ prompt_flag:\n+        raise ValueError(\n+            f\"profile {name!r}\
+      \ invoke.transport=flag requires a non-null \"\n+            f\"invoke.prompt_flag\"\
+      \n+        )\n+    if transport == TRANSPORT_STDIN and prompt_flag is not None:\n\
+      +        raise ValueError(\n+            f\"profile {name!r} invoke.transport=stdin\
+      \ requires \"\n+            f\"invoke.prompt_flag to be null/absent; got {prompt_flag!r}\"\
+      \n+        )\ndiff --git a/consensus_mcp/_engine_factory.py b/consensus_mcp/_engine_factory.py\n\
+      index 6f26547..970b163 100644\n--- a/consensus_mcp/_engine_factory.py\n+++ b/consensus_mcp/_engine_factory.py\n\
+      @@ -1,34 +1,36 @@\n \"\"\"Factory for assembling a WorkflowEngine from a `.consensus/config.yaml`.\n\
+      \ \n Single source of truth for \"given a validated config + repo root, return\
+      \ a\n ready-to-run WorkflowEngine with all enabled contributors instantiated\"\
+      .\n \n Reusable from Python and from the `consensus_run_iteration` MCP tool\
+      \ wrapper\n so both entry points construct identical adapter pools.\n \"\"\"\
+      \n from __future__ import annotations\n \n from pathlib import Path\n from typing\
+      \ import Callable\n \n from consensus_mcp import config as cfg\n+from consensus_mcp\
+      \ import _contributor_profiles as profiles\n from consensus_mcp.contributors\
+      \ import ContributorAdapter\n from consensus_mcp.contributors.base import DispatchPacket\n\
+      \ from consensus_mcp.contributors.claude import ClaudeAdapter\n from consensus_mcp.contributors.codex\
+      \ import CodexAdapter\n from consensus_mcp.contributors.gemini import GeminiAdapter\n\
+      +from consensus_mcp.contributors.profile_adapter import ProfileAdapter\n from\
+      \ consensus_mcp.workflow_engine import WorkflowEngine, WorkflowError\n \n \n\
+      \ class EngineFactoryError(RuntimeError):\n     \"\"\"Raised when a config requests\
+      \ a contributor we can't construct.\"\"\"\n \n \n # Registry of built-in contributor\
+      \ keys → adapter constructors.\n # Each adapter takes `adapter_config: dict\
+      \ | None` at construction time and\n # receives per-dispatch context (repo_root,\
+      \ iteration_dir, paths) via the\n # DispatchPacket passed to dispatch().\n _BUILTIN_ADAPTERS:\
+      \ dict[str, type[ContributorAdapter]] = {\n     \"claude\": ClaudeAdapter,\n\
+      \     \"codex\": CodexAdapter,\n     \"gemini\": GeminiAdapter,\n@@ -94,48 +96,99\
+      \ @@ def build_adapters(\n     \"\"\"\n     enabled = config.get(\"contributors\"\
+      , {}).get(\"enabled\", [])\n     if not enabled:\n         raise EngineFactoryError(\"\
+      config.contributors.enabled is empty\")\n \n     # 1.17 review (codex-002):\
+      \ read per-contributor config from `contributors.\n     # adapters` — the key\
+      \ default_config() + validate() actually use. The old\n     # `contributors.config`\
+      \ key was never populated, so adapter_config (e.g.\n     # model overrides)\
+      \ was silently always empty. Fall back to the legacy\n     # `.config` key for\
+      \ any pre-existing config that used it.\n     contributors_block = config.get(\"\
+      contributors\", {}) or {}\n     per_contributor = (contributors_block.get(\"\
+      adapters\")\n                        or contributors_block.get(\"config\")\n\
+      \                        or {})\n \n+    # v1.18.0 B-routing (converged-plan\
+      \ decision.engine_factory): resolution\n+    # order per enabled key is (a)\
+      \ _REGISTERED_ADAPTERS, (b) _BUILTIN_ADAPTERS\n+    # (claude/codex/gemini →\
+      \ existing classes), (c) merged profiles. Only step\n+    # (c) needs the profile\
+      \ map, so it is loaded LAZILY (and at most once) — a\n+    # config with only\
+      \ built-in classes (the R8 case) never touches profile IO.\n+    _merged_profiles_cache:\
+      \ dict | None = None\n+\n+    def _merged_profiles() -> dict:\n+        nonlocal\
+      \ _merged_profiles_cache\n+        if _merged_profiles_cache is None:\n+   \
+      \         _merged_profiles_cache = profiles.merge_profiles(\n+             \
+      \   profiles.load_builtin_profiles(),\n+                contributors_block.get(\"\
+      profiles\") or {},\n+            )\n+        return _merged_profiles_cache\n\
+      +\n     adapters: dict[str, ContributorAdapter] = {}\n     for key in enabled:\n\
+      +        adapter_config = per_contributor.get(key) or {}\n+\n+        # (a)\
+      \ + (b): a registered or built-in adapter CLASS wins. This keeps\n+        #\
+      \ claude/codex/gemini on their existing classes (R8) even though they\n+   \
+      \     # also carry metadata-only profiles.\n         ctor = _resolve_adapter(key)\n\
+      -        if ctor is None:\n+        if ctor is not None:\n+            if key\
+      \ == \"claude\":\n+                adapters[key] = ctor(\n+                \
+      \    adapter_config=adapter_config,\n+                    artifact_callback=claude_artifact_callback,\n\
+      +                )\n+            else:\n+                adapters[key] = ctor(adapter_config=adapter_config)\n\
+      +            continue\n+\n+        # (c): no class for this key — fall back\
+      \ to the merged profiles.\n+        profile = _merged_profiles().get(key)\n\
+      +        if profile is not None:\n+            kind = profile.get(\"kind\")\n\
+      +            if kind == profiles.KIND_HOST:\n+                # kind:host is\
+      \ reserved for the in-process orchestrator (claude),\n+                # which\
+      \ always resolves via _BUILTIN_ADAPTERS above. A host\n+                # profile\
+      \ under any other name must NOT be spun up as a\n+                # subprocess\
+      \ — fail closed.\n+                raise EngineFactoryError(\n+            \
+      \        f\"contributor {key!r} has profile kind={profiles.KIND_HOST!r} \"\n\
+      +                    f\"but no built-in host adapter. kind:host is reserved\
+      \ for the \"\n+                    f\"in-process orchestrator (claude); it is\
+      \ never dispatched as a \"\n+                    f\"subprocess. Use kind:{profiles.KIND_CLI_REVIEWER!r}\
+      \ for a \"\n+                    f\"CLI contributor, or remove {key!r} from\
+      \ contributors.enabled.\"\n+                )\n+            if kind == profiles.KIND_CLI_REVIEWER:\n\
+      +                adapters[key] = ProfileAdapter(profile, adapter_config=adapter_config)\n\
+      +                continue\n             raise EngineFactoryError(\n-       \
+      \         f\"unknown contributor key {key!r}; \"\n-                f\"constructible\
+      \ keys: {known_contributor_keys()}. \"\n-                f\"Register a custom\
+      \ contributor via \"\n-                f\"engine_factory.register_contributor(name,\
+      \ AdapterClass).\"\n+                f\"contributor {key!r} profile has unsupported\
+      \ kind {kind!r}; \"\n+                f\"expected {profiles.KIND_CLI_REVIEWER!r}\
+      \ (or {profiles.KIND_HOST!r} \"\n+                f\"for the reserved host).\"\
+      \n             )\n-        adapter_config = per_contributor.get(key) or {}\n\
+      -        if key == \"claude\":\n-            adapters[key] = ctor(\n-      \
+      \          adapter_config=adapter_config,\n-                artifact_callback=claude_artifact_callback,\n\
+      -            )\n-        else:\n-            adapters[key] = ctor(adapter_config=adapter_config)\n\
+      +\n+        # Nothing matched: unknown contributor. Fail closed.\n+        known_profile_names\
+      \ = sorted(_merged_profiles().keys())\n+        raise EngineFactoryError(\n\
+      +            f\"unknown contributor key {key!r}; \"\n+            f\"constructible\
+      \ classes: {known_contributor_keys()}; \"\n+            f\"profile names: {known_profile_names}.\
+      \ \"\n+            f\"Register a custom contributor via \"\n+            f\"\
+      engine_factory.register_contributor(name, AdapterClass), or add a \"\n+    \
+      \        f\"kind:cli_reviewer profile under contributors.profiles.\"\n+    \
+      \    )\n     return adapters\n \n \n def build_engine(\n     config: dict,\n\
+      \     repo_root: Path,\n     *,\n     claude_artifact_callback: Callable[[DispatchPacket],\
+      \ dict] | None = None,\n ) -> WorkflowEngine:\n     \"\"\"Convenience: validate\
+      \ config, build adapters, return a WorkflowEngine.\n \n     schema_version=0\
+      \ is a legacy-synthesis sentinel per config.synthesize_\n     legacy_config();\
+      \ skip validation for legacy-mode dicts so the engine can\n     still run against\
+      \ pre-iter-0015 repos without a .consensus/config.yaml.\n     \"\"\"\ndiff --git\
+      \ a/consensus_mcp/_init_wizard.py b/consensus_mcp/_init_wizard.py\nindex 9baee9d..eb81c24\
+      \ 100644\n--- a/consensus_mcp/_init_wizard.py\n+++ b/consensus_mcp/_init_wizard.py\n\
+      @@ -21,30 +21,31 @@ markers (open without close) are detected and preserved\
+      \ untouched rather than\n risking data loss.\n \"\"\"\n from __future__ import\
+      \ annotations\n \n import argparse\n import difflib\n import json\n import shutil\n\
+      \ import subprocess\n import sys\n from pathlib import Path\n \n import yaml\n\
+      \ \n from consensus_mcp import config as cfg\n+from consensus_mcp import _contributor_profiles\
+      \ as profiles_mod\n \n \n # iter-0031 (per iter-0030 converged plan Q3): marker-based\
+      \ project-root\n # detection beats .git-only. Order: git rev-parse > strong-marker\
+      \ walk > cwd.\n _STRONG_MARKERS = (\n     \".git\",\n     \"pyproject.toml\"\
+      ,\n     \"package.json\",\n     \"CLAUDE.md\",\n     \".mcp.json\",\n     \"\
+      consensus-state\",\n )\n \n \n GITIGNORE_OPEN_MARKER = \"# >>> consensus-mcp\
+      \ managed <<<\"\n@@ -326,30 +327,276 @@ def _resolve_config_path(args, repo_root:\
+      \ Path) -> Path:\n     if getattr(args, \"config\", None):\n         return\
+      \ Path(args.config).resolve()\n     return repo_root / \".consensus\" / \"config.yaml\"\
+      \n \n \n def _detect_available_contributors(repo_root: Path) -> list[str]:\n\
+      \     \"\"\"Return contributors whose CLIs are resolvable on PATH. Always includes\
+      \ claude.\"\"\"\n     available = [\"claude\"]\n     if shutil.which(\"codex\"\
+      ):\n         available.append(\"codex\")\n     if shutil.which(\"gemini\"):\n\
+      \         available.append(\"gemini\")\n     return available\n \n \n+# ---\
+      \ v1.18.0: contributor selection + detect-guide + instruction provisioning ---\n\
+      +# (per converged-plan iteration-v1180-contributor-design: decision.wizard_ux,\n\
+      +#  decision.detect_guide, the instruction_files block.)\n+\n+\n+# Managed-block\
+      \ sentinels for per-AI instruction files. The em-dash matches the\n+# converged\
+      \ plan verbatim; the block between these markers is owned by\n+# consensus-mcp\
+      \ and refreshed in place — everything outside is the user's.\n+INSTRUCTION_BEGIN_MARKER\
+      \ = \"<!-- consensus-mcp:begin (managed — do not edit inside) -->\"\n+INSTRUCTION_END_MARKER\
+      \ = \"<!-- consensus-mcp:end -->\"\n+\n+# A static reminder appended to each\
+      \ detect+guide block: the wizard NEVER shells\n+# out install/auth commands\
+      \ (operator chose detect+guide, not auto-exec).\n+_DETECT_GUIDE_REMINDER = \"\
+      \  (these commands are NOT run for you)\"\n+\n+\n+def _load_merged_profiles(config_profiles:\
+      \ dict | None) -> dict:\n+    \"\"\"Merge the packaged built-in profiles with\
+      \ any operator overlay.\n+\n+    `config_profiles` is the `contributors.profiles`\
+      \ map from an existing\n+    config (or None). Built-ins come from the package;\
+      \ the overlay overrides\n+    by name and may add new contributors.\n+    \"\
+      \"\"\n+    builtin = profiles_mod.load_builtin_profiles()\n+    return profiles_mod.merge_profiles(builtin,\
+      \ config_profiles or {})\n+\n+\n+def _ordered_profile_names(profiles: dict)\
+      \ -> list[str]:\n+    \"\"\"Stable display/selection order: claude (host) first,\
+      \ then the rest sorted.\"\"\"\n+    names = list(profiles)\n+    host = [n for\
+      \ n in names if profiles[n].get(\"kind\") == profiles_mod.KIND_HOST]\n+    rest\
+      \ = sorted(n for n in names if n not in host)\n+    return sorted(host) + rest\n\
+      +\n+\n+def _profile_installed(profile: dict) -> bool:\n+    \"\"\"True if the\
+      \ contributor is usable on this host.\n+\n+    host (claude) is the running\
+      \ environment — always available. cli_reviewers\n+    are available iff their\
+      \ detect.command resolves on PATH.\n+    \"\"\"\n+    if profile.get(\"kind\"\
+      ) == profiles_mod.KIND_HOST:\n+        return True\n+    command = (profile.get(\"\
+      detect\") or {}).get(\"command\")\n+    if not command:\n+        return False\n\
+      +    return shutil.which(command) is not None\n+\n+\n+def _select_contributors_interactive(profiles:\
+      \ dict) -> list[str]:\n+    \"\"\"Numbered multi-select over merged profiles\
+      \ (no TUI dep).\n+\n+    Shows '✓ installed' / '✗ missing' per entry, pre-checks\
+      \ installed ones as\n+    the default (accepted on empty input), and re-prompts\
+      \ until >=2 are picked.\n+    Returns the selected names in display order.\n\
+      +\n+    Raises KeyboardInterrupt on Ctrl+C / EOF (caller maps to exit 1).\n\
+      +    \"\"\"\n+    names = _ordered_profile_names(profiles)\n+    installed =\
+      \ {n: _profile_installed(profiles[n]) for n in names}\n+    prechecked = [n\
+      \ for n in names if installed[n]]\n+\n+    print(\"Select contributors (>=2\
+      \ required):\")\n+    for idx, name in enumerate(names, start=1):\n+       \
+      \ status = \"✓ installed\" if installed[name] else \"✗ missing\"\n+        mark\
+      \ = \"x\" if installed[name] else \" \"\n+        print(f\"  [{mark}] {idx}.\
+      \ {name} ({status})\")\n+    default_hint = \",\".join(str(names.index(n) +\
+      \ 1) for n in prechecked) or \"none\"\n+\n+    while True:\n+        try:\n\
+      +            raw = input(\n+                f\"Enter comma-separated numbers\
+      \ [default: {default_hint}]: \"\n+            ).strip()\n+        except EOFError\
+      \ as exc:\n+            raise KeyboardInterrupt from exc\n+\n+        if not\
+      \ raw:\n+            chosen = list(prechecked)\n+        else:\n+          \
+      \  chosen = []\n+            bad = False\n+            for tok in (t.strip()\
+      \ for t in raw.split(\",\") if t.strip()):\n+                if not tok.isdigit()\
+      \ or not (1 <= int(tok) <= len(names)):\n+                    print(f\"  invalid\
+      \ selection {tok!r}\", file=sys.stderr)\n+                    bad = True\n+\
+      \                    break\n+                cand = names[int(tok) - 1]\n+ \
+      \               if cand not in chosen:\n+                    chosen.append(cand)\n\
+      +            if bad:\n+                continue\n+\n+        if len(chosen)\
+      \ < 2:\n+            print(\"  please select at least 2 contributors\", file=sys.stderr)\n\
+      +            continue\n+        return chosen\n+\n+\n+def _validate_contributor_selection(selection:\
+      \ list[str], profiles: dict) -> list[str]:\n+    \"\"\"Validate a name list\
+      \ against known profiles + enforce min-2.\n+\n+    Raises WizardError on an\
+      \ unknown name or on <2 selected.\n+    \"\"\"\n+    unknown = [n for n in selection\
+      \ if n not in profiles]\n+    if unknown:\n+        raise WizardError(\n+  \
+      \          f\"unknown contributor(s) {unknown}; \"\n+            f\"known: {sorted(profiles)}\"\
+      \n+        )\n+    if len(selection) < 2:\n+        raise WizardError(\n+  \
+      \          f\"at least 2 contributors are required; got {selection!r}\"\n+ \
+      \       )\n+    return list(selection)\n+\n+\n+def _resolve_contributor_selection(\n\
+      +    explicit: str | None, profiles: dict, interactive: bool,\n+) -> list[str]:\n\
+      +    \"\"\"Resolve the contributor list (flags-over-prompts).\n+\n+    If `explicit`\
+      \ (the --contributors flag) is set, it bypasses the prompt and\n+    is validated\
+      \ against known profiles + min-2. Otherwise, when interactive,\n+    the multi-select\
+      \ prompt runs; non-interactive with no flag is left to the\n+    caller's existing\
+      \ default-detection path (returns None to signal that).\n+    \"\"\"\n+    if\
+      \ explicit is not None:\n+        selection = [c.strip() for c in explicit.split(\"\
+      ,\") if c.strip()]\n+        return _validate_contributor_selection(selection,\
+      \ profiles)\n+    if interactive:\n+        return _select_contributors_interactive(profiles)\n\
+      +    return None\n+\n+\n+def _install_os_key() -> str:\n+    \"\"\"Map sys.platform\
+      \ to a profile install[] OS key.\"\"\"\n+    if sys.platform == \"win32\":\n\
+      +        return \"windows\"\n+    if sys.platform == \"darwin\":\n+        return\
+      \ \"darwin\"\n+    return \"linux\"\n+\n+\n+def _detect_and_guide(selection:\
+      \ list[str], profiles: dict) -> None:\n+    \"\"\"Print OS-appropriate install/auth\
+      \ guidance for each MISSING cli_reviewer.\n+\n+    Nothing is executed. Present\
+      \ CLIs and the host (claude) print nothing.\n+    \"\"\"\n+    os_key = _install_os_key()\n\
+      +    for name in selection:\n+        profile = profiles.get(name)\n+      \
+      \  if profile is None:\n+            continue\n+        if profile.get(\"kind\"\
+      ) == profiles_mod.KIND_HOST:\n+            continue\n+        command = (profile.get(\"\
+      detect\") or {}).get(\"command\")\n+        if not command or shutil.which(command)\
+      \ is not None:\n+            continue\n+\n+        print(f\"{name}: not found\
+      \ on PATH — to enable it:\")\n+        install = profile.get(\"install\") or\
+      \ {}\n+        cmd = install.get(os_key)\n+        if cmd is None and os_key\
+      \ == \"darwin\":\n+            cmd = install.get(\"linux\")\n+        if cmd:\n\
+      +            print(f\"  install: {cmd}\")\n+        else:\n+            print(f\"\
+      \  install: unavailable for {os_key} — see {name} vendor docs\")\n+\n+     \
+      \   auth = profile.get(\"auth\") or {}\n+        if auth.get(\"command\"):\n\
+      +            print(f\"  auth:    {auth['command']}\")\n+        for var in auth.get(\"\
+      env_vars\") or []:\n+            print(f\"  auth env (optional): {var}\")\n\
+      +        if auth.get(\"note\"):\n+            print(f\"  note:    {auth['note']}\"\
+      )\n+        print(_DETECT_GUIDE_REMINDER)\n+\n+\n+def _vendored_instructions_text()\
+      \ -> str:\n+    \"\"\"Return the vendored Karpathy guidelines (contributor_instructions/base.md).\"\
+      \"\"\n+    base = Path(__file__).resolve().parent / \"contributor_instructions\"\
+      \ / \"base.md\"\n+    return base.read_text(encoding=\"utf-8\")\n+\n+\n+def\
+      \ _upsert_managed_block(existing: str, block_body: str) -> str:\n+    \"\"\"\
+      Insert or refresh the managed block in `existing` text. Idempotent.\n+\n+  \
+      \  If a sentinel pair is present, its contents are replaced and surrounding\n\
+      +    user content is preserved. If absent, the block is appended. Running twice\n\
+      +    yields exactly one block.\n+    \"\"\"\n+    managed = f\"{INSTRUCTION_BEGIN_MARKER}\\\
+      n{block_body.rstrip(chr(10))}\\n{INSTRUCTION_END_MARKER}\\n\"\n+\n+    begin\
+      \ = existing.find(INSTRUCTION_BEGIN_MARKER)\n+    end = existing.find(INSTRUCTION_END_MARKER)\n\
+      +    if begin != -1 and end != -1 and end > begin:\n+        end_full = end\
+      \ + len(INSTRUCTION_END_MARKER)\n+        # Consume a single trailing newline\
+      \ after the end marker if present so\n+        # we don't accumulate blank lines\
+      \ on refresh.\n+        if end_full < len(existing) and existing[end_full] ==\
+      \ \"\\n\":\n+            end_full += 1\n+        return existing[:begin] + managed\
+      \ + existing[end_full:]\n+\n+    # No existing block: append, separating from\
+      \ prior content with one blank line.\n+    if existing and not existing.endswith(\"\
+      \\n\"):\n+        existing += \"\\n\"\n+    if existing.strip():\n+        existing\
+      \ += \"\\n\"\n+    return existing + managed\n+\n+\n+def _provision_instruction_files(\n\
+      +    selection: list[str], profiles: dict, repo_root: Path,\n+) -> list[Path]:\n\
+      +    \"\"\"Seed/refresh per-AI instruction files for the selected contributors.\n\
+      +\n+    Targets profile.instructions.filename, deduped by filename (codex+kimi\
+      \ both\n+    → AGENTS.md → written once). Non-destructive: a managed block is\
+      \ inserted or\n+    refreshed between sentinels, leaving any user content intact.\
+      \ Idempotent.\n+\n+    Returns the list of written file paths (deduped).\n+\
+      \    \"\"\"\n+    block_body = _vendored_instructions_text()\n+    targets:\
+      \ list[str] = []\n+    for name in selection:\n+        profile = profiles.get(name)\n\
+      +        if profile is None:\n+            continue\n+        filename = (profile.get(\"\
+      instructions\") or {}).get(\"filename\")\n+        if filename and filename\
+      \ not in targets:\n+            targets.append(filename)\n+\n+    written: list[Path]\
+      \ = []\n+    for filename in targets:\n+        path = repo_root / filename\n\
+      +        existing = path.read_text(encoding=\"utf-8\") if path.exists() else\
+      \ \"\"\n+        new_text = _upsert_managed_block(existing, block_body)\n+ \
+      \       if new_text != existing:\n+            path.parent.mkdir(parents=True,\
+      \ exist_ok=True)\n+            path.write_text(new_text, encoding=\"utf-8\"\
+      )\n+        written.append(path)\n+    return written\n+\n+\n def _prompt(label:\
+      \ str, default: str, valid: list[str] | None = None) -> str:\n     \"\"\"Single-line\
+      \ prompt with default. Raises KeyboardInterrupt on Ctrl+C/EOF.\"\"\"\n     suffix\
+      \ = f\" [{default}]\"\n     if valid:\n         suffix = f\" ({'/'.join(valid)})\"\
+      \ + suffix\n     while True:\n         try:\n             raw = input(f\"{label}{suffix}:\
+      \ \").strip()\n         except EOFError as exc:\n             raise KeyboardInterrupt\
+      \ from exc\n         choice = raw or default\n         if valid and choice not\
+      \ in valid:\n             print(f\"  invalid; expected one of {valid}\", file=sys.stderr)\n\
+      \             continue\n         return choice\n@@ -751,42 +998,62 @@ def cmd_init(args)\
+      \ -> int:\n         except cfg.ConfigValidationError:\n             print(f\"\
+      note: existing config at {config_path} is invalid; overwriting\")\n \n     if\
+      \ args.dry_run:\n         print(f\"DRY RUN: would write {config_path}\")\n \
+      \        print(yaml.safe_dump(new_config, sort_keys=False, default_flow_style=False))\n\
+      \         if not args.no_update_gitignore:\n             print(f\"would update\
+      \ .gitignore at {repo_root / '.gitignore'} (managed block)\")\n         else:\n\
+      \             print(\".gitignore update skipped (--no-update-gitignore)\")\n\
+      \         if not args.no_mcp_json:\n             mcp_path = _resolve_mcp_json_path(repo_root)\n\
+      \             print(f\"would write .mcp.json at {mcp_path} (consensus-mcp registered)\"\
+      )\n         else:\n             print(\".mcp.json write skipped (--no-mcp-json)\"\
+      )\n+        if not args.no_instructions:\n+            print(\"would seed per-AI\
+      \ instruction files (managed block)\")\n+        else:\n+            print(\"\
+      instruction-file seeding skipped (--no-instructions)\")\n         return 0\n\
+      \ \n     write_config(new_config, config_path)\n     print(f\"wrote {config_path}\"\
+      )\n \n     if not args.no_update_gitignore:\n         changed = update_gitignore(repo_root)\n\
+      \         if changed:\n             print(f\"updated .gitignore at {repo_root\
+      \ / '.gitignore'}\")\n         else:\n             print(\".gitignore already\
+      \ up to date\")\n \n+    # v1.18.0: detect+guide for missing CLIs and seed per-AI\
+      \ instruction files\n+    # for the contributors that ended up enabled. Best-effort:\
+      \ profile load\n+    # failures must not abort a successful config write.\n\
+      +    try:\n+        existing_profiles = (new_config.get(\"contributors\") or\
+      \ {}).get(\"profiles\")\n+        merged_profiles = _load_merged_profiles(existing_profiles)\n\
+      +        enabled = (new_config.get(\"contributors\") or {}).get(\"enabled\"\
+      ) or []\n+        _detect_and_guide(enabled, merged_profiles)\n+        if not\
+      \ args.no_instructions:\n+            for path in _provision_instruction_files(enabled,\
+      \ merged_profiles, repo_root):\n+                print(f\"seeded instruction\
+      \ file {path}\")\n+        else:\n+            print(\"instruction-file seeding\
+      \ skipped (--no-instructions)\")\n+    except (OSError, ValueError) as exc:\n\
+      +        print(f\"WARN: instruction/detect-guide step skipped: {exc}\", file=sys.stderr)\n\
+      +\n     # iter-0031: write .mcp.json by default (per iter-0030 converged plan).\n\
+      \     if not args.no_mcp_json:\n         try:\n             command, mcp_args,\
+      \ is_portable = _resolve_mcp_command(args.mcp_command)\n         except ValueError\
+      \ as exc:\n             print(f\"WARN: --mcp-command invalid: {exc}; skipping\
+      \ .mcp.json\", file=sys.stderr)\n             return 0\n         state_root\
+      \ = repo_root / \"consensus-state\"\n         project_root = repo_root\n   \
+      \      status, mcp_path = _write_mcp_json(\n             repo_root,\n      \
+      \       state_root,\n             project_root,\n             command,\n   \
+      \          mcp_args,\n@@ -846,30 +1113,33 @@ def main(argv: list[str] | None\
+      \ = None) -> int:\n         raw = raw[1:]\n     argv = raw\n \n     parser =\
+      \ argparse.ArgumentParser(\n         prog=\"consensus init\",\n         description=\"\
+      Initialize .consensus/config.yaml for cross-AI workflow\",\n     )\n     parser.add_argument(\"\
+      --check\", action=\"store_true\", help=\"validate existing config and exit\"\
+      )\n     parser.add_argument(\"--print-defaults\", action=\"store_true\", help=\"\
+      print default YAML to stdout\")\n     parser.add_argument(\"--dry-run\", action=\"\
+      store_true\", help=\"show intended config; do not write\")\n     parser.add_argument(\"\
+      --non-interactive\", action=\"store_true\", help=\"no prompts\")\n     parser.add_argument(\"\
+      --accept-defaults\", action=\"store_true\", help=\"non-interactive with defaults\"\
+      )\n     parser.add_argument(\"--reconfigure\", action=\"store_true\", help=\"\
+      re-prompt with existing as defaults; show diff\")\n     parser.add_argument(\"\
+      --force\", action=\"store_true\", help=\"overwrite without prompt\")\n     parser.add_argument(\"\
+      --no-update-gitignore\", action=\"store_true\", help=\"skip .gitignore marker\
+      \ write\")\n+    parser.add_argument(\"--no-instructions\", action=\"store_true\"\
+      ,\n+                        help=(\"skip seeding per-AI instruction files \"\
+      \n+                              \"(CLAUDE.md/AGENTS.md/GEMINI.md managed block)\"\
+      ))\n     parser.add_argument(\"--config\", default=None, help=\"override config\
+      \ path\")\n \n     # iter-0031: .mcp.json bootstrap flags (per iter-0030 converged\
+      \ plan).\n     parser.add_argument(\"--no-mcp-json\", action=\"store_true\"\
+      ,\n                         help=\"skip writing .mcp.json (default: auto-write)\"\
+      )\n     parser.add_argument(\"--mcp-command\", default=None,\n             \
+      \            help=(\"override the command written into .mcp.json. \"\n     \
+      \                          \"Whitespace-split; first token = command, rest =\
+      \ args. \"\n                               \"Default: discover via PATH (consensus-mcp),\
+      \ else \"\n                               \"fall back to sys.executable -m consensus_mcp.server.\"\
+      ))\n     parser.add_argument(\"--mcp-force\", action=\"store_true\",\n     \
+      \                    help=(\"replace existing consensus-mcp entry in .mcp.json\
+      \ \"\n                               \"even when it differs from the desired\
+      \ config. \"\n                               \"Does NOT overwrite other servers\
+      \ in mcpServers.\"))\n \ndiff --git a/consensus_mcp/config.py b/consensus_mcp/config.py\n\
+      index 097f841..4e0d2bd 100644\n--- a/consensus_mcp/config.py\n+++ b/consensus_mcp/config.py\n\
+      @@ -333,43 +333,63 @@ def validate(config: dict) -> None:\n     # enum, so a\
+      \ clean install supports ANY number of contributors with ANY\n     # names (min-2\
+      \ / max-N). Whether a name is actually CONSTRUCTIBLE is checked\n     # at build\
+      \ time by engine_factory (fail-closed with a register_contributor\n     # hint),\
+      \ which is the only layer that knows the open adapter registry.\n     # Names\
+      \ must still be non-empty strings.\n     for c in enabled:\n         if not\
+      \ isinstance(c, str) or not c.strip():\n             raise ConfigValidationError(\n\
+      \                 f\"contributors.enabled entries must be non-empty, non-whitespace\
+      \ \"\n                 f\"strings; got {c!r}\"\n             )\n     # NOTE:\
+      \ min-2 is NOT blanket-enforced here — it is MODE-SPECIFIC below\n     # (propose-converge\
+      \ / sequential / strict-majority each require >=2), so\n     # single-contributor\
+      \ modes (e.g. solo-claude post-review) stay valid. There\n     # is NO upper\
+      \ cap on N anywhere.\n-    if CLAUDE not in enabled:\n-        raise ConfigValidationError(\n\
+      -            f\"contributors.enabled must contain 'claude' (the orchestrator\
+      \ that \"\n-            f\"runs the loop); got {enabled!r}\"\n-        )\n+\
+      \    # v1.18.0 (open-contributor model — converged plan): claude is OPTIONAL\
+      \ (the\n+    # host orchestrates the loop regardless of whether claude is itself\
+      \ a\n+    # contributor) and a per-contributor `contributors.adapters` entry\
+      \ is\n+    # OPTIONAL. Whether a name is actually CONSTRUCTIBLE — a built-in\
+      \ class, a\n+    # registered adapter, or a kind:cli_reviewer profile — is the\
+      \ engine_factory's\n+    # fail-closed job (see the STRUCTURAL-only note above),\
+      \ NOT config.validate's.\n+    # We keep only the adapters-is-a-mapping type\
+      \ check.\n     adapters = contributors.get(\"adapters\", {})\n     if not isinstance(adapters,\
+      \ dict):\n         raise ConfigValidationError(\"contributors.adapters must\
+      \ be a mapping\")\n-    for c in enabled:\n-        if c not in adapters:\n\
+      +\n+    # === contributors.profiles (v1.18.0 — optional operator overlay) ===\n\
+      +    # Validate each operator-supplied profile against the contributor-profile\n\
+      +    # schema (loader/validator lives in _contributor_profiles). config overrides\n\
+      +    # built-in profiles by same name; this block only checks the OVERLAY supplied\n\
+      +    # in config — built-in profiles are validated by their own test suite.\
+      \ Plain\n+    # ValueErrors from validate_profile are re-raised as ConfigValidationError\
+      \ to\n+    # keep the config-layer error type consistent.\n+    profiles = contributors.get(\"\
+      profiles\")\n+    if profiles is not None:\n+        if not isinstance(profiles,\
+      \ dict):\n             raise ConfigValidationError(\n-                f\"contributors.enabled\
+      \ contains {c!r} but contributors.adapters.{c} is missing\"\n+             \
+      \   f\"contributors.profiles must be a mapping, \"\n+                f\"got\
+      \ {type(profiles).__name__}\"\n             )\n+        from consensus_mcp._contributor_profiles\
+      \ import validate_profile\n+        for pname, pdef in profiles.items():\n+\
+      \            try:\n+                validate_profile(pname, pdef)\n+       \
+      \     except ValueError as exc:\n+                raise ConfigValidationError(\n\
+      +                    f\"contributors.profiles.{pname}: {exc}\"\n+          \
+      \      ) from exc\n \n     # === convergence ===\n     convergence = config.get(\"\
+      convergence\", {})\n     if not isinstance(convergence, dict):\n         raise\
+      \ ConfigValidationError(\"'convergence' must be a mapping\")\n     rule = convergence.get(\"\
+      rule\")\n     if rule not in VALID_CONVERGENCE:\n         raise ConfigValidationError(\n\
+      \             f\"convergence.rule={rule!r} not in {sorted(VALID_CONVERGENCE)}\"\
+      \n         )\n     disposition = convergence.get(\"finding_disposition\")\n\
+      \     if disposition not in VALID_DISPOSITION:\n         raise ConfigValidationError(\n\
+      \             f\"convergence.finding_disposition={disposition!r} not in {sorted(VALID_DISPOSITION)}\"\
+      \n         )\ndiff --git a/consensus_mcp/contributor_instructions/base.md b/consensus_mcp/contributor_instructions/base.md\n\
+      new file mode 100644\nindex 0000000..69853f7\n--- /dev/null\n+++ b/consensus_mcp/contributor_instructions/base.md\n\
+      @@ -0,0 +1,72 @@\n+<!--\n+Source: https://github.com/multica-ai/andrej-karpathy-skills/blob/main/CLAUDE.md\n\
+      +(vendored 2026-05-22). Shared consensus-mcp contributor operating guidelines.\n\
+      +The content below is the upstream file verbatim; do not edit in place — re-vendor\n\
+      +from the source URL to update.\n+-->\n+\n+# CLAUDE.md\n+\n+Behavioral guidelines\
+      \ to reduce common LLM coding mistakes. Merge with project-specific instructions\
+      \ as needed.\n+\n+**Tradeoff:** These guidelines bias toward caution over speed.\
+      \ For trivial tasks, use judgment.\n+\n+## 1. Think Before Coding\n+\n+**Don't\
+      \ assume. Don't hide confusion. Surface tradeoffs.**\n+\n+Before implementing:\n\
+      +- State your assumptions explicitly. If uncertain, ask.\n+- If multiple interpretations\
+      \ exist, present them - don't pick silently.\n+- If a simpler approach exists,\
+      \ say so. Push back when warranted.\n+- If something is unclear, stop. Name\
+      \ what's confusing. Ask.\n+\n+## 2. Simplicity First\n+\n+**Minimum code that\
+      \ solves the problem. Nothing speculative.**\n+\n+- No features beyond what\
+      \ was asked.\n+- No abstractions for single-use code.\n+- No \"flexibility\"\
+      \ or \"configurability\" that wasn't requested.\n+- No error handling for impossible\
+      \ scenarios.\n+- If you write 200 lines and it could be 50, rewrite it.\n+\n\
+      +Ask yourself: \"Would a senior engineer say this is overcomplicated?\" If yes,\
+      \ simplify.\n+\n+## 3. Surgical Changes\n+\n+**Touch only what you must. Clean\
+      \ up only your own mess.**\n+\n+When editing existing code:\n+- Don't \"improve\"\
+      \ adjacent code, comments, or formatting.\n+- Don't refactor things that aren't\
+      \ broken.\n+- Match existing style, even if you'd do it differently.\n+- If\
+      \ you notice unrelated dead code, mention it - don't delete it.\n+\n+When your\
+      \ changes create orphans:\n+- Remove imports/variables/functions that YOUR changes\
+      \ made unused.\n+- Don't remove pre-existing dead code unless asked.\n+\n+The\
+      \ test: Every changed line should trace directly to the user's request.\n+\n\
+      +## 4. Goal-Driven Execution\n+\n+**Define success criteria. Loop until verified.**\n\
+      +\n+Transform tasks into verifiable goals:\n+- \"Add validation\" → \"Write\
+      \ tests for invalid inputs, then make them pass\"\n+- \"Fix the bug\" → \"Write\
+      \ a test that reproduces it, then make it pass\"\n+- \"Refactor X\" → \"Ensure\
+      \ tests pass before and after\"\n+\n+For multi-step tasks, state a brief plan:\n\
+      +```\n+1. [Step] → verify: [check]\n+2. [Step] → verify: [check]\n+3. [Step]\
+      \ → verify: [check]\n+```\n+\n+Strong success criteria let you loop independently.\
+      \ Weak criteria (\"make it work\") require constant clarification.\n+\n+---\n\
+      +\n+**These guidelines are working if:** fewer unnecessary changes in diffs,\
+      \ fewer rewrites due to overcomplication, and clarifying questions come before\
+      \ implementation rather than after mistakes.\ndiff --git a/consensus_mcp/contributor_profiles/claude.yaml\
+      \ b/consensus_mcp/contributor_profiles/claude.yaml\nnew file mode 100644\nindex\
+      \ 0000000..c5febd4\n--- /dev/null\n+++ b/consensus_mcp/contributor_profiles/claude.yaml\n\
+      @@ -0,0 +1,11 @@\n+# Built-in contributor profile: claude (the host orchestrator).\n\
+      +#\n+# kind=host: claude is the running Claude Code environment, NOT a subprocess.\n\
+      +# It has no CLI to detect, no install command, and no auth step — its \"review\"\
+      \n+# is the orchestrator's own analysis via the existing claude_artifact_callback.\n\
+      +# Therefore detect / invoke / install / auth are intentionally absent.\n+name:\
+      \ claude\n+kind: host\n+model: \"claude (host orchestrator)\"\n+instructions:\n\
+      +  filename: CLAUDE.md\ndiff --git a/consensus_mcp/contributor_profiles/codex.yaml\
+      \ b/consensus_mcp/contributor_profiles/codex.yaml\nnew file mode 100644\nindex\
+      \ 0000000..e745b7a\n--- /dev/null\n+++ b/consensus_mcp/contributor_profiles/codex.yaml\n\
+      @@ -0,0 +1,42 @@\n+# Built-in contributor profile: codex (OpenAI Codex CLI).\n\
+      +#\n+# METADATA-ONLY in v1.18.0: codex is dispatched by the EXISTING CodexAdapter\
+      \ via\n+# B-routing (_engine_factory keeps the built-in class). This profile\
+      \ supplies the\n+# wizard list, detect+guide install/auth strings, and the model/provenance\
+      \ label;\n+# it is NOT consumed by ProfileAdapter. Full metadata is authored\
+      \ anyway for the\n+# wizard, forward-compat (future option-A refactor), and\
+      \ provenance accuracy.\n+#\n+# install/auth strings VERIFIED 2026-05-22 (do\
+      \ NOT invent):\n+#   npm package: @openai/codex   ;   auth: `codex login` (token/ChatGPT\
+      \ auth)\n+name: codex\n+kind: cli_reviewer\n+model: \"codex (codex-cli)\"\n\
+      +detect:\n+  command: codex\n+invoke:\n+  # METADATA-ONLY: codex is dispatched\
+      \ by CodexAdapter, not ProfileAdapter, so\n+  # transport is not actually consumed.\
+      \ transport=stdin/prompt_flag=null is the\n+  # schema-valid neutral placeholder\
+      \ (a flag transport would require a real\n+  # prompt_flag the existing adapter\
+      \ does not use).\n+  transport: stdin\n+  base_args: []\n+  prompt_flag: null\n\
+      +  workdir_flag: null\n+  model_flag: null\n+env: {}\n+output:\n+  strip_patterns:\
+      \ []\n+  schema_enforced: true    # codex enforces its review JSON schema natively\n\
+      +sealed_filename: codex-review.yaml\n+id_prefix: codex-rev\n+install:\n+  windows:\
+      \ \"npm install -g @openai/codex\"\n+  linux: \"npm install -g @openai/codex\"\
+      \n+auth:\n+  command: \"codex login\"\n+  env_vars:\n+    - OPENAI_API_KEY\n\
+      +  note: \"ChatGPT/token auth (interactive) or OPENAI_API_KEY\"\n+instructions:\n\
+      +  filename: AGENTS.md\n+timeout_seconds: 1800\ndiff --git a/consensus_mcp/contributor_profiles/gemini.yaml\
+      \ b/consensus_mcp/contributor_profiles/gemini.yaml\nnew file mode 100644\nindex\
+      \ 0000000..9df1835\n--- /dev/null\n+++ b/consensus_mcp/contributor_profiles/gemini.yaml\n\
+      @@ -0,0 +1,42 @@\n+# Built-in contributor profile: gemini (Google Gemini CLI).\n\
+      +#\n+# METADATA-ONLY in v1.18.0: gemini is dispatched by the EXISTING GeminiAdapter\
+      \ via\n+# B-routing. This profile supplies the wizard list, detect+guide install/auth,\
+      \ the\n+# trust-workspace env var, and the model/provenance label; it is NOT\
+      \ consumed by\n+# ProfileAdapter. Full metadata is authored for the wizard +\
+      \ forward-compat.\n+#\n+# install/auth strings VERIFIED 2026-05-22 (do NOT invent):\n\
+      +#   npm package: @google/gemini-cli ; auth: run `gemini` → OAuth in browser.\n\
+      +#   env GEMINI_CLI_TRUST_WORKSPACE=true is REQUIRED for headless empty-output\n\
+      +#   runs on gemini CLI >=0.43 (see reference_gemini_trust_workspace).\n+name:\
+      \ gemini\n+kind: cli_reviewer\n+model: \"gemini-2.5-pro\"\n+detect:\n+  command:\
+      \ gemini\n+invoke:\n+  # METADATA-ONLY: gemini is dispatched by GeminiAdapter,\
+      \ not ProfileAdapter.\n+  # transport=flag with prompt_flag=-p reflects the\
+      \ real gemini CLI invocation\n+  # (gemini -p \"<prompt>\") and validates clean.\n\
+      +  transport: flag\n+  base_args: []\n+  prompt_flag: \"-p\"\n+  workdir_flag:\
+      \ null\n+  model_flag: \"--model\"\n+env:\n+  GEMINI_CLI_TRUST_WORKSPACE: \"\
+      true\"\n+output:\n+  strip_patterns: []\n+  schema_enforced: false   # gemini\
+      \ does not enforce the review JSON natively\n+sealed_filename: gemini-review.yaml\n\
+      +id_prefix: gemini-rev\n+install:\n+  windows: \"npm install -g @google/gemini-cli\"\
+      \n+  linux: \"npm install -g @google/gemini-cli\"\n+auth:\n+  command: \"gemini\"\
+      \n+  env_vars: []\n+  note: \"OAuth on first run (browser)\"\n+instructions:\n\
+      +  filename: GEMINI.md\n+timeout_seconds: 1800\ndiff --git a/consensus_mcp/contributor_profiles/kimi.yaml\
+      \ b/consensus_mcp/contributor_profiles/kimi.yaml\nnew file mode 100644\nindex\
+      \ 0000000..42a275f\n--- /dev/null\n+++ b/consensus_mcp/contributor_profiles/kimi.yaml\n\
+      @@ -0,0 +1,43 @@\n+# Built-in contributor profile: kimi (Moonshot Kimi CLI).\n\
+      +#\n+# kimi IS consumed by ProfileAdapter — the ONLY built-in routed through\
+      \ the new\n+# generic adapter in v1.18.0 (codex/gemini/claude keep their existing\
+      \ classes).\n+# This profile is therefore the live invocation contract, not\
+      \ just metadata.\n+#\n+# Provenance regression fix: the parent project's kimi\
+      \ monkeypatch wrapper\n+# mislabeled model='gemini-2.5-pro'. ProfileAdapter\
+      \ seals model from THIS field,\n+# so the label below must be accurate (see\
+      \ converged-plan provenance gate).\n+#\n+# install/auth strings VERIFIED 2026-05-22\
+      \ (do NOT invent):\n+#   pipx package: kimi-cli ; auth: `kimi login` (OAuth/subscription,\
+      \ interactive).\n+#   stdin transport (NOT -p), --quiet --thinking, -w sets\
+      \ workdir for project ctx.\n+name: kimi\n+kind: cli_reviewer\n+model: \"kimi-code/kimi-for-coding\
+      \ (managed, +thinking)\"\n+detect:\n+  command: kimi\n+invoke:\n+  transport:\
+      \ stdin         # kimi reads the prompt from stdin (NOT a -p flag)\n+  base_args:\n\
+      +    - \"--quiet\"\n+    - \"--thinking\"\n+  prompt_flag: null        # stdin\
+      \ transport → no prompt flag\n+  workdir_flag: \"-w\"       # sets cwd so the\
+      \ CLI loads project context\n+  model_flag: null\n+env: {}\n+output:\n+  strip_patterns:\n\
+      +    - \"\\\\n*To resume this session:\\\\s*kimi -r \\\\S+\\\\s*$\"\n+  schema_enforced:\
+      \ false   # kimi does not enforce the review JSON natively\n+sealed_filename:\
+      \ kimi-review.yaml\n+id_prefix: kimi-rev\n+install:\n+  windows: \"pipx install\
+      \ kimi-cli\"\n+  linux: \"pipx install kimi-cli\"\n+auth:\n+  command: \"kimi\
+      \ login\"\n+  env_vars: []\n+  note: \"OAuth/subscription login (interactive)\"\
+      \n+instructions:\n+  filename: AGENTS.md       # codex AND kimi both read AGENTS.md\
+      \ → dedupe to one file\n+timeout_seconds: 1800\ndiff --git a/consensus_mcp/contributors/profile_adapter.py\
+      \ b/consensus_mcp/contributors/profile_adapter.py\nnew file mode 100644\nindex\
+      \ 0000000..4317506\n--- /dev/null\n+++ b/consensus_mcp/contributors/profile_adapter.py\n\
+      @@ -0,0 +1,392 @@\n+\"\"\"Generic, profile-driven contributor adapter (v1.18.0).\n\
+      +\n+Per the converged plan (iteration-v1180-contributor-design-2026-05-22):\n\
+      +**B-ROUTING + UNIVERSAL PROFILES.** claude/codex/gemini keep their existing\n\
+      +adapter classes; ``ProfileAdapter`` is the ONE generic adapter that dispatches\n\
+      +any ``kind: cli_reviewer`` contributor described purely by a profile dict —\
+      \ kimi\n+today, plus any user-added AI with ZERO new Python classes.\n+\n+ProfileAdapter\
+      \ is the live replacement (in spirit) for the parent project's kimi\n+monkeypatch\
+      \ wrapper. That wrapper monkeypatched ``_dispatch_gemini._invoke_gemini``\n\
+      +and ``_seal_via_t6`` and — critically — left the gemini provenance defaults\
+      \ in\n+place, so a kimi review sealed with ``model='gemini-2.5-pro'``. ProfileAdapter\n\
+      +fixes this by building ``dispatch_provenance`` EXPLICITLY from the resolved\n\
+      +profile (model/contributor/bin/attestation_method), never copying another\n\
+      +adapter's defaults (converged-plan ``decision.provenance``; regression gate:\
+      \ a\n+kimi seal must NOT contain ``model='gemini-2.5-pro'``).\n+\n+Reuse, don't\
+      \ reimplement\n+------------------------\n+The dispatch pipeline mirrors ``_dispatch_gemini.main``\
+      \ but is parameterized by\n+the profile. It reuses the shared ``_dispatch_base``\
+      \ machinery for everything\n+that is NOT CLI-shape-specific:\n+\n+  * ``_load_goal_packet``\
+      \ / ``_load_template`` — read goal_packet + prompt template\n+  * ``_build_prompt``\
+      \ — substitute placeholders (same template the gemini adapter uses)\n+  * ``_sha256_str``\
+      \ — provenance hashes\n+  * ``_build_sealed_packet`` — wrap findings in the\
+      \ T6 outer structure\n+  * ``_seal_via_t6`` — write the sealed YAML through\
+      \ review.write_and_seal (NOT reimplemented)\n+\n+The ONLY profile-specific steps\
+      \ are:\n+  * the CLI invocation (``_invoke``: transport, base_args, prompt_flag,\n\
+      +    workdir_flag, model_flag, env, timeout)\n+  * output chrome removal (``output.strip_patterns``)\
+      \ before JSON parse\n+\n+The parser intentionally reuses gemini's lenient extractor\
+      \ + shape validator\n+(``_dispatch_gemini._parse_gemini_output`` via ``_extract_json_from_text``):\n\
+      +a non-codex cli_reviewer (kimi/custom) does not enforce a JSON schema natively\n\
+      +(``output.schema_enforced: false``), so it needs the same fence/prose-tolerant\n\
+      +extraction gemini uses. Finding-ID prefix enforcement is gemini-specific, so\
+      \ we\n+do NOT route through gemini's id-pattern check; we use ``json.loads``\
+      \ on the\n+stripped+extracted text and a minimal structural guard.\n+\"\"\"\n\
+      +from __future__ import annotations\n+\n+import json\n+import os\n+import re\n\
+      +import subprocess\n+import sys\n+import time\n+from pathlib import Path\n+\n\
+      +from consensus_mcp import _contributor_profiles as _profiles\n+from consensus_mcp._dispatch_base\
+      \ import (\n+    _build_prompt,\n+    _build_sealed_packet,\n+    _load_goal_packet,\n\
+      +    _load_template,\n+    _seal_via_t6,\n+    _sha256_str,\n+)\n+from consensus_mcp._dispatch_gemini\
+      \ import _extract_json_from_text\n+from consensus_mcp.contributors.base import\
+      \ (\n+    ContributorAdapter,\n+    DispatchError,\n+    DispatchPacket,\n+\
+      \    SealedArtifact,\n+)\n+\n+# Default prompt template (shared with the gemini\
+      \ adapter). A profile-driven\n+# cli_reviewer is a review/proposal contributor\
+      \ exactly like gemini; it consumes\n+# the same goal_packet-substituted template.\
+      \ Future profiles MAY name their own\n+# template, but v1.18.0 keeps a single\
+      \ shared default.\n+_DISPATCH_TEMPLATES_DIR = (\n+    Path(__file__).resolve().parent.parent\
+      \ / \"dispatch_templates\"\n+)\n+_DEFAULT_REVIEW_TEMPLATE = _DISPATCH_TEMPLATES_DIR\
+      \ / \"gemini_review_template.md\"\n+\n+\n+class ProfileAdapter(ContributorAdapter):\n\
+      +    \"\"\"Profile-driven cli_reviewer adapter.\n+\n+    Construct with a single\
+      \ ``profile`` dict (a merged built-in/override entry\n+    from ``_contributor_profiles``).\
+      \ The profile MUST validate and be\n+    ``kind: cli_reviewer``; a ``kind: host``\
+      \ profile (claude) is rejected — the\n+    host is never a subprocess.\n+  \
+      \  \"\"\"\n+\n+    def __init__(self, profile: dict, adapter_config: dict |\
+      \ None = None):\n+        super().__init__(adapter_config)\n+        if not\
+      \ isinstance(profile, dict):\n+            raise ValueError(\n+            \
+      \    f\"ProfileAdapter requires a profile dict; got {type(profile).__name__}\"\
+      \n+            )\n+        name = profile.get(\"name\")\n+        # Validate\
+      \ the profile up front (raises ValueError on any violation).\n+        _profiles.validate_profile(name\
+      \ or \"<unnamed>\", profile)\n+        if profile.get(\"kind\") != _profiles.KIND_CLI_REVIEWER:\n\
+      +            raise ValueError(\n+                f\"ProfileAdapter only dispatches\
+      \ kind={_profiles.KIND_CLI_REVIEWER!r} \"\n+                f\"profiles; profile\
+      \ {name!r} has kind={profile.get('kind')!r}. \"\n+                f\"A host\
+      \ (claude) is the in-process orchestrator, never a subprocess.\"\n+        \
+      \    )\n+        self.profile = profile\n+        self.name = name\n+\n+   \
+      \ # ----- profile accessors -------------------------------------------------\n\
+      +\n+    @property\n+    def _invoke_cfg(self) -> dict:\n+        return self.profile.get(\"\
+      invoke\") or {}\n+\n+    @property\n+    def _timeout_seconds(self) -> int:\n\
+      +        return int(self.profile.get(\"timeout_seconds\", 1800))\n+\n+    @property\n\
+      +    def _sealed_filename(self) -> str:\n+        return self.profile.get(\"\
+      sealed_filename\") or f\"{self.name}-review.yaml\"\n+\n+    @property\n+   \
+      \ def _bin(self) -> str:\n+        return (self.profile.get(\"detect\") or {}).get(\"\
+      command\") or self.name\n+\n+    @property\n+    def _model(self) -> str:\n\
+      +        return self.profile.get(\"model\") or \"\"\n+\n+    # ----- CLI invocation\
+      \ (the ONE profile-specific step) --------------------\n+\n+    def _build_cmd(self,\
+      \ prompt: str, repo_root: Path) -> tuple[list[str], bool]:\n+        \"\"\"\
+      Build the argv from the profile. Returns (cmd, stdin_prompt).\n+\n+        transport=stdin\
+      \ → prompt delivered via stdin; NO prompt_flag in argv.\n+        transport=flag\
+      \  → prompt delivered as the value following prompt_flag.\n+\n+        base_args,\
+      \ workdir_flag (+ repo_root value), and model_flag (+ model\n+        value)\
+      \ are wired in per the profile. model_flag is only added when the\n+       \
+      \ profile carries a non-empty model.\n+        \"\"\"\n+        invoke = self._invoke_cfg\n\
+      +        transport = invoke.get(\"transport\")\n+        cmd: list[str] = [self._bin]\n\
+      +        cmd.extend(list(invoke.get(\"base_args\") or []))\n+\n+        workdir_flag\
+      \ = invoke.get(\"workdir_flag\")\n+        if workdir_flag:\n+            cmd.extend([workdir_flag,\
+      \ str(repo_root)])\n+\n+        model_flag = invoke.get(\"model_flag\")\n+ \
+      \       if model_flag and self._model:\n+            cmd.extend([model_flag,\
+      \ self._model])\n+\n+        stdin_prompt = transport == _profiles.TRANSPORT_STDIN\n\
+      +        if transport == _profiles.TRANSPORT_FLAG:\n+            prompt_flag\
+      \ = invoke.get(\"prompt_flag\")\n+            cmd.extend([prompt_flag, prompt])\n\
+      +        return cmd, stdin_prompt\n+\n+    def _subprocess_env(self) -> dict:\n\
+      +        \"\"\"Parent env + the profile's injected env vars (e.g.\n+       \
+      \ GEMINI_CLI_TRUST_WORKSPACE). Returns a COPY; never mutates os.environ.\"\"\
+      \"\n+        env = os.environ.copy()\n+        for key, value in (self.profile.get(\"\
+      env\") or {}).items():\n+            env[str(key)] = str(value)\n+        return\
+      \ env\n+\n+    def _invoke(\n+        self,\n+        *,\n+        cmd: list[str],\n\
+      +        prompt: str,\n+        stdin_prompt: bool,\n+        env: dict,\n+\
+      \        cwd: str,\n+        timeout_seconds: int,\n+    ) -> str:\n+      \
+      \  \"\"\"Shell out to the profile's CLI and return raw stdout.\n+\n+       \
+      \ This is the seam tests monkeypatch (mirrors the kimi wrapper's\n+        ``_invoke_kimi``\
+      \ and the test_dispatch_gemini fake-invoke pattern). The\n+        real implementation\
+      \ runs the CLI non-interactively, piping the prompt\n+        via stdin when\
+      \ ``stdin_prompt`` is True. Raises DispatchError on any\n+        subprocess\
+      \ failure so the engine's timeout/failure policy applies.\n+        \"\"\"\n\
+      +        popen_input = prompt if stdin_prompt else None\n+        _t0 = time.perf_counter()\n\
+      +        try:\n+            result = subprocess.run(\n+                cmd,\n\
+      +                input=popen_input,\n+                capture_output=True,\n\
+      +                text=True,\n+                timeout=timeout_seconds,\n+  \
+      \              cwd=cwd,\n+                env=env,\n+            )\n+      \
+      \  except subprocess.TimeoutExpired as exc:\n+            raise DispatchError(\n\
+      +                f\"{self.name} CLI timed out after {timeout_seconds}s\"\n+\
+      \            ) from exc\n+        except FileNotFoundError as exc:\n+      \
+      \      raise DispatchError(\n+                f\"{self.name} CLI binary not\
+      \ found: {self._bin!r}\"\n+            ) from exc\n+        except OSError as\
+      \ exc:\n+            raise DispatchError(\n+                f\"{self.name} CLI\
+      \ invocation failed ({type(exc).__name__}): {exc}\"\n+            ) from exc\n\
+      +        if result.returncode != 0:\n+            _el = time.perf_counter()\
+      \ - _t0\n+            raise DispatchError(\n+                f\"{self.name}\
+      \ CLI exited {result.returncode} after {_el:.0f}s; \"\n+                f\"\
+      stderr tail: {(result.stderr or '')[-500:]!r}\"\n+            )\n+        return\
+      \ result.stdout or \"\"\n+\n+    # ----- output chrome removal --------------------------------------------\n\
+      +\n+    def _strip_chrome(self, text: str) -> str:\n+        \"\"\"Apply the\
+      \ profile's output.strip_patterns (regexes) to remove CLI\n+        chrome (resume\
+      \ footers, banners) BEFORE JSON parse. Patterns are applied\n+        in declared\
+      \ order; MULTILINE + DOTALL match the kimi wrapper's\n+        _RESUME_FOOTER_RE\
+      \ semantics.\"\"\"\n+        out = text\n+        for pattern in (self.profile.get(\"\
+      output\") or {}).get(\"strip_patterns\") or []:\n+            out = re.sub(pattern,\
+      \ \"\", out, flags=re.MULTILINE | re.DOTALL)\n+        return out.strip()\n\
+      +\n+    # ----- parse ------------------------------------------------------------\n\
+      +\n+    def _parse(self, raw: str) -> dict:\n+        \"\"\"Strip chrome, extract\
+      \ a JSON object, parse + minimally validate shape.\n+\n+        cli_reviewer\
+      \ profiles (kimi/custom) do NOT enforce a JSON schema\n+        natively, so\
+      \ this reuses gemini's prose/fence-tolerant\n+        ``_extract_json_from_text``\
+      \ before ``json.loads``. The structural guard\n+        keeps it adapter-agnostic\
+      \ (no gemini-rev id-prefix check): the parsed\n+        object must be a mapping\
+      \ with the standard review keys.\n+        \"\"\"\n+        stripped = self._strip_chrome(raw)\n\
+      +        candidate = _extract_json_from_text(stripped)\n+        try:\n+   \
+      \         parsed = json.loads(candidate)\n+        except json.JSONDecodeError\
+      \ as exc:\n+            raise DispatchError(\n+                f\"{self.name}\
+      \ output is not valid JSON: {exc}; \"\n+                f\"first 300 chars:\
+      \ {stripped[:300]!r}\"\n+            ) from exc\n+        if not isinstance(parsed,\
+      \ dict):\n+            raise DispatchError(\n+                f\"{self.name}\
+      \ output JSON root must be an object, \"\n+                f\"got {type(parsed).__name__}\"\
+      \n+            )\n+        for required in (\"findings\", \"goal_satisfied\"\
+      , \"blocking_objections\"):\n+            if required not in parsed:\n+    \
+      \            raise DispatchError(\n+                    f\"{self.name} output\
+      \ JSON missing required key: {required!r}\"\n+                )\n+        if\
+      \ not isinstance(parsed[\"findings\"], list):\n+            raise DispatchError(f\"\
+      {self.name} output 'findings' must be an array\")\n+        return parsed\n\
+      +\n+    # ----- dispatch ---------------------------------------------------------\n\
+      +\n+    def dispatch(self, packet: DispatchPacket) -> SealedArtifact:\n+   \
+      \     iter_dir = Path(packet.iteration_dir)\n+        iteration_id = iter_dir.name\n\
+      +        reviewer_id = (\n+            packet.reviewer_id\n+            or f\"\
+      {self.name}-{iteration_id}-{packet.phase}-1\"\n+        )\n+        pass_id\
+      \ = packet.pass_id or f\"{reviewer_id}-pass1\"\n+        timeout_seconds = packet.timeout_seconds\
+      \ or self._timeout_seconds\n+\n+        # The CLI's working directory: where\
+      \ it loads project context + runs.\n+        # Mirrors the kimi wrapper's -w/cwd\
+      \ = repo_root. Use the goal_packet's\n+        # parent as the project frame\
+      \ (the iteration lives under the repo).\n+        repo_root = iter_dir.parent\n\
+      +\n+        try:\n+            goal_packet_text = Path(packet.goal_packet_path).read_text(encoding=\"\
+      utf-8\")\n+            goal_packet = _load_goal_packet(Path(packet.goal_packet_path))\n\
+      +            template_text = _load_template(_DEFAULT_REVIEW_TEMPLATE)\n+\n+\
+      \            review_target_hash = None\n+            review_packet_data = None\n\
+      +            if packet.review_target_path is not None:\n+                rt\
+      \ = Path(packet.review_target_path)\n+                review_target_text = rt.read_text(encoding=\"\
+      utf-8\")\n+                review_target_hash = _sha256_str(review_target_text)\n\
+      +                if rt.suffix.lower() in (\".yaml\", \".yml\"):\n+         \
+      \           import yaml\n+                    try:\n+                      \
+      \  candidate = yaml.safe_load(review_target_text)\n+                       \
+      \ if isinstance(candidate, dict):\n+                            review_packet_data\
+      \ = candidate\n+                    except yaml.YAMLError:\n+              \
+      \          review_packet_data = None\n+\n+            prompt = _build_prompt(\n\
+      +                goal_packet,\n+                template_text,\n+          \
+      \      iteration_dir=str(iter_dir),\n+                review_packet_path=str(packet.goal_packet_path),\n\
+      +                review_target_path=(\n+                    str(packet.review_target_path)\n\
+      +                    if packet.review_target_path is not None\n+           \
+      \         else None\n+                ),\n+                review_target_hash=review_target_hash,\n\
+      +                review_packet=review_packet_data,\n+            )\n+      \
+      \      prompt_sha = _sha256_str(prompt)\n+            goal_packet_sha = _sha256_str(goal_packet_text)\n\
+      +            scope_sig = (\n+                (goal_packet or {}).get(\"authorization\"\
+      , {}) or {}\n+            ).get(\"scope_signature\", \"\")\n+\n+           \
+      \ cmd, stdin_prompt = self._build_cmd(prompt, repo_root)\n+            raw_output\
+      \ = self._invoke(\n+                cmd=cmd,\n+                prompt=prompt,\n\
+      +                stdin_prompt=stdin_prompt,\n+                env=self._subprocess_env(),\n\
+      +                cwd=str(repo_root),\n+                timeout_seconds=timeout_seconds,\n\
+      +            )\n+            extracted = self._parse(raw_output)\n+        \
+      \    output_sha = _sha256_str(raw_output)\n+        except DispatchError:\n\
+      +            raise\n+        except Exception as exc:\n+            raise DispatchError(\n\
+      +                f\"{self.name} dispatch failed ({type(exc).__name__}): {exc}\"\
+      \n+            ) from exc\n+\n+        # PROVENANCE — built EXPLICITLY from\
+      \ the profile. Never copy another\n+        # adapter's defaults (converged-plan\
+      \ decision.provenance). This is the\n+        # regression fix for the kimi\
+      \ wrapper's gemini-2.5-pro mislabel.\n+        provenance = {\n+           \
+      \ \"model\": self._model,\n+            \"adapter\": \"profile\",\n+       \
+      \     \"contributor\": self.name,\n+            \"bin\": self._bin,\n+     \
+      \       \"attestation_method\": f\"auto_{self.name}_dispatch\",\n+         \
+      \   \"prompt_sha256\": prompt_sha,\n+            \"output_sha256\": output_sha,\n\
+      +            \"goal_packet_sha256\": goal_packet_sha,\n+            \"schema_sha256\"\
+      : None,\n+            \"scope_signature\": scope_sig,\n+            \"review_target_hash\"\
+      : review_target_hash,\n+        }\n+\n+        attestation_method = f\"auto_{self.name}_dispatch\"\
+      \n+        sealed_packet = _build_sealed_packet(\n+            extracted,\n\
+      +            iteration_id,\n+            reviewer_id,\n+            pass_id,\n\
+      +            provenance=provenance,\n+            attestation_method=attestation_method,\n\
+      +            attestation_input_sources=[\n+                \"goal_packet (path\
+      \ passed via packet.goal_packet_path)\",\n+                \"prompt_template\
+      \ (substituted by _build_prompt)\",\n+                \"review_target (path\
+      \ passed via packet.review_target_path; may be unspecified)\",\n+          \
+      \      f\"profile (name={self.name}, model={self._model}, bin={self._bin})\"\
+      ,\n+            ],\n+        )\n+\n+        try:\n+            result = _seal_via_t6(\n\
+      +                sealed_packet, iter_dir, sealed_filename=self._sealed_filename\n\
+      +            )\n+        except Exception as exc:\n+            raise DispatchError(\n\
+      +                f\"{self.name} T6 seal failed ({type(exc).__name__}): {exc}\"\
+      \n+            ) from exc\n+\n+        return SealedArtifact(\n+           \
+      \ contributor=self.name,\n+            phase=packet.phase,\n+            pass_id=pass_id,\n\
+      +            sealed_path=Path(result[\"sealed_path\"]),\n+            archive_sealed_path=(\n\
+      +                Path(result[\"archive_sealed_path\"])\n+                if\
+      \ result.get(\"archive_sealed_path\")\n+                else None\n+       \
+      \     ),\n+            packet_sha256=result.get(\"packet_sha256\", \"\"),\n\
+      +            parsed=sealed_packet,\n+        )\ndiff --git a/consensus_mcp/tests/test_config.py\
+      \ b/consensus_mcp/tests/test_config.py\nindex e4568cf..82716bf 100644\n--- a/consensus_mcp/tests/test_config.py\n\
+      +++ b/consensus_mcp/tests/test_config.py\n@@ -304,44 +304,54 @@ def test_engine_factory_gates_unregistered_contributor():\n\
+      \         assert set(adapters) == {\"claude\", \"aider\"}\n     finally:\n \
+      \        ef.unregister_contributor(\"aider\")\n \n \n def test_validate_rejects_whitespace_only_contributor_name():\n\
+      \     \"\"\"1.17 review (kimi-004): structural validation must reject whitespace-only\n\
+      \     names, not just empty strings.\"\"\"\n     c = cfg.default_config()\n\
+      \     c[\"contributors\"][\"enabled\"] = [\"claude\", \"   \"]\n     c[\"contributors\"\
+      ][\"adapters\"] = {\"claude\": {}, \"   \": {}}\n     with pytest.raises(cfg.ConfigValidationError,\
+      \ match=\"non-whitespace\"):\n         cfg.validate(c)\n \n \n-def test_validate_requires_claude():\n\
+      -    \"\"\"Per converged-plan: schema_version 1 requires claude as orchestrator.\"\
+      \"\"\n+def test_validate_allows_no_claude():\n+    \"\"\"v1.18.0: claude is\
+      \ OPTIONAL (open-contributor model — any AI / min-2). A\n+    panel with no\
+      \ claude validates; the host still orchestrates the loop.\"\"\"\n     c = cfg.default_config()\n\
+      \     c[\"contributors\"][\"enabled\"] = [\"codex\", \"gemini\"]\n-    with\
+      \ pytest.raises(cfg.ConfigValidationError, match=\"must contain 'claude'\"):\n\
+      -        cfg.validate(c)\n+    cfg.validate(c)  # no raise\n \n \n-def test_validate_rejects_missing_adapter():\n\
+      +def test_validate_allows_missing_adapter():\n+    \"\"\"v1.18.0: a contributors.adapters\
+      \ entry is OPTIONAL — constructibility is\n+    the engine_factory's fail-closed\
+      \ job (config.validate is structural only). A\n+    built-in contributor with\
+      \ no adapters entry validates.\"\"\"\n     c = cfg.default_config()\n     c[\"\
+      contributors\"][\"enabled\"] = [\"claude\", \"codex\", \"gemini\"]\n     del\
+      \ c[\"contributors\"][\"adapters\"][\"gemini\"]\n-    with pytest.raises(cfg.ConfigValidationError,\
+      \ match=\"adapters.gemini\"):\n-        cfg.validate(c)\n+    cfg.validate(c)\
+      \  # no raise\n+\n+\n+def test_validate_allows_profile_backed_contributor():\n\
+      +    \"\"\"v1.18.0: a profile-backed contributor (built-in profile, e.g. kimi)\
+      \ with no\n+    adapters entry validates; engine_factory builds it via ProfileAdapter.\"\
+      \"\"\n+    c = cfg.default_config()\n+    c[\"contributors\"][\"enabled\"] =\
+      \ [\"claude\", \"codex\", \"kimi\"]\n+    cfg.validate(c)  # no raise\n \n \n\
+      \ # ---------- validation: convergence ----------\n \n def test_validate_rejects_unknown_convergence_rule():\n\
+      \     c = cfg.default_config()\n     c[\"convergence\"][\"rule\"] = \"wrong\"\
+      \n     with pytest.raises(cfg.ConfigValidationError, match=\"convergence.rule\"\
+      ):\n         cfg.validate(c)\n \n \n def test_validate_rejects_unknown_finding_disposition():\n\
+      \     c = cfg.default_config()\n     c[\"convergence\"][\"finding_disposition\"\
+      ] = \"wrong\"\n     with pytest.raises(cfg.ConfigValidationError, match=\"finding_disposition\"\
+      ):\n@@ -557,15 +567,88 @@ def test_synthesize_legacy_config_has_sentinel(tmp_path):\n\
+      \ \n def test_synthesize_legacy_config_workflow_post_review(tmp_path):\n   \
+      \  \"\"\"Per converged-plan Section D: legacy mode emulates workflow #3.\"\"\
+      \"\n     legacy = cfg.synthesize_legacy_config(tmp_path)\n     assert legacy[\"\
+      workflow\"][\"mode\"] == cfg.WORKFLOW_POST_REVIEW\n     assert legacy[\"contributors\"\
+      ][\"enabled\"] == [\"claude\", \"codex\"]\n     assert legacy[\"snapshots\"\
+      ][\"trigger\"] == cfg.SNAPSHOT_MANUAL  # legacy didn't auto-snapshot\n     assert\
+      \ legacy[\"patches\"][\"authoring\"] == cfg.PATCH_CLAUDE_ONLY\n \n \n def test_synthesize_legacy_config_validate_rejected_because_v0_sentinel(tmp_path):\n\
+      \     \"\"\"Legacy synthesis is schema_version=0; validate() rejects it (engine\
+      \ uses separate path).\"\"\"\n     legacy = cfg.synthesize_legacy_config(tmp_path)\n\
+      \     with pytest.raises(cfg.ConfigValidationError, match=\"schema_version\"\
+      ):\n         cfg.validate(legacy)\n+\n+\n+# ---------- contributors.profiles\
+      \ validation (v1.18.0) ----------\n+\n+def _config_with_profiles(profiles: dict)\
+      \ -> dict:\n+    \"\"\"A valid default config with contributors.profiles set\
+      \ to `profiles`.\"\"\"\n+    c = cfg.default_config()\n+    c[\"contributors\"\
+      ][\"profiles\"] = profiles\n+    return c\n+\n+\n+def test_validate_accepts_absent_profiles():\n\
+      +    \"\"\"contributors.profiles is optional; default config (no profiles) validates.\"\
+      \"\"\n+    cfg.validate(cfg.default_config())\n+\n+\n+def test_validate_accepts_empty_profiles():\n\
+      +    cfg.validate(_config_with_profiles({}))\n+\n+\n+def test_validate_accepts_valid_cli_reviewer_profile():\n\
+      +    good = {\n+        \"grok\": {\n+            \"name\": \"grok\",\n+   \
+      \         \"kind\": \"cli_reviewer\",\n+            \"detect\": {\"command\"\
+      : \"grok\"},\n+            \"invoke\": {\"transport\": \"flag\", \"prompt_flag\"\
+      : \"-p\"},\n+            \"output\": {\"schema_enforced\": False},\n+      \
+      \  }\n+    }\n+    cfg.validate(_config_with_profiles(good))\n+\n+\n+def test_validate_rejects_profiles_not_a_mapping():\n\
+      +    c = cfg.default_config()\n+    c[\"contributors\"][\"profiles\"] = [\"\
+      not\", \"a\", \"dict\"]\n+    with pytest.raises(cfg.ConfigValidationError):\n\
+      +        cfg.validate(c)\n+\n+\n+def test_validate_rejects_bad_profile_kind():\n\
+      +    bad = {\"x\": {\"name\": \"x\", \"kind\": \"wizard\"}}\n+    with pytest.raises(cfg.ConfigValidationError):\n\
+      +        cfg.validate(_config_with_profiles(bad))\n+\n+\n+def test_validate_rejects_flag_transport_without_prompt_flag():\n\
+      +    bad = {\n+        \"x\": {\n+            \"name\": \"x\",\n+          \
+      \  \"kind\": \"cli_reviewer\",\n+            \"detect\": {\"command\": \"x\"\
+      },\n+            \"invoke\": {\"transport\": \"flag\", \"prompt_flag\": None},\n\
+      +            \"output\": {\"schema_enforced\": False},\n+        }\n+    }\n\
+      +    with pytest.raises(cfg.ConfigValidationError):\n+        cfg.validate(_config_with_profiles(bad))\n\
+      +\n+\n+def test_validate_rejects_bad_install_os_key():\n+    bad = {\n+    \
+      \    \"x\": {\n+            \"name\": \"x\",\n+            \"kind\": \"cli_reviewer\"\
+      ,\n+            \"detect\": {\"command\": \"x\"},\n+            \"invoke\":\
+      \ {\"transport\": \"stdin\", \"prompt_flag\": None},\n+            \"output\"\
+      : {\"schema_enforced\": False},\n+            \"install\": {\"solaris\": \"\
+      pkg install x\"},\n+        }\n+    }\n+    with pytest.raises(cfg.ConfigValidationError):\n\
+      +        cfg.validate(_config_with_profiles(bad))\ndiff --git a/consensus_mcp/tests/test_contributor_profiles.py\
+      \ b/consensus_mcp/tests/test_contributor_profiles.py\nnew file mode 100644\n\
+      index 0000000..10059bf\n--- /dev/null\n+++ b/consensus_mcp/tests/test_contributor_profiles.py\n\
+      @@ -0,0 +1,235 @@\n+\"\"\"Unit tests for consensus_mcp._contributor_profiles\
+      \ — the v1.18.0 contributor\n+profile data foundation (loader / merger / validator).\n\
+      +\n+Per converged-plan.yaml (iteration-v1180-contributor-design-2026-05-22):\n\
+      +B-ROUTING + UNIVERSAL PROFILES. This module supplies the wizard list, detect\n\
+      +status, install/auth guidance, model/provenance labels, and forward-compat\n\
+      +schema. It does NOT dispatch — _engine_factory + ProfileAdapter own that.\n\
+      +\n+This test file pins:\n+  * load_builtin_profiles() returns the 4 built-in\
+      \ AIs (claude/codex/gemini/kimi)\n+  * every built-in profile validates clean\n\
+      +  * validate_profile rejects each malformation class\n+  * merge_profiles overrides\
+      \ by name + adds new names\n+\"\"\"\n+from __future__ import annotations\n+\n\
+      +from copy import deepcopy\n+\n+import pytest\n+\n+from consensus_mcp import\
+      \ _contributor_profiles as cp\n+\n+\n+BUILTIN_NAMES = {\"claude\", \"codex\"\
+      , \"gemini\", \"kimi\"}\n+\n+\n+# ---------- load_builtin_profiles ----------\n\
+      +\n+def test_load_builtin_returns_the_four():\n+    profiles = cp.load_builtin_profiles()\n\
+      +    assert isinstance(profiles, dict)\n+    assert set(profiles) == BUILTIN_NAMES\n\
+      +\n+\n+def test_load_builtin_keyed_by_name_field():\n+    \"\"\"Each profile's\
+      \ `name` field matches its dict key (the yaml stem).\"\"\"\n+    profiles =\
+      \ cp.load_builtin_profiles()\n+    for key, prof in profiles.items():\n+   \
+      \     assert prof[\"name\"] == key\n+\n+\n+def test_each_builtin_validates_clean():\n\
+      +    profiles = cp.load_builtin_profiles()\n+    for name, prof in profiles.items():\n\
+      +        # must not raise\n+        cp.validate_profile(name, prof)\n+\n+\n\
+      +def test_claude_is_host_kind():\n+    profiles = cp.load_builtin_profiles()\n\
+      +    assert profiles[\"claude\"][\"kind\"] == \"host\"\n+\n+\n+def test_cli_reviewers_are_cli_reviewer_kind():\n\
+      +    profiles = cp.load_builtin_profiles()\n+    for name in (\"codex\", \"\
+      gemini\", \"kimi\"):\n+        assert profiles[name][\"kind\"] == \"cli_reviewer\"\
+      \n+\n+\n+def test_kimi_provenance_model_is_not_gemini():\n+    \"\"\"Regression:\
+      \ the parent kimi wrapper mislabeled model='gemini-2.5-pro'.\n+    The kimi\
+      \ profile must seal an ACCURATE model label.\n+    \"\"\"\n+    profiles = cp.load_builtin_profiles()\n\
+      +    assert profiles[\"kimi\"][\"model\"] != \"gemini-2.5-pro\"\n+    assert\
+      \ \"kimi\" in profiles[\"kimi\"][\"model\"]\n+\n+\n+def test_kimi_transport_is_stdin_with_null_prompt_flag():\n\
+      +    profiles = cp.load_builtin_profiles()\n+    kimi = profiles[\"kimi\"]\n\
+      +    assert kimi[\"invoke\"][\"transport\"] == \"stdin\"\n+    assert kimi[\"\
+      invoke\"].get(\"prompt_flag\") is None\n+\n+\n+def test_gemini_env_trust_workspace():\n\
+      +    profiles = cp.load_builtin_profiles()\n+    assert profiles[\"gemini\"\
+      ][\"env\"][\"GEMINI_CLI_TRUST_WORKSPACE\"] == \"true\"\n+\n+\n+def test_codex_schema_enforced_true():\n\
+      +    profiles = cp.load_builtin_profiles()\n+    assert profiles[\"codex\"][\"\
+      output\"][\"schema_enforced\"] is True\n+\n+\n+def test_instruction_filename_map():\n\
+      +    \"\"\"claude→CLAUDE.md, codex→AGENTS.md, gemini→GEMINI.md, kimi→AGENTS.md.\"\
+      \"\"\n+    profiles = cp.load_builtin_profiles()\n+    assert profiles[\"claude\"\
+      ][\"instructions\"][\"filename\"] == \"CLAUDE.md\"\n+    assert profiles[\"\
+      codex\"][\"instructions\"][\"filename\"] == \"AGENTS.md\"\n+    assert profiles[\"\
+      gemini\"][\"instructions\"][\"filename\"] == \"GEMINI.md\"\n+    assert profiles[\"\
+      kimi\"][\"instructions\"][\"filename\"] == \"AGENTS.md\"\n+\n+\n+# ----------\
+      \ validate_profile (rejections) ----------\n+\n+def _minimal_cli_reviewer()\
+      \ -> dict:\n+    \"\"\"A minimal VALID cli_reviewer profile to mutate in rejection\
+      \ tests.\"\"\"\n+    return {\n+        \"name\": \"fake\",\n+        \"kind\"\
+      : \"cli_reviewer\",\n+        \"detect\": {\"command\": \"fake\"},\n+      \
+      \  \"invoke\": {\"transport\": \"stdin\", \"prompt_flag\": None},\n+       \
+      \ \"output\": {\"schema_enforced\": False},\n+    }\n+\n+\n+def test_minimal_cli_reviewer_validates_clean():\n\
+      +    cp.validate_profile(\"fake\", _minimal_cli_reviewer())\n+\n+\n+def test_reject_missing_name():\n\
+      +    d = _minimal_cli_reviewer()\n+    del d[\"name\"]\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_reject_bad_kind():\n\
+      +    d = _minimal_cli_reviewer()\n+    d[\"kind\"] = \"wizard\"\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_reject_cli_reviewer_missing_detect_command():\n\
+      +    d = _minimal_cli_reviewer()\n+    del d[\"detect\"]\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_reject_cli_reviewer_missing_invoke_transport():\n\
+      +    d = _minimal_cli_reviewer()\n+    del d[\"invoke\"]\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_reject_cli_reviewer_missing_output():\n\
+      +    d = _minimal_cli_reviewer()\n+    del d[\"output\"]\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_reject_bad_transport_enum():\n\
+      +    d = _minimal_cli_reviewer()\n+    d[\"invoke\"][\"transport\"] = \"pipe\"\
+      \n+    with pytest.raises(ValueError):\n+        cp.validate_profile(\"fake\"\
+      , d)\n+\n+\n+def test_reject_flag_transport_without_prompt_flag():\n+    d =\
+      \ _minimal_cli_reviewer()\n+    d[\"invoke\"][\"transport\"] = \"flag\"\n+ \
+      \   d[\"invoke\"][\"prompt_flag\"] = None\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_flag_transport_with_prompt_flag_validates():\n\
+      +    d = _minimal_cli_reviewer()\n+    d[\"invoke\"][\"transport\"] = \"flag\"\
+      \n+    d[\"invoke\"][\"prompt_flag\"] = \"-p\"\n+    cp.validate_profile(\"\
+      fake\", d)  # must not raise\n+\n+\n+def test_reject_stdin_transport_with_prompt_flag():\n\
+      +    d = _minimal_cli_reviewer()\n+    d[\"invoke\"][\"transport\"] = \"stdin\"\
+      \n+    d[\"invoke\"][\"prompt_flag\"] = \"-p\"\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_reject_bad_install_os_key():\n\
+      +    d = _minimal_cli_reviewer()\n+    d[\"install\"] = {\"windows\": \"pipx\
+      \ install x\", \"solaris\": \"pkg install x\"}\n+    with pytest.raises(ValueError):\n\
+      +        cp.validate_profile(\"fake\", d)\n+\n+\n+def test_valid_install_os_keys():\n\
+      +    d = _minimal_cli_reviewer()\n+    d[\"install\"] = {\"windows\": \"x\"\
+      , \"linux\": \"x\", \"darwin\": \"x\"}\n+    cp.validate_profile(\"fake\", d)\
+      \  # must not raise\n+\n+\n+def test_host_kind_needs_no_detect_or_invoke():\n\
+      +    \"\"\"claude (host) need not have detect/invoke/output.\"\"\"\n+    d =\
+      \ {\"name\": \"claude\", \"kind\": \"host\", \"instructions\": {\"filename\"\
+      : \"CLAUDE.md\"}}\n+    cp.validate_profile(\"claude\", d)  # must not raise\n\
+      +\n+\n+# ---------- merge_profiles ----------\n+\n+def test_merge_override_by_name():\n\
+      +    builtin = cp.load_builtin_profiles()\n+    override = {\"kimi\": {\"name\"\
+      : \"kimi\", \"kind\": \"cli_reviewer\", \"model\": \"kimi-OVERRIDDEN\",\n+ \
+      \                        \"detect\": {\"command\": \"kimi\"},\n+           \
+      \              \"invoke\": {\"transport\": \"stdin\", \"prompt_flag\": None},\n\
+      +                         \"output\": {\"schema_enforced\": False}}}\n+    merged\
+      \ = cp.merge_profiles(builtin, override)\n+    assert merged[\"kimi\"][\"model\"\
+      ] == \"kimi-OVERRIDDEN\"\n+    # other built-ins untouched\n+    assert merged[\"\
+      codex\"][\"name\"] == \"codex\"\n+\n+\n+def test_merge_adds_new_name():\n+ \
+      \   builtin = cp.load_builtin_profiles()\n+    new = {\"grok\": {\"name\": \"\
+      grok\", \"kind\": \"cli_reviewer\",\n+                    \"detect\": {\"command\"\
+      : \"grok\"},\n+                    \"invoke\": {\"transport\": \"flag\", \"\
+      prompt_flag\": \"-p\"},\n+                    \"output\": {\"schema_enforced\"\
+      : False}}}\n+    merged = cp.merge_profiles(builtin, new)\n+    assert \"grok\"\
+      \ in merged\n+    assert set(merged) == BUILTIN_NAMES | {\"grok\"}\n+\n+\n+def\
+      \ test_merge_does_not_mutate_inputs():\n+    builtin = cp.load_builtin_profiles()\n\
+      +    builtin_snapshot = deepcopy(builtin)\n+    override = {\"kimi\": {\"name\"\
+      : \"kimi\", \"kind\": \"cli_reviewer\", \"model\": \"x\",\n+               \
+      \          \"detect\": {\"command\": \"kimi\"},\n+                         \"\
+      invoke\": {\"transport\": \"stdin\", \"prompt_flag\": None},\n+            \
+      \             \"output\": {\"schema_enforced\": False}}}\n+    cp.merge_profiles(builtin,\
+      \ override)\n+    assert builtin == builtin_snapshot\n+\n+\n+def test_merge_empty_config_returns_builtins():\n\
+      +    builtin = cp.load_builtin_profiles()\n+    merged = cp.merge_profiles(builtin,\
+      \ {})\n+    assert set(merged) == BUILTIN_NAMES\ndiff --git a/consensus_mcp/tests/test_engine_factory_profiles.py\
+      \ b/consensus_mcp/tests/test_engine_factory_profiles.py\nnew file mode 100644\n\
+      index 0000000..e63bd76\n--- /dev/null\n+++ b/consensus_mcp/tests/test_engine_factory_profiles.py\n\
+      @@ -0,0 +1,164 @@\n+\"\"\"Engine-factory routing tests for v1.18.0 ProfileAdapter\
+      \ (B-routing).\n+\n+Per the converged plan (iteration-v1180-contributor-design-2026-05-22)\n\
+      +decision.engine_factory, `build_adapters` resolves each enabled contributor\
+      \ in\n+this order:\n+  (a) _REGISTERED_ADAPTERS\n+  (b) _BUILTIN_ADAPTERS (claude/codex/gemini\
+      \ → existing classes)\n+  (c) merged profiles (load_builtin_profiles + config\
+      \ contributors.profiles via\n+      merge_profiles); kind:cli_reviewer → ProfileAdapter(profile);\
+      \ kind:host is\n+      reserved (claude) and must NOT be turned into a subprocess\
+      \ adapter.\n+  Unknown name → EngineFactoryError.\n+\n+R8 REGRESSION GATE: enabled=[claude,codex,gemini]\
+      \ must build the SAME adapter\n+classes as v1.17.5 (the existing test_engine_factory.py\
+      \ asserts this; this file\n+re-asserts it alongside the new profile routing\
+      \ to keep both observable in one\n+suite).\n+\"\"\"\n+from __future__ import\
+      \ annotations\n+\n+import sys\n+from copy import deepcopy\n+from pathlib import\
+      \ Path\n+\n+import pytest\n+\n+ROOT = Path(__file__).resolve().parent.parent.parent\n\
+      +if str(ROOT) not in sys.path:\n+    sys.path.insert(0, str(ROOT))\n+\n+from\
+      \ consensus_mcp import _engine_factory as factory  # noqa: E402\n+from consensus_mcp\
+      \ import config as cfg  # noqa: E402\n+from consensus_mcp.contributors.claude\
+      \ import ClaudeAdapter  # noqa: E402\n+from consensus_mcp.contributors.codex\
+      \ import CodexAdapter  # noqa: E402\n+from consensus_mcp.contributors.gemini\
+      \ import GeminiAdapter  # noqa: E402\n+from consensus_mcp.contributors.profile_adapter\
+      \ import ProfileAdapter  # noqa: E402\n+\n+\n+def _claude_cb(_packet):\n+  \
+      \  return {\"findings\": [], \"goal_satisfied\": True, \"blocking_objections\"\
+      : []}\n+\n+\n+def _base_config(enabled):\n+    c = deepcopy(cfg.default_config())\n\
+      +    c[\"contributors\"][\"enabled\"] = list(enabled)\n+    return c\n+\n+\n\
+      +# ---------------------------------------------------------------------------\
+      \ #\n+# R8: built-in trio resolves to the existing classes (regression)\n+#\
+      \ ---------------------------------------------------------------------------\
+      \ #\n+\n+def test_r8_builtin_trio_unchanged():\n+    config = _base_config([\"\
+      claude\", \"codex\", \"gemini\"])\n+    cfg.validate(config)\n+    adapters\
+      \ = factory.build_adapters(config, claude_artifact_callback=_claude_cb)\n+ \
+      \   assert set(adapters.keys()) == {\"claude\", \"codex\", \"gemini\"}\n+  \
+      \  assert isinstance(adapters[\"claude\"], ClaudeAdapter)\n+    assert isinstance(adapters[\"\
+      codex\"], CodexAdapter)\n+    assert isinstance(adapters[\"gemini\"], GeminiAdapter)\n\
+      +    # Specifically NOT ProfileAdapter — built-in classes win over their profiles.\n\
+      +    assert not isinstance(adapters[\"codex\"], ProfileAdapter)\n+    assert\
+      \ not isinstance(adapters[\"gemini\"], ProfileAdapter)\n+\n+\n+# ---------------------------------------------------------------------------\
+      \ #\n+# kimi: built-in cli_reviewer profile → ProfileAdapter (no new Python\
+      \ class)\n+# ---------------------------------------------------------------------------\
+      \ #\n+\n+def test_kimi_builtin_profile_resolves_to_profile_adapter():\n+   \
+      \ config = _base_config([\"claude\", \"kimi\"])\n+    adapters = factory.build_adapters(config,\
+      \ claude_artifact_callback=_claude_cb)\n+    assert set(adapters.keys()) ==\
+      \ {\"claude\", \"kimi\"}\n+    assert isinstance(adapters[\"claude\"], ClaudeAdapter)\n\
+      +    assert isinstance(adapters[\"kimi\"], ProfileAdapter)\n+    assert adapters[\"\
+      kimi\"].name == \"kimi\"\n+    # provenance/model surfaced from the profile,\
+      \ not a default.\n+    assert adapters[\"kimi\"].profile[\"model\"].startswith(\"\
+      kimi-code\")\n+\n+\n+def test_kimi_alongside_builtins():\n+    \"\"\"kimi +\
+      \ the full built-in trio: trio keeps classes, kimi is ProfileAdapter.\"\"\"\n\
+      +    config = _base_config([\"claude\", \"codex\", \"gemini\", \"kimi\"])\n\
+      +    adapters = factory.build_adapters(config, claude_artifact_callback=_claude_cb)\n\
+      +    assert isinstance(adapters[\"codex\"], CodexAdapter)\n+    assert isinstance(adapters[\"\
+      gemini\"], GeminiAdapter)\n+    assert isinstance(adapters[\"kimi\"], ProfileAdapter)\n\
+      +\n+\n+# ---------------------------------------------------------------------------\
+      \ #\n+# config contributors.profiles overlay: add a custom + override a built-in\n\
+      +# ---------------------------------------------------------------------------\
+      \ #\n+\n+def _custom_cli_profile(name=\"acme\"):\n+    return {\n+        \"\
+      name\": name,\n+        \"kind\": \"cli_reviewer\",\n+        \"model\": f\"\
+      {name}-model\",\n+        \"detect\": {\"command\": f\"{name}-cli\"},\n+   \
+      \     \"invoke\": {\n+            \"transport\": \"stdin\",\n+            \"\
+      base_args\": [],\n+            \"prompt_flag\": None,\n+            \"workdir_flag\"\
+      : None,\n+            \"model_flag\": None,\n+        },\n+        \"env\":\
+      \ {},\n+        \"output\": {\"strip_patterns\": [], \"schema_enforced\": False},\n\
+      +        \"sealed_filename\": f\"{name}-review.yaml\",\n+        \"id_prefix\"\
+      : f\"{name}-rev\",\n+        \"timeout_seconds\": 1800,\n+    }\n+\n+\n+def\
+      \ test_config_profile_adds_new_contributor():\n+    config = _base_config([\"\
+      claude\", \"acme\"])\n+    config[\"contributors\"][\"profiles\"] = {\"acme\"\
+      : _custom_cli_profile(\"acme\")}\n+    adapters = factory.build_adapters(config,\
+      \ claude_artifact_callback=_claude_cb)\n+    assert isinstance(adapters[\"acme\"\
+      ], ProfileAdapter)\n+    assert adapters[\"acme\"].profile[\"model\"] == \"\
+      acme-model\"\n+\n+\n+def test_config_profile_overrides_builtin_kimi():\n+  \
+      \  \"\"\"A config profile with the same name overrides the built-in (whole-profile\n\
+      +    replacement, per merge_profiles semantics).\"\"\"\n+    config = _base_config([\"\
+      claude\", \"kimi\"])\n+    override = _custom_cli_profile(\"kimi\")\n+    override[\"\
+      model\"] = \"kimi-overridden-model\"\n+    config[\"contributors\"][\"profiles\"\
+      ] = {\"kimi\": override}\n+    adapters = factory.build_adapters(config, claude_artifact_callback=_claude_cb)\n\
+      +    assert isinstance(adapters[\"kimi\"], ProfileAdapter)\n+    assert adapters[\"\
+      kimi\"].profile[\"model\"] == \"kimi-overridden-model\"\n+\n+\n+# ---------------------------------------------------------------------------\
+      \ #\n+# host profile never becomes a subprocess; unknown name fails closed\n\
+      +# ---------------------------------------------------------------------------\
+      \ #\n+\n+def test_unknown_name_raises():\n+    config = _base_config([\"claude\"\
+      , \"totally-unknown-ai\"])\n+    with pytest.raises(factory.EngineFactoryError,\
+      \ match=\"unknown contributor\"):\n+        factory.build_adapters(config, claude_artifact_callback=_claude_cb)\n\
+      +\n+\n+def test_host_profile_not_instantiated_as_subprocess():\n+    \"\"\"\
+      A bare `kind: host` profile name (other than the built-in claude class)\n+ \
+      \   must NOT be turned into a ProfileAdapter subprocess. claude itself resolves\n\
+      +    via _BUILTIN_ADAPTERS, so to exercise the host branch we register a host\n\
+      +    profile under a fresh name via config and assert it is rejected (host is\n\
+      +    reserved; only claude is a host and it routes to ClaudeAdapter).\"\"\"\n\
+      +    config = _base_config([\"claude\", \"ghost\"])\n+    config[\"contributors\"\
+      ][\"profiles\"] = {\n+        \"ghost\": {\"name\": \"ghost\", \"kind\": \"\
+      host\", \"model\": \"ghost (host)\"}\n+    }\n+    with pytest.raises(factory.EngineFactoryError,\
+      \ match=\"host\"):\n+        factory.build_adapters(config, claude_artifact_callback=_claude_cb)\n\
+      +\n+\n+def test_claude_still_routes_to_claude_adapter_not_profile():\n+    \"\
+      \"\"claude has kind:host AND a built-in class; it must resolve to\n+    ClaudeAdapter\
+      \ (built-in wins), never ProfileAdapter.\"\"\"\n+    config = _base_config([\"\
+      claude\", \"kimi\"])\n+    adapters = factory.build_adapters(config, claude_artifact_callback=_claude_cb)\n\
+      +    assert isinstance(adapters[\"claude\"], ClaudeAdapter)\n+    assert not\
+      \ isinstance(adapters[\"claude\"], ProfileAdapter)\ndiff --git a/consensus_mcp/tests/test_init_wizard_contributors.py\
+      \ b/consensus_mcp/tests/test_init_wizard_contributors.py\nnew file mode 100644\n\
+      index 0000000..ef14429\n--- /dev/null\n+++ b/consensus_mcp/tests/test_init_wizard_contributors.py\n\
+      @@ -0,0 +1,304 @@\n+\"\"\"Tests for v1.18.0 contributor-selection + detect-guide\
+      \ + instruction\n+provisioning in consensus_mcp._init_wizard.\n+\n+Covers the\
+      \ four converged-plan features (decision.wizard_ux, decision.detect_guide,\n\
+      +the instruction_files block):\n+\n+  1. interactive multi-select over merged\
+      \ profiles (min-2 re-prompt, claude\n+     optional, installed-status, pre-checked\
+      \ defaults)\n+  2. non-interactive --contributors precedence (unknown-name +\
+      \ <2 errors)\n+  3. detect+guide (per-OS install/auth lines for missing CLIs;\
+      \ silence for\n+     present ones; nothing executed)\n+  4. non-destructive\
+      \ idempotent managed-block instruction-file provisioning\n+     (filename-map\
+      \ dedupe; --no-instructions opt-out)\n+\n+Helpers are exercised directly (mirroring\
+      \ how test_init_wizard.py drives\n+_resolve_mcp_command et al.) so config-level\
+      \ validation does not couple these\n+unit tests to other agents' modules.\n\
+      +\"\"\"\n+from __future__ import annotations\n+\n+import builtins\n+\n+import\
+      \ pytest\n+\n+from consensus_mcp import _init_wizard as wiz\n+\n+\n+# ----------\
+      \ input stub (mirrors test_init_wizard._stub_input) ----------\n+\n+def _stub_input(responses):\n\
+      +    queue = list(responses)\n+    def _fake(prompt=\"\"):\n+        if not\
+      \ queue:\n+            raise EOFError\n+        return queue.pop(0)\n+    return\
+      \ _fake\n+\n+\n+# ============================================================\n\
+      +# 1. interactive multi-select\n+# ============================================================\n\
+      +\n+def test_select_contributors_interactive_min2_reprompt(monkeypatch, capsys):\n\
+      +    \"\"\"A selection of <2 must re-prompt until >=2 are chosen.\"\"\"\n+ \
+      \   profiles = wiz._load_merged_profiles(None)\n+    # which → nothing installed,\
+      \ so nothing pre-checked (claude host always avail).\n+    monkeypatch.setattr(wiz.shutil,\
+      \ \"which\", lambda name: None)\n+    # First answer picks a single number (claude\
+      \ only via its index) → re-prompt;\n+    # second answer picks two indices →\
+      \ accepted.\n+    names = wiz._ordered_profile_names(profiles)\n+    one = str(names.index(\"\
+      claude\") + 1)\n+    two = f\"{names.index('claude') + 1},{names.index('codex')\
+      \ + 1}\"\n+    monkeypatch.setattr(builtins, \"input\", _stub_input([one, two]))\n\
+      +    chosen = wiz._select_contributors_interactive(profiles)\n+    assert set(chosen)\
+      \ == {\"claude\", \"codex\"}\n+    err = capsys.readouterr().err\n+    assert\
+      \ \"at least 2\" in err.lower()\n+\n+\n+def test_select_contributors_interactive_min2_ok_first_try(monkeypatch):\n\
+      +    profiles = wiz._load_merged_profiles(None)\n+    monkeypatch.setattr(wiz.shutil,\
+      \ \"which\", lambda name: None)\n+    names = wiz._ordered_profile_names(profiles)\n\
+      +    pick = f\"{names.index('codex') + 1},{names.index('gemini') + 1}\"\n+ \
+      \   monkeypatch.setattr(builtins, \"input\", _stub_input([pick]))\n+    chosen\
+      \ = wiz._select_contributors_interactive(profiles)\n+    assert set(chosen)\
+      \ == {\"codex\", \"gemini\"}\n+\n+\n+def test_select_contributors_interactive_empty_accepts_prechecked(monkeypatch):\n\
+      +    \"\"\"Empty input accepts the pre-checked (installed) default set when\
+      \ >=2.\"\"\"\n+    profiles = wiz._load_merged_profiles(None)\n+    # codex\
+      \ + gemini installed → pre-checked; claude host always available too.\n+   \
+      \ installed = {\"codex\", \"gemini\"}\n+    monkeypatch.setattr(\n+        wiz.shutil,\
+      \ \"which\",\n+        lambda name: f\"/usr/bin/{name}\" if name in installed\
+      \ else None,\n+    )\n+    monkeypatch.setattr(builtins, \"input\", _stub_input([\"\
+      \"]))\n+    chosen = wiz._select_contributors_interactive(profiles)\n+    #\
+      \ claude (host) + codex + gemini are the pre-checked defaults.\n+    assert\
+      \ \"codex\" in chosen and \"gemini\" in chosen\n+    assert len(chosen) >= 2\n\
+      +\n+\n+def test_select_contributors_status_line_shows_installed_and_missing(monkeypatch,\
+      \ capsys):\n+    profiles = wiz._load_merged_profiles(None)\n+    installed\
+      \ = {\"codex\"}\n+    monkeypatch.setattr(\n+        wiz.shutil, \"which\",\n\
+      +        lambda name: f\"/usr/bin/{name}\" if name in installed else None,\n\
+      +    )\n+    monkeypatch.setattr(builtins, \"input\", _stub_input([\"1,2,3\"\
+      ]))\n+    wiz._select_contributors_interactive(profiles)\n+    out = capsys.readouterr().out\n\
+      +    assert \"installed\" in out\n+    assert \"missing\" in out\n+\n+\n+# ============================================================\n\
+      +# 2. --contributors non-interactive precedence + validation\n+# ============================================================\n\
+      +\n+def test_validate_selection_accepts_known_min2():\n+    profiles = wiz._load_merged_profiles(None)\n\
+      +    result = wiz._validate_contributor_selection([\"claude\", \"codex\"], profiles)\n\
+      +    assert result == [\"claude\", \"codex\"]\n+\n+\n+def test_validate_selection_unknown_name_errors():\n\
+      +    profiles = wiz._load_merged_profiles(None)\n+    with pytest.raises(wiz.WizardError)\
+      \ as exc:\n+        wiz._validate_contributor_selection([\"claude\", \"bogus\"\
+      ], profiles)\n+    assert \"bogus\" in str(exc.value)\n+\n+\n+def test_validate_selection_under_two_errors():\n\
+      +    profiles = wiz._load_merged_profiles(None)\n+    with pytest.raises(wiz.WizardError)\
+      \ as exc:\n+        wiz._validate_contributor_selection([\"codex\"], profiles)\n\
+      +    assert \"at least 2\" in str(exc.value).lower()\n+\n+\n+def test_contributors_flag_bypasses_prompt(monkeypatch):\n\
+      +    \"\"\"Non-interactive selection: --contributors list is honored without\
+      \ prompting.\"\"\"\n+    profiles = wiz._load_merged_profiles(None)\n+    def\
+      \ _explode(prompt=\"\"):\n+        raise AssertionError(\"prompt invoked despite\
+      \ --contributors\")\n+    monkeypatch.setattr(builtins, \"input\", _explode)\n\
+      +    chosen = wiz._resolve_contributor_selection(\n+        explicit=\"codex,gemini\"\
+      , profiles=profiles, interactive=True,\n+    )\n+    assert chosen == [\"codex\"\
+      , \"gemini\"]\n+\n+\n+# ============================================================\n\
+      +# 3. detect + guide\n+# ============================================================\n\
+      +\n+def test_detect_guide_missing_windows_prints_install_and_auth(monkeypatch,\
+      \ capsys):\n+    profiles = wiz._load_merged_profiles(None)\n+    monkeypatch.setattr(wiz.sys,\
+      \ \"platform\", \"win32\")\n+    monkeypatch.setattr(wiz.shutil, \"which\",\
+      \ lambda name: None)  # nothing installed\n+    # Guard: nothing must be shelled\
+      \ out.\n+    monkeypatch.setattr(\n+        wiz.subprocess, \"run\",\n+    \
+      \    lambda *a, **k: (_ for _ in ()).throw(AssertionError(\"subprocess.run called\"\
+      )),\n+    )\n+    wiz._detect_and_guide([\"codex\"], profiles)\n+    out = capsys.readouterr().out\n\
+      +    assert \"npm install -g @openai/codex\" in out\n+    assert \"codex login\"\
+      \ in out\n+    assert \"OPENAI_API_KEY\" in out\n+    assert \"NOT run for you\"\
+      \ in out\n+\n+\n+def test_detect_guide_uses_linux_install_on_linux(monkeypatch,\
+      \ capsys):\n+    profiles = wiz._load_merged_profiles(None)\n+    monkeypatch.setattr(wiz.sys,\
+      \ \"platform\", \"linux\")\n+    monkeypatch.setattr(wiz.shutil, \"which\",\
+      \ lambda name: None)\n+    wiz._detect_and_guide([\"gemini\"], profiles)\n+\
+      \    out = capsys.readouterr().out\n+    assert \"npm install -g @google/gemini-cli\"\
+      \ in out\n+\n+\n+def test_detect_guide_darwin_falls_back_to_linux_when_absent(monkeypatch,\
+      \ capsys):\n+    \"\"\"darwin uses install.darwin if present, else install.linux.\"\
+      \"\"\n+    profiles = wiz._load_merged_profiles(None)\n+    monkeypatch.setattr(wiz.sys,\
+      \ \"platform\", \"darwin\")\n+    monkeypatch.setattr(wiz.shutil, \"which\"\
+      , lambda name: None)\n+    wiz._detect_and_guide([\"kimi\"], profiles)  # kimi\
+      \ has no darwin install key\n+    out = capsys.readouterr().out\n+    assert\
+      \ \"pipx install kimi-cli\" in out  # linux fallback\n+\n+\n+def test_detect_guide_present_cli_prints_nothing(monkeypatch,\
+      \ capsys):\n+    profiles = wiz._load_merged_profiles(None)\n+    monkeypatch.setattr(wiz.sys,\
+      \ \"platform\", \"linux\")\n+    monkeypatch.setattr(wiz.shutil, \"which\",\
+      \ lambda name: f\"/usr/bin/{name}\")\n+    monkeypatch.setattr(\n+        wiz.subprocess,\
+      \ \"run\",\n+        lambda *a, **k: (_ for _ in ()).throw(AssertionError(\"\
+      subprocess.run called\")),\n+    )\n+    wiz._detect_and_guide([\"codex\", \"\
+      gemini\"], profiles)\n+    out = capsys.readouterr().out\n+    assert out.strip()\
+      \ == \"\"\n+\n+\n+def test_detect_guide_host_claude_prints_nothing(monkeypatch,\
+      \ capsys):\n+    \"\"\"claude is kind=host — no CLI, never guided, never executed.\"\
+      \"\"\n+    profiles = wiz._load_merged_profiles(None)\n+    monkeypatch.setattr(wiz.sys,\
+      \ \"platform\", \"win32\")\n+    monkeypatch.setattr(wiz.shutil, \"which\",\
+      \ lambda name: None)\n+    wiz._detect_and_guide([\"claude\"], profiles)\n+\
+      \    out = capsys.readouterr().out\n+    assert out.strip() == \"\"\n+\n+\n\
+      +# ============================================================\n+# 4. instruction-file\
+      \ provisioning\n+# ============================================================\n\
+      +\n+_SENTINEL_BEGIN = \"<!-- consensus-mcp:begin (managed — do not edit inside)\
+      \ -->\"\n+_SENTINEL_END = \"<!-- consensus-mcp:end -->\"\n+\n+\n+def test_provision_creates_per_ai_files_with_dedupe(tmp_path):\n\
+      +    profiles = wiz._load_merged_profiles(None)\n+    wiz._provision_instruction_files(\n\
+      +        [\"claude\", \"codex\", \"gemini\", \"kimi\"], profiles, tmp_path,\n\
+      +    )\n+    # filename map: claude→CLAUDE.md, codex/kimi→AGENTS.md, gemini→GEMINI.md\n\
+      +    assert (tmp_path / \"CLAUDE.md\").exists()\n+    assert (tmp_path / \"\
+      AGENTS.md\").exists()\n+    assert (tmp_path / \"GEMINI.md\").exists()\n+  \
+      \  agents = (tmp_path / \"AGENTS.md\").read_text(encoding=\"utf-8\")\n+    #\
+      \ dedupe: AGENTS.md (codex AND kimi) written exactly once.\n+    assert agents.count(_SENTINEL_BEGIN)\
+      \ == 1\n+    assert agents.count(_SENTINEL_END) == 1\n+    # managed block carries\
+      \ the vendored guidelines.\n+    assert \"Behavioral guidelines to reduce common\
+      \ LLM coding mistakes\" in agents\n+\n+\n+def test_provision_is_idempotent(tmp_path):\n\
+      +    profiles = wiz._load_merged_profiles(None)\n+    wiz._provision_instruction_files([\"\
+      claude\", \"codex\"], profiles, tmp_path)\n+    first = (tmp_path / \"AGENTS.md\"\
+      ).read_text(encoding=\"utf-8\")\n+    wiz._provision_instruction_files([\"claude\"\
+      , \"codex\"], profiles, tmp_path)\n+    second = (tmp_path / \"AGENTS.md\").read_text(encoding=\"\
+      utf-8\")\n+    assert first == second\n+    assert second.count(_SENTINEL_BEGIN)\
+      \ == 1\n+    assert second.count(_SENTINEL_END) == 1\n+\n+\n+def test_provision_preserves_existing_user_content(tmp_path):\n\
+      +    profiles = wiz._load_merged_profiles(None)\n+    existing = \"# My project\\\
+      n\\nUser-authored notes here.\\n\"\n+    (tmp_path / \"CLAUDE.md\").write_text(existing,\
+      \ encoding=\"utf-8\")\n+    wiz._provision_instruction_files([\"claude\", \"\
+      codex\"], profiles, tmp_path)\n+    text = (tmp_path / \"CLAUDE.md\").read_text(encoding=\"\
+      utf-8\")\n+    assert \"# My project\" in text\n+    assert \"User-authored\
+      \ notes here.\" in text\n+    assert _SENTINEL_BEGIN in text\n+    assert _SENTINEL_END\
+      \ in text\n+    assert \"Behavioral guidelines to reduce common LLM coding mistakes\"\
+      \ in text\n+\n+\n+def test_provision_refreshes_block_without_duplicating_user_content(tmp_path):\n\
+      +    \"\"\"Re-running over a file that already has user content + a stale block\
+      \ keeps\n+    one block and the user's surrounding content intact.\"\"\"\n+\
+      \    profiles = wiz._load_merged_profiles(None)\n+    pre = (\n+        \"#\
+      \ Header\\n\\n\"\n+        f\"{_SENTINEL_BEGIN}\\n\"\n+        \"STALE managed\
+      \ content that should be refreshed\\n\"\n+        f\"{_SENTINEL_END}\\n\\n\"\
+      \n+        \"# Footer kept by user\\n\"\n+    )\n+    (tmp_path / \"GEMINI.md\"\
+      ).write_text(pre, encoding=\"utf-8\")\n+    wiz._provision_instruction_files([\"\
+      claude\", \"gemini\"], profiles, tmp_path)\n+    text = (tmp_path / \"GEMINI.md\"\
+      ).read_text(encoding=\"utf-8\")\n+    assert text.count(_SENTINEL_BEGIN) ==\
+      \ 1\n+    assert text.count(_SENTINEL_END) == 1\n+    assert \"STALE managed\
+      \ content\" not in text\n+    assert \"# Header\" in text\n+    assert \"# Footer\
+      \ kept by user\" in text\n+    assert \"Behavioral guidelines to reduce common\
+      \ LLM coding mistakes\" in text\n+\n+\n+def test_no_instructions_flag_skips_provisioning(tmp_path,\
+      \ monkeypatch):\n+    \"\"\"End-to-end: --no-instructions suppresses instruction-file\
+      \ writes.\"\"\"\n+    monkeypatch.chdir(tmp_path)\n+    monkeypatch.setattr(\n\
+      +        wiz.shutil, \"which\",\n+        lambda name: \"/fake/consensus-mcp\"\
+      \ if name == \"consensus-mcp\" else None,\n+    )\n+    rc = wiz.main([\n+ \
+      \       \"--non-interactive\", \"--accept-defaults\",\n+        \"--contributors\"\
+      , \"claude,codex,gemini\",\n+        \"--no-instructions\",\n+        \"--no-mcp-json\"\
+      ,\n+    ])\n+    assert rc == 0\n+    assert not (tmp_path / \"CLAUDE.md\").exists()\n\
+      +    assert not (tmp_path / \"AGENTS.md\").exists()\n+    assert not (tmp_path\
+      \ / \"GEMINI.md\").exists()\n+\n+\n+def test_init_provisions_instruction_files_by_default(tmp_path,\
+      \ monkeypatch):\n+    \"\"\"End-to-end: a normal non-interactive init writes\
+      \ the per-AI files.\"\"\"\n+    monkeypatch.chdir(tmp_path)\n+    monkeypatch.setattr(\n\
+      +        wiz.shutil, \"which\",\n+        lambda name: \"/fake/consensus-mcp\"\
+      \ if name == \"consensus-mcp\" else None,\n+    )\n+    rc = wiz.main([\n+ \
+      \       \"--non-interactive\", \"--accept-defaults\",\n+        \"--contributors\"\
+      , \"claude,codex,gemini\",\n+        \"--no-mcp-json\",\n+    ])\n+    assert\
+      \ rc == 0\n+    assert (tmp_path / \"CLAUDE.md\").exists()\n+    assert (tmp_path\
+      \ / \"AGENTS.md\").exists()   # codex\n+    assert (tmp_path / \"GEMINI.md\"\
+      ).exists()\ndiff --git a/consensus_mcp/tests/test_profile_adapter.py b/consensus_mcp/tests/test_profile_adapter.py\n\
+      new file mode 100644\nindex 0000000..51ee7fd\n--- /dev/null\n+++ b/consensus_mcp/tests/test_profile_adapter.py\n\
+      @@ -0,0 +1,370 @@\n+\"\"\"Unit tests for consensus_mcp.contributors.profile_adapter.ProfileAdapter\
+      \ (v1.18.0).\n+\n+ProfileAdapter is the generic, profile-driven contributor\
+      \ adapter introduced by\n+the v1.18.0 B-routing + universal-profiles converged\
+      \ plan\n+(iteration-v1180-contributor-design-2026-05-22). It consumes a `kind:\n\
+      +cli_reviewer` profile dict and dispatches the described CLI by reusing the\n\
+      +shared `_dispatch_base` machinery (prompt build, JSON parse helpers, T6 seal),\n\
+      +with a PROFILE-DRIVEN invoke step.\n+\n+These tests are hermetic: the real\
+      \ CLI subprocess is replaced by a fake invoker\n+(monkeypatched onto the adapter's\
+      \ `_invoke` seam, mirroring how\n+test_dispatch_gemini fakes `_invoke_gemini`),\
+      \ and the T6 seal is replaced by a\n+capturing fake so the sealed packet — and\
+      \ its `dispatch_provenance` block — can\n+be asserted without a real consensus-state\
+      \ tree.\n+\n+Coverage (per converged-plan acceptance gates):\n+  * BOTH transports:\
+      \ a stdin profile (kimi: prompt via stdin, NO prompt_flag)\n+    and a flag\
+      \ profile (prompt via invoke.prompt_flag).\n+  * env injection, workdir_flag,\
+      \ base_args, model_flag wiring into the argv/env.\n+  * output.strip_patterns\
+      \ applied to the raw CLI output BEFORE JSON parse.\n+  * JSON parsed; T6 seal\
+      \ written.\n+  * dispatch_provenance carries ACCURATE model/adapter/contributor\
+      \ sourced from\n+    the profile (NOT another adapter's defaults).\n+  * Provenance\
+      \ regression: a kimi-profile seal MUST NOT carry\n+    model == 'gemini-2.5-pro'\
+      \ (the parent kimi-wrapper mislabel).\n+\"\"\"\n+from __future__ import annotations\n\
+      +\n+import json\n+import sys\n+from pathlib import Path\n+\n+import pytest\n\
+      +import yaml\n+\n+ROOT = Path(__file__).resolve().parent.parent.parent\n+if\
+      \ str(ROOT) not in sys.path:\n+    sys.path.insert(0, str(ROOT))\n+\n+from consensus_mcp\
+      \ import _contributor_profiles as profiles  # noqa: E402\n+from consensus_mcp.contributors\
+      \ import profile_adapter as pa  # noqa: E402\n+from consensus_mcp.contributors.base\
+      \ import (  # noqa: E402\n+    DispatchError,\n+    DispatchPacket,\n+    PHASE_REVIEW,\n\
+      +    SealedArtifact,\n+)\n+\n+\n+# ---------------------------------------------------------------------------\
+      \ #\n+# Fixtures / helpers\n+# ---------------------------------------------------------------------------\
+      \ #\n+\n+def _kimi_profile() -> dict:\n+    \"\"\"The packaged kimi profile\
+      \ (the live ProfileAdapter contract in v1.18.0).\"\"\"\n+    return profiles.load_builtin_profiles()[\"\
+      kimi\"]\n+\n+\n+def _flag_profile() -> dict:\n+    \"\"\"A synthetic flag-transport\
+      \ cli_reviewer profile (the OTHER transport).\n+\n+    Modeled on a gemini-shaped\
+      \ CLI: prompt delivered via a -p flag, model via\n+    --model, an injected\
+      \ env var, no workdir flag. Distinct model label so the\n+    provenance assertion\
+      \ is unambiguous.\n+    \"\"\"\n+    return {\n+        \"name\": \"acme\",\n\
+      +        \"kind\": \"cli_reviewer\",\n+        \"model\": \"acme-reviewer-v9\"\
+      ,\n+        \"detect\": {\"command\": \"acme-cli\"},\n+        \"invoke\": {\n\
+      +            \"transport\": \"flag\",\n+            \"base_args\": [\"--headless\"\
+      ],\n+            \"prompt_flag\": \"-p\",\n+            \"workdir_flag\": None,\n\
+      +            \"model_flag\": \"--model\",\n+        },\n+        \"env\": {\"\
+      ACME_TRUST\": \"true\"},\n+        \"output\": {\"strip_patterns\": [], \"schema_enforced\"\
+      : False},\n+        \"sealed_filename\": \"acme-review.yaml\",\n+        \"\
+      id_prefix\": \"acme-rev\",\n+        \"timeout_seconds\": 1800,\n+    }\n+\n\
+      +\n+def _valid_review_json() -> str:\n+    \"\"\"Minimal valid review-shaped\
+      \ JSON payload (parse target).\"\"\"\n+    return json.dumps({\n+        \"\
+      findings\": [],\n+        \"goal_satisfied\": True,\n+        \"goal_satisfied_rationale\"\
+      : \"No issues found.\",\n+        \"blocking_objections\": [],\n+    })\n+\n\
+      +\n+def _write_goal_packet(tmp_path: Path) -> Path:\n+    gp = {\n+        \"\
+      goal\": {\"summary\": \"test goal\", \"desired_end_state\": \"done\"},\n+  \
+      \      \"allowed_files\": [\"consensus_mcp/foo.py\"],\n+        \"acceptance_gates\"\
+      : [],\n+        \"authorization\": {\n+            \"scope_signature\": \"sig-123\"\
+      ,\n+            \"authorized_by\": \"tester\",\n+            \"authorized_at_utc\"\
+      : \"2026-05-22T00:00:00Z\",\n+        },\n+    }\n+    p = tmp_path / \"goal_packet.yaml\"\
+      \n+    p.write_text(yaml.safe_dump(gp, sort_keys=False), encoding=\"utf-8\"\
+      )\n+    return p\n+\n+\n+class _CaptureInvoke:\n+    \"\"\"Fake CLI invoker.\
+      \ Captures the kwargs ProfileAdapter passes (cmd, env,\n+    prompt, cwd) and\
+      \ returns scripted raw output. Mirrors the\n+    test_dispatch_gemini fake-invoke\
+      \ pattern.\"\"\"\n+\n+    def __init__(self, output: str):\n+        self.output\
+      \ = output\n+        self.calls: list[dict] = []\n+\n+    def __call__(self,\
+      \ **kwargs):\n+        self.calls.append(kwargs)\n+        return self.output\n\
+      +\n+\n+class _CaptureSeal:\n+    \"\"\"Fake _seal_via_t6. Captures the packet\
+      \ (with dispatch_provenance) and the\n+    sealed_filename, and writes a minimal\
+      \ sealed YAML to iter_dir so the adapter\n+    can read it back. Returns the\
+      \ same dict shape real _seal_via_t6 returns.\"\"\"\n+\n+    def __init__(self):\n\
+      +        self.packets: list[dict] = []\n+        self.sealed_filenames: list[str]\
+      \ = []\n+\n+    def __call__(self, packet, iteration_dir, sealed_filename=\"\
+      review.yaml\"):\n+        self.packets.append(packet)\n+        self.sealed_filenames.append(sealed_filename)\n\
+      +        local = Path(iteration_dir) / sealed_filename\n+        local.write_text(yaml.safe_dump(packet,\
+      \ sort_keys=False), encoding=\"utf-8\")\n+        return {\n+            \"\
+      sealed_path\": str(local),\n+            \"archive_sealed_path\": str(local),\n\
+      +            \"packet_sha256\": \"deadbeef\",\n+            \"index_updated\"\
+      : True,\n+            \"audit_event_id\": \"evt-1\",\n+        }\n+\n+\n+def\
+      \ _make_packet(tmp_path: Path, profile_name: str) -> DispatchPacket:\n+    iter_dir\
+      \ = tmp_path / f\"iter-{profile_name}\"\n+    iter_dir.mkdir()\n+    return\
+      \ DispatchPacket(\n+        phase=PHASE_REVIEW,\n+        contributor=profile_name,\n\
+      +        iteration_dir=iter_dir,\n+        goal_packet_path=_write_goal_packet(tmp_path),\n\
+      +        review_target_path=None,\n+        reviewer_id=None,\n+        pass_id=None,\n\
+      +        timeout_seconds=900,\n+    )\n+\n+\n+def _wire(monkeypatch, invoke:\
+      \ _CaptureInvoke, seal: _CaptureSeal):\n+    \"\"\"Replace the adapter's CLI\
+      \ invoke + T6 seal seams with capturing fakes.\"\"\"\n+    monkeypatch.setattr(pa.ProfileAdapter,\
+      \ \"_invoke\", lambda self, **kw: invoke(**kw))\n+    monkeypatch.setattr(pa,\
+      \ \"_seal_via_t6\", seal)\n+\n+\n+# ---------------------------------------------------------------------------\
+      \ #\n+# Construction\n+# ---------------------------------------------------------------------------\
+      \ #\n+\n+def test_profile_adapter_name_is_profile_name():\n+    adapter = pa.ProfileAdapter(_kimi_profile())\n\
+      +    assert adapter.name == \"kimi\"\n+\n+\n+def test_profile_adapter_rejects_host_profile():\n\
+      +    host = {\"name\": \"claude\", \"kind\": \"host\", \"model\": \"claude (host)\"\
+      }\n+    with pytest.raises(ValueError, match=\"cli_reviewer\"):\n+        pa.ProfileAdapter(host)\n\
+      +\n+\n+def test_profile_adapter_validates_profile_at_construction():\n+    bad\
+      \ = {\"name\": \"broken\", \"kind\": \"cli_reviewer\"}  # missing detect/invoke/output\n\
+      +    with pytest.raises(ValueError):\n+        pa.ProfileAdapter(bad)\n+\n+\n\
+      +# ---------------------------------------------------------------------------\
+      \ #\n+# stdin transport (kimi): prompt via stdin, NO prompt flag\n+# ---------------------------------------------------------------------------\
+      \ #\n+\n+def test_stdin_transport_delivers_prompt_via_stdin_no_flag(tmp_path,\
+      \ monkeypatch):\n+    invoke = _CaptureInvoke(_valid_review_json())\n+    seal\
+      \ = _CaptureSeal()\n+    _wire(monkeypatch, invoke, seal)\n+\n+    adapter =\
+      \ pa.ProfileAdapter(_kimi_profile())\n+    adapter.dispatch(_make_packet(tmp_path,\
+      \ \"kimi\"))\n+\n+    call = invoke.calls[0]\n+    # Prompt delivered through\
+      \ stdin, not as a flag value.\n+    assert call[\"prompt\"]\n+    assert call[\"\
+      stdin_prompt\"] is True\n+    cmd = call[\"cmd\"]\n+    # NO -p (or any prompt\
+      \ flag) in argv for a stdin profile.\n+    assert \"-p\" not in cmd\n+    #\
+      \ base_args present.\n+    assert \"--quiet\" in cmd and \"--thinking\" in cmd\n\
+      +    # workdir_flag wired with the repo/cwd value.\n+    assert \"-w\" in cmd\n\
+      +\n+\n+def test_stdin_transport_seal_provenance_accurate(tmp_path, monkeypatch):\n\
+      +    invoke = _CaptureInvoke(_valid_review_json())\n+    seal = _CaptureSeal()\n\
+      +    _wire(monkeypatch, invoke, seal)\n+\n+    adapter = pa.ProfileAdapter(_kimi_profile())\n\
+      +    adapter.dispatch(_make_packet(tmp_path, \"kimi\"))\n+\n+    prov = seal.packets[0][\"\
+      dispatch_provenance\"]\n+    assert prov[\"model\"] == \"kimi-code/kimi-for-coding\
+      \ (managed, +thinking)\"\n+    assert prov[\"adapter\"] == \"profile\"\n+  \
+      \  assert prov[\"contributor\"] == \"kimi\"\n+    assert prov[\"bin\"] == \"\
+      kimi\"\n+    assert prov[\"attestation_method\"] == \"auto_kimi_dispatch\"\n\
+      +    # sha256s present (sourced via _dispatch_base._sha256_str).\n+    assert\
+      \ prov[\"prompt_sha256\"]\n+    assert prov[\"output_sha256\"]\n+    assert\
+      \ prov[\"goal_packet_sha256\"]\n+\n+\n+def test_kimi_seal_not_mislabeled_as_gemini(tmp_path,\
+      \ monkeypatch):\n+    \"\"\"REGRESSION (converged-plan gate): the parent kimi\
+      \ wrapper mislabeled\n+    model='gemini-2.5-pro'. A kimi-profile seal MUST\
+      \ NOT carry that label.\"\"\"\n+    invoke = _CaptureInvoke(_valid_review_json())\n\
+      +    seal = _CaptureSeal()\n+    _wire(monkeypatch, invoke, seal)\n+\n+    adapter\
+      \ = pa.ProfileAdapter(_kimi_profile())\n+    adapter.dispatch(_make_packet(tmp_path,\
+      \ \"kimi\"))\n+\n+    prov = seal.packets[0][\"dispatch_provenance\"]\n+   \
+      \ assert prov[\"model\"] != \"gemini-2.5-pro\"\n+    assert prov[\"adapter\"\
+      ] != \"gemini\"\n+    assert seal.sealed_filenames[0] == \"kimi-review.yaml\"\
+      \n+\n+\n+def test_stdin_strip_patterns_applied_before_parse(tmp_path, monkeypatch):\n\
+      +    \"\"\"kimi profile carries a resume-footer strip_pattern. Output with that\n\
+      +    chrome appended must still parse (chrome removed before JSON parse).\"\"\
+      \"\n+    chrome = \"\\n\\nTo resume this session: kimi -r abc-123-uuid\"\n+\
+      \    invoke = _CaptureInvoke(_valid_review_json() + chrome)\n+    seal = _CaptureSeal()\n\
+      +    _wire(monkeypatch, invoke, seal)\n+\n+    adapter = pa.ProfileAdapter(_kimi_profile())\n\
+      +    art = adapter.dispatch(_make_packet(tmp_path, \"kimi\"))\n+    assert isinstance(art,\
+      \ SealedArtifact)\n+    assert art.parsed[\"goal_satisfied\"] is True\n+\n+\n\
+      +# ---------------------------------------------------------------------------\
+      \ #\n+# flag transport: prompt via prompt_flag, model via model_flag, env injected\n\
+      +# ---------------------------------------------------------------------------\
+      \ #\n+\n+def test_flag_transport_delivers_prompt_via_flag(tmp_path, monkeypatch):\n\
+      +    invoke = _CaptureInvoke(_valid_review_json())\n+    seal = _CaptureSeal()\n\
+      +    _wire(monkeypatch, invoke, seal)\n+\n+    adapter = pa.ProfileAdapter(_flag_profile())\n\
+      +    adapter.dispatch(_make_packet(tmp_path, \"acme\"))\n+\n+    call = invoke.calls[0]\n\
+      +    cmd = call[\"cmd\"]\n+    # Flag transport: prompt is the value immediately\
+      \ following prompt_flag.\n+    assert \"-p\" in cmd\n+    p_idx = cmd.index(\"\
+      -p\")\n+    assert cmd[p_idx + 1] == call[\"prompt\"]\n+    # stdin NOT used\
+      \ for the prompt.\n+    assert call[\"stdin_prompt\"] is False\n+    # base_args\
+      \ present.\n+    assert \"--headless\" in cmd\n+\n+\n+def test_flag_transport_model_flag_wired(tmp_path,\
+      \ monkeypatch):\n+    invoke = _CaptureInvoke(_valid_review_json())\n+    seal\
+      \ = _CaptureSeal()\n+    _wire(monkeypatch, invoke, seal)\n+\n+    adapter =\
+      \ pa.ProfileAdapter(_flag_profile())\n+    adapter.dispatch(_make_packet(tmp_path,\
+      \ \"acme\"))\n+\n+    cmd = invoke.calls[0][\"cmd\"]\n+    assert \"--model\"\
+      \ in cmd\n+    m_idx = cmd.index(\"--model\")\n+    assert cmd[m_idx + 1] ==\
+      \ \"acme-reviewer-v9\"\n+\n+\n+def test_env_injected_into_invoke(tmp_path, monkeypatch):\n\
+      +    invoke = _CaptureInvoke(_valid_review_json())\n+    seal = _CaptureSeal()\n\
+      +    _wire(monkeypatch, invoke, seal)\n+\n+    adapter = pa.ProfileAdapter(_flag_profile())\n\
+      +    adapter.dispatch(_make_packet(tmp_path, \"acme\"))\n+\n+    env = invoke.calls[0][\"\
+      env\"]\n+    assert env[\"ACME_TRUST\"] == \"true\"\n+\n+\n+def test_flag_transport_seal_provenance_accurate(tmp_path,\
+      \ monkeypatch):\n+    invoke = _CaptureInvoke(_valid_review_json())\n+    seal\
+      \ = _CaptureSeal()\n+    _wire(monkeypatch, invoke, seal)\n+\n+    adapter =\
+      \ pa.ProfileAdapter(_flag_profile())\n+    adapter.dispatch(_make_packet(tmp_path,\
+      \ \"acme\"))\n+\n+    prov = seal.packets[0][\"dispatch_provenance\"]\n+   \
+      \ assert prov[\"model\"] == \"acme-reviewer-v9\"\n+    assert prov[\"adapter\"\
+      ] == \"profile\"\n+    assert prov[\"contributor\"] == \"acme\"\n+    assert\
+      \ prov[\"bin\"] == \"acme-cli\"\n+    assert prov[\"attestation_method\"] ==\
+      \ \"auto_acme_dispatch\"\n+    assert seal.sealed_filenames[0] == \"acme-review.yaml\"\
+      \n+\n+\n+# ---------------------------------------------------------------------------\
+      \ #\n+# Parsing / failure surfaces\n+# ---------------------------------------------------------------------------\
+      \ #\n+\n+def test_returns_sealed_artifact_with_parsed_payload(tmp_path, monkeypatch):\n\
+      +    invoke = _CaptureInvoke(_valid_review_json())\n+    seal = _CaptureSeal()\n\
+      +    _wire(monkeypatch, invoke, seal)\n+\n+    adapter = pa.ProfileAdapter(_kimi_profile())\n\
+      +    art = adapter.dispatch(_make_packet(tmp_path, \"kimi\"))\n+\n+    assert\
+      \ isinstance(art, SealedArtifact)\n+    assert art.contributor == \"kimi\"\n\
+      +    assert art.phase == PHASE_REVIEW\n+    assert art.parsed[\"goal_satisfied\"\
+      ] is True\n+    assert art.sealed_path.exists()\n+\n+\n+def test_non_json_output_raises_dispatch_error(tmp_path,\
+      \ monkeypatch):\n+    invoke = _CaptureInvoke(\"this is not json at all\")\n\
+      +    seal = _CaptureSeal()\n+    _wire(monkeypatch, invoke, seal)\n+\n+    adapter\
+      \ = pa.ProfileAdapter(_kimi_profile())\n+    with pytest.raises(DispatchError):\n\
+      +        adapter.dispatch(_make_packet(tmp_path, \"kimi\"))\n+\n+\n+def test_invoke_failure_surfaces_as_dispatch_error(tmp_path,\
+      \ monkeypatch):\n+    def boom(self, **_kw):\n+        raise RuntimeError(\"\
+      CLI exploded\")\n+    monkeypatch.setattr(pa.ProfileAdapter, \"_invoke\", boom)\n\
+      +    monkeypatch.setattr(pa, \"_seal_via_t6\", _CaptureSeal())\n+\n+    adapter\
+      \ = pa.ProfileAdapter(_kimi_profile())\n+    with pytest.raises(DispatchError):\n\
+      +        adapter.dispatch(_make_packet(tmp_path, \"kimi\"))\ndiff --git a/pyproject.toml\
+      \ b/pyproject.toml\nindex 1478956..6bdbeac 100644\n--- a/pyproject.toml\n+++\
+      \ b/pyproject.toml\n@@ -1,53 +1,58 @@\n [build-system]\n requires = [\"setuptools>=64\"\
+      , \"wheel\"]\n build-backend = \"setuptools.build_meta\"\n \n [project]\n name\
+      \ = \"consensus-mcp\"\n version = \"1.18.0.dev0\"\n description = \"MCP server\
+      \ enforcing G1-G5 consensus gates (sealed-review provenance, canonical-006 dry-run,\
+      \ intra-file scope, production-scope match, mediated ledger updates)\"\n authors\
+      \ = [{name = \"stgarca\"}]\n-requires-python = \">=3.10\"\n+requires-python\
+      \ = \">=3.11\"\n license = {text = \"MIT\"}\n readme = \"README.md\"\n dependencies\
+      \ = [\n   \"pyyaml>=6.0\",\n   \"jsonschema>=4.0\",\n ]\n \n [project.scripts]\n\
+      \ consensus-mcp = \"consensus_mcp.server:main\"\n consensus-mcp-dispatch-codex\
+      \ = \"consensus_mcp._dispatch_codex:main\"\n consensus-mcp-dispatch-gemini =\
+      \ \"consensus_mcp._dispatch_gemini:main\"\n consensus-init = \"consensus_mcp._init_wizard:main\"\
+      \n # iter-0040 bonus per iter-0039 converged plan Q6: alias so `consensus init`\n\
+      \ # (with a SPACE) also works at the shell, matching the natural mental model.\n\
+      \ consensus = \"consensus_mcp._init_wizard:main\"\n \n [tool.setuptools]\n packages\
+      \ = [\n   \"consensus_mcp\",\n   \"consensus_mcp.contributors\",\n   \"consensus_mcp.tools\"\
+      ,\n   \"consensus_mcp.validators\",\n ]\n include-package-data = true\n \n [tool.setuptools.package-data]\n\
+      \ consensus_mcp = [\n   \"dispatch_templates/*.md\",\n   \"dispatch_templates/*.json\"\
+      ,\n+  # v1.18.0: packaged built-in contributor profiles + vendored instruction\n\
+      +  # guidelines. Without these, pip users get no built-ins (mirrors how\n+ \
+      \ # dispatch_templates is packaged).\n+  \"contributor_profiles/*.yaml\",\n\
+      +  \"contributor_instructions/*.md\",\n   \"docs/*.md\",\n   \"spec_template.md\"\
+      ,\n   # v1.15.1: converged-plan convention machine-enforcement contract.\n \
+      \  \"schemas/*.json\",\n   \"tests/fixtures/dispatch_codex/*\",\n   # iter-0040:\
+      \ Claude Code bootstrap pack (skill + slash command), copied\n   # into ~/.claude\
+      \ by `consensus-init --install-claude-code`.\n   \"claude_extensions/skills/consensus/SKILL.md\"\
+      ,\n   \"claude_extensions/commands/consensus-init.md\",\n   # iter-0041: operating-procedure\
+      \ skill carrying the transferable\n   # consensus-mcp workflow rules (workflow\
+      \ #3 vs #4, dispatch order,\n   # gemini 429, snapshot/restore, dispatcher hazards).\n\
+      \   \"claude_extensions/skills/consensus-workflow/SKILL.md\",\n ]\n"
+    consensus-state/active/iteration-v1180-impl-audit-2026-05-22/rationale.md: '#
+      v1.18.0 implementation — author''s rationale for the Workflow B audit
+
+
+      **Reviewer:** audit claude''s implementation of the v1.18.0 contributor-selection
+
+      feature (the embedded `v1.18.0-impl.diff`) for **correctness and regressions**.
+
+      This implements the converged plan from the 4-way Workflow A design consult
+
+      (B-routing + universal profiles). Empty findings is a valid review — don''t
+
+      manufacture. Verify any file content you cite is actually in the diff.
+
+
+      Process: built via strict TDD across 4 components + a config reconciliation.
+
+      Full suite: **1053 passed, 1 skipped, 0 failed** (+~80 new tests). E2E smoke:
+
+      a no-claude, profile-backed config (`enabled=[codex,gemini,kimi]`, zero adapters
+
+      entries) validates and builds → `{codex:CodexAdapter, gemini:GeminiAdapter,
+
+      kimi:ProfileAdapter}`.
+
+
+      ## What the diff does, and what to scrutinize
+
+
+      ### 1. Config-driven profiles (`_contributor_profiles.py` + `contributor_profiles/*.yaml`)
+
+      `Profile` schema + `load_builtin_profiles` (resolves dir via `__file__` → pip-safe)
+
+      + `merge_profiles` (config overrides built-in by name; whole-profile replacement)
+
+      + `validate_profile` (required fields, kind/transport enums, flag↔prompt_flag
+
+      consistency, OS-key check). 4 built-in YAMLs.
+
+      **Scrutinize:** schema completeness; the verified install/auth strings (codex
+
+      `npm i -g @openai/codex`, gemini `npm i -g @google/gemini-cli`, kimi
+
+      `pipx install kimi-cli` — all verified on this machine, both OSes); claude=host
+
+      (no detect/install). codex/gemini profiles are **metadata-only** (dispatched
+      by
+
+      their existing classes via B-routing); kimi is the only profile actually consumed
+
+      by ProfileAdapter.
+
+
+      ### 2. `ProfileAdapter` (`contributors/profile_adapter.py`)
+
+      Generic `ContributorAdapter` that consumes a profile and reuses `_dispatch_base`
+
+      (prompt-build, JSON parse, T6 seal), parameterizing only the invoke (transport
+
+      stdin|flag, base_args, env, workdir_flag, output strip) — the same shape the
+
+      parent kimi wrapper proved, but first-class.
+
+      **Scrutinize (highest value):** (a) PROVENANCE — it builds dispatch_provenance
+
+      explicitly from the profile (model=profile.model, adapter=''profile'',
+
+      contributor=name); confirm a kimi seal can NEVER carry model=''gemini-2.5-pro''
+
+      (the parent wrapper''s bug). (b) Both transports invoke correctly (stdin → no
+
+      prompt flag; flag → prompt after prompt_flag). (c) It reuses `_seal_via_t6`
+      (not
+
+      reimplemented). (d) Any divergence from how the existing gemini adapter parses/
+
+      seals that could break the sealed-artifact contract.
+
+
+      ### 3. Factory routing (`_engine_factory.py`)
+
+      `build_adapters` resolution: (a) registered, (b) built-in class
+
+      (claude/codex/gemini → existing classes — **R8**), (c) merged profile
+
+      kind:cli_reviewer → ProfileAdapter; kind:host reserved (fail-closed); unknown
+      →
+
+      fail-closed error. `adapters` entries are optional (`per_contributor.get(key)
+      or {}`).
+
+      **Scrutinize:** R8 (existing [claude,codex,gemini] configs build identical
+
+      classes); the lazy profile-load; the host-profile-misuse guard; the unknown-key
+
+      error path.
+
+
+      ### 4. Wizard (`_init_wizard.py`)
+
+      Numbered multi-select over merged profiles; `shutil.which` install status; min-2
+
+      re-prompt; claude optional; `--contributors a,b,c` non-interactive (flags-over-
+
+      prompts); OS-aware detect+guide (install/auth printed for missing, **nothing
+
+      executed**); non-destructive instruction-file provisioning (managed block between
+
+      sentinels, idempotent, dedupe by filename so codex+kimi share one AGENTS.md);
+
+      `--no-instructions` opt-out.
+
+      **Scrutinize:** min-2 enforcement; flag precedence; that detect+guide truly
+
+      executes nothing; the managed-block idempotency (running twice = one block)
+      and
+
+      non-destructiveness (existing user content preserved); the AGENTS.md dedupe;
+
+      non-TTY degrade.
+
+
+      ### 5. Config reconciliation (`config.py`) — DESIGN-JUDGMENT to scrutinize
+
+      Removed two rules: claude-mandatory and adapters-required-per-contributor.
+
+      Rationale: the operator chose **claude fully optional** (open-contributor model),
+
+      and the file''s own comment says validation is "STRUCTURAL only — constructibility
+
+      is the engine_factory''s fail-closed job." So both rules contradicted the stated
+
+      philosophy + the design. The `adapters` mapping stays optional config (type-check
+
+      kept). `contributors.profiles` overlay is validated.
+
+      **Scrutinize (key judgment call):** is dropping claude-mandatory SAFE — does
+      any
+
+      code path assume claude is an enabled contributor (vs the host orchestrator)?
+
+      build_adapters + WorkflowEngine operate on the enabled set generically (claude
+
+      callback only used if claude enabled), and the E2E smoke ran a no-claude panel
+      —
+
+      but please refute if you find a hidden claude assumption.
+
+
+      ### 6. Cross-platform (`.mcp.json`, `pyproject.toml`, `README.md`)
+
+      Committed `.mcp.json` → `consensus-mcp` entry point (was Windows-only `py -3.11`);
+
+      `requires-python >=3.10`→`>=3.11`; `contributor_profiles/*.yaml` +
+
+      `contributor_instructions/*.md` added to package-data; README python range →
+      3.11+.
+
+      **Scrutinize:** the entry point is on PATH on both OSes (matches
+
+      `_resolve_mcp_command`); package-data globs correct (else pip users get no
+
+      built-ins).
+
+
+      ### 7. Instruction files (`contributor_instructions/base.md`)
+
+      Vendored from `andrej-karpathy-skills/CLAUDE.md` (HTTP 200 verified) with a
+
+      citation header. Provisioned per-AI (CLAUDE.md/AGENTS.md/GEMINI.md).
+
+      **Scrutinize:** the citation header is present; provisioning writes the right
+
+      file per profile.instructions.filename.
+
+
+      ## What to return
+
+      Per-component: correct? regression? Then a verdict on the config-reconciliation
+
+      judgment call (claude-optional safety) and the ProfileAdapter provenance. Mark
+
+      `goal_satisfied: true` only if the diff fully implements the converged plan
+      with
+
+      no blocking findings.
+
+      '
+schema_version: 1
+iteration_id: iteration-v1180-impl-audit-2026-05-22

@@ -1445,4 +1445,22 @@ passes:
   packet_sha256: 170aa8f94fbcf7c28d7fc77776a41dcdd6669d8cdfbfe71db210ffc7d9c13b94
   iteration_id: iteration-v1180-contributor-design-2026-05-22
   reviewer_id: kimi-v1180-1
-last_updated_utc: '2026-05-22T16:48:03Z'
+- id: codex-v1180impl-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-v1180-impl-audit-2026-05-22-codex-v1180impl-1-codex-v1180impl-pass1-pass.yaml
+  sealed_at: '2026-05-22T17:20:01Z'
+  packet_sha256: 15cdd3e0ba789dbca9c2b7cf5fd9408b2853560c404b8aa0406b323b3d4759f8
+  iteration_id: iteration-v1180-impl-audit-2026-05-22
+  reviewer_id: codex-v1180impl-1
+- id: gemini-v1180impl-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-v1180-impl-audit-2026-05-22-gemini-v1180impl-1-gemini-v1180impl-pass1-pass.yaml
+  sealed_at: '2026-05-22T17:21:33Z'
+  packet_sha256: 290301c8188c92fe5cf5e1b76390c5004d3946d43e4e55ba05c138f27779e378
+  iteration_id: iteration-v1180-impl-audit-2026-05-22
+  reviewer_id: gemini-v1180impl-1
+- id: kimi-v1180impl-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-v1180-impl-audit-2026-05-22-kimi-v1180impl-1-kimi-v1180impl-pass1-pass.yaml
+  sealed_at: '2026-05-22T17:29:19Z'
+  packet_sha256: 9c72f8b70035da069af2527611d73cf76cac165001a03a6c3ec4086cf12db414
+  iteration_id: iteration-v1180-impl-audit-2026-05-22
+  reviewer_id: kimi-v1180impl-1
+last_updated_utc: '2026-05-22T17:29:19Z'

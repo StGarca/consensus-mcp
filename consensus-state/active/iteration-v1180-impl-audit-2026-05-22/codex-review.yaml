@@ -1,0 +1,65 @@
+iteration_id: iteration-v1180-impl-audit-2026-05-22
+reviewer_id: codex-v1180impl-1
+pass_id: codex-v1180impl-pass1
+findings:
+- id: codex-rev-001
+  severity: blocking
+  summary: Wizard contributor selection is implemented only as helpers and is not
+    wired into the CLI/config flow.
+  citation: consensus_mcp/_init_wizard.py:998
+  risk: '`consensus init --contributors ...` is not registered in the shown parser,
+    and the new multi-select resolver is never called when building `new_config`;
+    the advertised flags-over-prompts, min-2 selection, claude-optional wizard UX,
+    and tests invoking `--contributors` will not work end to end.'
+  recommendation: Add a `--contributors` parser option and call `_resolve_contributor_selection`
+    during config construction so `new_config['contributors']['enabled']` reflects
+    either the explicit list or interactive multi-select before validation/write/dry-run.
+  patch_not_proposed_reason: The embedded diff does not include the existing `cmd_init`
+    config-construction block where `new_config` is assembled, so a safe unified diff
+    cannot be authored without hallucinating surrounding lines.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: ProfileAdapter derives the repository root from `iteration_dir.parent`,
+    which points at consensus-state rather than the project root for normal iteration
+    paths.
+  citation: consensus_mcp/contributors/profile_adapter.py:268
+  risk: For paths like `repo/consensus-state/active/iter-*`, Kimi/custom profile CLIs
+    are invoked with `cwd` and `-w` set to `repo/consensus-state/active` instead of
+    the repository root, so they will miss project context and may review or modify
+    the wrong tree.
+  recommendation: Derive the working directory from an explicit dispatch packet repo-root
+    field if available, or compute it robustly from the known consensus-state layout
+    instead of assuming the iteration directory's parent is the repo root.
+  patch_not_proposed_reason: The embedded contents do not include `DispatchPacket`'s
+    full schema or existing adapter repo-root conventions, so a correct patch would
+    require missing context outside the supplied file contents.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The implementation has blocking wizard integration drift
+  and a high-risk ProfileAdapter working-directory bug, so it does not fully satisfy
+  the v1.18.0 contributor-selection goal despite the provenance and factory routing
+  pieces largely matching the plan.
+blocking_objections:
+- codex-rev-001
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.132.0
+  prompt_sha256: be5e7a2323f2d5fbb8ad5da24435687db67adc166a1e925216765617b329581a
+  output_sha256: e8edc1c91fdfd0a941530dcc2cbe8c18df9394e292cbcd0828b52c5665580b54
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 4ea585474ae91b58e4fcc141f44b0c118533061663b22323af558719c0a435db
+  scope_signature: 0cd0753c32b8ffcca680f9de14526b00da5426451a439f94dc3f4f3295517dfa
+  review_target_path: consensus-state/active/iteration-v1180-impl-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 73d1e404bd4e14b12ea07a6a0abdbfe78e9c9e837d6e438647eb3ffbc05f6ba1
+  mode: review
+sealed_at_utc: '2026-05-22T17:20:01Z'
+packet_sha256: 15cdd3e0ba789dbca9c2b7cf5fd9408b2853560c404b8aa0406b323b3d4759f8

@@ -1,0 +1,80 @@
+schema_version: 1
+pilot_id: iteration-v1180-impl-audit-2026-05-22
+goal:
+  summary: >-
+    Workflow B (post-review) audit of the v1.18.0 contributor-selection
+    implementation (config-driven AI profiles, ProfileAdapter, factory routing,
+    wizard multi-select + detect-guide + instruction files, config reconciliation,
+    cross-platform install). Audit the embedded diff for correctness + regressions.
+  desired_end_state: |
+    The review-target is a unified diff (v1.18.0-impl.diff) implementing the
+    converged plan from the 4-way Workflow A consult (B-routing + universal
+    profiles). The per-component rationale + the specific things to scrutinize are
+    in the embedded rationale.md — follow it. Built via strict TDD; full suite
+    1053 passed / 1 skipped / 0 failed; E2E smoke proves a no-claude profile-backed
+    config validates + builds.
+
+    Highest-value scrutiny:
+      1. ProfileAdapter PROVENANCE — confirm a kimi seal can never carry
+         model='gemini-2.5-pro' (the parent-wrapper bug this replaces); both
+         stdin/flag transports invoke correctly; _seal_via_t6 reused not rewritten.
+      2. Factory R8 — existing [claude,codex,gemini] configs build identical
+         classes; unknown key + host-profile misuse fail closed.
+      3. Config reconciliation — dropping claude-mandatory + adapters-required:
+         is it SAFE? does any path assume claude is an enabled contributor (vs the
+         host orchestrator)? Refute if you find a hidden assumption.
+      4. Wizard — min-2; flags-over-prompts; detect+guide executes NOTHING;
+         instruction managed-block is idempotent + non-destructive + dedupes
+         codex/kimi to one AGENTS.md.
+      5. Profiles — verified install/auth strings (no invented commands);
+         codex/gemini metadata-only, kimi live; schema completeness.
+      6. Cross-platform .mcp.json entry point + package-data globs (else pip
+         users get no built-ins) + requires-python >=3.11.
+
+    Acceptance: the diff fully implements the converged plan with no blocking
+    findings; suite green. Close when codex + gemini + kimi emit
+    goal_satisfied=true OR the operator dispositions findings.
+  non_goals:
+    - relitigate the converged B-routing decision (settled by the design consult)
+    - demand the option-A dispatcher refactor (tracked future follow-up)
+    - require auto-install/auth (operator chose detect+guide)
+allowed_files:
+  - consensus_mcp/_contributor_profiles.py
+  - consensus_mcp/contributors/profile_adapter.py
+  - consensus_mcp/contributor_profiles/
+  - consensus_mcp/contributor_instructions/
+  - consensus_mcp/_engine_factory.py
+  - consensus_mcp/config.py
+  - consensus_mcp/_init_wizard.py
+  - .mcp.json
+  - pyproject.toml
+  - README.md
+  - consensus_mcp/tests/test_contributor_profiles.py
+  - consensus_mcp/tests/test_profile_adapter.py
+  - consensus_mcp/tests/test_engine_factory_profiles.py
+  - consensus_mcp/tests/test_init_wizard_contributors.py
+  - consensus_mcp/tests/test_config.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/contributors/codex.py
+  - consensus_mcp/contributors/gemini.py
+  - consensus-state/
+max_iterations: 1
+max_patch_size: 6000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: full test suite green
+    check: 'python -m pytest consensus_mcp/tests/ -q'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - blocking_finding_unresolved
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 0cd0753c32b8ffcca680f9de14526b00da5426451a439f94dc3f4f3295517dfa

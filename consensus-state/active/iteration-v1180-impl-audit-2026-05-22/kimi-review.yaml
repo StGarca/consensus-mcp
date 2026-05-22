@@ -1,0 +1,42 @@
+iteration_id: iteration-v1180-impl-audit-2026-05-22
+reviewer_id: kimi-v1180impl-1
+pass_id: kimi-v1180impl-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'The v1.18.0 diff fully implements the converged plan (B-routing
+  + universal profiles) with no blocking findings. ProfileAdapter builds provenance
+  explicitly from the profile, fixing the parent wrapper''s model mislabel; both stdin
+  and flag transports are tested; _seal_via_t6 is reused. Factory R8 is verified (existing
+  built-ins resolve to existing classes), host-profile misuse is guarded, and unknown
+  keys fail closed. Config reconciliation dropping claude-mandatory is safe: build_adapters
+  and WorkflowEngine operate generically on the enabled set, and the E2E smoke validates
+  a no-claude panel. Wizard min-2 enforcement, flags-over-prompts, detect+guide zero-execution,
+  and idempotent non-destructive instruction provisioning are all tested. Package-data
+  globs and cross-platform entry point are correct. Test suite passes per rationale
+  (1053 passed, 1 skipped, 0 failed).'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: kimi, version 1.44.0
+  model: gemini-2.5-pro
+  prompt_sha256: ccf45ef7ab8c2fc8a56b75c7d610653a772c5b734304d3f29aade14ad742521c
+  output_sha256: bcc85fdc9d0b89af7b62b0273132f75fe02a0b4cc956918cd4d349f47657f368
+  goal_packet_sha256: 4ea585474ae91b58e4fcc141f44b0c118533061663b22323af558719c0a435db
+  scope_signature: 0cd0753c32b8ffcca680f9de14526b00da5426451a439f94dc3f4f3295517dfa
+  review_target_path: consensus-state/active/iteration-v1180-impl-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 73d1e404bd4e14b12ea07a6a0abdbfe78e9c9e837d6e438647eb3ffbc05f6ba1
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-22T17:29:19Z'
+packet_sha256: 9c72f8b70035da069af2527611d73cf76cac165001a03a6c3ec4086cf12db414
