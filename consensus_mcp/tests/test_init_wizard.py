@@ -854,3 +854,20 @@ def test_init_nested_cwd_resolves_to_root_via_markers(tmp_path, monkeypatch):
     # .mcp.json lands at the repo root (where pyproject.toml is), not the sub.
     assert (repo / ".mcp.json").exists()
     assert not (sub / ".mcp.json").exists()
+
+
+def test_detect_available_is_dynamic_over_profiles(monkeypatch, tmp_path):
+    from consensus_mcp import _init_wizard as wiz
+    fake = {
+        "claude": {"name": "claude", "kind": "host"},
+        "codex": {"name": "codex", "kind": "cli_reviewer", "detect": {"command": "codex"}},
+        "kimi": {"name": "kimi", "kind": "cli_reviewer", "detect": {"command": "kimi"}},
+        "claude-swe-reviewer": {"name": "claude-swe-reviewer", "kind": "host_peer", "family": "claude"},
+    }
+    monkeypatch.setattr(wiz, "_load_merged_profiles", lambda *_: fake)
+    monkeypatch.setattr(wiz.shutil, "which", lambda c: "/x/" + c if c in ("codex", "kimi") else None)
+    got = wiz._detect_available_contributors(tmp_path)
+    assert "kimi" in got                       # dynamic — not hardcoded
+    assert "claude" in got                     # host always available
+    assert "claude-swe-reviewer" not in got    # host_peer excluded
+    assert "gemini" not in got                 # not installed
