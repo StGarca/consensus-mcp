@@ -873,3 +873,28 @@ def test_detect_available_is_dynamic_over_profiles(monkeypatch, tmp_path):
     assert "claude" in got                     # host always available
     assert "claude-swe-reviewer" not in got    # host_peer excluded
     assert "gemini" not in got                 # not installed
+
+
+def test_panel_summary_weighted(capsys):
+    from consensus_mcp import _init_wizard as wiz
+    profiles = {
+        "claude": {"name": "claude", "kind": "host"},
+        "codex": {"name": "codex", "kind": "cli_reviewer", "detect": {"command": "codex"}},
+        "claude-swe-reviewer": {"name": "claude-swe-reviewer", "kind": "host_peer", "family": "claude"},
+    }
+    wiz._print_panel_summary(["claude", "codex", "claude-swe-reviewer"], profiles)
+    out = capsys.readouterr().out
+    assert "2.5 reviewers" in out
+    assert "2 independent" in out
+    assert "claude-swe-reviewer" in out
+
+
+def test_panel_summary_no_supplemental(capsys):
+    from consensus_mcp import _init_wizard as wiz
+    profiles = {
+        "claude": {"name": "claude", "kind": "host"},
+        "codex": {"name": "codex", "kind": "cli_reviewer", "detect": {"command": "codex"}},
+    }
+    wiz._print_panel_summary(["claude", "codex"], profiles)
+    out = capsys.readouterr().out
+    assert "2 independent reviewers" in out

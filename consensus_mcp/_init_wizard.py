@@ -454,6 +454,20 @@ def _select_contributors_interactive(
         return chosen
 
 
+def _print_panel_summary(enabled: list[str], profiles: dict) -> None:
+    """Print a one-line panel summary after init, showing weighted reviewer count."""
+    indep = [n for n in enabled if profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST_PEER]
+    peers = [n for n in enabled if profiles_mod.resolve_kind(n, profiles) == profiles_mod.KIND_HOST_PEER]
+    if peers:
+        total = f"{len(indep)}.5"
+        print(
+            f"Panel: {total} reviewers — {len(indep)} independent "
+            f"({', '.join(indep)}) + 0.5 supplemental same-model ({', '.join(peers)})."
+        )
+    else:
+        print(f"Panel: {len(indep)} independent reviewers ({', '.join(indep)}).")
+
+
 def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes: bool) -> str | None:
     """If a host is selected and a same-family host_peer profile exists (and is
     not already enabled), offer it as a 0.5 supplemental. Returns the host_peer
@@ -1113,6 +1127,7 @@ def cmd_init(args) -> int:
         merged_profiles = _load_merged_profiles(existing_profiles)
         enabled = (new_config.get("contributors") or {}).get("enabled") or []
         _detect_and_guide(enabled, merged_profiles)
+        _print_panel_summary(enabled, merged_profiles)
         if not args.no_instructions:
             for path in _provision_instruction_files(enabled, merged_profiles, repo_root):
                 print(f"seeded instruction file {path}")
