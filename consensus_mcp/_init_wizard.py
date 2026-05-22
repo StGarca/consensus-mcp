@@ -454,6 +454,41 @@ def _select_contributors_interactive(
         return chosen
 
 
+def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes: bool) -> str | None:
+    """If a host is selected and a same-family host_peer profile exists (and is
+    not already enabled), offer it as a 0.5 supplemental. Returns the host_peer
+    profile name to append, or None. Multiple same-family host_peers -> mini-
+    select defaulting to none (never silently pick the first)."""
+    candidates = []
+    for host in (n for n in selection if profiles_mod.resolve_kind(n, profiles) == profiles_mod.KIND_HOST):
+        for hp in profiles_mod.matching_host_peers(host, profiles):
+            if hp not in selection and hp not in candidates:
+                candidates.append(hp)
+    if not candidates:
+        return None
+
+    print("\nYou're using claude as the host. Add a same-model claude review agent?")
+    print(
+        "This is a SUPPLEMENTAL review (shown as +0.5 in the init summary only — NOT a\n"
+        "fully independent reviewer; it shares the host model's blind spots). It gets no\n"
+        "vote at the consensus gate and can't close consensus (claude already votes as\n"
+        "host) — but every good idea it raises is still applied on merit. A useful extra\n"
+        "pass if you have the tokens to spare."
+    )
+    if len(candidates) == 1:
+        default = "y" if default_yes else "n"
+        ans = (input(f"Add it? [{'Y/n' if default_yes else 'y/N'}]: ").strip().lower() or default)
+        return candidates[0] if ans.startswith("y") else None
+
+    print("Multiple same-model reviewers available (choose one or none):")
+    for i, hp in enumerate(candidates, start=1):
+        print(f"  {i}. {hp}")
+    raw = input("Number to add [default: none]: ").strip()
+    if raw.isdigit() and 1 <= int(raw) <= len(candidates):
+        return candidates[int(raw) - 1]
+    return None
+
+
 def _validate_contributor_selection(selection: list[str], profiles: dict) -> list[str]:
     """Validate a name list against known profiles + enforce min-2.
 
@@ -690,7 +725,11 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
             profiles = _load_merged_profiles(
                 (base.get("contributors") or {}).get("profiles")
             )
-            base["contributors"]["enabled"] = _select_contributors_interactive(profiles)
+            selection = _select_contributors_interactive(profiles)
+            hp = _prompt_host_peer_followup(selection, profiles, default_yes=False)
+            if hp:
+                selection.append(hp)
+            base["contributors"]["enabled"] = selection
         else:
             # Reconfigure: preserve the existing enabled list as the default via
             # the comma-separated free-text prompt (unchanged behavior/tests).

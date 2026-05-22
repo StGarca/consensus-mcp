@@ -407,3 +407,35 @@ def test_multiselect_preselected_defaults(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda *_: "")  # accept default
     chosen = wiz._select_contributors_interactive(_T4_PROFILES, preselected=["claude", "kimi"])
     assert chosen == ["claude", "kimi"]
+
+
+# ============================================================
+# Task 6: _prompt_host_peer_followup (module-level alias for test convenience)
+# ============================================================
+
+_PROFILES = _T4_PROFILES
+
+
+def test_followup_offered_when_host_selected(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *_: "y")
+    add = wiz._prompt_host_peer_followup(["claude", "codex"], _PROFILES, default_yes=False)
+    assert add == "claude-swe-reviewer"
+
+
+def test_followup_default_no(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *_: "")
+    add = wiz._prompt_host_peer_followup(["claude", "codex"], _PROFILES, default_yes=False)
+    assert add is None
+
+
+def test_followup_skipped_when_no_host(monkeypatch):
+    def boom(*_):
+        raise AssertionError("must not prompt when no host selected")
+    monkeypatch.setattr("builtins.input", boom)
+    assert wiz._prompt_host_peer_followup(["codex", "kimi"], _PROFILES, default_yes=False) is None
+
+
+def test_followup_default_yes_on_empty(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *_: "")
+    add = wiz._prompt_host_peer_followup(["claude", "codex"], _PROFILES, default_yes=True)
+    assert add == "claude-swe-reviewer"
