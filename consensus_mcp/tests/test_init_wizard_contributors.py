@@ -462,6 +462,38 @@ def test_flag_accepts_independents_plus_supplemental():
 
 
 # ============================================================
+# D8: multiple same-family host_peers -> deterministic mini-select
+# (default none; NEVER silently pick the first)
+# ============================================================
+
+_TWO_PEERS = {
+    "claude": {"name": "claude", "kind": "host"},
+    "codex": {"name": "codex", "kind": "cli_reviewer", "detect": {"command": "codex"}},
+    "claude-swe-reviewer": {"name": "claude-swe-reviewer", "kind": "host_peer", "family": "claude"},
+    "claude-deep-reviewer": {"name": "claude-deep-reviewer", "kind": "host_peer", "family": "claude"},
+}
+
+
+def test_followup_multiple_host_peers_mini_select(monkeypatch):
+    # candidates are sorted: [claude-deep-reviewer, claude-swe-reviewer]; "2" picks the second
+    monkeypatch.setattr("builtins.input", lambda *_: "2")
+    add = wiz._prompt_host_peer_followup(["claude", "codex"], _TWO_PEERS, default_yes=False)
+    assert add == "claude-swe-reviewer"
+
+
+def test_followup_multiple_host_peers_default_none_never_first(monkeypatch):
+    # empty / non-numeric input must default to NONE even with default_yes=True —
+    # the mini-select must never silently append the first candidate.
+    monkeypatch.setattr("builtins.input", lambda *_: "")
+    assert wiz._prompt_host_peer_followup(["claude", "codex"], _TWO_PEERS, default_yes=True) is None
+
+
+def test_followup_multiple_host_peers_out_of_range_none(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *_: "9")
+    assert wiz._prompt_host_peer_followup(["claude", "codex"], _TWO_PEERS, default_yes=False) is None
+
+
+# ============================================================
 # Task 8: _reconfigure_contributors — preserves legacy host_peer
 # ============================================================
 
