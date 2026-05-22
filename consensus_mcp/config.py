@@ -336,9 +336,10 @@ def validate(config: dict) -> None:
     # hint), which is the only layer that knows the open adapter registry.
     # Names must still be non-empty strings.
     for c in enabled:
-        if not c or not isinstance(c, str):
+        if not isinstance(c, str) or not c.strip():
             raise ConfigValidationError(
-                f"contributors.enabled entries must be non-empty strings; got {c!r}"
+                f"contributors.enabled entries must be non-empty, non-whitespace "
+                f"strings; got {c!r}"
             )
     # NOTE: min-2 is NOT blanket-enforced here — it is MODE-SPECIFIC below
     # (propose-converge / sequential / strict-majority each require >=2), so

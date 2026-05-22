@@ -88,3 +88,17 @@ def test_build_engine_claude_callback_threaded(tmp_path):
         config, repo_root=tmp_path, claude_artifact_callback=_cb,
     )
     assert engine.adapters["claude"].artifact_callback is _cb
+
+
+def test_build_adapters_reads_per_contributor_from_adapters_key():
+    """1.17 review (codex-002): per-contributor config lives under
+    `contributors.adapters` (what default_config + validate use). build_adapters
+    previously read the never-populated `contributors.config` key, so adapter
+    config (e.g. model) was silently always empty. Now it reaches the adapter."""
+    config = _three_contributor_config()
+    config["contributors"]["adapters"]["codex"] = {"model": "test-model-x"}
+    adapters = factory.build_adapters(config, claude_artifact_callback=lambda p: {
+        "findings": [], "goal_satisfied": True, "blocking_objections": []})
+    assert adapters["codex"].adapter_config.get("model") == "test-model-x", (
+        f"adapter_config not populated from contributors.adapters: "
+        f"{adapters['codex'].adapter_config}")
