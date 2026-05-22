@@ -504,3 +504,72 @@ def test_expected_next_action_dispatch_path_when_no_reviews(fake_repo: Path):
     assert snap["expected_next_action"]["kind"] in (
         "dispatch_cross_family_reviewer", "operator_decision_required",
     )
+
+
+# ---------------------------------------------------------------------------
+# H-8 (iter-0036 parity narrowing): YAML/IO helpers narrow their except clauses
+# so PROGRAMMER errors propagate instead of being mislabeled as parse/IO
+# failures. Behavior for genuinely missing/malformed files is UNCHANGED.
+#
+# NOTE on H-8's "silent wrong-state" headline: the dispatch-log read path was
+# NEVER bare/silent — it already appends a warning. The third test below is a
+# regression-lock documenting that the scary framing is not supported by the
+# code; it PASSES today.
+# ---------------------------------------------------------------------------
+
+def test_load_yaml_propagates_unexpected_exception(fake_repo: Path, monkeypatch):
+    """A non-IO/parse exception (programmer error) from yaml.safe_load must
+    propagate, not be swallowed and returned as None.
+
+    RED today: _load_yaml's bare ``except Exception`` catches TypeError and
+    returns None. After narrowing to (OSError, UnicodeDecodeError, yaml.YAMLError)
+    the TypeError propagates.
+    """
+    iter_dir = _write_iter(fake_repo, "iter-load-prop")
+    gp_path = iter_dir / "goal_packet.yaml"
+
+    def boom(*_args, **_kwargs):
+        raise TypeError("programmer error, not a parse failure")
+
+    monkeypatch.setattr(_resume.yaml, "safe_load", boom)
+    with pytest.raises(TypeError, match="programmer error"):
+        _resume._load_yaml(gp_path)
+
+
+def test_load_yaml_returns_none_on_parse_error(fake_repo: Path):
+    """Genuinely malformed YAML still yields None (behavior unchanged before & after).
+
+    yaml.YAMLError is the legitimate parse-failure class; _load_yaml must keep
+    swallowing it and return None.
+    """
+    iter_dir = _write_iter(fake_repo, "iter-load-malformed")
+    bad = iter_dir / "bad.yaml"
+    # Unbalanced flow mapping → yaml.YAMLError on safe_load.
+    bad.write_text("{ this is: not, valid: yaml: ::: [unclosed", encoding="utf-8")
+    assert _resume._load_yaml(bad) is None
+
+
+def test_dispatch_log_read_failure_is_not_silent(fake_repo: Path, monkeypatch):
+    """Regression-lock for H-8's FALSE 'silent wrong-state' headline.
+
+    When the dispatch-log read raises (e.g. PermissionError), the orchestrator
+    must NOT silently think nothing is in-flight — it must surface a warning AND
+    return an empty in_flight list. This PASSES today (the path already warns);
+    the test documents that the HIGH 'silent wrong-state' framing is unfounded.
+    """
+    _write_iter(fake_repo, "iter-logfail")
+    log_path = fake_repo / "consensus-state" / "state" / "dispatch-log.jsonl"
+    # Make the log exist (so is_file() passes) but its read raise PermissionError.
+    log_path.write_text("", encoding="utf-8")
+
+    real_read_text = Path.read_text
+
+    def guarded_read_text(self, *args, **kwargs):
+        if self == log_path:
+            raise PermissionError("denied")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+    snap = _resume.snapshot(repo_root=fake_repo)
+    assert snap["in_flight_dispatches"] == []
+    assert any("dispatch-log.jsonl read failed" in w for w in snap["warnings"])

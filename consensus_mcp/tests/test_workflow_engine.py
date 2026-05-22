@@ -294,6 +294,49 @@ def test_timeout_policy_treat_as_blocking(tmp_path):
     assert "codex" in outcome.convergence.block_votes
 
 
+def test_timeout_policy_blocking_vetoes_strict_majority(tmp_path):
+    """H-7: under TIMEOUT_BLOCKING a timed-out contributor MUST veto even a
+    strict-majority. 3 enabled, strict-majority, codex times out, claude+gemini
+    approve. Two approvals reach the strict-maj threshold ((3//2)+1 == 2), so the
+    approve count alone would converge — but the operator chose treat-as-blocking,
+    so codex's non-response is a block that vetoes the majority."""
+    config = _three_contributor_config(rule=cfg.CONVERGE_STRICT_MAJ)
+    config["workflow"]["timeout_policy"] = cfg.TIMEOUT_BLOCKING
+    config["workflow"]["max_convergence_rounds"] = 1
+    cfg.validate(config)
+    adapters = {
+        "claude": FakeAlwaysApprove(),
+        "codex": FakeRaisesDispatchError(),  # times out → no artifact
+        "gemini": FakeAlwaysApprove(),
+    }
+    engine = WorkflowEngine(config, adapters, tmp_path)
+    iter_dir, goal, target = _make_iter_dir(tmp_path)
+    outcome = engine.run_iteration(iter_dir, goal, target)
+    assert "codex" in outcome.convergence.block_votes
+    assert outcome.convergence.converged is False
+
+
+def test_timeout_blocking_inclusive_majority_two_party(tmp_path):
+    """H-7: under TIMEOUT_BLOCKING a timeout vetoes an inclusive-majority too.
+    enabled=[claude,codex], inclusive-majority, claude approves, codex times out.
+    inclusive-maj threshold ceil(2/2) == 1, so claude's lone approval would
+    otherwise converge — but treat-as-blocking makes codex's timeout a veto."""
+    config = _three_contributor_config(rule=cfg.CONVERGE_INCL_MAJ)
+    config["contributors"]["enabled"] = ["claude", "codex"]
+    config["workflow"]["timeout_policy"] = cfg.TIMEOUT_BLOCKING
+    config["workflow"]["max_convergence_rounds"] = 1
+    cfg.validate(config)
+    adapters = {
+        "claude": FakeAlwaysApprove(),
+        "codex": FakeRaisesDispatchError(),  # times out → no artifact
+    }
+    engine = WorkflowEngine(config, adapters, tmp_path)
+    iter_dir, goal, target = _make_iter_dir(tmp_path)
+    outcome = engine.run_iteration(iter_dir, goal, target)
+    assert "codex" in outcome.convergence.block_votes
+    assert outcome.convergence.converged is False
+
+
 # ---------- failure mode: all contributors blow up ----------
 
 def test_workflow_4_all_contributors_fail(tmp_path):

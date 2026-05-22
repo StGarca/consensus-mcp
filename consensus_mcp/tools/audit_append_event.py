@@ -63,6 +63,17 @@ def __getattr__(name: str):
         return active_dir()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
+class GitUnavailableError(RuntimeError):
+    """Raised when NO git command could be executed (git binary missing,
+    timeout, or OS error on every sub-command).
+
+    iter-0018 H-5: consensus-mcp is inherently git-based — the closure
+    invariant uses SHAs and snapshots use git. There is no "git is optional /
+    not a git repo" design. When git is wholly unavailable the
+    mutation-completeness gate cannot be verified, so the gate must FAIL CLOSED
+    (refuse the close) rather than allow-empty (fail-open)."""
+
 CANONICAL_EVENT_TYPES: dict[str, dict] = {
     "review_packet_built": {"required": ["artifact", "sha256"], "optional": []},
     "reviewer_invoked": {"required": ["actor", "artifact", "independence_attestation"], "optional": ["invocation_protocol"]},
@@ -299,7 +310,14 @@ def handle(
         # iter-0018 Finding 3: mutation-completeness check. If the working tree
         # has paths that are NOT in any apply_step_landed event's files_touched
         # set, refuse. Conservative-fail-closed for manual edits.
-        unaudited = _detect_unaudited_mutation(audit_log, project_root())
+        # iter-0018 H-5: if git is wholly unavailable the gate cannot be
+        # verified — FAIL CLOSED rather than allow-empty (fail-open). Scoped to
+        # only this call so it does not swallow the separate closure-invariant
+        # try/except below.
+        try:
+            unaudited = _detect_unaudited_mutation(audit_log, project_root())
+        except GitUnavailableError as exc:
+            return {"error": f"mutation_completeness_unverifiable: {exc}"}
         if unaudited:
             return {
                 "error": (
@@ -416,15 +434,21 @@ def _detect_working_tree_changes(repo_root: Path) -> list[str]:
     `git ls-files --others --exclude-standard` (untracked files) and returns
     the union.
 
-    Returns [] on any git error (treat as no detectable changes — caller
-    decides whether that's safe; the close gate logic still relies on the
-    apply_step_landed events for cross-checking).
+    A single sub-command that fails (non-zero exit, or raises
+    FileNotFoundError/TimeoutExpired/OSError) is tolerated via `continue` so
+    that one odd sub-command does not nuke the whole check while the other
+    still succeeds. BUT if NO sub-command succeeds at all — git is wholly
+    unavailable — this raises `GitUnavailableError` instead of returning [].
+    iter-0018 H-5: consensus-mcp is inherently git-based, so an unverifiable
+    mutation-completeness gate must FAIL CLOSED at the caller, never silently
+    pass on an empty set (fail-open).
 
     Tests can monkeypatch this function to inject simulated working-tree
     state without needing a real git repo.
     """
     import subprocess
     paths: set[str] = set()
+    any_ok = False
     for cmd in (
         ["git", "diff", "--name-only", "HEAD"],
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -441,12 +465,18 @@ def _detect_working_tree_changes(repo_root: Path) -> list[str]:
             )
             if result.returncode != 0:
                 continue
+            any_ok = True
             for line in result.stdout.splitlines():
                 line = line.strip()
                 if line:
                     paths.add(line)
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             continue
+    if not any_ok:
+        raise GitUnavailableError(
+            "no git command succeeded (git missing, timed out, or errored on "
+            "every sub-command); cannot verify mutation-completeness"
+        )
     return sorted(paths)
 
 

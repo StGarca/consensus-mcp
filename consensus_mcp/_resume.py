@@ -133,7 +133,9 @@ def _list_active_iterations(active_dir: Path) -> list[tuple[Path, str | None]]:
             if isinstance(data, dict):
                 auth = data.get("authorization") or {}
                 auth_at = auth.get("authorized_at_utc")
-        except Exception:
+        # iter-0036 parity (H-8): narrow to IO/decode/parse classes so unrelated
+        # programmer errors propagate instead of being swallowed as "no auth time".
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
             auth_at = None
         entries.append((child, auth_at))
     # Sort: authorized_at_utc DESC primary (None last), then dir name DESC.
@@ -165,7 +167,10 @@ def _walk_dispatch_log(log_path: Path, iteration_id: str) -> tuple[list[dict], l
         return events, warnings
     try:
         text = log_path.read_text(encoding="utf-8")
-    except Exception as exc:
+    # iter-0036 parity (H-8): narrow to IO/decode classes (KEEP the loud warning —
+    # this path was never silent, so the orchestrator still learns nothing is
+    # readable). Programmer errors now propagate instead of being mislabeled.
+    except (OSError, UnicodeDecodeError) as exc:
         warnings.append(f"dispatch-log.jsonl read failed: {type(exc).__name__}")
         return events, warnings
     for idx, line in enumerate(text.splitlines(), start=1):
@@ -231,7 +236,8 @@ def _compute_current_bundle_sha(
                 sha = dt.get("base_sha")
                 if isinstance(sha, str) and sha:
                     return sha, "review_packet_base_sha"
-        except Exception:
+        # iter-0036 parity (H-8): narrow to IO/decode/parse classes.
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
             pass
     return None, "none"
 
@@ -330,7 +336,9 @@ def _compute_in_flight(
             try:
                 t = datetime.fromisoformat(last_line_ts.replace("Z", "+00:00"))
                 seconds_since = max(0.0, (now - t).total_seconds())
-            except Exception:
+            # iter-0036 parity (H-8): ValueError is what datetime.fromisoformat
+            # raises on a malformed timestamp; programmer errors now propagate.
+            except ValueError:
                 seconds_since = None
         abort_signal_path = iter_dir.parent.parent / f"abort-dispatch-{pid}.signal"
         entry = {
@@ -359,7 +367,8 @@ def _parse_review(path: Path) -> dict | None:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except Exception:
+    # iter-0036 parity (H-8): narrow to IO/decode/parse classes.
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return None
 
 
@@ -454,7 +463,11 @@ def _load_yaml(path: Path) -> dict | None:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except Exception:
+    # iter-0036 parity (H-8): mirror _self_drive._read_yaml_or_empty — narrow to
+    # the IO/decode/parse classes so programmer errors (TypeError, AttributeError,
+    # KeyboardInterrupt) propagate instead of being mislabeled as a parse failure.
+    # Behavior on missing/unreadable/unparseable files is unchanged (still None).
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return None
 
 

@@ -278,6 +278,91 @@ def test_unaudited_working_tree_changes_block_close(tmp_path, monkeypatch):
     assert unaudited_rel in result["error"]
 
 
+def test_git_unavailable_blocks_close_fail_closed(tmp_path, monkeypatch):
+    """H-5: the mutation-completeness gate must FAIL CLOSED when git is
+    unavailable, not silently allow close (fail-open).
+
+    Setup: a normal closeable iteration (apply event + cross-family closer
+    review). Then monkeypatch subprocess.run to raise FileNotFoundError (git
+    binary missing). Unlike the Finding-3/Finding-5 tests, this test does NOT
+    stub _detect_working_tree_changes — it lets the real function body run so
+    it raises GitUnavailableError, which handle() must surface as
+    mutation_completeness_unverifiable.
+
+    RED today: current code's _detect_working_tree_changes swallows the
+    FileNotFoundError (per-cmd `continue`) and returns [], so handle() treats
+    the empty set as "no unaudited mutation" and allows the close (success).
+    """
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    importlib.reload(audit_append_event)
+
+    iter_id = "iteration-test-git-unavailable"
+    iter_dir = tmp_path / "consensus-state" / "active" / iter_id
+    iter_dir.mkdir(parents=True)
+
+    audited_rel = "audited_file.py"
+    (tmp_path / audited_rel).write_text("audited content\n", encoding="utf-8")
+
+    apply_event = {
+        "event": "apply_step_landed",
+        "timestamp_utc": _now_iso(-100),
+        "event_id": f"{_now_iso(-100)}_apply_step_landed_codex",
+        "effect": "applied patch",
+        "actor": {
+            "id": "codex-iter0018-1",
+            "model_family": "codex",
+            "role": "fix_author",
+            "pass_id": "codex-iter0018-1-pass1",
+        },
+        "patch_id": "codex-rev-001-patch",
+        "files_touched": [audited_rel],
+        "base_sha": "base",
+        "post_sha": "POST",
+        "unified_diff_sha256": "diff",
+        "timestamp": _now_iso(-100),
+        "files_modified": [audited_rel],
+    }
+    audit_path = iter_dir / "independence-audit.yaml"
+    audit_path.write_text(
+        yaml.safe_dump({"audit_log": [apply_event]}), encoding="utf-8"
+    )
+
+    closer = {
+        "actor": {
+            "id": "claude-iter0018-2",
+            "model_family": "claude",
+            "pass_id": "claude-iter0018-2-pass1",
+        },
+        "review_target_hash": "POST",
+        "created_at_utc": _now_iso(0),
+        "goal_satisfied": True,
+    }
+    (iter_dir / "claude-review.yaml").write_text(
+        yaml.safe_dump(closer), encoding="utf-8"
+    )
+
+    from consensus_mcp.tools import audit_append_event as aae
+
+    # Simulate git missing: every subprocess.run raises FileNotFoundError.
+    # The real _detect_working_tree_changes body must run and raise
+    # GitUnavailableError, which handle() surfaces fail-closed.
+    import subprocess as _subprocess
+
+    def _no_git(*args, **kwargs):
+        raise FileNotFoundError("git: command not found")
+
+    monkeypatch.setattr(_subprocess, "run", _no_git)
+
+    result = aae.handle(
+        iteration_id=iter_id,
+        event_type="iteration_closed",
+        actor="claude-iter0018-2",
+        closing_state="quorum_close_passed",
+    )
+    assert "error" in result, f"expected fail-closed error, got: {result}"
+    assert "mutation_completeness_unverifiable" in result["error"]
+
+
 def test_audited_working_tree_changes_allowed_to_close(tmp_path, monkeypatch):
     """When all working-tree changes are accounted for in apply_step_landed,
     no unaudited_mutation_detected refusal."""
@@ -632,6 +717,14 @@ def test_t6_no_mutation_evaluator_none_still_allowed(tmp_path, monkeypatch):
     # close should be allowed.
     monkeypatch.setattr(
         aae, "_evaluate_closure_invariant", lambda *a, **kw: None,
+    )
+    # H-5: the mutation-completeness gate now FAILS CLOSED when git is
+    # unavailable. The pytest tmp_path is not a git repo, so the real helper
+    # would (correctly) raise GitUnavailableError. Stub it to return [] — the
+    # legitimate "git ran, no working-tree changes" signal — so this test
+    # exercises ONLY the no-mutation/evaluator-None path it was written for.
+    monkeypatch.setattr(
+        aae, "_detect_working_tree_changes", lambda repo_root: [],
     )
 
     result = aae.handle(
