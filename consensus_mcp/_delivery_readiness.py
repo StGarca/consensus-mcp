@@ -117,10 +117,18 @@ def _token_path(artifact_path: Path, repo_root: Path) -> Path:
 
 def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
                         vetted_by: list[str], known_flaws: list | None = None,
-                        operator_ack: bool = False, repo_root: Path | None = None) -> dict:
+                        operator_ack: bool = False, action_classes: list | None = None,
+                        followup_ledger_key: str | None = None,
+                        repo_root: Path | None = None) -> dict:
     """Mint a token — REFUSES unless the design ref is sealed and >=2 non-claude
     reviewers vetted it. This is the anti-self-judge gate: an agent cannot mint
-    readiness from its own assertion."""
+    readiness from its own assertion.
+
+    1.16.1: also REFUSES if the declared `action_classes` carry required
+    follow-ups (required_followups.yaml) that are neither resolved nor
+    deferred-with-reason in the follow-up ledger — the mechanical binding of the
+    EXISTING complete-fulfillment rule (prevents 'merge a version bump but skip
+    the release')."""
     repo_root = repo_root or _resolve_repo_root()
     artifact_path = Path(artifact_path)
     if not artifact_path.exists():
@@ -141,6 +149,20 @@ def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
         raise DeliveryReadinessError(
             f"known_flaws non-empty {known_flaws} without operator_ack=True — no caveat-and-ship"
         )
+    # 1.16.1 follow-up completeness: declared action_classes acquire required
+    # follow-ups; refuse to mint while any is unresolved/undeferred.
+    action_classes = list(action_classes or [])
+    open_fu: list[str] = []
+    if action_classes:
+        from consensus_mcp import _followup_completeness as _fc
+        ledger = _fc.read_ledger(followup_ledger_key or str(artifact_path), repo_root)
+        complete, open_fu = _fc.followups_complete(action_classes, ledger)
+        if not complete:
+            raise DeliveryReadinessError(
+                f"action_classes {action_classes} have unresolved required follow-ups "
+                f"{open_fu} — resolve them or defer-with-reason before delivery "
+                f"(complete-fulfillment rule, mechanically enforced)"
+            )
     token = {
         "schema_version": TOKEN_SCHEMA_VERSION,
         "token_id": uuid.uuid4().hex,
@@ -154,6 +176,9 @@ def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
         "vetted_by": list(vetted_by),
         "known_flaws": known_flaws,
         "operator_ack": bool(operator_ack),
+        "action_classes": action_classes,
+        "followups_resolved": not open_fu,
+        "open_followups": open_fu,
     }
     _token_path(artifact_path, repo_root).write_text(json.dumps(token, indent=2), encoding="utf-8")
     return token
@@ -185,7 +210,15 @@ def verify_delivery_token(artifact_path: Path, repo_root: Path | None = None) ->
         non_claude = [r for r in (token.get("vetted_by") or []) if r and "claude" not in r.lower()]
         if len(non_claude) < 2:
             return {"ok": False, "reason": f"<2 non-claude reviewers: {non_claude}"}
-        return {"ok": True, "reason": "consensus-vetted, hash-current, sealed", "token_id": token.get("token_id")}
+        # 1.16.1: re-check follow-up completeness against the live ledger.
+        action_classes = token.get("action_classes") or []
+        if action_classes:
+            from consensus_mcp import _followup_completeness as _fc
+            ledger = _fc.read_ledger(str(artifact_path), repo_root)
+            complete, open_fu = _fc.followups_complete(action_classes, ledger)
+            if not complete:
+                return {"ok": False, "reason": f"unresolved required follow-ups: {open_fu}"}
+        return {"ok": True, "reason": "consensus-vetted, hash-current, sealed, follow-ups complete", "token_id": token.get("token_id")}
     except Exception as exc:  # fail-closed
         return {"ok": False, "reason": f"verify error (fail-closed): {exc}"}
 
