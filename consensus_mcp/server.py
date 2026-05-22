@@ -184,6 +184,10 @@ consensus_run_iteration.register(registry)
 from consensus_mcp.tools import consensus_get_iteration_outcome  # noqa: E402
 consensus_get_iteration_outcome.register(registry)
 
+# 1.16.0: delivery-readiness gate (anti-self-judge enforcement).
+from consensus_mcp.tools import delivery_gate  # noqa: E402
+delivery_gate.register(registry)
+
 
 # ---------------------------------------------------------------------------
 # Boot-time disposition check
