@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.2 - unreleased
+
+_Unreleased._
+
 ## 1.20.1 - 2026-05-22
 
 **`consensus init` contributor-selection redesign.** Setup now offers the

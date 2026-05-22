@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-version = "1.20.1"
+version = "1.20.2.dev0"
 description = "Cross-AI consensus code review: a panel of different AI models you choose (Claude, Codex, Gemini, Kimi, or add your own) review each change independently, and it ships only when they agree. An MCP server for AI coding tools."
 authors = [{name = "stgarca"}]
 requires-python = ">=3.11"
