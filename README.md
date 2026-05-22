@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.19.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.20.0
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -86,6 +86,12 @@ e.g. *"get a consensus review on this change."*
 multi-select that shows which AI CLIs you already have installed and
 lets you choose the panel (minimum two). Claude is optional — you can
 run, say, Codex + Gemini + Kimi with no Claude at all.
+
+You can also enable an *optional same-model second opinion* — a blind
+reviewer that runs the host's own model. It's a cheap extra check if
+you have the tokens, but it's marked supplementary: it does **not**
+count as independent multi-AI consensus (it shares the host's blind
+spots), so it can never be the deciding cross-model sign-off.
 
 > **Guided, cross-platform setup.** If you pick an AI whose CLI isn't
 > installed yet, init prints the exact install and login commands for
@@ -144,7 +150,7 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.19.0 — stable.** 1,000+ regression tests, green on
+**Current: v1.20.0 — stable.** 1,000+ regression tests, green on
 CI across Linux + Windows and Python 3.11+. Self-hosted:
 every release is built through consensus-mcp's own cross-AI
 review.
