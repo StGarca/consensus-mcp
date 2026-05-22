@@ -259,12 +259,23 @@ def check_closure_invariant(
     closer_family = _actor_model_family(closing_verdict.get("actor"))
     lm_family = _actor_model_family(last_mutation.get("actor"))
 
+    # v1.20.0 host_peer gate exclusion (ADDITIVE, minimal): a closer tagged
+    # gate_eligible == False (a same-family blind SWE-reviewer / host_peer) can
+    # NEVER be the different-family signer that closes a mutation — even when its
+    # model_family differs from the mutator's. The host is not independent of its
+    # own orchestration, so its supplementary review augments cross-family review
+    # but can never satisfy it. Only the LITERAL boolean False excludes; absent /
+    # None / any non-false value means gate-eligible (default), preserving every
+    # existing closer's behavior unchanged.
+    closer_gate_excluded = closing_verdict.get("gate_eligible") is False
+
     # v5 Finding 1: cross-family check (BOTH families must be present AND
     # different). actor.id difference is necessary (a node cannot close its
     # own work) but not sufficient — same-family-different-actor doesn't
     # buy independence.
     cross_family = (
-        closer_family is not None
+        not closer_gate_excluded
+        and closer_family is not None
         and lm_family is not None
         and closer_family != lm_family
         and closer_actor_id is not None
@@ -293,10 +304,15 @@ def check_closure_invariant(
     ok = cross_family and hash_match and freshness
     reasons: list[str] = []
     if not cross_family:
+        excluded_note = (
+            " [closer gate_eligible=False (host_peer/supplementary): excluded "
+            "from cross-family signoff]"
+            if closer_gate_excluded else ""
+        )
         reasons.append(
             f"cross_family: closer.actor.model_family={closer_family!r}/"
             f"id={closer_actor_id!r} vs last_mutation.actor.model_family={lm_family!r}/"
-            f"id={lm_actor_id!r}"
+            f"id={lm_actor_id!r}{excluded_note}"
         )
     if not hash_match:
         reasons.append(

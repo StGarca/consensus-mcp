@@ -19,7 +19,8 @@
         "required": ["name"],
         "properties": {
           "name": {"type": "string"},
-          "family": {"type": ["string", "null"]}
+          "family": {"type": ["string", "null"]},
+          "supplementary": {"type": ["boolean", "null"], "description": "v1.20.0: true when this reviewer is a same-family supplementary host_peer (gate-ineligible); the scorecard separates its findings from independent cross-family review."}
         }
       }
     },

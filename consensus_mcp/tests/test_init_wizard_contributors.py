@@ -141,12 +141,15 @@ def test_interactive_overrides_fresh_wires_numbered_multiselect(tmp_path, monkey
     # Deterministic install detection regardless of host PATH.
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
 
-    # Display order is [claude, codex, gemini, kimi]; "2,3" picks codex+gemini
-    # (claude-optional). Remaining answers ("") accept each later dimension's
-    # default. interactive_overrides prompts 8 more dimensions after contributors.
+    # Display order is host-first then alphabetical:
+    # [claude, claude-swe-reviewer, codex, gemini, kimi] (v1.20.0 added the
+    # host_peer built-in claude-swe-reviewer at index 2). "3,4" picks
+    # codex+gemini (claude-optional). Remaining answers ("") accept each later
+    # dimension's default. interactive_overrides prompts 8 more dimensions after
+    # contributors.
     monkeypatch.setattr(
         builtins, "input",
-        _stub_input(["2,3", "", "", "", "", "", "", "", ""]),
+        _stub_input(["3,4", "", "", "", "", "", "", "", ""]),
     )
 
     wiz.interactive_overrides(args, tmp_path, base, fresh=True)
@@ -362,3 +365,49 @@ def test_init_provisions_instruction_files_by_default(tmp_path, monkeypatch):
     assert (tmp_path / "CLAUDE.md").exists()
     assert (tmp_path / "AGENTS.md").exists()   # codex
     assert (tmp_path / "GEMINI.md").exists()
+
+
+# ---------- v1.20.0: host_peer selection annotation ----------
+
+def test_contributor_option_note_explains_host_peer_is_not_true_consensus():
+    """A host_peer option must carry a plain-language note: a same-model second
+    opinion (extra tokens) that is NOT independent cross-AI consensus."""
+    note = wiz._contributor_option_note(
+        {"kind": cfg_profiles_kind_host_peer()}
+    )
+    low = note.lower()
+    assert note, "host_peer must have an explanatory selection note"
+    # mentions it's the same model as the host/orchestrator
+    assert "same" in low and ("model" in low or "ai" in low or "host" in low)
+    # mentions the token cost trade-off
+    assert "token" in low
+    # is explicit that it is NOT true multi-AI consensus
+    assert "not" in low and "consensus" in low
+
+
+def test_contributor_option_note_empty_for_cross_family_reviewer():
+    """Genuine cross-family CLI reviewers (and the host) get no caveat note."""
+    assert wiz._contributor_option_note({"kind": "cli_reviewer"}) == ""
+    assert wiz._contributor_option_note({"kind": "host"}) == ""
+
+
+def test_interactive_list_shows_host_peer_note(capsys, monkeypatch):
+    """The note is surfaced in the numbered multi-select so it's visible when
+    choosing options (not buried in docs)."""
+    profiles = {
+        "codex": {"kind": "cli_reviewer", "detect": {"command": "codex"}},
+        "claude-swe-reviewer": {"kind": cfg_profiles_kind_host_peer()},
+    }
+    monkeypatch.setattr(wiz, "_profile_installed", lambda p: True)
+    monkeypatch.setattr(builtins, "input", _stub_input(["1,2"]))
+    wiz._select_contributors_interactive(profiles)
+    out = capsys.readouterr().out
+    # exactly one caveat line, and it's the host_peer's (codex gets none)
+    caveat_lines = [l for l in out.splitlines() if "↳" in l]
+    assert len(caveat_lines) == 1
+    assert "token" in caveat_lines[0].lower() and "consensus" in caveat_lines[0].lower()
+
+
+def cfg_profiles_kind_host_peer():
+    from consensus_mcp import _contributor_profiles as p
+    return p.KIND_HOST_PEER

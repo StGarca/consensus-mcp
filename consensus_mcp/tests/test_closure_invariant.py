@@ -559,6 +559,99 @@ def test_no_mutation_yet_close_not_gated():
     assert res["ok"] is True
 
 
+# ---------------------------------------------------------------------------
+# v1.20.0 host_peer LOAD-BEARING REGRESSION:
+# the cross-family closure invariant must NOT be weakened. A same-family blind
+# SWE-reviewer (host_peer) carries gate_eligible=false in its closing verdict
+# and can NEVER be the different-family signer that closes a mutation —
+# regardless of whether its family matches the mutator's. A genuinely
+# different, gate-eligible family is still required.
+# ---------------------------------------------------------------------------
+
+
+def _make_host_peer_verdict(*, actor_id, model_family, target_hash, ts_offset=0):
+    """A host_peer closing verdict: cross-family-DIFFERENT actor but tagged
+    gate_eligible=false + weight=supplementary (a same-family blind reviewer)."""
+    v = _make_verdict(
+        actor_id=actor_id, model_family=model_family,
+        target_hash=target_hash, ts_offset=ts_offset,
+    )
+    v["gate_eligible"] = False
+    v["weight"] = "supplementary"
+    v["independence_attestation"] = {
+        "method": "host_peer_callback",
+        "fresh_context": True,
+        "no_peer_review_visible_at_dispatch": True,
+    }
+    return v
+
+
+def test_claude_mutator_claude_host_peer_cannot_close():
+    """host_peer is SAME family as the mutator (claude+claude) — must NOT close.
+
+    This already fails on the existing cross_family check (same family); the
+    gate_eligible=false tag is belt-and-suspenders. Pins that [host + host_peer]
+    cannot close a host-authored change.
+    """
+    lm = _make_lm(actor_id="claude-iter1200-1", model_family="claude",
+                  post_sha="POST", ts_offset=-100)
+    v = _make_host_peer_verdict(actor_id="claude-swe-reviewer-iter1200",
+                                model_family="claude",
+                                target_hash="POST", ts_offset=0)
+    res = _closure_invariant.check_closure_invariant(lm, v)
+    assert res["ok"] is False
+    assert res["checks"]["cross_family"] is False
+
+
+def test_codex_mutator_claude_host_peer_cannot_close_despite_different_family():
+    """THE load-bearing case: a claude host_peer reviewing a CODEX-authored
+    change is cross-family-DIFFERENT, hash-matched, and fresh — yet because it
+    is gate_eligible=false it STILL must NOT satisfy cross-family signoff.
+
+    Without the gate_eligible exclusion this would WRONGLY pass (different
+    families). It must fail: the host is not independent of its own
+    orchestration, so a genuinely external gate-eligible family is required.
+    """
+    lm = _make_lm(actor_id="codex-iter1200-1", model_family="codex",
+                  post_sha="POST", ts_offset=-100)
+    v = _make_host_peer_verdict(actor_id="claude-swe-reviewer-iter1200",
+                                model_family="claude",
+                                target_hash="POST", ts_offset=0)
+    res = _closure_invariant.check_closure_invariant(lm, v)
+    assert res["ok"] is False, (
+        "a gate_eligible=false host_peer must NOT satisfy cross-family signoff "
+        "even when its family differs from the mutator"
+    )
+    assert res["checks"]["cross_family"] is False
+
+
+def test_codex_mutator_genuine_claude_closer_still_passes():
+    """Invariant NOT weakened: a REAL (gate-eligible) claude closer over a codex
+    mutation still passes. The gate_eligible exclusion only blocks the
+    supplementary host_peer, never the genuine cross-family signer."""
+    lm = _make_lm(actor_id="codex-iter1200-1", model_family="codex",
+                  post_sha="POST", ts_offset=-100)
+    v = _make_verdict(actor_id="claude-iter1200-2", model_family="claude",
+                      target_hash="POST", ts_offset=0)
+    # No gate_eligible key (absent) means gate-eligible by default.
+    res = _closure_invariant.check_closure_invariant(lm, v)
+    assert res["ok"] is True
+    assert res["checks"]["cross_family"] is True
+
+
+def test_gate_eligible_true_closer_unaffected():
+    """An explicit gate_eligible=true closer is treated exactly like a normal
+    closer (the exclusion only triggers on the literal false)."""
+    lm = _make_lm(actor_id="codex-iter1200-1", model_family="codex",
+                  post_sha="POST", ts_offset=-100)
+    v = _make_verdict(actor_id="claude-iter1200-2", model_family="claude",
+                      target_hash="POST", ts_offset=0)
+    v["gate_eligible"] = True
+    res = _closure_invariant.check_closure_invariant(lm, v)
+    assert res["ok"] is True
+    assert res["checks"]["cross_family"] is True
+
+
 def test_closure_certificate_authored_on_pass(tmp_path, monkeypatch):
     """#9 When invariant passes and iteration_closed is recorded, closure-certificate.yaml is authored.
 
