@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.5 - unreleased
+
+In progress: the gates/state (H-1, H-4–H-7) and orchestration (H-3, H-8, M-11)
+clusters from the 2026-05-22 code review (`docs/code-review-2026-05-22.md`), plus
+the 4 pre-existing `test_visibility_watchdog` failures — one consensus-audited
+batch.
+
 ## 1.17.4 - 2026-05-22
 
 **Security cluster — fail-closed path/scope/auth boundaries.** A thorough code
