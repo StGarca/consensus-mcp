@@ -4,7 +4,11 @@
 **Reviewed at:** main `d948334` (post-PII-scrub).
 **Confidence** is the reviewer's self-rated 0–100; I've dropped findings the reviewers retracted mid-analysis and down-weighted spec-ambiguities.
 
-> **Status (updated 2026-05-22):** the **security cluster (CR-1…CR-5, H-2, M-6) is FIXED and shipped in tag `v1.17.4`** (consensus-audited — see the "Consensus audit" section at the end). The **gates/state** (H-1, H-4–H-7) and **orchestration** (H-3, H-8, M-11) clusters, plus the 4 pre-existing `test_visibility_watchdog` failures, are scoped for `v1.17.5`. Non-trivial fixes go through the consensus peer-review workflow.
+> **Status (updated 2026-05-22):**
+> - **Security cluster (CR-1…CR-5, H-2, M-6): FIXED, shipped in tag `v1.17.4`** (consensus-audited — see the "Consensus audit" section at the end).
+> - **`test_visibility_watchdog` (4 failures): FIXED** on `v1.17.5` — a time-bomb test (hardcoded absolute timestamp aged past the watchdog's 7-day `--window-days` filter), not a product bug.
+> - **H-1: DISMISSED.** The `state_root`/`project_root` cwd-fallback is the **intentional multi-project mechanism** (consensus-mcp writes state into the current project's cwd; a project-scoped MCP server runs with cwd = project dir). A `__file__`-walk "fix" was implemented and **reverted** because it ties state to consensus-mcp's source location and breaks multi-project (caught by `test_paths.py:198 test_unsetting_env_falls_back_correctly`). The env-free `.mcp.json` from v1.17.4 is correct.
+> - Remaining **gates/state** (H-4, H-5, H-6, H-7) and **orchestration** (H-3, H-8, M-11) are in progress on `v1.17.5`. Non-trivial fixes go through the consensus peer-review workflow.
 
 ---
 
