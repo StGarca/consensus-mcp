@@ -376,7 +376,11 @@ def scope_check(
                 "claim": f"touched file {path!r} matches forbidden_files pattern",
             })
             continue
-        if allowed_files and not _matches_any(allowed_files, path):
+        # CR-4 (2026-05-22 security review): fail CLOSED. Dropping the
+        # `allowed_files and` guard means an empty / missing / coerced-empty
+        # allowed_files matches nothing, so every touched file is out-of-scope
+        # instead of the previous silent allow-all.
+        if not _matches_any(allowed_files, path):
             out_of_scope.append(path)
             findings.append({
                 "id": "FILE_OUTSIDE_ALLOWED_SCOPE",
