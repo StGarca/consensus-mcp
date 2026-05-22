@@ -1,8 +1,7 @@
 {
   "mcpServers": {
     "consensus-mcp": {
-      "command": "py",
-      "args": ["-3.11", "-m", "consensus_mcp.server"]
+      "command": "consensus-mcp"
     }
   }
 }

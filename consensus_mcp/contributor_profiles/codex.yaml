@@ -1,0 +1,42 @@
+# Built-in contributor profile: codex (OpenAI Codex CLI).
+#
+# METADATA-ONLY in v1.18.0: codex is dispatched by the EXISTING CodexAdapter via
+# B-routing (_engine_factory keeps the built-in class). This profile supplies the
+# wizard list, detect+guide install/auth strings, and the model/provenance label;
+# it is NOT consumed by ProfileAdapter. Full metadata is authored anyway for the
+# wizard, forward-compat (future option-A refactor), and provenance accuracy.
+#
+# install/auth strings VERIFIED 2026-05-22 (do NOT invent):
+#   npm package: @openai/codex   ;   auth: `codex login` (token/ChatGPT auth)
+name: codex
+kind: cli_reviewer
+model: "codex (codex-cli)"
+detect:
+  command: codex
+invoke:
+  # METADATA-ONLY: codex is dispatched by CodexAdapter, not ProfileAdapter, so
+  # transport is not actually consumed. transport=stdin/prompt_flag=null is the
+  # schema-valid neutral placeholder (a flag transport would require a real
+  # prompt_flag the existing adapter does not use).
+  transport: stdin
+  base_args: []
+  prompt_flag: null
+  workdir_flag: null
+  model_flag: null
+env: {}
+output:
+  strip_patterns: []
+  schema_enforced: true    # codex enforces its review JSON schema natively
+sealed_filename: codex-review.yaml
+id_prefix: codex-rev
+install:
+  windows: "npm install -g @openai/codex"
+  linux: "npm install -g @openai/codex"
+auth:
+  command: "codex login"
+  env_vars:
+    - OPENAI_API_KEY
+  note: "ChatGPT/token auth (interactive) or OPENAI_API_KEY"
+instructions:
+  filename: AGENTS.md
+timeout_seconds: 1800

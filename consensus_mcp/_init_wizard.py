@@ -33,6 +33,7 @@ from pathlib import Path
 import yaml
 
 from consensus_mcp import config as cfg
+from consensus_mcp import _contributor_profiles as profiles_mod
 
 
 # iter-0031 (per iter-0030 converged plan Q3): marker-based project-root
@@ -338,6 +339,252 @@ def _detect_available_contributors(repo_root: Path) -> list[str]:
     return available
 
 
+# --- v1.18.0: contributor selection + detect-guide + instruction provisioning ---
+# (per converged-plan iteration-v1180-contributor-design: decision.wizard_ux,
+#  decision.detect_guide, the instruction_files block.)
+
+
+# Managed-block sentinels for per-AI instruction files. The em-dash matches the
+# converged plan verbatim; the block between these markers is owned by
+# consensus-mcp and refreshed in place — everything outside is the user's.
+INSTRUCTION_BEGIN_MARKER = "<!-- consensus-mcp:begin (managed — do not edit inside) -->"
+INSTRUCTION_END_MARKER = "<!-- consensus-mcp:end -->"
+
+# A static reminder appended to each detect+guide block: the wizard NEVER shells
+# out install/auth commands (operator chose detect+guide, not auto-exec).
+_DETECT_GUIDE_REMINDER = "  (these commands are NOT run for you)"
+
+
+def _load_merged_profiles(config_profiles: dict | None) -> dict:
+    """Merge the packaged built-in profiles with any operator overlay.
+
+    `config_profiles` is the `contributors.profiles` map from an existing
+    config (or None). Built-ins come from the package; the overlay overrides
+    by name and may add new contributors.
+    """
+    builtin = profiles_mod.load_builtin_profiles()
+    return profiles_mod.merge_profiles(builtin, config_profiles or {})
+
+
+def _ordered_profile_names(profiles: dict) -> list[str]:
+    """Stable display/selection order: claude (host) first, then the rest sorted."""
+    names = list(profiles)
+    host = [n for n in names if profiles[n].get("kind") == profiles_mod.KIND_HOST]
+    rest = sorted(n for n in names if n not in host)
+    return sorted(host) + rest
+
+
+def _profile_installed(profile: dict) -> bool:
+    """True if the contributor is usable on this host.
+
+    host (claude) is the running environment — always available. cli_reviewers
+    are available iff their detect.command resolves on PATH.
+    """
+    if profile.get("kind") == profiles_mod.KIND_HOST:
+        return True
+    command = (profile.get("detect") or {}).get("command")
+    if not command:
+        return False
+    return shutil.which(command) is not None
+
+
+def _select_contributors_interactive(profiles: dict) -> list[str]:
+    """Numbered multi-select over merged profiles (no TUI dep).
+
+    Shows '✓ installed' / '✗ missing' per entry, pre-checks installed ones as
+    the default (accepted on empty input), and re-prompts until >=2 are picked.
+    Returns the selected names in display order.
+
+    Raises KeyboardInterrupt on Ctrl+C / EOF (caller maps to exit 1).
+    """
+    names = _ordered_profile_names(profiles)
+    installed = {n: _profile_installed(profiles[n]) for n in names}
+    prechecked = [n for n in names if installed[n]]
+
+    print("Select contributors (>=2 required):")
+    for idx, name in enumerate(names, start=1):
+        status = "✓ installed" if installed[name] else "✗ missing"
+        mark = "x" if installed[name] else " "
+        print(f"  [{mark}] {idx}. {name} ({status})")
+    default_hint = ",".join(str(names.index(n) + 1) for n in prechecked) or "none"
+
+    while True:
+        try:
+            raw = input(
+                f"Enter comma-separated numbers [default: {default_hint}]: "
+            ).strip()
+        except EOFError as exc:
+            raise KeyboardInterrupt from exc
+
+        if not raw:
+            chosen = list(prechecked)
+        else:
+            chosen = []
+            bad = False
+            for tok in (t.strip() for t in raw.split(",") if t.strip()):
+                if not tok.isdigit() or not (1 <= int(tok) <= len(names)):
+                    print(f"  invalid selection {tok!r}", file=sys.stderr)
+                    bad = True
+                    break
+                cand = names[int(tok) - 1]
+                if cand not in chosen:
+                    chosen.append(cand)
+            if bad:
+                continue
+
+        if len(chosen) < 2:
+            print("  please select at least 2 contributors", file=sys.stderr)
+            continue
+        return chosen
+
+
+def _validate_contributor_selection(selection: list[str], profiles: dict) -> list[str]:
+    """Validate a name list against known profiles + enforce min-2.
+
+    Raises WizardError on an unknown name or on <2 selected.
+    """
+    unknown = [n for n in selection if n not in profiles]
+    if unknown:
+        raise WizardError(
+            f"unknown contributor(s) {unknown}; "
+            f"known: {sorted(profiles)}"
+        )
+    if len(selection) < 2:
+        raise WizardError(
+            f"at least 2 contributors are required; got {selection!r}"
+        )
+    return list(selection)
+
+
+def _resolve_contributor_selection(
+    explicit: str | None, profiles: dict, interactive: bool,
+) -> list[str]:
+    """Resolve the contributor list (flags-over-prompts).
+
+    If `explicit` (the --contributors flag) is set, it bypasses the prompt and
+    is validated against known profiles + min-2. Otherwise, when interactive,
+    the multi-select prompt runs; non-interactive with no flag is left to the
+    caller's existing default-detection path (returns None to signal that).
+    """
+    if explicit is not None:
+        selection = [c.strip() for c in explicit.split(",") if c.strip()]
+        return _validate_contributor_selection(selection, profiles)
+    if interactive:
+        return _select_contributors_interactive(profiles)
+    return None
+
+
+def _install_os_key() -> str:
+    """Map sys.platform to a profile install[] OS key."""
+    if sys.platform == "win32":
+        return "windows"
+    if sys.platform == "darwin":
+        return "darwin"
+    return "linux"
+
+
+def _detect_and_guide(selection: list[str], profiles: dict) -> None:
+    """Print OS-appropriate install/auth guidance for each MISSING cli_reviewer.
+
+    Nothing is executed. Present CLIs and the host (claude) print nothing.
+    """
+    os_key = _install_os_key()
+    for name in selection:
+        profile = profiles.get(name)
+        if profile is None:
+            continue
+        if profile.get("kind") == profiles_mod.KIND_HOST:
+            continue
+        command = (profile.get("detect") or {}).get("command")
+        if not command or shutil.which(command) is not None:
+            continue
+
+        print(f"{name}: not found on PATH — to enable it:")
+        install = profile.get("install") or {}
+        cmd = install.get(os_key)
+        if cmd is None and os_key == "darwin":
+            cmd = install.get("linux")
+        if cmd:
+            print(f"  install: {cmd}")
+        else:
+            print(f"  install: unavailable for {os_key} — see {name} vendor docs")
+
+        auth = profile.get("auth") or {}
+        if auth.get("command"):
+            print(f"  auth:    {auth['command']}")
+        for var in auth.get("env_vars") or []:
+            print(f"  auth env (optional): {var}")
+        if auth.get("note"):
+            print(f"  note:    {auth['note']}")
+        print(_DETECT_GUIDE_REMINDER)
+
+
+def _vendored_instructions_text() -> str:
+    """Return the vendored Karpathy guidelines (contributor_instructions/base.md)."""
+    base = Path(__file__).resolve().parent / "contributor_instructions" / "base.md"
+    return base.read_text(encoding="utf-8")
+
+
+def _upsert_managed_block(existing: str, block_body: str) -> str:
+    """Insert or refresh the managed block in `existing` text. Idempotent.
+
+    If a sentinel pair is present, its contents are replaced and surrounding
+    user content is preserved. If absent, the block is appended. Running twice
+    yields exactly one block.
+    """
+    managed = f"{INSTRUCTION_BEGIN_MARKER}\n{block_body.rstrip(chr(10))}\n{INSTRUCTION_END_MARKER}\n"
+
+    begin = existing.find(INSTRUCTION_BEGIN_MARKER)
+    end = existing.find(INSTRUCTION_END_MARKER)
+    if begin != -1 and end != -1 and end > begin:
+        end_full = end + len(INSTRUCTION_END_MARKER)
+        # Consume a single trailing newline after the end marker if present so
+        # we don't accumulate blank lines on refresh.
+        if end_full < len(existing) and existing[end_full] == "\n":
+            end_full += 1
+        return existing[:begin] + managed + existing[end_full:]
+
+    # No existing block: append, separating from prior content with one blank line.
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    if existing.strip():
+        existing += "\n"
+    return existing + managed
+
+
+def _provision_instruction_files(
+    selection: list[str], profiles: dict, repo_root: Path,
+) -> list[Path]:
+    """Seed/refresh per-AI instruction files for the selected contributors.
+
+    Targets profile.instructions.filename, deduped by filename (codex+kimi both
+    → AGENTS.md → written once). Non-destructive: a managed block is inserted or
+    refreshed between sentinels, leaving any user content intact. Idempotent.
+
+    Returns the list of written file paths (deduped).
+    """
+    block_body = _vendored_instructions_text()
+    targets: list[str] = []
+    for name in selection:
+        profile = profiles.get(name)
+        if profile is None:
+            continue
+        filename = (profile.get("instructions") or {}).get("filename")
+        if filename and filename not in targets:
+            targets.append(filename)
+
+    written: list[Path] = []
+    for filename in targets:
+        path = repo_root / filename
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        new_text = _upsert_managed_block(existing, block_body)
+        if new_text != existing:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(new_text, encoding="utf-8")
+        written.append(path)
+    return written
+
+
 def _prompt(label: str, default: str, valid: list[str] | None = None) -> str:
     """Single-line prompt with default. Raises KeyboardInterrupt on Ctrl+C/EOF."""
     suffix = f" [{default}]"
@@ -419,11 +666,21 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
 
     # Contributors.
     if "contributors" not in set_flags:
-        default = ",".join(
-            base["contributors"]["enabled"] if not fresh else _detect_available_contributors(repo_root)
-        )
-        choice = _prompt("Enabled contributors (comma-separated)", default)
-        base["contributors"]["enabled"] = [c.strip() for c in choice.split(",") if c.strip()]
+        if fresh:
+            # FRESH path uses the v1.18.0 numbered multi-select over merged
+            # profiles (✓ installed / ✗ missing, min-2 re-prompt, claude
+            # optional) — wired here per codex-rev-001 (the helper existed but
+            # was never reached by the wizard flow).
+            profiles = _load_merged_profiles(
+                (base.get("contributors") or {}).get("profiles")
+            )
+            base["contributors"]["enabled"] = _select_contributors_interactive(profiles)
+        else:
+            # Reconfigure: preserve the existing enabled list as the default via
+            # the comma-separated free-text prompt (unchanged behavior/tests).
+            default = ",".join(base["contributors"]["enabled"])
+            choice = _prompt("Enabled contributors (comma-separated)", default)
+            base["contributors"]["enabled"] = [c.strip() for c in choice.split(",") if c.strip()]
     n_contributors = len(base["contributors"]["enabled"])
 
     # Workflow mode.
@@ -763,6 +1020,10 @@ def cmd_init(args) -> int:
             print(f"would write .mcp.json at {mcp_path} (consensus-mcp registered)")
         else:
             print(".mcp.json write skipped (--no-mcp-json)")
+        if not args.no_instructions:
+            print("would seed per-AI instruction files (managed block)")
+        else:
+            print("instruction-file seeding skipped (--no-instructions)")
         return 0
 
     write_config(new_config, config_path)
@@ -774,6 +1035,22 @@ def cmd_init(args) -> int:
             print(f"updated .gitignore at {repo_root / '.gitignore'}")
         else:
             print(".gitignore already up to date")
+
+    # v1.18.0: detect+guide for missing CLIs and seed per-AI instruction files
+    # for the contributors that ended up enabled. Best-effort: profile load
+    # failures must not abort a successful config write.
+    try:
+        existing_profiles = (new_config.get("contributors") or {}).get("profiles")
+        merged_profiles = _load_merged_profiles(existing_profiles)
+        enabled = (new_config.get("contributors") or {}).get("enabled") or []
+        _detect_and_guide(enabled, merged_profiles)
+        if not args.no_instructions:
+            for path in _provision_instruction_files(enabled, merged_profiles, repo_root):
+                print(f"seeded instruction file {path}")
+        else:
+            print("instruction-file seeding skipped (--no-instructions)")
+    except (OSError, ValueError) as exc:
+        print(f"WARN: instruction/detect-guide step skipped: {exc}", file=sys.stderr)
 
     # iter-0031: write .mcp.json by default (per iter-0030 converged plan).
     if not args.no_mcp_json:
@@ -858,6 +1135,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reconfigure", action="store_true", help="re-prompt with existing as defaults; show diff")
     parser.add_argument("--force", action="store_true", help="overwrite without prompt")
     parser.add_argument("--no-update-gitignore", action="store_true", help="skip .gitignore marker write")
+    parser.add_argument("--no-instructions", action="store_true",
+                        help=("skip seeding per-AI instruction files "
+                              "(CLAUDE.md/AGENTS.md/GEMINI.md managed block)"))
     parser.add_argument("--config", default=None, help="override config path")
 
     # iter-0031: .mcp.json bootstrap flags (per iter-0030 converged plan).

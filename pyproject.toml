@@ -7,7 +7,7 @@ name = "consensus-mcp"
 version = "1.18.0.dev0"
 description = "MCP server enforcing G1-G5 consensus gates (sealed-review provenance, canonical-006 dry-run, intra-file scope, production-scope match, mediated ledger updates)"
 authors = [{name = "stgarca"}]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 readme = "README.md"
 dependencies = [
@@ -37,6 +37,11 @@ include-package-data = true
 consensus_mcp = [
   "dispatch_templates/*.md",
   "dispatch_templates/*.json",
+  # v1.18.0: packaged built-in contributor profiles + vendored instruction
+  # guidelines. Without these, pip users get no built-ins (mirrors how
+  # dispatch_templates is packaged).
+  "contributor_profiles/*.yaml",
+  "contributor_instructions/*.md",
   "docs/*.md",
   "spec_template.md",
   # v1.15.1: converged-plan convention machine-enforcement contract.
