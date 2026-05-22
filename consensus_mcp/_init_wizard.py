@@ -330,13 +330,16 @@ def _resolve_config_path(args, repo_root: Path) -> Path:
 
 
 def _detect_available_contributors(repo_root: Path) -> list[str]:
-    """Return contributors whose CLIs are resolvable on PATH. Always includes claude."""
-    available = ["claude"]
-    if shutil.which("codex"):
-        available.append("codex")
-    if shutil.which("gemini"):
-        available.append("gemini")
-    return available
+    """Installed INDEPENDENT contributors, derived dynamically from the merged
+    profile set (no hardcoded AI list — decision 7). host is always available;
+    cli_reviewers iff their detect.command resolves on PATH; host_peer excluded
+    (it is offered via the conditional follow-up, never auto-enabled)."""
+    profiles = _load_merged_profiles(None)
+    out = []
+    for name in _independent_ordered_names(profiles):
+        if _profile_installed(profiles[name]):
+            out.append(name)
+    return out
 
 
 # --- v1.18.0: contributor selection + detect-guide + instruction provisioning ---
