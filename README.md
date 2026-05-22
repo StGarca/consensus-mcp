@@ -2,9 +2,10 @@
 
 **A second opinion for AI-written code — from other AIs.** Instead of
 trusting one AI to grade its own homework, consensus-mcp puts a small
-panel of *different* AIs (Claude, Codex, and Gemini by default) on
-every change, has them review it independently, and only lets the
-change through when they agree.
+panel of *different* AIs — one you choose — on every change, has them
+review it independently, and only lets the change through when they
+agree. Built-in support for Claude, Codex, Gemini, and Kimi, and you
+can add any other AI just by writing a short config profile (no code).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
@@ -26,7 +27,10 @@ consensus-mcp turns that into an automatic step in your workflow.
 
 ## What it does
 
-When you ask the AI panel to write, fix, or review code, consensus-mcp:
+You decide who's on the panel. At setup you pick from the AIs you have
+installed — Claude, Codex, Gemini, Kimi, or any other you've defined —
+and they each review every change. When you ask the panel to write,
+fix, or review code, consensus-mcp:
 
 1. **Writes down the request as a contract** — what's changing, which
    files, what "done" looks like, who approved it.
@@ -43,9 +47,15 @@ When you ask the AI panel to write, fix, or review code, consensus-mcp:
 6. **Backs up its working state** to a separate git branch so a stray
    `git clean` can't lose review history.
 
-The payoff: a change that passes three different AI families isn't
-"one model liked it" — it's "three models that fail differently all
+The payoff: a change that passes a panel of different AI families isn't
+"one model liked it" — it's "several models that fail differently all
 agree."
+
+**Add an AI without touching code.** Each reviewer is described by a
+small config *profile* — how to detect it, run it, and read its answer.
+Built-in profiles ship for Claude, Codex, Gemini, and Kimi; to add a
+new AI you just drop in another profile. No code change, no new
+release.
 
 ## Quick start
 
@@ -71,10 +81,17 @@ That writes a small config and registers the tool with Claude Code.
 Reopen Claude Code in the project and just ask in plain language —
 e.g. *"get a consensus review on this change."*
 
-> Codex and Gemini are optional and auto-detected if their CLIs are on
-> your PATH. Claude is always there as the coordinator. With just
-> Claude + Codex you still get full cross-AI review — see
-> "2 AIs or 3?" below.
+**Pick your panel at setup.** `consensus-init` runs an interactive
+multi-select that shows which AI CLIs you already have installed and
+lets you choose the panel (minimum two). Claude is optional — you can
+run, say, Codex + Gemini + Kimi with no Claude at all.
+
+> **Guided, cross-platform setup.** If you pick an AI whose CLI isn't
+> installed yet, init prints the exact install and login commands for
+> your OS (Windows or Linux) — it never runs them for you. It also
+> seeds shared reviewer "house rules" into each AI's own instructions
+> file (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`) so every model on the
+> panel plays by the same guidelines.
 
 ## How it works (the short version)
 
@@ -93,14 +110,17 @@ You pick how strict things are per project — the review style, who's
 on the panel, the agreement rule, and more. `consensus-init` walks you
 through it; `consensus-init --print-defaults` shows every option.
 
-## 2 AIs or 3?
+## How big a panel?
 
-A 2-AI setup (Claude + Codex) and a 3-AI setup (adding Gemini) are
-governed **identically** — same rules, same enforcement, same
-guarantees. The number of AIs never changes the doctrine; it's the
-*workflow mode* that does. The only difference is a sensible default:
-2 AIs default to "both must agree," 3 default to "majority" — and you
-can override either.
+Any panel works as long as it has **at least two** AIs — the floor that
+makes "different models that fail differently" possible. Two, three,
+four, or your own custom mix are all governed **identically**: same
+rules, same enforcement, same guarantees. The size of the panel never
+changes the doctrine; it's the *workflow mode* that does.
+
+The only thing panel size changes is a sensible default agreement rule:
+2 AIs default to "both must agree," 3-or-more default to "majority" —
+and you can override either.
 
 ## Does it actually work?
 
@@ -152,9 +172,15 @@ readable.)
 - Python 3.11+
 - [`pipx`](https://pipx.pypa.io/) recommended (isolated, reusable
   across projects)
-- Optional: [`codex-cli`](https://github.com/openai/codex-cli) and/or
-  [`gemini-cli`](https://github.com/google-gemini/gemini-cli) on PATH
-  for the multi-AI panel (Claude is always present)
+- At least two AI CLIs on your PATH for the panel. Built-in support for:
+  - [`codex`](https://github.com/openai/codex)
+  - [`gemini-cli`](https://github.com/google-gemini/gemini-cli)
+  - [`kimi-cli`](https://github.com/MoonshotAI/kimi-cli)
+  - Claude (when you run inside Claude Code) — optional, like the rest
+- Don't see your AI? Add it with a short config profile — no code
+  change needed. `consensus-init` detects which of these you have
+  installed and, for any you pick that are missing, prints the right
+  install + login commands for your OS.
 
 ## License
 

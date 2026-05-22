@@ -571,6 +571,17 @@ on `main`). `main` = newest tag; `v<next>` = where work lands;
 release = the moment a tag is pushed AND `main` is fast-forwarded
 onto it.
 
+**Keep `main` CURRENT — never frozen (operator, 2026-05-22):** the
+GitHub landing page IS `main`, so `main` must always reflect the
+current state. Beyond the at-cut fast-forward to the tag, `main` may
+also be fast-forwarded to the active dev-branch tip *between* cuts to
+keep the README / landing page current (clean FF only; `git
+merge-base --is-ancestor origin/main <tip>` guard; never merge, never
+force). The v1.17.x cuts had DRIFTED — they left `main` frozen at the
+PII-scrub root `d948334` instead of FF-ing per step 8; this was
+corrected at v1.18.x (`main` fast-forwarded to the v1.18.1 tip). If
+you ever find `main` lagging the latest release/dev tip, FF it.
+
 **Sanctioned-exception carve-out (added v1.15.5):** "never a
 force-push" governs ROUTINE operation. A **full-history rewrite**
 (`git filter-repo`) — e.g., an account migration or a
