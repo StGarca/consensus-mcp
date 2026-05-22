@@ -45,12 +45,49 @@ SCHEMA_VERSION = 1
 
 # Sealed review-pass files, mapped to their reviewer family. Mirrors
 # consensus_get_iteration_outcome._KNOWN_CONTRIB_FILES.
-_REVIEW_FILES: dict[str, str] = {
+#
+# v1.20.0: host-peer-review.yaml is a SAME-FAMILY supplementary blind
+# SWE-reviewer. Its `family` is taken from the sealed actor.model_family (the
+# host family, e.g. claude) at read time rather than hardcoded here, because the
+# host family is host-dependent; the static default below is None.
+_REVIEW_FILES: dict[str, str | None] = {
     "claude-review.yaml": "claude",
     "claude-proposal.yaml": "claude",
     "codex-review.yaml": "codex",
     "gemini-review.yaml": "gemini",
+    "host-peer-review.yaml": None,
 }
+
+
+def _is_supplementary(parsed: dict) -> bool:
+    """A sealed pass is a supplementary (host_peer / same-family) reviewer when
+    it is explicitly weight=supplementary OR gate_eligible=false. Content-driven
+    so a host_peer enabled under any profile name is detected, not just the
+    built-in filename."""
+    if not isinstance(parsed, dict):
+        return False
+    if parsed.get("weight") == "supplementary":
+        return True
+    if parsed.get("gate_eligible") is False:
+        return True
+    prov = parsed.get("dispatch_provenance")
+    if isinstance(prov, dict):
+        if prov.get("weight") == "supplementary" or prov.get("gate_eligible") is False:
+            return True
+        if prov.get("adapter") == "host_peer":
+            return True
+    return False
+
+
+def _family_for_pass(parsed: dict, static_family: str | None) -> str | None:
+    """Resolve a pass's reviewer family: prefer the sealed actor.model_family
+    (authoritative — host_peer's family is host-dependent), else the static
+    per-file default."""
+    if isinstance(parsed, dict):
+        actor = parsed.get("actor")
+        if isinstance(actor, dict) and actor.get("model_family"):
+            return actor.get("model_family")
+    return static_family
 
 _VALID_SEVERITIES = {"low", "medium", "high", "blocking", "critical"}
 _DEFAULT_SEVERITY = "medium"
@@ -112,6 +149,8 @@ def _collect_findings_from_passes(iter_dir: Path) -> dict[str, dict]:
             if isinstance(actor, dict):
                 reviewer = actor.get("id")
         pass_id = parsed.get("pass_id")
+        resolved_family = _family_for_pass(parsed, family)
+        supplementary = _is_supplementary(parsed)
         findings = parsed.get("findings")
         if not isinstance(findings, list):
             continue
@@ -128,7 +167,8 @@ def _collect_findings_from_passes(iter_dir: Path) -> dict[str, dict]:
                     "severity": severity,
                     "source_reviewer": reviewer,
                     "source_pass_id": pass_id,
-                    "_family": family,
+                    "_family": resolved_family,
+                    "_supplementary": supplementary,
                 }
             else:
                 # Dedup: keep first provenance, but upgrade a defaulted severity
@@ -173,8 +213,15 @@ def _convergence_from_plan(iter_dir: Path) -> dict | None:
 
 
 def _reviewers_from_passes(findings_by_id: dict[str, dict], iter_dir: Path) -> list[dict]:
-    """Distinct reviewers (name + family) seen across sealed passes."""
-    seen: dict[str, str | None] = {}
+    """Distinct reviewers (name + family [+ supplementary]) across sealed passes.
+
+    v1.20.0: a same-family supplementary host_peer reviewer is tagged
+    `supplementary: true` so the scorecard can separate its (same-family)
+    findings from independent cross-family review. The flag is only emitted when
+    true, keeping the record shape unchanged for the existing cross-family
+    reviewers.
+    """
+    seen: dict[str, dict] = {}
     for fname, family in _REVIEW_FILES.items():
         fpath = iter_dir / fname
         if not fpath.exists():
@@ -190,8 +237,17 @@ def _reviewers_from_passes(findings_by_id: dict[str, dict], iter_dir: Path) -> l
         if not isinstance(name, str) or not name:
             continue
         if name not in seen:
-            seen[name] = family
-    return [{"name": n, "family": f} for n, f in seen.items()]
+            seen[name] = {
+                "family": _family_for_pass(parsed, family),
+                "supplementary": _is_supplementary(parsed),
+            }
+    reviewers: list[dict] = []
+    for n, meta in seen.items():
+        entry: dict = {"name": n, "family": meta["family"]}
+        if meta["supplementary"]:
+            entry["supplementary"] = True
+        reviewers.append(entry)
+    return reviewers
 
 
 # ---------------------------------------------------------------------------

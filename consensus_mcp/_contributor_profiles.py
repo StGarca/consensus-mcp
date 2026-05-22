@@ -54,7 +54,12 @@ import yaml
 # === Schema vocabulary ===
 KIND_HOST = "host"
 KIND_CLI_REVIEWER = "cli_reviewer"
-VALID_KINDS = {KIND_HOST, KIND_CLI_REVIEWER}
+# v1.20.0: a same-family blind SWE-reviewer run via a dedicated host review
+# callback (no CLI). Like KIND_HOST it has no detect/invoke/output; it
+# additionally REQUIRES `family` + `role` and is supplementary +
+# gate-ineligible by contract.
+KIND_HOST_PEER = "host_peer"
+VALID_KINDS = {KIND_HOST, KIND_CLI_REVIEWER, KIND_HOST_PEER}
 
 TRANSPORT_STDIN = "stdin"
 TRANSPORT_FLAG = "flag"
@@ -174,6 +179,31 @@ def validate_profile(name: str, d: dict) -> None:
 
     # host (claude) needs no detect/invoke/output — it is the in-process env.
     if kind == KIND_HOST:
+        return
+
+    # host_peer (v1.20.0): a same-family blind SWE-reviewer run via a dedicated
+    # host review callback. Like host it has NO CLI detect/invoke/output, but it
+    # REQUIRES `family` + `role`. `weight` and `gate_eligible` are allowed
+    # (optional) — the adapter stamps the canonical supplementary /
+    # gate_eligible=False provenance regardless, so the profile fields are
+    # advisory metadata only.
+    if kind == KIND_HOST_PEER:
+        family = d.get("family")
+        if not family or not isinstance(family, str):
+            raise ValueError(
+                f"profile {name!r} (kind=host_peer) missing required field 'family'"
+            )
+        role = d.get("role")
+        if not role or not isinstance(role, str):
+            raise ValueError(
+                f"profile {name!r} (kind=host_peer) missing required field 'role'"
+            )
+        gate_eligible = d.get("gate_eligible")
+        if gate_eligible is not None and not isinstance(gate_eligible, bool):
+            raise ValueError(
+                f"profile {name!r} (kind=host_peer) 'gate_eligible' must be a "
+                f"boolean when present, got {type(gate_eligible).__name__}"
+            )
         return
 
     # === cli_reviewer-specific required fields ===

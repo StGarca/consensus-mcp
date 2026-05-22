@@ -144,6 +144,68 @@ def test_build_record_validates_against_schema(tmp_path):
     assert by_src["codex-rev-001"]["severity"] == "high"
 
 
+def _write_host_peer_review(
+    iter_dir: Path,
+    reviewer_id: str,
+    pass_id: str,
+    findings: list[dict],
+    model_family: str = "claude",
+) -> None:
+    """Write a v1.20.0 host_peer (same-family supplementary) sealed review file."""
+    review = {
+        "iteration_id": iter_dir.name,
+        "reviewer_id": reviewer_id,
+        "pass_id": pass_id,
+        "sealed_at_utc": _now_iso(-150),
+        "findings": findings,
+        "goal_satisfied": not findings,
+        "actor": {"id": reviewer_id, "model_family": model_family, "role": "swe_reviewer"},
+        "gate_eligible": False,
+        "weight": "supplementary",
+        "role": "swe_reviewer",
+        "independence_attestation": {
+            "method": "host_peer_callback",
+            "fresh_context": True,
+            "no_peer_review_visible_at_dispatch": True,
+        },
+        "dispatch_provenance": {"adapter": "host_peer", "family": model_family,
+                                "gate_eligible": False, "weight": "supplementary"},
+    }
+    (iter_dir / "host-peer-review.yaml").write_text(yaml.safe_dump(review), encoding="utf-8")
+
+
+def test_host_peer_reviewer_tagged_supplementary(tmp_path):
+    """v1.20.0: a host_peer (same-family) reviewer is collected and tagged
+    supplementary in reviewers[]; its findings carry source_reviewer provenance.
+    The record still validates against the schema."""
+    state_root = tmp_path / "consensus-state"
+    iter_dir = _make_iter_dir(state_root, "iteration-host-peer-results")
+
+    # A genuine cross-family reviewer plus the supplementary host_peer.
+    _write_review(
+        iter_dir, "codex-review.yaml", "codex-1", "codex-1-pass1",
+        [_finding("codex-rev-001", "high")], model_family="codex",
+    )
+    _write_host_peer_review(
+        iter_dir, "claude-swe-reviewer-1", "claude-swe-reviewer-1-pass1",
+        [_finding("claude-swe-rev-001", "medium")], model_family="claude",
+    )
+    _write_audit(iter_dir, [])
+
+    record = _results_log.build_results_record(iter_dir)
+    _validate(record)
+
+    revs = {r["name"]: r for r in record["reviewers"]}
+    assert revs["codex-1"].get("supplementary") in (None, False)
+    assert revs["claude-swe-reviewer-1"]["supplementary"] is True
+    assert revs["claude-swe-reviewer-1"]["family"] == "claude"
+
+    by_id = {f["id"]: f for f in record["findings"]}
+    assert by_id["claude-swe-rev-001"]["source_reviewer"] == "claude-swe-reviewer-1"
+    # The cross-family reviewer is NOT tagged supplementary.
+    assert "supplementary" not in revs["codex-1"]
+
+
 def test_disposition_validated_fixed_when_apply_links_finding(tmp_path):
     state_root = tmp_path / "consensus-state"
     iter_dir = _make_iter_dir(state_root, "iteration-results-fixed")

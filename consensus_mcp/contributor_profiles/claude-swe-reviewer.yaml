@@ -1,0 +1,27 @@
+# Built-in contributor profile: claude-swe-reviewer (v1.20.0 host_peer).
+#
+# kind=host_peer: a SAME-FAMILY blind SWE-reviewer that runs the host's own AI
+# family (claude) as a fresh-context, adversarial code reviewer via a DEDICATED
+# host review callback (NOT a subprocess, NOT the orchestrator's own voice). It
+# is SUPPLEMENTARY and EXCLUDED from the cross-family closure invariant: its
+# sealed artifact carries gate_eligible=false, so it can NEVER be the
+# different-family signer that closes a mutation. It augments cross-family
+# review; it never replaces it.
+#
+# Like kind=host it has NO CLI to detect, NO install command, and NO auth step —
+# detect / invoke / install / auth are intentionally absent. The adapter
+# (HostPeerAdapter) stamps the canonical role/weight/gate_eligible/attestation
+# provenance regardless of the advisory fields below.
+#
+# The name is chosen to avoid colliding with a likely user-authored profile.
+name: claude-swe-reviewer
+kind: host_peer
+family: claude
+role: swe_reviewer
+weight: supplementary
+gate_eligible: false
+model: "claude (host SWE-reviewer)"
+sealed_filename: host-peer-review.yaml
+id_prefix: claude-swe-rev
+instructions:
+  filename: CLAUDE.md

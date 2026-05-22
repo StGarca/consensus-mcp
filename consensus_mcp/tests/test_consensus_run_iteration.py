@@ -53,7 +53,10 @@ def test_run_iteration_workflow_4_with_fakes(tmp_path, monkeypatch):
         FakeAlwaysApprove, FakeAlwaysBlock, FakeRaisesDispatchError,
     )
 
-    def _fake_build_adapters(config, *, claude_artifact_callback=None):
+    def _fake_build_adapters(config, *, claude_artifact_callback=None, **_kwargs):
+        # **_kwargs absorbs additive callbacks (e.g. v1.20.0
+        # host_peer_review_callback) so the fake stays forward-compatible with
+        # build_engine threading new optional callbacks through build_adapters.
         return {
             "claude": FakeAlwaysApprove(),
             "codex": FakeAlwaysApprove(),

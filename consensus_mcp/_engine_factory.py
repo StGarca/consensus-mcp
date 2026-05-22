@@ -18,6 +18,7 @@ from consensus_mcp.contributors.base import DispatchPacket
 from consensus_mcp.contributors.claude import ClaudeAdapter
 from consensus_mcp.contributors.codex import CodexAdapter
 from consensus_mcp.contributors.gemini import GeminiAdapter
+from consensus_mcp.contributors.host_peer_adapter import HostPeerAdapter
 from consensus_mcp.contributors.profile_adapter import ProfileAdapter
 from consensus_mcp.workflow_engine import WorkflowEngine, WorkflowError
 
@@ -81,6 +82,7 @@ def build_adapters(
     config: dict,
     *,
     claude_artifact_callback: Callable[[DispatchPacket], dict] | None = None,
+    host_peer_review_callback: Callable[[DispatchPacket], dict] | None = None,
 ) -> dict[str, ContributorAdapter]:
     """Build a {contributor_key: ContributorAdapter} dict from a validated config.
 
@@ -93,6 +95,12 @@ def build_adapters(
     is dispatched (workflow #4 propose-converge; advisory). For workflow #3
     post-review the ClaudeAdapter is registered but not invoked, so the
     callback may be None.
+
+    `host_peer_review_callback` (v1.20.0): a DEDICATED fresh-context host review
+    callback, SEPARATE from `claude_artifact_callback`. Required to build a
+    `kind: host_peer` contributor (the same-family blind SWE-reviewer). If it is
+    not provided, any enabled host_peer profile is gracefully NOT built — every
+    existing (non-host_peer) flow is unaffected.
     """
     enabled = config.get("contributors", {}).get("enabled", [])
     if not enabled:
@@ -161,9 +169,32 @@ def build_adapters(
             if kind == profiles.KIND_CLI_REVIEWER:
                 adapters[key] = ProfileAdapter(profile, adapter_config=adapter_config)
                 continue
+            if kind == profiles.KIND_HOST_PEER:
+                # v1.20.0: a same-family blind SWE-reviewer. Build it ONLY when a
+                # dedicated host_peer_review_callback is wired; otherwise skip it
+                # gracefully (no failure) so existing flows that enable a
+                # host_peer profile but run in a context without the callback
+                # (e.g. CLI/author, workflow #3 post-review) are unaffected.
+                if host_peer_review_callback is None:
+                    continue
+                # The adapter's `family` MUST be the host family from the
+                # profile (NOT operator-overridable per-dispatch adapter_config
+                # alone); merge so the profile's family/role authoritatively
+                # seed the adapter while still allowing adapter_config extras.
+                hp_config = {
+                    **adapter_config,
+                    "family": profile.get("family"),
+                    "role": profile.get("role"),
+                }
+                adapters[key] = HostPeerAdapter(
+                    adapter_config=hp_config,
+                    host_peer_review_callback=host_peer_review_callback,
+                )
+                continue
             raise EngineFactoryError(
                 f"contributor {key!r} profile has unsupported kind {kind!r}; "
-                f"expected {profiles.KIND_CLI_REVIEWER!r} (or {profiles.KIND_HOST!r} "
+                f"expected {profiles.KIND_CLI_REVIEWER!r} or "
+                f"{profiles.KIND_HOST_PEER!r} (or {profiles.KIND_HOST!r} "
                 f"for the reserved host)."
             )
 
@@ -185,18 +216,24 @@ def build_engine(
     repo_root: Path,
     *,
     claude_artifact_callback: Callable[[DispatchPacket], dict] | None = None,
+    host_peer_review_callback: Callable[[DispatchPacket], dict] | None = None,
 ) -> WorkflowEngine:
     """Convenience: validate config, build adapters, return a WorkflowEngine.
 
     schema_version=0 is a legacy-synthesis sentinel per config.synthesize_
     legacy_config(); skip validation for legacy-mode dicts so the engine can
     still run against pre-iter-0015 repos without a .consensus/config.yaml.
+
+    `host_peer_review_callback` (v1.20.0): dedicated fresh-context host review
+    callback; threaded to build_adapters so a kind:host_peer contributor is
+    built only when the callback is wired (graceful absence otherwise).
     """
     if config.get("schema_version") != 0:
         cfg.validate(config)
     adapters = build_adapters(
         config,
         claude_artifact_callback=claude_artifact_callback,
+        host_peer_review_callback=host_peer_review_callback,
     )
     try:
         return WorkflowEngine(config, adapters, repo_root)

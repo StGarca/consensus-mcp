@@ -377,15 +377,35 @@ def _ordered_profile_names(profiles: dict) -> list[str]:
 def _profile_installed(profile: dict) -> bool:
     """True if the contributor is usable on this host.
 
-    host (claude) is the running environment — always available. cli_reviewers
+    host (claude) is the running environment — always available. host_peer
+    (v1.20.0: a same-family blind SWE-reviewer run via the host callback) is
+    likewise always usable on the host — it has no CLI to detect. cli_reviewers
     are available iff their detect.command resolves on PATH.
     """
-    if profile.get("kind") == profiles_mod.KIND_HOST:
+    if profile.get("kind") in (profiles_mod.KIND_HOST, profiles_mod.KIND_HOST_PEER):
         return True
     command = (profile.get("detect") or {}).get("command")
     if not command:
         return False
     return shutil.which(command) is not None
+
+
+def _contributor_option_note(profile: dict) -> str:
+    """Plain-language caveat shown next to a contributor in the multi-select.
+
+    A host_peer (v1.20.0: a same-model blind SWE-reviewer run via the host) is a
+    genuinely useful EXTRA opinion, but it runs the SAME model as the host/
+    orchestrator, so it shares the same blind spots and does NOT count as
+    independent cross-AI consensus. Surface that trade-off at selection time so
+    the choice is informed. Empty for real cross-family reviewers + the host.
+    """
+    if profile.get("kind") == profiles_mod.KIND_HOST_PEER:
+        return (
+            "optional same-model second opinion — a useful extra check if you "
+            "have the tokens to spare, but NOT independent multi-AI consensus "
+            "(it uses the same model as the host/orchestrator)"
+        )
+    return ""
 
 
 def _select_contributors_interactive(profiles: dict) -> list[str]:
@@ -405,7 +425,9 @@ def _select_contributors_interactive(profiles: dict) -> list[str]:
     for idx, name in enumerate(names, start=1):
         status = "✓ installed" if installed[name] else "✗ missing"
         mark = "x" if installed[name] else " "
-        print(f"  [{mark}] {idx}. {name} ({status})")
+        note = _contributor_option_note(profiles[name])
+        suffix = f"\n        ↳ {note}" if note else ""
+        print(f"  [{mark}] {idx}. {name} ({status}){suffix}")
     default_hint = ",".join(str(names.index(n) + 1) for n in prechecked) or "none"
 
     while True:
