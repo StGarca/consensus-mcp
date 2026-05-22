@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.16.0 - 2026-05-22
+
+**Delivery-readiness gate (anti-self-judge enforcement) — HEADLINE FEATURE.**
+Fixes a major logic flaw: an agent self-judging artifact soundness instead of
+routing it through consensus, which caused real-world bad deliverables and work
+stoppage. The gate makes that failure mode *mechanically impossible*, not merely
+discouraged.
+
+### Added
+- `consensus_mcp/_delivery_readiness.py`: fail-closed gate. `mint_delivery_token()`
+  refuses unless `design_consensus_ref` resolves to a SEALED/closed consensus
+  iteration (`closing_state` in `{quorum_close_passed,
+  implementation_ready_apply_landed}`, mirroring `_release_gate_check.gate_real_iter`),
+  >=2 non-claude reviewers vetted it, and `known_flaws == []` (unless
+  `operator_ack`). `verify_delivery_token()` is fail-closed and also rejects a
+  stale/edited artifact (sha256 drift). Reuses
+  `_self_drive._canonical_sha256_of_yaml_file` + `_resolve_repo_root`.
+- MCP tools `delivery.request` / `delivery.mint` (`consensus_mcp/tools/delivery_gate.py`),
+  registered in `server.py` — the portable enforcement surface.
+- CLI: `python -m consensus_mcp._delivery_readiness {mint,verify}`.
+- `contrib/delivery_gate_pretooluse.py`: optional Claude-Code PreToolUse hook template.
+- `consensus_mcp/tests/test_delivery_readiness.py`: 7 fail-closed tests.
+- `docs/delivery-gate.md`: integration guide.
+
+### Why it binds
+The invariant is unforgeable by the agent: you cannot obtain a delivery token
+from your own assertion — only a prior cryptographically sealed consensus
+iteration. Origin: internal consensus iterations
+`iteration-antistall-protocol-2026-05-22` + `iteration-antistall-impl-2026-05-22`
+(both 4/4 unanimous).
+
 ## 1.15.11 - unreleased
 
 _Development branch. No iteration scoped yet; release-cut Friday if any iter lands this week (release-cadence doctrine)._
