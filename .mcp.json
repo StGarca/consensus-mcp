@@ -2,11 +2,7 @@
   "mcpServers": {
     "consensus-mcp": {
       "command": "py",
-      "args": ["-3.11", "-m", "consensus_mcp.server"],
-      "env": {
-        "PYTHONPATH": "C:\\Users\\<you>\\Downloads\\consensus-mcp",
-        "CONSENSUS_MCP_REPO_ROOT": "C:\\Users\\<you>\\Downloads\\consensus-mcp"
-      }
+      "args": ["-3.11", "-m", "consensus_mcp.server"]
     }
   }
 }
