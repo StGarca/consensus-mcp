@@ -490,19 +490,21 @@ def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes
 
 
 def _validate_contributor_selection(selection: list[str], profiles: dict) -> list[str]:
-    """Validate a name list against known profiles + enforce min-2.
-
-    Raises WizardError on an unknown name or on <2 selected.
-    """
+    """Validate a name list: known names only (wizard layer holds the profile
+    set), >=2 INDEPENDENT, and no orphan host_peer."""
     unknown = [n for n in selection if n not in profiles]
     if unknown:
+        raise WizardError(f"unknown contributor(s) {unknown}; known: {sorted(profiles)}")
+    if profiles_mod.independent_count(selection, profiles) < 2:
         raise WizardError(
-            f"unknown contributor(s) {unknown}; "
-            f"known: {sorted(profiles)}"
+            f"at least 2 independent contributors are required (a same-model "
+            f"supplemental does not count); got {selection!r}"
         )
-    if len(selection) < 2:
+    orphans = profiles_mod.orphan_host_peers(selection, profiles)
+    if orphans:
         raise WizardError(
-            f"at least 2 contributors are required; got {selection!r}"
+            f"orphan supplemental reviewer(s) {orphans}: a host_peer requires its "
+            f"host to also be enabled"
         )
     return list(selection)
 
