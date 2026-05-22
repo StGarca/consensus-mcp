@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.17.0 - 2026-05-22
+
+**Open contributor model — any AI, any number (min 2, no upper cap) + mechanical
+anchoring lint.** Answers "will a clean install work with 2 or 20 or 200 AIs?":
+yes. Previously a closed enum (`KNOWN_CONTRIBUTORS`) + a fixed adapter dict
+rejected any contributor outside `{claude,codex,gemini}`. Now contributors are an
+OPEN set — register any adapter under any name with zero core edits.
+
+### Added
+- `_engine_factory.register_contributor(name, AdapterClass)` / `unregister_contributor`
+  / `known_contributor_keys()` — an open contributor registry. `build_adapters`
+  resolves registered ∪ built-in and fail-closes with a register hint.
+- `consensus_mcp/_anchoring_lint.py` — a MECHANICAL term-skew linter that flags
+  orchestrator contributor-anchoring (one peer named N×, others 0×) at
+  goal-packet author time, contributor-set-configurable (never hardcoded).
+  Wired into `_author_review_packet` (emits an `anchoring_audit` block).
+- `tests/test_n_contributor_acceptance.py` — DECISIVE acceptance test: N=2 and
+  N=20 ARBITRARILY-NAMED contributors run an iteration to convergence; N=50
+  validates (no cap). Independently QA-verified + mutation-proven genuine.
+
+### Changed
+- `config.validate()` — contributor validation is now STRUCTURAL (no closed
+  enum); per-mode min-2 (propose-converge / sequential / strict-majority) is
+  preserved. Constructibility is enforced at build time by `engine_factory`.
+- `KNOWN_CONTRIBUTORS` += `kimi` (it was excluded — a second-class identity that
+  also blinded the anchoring lint to kimi-anchoring; found by independent QA).
+
+### Known limitations (honest)
+- A REAL external CLI AI still needs a `ContributorAdapter` subclass + a
+  `register_contributor` call; CONFIG-ONLY onboarding of an arbitrary CLI AI (a
+  generic `SubprocessCliAdapter`) is a tracked follow-up. The framework is open;
+  the config-only convenience is not yet shipped.
+
+Origin: abkgen consensus iterations uniform-contributor-arch +
+orchestrator-framing-bias + qa-verifier-mechanism (2026-05-22); the kimi
+exclusion + a docstring overclaim were caught by an independent QA subagent, not
+self-review.
+
 ## 1.16.1 - 2026-05-22
 
 **Follow-up completeness gate — mechanically binds the *existing*

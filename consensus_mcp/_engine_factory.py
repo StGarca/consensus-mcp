@@ -34,6 +34,46 @@ _BUILTIN_ADAPTERS: dict[str, type[ContributorAdapter]] = {
     "gemini": GeminiAdapter,
 }
 
+# OPEN contributor registry (2026-05-22, "2-or-20-or-200 AIs" acceptance). The
+# built-ins above are NOT a closed set — ANY number of contributors with ANY
+# names can be registered with ZERO code changes, so a clean install supports
+# min-2 / max-N / any-combination. A registered name shadows a same-named
+# built-in (host swaps an impl).
+_REGISTERED_ADAPTERS: dict[str, type[ContributorAdapter]] = {}
+
+
+def register_contributor(name: str, adapter_cls: type[ContributorAdapter]) -> None:
+    """Register a contributor adapter under `name` (any name). The no-classes,
+    open-set extension point: adding the Nth AI is this one call, identical for
+    the 2nd or the 200th — no special-casing, no enum edit."""
+    if not name or not isinstance(name, str):
+        raise EngineFactoryError(f"contributor name must be a non-empty string; got {name!r}")
+    if not (isinstance(adapter_cls, type) and issubclass(adapter_cls, ContributorAdapter)):
+        raise EngineFactoryError(
+            f"adapter for {name!r} must subclass ContributorAdapter; got {adapter_cls!r}")
+    _REGISTERED_ADAPTERS[name] = adapter_cls
+
+
+def unregister_contributor(name: str) -> None:
+    """Remove a registered adapter (test isolation / host reconfiguration)."""
+    _REGISTERED_ADAPTERS.pop(name, None)
+
+
+def known_contributor_keys() -> list[str]:
+    """All currently-CONSTRUCTIBLE contributor keys (built-in + registered).
+
+    This is the set `build_adapters()` can actually instantiate; it powers the
+    fail-closed error message there and is a public API for a host to query what
+    it can run. NOTE: it is NOT the anchoring linter's name set — the linter
+    sources contributor NAMES from the project config (or `KNOWN_CONTRIBUTORS`
+    as a static fallback), because in a CLI/author context no adapters are
+    registered yet, so this set would understate the real contributor list."""
+    return sorted(set(_BUILTIN_ADAPTERS) | set(_REGISTERED_ADAPTERS))
+
+
+def _resolve_adapter(key: str) -> "type[ContributorAdapter] | None":
+    return _REGISTERED_ADAPTERS.get(key) or _BUILTIN_ADAPTERS.get(key)
+
 
 def build_adapters(
     config: dict,
@@ -60,11 +100,13 @@ def build_adapters(
 
     adapters: dict[str, ContributorAdapter] = {}
     for key in enabled:
-        ctor = _BUILTIN_ADAPTERS.get(key)
+        ctor = _resolve_adapter(key)
         if ctor is None:
             raise EngineFactoryError(
                 f"unknown contributor key {key!r}; "
-                f"built-in keys: {sorted(_BUILTIN_ADAPTERS.keys())}"
+                f"constructible keys: {known_contributor_keys()}. "
+                f"Register a custom contributor via "
+                f"engine_factory.register_contributor(name, AdapterClass)."
             )
         adapter_config = per_contributor.get(key) or {}
         if key == "claude":
