@@ -1,8 +1,12 @@
 # Changelog
 
-## 1.19.1 - unreleased
+## 1.20.0 - unreleased
 
-_Unreleased._
+In progress: **host-family specialist agents** — a new `kind: host_peer`
+contributor (a same-family blind SWE-reviewer, supplementary + excluded from the
+cross-family closure gate) and a distinct orchestrator role. Designed via a 4-way
+Workflow A consult (`docs/design-consults/v1.20.0-host-peer-agent.md`); Workflow B
+skipped per operator.
 
 ## 1.19.0 - 2026-05-22
 
