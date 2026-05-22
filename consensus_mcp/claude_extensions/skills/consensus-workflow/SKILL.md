@@ -15,9 +15,11 @@ the operator explicitly says otherwise.
 **Default to Workflow A (propose-converge with blind-first-reveal) for
 any decision with real design surface** — API shape, trade-off, novel
 mechanism, anything where reasonable people could disagree on the right
-approach. Workflow B (post-review: claude implements, codex+gemini
-audit) is for **execution per a converged design** or for hot-patches
-that block in-flight work.
+approach. Workflow B (post-review: claude implements the approved plan,
+then **ONE single reviewer — codex — does a code review**) is the
+lightweight code review run AFTER a Workflow A plan is approved, or for
+hot-patches that block in-flight work. Claude weighs the reviewer's
+suggestions on merit, finalizes, and ships.
 
 The mistake to avoid is defaulting to B because it's faster and
 calling everything "execution." Test: did the converged plan specify
@@ -37,9 +39,11 @@ one cycle with `DeprecationWarning`.**
   contributors propose independently in round 1 (blind), then
   converge across reviewed rounds. Used for design questions.
   (Was numbered #4.)
-- **Workflow B (post-review)** — LIGHTWEIGHT/QUICK. Claude writes
-  the patch first, codex + gemini audit afterward. Used for clear
-  execution work and hot-patches. (Was numbered #3.)
+- **Workflow B (post-review)** — LIGHTWEIGHT/QUICK. Run AFTER an
+  approved Workflow A plan: Claude implements per spec, then **exactly
+  ONE reviewer (codex) does a code review** — NOT the full panel (that's
+  A). Claude weighs the suggestions on merit and ships. Also used for
+  hot-patches. (Was numbered #3.)
 - **Workflow C (autonomous-execute)** — LONG-FORM/OVERNIGHT. Runs
   to completion without operator-in-the-loop, auto-approves
   emergent scope items within operator-pre-declared
