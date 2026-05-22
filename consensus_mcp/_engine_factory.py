@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import Callable
 
 from consensus_mcp import config as cfg
+from consensus_mcp import _contributor_profiles as profiles
 from consensus_mcp.contributors import ContributorAdapter
 from consensus_mcp.contributors.base import DispatchPacket
 from consensus_mcp.contributors.claude import ClaudeAdapter
 from consensus_mcp.contributors.codex import CodexAdapter
 from consensus_mcp.contributors.gemini import GeminiAdapter
+from consensus_mcp.contributors.profile_adapter import ProfileAdapter
 from consensus_mcp.workflow_engine import WorkflowEngine, WorkflowError
 
 
@@ -106,24 +108,75 @@ def build_adapters(
                        or contributors_block.get("config")
                        or {})
 
+    # v1.18.0 B-routing (converged-plan decision.engine_factory): resolution
+    # order per enabled key is (a) _REGISTERED_ADAPTERS, (b) _BUILTIN_ADAPTERS
+    # (claude/codex/gemini → existing classes), (c) merged profiles. Only step
+    # (c) needs the profile map, so it is loaded LAZILY (and at most once) — a
+    # config with only built-in classes (the R8 case) never touches profile IO.
+    _merged_profiles_cache: dict | None = None
+
+    def _merged_profiles() -> dict:
+        nonlocal _merged_profiles_cache
+        if _merged_profiles_cache is None:
+            _merged_profiles_cache = profiles.merge_profiles(
+                profiles.load_builtin_profiles(),
+                contributors_block.get("profiles") or {},
+            )
+        return _merged_profiles_cache
+
     adapters: dict[str, ContributorAdapter] = {}
     for key in enabled:
-        ctor = _resolve_adapter(key)
-        if ctor is None:
-            raise EngineFactoryError(
-                f"unknown contributor key {key!r}; "
-                f"constructible keys: {known_contributor_keys()}. "
-                f"Register a custom contributor via "
-                f"engine_factory.register_contributor(name, AdapterClass)."
-            )
         adapter_config = per_contributor.get(key) or {}
-        if key == "claude":
-            adapters[key] = ctor(
-                adapter_config=adapter_config,
-                artifact_callback=claude_artifact_callback,
+
+        # (a) + (b): a registered or built-in adapter CLASS wins. This keeps
+        # claude/codex/gemini on their existing classes (R8) even though they
+        # also carry metadata-only profiles.
+        ctor = _resolve_adapter(key)
+        if ctor is not None:
+            if key == "claude":
+                adapters[key] = ctor(
+                    adapter_config=adapter_config,
+                    artifact_callback=claude_artifact_callback,
+                )
+            else:
+                adapters[key] = ctor(adapter_config=adapter_config)
+            continue
+
+        # (c): no class for this key — fall back to the merged profiles.
+        profile = _merged_profiles().get(key)
+        if profile is not None:
+            kind = profile.get("kind")
+            if kind == profiles.KIND_HOST:
+                # kind:host is reserved for the in-process orchestrator (claude),
+                # which always resolves via _BUILTIN_ADAPTERS above. A host
+                # profile under any other name must NOT be spun up as a
+                # subprocess — fail closed.
+                raise EngineFactoryError(
+                    f"contributor {key!r} has profile kind={profiles.KIND_HOST!r} "
+                    f"but no built-in host adapter. kind:host is reserved for the "
+                    f"in-process orchestrator (claude); it is never dispatched as a "
+                    f"subprocess. Use kind:{profiles.KIND_CLI_REVIEWER!r} for a "
+                    f"CLI contributor, or remove {key!r} from contributors.enabled."
+                )
+            if kind == profiles.KIND_CLI_REVIEWER:
+                adapters[key] = ProfileAdapter(profile, adapter_config=adapter_config)
+                continue
+            raise EngineFactoryError(
+                f"contributor {key!r} profile has unsupported kind {kind!r}; "
+                f"expected {profiles.KIND_CLI_REVIEWER!r} (or {profiles.KIND_HOST!r} "
+                f"for the reserved host)."
             )
-        else:
-            adapters[key] = ctor(adapter_config=adapter_config)
+
+        # Nothing matched: unknown contributor. Fail closed.
+        known_profile_names = sorted(_merged_profiles().keys())
+        raise EngineFactoryError(
+            f"unknown contributor key {key!r}; "
+            f"constructible classes: {known_contributor_keys()}; "
+            f"profile names: {known_profile_names}. "
+            f"Register a custom contributor via "
+            f"engine_factory.register_contributor(name, AdapterClass), or add a "
+            f"kind:cli_reviewer profile under contributors.profiles."
+        )
     return adapters
 
 

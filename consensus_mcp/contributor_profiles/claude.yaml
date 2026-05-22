@@ -1,0 +1,11 @@
+# Built-in contributor profile: claude (the host orchestrator).
+#
+# kind=host: claude is the running Claude Code environment, NOT a subprocess.
+# It has no CLI to detect, no install command, and no auth step — its "review"
+# is the orchestrator's own analysis via the existing claude_artifact_callback.
+# Therefore detect / invoke / install / auth are intentionally absent.
+name: claude
+kind: host
+model: "claude (host orchestrator)"
+instructions:
+  filename: CLAUDE.md

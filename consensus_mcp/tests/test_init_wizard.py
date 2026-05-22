@@ -518,10 +518,16 @@ def test_interactive_keyboard_interrupt_returns_user_abort(tmp_path, monkeypatch
 
 def test_interactive_user_overrides_workflow(tmp_path, monkeypatch):
     """User can pick non-default workflow at the prompt; remaining 6 dimensions
-    accept defaults via empty input."""
+    accept defaults via empty input.
+
+    The fresh contributor dimension is now a numbered multi-select (codex-rev-001
+    wiring); install detection is forced deterministic so this is hermetic across
+    machines/CI, and the first answer is a numeric selection (display order:
+    1=claude,2=codex,3=gemini,4=kimi → "1,2,3" picks claude,codex,gemini)."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     monkeypatch.setattr(builtins, "input", _stub_input([
-        "claude,codex,gemini",          # contributors
+        "1,2,3",                         # contributors (claude,codex,gemini)
         cfg.WORKFLOW_POST_REVIEW,       # workflow
         cfg.CONVERGE_STRICT_MAJ,        # convergence
         cfg.INDEPENDENCE_VISIBLE,       # independence (workflow #3 needs visible)
@@ -541,8 +547,9 @@ def test_interactive_prompts_all_nine_dimensions(tmp_path, monkeypatch, capsys):
     """codex-rev-002: every configurability dimension must be prompted in
     interactive mode (not just contributors/workflow/convergence)."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     monkeypatch.setattr(builtins, "input", _stub_input([
-        "claude,codex,gemini",          # contributors
+        "1,2,3",                         # contributors (claude,codex,gemini)
         cfg.WORKFLOW_PROPOSE_CONVERGE,  # workflow
         cfg.CONVERGE_STRICT_MAJ,        # convergence
         cfg.INDEPENDENCE_BLIND,         # independence
@@ -565,8 +572,11 @@ def test_interactive_defaults_reflect_cli_overrides(tmp_path, monkeypatch, capsy
     """codex-rev-003: when --workflow advisory is passed, convergence prompt
     default must be 'advisory', not the count-derived default."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     captured_prompts: list[str] = []
-    queue = ["claude,codex,gemini", "", "", "", "", "", "", ""]
+    # First answer is a numeric multi-select (1,2,3 → claude,codex,gemini) now
+    # that the fresh contributor dimension is the wired numbered multi-select.
+    queue = ["1,2,3", "", "", "", "", "", "", ""]
     def _capturing_input(prompt=""):
         captured_prompts.append(prompt)
         if not queue:

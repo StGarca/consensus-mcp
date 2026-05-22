@@ -7,7 +7,7 @@ every change, has them review it independently, and only lets the
 change through when they agree.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-server-purple.svg)](https://modelcontextprotocol.io)
 
 ---
@@ -119,7 +119,7 @@ tool built to catch inflated metrics shouldn't inflate its own.)
 ## Status
 
 **Current: v1.17.5 — stable.** 1,000+ regression tests, green on
-CI across Linux + Windows and Python 3.10–3.12. Self-hosted:
+CI across Linux + Windows and Python 3.11+. Self-hosted:
 every release is built through consensus-mcp's own cross-AI
 review.
 
@@ -149,7 +149,7 @@ readable.)
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - [`pipx`](https://pipx.pypa.io/) recommended (isolated, reusable
   across projects)
 - Optional: [`codex-cli`](https://github.com/openai/codex-cli) and/or

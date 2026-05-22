@@ -316,20 +316,30 @@ def test_validate_rejects_whitespace_only_contributor_name():
         cfg.validate(c)
 
 
-def test_validate_requires_claude():
-    """Per converged-plan: schema_version 1 requires claude as orchestrator."""
+def test_validate_allows_no_claude():
+    """v1.18.0: claude is OPTIONAL (open-contributor model — any AI / min-2). A
+    panel with no claude validates; the host still orchestrates the loop."""
     c = cfg.default_config()
     c["contributors"]["enabled"] = ["codex", "gemini"]
-    with pytest.raises(cfg.ConfigValidationError, match="must contain 'claude'"):
-        cfg.validate(c)
+    cfg.validate(c)  # no raise
 
 
-def test_validate_rejects_missing_adapter():
+def test_validate_allows_missing_adapter():
+    """v1.18.0: a contributors.adapters entry is OPTIONAL — constructibility is
+    the engine_factory's fail-closed job (config.validate is structural only). A
+    built-in contributor with no adapters entry validates."""
     c = cfg.default_config()
     c["contributors"]["enabled"] = ["claude", "codex", "gemini"]
     del c["contributors"]["adapters"]["gemini"]
-    with pytest.raises(cfg.ConfigValidationError, match="adapters.gemini"):
-        cfg.validate(c)
+    cfg.validate(c)  # no raise
+
+
+def test_validate_allows_profile_backed_contributor():
+    """v1.18.0: a profile-backed contributor (built-in profile, e.g. kimi) with no
+    adapters entry validates; engine_factory builds it via ProfileAdapter."""
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "codex", "kimi"]
+    cfg.validate(c)  # no raise
 
 
 # ---------- validation: convergence ----------
@@ -569,3 +579,76 @@ def test_synthesize_legacy_config_validate_rejected_because_v0_sentinel(tmp_path
     legacy = cfg.synthesize_legacy_config(tmp_path)
     with pytest.raises(cfg.ConfigValidationError, match="schema_version"):
         cfg.validate(legacy)
+
+
+# ---------- contributors.profiles validation (v1.18.0) ----------
+
+def _config_with_profiles(profiles: dict) -> dict:
+    """A valid default config with contributors.profiles set to `profiles`."""
+    c = cfg.default_config()
+    c["contributors"]["profiles"] = profiles
+    return c
+
+
+def test_validate_accepts_absent_profiles():
+    """contributors.profiles is optional; default config (no profiles) validates."""
+    cfg.validate(cfg.default_config())
+
+
+def test_validate_accepts_empty_profiles():
+    cfg.validate(_config_with_profiles({}))
+
+
+def test_validate_accepts_valid_cli_reviewer_profile():
+    good = {
+        "grok": {
+            "name": "grok",
+            "kind": "cli_reviewer",
+            "detect": {"command": "grok"},
+            "invoke": {"transport": "flag", "prompt_flag": "-p"},
+            "output": {"schema_enforced": False},
+        }
+    }
+    cfg.validate(_config_with_profiles(good))
+
+
+def test_validate_rejects_profiles_not_a_mapping():
+    c = cfg.default_config()
+    c["contributors"]["profiles"] = ["not", "a", "dict"]
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(c)
+
+
+def test_validate_rejects_bad_profile_kind():
+    bad = {"x": {"name": "x", "kind": "wizard"}}
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(_config_with_profiles(bad))
+
+
+def test_validate_rejects_flag_transport_without_prompt_flag():
+    bad = {
+        "x": {
+            "name": "x",
+            "kind": "cli_reviewer",
+            "detect": {"command": "x"},
+            "invoke": {"transport": "flag", "prompt_flag": None},
+            "output": {"schema_enforced": False},
+        }
+    }
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(_config_with_profiles(bad))
+
+
+def test_validate_rejects_bad_install_os_key():
+    bad = {
+        "x": {
+            "name": "x",
+            "kind": "cli_reviewer",
+            "detect": {"command": "x"},
+            "invoke": {"transport": "stdin", "prompt_flag": None},
+            "output": {"schema_enforced": False},
+            "install": {"solaris": "pkg install x"},
+        }
+    }
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(_config_with_profiles(bad))

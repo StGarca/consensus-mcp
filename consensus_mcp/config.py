@@ -345,19 +345,39 @@ def validate(config: dict) -> None:
     # (propose-converge / sequential / strict-majority each require >=2), so
     # single-contributor modes (e.g. solo-claude post-review) stay valid. There
     # is NO upper cap on N anywhere.
-    if CLAUDE not in enabled:
-        raise ConfigValidationError(
-            f"contributors.enabled must contain 'claude' (the orchestrator that "
-            f"runs the loop); got {enabled!r}"
-        )
+    # v1.18.0 (open-contributor model — converged plan): claude is OPTIONAL (the
+    # host orchestrates the loop regardless of whether claude is itself a
+    # contributor) and a per-contributor `contributors.adapters` entry is
+    # OPTIONAL. Whether a name is actually CONSTRUCTIBLE — a built-in class, a
+    # registered adapter, or a kind:cli_reviewer profile — is the engine_factory's
+    # fail-closed job (see the STRUCTURAL-only note above), NOT config.validate's.
+    # We keep only the adapters-is-a-mapping type check.
     adapters = contributors.get("adapters", {})
     if not isinstance(adapters, dict):
         raise ConfigValidationError("contributors.adapters must be a mapping")
-    for c in enabled:
-        if c not in adapters:
+
+    # === contributors.profiles (v1.18.0 — optional operator overlay) ===
+    # Validate each operator-supplied profile against the contributor-profile
+    # schema (loader/validator lives in _contributor_profiles). config overrides
+    # built-in profiles by same name; this block only checks the OVERLAY supplied
+    # in config — built-in profiles are validated by their own test suite. Plain
+    # ValueErrors from validate_profile are re-raised as ConfigValidationError to
+    # keep the config-layer error type consistent.
+    profiles = contributors.get("profiles")
+    if profiles is not None:
+        if not isinstance(profiles, dict):
             raise ConfigValidationError(
-                f"contributors.enabled contains {c!r} but contributors.adapters.{c} is missing"
+                f"contributors.profiles must be a mapping, "
+                f"got {type(profiles).__name__}"
             )
+        from consensus_mcp._contributor_profiles import validate_profile
+        for pname, pdef in profiles.items():
+            try:
+                validate_profile(pname, pdef)
+            except ValueError as exc:
+                raise ConfigValidationError(
+                    f"contributors.profiles.{pname}: {exc}"
+                ) from exc
 
     # === convergence ===
     convergence = config.get("convergence", {})
