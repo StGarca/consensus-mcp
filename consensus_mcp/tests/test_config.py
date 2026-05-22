@@ -275,11 +275,35 @@ def test_validate_rejects_duplicate_contributors():
         cfg.validate(c)
 
 
-def test_validate_rejects_unknown_contributor():
+def test_validate_accepts_arbitrary_contributor_name_open_set():
+    """OPEN contributor set (2026-05-22): validation is STRUCTURAL — it does NOT
+    reject names outside a closed enum (that closed enum was the "2-or-20-or-200
+    AIs" blocker). Constructibility is enforced at BUILD time by engine_factory."""
     c = cfg.default_config()
     c["contributors"]["enabled"] = ["claude", "aider"]
-    with pytest.raises(cfg.ConfigValidationError, match="unknown identifier"):
-        cfg.validate(c)
+    c["contributors"]["adapters"] = {"claude": {}, "aider": {}}
+    cfg.validate(c)  # must NOT raise — 'aider' is a structurally-valid name
+
+
+def test_engine_factory_gates_unregistered_contributor():
+    """Constructibility lives in engine_factory (the only layer that knows the
+    open adapter registry), fail-closed with a register hint; registering ANY
+    name then builds — the min-2 / max-N, any-AI promise."""
+    from consensus_mcp import _engine_factory as ef
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "aider"]
+    with pytest.raises(ef.EngineFactoryError, match="register_contributor"):
+        ef.build_adapters(c)
+    from consensus_mcp.contributors.base import FakeAlwaysApprove
+    class AiderAdapter(FakeAlwaysApprove):
+        name = "aider"
+    ef.register_contributor("aider", AiderAdapter)
+    try:
+        adapters = ef.build_adapters(c, claude_artifact_callback=lambda p: {
+            "findings": [], "goal_satisfied": True, "blocking_objections": []})
+        assert set(adapters) == {"claude", "aider"}
+    finally:
+        ef.unregister_contributor("aider")
 
 
 def test_validate_requires_claude():

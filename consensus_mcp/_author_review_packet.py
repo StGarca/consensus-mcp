@@ -165,11 +165,79 @@ def author_review_packet(
     merged.setdefault("schema_version", 1)
     merged.setdefault("iteration_id", iteration_dir.name)
 
+    # iter-orchestrator-framing-bias-2026-05-22: MECHANICAL anchoring lint.
+    # The orchestrator authors the goal_packet, so its framing/anchoring bias
+    # rides through consensus uncaught. Lint the goal_packet's contributor-term
+    # skew at author time + embed the report so contributors (and the operator)
+    # see it WITHOUT relying on anyone noticing. Contributor set comes from
+    # config (never hardcoded — that would be the bias under guard).
+    anchoring = _anchoring_audit(iteration_dir, repo_root)
+    if anchoring:
+        merged["anchoring_audit"] = anchoring
+        for a in anchoring:
+            sys.stderr.write(f"[anchoring-lint] {a['detail']}\n")
+
     review_packet_path.write_text(
         yaml.safe_dump(merged, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
     return review_packet_path
+
+
+def _configured_contributors(repo_root: Path | None = None) -> list[str]:
+    """The configured contributor set (NOT hardcoded). Prefers the project's
+    active config (so a project that adds kimi / any AI is covered); falls back
+    to the packaged default."""
+    # Project config, if present at the conventional location.
+    if repo_root is not None:
+        for rel in (".consensus/config.yaml", ".consensus/config.yml"):
+            cfg_path = repo_root / rel
+            if cfg_path.exists():
+                try:
+                    from consensus_mcp.config import load, normalize
+                    enabled = (((normalize(load(cfg_path)) or {}).get("contributors") or {})
+                               .get("enabled")) or []
+                    if enabled:
+                        return list(enabled)
+                except Exception as exc:
+                    sys.stderr.write(f"[anchoring-lint] project config load failed ({exc}); "
+                                     f"falling back to KNOWN_CONTRIBUTORS\n")
+                    break
+    # Fallback = the FULL known contributor allow-list (NOT the narrower
+    # enabled-default), so anchoring DETECTION covers every known contributor
+    # including kimi. (QA caught that using `enabled` here dropped kimi —
+    # blinding the linter to the exact bias it guards against.)
+    try:
+        from consensus_mcp.config import KNOWN_CONTRIBUTORS
+        return list(KNOWN_CONTRIBUTORS)
+    except Exception as exc:
+        sys.stderr.write(f"[anchoring-lint] could not load KNOWN_CONTRIBUTORS ({exc})\n")
+        return []
+
+
+def _anchoring_audit(iteration_dir: Path, repo_root: Path | None = None) -> list[dict]:
+    """Run the mechanical anchoring linter on the iteration's goal_packet.yaml."""
+    gp = iteration_dir / "goal_packet.yaml"
+    if not gp.exists():
+        return []
+    contributors = _configured_contributors(repo_root)
+    if len(contributors) < 2:
+        return []
+    try:
+        from consensus_mcp._anchoring_lint import detect_anchoring
+        text = gp.read_text(encoding="utf-8")
+        flags = detect_anchoring(text, {"contributors": contributors})
+        return [
+            {"group": f.group, "skewed_to": f.skewed_to,
+             "skew_fraction": f.skew_fraction, "counts": f.counts,
+             "never_mentioned": f.never_mentioned, "detail": f.detail}
+            for f in flags
+        ]
+    except Exception as exc:
+        # Don't silently no-op — a real failure must be distinguishable from
+        # "no anchoring found" (QA finding 2026-05-22).
+        sys.stderr.write(f"[anchoring-lint] audit failed ({type(exc).__name__}: {exc})\n")
+        return []
 
 
 def main(argv: list[str] | None = None) -> int:
