@@ -152,7 +152,10 @@ def test_validate_autonomous_execute_accepts_3_contributors():
     config = cfg.default_config()
     config["project"]["name"] = "test"
     config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
-    # default_config() already enables claude + codex + gemini
+    # Pin to exactly 3 independents — the autonomous-execute rule requires N==3.
+    # (default_config() now returns 4 via dynamic profile lookup; override here
+    # so this test targets the validation rule, not the default count.)
+    config["contributors"]["enabled"] = ["claude", "codex", "gemini"]
     cfg.validate(config)  # must not raise
 
 
@@ -168,8 +171,9 @@ def test_default_patch_authoring_claude_only():
     assert cfg.default_config()["patches"]["authoring"] == cfg.PATCH_CLAUDE_ONLY
 
 
-def test_default_contributors_include_all_three():
-    assert cfg.default_config()["contributors"]["enabled"] == ["claude", "codex", "gemini"]
+def test_default_contributors_include_all_four():
+    # dynamic default now includes kimi (decision 7: derived from built-in independents)
+    assert cfg.default_config()["contributors"]["enabled"] == ["claude", "codex", "gemini", "kimi"]
 
 
 # ---------- normalize / aliases ----------
@@ -511,7 +515,7 @@ def test_load_sparse_yaml_fills_defaults(tmp_path):
     loaded = cfg.load(p)
     # Should have all default keys populated.
     assert loaded["convergence"]["rule"] == cfg.CONVERGE_STRICT_MAJ
-    assert loaded["contributors"]["enabled"] == ["claude", "codex", "gemini"]
+    assert loaded["contributors"]["enabled"] == ["claude", "codex", "gemini", "kimi"]
 
 
 def test_load_invalid_raises(tmp_path):
@@ -686,3 +690,11 @@ def test_validate_rejects_bad_install_os_key():
     }
     with pytest.raises(cfg.ConfigValidationError):
         cfg.validate(_config_with_profiles(bad))
+
+
+def test_default_config_enabled_is_dynamic_independents_in_order():
+    enabled = cfg.default_config()["contributors"]["enabled"]
+    assert "claude-swe-reviewer" not in enabled       # host_peer excluded
+    assert "kimi" in enabled                           # dynamic includes kimi
+    assert enabled == sorted(enabled)                  # stable ordering pinned
+    assert enabled == ["claude", "codex", "gemini", "kimi"]

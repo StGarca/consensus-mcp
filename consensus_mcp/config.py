@@ -152,11 +152,31 @@ class ConfigValidationError(ValueError):
     """Raised on schema violation or illegal config combination."""
 
 
+def _default_independent_enabled() -> list[str]:
+    """Derive the default enabled set from built-in INDEPENDENT profiles (decision 7).
+
+    Lazy import avoids any import-cycle risk with _contributor_profiles.
+    host_peer profiles (e.g. claude-swe-reviewer) are excluded — they are
+    opt-in overlays, not independent contributors.
+    """
+    from consensus_mcp._contributor_profiles import (  # noqa: PLC0415
+        KIND_HOST_PEER,
+        load_builtin_profiles,
+    )
+
+    profiles = load_builtin_profiles()
+    return sorted(
+        name for name, p in profiles.items()
+        if isinstance(p, dict) and p.get("kind") != KIND_HOST_PEER
+    )
+
+
 def default_config() -> dict:
     """Return the canonical default `.consensus/config.yaml` structure.
 
-    Defaults assume the canonical 3-contributor setup. Operators with smaller
-    pools must override via init wizard or flags.
+    The enabled contributor list derives dynamically from built-in independent
+    profiles (decision 7: no hardcoded AI list). Adding a new built-in profile
+    automatically extends this default.
     """
     return {
         "schema_version": SCHEMA_VERSION,
@@ -171,7 +191,7 @@ def default_config() -> dict:
             "timeout_policy": TIMEOUT_NO_VOTE,
         },
         "contributors": {
-            "enabled": ["claude", "codex", "gemini"],
+            "enabled": _default_independent_enabled(),  # decision 7: dynamic, not hardcoded
             "adapters": {
                 "claude": {
                     "role": "orchestrator",
@@ -602,6 +622,8 @@ def synthesize_legacy_config(repo_root: Path) -> dict:
             "timeout_policy": TIMEOUT_NO_VOTE,
         },
         "contributors": {
+            # Historical legacy list — intentional pre-iter-0015 state, NOT the
+            # canonical default (which is dynamic via _default_independent_enabled).
             "enabled": ["claude", "codex"],
             "adapters": {
                 "claude": {
