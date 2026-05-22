@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.org/consensus-mcp/converged_plan_convention.schema.json",
+  "$id": "consensus_mcp/schemas/converged_plan_convention.schema.json",
   "title": "Converged-plan convention block (v1.15.0 doctrine, machine-enforced from v1.15.1)",
   "description": "Machine contract for the falsification / independent_safeguard / decisive_experiment_before_next_iteration blocks defined in docs/workflows/converged-plan-convention.md. The schema validates STRUCTURE and PRESENCE only. It does NOT and CANNOT assert the hypothesis is true or the safeguard adequate — that remains a human judgement (see validators/validate_converged_plan.py GATE_SCOPE_DISCLAIMER).",
   "type": "object",
