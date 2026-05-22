@@ -31,6 +31,10 @@ from consensus_mcp.workflow_engine import (
 
 def _three_contributor_config(mode=cfg.WORKFLOW_PROPOSE_CONVERGE, rule=cfg.CONVERGE_STRICT_MAJ) -> dict:
     c = deepcopy(cfg.default_config())
+    # Pin to 3 named contributors (helper is "three_contributor"); default_config
+    # now derives a dynamic 4-AI independent set (incl kimi), which these tests do
+    # not provide adapters for.
+    c["contributors"]["enabled"] = ["claude", "codex", "gemini"]
     c["workflow"]["mode"] = mode
     c["convergence"]["rule"] = rule
     # propose-converge forces all-or-nothing in validation; respect that
