@@ -52,7 +52,7 @@ agree."
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.17.5
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.18.0
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -118,7 +118,7 @@ tool built to catch inflated metrics shouldn't inflate its own.)
 
 ## Status
 
-**Current: v1.17.5 — stable.** 1,000+ regression tests, green on
+**Current: v1.18.0 — stable.** 1,000+ regression tests, green on
 CI across Linux + Windows and Python 3.11+. Self-hosted:
 every release is built through consensus-mcp's own cross-AI
 review.

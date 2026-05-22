@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.18.1 - unreleased
+
+_Unreleased._
+
 ## 1.18.0 - 2026-05-22
 
 **Extensible, config-driven contributor profiles + cross-platform install.** Add
