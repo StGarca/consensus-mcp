@@ -41,7 +41,10 @@ from consensus_mcp._dispatch_base import (
 )
 
 
-DEFAULT_PARENT = Path(r"C:\Users\<you>\Downloads\upstream-26.4.16\agent-loop")
+# No default parent path — this is a one-time, machine-specific maintenance
+# tool; a hardcoded personal absolute path does not belong in a public package.
+# Callers MUST pass --parent explicitly (see main()).
+DEFAULT_PARENT = None
 
 
 def _iso_utc_now() -> str:
@@ -374,8 +377,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="consensus_mcp._import_parent_history",
         description="One-time import of parent project's iteration history into this repo's archive.",
     )
-    p.add_argument("--parent", type=Path, default=DEFAULT_PARENT,
-                   help="Path to parent project's agent-loop dir")
+    p.add_argument("--parent", type=Path, default=DEFAULT_PARENT, required=DEFAULT_PARENT is None,
+                   help="Path to parent project's agent-loop dir (required)")
     p.add_argument("--target", type=Path, default=None,
                    help="Target dir (default: <repo>/consensus-state/archive/imported-from-parent)")
     p.add_argument("--dry-run", action="store_true",

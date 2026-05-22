@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.17.1 - 2026-05-22
+
+**Public-readiness sanitization (code/schema personal-info).** Removes
+machine-specific personal info from shipped code:
+- `_import_parent_history.py`: dropped the hardcoded `DEFAULT_PARENT =
+  C:\Users\<you>\...` absolute path (a personal path in a public package);
+  `--parent` is now required.
+- `schemas/converged_plan_convention.schema.json`: `$id` changed from a personal
+  domain (`example.org`) to a neutral relative id (not `$ref`'d anywhere).
+
+### Still outstanding (flagged, NOT auto-done)
+- `consensus-state/archive/imported-from-parent/` is a large imported history
+  archive full of personal paths + other-project references. Removing it is a
+  deletion of maintainer historical data — left for an explicit maintainer
+  decision, not auto-`git rm`'d.
+- Cosmetic `C:\Users\<you>\...` EXAMPLE paths remain in several `docs/` files.
+
 ## 1.17.0 - 2026-05-22
 
 **Open contributor model — any AI, any number (min 2, no upper cap) + mechanical
