@@ -504,6 +504,14 @@ and no tag.
    line; fix all in one commit on the release branch before step 5.
    (Pre-v1.15.4 this was a post-tag dev-branch step; under
    main=tag it MUST be pre-tag.)
+   **ALSO verify the INSTALL + HOW-TO-USE instructions themselves are
+   current — not just the version number (recurring miss, operator-
+   flagged 2026-05-22: usage docs drifted stale repeatedly).** The pipx
+   command, the `consensus-init` flags/usage, the quick-start steps, and
+   any "how it works" claims must match the CURRENT CLI behavior for this
+   version. Spot-check that every documented command/flag actually exists
+   and works (e.g. `grep` the flags against the argparser; run
+   `--print-defaults`) — stale instructions are a release defect.
 4. Run the full test suite; surface regressions before tagging.
    Document any pre-existing known-issue flakes in CHANGELOG so
    they aren't mistaken for v<X.Y.Z> regressions.
