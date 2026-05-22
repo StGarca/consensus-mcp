@@ -2,7 +2,7 @@
 
 **A second opinion for AI-written code — from other AIs.** Instead of
 trusting one AI to grade its own homework, consensus-mcp puts a small
-panel of *different* AIs — one you choose — on every change, has them
+panel of *different* AIs — the ones you choose — on every change, has them
 review it independently, and only lets the change through when they
 agree. Built-in support for Claude, Codex, Gemini, and Kimi, and you
 can add any other AI just by writing a short config profile (no code).
@@ -124,17 +124,31 @@ and you can override either.
 
 ## Does it actually work?
 
-consensus-mcp is built using itself — every change goes through
-its own cross-AI review. The original bootstrap deployment
-measured **38 real defects caught before commit, zero false
-positives** across 6 subsystems (a race condition, a fail-open
-safety gate, a path-matching bug — each missed by single-AI
-review). It's been self-hosted continuously since, across **70+
-consensus iterations** on the v1.13–v1.15 line, with cross-AI
-audits routinely catching blocking defects pre-merge.
+consensus-mcp reviews itself — and the track record isn't a number you
+have to take on faith. **Every review is sealed to disk with content
+hashes**, so the history is an auditable trail you can read:
+[`consensus-state/archive/review-passes/`](consensus-state/archive/review-passes).
 
-(38 is the original *measured* baseline, not a running tally — a
-tool built to catch inflated metrics shouldn't inflate its own.)
+As of 2026-05-22 that trail holds **244 sealed review passes across 74
+consensus iterations**, self-hosted continuously since 2026-05-11 and
+produced by a panel of four different AI families (Claude, Codex,
+Gemini, and Kimi). Together those passes raised **232 findings, 60 of
+them blocking** — every one resolved before its change merged.
+
+What that history shows is two jobs, not one. The panel **catches real
+defects** — recent examples include path-traversal and fail-open
+security holes, a Windows CRLF "always-dirty" bug, and a fail-open
+mutation gate, each fixed before merge. And it **adjudicates** the
+findings that turn out to be wrong: those are dismissed *with empirical
+evidence recorded in the commit* — e.g. a reviewer's "that won't apply
+the clean filter" objection refuted by a one-line `git hash-object`
+experiment. The point isn't a tally; it's that a *different* AI family
+than the one that wrote the code signs off on the exact final state,
+and every finding is settled on the record.
+
+(consensus-mcp grew out of an earlier project, where its first
+deployment caught defects across several subsystems that single-AI
+review had missed — which is why it exists.)
 
 ## Status
 
