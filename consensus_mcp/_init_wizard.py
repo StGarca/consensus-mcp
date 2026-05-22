@@ -366,13 +366,6 @@ def _load_merged_profiles(config_profiles: dict | None) -> dict:
     return profiles_mod.merge_profiles(builtin, config_profiles or {})
 
 
-def _ordered_profile_names(profiles: dict) -> list[str]:
-    """Stable display/selection order: claude (host) first, then the rest sorted."""
-    names = list(profiles)
-    host = [n for n in names if profiles[n].get("kind") == profiles_mod.KIND_HOST]
-    rest = sorted(n for n in names if n not in host)
-    return sorted(host) + rest
-
 
 def _profile_installed(profile: dict) -> bool:
     """True if the contributor is usable on this host.
@@ -390,59 +383,57 @@ def _profile_installed(profile: dict) -> bool:
     return shutil.which(command) is not None
 
 
-def _contributor_option_note(profile: dict) -> str:
-    """Plain-language caveat shown next to a contributor in the multi-select.
-
-    A host_peer (v1.20.0: a same-model blind SWE-reviewer run via the host) is a
-    genuinely useful EXTRA opinion, but it runs the SAME model as the host/
-    orchestrator, so it shares the same blind spots and does NOT count as
-    independent cross-AI consensus. Surface that trade-off at selection time so
-    the choice is informed. Empty for real cross-family reviewers + the host.
-    """
-    if profile.get("kind") == profiles_mod.KIND_HOST_PEER:
-        return (
-            "optional same-model second opinion — a useful extra check if you "
-            "have the tokens to spare, but NOT independent multi-AI consensus "
-            "(it uses the same model as the host/orchestrator)"
-        )
-    return ""
+def _independent_ordered_names(profiles: dict) -> list[str]:
+    """Display/selection order over INDEPENDENT profiles only (host first, then
+    sorted). host_peer is excluded — it is offered via the conditional follow-up."""
+    indep = {
+        n: p for n, p in profiles.items()
+        if isinstance(p, dict) and p.get("kind") != profiles_mod.KIND_HOST_PEER
+    }
+    host = sorted(n for n in indep if indep[n].get("kind") == profiles_mod.KIND_HOST)
+    rest = sorted(n for n in indep if n not in host)
+    return host + rest
 
 
-def _select_contributors_interactive(profiles: dict) -> list[str]:
-    """Numbered multi-select over merged profiles (no TUI dep).
+def _select_contributors_interactive(
+    profiles: dict, preselected: list[str] | None = None
+) -> list[str]:
+    """Numbered multi-select over independent profiles only (no TUI dep).
 
-    Shows '✓ installed' / '✗ missing' per entry, pre-checks installed ones as
-    the default (accepted on empty input), and re-prompts until >=2 are picked.
-    Returns the selected names in display order.
+    host_peer profiles are excluded from this list — they are offered via a
+    conditional follow-up prompt (separate task). Shows '✓ installed' /
+    '✗ missing' per entry, pre-checks installed ones as the default (accepted
+    on empty input), and re-prompts until >=2 are picked.
+
+    preselected: if supplied, those names (filtered to the display list) are
+    pre-checked regardless of install status. Useful for --reconfigure defaults.
 
     Raises KeyboardInterrupt on Ctrl+C / EOF (caller maps to exit 1).
     """
-    names = _ordered_profile_names(profiles)
+    names = _independent_ordered_names(profiles)
     installed = {n: _profile_installed(profiles[n]) for n in names}
-    prechecked = [n for n in names if installed[n]]
+    if preselected is not None:
+        prechecked = [n for n in names if n in preselected]
+    else:
+        prechecked = [n for n in names if installed[n]]
 
-    print("Select contributors (>=2 required):")
+    print("Select the AI reviewers to use (>=2 required):")
     for idx, name in enumerate(names, start=1):
         status = "✓ installed" if installed[name] else "✗ missing"
-        mark = "x" if installed[name] else " "
-        note = _contributor_option_note(profiles[name])
-        suffix = f"\n        ↳ {note}" if note else ""
-        print(f"  [{mark}] {idx}. {name} ({status}){suffix}")
+        mark = "x" if name in prechecked else " "
+        print(f"  [{mark}] {idx}. {name} ({status})")
     default_hint = ",".join(str(names.index(n) + 1) for n in prechecked) or "none"
 
     while True:
         try:
-            raw = input(
-                f"Enter comma-separated numbers [default: {default_hint}]: "
-            ).strip()
+            raw = input(f"Enter comma-separated numbers [default: {default_hint}]: ").strip()
         except EOFError as exc:
             raise KeyboardInterrupt from exc
 
         if not raw:
             chosen = list(prechecked)
         else:
-            chosen = []
-            bad = False
+            chosen, bad = [], False
             for tok in (t.strip() for t in raw.split(",") if t.strip()):
                 if not tok.isdigit() or not (1 <= int(tok) <= len(names)):
                     print(f"  invalid selection {tok!r}", file=sys.stderr)
@@ -455,7 +446,7 @@ def _select_contributors_interactive(profiles: dict) -> list[str]:
                 continue
 
         if len(chosen) < 2:
-            print("  please select at least 2 contributors", file=sys.stderr)
+            print("  please select at least 2 independent reviewers", file=sys.stderr)
             continue
         return chosen
 
