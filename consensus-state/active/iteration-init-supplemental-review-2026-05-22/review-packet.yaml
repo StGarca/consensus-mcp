@@ -1,0 +1,1129 @@
+defect_target:
+  files:
+  - docs/design-consults/init-contributor-selection-supplemental-review.md
+  - consensus_mcp/config.py
+  - consensus_mcp/_init_wizard.py
+  base_sha: 512b918e93d14fccf4861483fdd7436f197fbe06dbd6261a68f837ac90489dcb
+  touched_files_contents:
+    docs/design-consults/init-contributor-selection-supplemental-review.md: "# Design:\
+      \ first-init contributor selection — independent panel + supplemental same-model\
+      \ review\n\n- **Date:** 2026-05-22\n- **Status:** Draft (brainstorming output;\
+      \ Workflow A consult decision pending)\n- **Scope:** `consensus_mcp/_init_wizard.py`\
+      \ (+ tests). NO engine / gate / convergence changes.\n\n## Problem\n\nThe `consensus\
+      \ init` multi-select (v1.18.0) lists **all** merged profiles in one\nflat list\
+      \ — `claude`, `claude-swe-reviewer` (a v1.20.0 `host_peer`), `codex`,\n`gemini`,\
+      \ `kimi`. Consequences:\n\n- The same-model review agent (`claude-swe-reviewer`)\
+      \ appears as a flat sibling\n  of `claude`, which is confusing.\n- `host_peer`\
+      \ reports as \"always installed\" (`_profile_installed` returns True\n  for\
+      \ `kind: host_peer`), so it is pre-checked and **default-on** — contradicting\n\
+      \  its supplemental nature.\n- The `>=2` minimum counts a `host_peer` like any\
+      \ contributor, so\n  `claude + claude-swe-reviewer` (one model reviewing its\
+      \ own work) can satisfy\n  \"2 contributors.\"\n\nExpected first-init experience:\
+      \ offer the in-house independent AIs (claude,\ncodex, gemini, kimi), ask which\
+      \ to use, and — only when the host AI (claude) is\nchosen — ask whether to add\
+      \ a same-model **supplemental** reviewer.\n\n## Decisions (from brainstorming)\n\
+      \n1. **Host scope: claude-only (now).** The host is the orchestrator AI; today\
+      \ only\n   claude can be `kind: host`. Reuse the existing `claude-swe-reviewer`\
+      \ profile\n   and the already-wired host callback. Generic (codex/gemini/kimi)\
+      \ host +\n   per-AI swe-reviewer profiles are future work.\n2. **Supplemental\
+      \ reviewer is a conditional follow-up, opt-in (default No)** — not\n   a flat\
+      \ sibling in the main list.\n3. **0.5 weight is presentational only.** Independent\
+      \ AI = 1.0; host_peer = 0.5.\n   Used for the init-minimum framing and the human-facing\
+      \ \"N.5 reviewers\"\n   summary. The consensus GATE is untouched.\n4. **The\
+      \ floor is \">=2 independent.\"** The minimum is\n   `count(enabled where kind\
+      \ != host_peer) >= 2`. A host_peer never counts toward\n   the floor, so `claude\
+      \ + claude-swe-reviewer` is rejected.\n5. **Gate behavior unchanged.** host_peer\
+      \ stays `gate_eligible=false`,\n   `weight=supplementary`, excluded from the\
+      \ cross-family closure invariant\n   (v1.20.0). It gets **no gate vote** and\
+      \ **cannot close consensus** — claude\n   already votes as host.\n6. **Messaging.**\
+      \ The end user must understand the same-model reviewer is a\n   SUPPLEMENTAL\
+      \ review with no gate vote — BUT every good idea it raises is still\n   applied\
+      \ on merit (weighted-synthesis doctrine). \"No vote\" must not read as\n   \"\
+      ignored.\"\n7. **Dynamic detection — NO hardcoded AI lists (operator, 2026-05-22).**\
+      \ The\n   product promise is \"add any AI with no code / any number of AIs.\"\
+      \ Therefore\n   every path that enumerates or detects contributors MUST derive\
+      \ from the merged\n   profile set (built-in profiles + `contributors.profiles`\
+      \ overlay), never a\n   name literal. Concretely: `_detect_available_contributors`\
+      \ (today hardcoded to\n   `[\"claude\",\"codex\",\"gemini\"]`, omitting kimi\
+      \ and every operator-added AI) is\n   replaced by \"iterate merged profiles,\
+      \ keep the installed independents\n   (`kind != host_peer` AND `_profile_installed`)\"\
+      . The static\n   `config.py default_config()` enabled list must likewise be\
+      \ derived from the\n   built-in independent profiles, not a literal — so dropping\
+      \ in a new built-in\n   profile extends the default automatically. Adding an\
+      \ AI is a profile drop-in\n   with zero code edits anywhere in the wizard.\n\
+      \n## Behavior\n\n### Main selection — independent AIs only\n\nList only `kind:\
+      \ host` / `kind: cli_reviewer` profiles (claude, codex, gemini,\nkimi + any\
+      \ operator overlay of those kinds). Exclude `kind: host_peer`.\nPre-check installed\
+      \ entries; require `>=2` independent.\n\n```\nSelect the AI reviewers to use\
+      \ (>=2 required):\n  [x] 1. claude  (✓ installed)\n  [x] 2. codex   (✓ installed)\n\
+      \  [ ] 3. gemini  (✗ missing)\n  [x] 4. kimi    (✓ installed)\nEnter comma-separated\
+      \ numbers [default: 1,2,4]:\n```\n\n### Conditional supplemental follow-up\n\
+      \nShown only if claude is in the selection AND a host-family `host_peer` profile\n\
+      exists:\n\n```\nYou're using claude as the host. Add a same-model claude review\
+      \ agent?\n\nThis is a SUPPLEMENTAL review (counts as 0.5 — NOT a fully independent\n\
+      reviewer; it shares the host model's blind spots). It gets no vote at the\n\
+      consensus gate and can't close consensus (claude already votes as host) —\n\
+      but every good idea it raises is still applied on merit. A useful extra\npass\
+      \ if you have the tokens to spare.\n\nAdd it? [y/N]:\n```\n\nDefault **No**.\
+      \ On yes → append the host-family `host_peer` profile name\n(`claude-swe-reviewer`)\
+      \ to `contributors.enabled`.\n\n### Confirmation summary\n\nSurface the weighted\
+      \ count so the supplemental status is explicit:\n\n```\nPanel: 2.5 reviewers\
+      \ — 2 independent (claude, codex)\n       + 0.5 supplemental same-model (claude-swe-reviewer).\n\
+      ```\n\nIf no host_peer chosen: `Panel: 2 independent reviewers (claude, codex).`\n\
+      \n## Enforcement points (all entry paths)\n\n**The authoritative floor is `config.py`,\
+      \ not the wizard.** Verified\n(`config.py:405-418`): `n_contributors = len(enabled)`\
+      \ counts EVERYTHING,\nincluding a `host_peer` — so `[claude, claude-swe-reviewer]`\
+      \ passes the ≥2\npropose-converge gate today (one model reviewing itself). The\
+      \ same raw count\ndrives autonomous-execute `== 3` (line 418) and strict-majority\
+      \ / sequential\n(454/461).\n\nImplement a single **independent-count helper**\
+      \ that resolves each enabled name\nto its `kind` (via merged built-in + overlay\
+      \ profiles) and counts\n`kind != host_peer`. Reuse it everywhere:\n\n- `config.py`\
+      \ validators — the `n_contributors`-based gates. **Decision:**\n  `host_peer`\
+      \ is excluded from the independent count for propose-converge (≥2)\n  AND for\
+      \ autonomous-execute (which means 3 *independent* reviewers) and\n  strict-majority\
+      \ / sequential. `config.py` therefore tracks both a raw count and\n  an independent\
+      \ count; the gates key off the independent count.\n- interactive multi-select\
+      \ (`_select_contributors_interactive`) — list already\n  excludes host_peer,\
+      \ so its min-2 re-prompt is naturally over independents.\n- `--contributors`\
+      \ flag (`_validate_contributor_selection`).\n- reconfigure path (`interactive_overrides:700-705`)\
+      \ — must also **preserve** an\n  already-enabled `host_peer` from a v1.18.0\
+      \ config rather than silently dropping\n  it, while enforcing the independent\
+      \ floor.\n\nRule: `len([c for c in enabled if profile_kind(c) != host_peer])\
+      \ >= 2`.\n\n## Dynamic detection (decision 7) — implementation\n\n- Replace\
+      \ `_detect_available_contributors` (line 332, hardcoded\n  `[\"claude\",\"codex\"\
+      ,\"gemini\"]`) with: load merged profiles → return names where\n  `kind != host_peer`\
+      \ AND `_profile_installed(profile)`. This auto-includes kimi\n  and any operator-added\
+      \ profile.\n- Derive `config.py default_config()` `enabled` from the built-in\
+      \ independent\n  profile names (not the `[\"claude\",\"codex\",\"gemini\"]`\
+      \ literal at line 174 / the\n  `[\"claude\",\"codex\"]` literal at 577).\n-\
+      \ Audit for any other name-literal AI list and route it through the profile\
+      \ set.\n\n## Out of scope\n\n- Generic (non-claude) host + per-AI swe-reviewer\
+      \ profiles.\n- Any change to convergence / quorum / closure / gate math.\n-\
+      \ Authoring new `host_peer` profiles.\n\n## Test impact\n\n- `test_init_wizard.py`,\
+      \ `test_init_wizard_contributors.py`: main list excludes\n  host_peer; conditional\
+      \ follow-up appears iff claude selected; default-No;\n  weighted summary line.\n\
+      - `test_n_contributor_acceptance.py` + `config.py` tests: independent count\n\
+      \  excludes host_peer for propose-converge AND autonomous-execute;\n  `[claude,\
+      \ claude-swe-reviewer]` rejected; `[claude, codex, claude-swe-reviewer]`\n \
+      \ accepted.\n- New cases: host_peer appended on yes; NOT appended on No/empty\
+      \ input; the\n  `--contributors` flag rejects a host_peer used to pad below\
+      \ 2 independents;\n  reconfigure preserves an existing host_peer.\n- Dynamic\
+      \ detection: with a fake profile set (e.g. kimi + a custom AI on PATH),\n  `_detect_available_contributors`\
+      \ returns them and excludes host_peer; no\n  AI-name literal remains in the\
+      \ detection/default paths.\n"
+    consensus_mcp/config.py: "\"\"\"Per-project `.consensus/config.yaml` schema +\
+      \ loader + validator.\n\nPer iter-0015 converged design (workflow #4, all three\
+      \ contributors agreed):\nthis module is the FIRST sub-component of the iter-0016\
+      \ implementation\ndelivering the configurable workflow engine. It provides:\n\
+      \n  * Schema constants (workflow modes, independence models, convergence rules,\n\
+      \    finding dispositions, snapshot triggers, patch authoring, timeout policies)\n\
+      \  * `ConfigValidationError` — raised on illegal config or invalid combinations\n\
+      \  * `load(path)` — parse YAML, normalize aliases + defaults, validate, return\n\
+      \    the effective config dict\n  * `validate(config)` — pure check on an already-loaded\
+      \ dict\n  * `normalize(config)` — apply default values + alias resolution (e.g.\n\
+      \    `workflow.mode: 3` → `workflow.mode: post-review`)\n  * `default_config()`\
+      \ — return the canonical default config dict\n  * `effective_config_sha256(config)`\
+      \ — deterministic hash for sealed provenance\n\nThis module does NOT load files\
+      \ into the engine, does NOT dispatch\ncontributors, does NOT run the wizard.\
+      \ Those land in iter-0016b/c/d.\n\nSchema version 1 lifecycle: schema_version=0\
+      \ is the synthetic legacy mode\n(no `.consensus/config.yaml`); schema_version=1\
+      \ is what iter-0016 ships.\nFuture bumps add an in-place migration command.\n\
+      \"\"\"\nfrom __future__ import annotations\n\nimport hashlib\nfrom copy import\
+      \ deepcopy\nfrom pathlib import Path\nfrom typing import Any\n\nimport yaml\n\
+      \n\nSCHEMA_VERSION = 1\n\n# === Workflow modes (semantic strings; CLI accepts\
+      \ numeric aliases 3/4) ===\nWORKFLOW_POST_REVIEW = \"post-review\"\nWORKFLOW_PROPOSE_CONVERGE\
+      \ = \"propose-converge\"\nWORKFLOW_ADVISORY = \"advisory\"\n# iter-workflow-abc-introduce:\
+      \ Workflow C — autonomous-execute. v1.14.4\n# ships the contract (alias, validators,\
+      \ scope_check helper, schema);\n# multi-iteration engine path is named-blocker\
+      \ for v1.15.0.\nWORKFLOW_AUTONOMOUS_EXECUTE = \"autonomous-execute\"\nVALID_WORKFLOWS\
+      \ = {\n    WORKFLOW_POST_REVIEW,\n    WORKFLOW_PROPOSE_CONVERGE,\n    WORKFLOW_ADVISORY,\n\
+      \    WORKFLOW_AUTONOMOUS_EXECUTE,\n}\n\n# Operator-facing aliases. iter-workflow-abc-introduce:\
+      \ letter aliases\n# replace numeric as the canonical operator vocabulary; numeric\
+      \ aliases\n# (3, 4) stay accepted for one release cycle with DeprecationWarning,\n\
+      # then removed in a future minor.\nWORKFLOW_ALIASES = {\n    # Letter aliases\
+      \ (canonical operator vocabulary as of v1.14.4)\n    \"A\": WORKFLOW_PROPOSE_CONVERGE,\n\
+      \    \"B\": WORKFLOW_POST_REVIEW,\n    \"C\": WORKFLOW_AUTONOMOUS_EXECUTE,\n\
+      \    \"a\": WORKFLOW_PROPOSE_CONVERGE,\n    \"b\": WORKFLOW_POST_REVIEW,\n \
+      \   \"c\": WORKFLOW_AUTONOMOUS_EXECUTE,\n    # Numeric aliases (deprecated;\
+      \ emit DeprecationWarning when resolved)\n    \"3\": WORKFLOW_POST_REVIEW,\n\
+      \    \"4\": WORKFLOW_PROPOSE_CONVERGE,\n    3: WORKFLOW_POST_REVIEW,\n    4:\
+      \ WORKFLOW_PROPOSE_CONVERGE,\n    # Semantic strings pass through unchanged\
+      \ in normalize.\n}\n_DEPRECATED_NUMERIC_WORKFLOW_ALIASES = {\"3\", \"4\", 3,\
+      \ 4}\n\n# === Independence models ===\nINDEPENDENCE_BLIND = \"blind-first-reveal\"\
+      \nINDEPENDENCE_VISIBLE = \"visible-from-start\"\nINDEPENDENCE_SEQUENTIAL = \"\
+      sequential\"\nVALID_INDEPENDENCE = {INDEPENDENCE_BLIND, INDEPENDENCE_VISIBLE,\
+      \ INDEPENDENCE_SEQUENTIAL}\n\n# === Convergence rules ===\nCONVERGE_UNANIMOUS\
+      \ = \"unanimous\"\nCONVERGE_STRICT_MAJ = \"strict-majority\"\nCONVERGE_INCL_MAJ\
+      \ = \"inclusive-majority\"\nCONVERGE_ADVISORY = \"advisory\"\nVALID_CONVERGENCE\
+      \ = {CONVERGE_UNANIMOUS, CONVERGE_STRICT_MAJ, CONVERGE_INCL_MAJ, CONVERGE_ADVISORY}\n\
+      \n# === Finding disposition ===\nDISPOSITION_ALL_OR_NOTHING = \"all-or-nothing\"\
+      \nDISPOSITION_PER_FINDING = \"per-finding\"\nDISPOSITION_WEIGHTED_SYNTHESIS\
+      \ = \"weighted-synthesis\"\nVALID_DISPOSITION = {\n    DISPOSITION_ALL_OR_NOTHING,\n\
+      \    DISPOSITION_PER_FINDING,\n    DISPOSITION_WEIGHTED_SYNTHESIS,\n}\n# iter-three-gaps:\
+      \ workflow #4 (propose-converge) accepts only the two\n# plan-shaped dispositions.\
+      \ per-finding is post-review semantics.\nVALID_DISPOSITION_FOR_PROPOSE_CONVERGE\
+      \ = {\n    DISPOSITION_ALL_OR_NOTHING,\n    DISPOSITION_WEIGHTED_SYNTHESIS,\n\
+      }\n\n# === Converged-plan convention enforcement (v1.15.1) ===\n# Machine-enforcement\
+      \ level for the v1.15.0 converged-plan convention\n# blocks (falsification /\
+      \ independent_safeguard /\n# decisive_experiment_before_next_iteration). Default\
+      \ `graduated`:\n# hard-reject ONLY (i) operator-declared safety/data-loss/bricking/\n\
+      # irreversible risk class missing a conforming independent_safeguard\n# and\
+      \ (ii) empirical_status:proven with no recorded experiment; warn +\n# annotate\
+      \ otherwise. See consensus_mcp.validators.validate_converged_plan\n# and docs/workflows/converged-plan-convention.md.\n\
+      ENFORCEMENT_OFF = \"off\"\nENFORCEMENT_WARN = \"warn\"\nENFORCEMENT_GRADUATED\
+      \ = \"graduated\"\nENFORCEMENT_STRICT = \"strict\"\nVALID_CONVERGED_PLAN_ENFORCEMENT\
+      \ = {\n    ENFORCEMENT_OFF,\n    ENFORCEMENT_WARN,\n    ENFORCEMENT_GRADUATED,\n\
+      \    ENFORCEMENT_STRICT,\n}\n\n# === Snapshot triggers ===\nSNAPSHOT_MANUAL\
+      \ = \"manual-only\"\nSNAPSHOT_ON_CLOSE = \"on-iteration-close\"\nSNAPSHOT_PERIODIC\
+      \ = \"periodic\"\nVALID_SNAPSHOT_TRIGGER = {SNAPSHOT_MANUAL, SNAPSHOT_ON_CLOSE,\
+      \ SNAPSHOT_PERIODIC}\n\n# === Patch authoring ===\nPATCH_CLAUDE_ONLY = \"claude-only\"\
+      \nPATCH_ANY = \"any-contributor\"\nPATCH_NONE = \"none\"\nVALID_PATCH_AUTHORING\
+      \ = {PATCH_CLAUDE_ONLY, PATCH_ANY, PATCH_NONE}\n\n# === Timeout policy ===\n\
+      TIMEOUT_NO_VOTE = \"treat-as-no-vote\"\nTIMEOUT_BLOCKING = \"treat-as-blocking\"\
+      \nTIMEOUT_SHRINK = \"shrink-quorum\"\nVALID_TIMEOUT_POLICY = {TIMEOUT_NO_VOTE,\
+      \ TIMEOUT_BLOCKING, TIMEOUT_SHRINK}\n\n# === Allowed contributor identities\
+      \ (v1 closed enum per converged plan SO-5) ===\n# kimi added 2026-05-22: it\
+      \ is a real default contributor; excluding it from the\n# allow-list (a) made\
+      \ `validate()` reject any project that configures kimi and\n# (b) made the anchoring\
+      \ linter blind to kimi-anchoring — the exact bias it was\n# built to catch.\
+      \ (Found by independent QA, not self-review.) Note: enabling\n# kimi still requires\
+      \ a KimiAdapter in the engine (tracked separately); this\n# allow-list entry\
+      \ just stops kimi being a second-class identity.\nKNOWN_CONTRIBUTORS = (\"claude\"\
+      , \"codex\", \"gemini\", \"kimi\")\nCLAUDE = \"claude\"\n\n\nclass ConfigValidationError(ValueError):\n\
+      \    \"\"\"Raised on schema violation or illegal config combination.\"\"\"\n\
+      \n\ndef default_config() -> dict:\n    \"\"\"Return the canonical default `.consensus/config.yaml`\
+      \ structure.\n\n    Defaults assume the canonical 3-contributor setup. Operators\
+      \ with smaller\n    pools must override via init wizard or flags.\n    \"\"\"\
+      \n    return {\n        \"schema_version\": SCHEMA_VERSION,\n        \"project\"\
+      : {\n            \"name\": None,\n            \"config_created_at_utc\": None,\n\
+      \        },\n        \"workflow\": {\n            \"mode\": WORKFLOW_PROPOSE_CONVERGE,\n\
+      \            \"independence\": INDEPENDENCE_BLIND,\n            \"max_convergence_rounds\"\
+      : 3,\n            \"timeout_policy\": TIMEOUT_NO_VOTE,\n        },\n       \
+      \ \"contributors\": {\n            \"enabled\": [\"claude\", \"codex\", \"gemini\"\
+      ],\n            \"adapters\": {\n                \"claude\": {\n           \
+      \         \"role\": \"orchestrator\",\n                    \"can_propose\":\
+      \ True,\n                    \"can_review\": True,\n                    \"can_converge\"\
+      : True,\n                },\n                \"codex\": {\n                \
+      \    \"command\": \"codex\",\n                    \"model\": \"gpt-5.5\",\n\
+      \                    \"sandbox_mode\": \"read-only\",\n                    \"\
+      can_propose\": True,\n                    \"can_review\": True,\n          \
+      \          \"can_converge\": True,\n                },\n                \"gemini\"\
+      : {\n                    \"command\": \"gemini\",\n                    \"model\"\
+      : \"gemini-2.5-pro\",\n                    \"approval_mode\": \"plan\",\n  \
+      \                  \"can_propose\": True,\n                    \"can_review\"\
+      : True,\n                    \"can_converge\": True,\n                },\n \
+      \           },\n        },\n        \"convergence\": {\n            \"rule\"\
+      : CONVERGE_STRICT_MAJ,\n            \"finding_disposition\": DISPOSITION_WEIGHTED_SYNTHESIS,\n\
+      \            \"converged_plan_enforcement\": ENFORCEMENT_GRADUATED,\n      \
+      \  },\n        \"patches\": {\n            \"authoring\": PATCH_CLAUDE_ONLY,\n\
+      \            \"max_patch_lines\": 600,\n        },\n        \"snapshots\": {\n\
+      \            \"trigger\": SNAPSHOT_ON_CLOSE,\n            \"periodic\": {\n\
+      \                \"every_iterations\": None,\n                \"every_minutes\"\
+      : None,\n            },\n            \"branch\": \"consensus-state-snapshots\"\
+      ,\n            \"retention\": \"unbounded\",\n        },\n        \"artifacts\"\
+      : {\n            \"root\": \"consensus-state\",\n            \"seal_outputs\"\
+      : True,\n        },\n        \"defaults\": {\n            \"iteration_timeout_seconds\"\
+      : 600,\n            \"stall_silence_seconds\": 180,\n            \"pre_first_byte_silence_seconds\"\
+      : 600,\n        },\n    }\n\n\ndef _deep_merge_defaults(base: dict, overrides:\
+      \ dict) -> dict:\n    \"\"\"Merge overrides into base (deep, override wins for\
+      \ scalars; lists replaced).\"\"\"\n    out = deepcopy(base)\n    for k, v in\
+      \ overrides.items():\n        if k in out and isinstance(out[k], dict) and isinstance(v,\
+      \ dict):\n            out[k] = _deep_merge_defaults(out[k], v)\n        else:\n\
+      \            out[k] = deepcopy(v)\n    return out\n\n\ndef normalize(config:\
+      \ dict) -> dict:\n    \"\"\"Apply defaults + alias resolution. Returns a NEW\
+      \ dict; does not mutate input.\n\n    Currently handles:\n      - `workflow.mode`\
+      \ aliases (A → propose-converge, B → post-review,\n        C → autonomous-execute;\
+      \ numeric 3/4 deprecated but still resolved)\n      - Filling unspecified keys\
+      \ with defaults from `default_config()`\n\n    Does NOT validate — see `validate()`\
+      \ for that.\n    \"\"\"\n    import warnings\n    if not isinstance(config,\
+      \ dict):\n        raise ConfigValidationError(\n            f\"config root must\
+      \ be a mapping, got {type(config).__name__}\"\n        )\n    normalized = _deep_merge_defaults(default_config(),\
+      \ config)\n    # Resolve workflow.mode aliases. Emit DeprecationWarning for\
+      \ numeric\n    # aliases (kept for backward compat for one release cycle per\n\
+      \    # iter-workflow-abc-introduce convergence; will be removed in a\n    #\
+      \ future minor).\n    mode = normalized.get(\"workflow\", {}).get(\"mode\")\n\
+      \    if mode in WORKFLOW_ALIASES:\n        if mode in _DEPRECATED_NUMERIC_WORKFLOW_ALIASES:\n\
+      \            warnings.warn(\n                f\"workflow.mode numeric alias\
+      \ {mode!r} is deprecated; \"\n                f\"use letter alias 'A' (propose-converge),\
+      \ 'B' (post-review), \"\n                f\"or 'C' (autonomous-execute) instead.\
+      \ Numeric aliases will \"\n                f\"be removed in a future minor release.\"\
+      ,\n                DeprecationWarning,\n                stacklevel=2,\n    \
+      \        )\n        normalized[\"workflow\"][\"mode\"] = WORKFLOW_ALIASES[mode]\n\
+      \    return normalized\n\n\ndef validate(config: dict) -> None:\n    \"\"\"\
+      Validate a (preferably normalized) config dict. Raises ConfigValidationError.\n\
+      \n    Per converged-plan.yaml Section B validation rules.\n    \"\"\"\n    if\
+      \ not isinstance(config, dict):\n        raise ConfigValidationError(\n    \
+      \        f\"config root must be a mapping, got {type(config).__name__}\"\n \
+      \       )\n\n    # === schema_version ===\n    sv = config.get(\"schema_version\"\
+      )\n    if sv != SCHEMA_VERSION:\n        raise ConfigValidationError(\n    \
+      \        f\"schema_version must be {SCHEMA_VERSION}, got {sv!r}\"\n        )\n\
+      \n    # === workflow ===\n    workflow = config.get(\"workflow\", {})\n    if\
+      \ not isinstance(workflow, dict):\n        raise ConfigValidationError(\"'workflow'\
+      \ must be a mapping\")\n    mode = workflow.get(\"mode\")\n    if mode not in\
+      \ VALID_WORKFLOWS:\n        raise ConfigValidationError(\n            f\"workflow.mode={mode!r}\
+      \ not in {sorted(VALID_WORKFLOWS)}\"\n        )\n    independence = workflow.get(\"\
+      independence\")\n    if independence not in VALID_INDEPENDENCE:\n        raise\
+      \ ConfigValidationError(\n            f\"workflow.independence={independence!r}\
+      \ not in {sorted(VALID_INDEPENDENCE)}\"\n        )\n    timeout_policy = workflow.get(\"\
+      timeout_policy\", TIMEOUT_NO_VOTE)\n    if timeout_policy not in VALID_TIMEOUT_POLICY:\n\
+      \        raise ConfigValidationError(\n            f\"workflow.timeout_policy={timeout_policy!r}\
+      \ not in {sorted(VALID_TIMEOUT_POLICY)}\"\n        )\n    max_rounds = workflow.get(\"\
+      max_convergence_rounds\", 3)\n    if not isinstance(max_rounds, int) or max_rounds\
+      \ < 1:\n        raise ConfigValidationError(\n            f\"workflow.max_convergence_rounds\
+      \ must be positive int, got {max_rounds!r}\"\n        )\n\n    # === contributors\
+      \ ===\n    contributors = config.get(\"contributors\", {})\n    if not isinstance(contributors,\
+      \ dict):\n        raise ConfigValidationError(\"'contributors' must be a mapping\"\
+      )\n    enabled = contributors.get(\"enabled\", [])\n    if not isinstance(enabled,\
+      \ list) or not enabled:\n        raise ConfigValidationError(\n            \"\
+      contributors.enabled must be a non-empty list\"\n        )\n    if len(set(enabled))\
+      \ != len(enabled):\n        raise ConfigValidationError(\n            f\"contributors.enabled\
+      \ must be unique; got {enabled!r}\"\n        )\n    # OPEN contributor set (2026-05-22,\
+      \ \"2-or-20-or-200 AIs\" acceptance):\n    # validation is STRUCTURAL only —\
+      \ it no longer rejects names outside a closed\n    # enum, so a clean install\
+      \ supports ANY number of contributors with ANY\n    # names (min-2 / max-N).\
+      \ Whether a name is actually CONSTRUCTIBLE is checked\n    # at build time by\
+      \ engine_factory (fail-closed with a register_contributor\n    # hint), which\
+      \ is the only layer that knows the open adapter registry.\n    # Names must\
+      \ still be non-empty strings.\n    for c in enabled:\n        if not isinstance(c,\
+      \ str) or not c.strip():\n            raise ConfigValidationError(\n       \
+      \         f\"contributors.enabled entries must be non-empty, non-whitespace\
+      \ \"\n                f\"strings; got {c!r}\"\n            )\n    # NOTE: min-2\
+      \ is NOT blanket-enforced here — it is MODE-SPECIFIC below\n    # (propose-converge\
+      \ / sequential / strict-majority each require >=2), so\n    # single-contributor\
+      \ modes (e.g. solo-claude post-review) stay valid. There\n    # is NO upper\
+      \ cap on N anywhere.\n    # v1.18.0 (open-contributor model — converged plan):\
+      \ claude is OPTIONAL (the\n    # host orchestrates the loop regardless of whether\
+      \ claude is itself a\n    # contributor) and a per-contributor `contributors.adapters`\
+      \ entry is\n    # OPTIONAL. Whether a name is actually CONSTRUCTIBLE — a built-in\
+      \ class, a\n    # registered adapter, or a kind:cli_reviewer profile — is the\
+      \ engine_factory's\n    # fail-closed job (see the STRUCTURAL-only note above),\
+      \ NOT config.validate's.\n    # We keep only the adapters-is-a-mapping type\
+      \ check.\n    adapters = contributors.get(\"adapters\", {})\n    if not isinstance(adapters,\
+      \ dict):\n        raise ConfigValidationError(\"contributors.adapters must be\
+      \ a mapping\")\n\n    # === contributors.profiles (v1.18.0 — optional operator\
+      \ overlay) ===\n    # Validate each operator-supplied profile against the contributor-profile\n\
+      \    # schema (loader/validator lives in _contributor_profiles). config overrides\n\
+      \    # built-in profiles by same name; this block only checks the OVERLAY supplied\n\
+      \    # in config — built-in profiles are validated by their own test suite.\
+      \ Plain\n    # ValueErrors from validate_profile are re-raised as ConfigValidationError\
+      \ to\n    # keep the config-layer error type consistent.\n    profiles = contributors.get(\"\
+      profiles\")\n    if profiles is not None:\n        if not isinstance(profiles,\
+      \ dict):\n            raise ConfigValidationError(\n                f\"contributors.profiles\
+      \ must be a mapping, \"\n                f\"got {type(profiles).__name__}\"\n\
+      \            )\n        from consensus_mcp._contributor_profiles import validate_profile\n\
+      \        for pname, pdef in profiles.items():\n            try:\n          \
+      \      validate_profile(pname, pdef)\n            except ValueError as exc:\n\
+      \                raise ConfigValidationError(\n                    f\"contributors.profiles.{pname}:\
+      \ {exc}\"\n                ) from exc\n\n    # === convergence ===\n    convergence\
+      \ = config.get(\"convergence\", {})\n    if not isinstance(convergence, dict):\n\
+      \        raise ConfigValidationError(\"'convergence' must be a mapping\")\n\
+      \    rule = convergence.get(\"rule\")\n    if rule not in VALID_CONVERGENCE:\n\
+      \        raise ConfigValidationError(\n            f\"convergence.rule={rule!r}\
+      \ not in {sorted(VALID_CONVERGENCE)}\"\n        )\n    disposition = convergence.get(\"\
+      finding_disposition\")\n    if disposition not in VALID_DISPOSITION:\n     \
+      \   raise ConfigValidationError(\n            f\"convergence.finding_disposition={disposition!r}\
+      \ not in {sorted(VALID_DISPOSITION)}\"\n        )\n    # v1.15.1: converged-plan\
+      \ convention machine-enforcement level.\n    cpe = convergence.get(\"converged_plan_enforcement\"\
+      , ENFORCEMENT_GRADUATED)\n    if cpe not in VALID_CONVERGED_PLAN_ENFORCEMENT:\n\
+      \        raise ConfigValidationError(\n            f\"convergence.converged_plan_enforcement={cpe!r}\
+      \ not in \"\n            f\"{sorted(VALID_CONVERGED_PLAN_ENFORCEMENT)}\"\n \
+      \       )\n\n    # === Cross-validation rules per converged-plan.yaml ===\n\
+      \    n_contributors = len(enabled)\n\n    # Rule: workflow.mode=propose-converge\
+      \ requires N>=2\n    if mode == WORKFLOW_PROPOSE_CONVERGE and n_contributors\
+      \ < 2:\n        raise ConfigValidationError(\n            f\"workflow.mode=propose-converge\
+      \ requires at least 2 contributors; \"\n            f\"got {n_contributors}\
+      \ ({enabled!r}). Use post-review or advisory for solo setups.\"\n        )\n\
+      \n    # Rule: workflow.mode=autonomous-execute requires N==3 contributors\n\
+      \    # (iter-workflow-abc-introduce safety floor: autonomous mode runs\n   \
+      \ # without operator-in-the-loop, so the wide cross-AI safety net is\n    #\
+      \ mandatory; v1.15.0+ may relax with explicit operator opt-in).\n    if mode\
+      \ == WORKFLOW_AUTONOMOUS_EXECUTE and n_contributors != 3:\n        raise ConfigValidationError(\n\
+      \            f\"workflow.mode=autonomous-execute requires exactly 3 contributors\
+      \ \"\n            f\"(claude + codex + gemini) for the wide cross-AI safety\
+      \ net \"\n            f\"required by autonomous runs; got {n_contributors} ({enabled!r}).\
+      \ \"\n            f\"Use propose-converge for 2-AI setups.\"\n        )\n\n\
+      \    # Rule: workflow.mode=propose-converge accepts the two plan-shaped\n  \
+      \  # dispositions only (iter-three-gaps doctrine: weighted-synthesis is the\n\
+      \    # default for workflow #4; all-or-nothing remains valid as explicit opt-in\n\
+      \    # for binary scope decisions / safety gates / compliance verdicts).\n \
+      \   # per-finding stays post-review-only (its semantics fit defect lists, not\n\
+      \    # plan synthesis).\n    if mode == WORKFLOW_PROPOSE_CONVERGE and disposition\
+      \ not in VALID_DISPOSITION_FOR_PROPOSE_CONVERGE:\n        raise ConfigValidationError(\n\
+      \            f\"workflow.mode=propose-converge accepts \"\n            f\"convergence.finding_disposition\
+      \ in \"\n            f\"{sorted(VALID_DISPOSITION_FOR_PROPOSE_CONVERGE)!r};\
+      \ \"\n            f\"got {disposition!r}. per-finding is post-review semantics;\
+      \ \"\n            f\"use weighted-synthesis (default) or all-or-nothing for\
+      \ workflow #4.\"\n        )\n\n    # Rule: advisory mode requires advisory convergence\
+      \ rule\n    if mode == WORKFLOW_ADVISORY and rule != CONVERGE_ADVISORY:\n  \
+      \      raise ConfigValidationError(\n            f\"workflow.mode=advisory requires\
+      \ convergence.rule=advisory; got {rule!r}\"\n        )\n    # And vice versa:\
+      \ advisory rule only valid in advisory mode\n    if rule == CONVERGE_ADVISORY\
+      \ and mode != WORKFLOW_ADVISORY:\n        raise ConfigValidationError(\n   \
+      \         f\"convergence.rule=advisory valid only when workflow.mode=advisory;\
+      \ \"\n            f\"got workflow.mode={mode!r}\"\n        )\n\n    # Rule:\
+      \ strict-majority with N=1 is invalid\n    if rule == CONVERGE_STRICT_MAJ and\
+      \ n_contributors == 1:\n        raise ConfigValidationError(\n            \"\
+      convergence.rule=strict-majority is invalid with only 1 contributor; \"\n  \
+      \          \"use unanimous or advisory\"\n        )\n\n    # Rule: sequential\
+      \ independence requires N>=2\n    if independence == INDEPENDENCE_SEQUENTIAL\
+      \ and n_contributors < 2:\n        raise ConfigValidationError(\n          \
+      \  f\"workflow.independence=sequential requires at least 2 contributors; \"\n\
+      \            f\"got {n_contributors}\"\n        )\n\n    # === patches ===\n\
+      \    patches = config.get(\"patches\", {})\n    if not isinstance(patches, dict):\n\
+      \        raise ConfigValidationError(\"'patches' must be a mapping\")\n    authoring\
+      \ = patches.get(\"authoring\")\n    if authoring not in VALID_PATCH_AUTHORING:\n\
+      \        raise ConfigValidationError(\n            f\"patches.authoring={authoring!r}\
+      \ not in {sorted(VALID_PATCH_AUTHORING)}\"\n        )\n    max_patch_lines =\
+      \ patches.get(\"max_patch_lines\", 600)\n    if not isinstance(max_patch_lines,\
+      \ int) or max_patch_lines < 0:\n        raise ConfigValidationError(\n     \
+      \       f\"patches.max_patch_lines must be non-negative int, got {max_patch_lines!r}\"\
+      \n        )\n\n    # === snapshots ===\n    snapshots = config.get(\"snapshots\"\
+      , {})\n    if not isinstance(snapshots, dict):\n        raise ConfigValidationError(\"\
+      'snapshots' must be a mapping\")\n    trigger = snapshots.get(\"trigger\")\n\
+      \    if trigger not in VALID_SNAPSHOT_TRIGGER:\n        raise ConfigValidationError(\n\
+      \            f\"snapshots.trigger={trigger!r} not in {sorted(VALID_SNAPSHOT_TRIGGER)}\"\
+      \n        )\n    periodic = snapshots.get(\"periodic\", {})\n    if not isinstance(periodic,\
+      \ dict):\n        raise ConfigValidationError(\"snapshots.periodic must be a\
+      \ mapping\")\n    every_iters = periodic.get(\"every_iterations\")\n    every_mins\
+      \ = periodic.get(\"every_minutes\")\n    if trigger == SNAPSHOT_PERIODIC:\n\
+      \        if every_iters is None and every_mins is None:\n            raise ConfigValidationError(\n\
+      \                \"snapshots.trigger=periodic requires at least one of \"\n\
+      \                \"snapshots.periodic.every_iterations or every_minutes\"\n\
+      \            )\n        if every_iters is not None and (not isinstance(every_iters,\
+      \ int) or every_iters < 1):\n            raise ConfigValidationError(\n    \
+      \            f\"snapshots.periodic.every_iterations must be positive int, got\
+      \ {every_iters!r}\"\n            )\n        if every_mins is not None and (not\
+      \ isinstance(every_mins, int) or every_mins < 1):\n            raise ConfigValidationError(\n\
+      \                f\"snapshots.periodic.every_minutes must be positive int, got\
+      \ {every_mins!r}\"\n            )\n    else:\n        # Non-periodic trigger:\
+      \ both periodic fields must be null\n        if every_iters is not None or every_mins\
+      \ is not None:\n            raise ConfigValidationError(\n                f\"\
+      snapshots.trigger={trigger!r} requires \"\n                f\"snapshots.periodic.every_iterations/every_minutes\
+      \ to be null; \"\n                f\"got every_iterations={every_iters!r}, every_minutes={every_mins!r}\"\
+      \n            )\n\n\ndef load(path: Path) -> dict:\n    \"\"\"Load `.consensus/config.yaml`\
+      \ from path. Returns normalized + validated dict.\n\n    Raises:\n      ConfigValidationError\
+      \ on malformed YAML, missing schema_version, or\n        illegal combination.\n\
+      \      OSError on file-read failure (caller decides legacy-mode fallback).\n\
+      \    \"\"\"\n    text = Path(path).read_text(encoding=\"utf-8\")\n    try:\n\
+      \        raw = yaml.safe_load(text)\n    except yaml.YAMLError as exc:\n   \
+      \     raise ConfigValidationError(f\"malformed YAML in {path}: {exc}\") from\
+      \ exc\n    normalized = normalize(raw)\n    validate(normalized)\n    return\
+      \ normalized\n\n\ndef effective_config_sha256(config: dict) -> str:\n    \"\"\
+      \"Deterministic sha256 of a config dict (canonical YAML form).\n\n    Used by\
+      \ the engine to stamp goal_packets with `config_sha256` so sealed\n    artifacts\
+      \ can prove which config governed dispatch.\n    \"\"\"\n    canonical = yaml.safe_dump(config,\
+      \ sort_keys=True, default_flow_style=False)\n    return hashlib.sha256(canonical.encode(\"\
+      utf-8\")).hexdigest()\n\n\ndef is_legacy_mode_repo(repo_root: Path) -> bool:\n\
+      \    \"\"\"True iff `.consensus/config.yaml` is absent at the repo root.\n\n\
+      \    Engine uses this to decide between loading config vs entering legacy mode.\n\
+      \    \"\"\"\n    return not (Path(repo_root) / \".consensus\" / \"config.yaml\"\
+      ).is_file()\n\n\ndef synthesize_legacy_config(repo_root: Path) -> dict:\n  \
+      \  \"\"\"Return the synthetic schema_version=0 'legacy mode' config.\n\n   \
+      \ Per converged-plan.yaml Section D: when `.consensus/config.yaml` is absent,\n\
+      \    the engine emulates pre-iter-0015 behavior. This helper returns the dict\n\
+      \    representing that behavior so the engine has a uniform config object to\n\
+      \    consume regardless of whether real config exists.\n\n    Schema_version=0\
+      \ is INTENTIONALLY not 1 — it's a sentinel marking legacy\n    synthesis. validate()\
+      \ rejects it; the engine uses a separate code path.\n    \"\"\"\n    return\
+      \ {\n        \"schema_version\": 0,  # sentinel: legacy synthesis\n        \"\
+      project\": {\"name\": Path(repo_root).name, \"config_created_at_utc\": None},\n\
+      \        \"workflow\": {\n            \"mode\": WORKFLOW_POST_REVIEW,\n    \
+      \        \"independence\": INDEPENDENCE_VISIBLE,\n            \"max_convergence_rounds\"\
+      : 1,\n            \"timeout_policy\": TIMEOUT_NO_VOTE,\n        },\n       \
+      \ \"contributors\": {\n            \"enabled\": [\"claude\", \"codex\"],\n \
+      \           \"adapters\": {\n                \"claude\": {\n               \
+      \     \"role\": \"orchestrator\",\n                    \"can_propose\": True,\n\
+      \                    \"can_review\": True,\n                    \"can_converge\"\
+      : False,\n                },\n                \"codex\": {\n               \
+      \     \"command\": \"codex\",\n                    \"model\": \"gpt-5.5\",\n\
+      \                    \"sandbox_mode\": \"read-only\",\n                    \"\
+      can_propose\": False,\n                    \"can_review\": True,\n         \
+      \           \"can_converge\": False,\n                },\n            },\n \
+      \       },\n        \"convergence\": {\n            \"rule\": CONVERGE_UNANIMOUS,\n\
+      \            \"finding_disposition\": DISPOSITION_ALL_OR_NOTHING,\n        \
+      \    \"converged_plan_enforcement\": ENFORCEMENT_GRADUATED,\n        },\n  \
+      \      \"patches\": {\"authoring\": PATCH_CLAUDE_ONLY, \"max_patch_lines\":\
+      \ 600},\n        \"snapshots\": {\n            \"trigger\": SNAPSHOT_MANUAL,\n\
+      \            \"periodic\": {\"every_iterations\": None, \"every_minutes\": None},\n\
+      \            \"branch\": \"consensus-state-snapshots\",\n            \"retention\"\
+      : \"unbounded\",\n        },\n        \"artifacts\": {\"root\": \"consensus-state\"\
+      , \"seal_outputs\": True},\n        \"defaults\": {\n            \"iteration_timeout_seconds\"\
+      : 600,\n            \"stall_silence_seconds\": 180,\n            \"pre_first_byte_silence_seconds\"\
+      : 600,\n        },\n        \"_legacy_mode_synthesis\": True,\n    }\n"
+    consensus_mcp/_init_wizard.py: "\"\"\"`consensus init` wizard — fourth and final\
+      \ sub-component of iter-0016.\n\nCreates `.consensus/config.yaml` per the iter-0015\
+      \ converged design. Supports:\n  - Interactive prompts (default; one question\
+      \ per configurability dimension)\n  - Non-interactive (`--non-interactive`)\
+      \ with explicit flags\n  - `--accept-defaults` (non-interactive using all defaults;\
+      \ overridable per-flag)\n  - `--reconfigure` (load existing config; use as defaults;\
+      \ show diff)\n  - `--check` (validate existing config; print normalized form;\
+      \ exit 0/2/3)\n  - `--print-defaults` (emit default YAML to stdout; no write)\n\
+      \  - `--dry-run` (show intended config + .gitignore changes; no write)\n\nExit\
+      \ codes per converged plan Section A:\n  0  ok\n  1  user-abort (interactive\
+      \ cancel via Ctrl+C / EOF)\n  2  config missing (--check only) or new iteration\
+      \ in repo without config\n  3  invalid config / illegal combination\n  4  config\
+      \ exists without --reconfigure or --force\n\n`.gitignore` updates use bracketed\
+      \ markers per converged design F9c. Malformed\nmarkers (open without close)\
+      \ are detected and preserved untouched rather than\nrisking data loss.\n\"\"\
+      \"\nfrom __future__ import annotations\n\nimport argparse\nimport difflib\n\
+      import json\nimport shutil\nimport subprocess\nimport sys\nfrom pathlib import\
+      \ Path\n\nimport yaml\n\nfrom consensus_mcp import config as cfg\nfrom consensus_mcp\
+      \ import _contributor_profiles as profiles_mod\n\n\n# iter-0031 (per iter-0030\
+      \ converged plan Q3): marker-based project-root\n# detection beats .git-only.\
+      \ Order: git rev-parse > strong-marker walk > cwd.\n_STRONG_MARKERS = (\n  \
+      \  \".git\",\n    \"pyproject.toml\",\n    \"package.json\",\n    \"CLAUDE.md\"\
+      ,\n    \".mcp.json\",\n    \"consensus-state\",\n)\n\n\nGITIGNORE_OPEN_MARKER\
+      \ = \"# >>> consensus-mcp managed <<<\"\nGITIGNORE_CLOSE_MARKER = \"# <<< consensus-mcp\
+      \ managed >>>\"\nGITIGNORE_MANAGED_PATHS = (\n    \".consensus/tmp/\",\n   \
+      \ \".consensus/cache/\",\n    \".consensus/logs/\",\n)\n\n\nclass WizardError(RuntimeError):\n\
+      \    pass\n\n\ndef _detect_repo_root(start: Path | None = None) -> Path:\n \
+      \   \"\"\"Resolve project root for the iteration.\n\n    iter-0031 (per iter-0030\
+      \ converged plan Q3): use marker-based detection\n    instead of .git-only walking.\
+      \ Precedence:\n      1. `git rev-parse --show-toplevel` if git is available\
+      \ and start is\n         inside a git working tree.\n      2. Walk up from start\
+      \ (or cwd) looking for any strong marker\n         (.git, pyproject.toml, package.json,\
+      \ CLAUDE.md, .mcp.json,\n         consensus-state).\n      3. Fall back to start\
+      \ / cwd.\n    \"\"\"\n    cwd = (start or Path.cwd()).resolve()\n\n    # 1.\
+      \ git rev-parse — most authoritative when git is on PATH.\n    try:\n      \
+      \  result = subprocess.run(\n            [\"git\", \"rev-parse\", \"--show-toplevel\"\
+      ],\n            cwd=str(cwd),\n            capture_output=True,\n          \
+      \  text=True,\n            timeout=5,\n            check=False,\n        )\n\
+      \        if result.returncode == 0:\n            top = (result.stdout or \"\"\
+      ).strip()\n            if top:\n                return Path(top).resolve()\n\
+      \    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):\n     \
+      \   # git not available / not in a worktree / timeout — fall through.\n    \
+      \    pass\n\n    # 2. Walk up looking for strong markers.\n    for candidate\
+      \ in (cwd, *cwd.parents):\n        for marker in _STRONG_MARKERS:\n        \
+      \    if (candidate / marker).exists():\n                return candidate\n\n\
+      \    # 3. Fallback.\n    return cwd\n\n\n# --- iter-0040: claude-code bootstrap\
+      \ pack helpers per iter-0039 converged plan ---\n\n\ndef _resolve_claude_home()\
+      \ -> Path:\n    \"\"\"Resolve ~/.claude (or override) for installing the bootstrap\
+      \ skill+command.\n\n    Precedence (per iter-0039 converged plan Q2):\n    \
+      \  1. `CLAUDE_HOME` env var (operator override; supports non-standard installs).\n\
+      \      2. `~/.claude` resolved via Path.home() (POSIX + Windows USERPROFILE/HOME).\n\
+      \    \"\"\"\n    import os as _os\n    override = _os.environ.get(\"CLAUDE_HOME\"\
+      )\n    if override:\n        return Path(override)\n    return Path.home() /\
+      \ \".claude\"\n\n\ndef _claude_extensions_source_root() -> Path:\n    \"\"\"\
+      Return the in-package source directory for claude_extensions assets.\"\"\"\n\
+      \    return Path(__file__).resolve().parent / \"claude_extensions\"\n\n\n_CLAUDE_EXTENSION_FILES\
+      \ = (\n    (\"skills/consensus/SKILL.md\", \"skills/consensus/SKILL.md\"),\n\
+      \    (\"commands/consensus-init.md\", \"commands/consensus-init.md\"),\n   \
+      \ # iter-0041: ship the operating-procedure skill (workflow #3 vs #4,\n    #\
+      \ round-1 dispatch order, gemini 429 handling, dispatcher hazards,\n    # snapshot/restore\
+      \ safety, peer-citation verification). Carries the\n    # transferable consensus-mcp\
+      \ memories forward into any project that\n    # runs `consensus-init --install-claude-code`.\n\
+      \    (\"skills/consensus-workflow/SKILL.md\", \"skills/consensus-workflow/SKILL.md\"\
+      ),\n)\n\n\ndef _install_claude_extensions(claude_home: Path, force: bool) ->\
+      \ list[str]:\n    \"\"\"Copy the shipped skill + command files into the user's\
+      \ CLAUDE_HOME.\n\n    Idempotency contract (per iter-0039 converged plan Q2):\n\
+      \      - If the destination file is byte-identical to the source, no-op.\n \
+      \     - If the destination file diverges from the source AND force=False,\n\
+      \        skip with a warning printed to stderr (user-edited content preserved).\n\
+      \      - If force=True, overwrite divergent destinations.\n      - Missing destination\
+      \ → write fresh.\n\n    Returns a list of human-readable status lines (also\
+      \ printed by the caller).\n    \"\"\"\n    source_root = _claude_extensions_source_root()\n\
+      \    if not source_root.is_dir():\n        return [f\"WARN: claude_extensions\
+      \ source missing at {source_root}; \"\n                f\"reinstall consensus-mcp\
+      \ to repair\"]\n\n    statuses: list[str] = []\n    for rel_src, rel_dst in\
+      \ _CLAUDE_EXTENSION_FILES:\n        src = source_root / rel_src\n        dst\
+      \ = claude_home / rel_dst\n        if not src.exists():\n            statuses.append(f\"\
+      WARN: source asset {src} missing; skipped\")\n            continue\n\n     \
+      \   src_text = src.read_text(encoding=\"utf-8\")\n        if dst.exists():\n\
+      \            existing_text = dst.read_text(encoding=\"utf-8\")\n           \
+      \ if existing_text == src_text:\n                statuses.append(f\"unchanged:\
+      \ {dst}\")\n                continue\n            if not force:\n          \
+      \      statuses.append(\n                    f\"SKIP: {dst} diverges from shipped\
+      \ content; pass --force to overwrite\"\n                )\n                continue\n\
+      \            # force=True: fall through to write.\n\n        dst.parent.mkdir(parents=True,\
+      \ exist_ok=True)\n        dst.write_text(src_text, encoding=\"utf-8\")\n   \
+      \     statuses.append(f\"wrote: {dst}\")\n\n    return statuses\n\n\n# --- iter-0031:\
+      \ .mcp.json bootstrap helpers per iter-0030 converged plan ---\n\n\ndef _resolve_mcp_command(\n\
+      \    explicit: str | None = None,\n) -> tuple[str, list[str], bool]:\n    \"\
+      \"\"Resolve the consensus-mcp command to write into `.mcp.json`.\n\n    Precedence\
+      \ (per iter-0030 converged plan Q4):\n      1. Explicit `--mcp-command` override\
+      \ (string; split on whitespace).\n      2. `shutil.which(\"consensus-mcp\")`\
+      \ → use bare name \"consensus-mcp\"\n         for PATH-portability so committed\
+      \ `.mcp.json` works on other\n         machines that have consensus-mcp installed.\n\
+      \      3. Fallback: `sys.executable -m consensus_mcp.server` (dev install\n\
+      \         where the console script wasn't generated).\n\n    Returns (command,\
+      \ args_list, is_portable). `is_portable=True` means the\n    written config\
+      \ does not include absolute paths; the command is a name\n    Claude Code resolves\
+      \ via PATH at spawn time.\n    \"\"\"\n    if explicit:\n        parts = explicit.split()\n\
+      \        if not parts:\n            raise ValueError(\"--mcp-command override\
+      \ is empty\")\n        return parts[0], parts[1:], False\n\n    found = shutil.which(\"\
+      consensus-mcp\")\n    if found:\n        return \"consensus-mcp\", [], True\n\
+      \n    return sys.executable, [\"-m\", \"consensus_mcp.server\"], False\n\n\n\
+      def _resolve_mcp_json_path(repo_root: Path) -> Path:\n    return repo_root /\
+      \ \".mcp.json\"\n\n\ndef _build_consensus_mcp_entry(\n    command: str,\n  \
+      \  args: list[str],\n    state_root: Path,\n    project_root: Path,\n) -> dict:\n\
+      \    \"\"\"Construct the mcpServers[\"consensus-mcp\"] entry.\"\"\"\n    entry:\
+      \ dict = {\"command\": command}\n    if args:\n        entry[\"args\"] = list(args)\n\
+      \    entry[\"env\"] = {\n        \"CONSENSUS_MCP_STATE_ROOT\": str(state_root),\n\
+      \        \"CONSENSUS_MCP_PROJECT_ROOT\": str(project_root),\n    }\n    return\
+      \ entry\n\n\ndef _load_existing_mcp_json(path: Path) -> tuple[dict | None, str\
+      \ | None]:\n    \"\"\"Load `.mcp.json` if present.\n\n    Returns (parsed_data,\
+      \ error_message):\n      - (None, None) if file doesn't exist\n      - (dict,\
+      \ None) on successful parse\n      - (None, \"parse error: ...\") on JSON failure\
+      \ / IO failure\n    \"\"\"\n    if not path.exists():\n        return None,\
+      \ None\n    try:\n        text = path.read_text(encoding=\"utf-8\")\n      \
+      \  parsed = json.loads(text)\n        return parsed, None\n    except json.JSONDecodeError\
+      \ as exc:\n        return None, f\"parse error: {exc}\"\n    except OSError\
+      \ as exc:\n        return None, f\"read error: {exc}\"\n\n\ndef _atomic_write_json(path:\
+      \ Path, data: dict) -> None:\n    \"\"\"Pretty-print JSON, write atomically\
+      \ via tmp+rename.\"\"\"\n    text = json.dumps(data, indent=2, sort_keys=False)\
+      \ + \"\\n\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    tmp = path.with_suffix(path.suffix\
+      \ + \".tmp\")\n    tmp.write_text(text, encoding=\"utf-8\")\n    tmp.replace(path)\n\
+      \n\ndef _write_mcp_json(\n    repo_root: Path,\n    state_root: Path,\n    project_root:\
+      \ Path,\n    command: str,\n    args: list[str],\n    *,\n    force: bool =\
+      \ False,\n) -> tuple[str, Path]:\n    \"\"\"Read existing `.mcp.json`, merge\
+      \ or write consensus-mcp entry,\n    write back. Returns (status, path) where\
+      \ status is one of:\n\n      - \"wrote\"             — fresh file created\n\
+      \      - \"merged\"            — added consensus-mcp into existing config,\n\
+      \                              other servers preserved\n      - \"already-current\"\
+      \   — entry exists and matches; no write\n      - \"blocked-conflict\"  — entry\
+      \ exists but differs; not overwritten\n                              (use force=True\
+      \ to replace just this entry)\n      - \"parse-error:<msg>\" — existing file\
+      \ failed to parse; not modified\n\n    Per iter-0030 converged plan: merge mode\
+      \ is default; conflict mode is\n    skip+warn unless force=True; malformed JSON\
+      \ is skip+warn unconditionally.\n    \"\"\"\n    path = _resolve_mcp_json_path(repo_root)\n\
+      \    existing, error = _load_existing_mcp_json(path)\n\n    desired = _build_consensus_mcp_entry(command,\
+      \ args, state_root, project_root)\n\n    if error is not None:\n        return\
+      \ (f\"parse-error:{error}\", path)\n\n    if existing is None:\n        payload\
+      \ = {\"mcpServers\": {\"consensus-mcp\": desired}}\n        _atomic_write_json(path,\
+      \ payload)\n        return (\"wrote\", path)\n\n    if not isinstance(existing,\
+      \ dict):\n        return (\"parse-error:root is not a JSON object\", path)\n\
+      \n    mcp_servers = existing.get(\"mcpServers\", {})\n    if not isinstance(mcp_servers,\
+      \ dict):\n        return (\"parse-error:mcpServers is not a JSON object\", path)\n\
+      \n    existing_entry = mcp_servers.get(\"consensus-mcp\")\n    if existing_entry\
+      \ == desired:\n        return (\"already-current\", path)\n\n    if existing_entry\
+      \ is not None and existing_entry != desired and not force:\n        return (\"\
+      blocked-conflict\", path)\n\n    # Add or replace consensus-mcp entry; preserve\
+      \ all other servers.\n    mcp_servers[\"consensus-mcp\"] = desired\n    existing[\"\
+      mcpServers\"] = mcp_servers\n    _atomic_write_json(path, existing)\n    return\
+      \ (\"merged\", path)\n\n\ndef _resolve_config_path(args, repo_root: Path) ->\
+      \ Path:\n    \"\"\"Honor --config override; otherwise default to repo_root/.consensus/config.yaml.\"\
+      \"\"\n    if getattr(args, \"config\", None):\n        return Path(args.config).resolve()\n\
+      \    return repo_root / \".consensus\" / \"config.yaml\"\n\n\ndef _detect_available_contributors(repo_root:\
+      \ Path) -> list[str]:\n    \"\"\"Return contributors whose CLIs are resolvable\
+      \ on PATH. Always includes claude.\"\"\"\n    available = [\"claude\"]\n   \
+      \ if shutil.which(\"codex\"):\n        available.append(\"codex\")\n    if shutil.which(\"\
+      gemini\"):\n        available.append(\"gemini\")\n    return available\n\n\n\
+      # --- v1.18.0: contributor selection + detect-guide + instruction provisioning\
+      \ ---\n# (per converged-plan iteration-v1180-contributor-design: decision.wizard_ux,\n\
+      #  decision.detect_guide, the instruction_files block.)\n\n\n# Managed-block\
+      \ sentinels for per-AI instruction files. The em-dash matches the\n# converged\
+      \ plan verbatim; the block between these markers is owned by\n# consensus-mcp\
+      \ and refreshed in place — everything outside is the user's.\nINSTRUCTION_BEGIN_MARKER\
+      \ = \"<!-- consensus-mcp:begin (managed — do not edit inside) -->\"\nINSTRUCTION_END_MARKER\
+      \ = \"<!-- consensus-mcp:end -->\"\n\n# A static reminder appended to each detect+guide\
+      \ block: the wizard NEVER shells\n# out install/auth commands (operator chose\
+      \ detect+guide, not auto-exec).\n_DETECT_GUIDE_REMINDER = \"  (these commands\
+      \ are NOT run for you)\"\n\n\ndef _load_merged_profiles(config_profiles: dict\
+      \ | None) -> dict:\n    \"\"\"Merge the packaged built-in profiles with any\
+      \ operator overlay.\n\n    `config_profiles` is the `contributors.profiles`\
+      \ map from an existing\n    config (or None). Built-ins come from the package;\
+      \ the overlay overrides\n    by name and may add new contributors.\n    \"\"\
+      \"\n    builtin = profiles_mod.load_builtin_profiles()\n    return profiles_mod.merge_profiles(builtin,\
+      \ config_profiles or {})\n\n\ndef _ordered_profile_names(profiles: dict) ->\
+      \ list[str]:\n    \"\"\"Stable display/selection order: claude (host) first,\
+      \ then the rest sorted.\"\"\"\n    names = list(profiles)\n    host = [n for\
+      \ n in names if profiles[n].get(\"kind\") == profiles_mod.KIND_HOST]\n    rest\
+      \ = sorted(n for n in names if n not in host)\n    return sorted(host) + rest\n\
+      \n\ndef _profile_installed(profile: dict) -> bool:\n    \"\"\"True if the contributor\
+      \ is usable on this host.\n\n    host (claude) is the running environment —\
+      \ always available. host_peer\n    (v1.20.0: a same-family blind SWE-reviewer\
+      \ run via the host callback) is\n    likewise always usable on the host — it\
+      \ has no CLI to detect. cli_reviewers\n    are available iff their detect.command\
+      \ resolves on PATH.\n    \"\"\"\n    if profile.get(\"kind\") in (profiles_mod.KIND_HOST,\
+      \ profiles_mod.KIND_HOST_PEER):\n        return True\n    command = (profile.get(\"\
+      detect\") or {}).get(\"command\")\n    if not command:\n        return False\n\
+      \    return shutil.which(command) is not None\n\n\ndef _contributor_option_note(profile:\
+      \ dict) -> str:\n    \"\"\"Plain-language caveat shown next to a contributor\
+      \ in the multi-select.\n\n    A host_peer (v1.20.0: a same-model blind SWE-reviewer\
+      \ run via the host) is a\n    genuinely useful EXTRA opinion, but it runs the\
+      \ SAME model as the host/\n    orchestrator, so it shares the same blind spots\
+      \ and does NOT count as\n    independent cross-AI consensus. Surface that trade-off\
+      \ at selection time so\n    the choice is informed. Empty for real cross-family\
+      \ reviewers + the host.\n    \"\"\"\n    if profile.get(\"kind\") == profiles_mod.KIND_HOST_PEER:\n\
+      \        return (\n            \"optional same-model second opinion — a useful\
+      \ extra check if you \"\n            \"have the tokens to spare, but NOT independent\
+      \ multi-AI consensus \"\n            \"(it uses the same model as the host/orchestrator)\"\
+      \n        )\n    return \"\"\n\n\ndef _select_contributors_interactive(profiles:\
+      \ dict) -> list[str]:\n    \"\"\"Numbered multi-select over merged profiles\
+      \ (no TUI dep).\n\n    Shows '✓ installed' / '✗ missing' per entry, pre-checks\
+      \ installed ones as\n    the default (accepted on empty input), and re-prompts\
+      \ until >=2 are picked.\n    Returns the selected names in display order.\n\n\
+      \    Raises KeyboardInterrupt on Ctrl+C / EOF (caller maps to exit 1).\n   \
+      \ \"\"\"\n    names = _ordered_profile_names(profiles)\n    installed = {n:\
+      \ _profile_installed(profiles[n]) for n in names}\n    prechecked = [n for n\
+      \ in names if installed[n]]\n\n    print(\"Select contributors (>=2 required):\"\
+      )\n    for idx, name in enumerate(names, start=1):\n        status = \"✓ installed\"\
+      \ if installed[name] else \"✗ missing\"\n        mark = \"x\" if installed[name]\
+      \ else \" \"\n        note = _contributor_option_note(profiles[name])\n    \
+      \    suffix = f\"\\n        ↳ {note}\" if note else \"\"\n        print(f\"\
+      \  [{mark}] {idx}. {name} ({status}){suffix}\")\n    default_hint = \",\".join(str(names.index(n)\
+      \ + 1) for n in prechecked) or \"none\"\n\n    while True:\n        try:\n \
+      \           raw = input(\n                f\"Enter comma-separated numbers [default:\
+      \ {default_hint}]: \"\n            ).strip()\n        except EOFError as exc:\n\
+      \            raise KeyboardInterrupt from exc\n\n        if not raw:\n     \
+      \       chosen = list(prechecked)\n        else:\n            chosen = []\n\
+      \            bad = False\n            for tok in (t.strip() for t in raw.split(\"\
+      ,\") if t.strip()):\n                if not tok.isdigit() or not (1 <= int(tok)\
+      \ <= len(names)):\n                    print(f\"  invalid selection {tok!r}\"\
+      , file=sys.stderr)\n                    bad = True\n                    break\n\
+      \                cand = names[int(tok) - 1]\n                if cand not in\
+      \ chosen:\n                    chosen.append(cand)\n            if bad:\n  \
+      \              continue\n\n        if len(chosen) < 2:\n            print(\"\
+      \  please select at least 2 contributors\", file=sys.stderr)\n            continue\n\
+      \        return chosen\n\n\ndef _validate_contributor_selection(selection: list[str],\
+      \ profiles: dict) -> list[str]:\n    \"\"\"Validate a name list against known\
+      \ profiles + enforce min-2.\n\n    Raises WizardError on an unknown name or\
+      \ on <2 selected.\n    \"\"\"\n    unknown = [n for n in selection if n not\
+      \ in profiles]\n    if unknown:\n        raise WizardError(\n            f\"\
+      unknown contributor(s) {unknown}; \"\n            f\"known: {sorted(profiles)}\"\
+      \n        )\n    if len(selection) < 2:\n        raise WizardError(\n      \
+      \      f\"at least 2 contributors are required; got {selection!r}\"\n      \
+      \  )\n    return list(selection)\n\n\ndef _resolve_contributor_selection(\n\
+      \    explicit: str | None, profiles: dict, interactive: bool,\n) -> list[str]:\n\
+      \    \"\"\"Resolve the contributor list (flags-over-prompts).\n\n    If `explicit`\
+      \ (the --contributors flag) is set, it bypasses the prompt and\n    is validated\
+      \ against known profiles + min-2. Otherwise, when interactive,\n    the multi-select\
+      \ prompt runs; non-interactive with no flag is left to the\n    caller's existing\
+      \ default-detection path (returns None to signal that).\n    \"\"\"\n    if\
+      \ explicit is not None:\n        selection = [c.strip() for c in explicit.split(\"\
+      ,\") if c.strip()]\n        return _validate_contributor_selection(selection,\
+      \ profiles)\n    if interactive:\n        return _select_contributors_interactive(profiles)\n\
+      \    return None\n\n\ndef _install_os_key() -> str:\n    \"\"\"Map sys.platform\
+      \ to a profile install[] OS key.\"\"\"\n    if sys.platform == \"win32\":\n\
+      \        return \"windows\"\n    if sys.platform == \"darwin\":\n        return\
+      \ \"darwin\"\n    return \"linux\"\n\n\ndef _detect_and_guide(selection: list[str],\
+      \ profiles: dict) -> None:\n    \"\"\"Print OS-appropriate install/auth guidance\
+      \ for each MISSING cli_reviewer.\n\n    Nothing is executed. Present CLIs and\
+      \ the host (claude) print nothing.\n    \"\"\"\n    os_key = _install_os_key()\n\
+      \    for name in selection:\n        profile = profiles.get(name)\n        if\
+      \ profile is None:\n            continue\n        if profile.get(\"kind\") ==\
+      \ profiles_mod.KIND_HOST:\n            continue\n        command = (profile.get(\"\
+      detect\") or {}).get(\"command\")\n        if not command or shutil.which(command)\
+      \ is not None:\n            continue\n\n        print(f\"{name}: not found on\
+      \ PATH — to enable it:\")\n        install = profile.get(\"install\") or {}\n\
+      \        cmd = install.get(os_key)\n        if cmd is None and os_key == \"\
+      darwin\":\n            cmd = install.get(\"linux\")\n        if cmd:\n     \
+      \       print(f\"  install: {cmd}\")\n        else:\n            print(f\" \
+      \ install: unavailable for {os_key} — see {name} vendor docs\")\n\n        auth\
+      \ = profile.get(\"auth\") or {}\n        if auth.get(\"command\"):\n       \
+      \     print(f\"  auth:    {auth['command']}\")\n        for var in auth.get(\"\
+      env_vars\") or []:\n            print(f\"  auth env (optional): {var}\")\n \
+      \       if auth.get(\"note\"):\n            print(f\"  note:    {auth['note']}\"\
+      )\n        print(_DETECT_GUIDE_REMINDER)\n\n\ndef _vendored_instructions_text()\
+      \ -> str:\n    \"\"\"Return the vendored Karpathy guidelines (contributor_instructions/base.md).\"\
+      \"\"\n    base = Path(__file__).resolve().parent / \"contributor_instructions\"\
+      \ / \"base.md\"\n    return base.read_text(encoding=\"utf-8\")\n\n\ndef _upsert_managed_block(existing:\
+      \ str, block_body: str) -> str:\n    \"\"\"Insert or refresh the managed block\
+      \ in `existing` text. Idempotent.\n\n    If a sentinel pair is present, its\
+      \ contents are replaced and surrounding\n    user content is preserved. If absent,\
+      \ the block is appended. Running twice\n    yields exactly one block.\n    \"\
+      \"\"\n    managed = f\"{INSTRUCTION_BEGIN_MARKER}\\n{block_body.rstrip(chr(10))}\\\
+      n{INSTRUCTION_END_MARKER}\\n\"\n\n    begin = existing.find(INSTRUCTION_BEGIN_MARKER)\n\
+      \    end = existing.find(INSTRUCTION_END_MARKER)\n    if begin != -1 and end\
+      \ != -1 and end > begin:\n        end_full = end + len(INSTRUCTION_END_MARKER)\n\
+      \        # Consume a single trailing newline after the end marker if present\
+      \ so\n        # we don't accumulate blank lines on refresh.\n        if end_full\
+      \ < len(existing) and existing[end_full] == \"\\n\":\n            end_full +=\
+      \ 1\n        return existing[:begin] + managed + existing[end_full:]\n\n   \
+      \ # No existing block: append, separating from prior content with one blank\
+      \ line.\n    if existing and not existing.endswith(\"\\n\"):\n        existing\
+      \ += \"\\n\"\n    if existing.strip():\n        existing += \"\\n\"\n    return\
+      \ existing + managed\n\n\ndef _provision_instruction_files(\n    selection:\
+      \ list[str], profiles: dict, repo_root: Path,\n) -> list[Path]:\n    \"\"\"\
+      Seed/refresh per-AI instruction files for the selected contributors.\n\n   \
+      \ Targets profile.instructions.filename, deduped by filename (codex+kimi both\n\
+      \    → AGENTS.md → written once). Non-destructive: a managed block is inserted\
+      \ or\n    refreshed between sentinels, leaving any user content intact. Idempotent.\n\
+      \n    Returns the list of written file paths (deduped).\n    \"\"\"\n    block_body\
+      \ = _vendored_instructions_text()\n    targets: list[str] = []\n    for name\
+      \ in selection:\n        profile = profiles.get(name)\n        if profile is\
+      \ None:\n            continue\n        filename = (profile.get(\"instructions\"\
+      ) or {}).get(\"filename\")\n        if filename and filename not in targets:\n\
+      \            targets.append(filename)\n\n    written: list[Path] = []\n    for\
+      \ filename in targets:\n        path = repo_root / filename\n        existing\
+      \ = path.read_text(encoding=\"utf-8\") if path.exists() else \"\"\n        new_text\
+      \ = _upsert_managed_block(existing, block_body)\n        if new_text != existing:\n\
+      \            path.parent.mkdir(parents=True, exist_ok=True)\n            path.write_text(new_text,\
+      \ encoding=\"utf-8\")\n        written.append(path)\n    return written\n\n\n\
+      def _prompt(label: str, default: str, valid: list[str] | None = None) -> str:\n\
+      \    \"\"\"Single-line prompt with default. Raises KeyboardInterrupt on Ctrl+C/EOF.\"\
+      \"\"\n    suffix = f\" [{default}]\"\n    if valid:\n        suffix = f\" ({'/'.join(valid)})\"\
+      \ + suffix\n    while True:\n        try:\n            raw = input(f\"{label}{suffix}:\
+      \ \").strip()\n        except EOFError as exc:\n            raise KeyboardInterrupt\
+      \ from exc\n        choice = raw or default\n        if valid and choice not\
+      \ in valid:\n            print(f\"  invalid; expected one of {valid}\", file=sys.stderr)\n\
+      \            continue\n        return choice\n\n\ndef _prompt_int(label: str,\
+      \ default: int) -> int:\n    while True:\n        try:\n            raw = input(f\"\
+      {label} [{default}]: \").strip()\n        except EOFError as exc:\n        \
+      \    raise KeyboardInterrupt from exc\n        if not raw:\n            return\
+      \ default\n        try:\n            return int(raw)\n        except ValueError:\n\
+      \            print(\"  invalid; expected an integer\", file=sys.stderr)\n\n\n\
+      def _apply_cli_overrides(args, base: dict) -> None:\n    \"\"\"Apply explicit\
+      \ CLI flags to `base` config (mutates in place).\n\n    Run before prompting\
+      \ so dependent defaults derive from the operator's\n    expressed intent, not\
+      \ from stale base values (codex-rev-003).\n    \"\"\"\n    if args.contributors\
+      \ is not None:\n        base[\"contributors\"][\"enabled\"] = [c.strip() for\
+      \ c in args.contributors.split(\",\") if c.strip()]\n    if args.workflow is\
+      \ not None:\n        base[\"workflow\"][\"mode\"] = cfg.WORKFLOW_ALIASES.get(args.workflow,\
+      \ args.workflow)\n    if args.convergence is not None:\n        base[\"convergence\"\
+      ][\"rule\"] = args.convergence\n    if args.independence is not None:\n    \
+      \    base[\"workflow\"][\"independence\"] = args.independence\n    if args.finding_disposition\
+      \ is not None:\n        base[\"convergence\"][\"finding_disposition\"] = args.finding_disposition\n\
+      \    if args.snapshot_trigger is not None:\n        base[\"snapshots\"][\"trigger\"\
+      ] = args.snapshot_trigger\n    if args.snapshot_every_iterations is not None:\n\
+      \        base[\"snapshots\"][\"periodic\"][\"every_iterations\"] = args.snapshot_every_iterations\n\
+      \    if args.patch_authoring is not None:\n        base[\"patches\"][\"authoring\"\
+      ] = args.patch_authoring\n    if args.timeout_policy is not None:\n        base[\"\
+      workflow\"][\"timeout_policy\"] = args.timeout_policy\n\n\ndef _which_flags_set(args)\
+      \ -> set[str]:\n    \"\"\"Return the names of dimension flags the user passed\
+      \ explicitly.\"\"\"\n    keys = (\n        \"contributors\", \"workflow\", \"\
+      convergence\", \"independence\",\n        \"finding_disposition\", \"snapshot_trigger\"\
+      , \"snapshot_every_iterations\",\n        \"patch_authoring\", \"timeout_policy\"\
+      ,\n    )\n    return {k for k in keys if getattr(args, k, None) is not None}\n\
+      \n\ndef interactive_overrides(args, repo_root: Path, base: dict, fresh: bool)\
+      \ -> None:\n    \"\"\"Prompt the user for each configurability dimension. Mutates\
+      \ `base` in place.\n\n    Flags already supplied on the command line take precedence\
+      \ (no prompt).\n    When `fresh` is True (no existing config / not reconfigure),\
+      \ missing\n    contributors are auto-suggested from PATH. When False, current\
+      \ base values\n    are the prompt defaults (preserving existing config).\n\n\
+      \    Raises KeyboardInterrupt on Ctrl+C / EOF — caller maps to exit code 1.\n\
+      \    \"\"\"\n    set_flags = _which_flags_set(args)\n\n    # Contributors.\n\
+      \    if \"contributors\" not in set_flags:\n        if fresh:\n            #\
+      \ FRESH path uses the v1.18.0 numbered multi-select over merged\n          \
+      \  # profiles (✓ installed / ✗ missing, min-2 re-prompt, claude\n          \
+      \  # optional) — wired here per codex-rev-001 (the helper existed but\n    \
+      \        # was never reached by the wizard flow).\n            profiles = _load_merged_profiles(\n\
+      \                (base.get(\"contributors\") or {}).get(\"profiles\")\n    \
+      \        )\n            base[\"contributors\"][\"enabled\"] = _select_contributors_interactive(profiles)\n\
+      \        else:\n            # Reconfigure: preserve the existing enabled list\
+      \ as the default via\n            # the comma-separated free-text prompt (unchanged\
+      \ behavior/tests).\n            default = \",\".join(base[\"contributors\"][\"\
+      enabled\"])\n            choice = _prompt(\"Enabled contributors (comma-separated)\"\
+      , default)\n            base[\"contributors\"][\"enabled\"] = [c.strip() for\
+      \ c in choice.split(\",\") if c.strip()]\n    n_contributors = len(base[\"contributors\"\
+      ][\"enabled\"])\n\n    # Workflow mode.\n    if \"workflow\" not in set_flags:\n\
+      \        if fresh:\n            default_workflow = (\n                cfg.WORKFLOW_PROPOSE_CONVERGE\
+      \ if n_contributors >= 2 else cfg.WORKFLOW_POST_REVIEW\n            )\n    \
+      \    else:\n            default_workflow = base[\"workflow\"][\"mode\"]\n  \
+      \      # iter-workflow-abc-introduce: Workflow C (autonomous-execute) added.\n\
+      \        # Letter aliases A/B/C accepted by WORKFLOW_ALIASES; semantic strings\n\
+      \        # remain canonical for the underlying value.\n        choice = _prompt(\n\
+      \            \"Workflow mode (A=propose-converge, B=post-review, C=autonomous-execute,\
+      \ advisory)\",\n            default_workflow,\n            valid=[\n       \
+      \         cfg.WORKFLOW_POST_REVIEW,\n                cfg.WORKFLOW_PROPOSE_CONVERGE,\n\
+      \                cfg.WORKFLOW_ADVISORY,\n                cfg.WORKFLOW_AUTONOMOUS_EXECUTE,\n\
+      \            ],\n        )\n        # Resolve letter alias (A/B/C) to semantic\
+      \ string before storing.\n        base[\"workflow\"][\"mode\"] = cfg.WORKFLOW_ALIASES.get(choice,\
+      \ choice)\n\n    # Convergence rule.\n    if \"convergence\" not in set_flags:\n\
+      \        if fresh:\n            if base[\"workflow\"][\"mode\"] == cfg.WORKFLOW_ADVISORY:\n\
+      \                default_rule = cfg.CONVERGE_ADVISORY\n            elif n_contributors\
+      \ >= 3:\n                default_rule = cfg.CONVERGE_STRICT_MAJ\n          \
+      \  else:\n                default_rule = cfg.CONVERGE_UNANIMOUS\n        else:\n\
+      \            default_rule = base[\"convergence\"][\"rule\"]\n        base[\"\
+      convergence\"][\"rule\"] = _prompt(\n            \"Convergence rule\", default_rule,\
+      \ valid=list(cfg.VALID_CONVERGENCE)\n        )\n\n    # Independence model.\n\
+      \    if \"independence\" not in set_flags:\n        if fresh:\n            default_ind\
+      \ = (\n                cfg.INDEPENDENCE_BLIND if base[\"workflow\"][\"mode\"\
+      ] == cfg.WORKFLOW_PROPOSE_CONVERGE\n                else cfg.INDEPENDENCE_VISIBLE\n\
+      \            )\n        else:\n            default_ind = base[\"workflow\"][\"\
+      independence\"]\n        base[\"workflow\"][\"independence\"] = _prompt(\n \
+      \           \"Independence model\", default_ind, valid=list(cfg.VALID_INDEPENDENCE)\n\
+      \        )\n\n    # Finding disposition. iter-three-gaps: workflow #4 defaults\
+      \ to\n    # weighted-synthesis (per doctrine); workflow #3 keeps the existing\n\
+      \    # all-or-nothing default.\n    if \"finding_disposition\" not in set_flags:\n\
+      \        if fresh:\n            if base[\"workflow\"][\"mode\"] == cfg.WORKFLOW_PROPOSE_CONVERGE:\n\
+      \                default_disp = cfg.DISPOSITION_WEIGHTED_SYNTHESIS\n       \
+      \     else:\n                default_disp = cfg.DISPOSITION_ALL_OR_NOTHING\n\
+      \        else:\n            default_disp = base[\"convergence\"][\"finding_disposition\"\
+      ]\n        base[\"convergence\"][\"finding_disposition\"] = _prompt(\n     \
+      \       \"Finding disposition\", default_disp, valid=list(cfg.VALID_DISPOSITION)\n\
+      \        )\n\n    # Snapshot trigger + cadence.\n    if \"snapshot_trigger\"\
+      \ not in set_flags:\n        default_trig = base[\"snapshots\"][\"trigger\"\
+      ]\n        base[\"snapshots\"][\"trigger\"] = _prompt(\n            \"Snapshot\
+      \ trigger\", default_trig, valid=list(cfg.VALID_SNAPSHOT_TRIGGER)\n        )\n\
+      \    if \"snapshot_every_iterations\" not in set_flags:\n        default_every\
+      \ = base[\"snapshots\"][\"periodic\"][\"every_iterations\"]\n        base[\"\
+      snapshots\"][\"periodic\"][\"every_iterations\"] = _prompt_int(\n          \
+      \  \"Periodic snapshot cadence (iterations)\", default_every\n        )\n\n\
+      \    # Patch authoring.\n    if \"patch_authoring\" not in set_flags:\n    \
+      \    default_auth = base[\"patches\"][\"authoring\"]\n        base[\"patches\"\
+      ][\"authoring\"] = _prompt(\n            \"Patch authoring policy\", default_auth,\
+      \ valid=list(cfg.VALID_PATCH_AUTHORING)\n        )\n\n    # Timeout policy.\n\
+      \    if \"timeout_policy\" not in set_flags:\n        default_to = base[\"workflow\"\
+      ][\"timeout_policy\"]\n        base[\"workflow\"][\"timeout_policy\"] = _prompt(\n\
+      \            \"Timeout policy\", default_to, valid=list(cfg.VALID_TIMEOUT_POLICY)\n\
+      \        )\n\n\ndef build_config_from_flags(args, repo_root: Path, interactive:\
+      \ bool = False) -> dict:\n    \"\"\"Construct a config dict from CLI args +\
+      \ defaults. Validates before return.\n\n    When `--reconfigure` and an existing\
+      \ config is present, the existing config\n    is the starting point; auto-detection\
+      \ and derived defaults are SKIPPED for\n    any dimension that already has a\
+      \ value (codex-rev-001). Explicit CLI flags\n    always override.\n    \"\"\"\
+      \n    config_path = _resolve_config_path(args, repo_root)\n    existing_loaded\
+      \ = False\n    if args.reconfigure and config_path.exists():\n        try:\n\
+      \            base = cfg.load(config_path)\n            existing_loaded = True\n\
+      \        except cfg.ConfigValidationError:\n            base = cfg.default_config()\n\
+      \    else:\n        base = cfg.default_config()\n\n    # Apply explicit CLI\
+      \ flags FIRST so prompts / derived defaults see them.\n    _apply_cli_overrides(args,\
+      \ base)\n    set_flags = _which_flags_set(args)\n\n    if interactive:\n   \
+      \     interactive_overrides(args, repo_root, base, fresh=not existing_loaded)\n\
+      \    else:\n        # Non-interactive: only apply derived defaults when we are\
+      \ NOT\n        # preserving an existing config; in reconfigure mode the existing\n\
+      \        # values must survive any unspecified flag (codex-rev-001).\n     \
+      \   if not existing_loaded:\n            if \"contributors\" not in set_flags:\n\
+      \                base[\"contributors\"][\"enabled\"] = _detect_available_contributors(repo_root)\n\
+      \            n_contributors = len(base[\"contributors\"][\"enabled\"])\n   \
+      \         if \"workflow\" not in set_flags:\n                base[\"workflow\"\
+      ][\"mode\"] = (\n                    cfg.WORKFLOW_PROPOSE_CONVERGE if n_contributors\
+      \ >= 2 else cfg.WORKFLOW_POST_REVIEW\n                )\n            if \"convergence\"\
+      \ not in set_flags:\n                if base[\"workflow\"][\"mode\"] == cfg.WORKFLOW_ADVISORY:\n\
+      \                    base[\"convergence\"][\"rule\"] = cfg.CONVERGE_ADVISORY\n\
+      \                elif n_contributors >= 3:\n                    base[\"convergence\"\
+      ][\"rule\"] = cfg.CONVERGE_STRICT_MAJ\n                else:\n             \
+      \       base[\"convergence\"][\"rule\"] = cfg.CONVERGE_UNANIMOUS\n         \
+      \   if \"independence\" not in set_flags:\n                base[\"workflow\"\
+      ][\"independence\"] = (\n                    cfg.INDEPENDENCE_BLIND if base[\"\
+      workflow\"][\"mode\"] == cfg.WORKFLOW_PROPOSE_CONVERGE\n                   \
+      \ else cfg.INDEPENDENCE_VISIBLE\n                )\n            if \"finding_disposition\"\
+      \ not in set_flags:\n                # iter-three-gaps doctrine: workflow #4\
+      \ defaults to\n                # weighted-synthesis; workflow #3 / advisory\
+      \ keep\n                # all-or-nothing as the default.\n                if\
+      \ base[\"workflow\"][\"mode\"] == cfg.WORKFLOW_PROPOSE_CONVERGE:\n         \
+      \           base[\"convergence\"][\"finding_disposition\"] = cfg.DISPOSITION_WEIGHTED_SYNTHESIS\n\
+      \                else:\n                    base[\"convergence\"][\"finding_disposition\"\
+      ] = cfg.DISPOSITION_ALL_OR_NOTHING\n\n    base[\"project\"][\"name\"] = repo_root.name\n\
+      \    cfg.validate(base)\n    return base\n\n\ndef write_config(config: dict,\
+      \ path: Path) -> None:\n    \"\"\"Atomically write config YAML to path.\"\"\"\
+      \n    path.parent.mkdir(parents=True, exist_ok=True)\n    tmp = path.with_suffix(path.suffix\
+      \ + \".tmp\")\n    tmp.write_text(\n        yaml.safe_dump(config, sort_keys=False,\
+      \ default_flow_style=False),\n        encoding=\"utf-8\",\n    )\n    tmp.replace(path)\n\
+      \n\ndef _config_diff(old: dict, new: dict) -> str:\n    \"\"\"Return a well-formed\
+      \ unified diff of two configs serialized as YAML.\"\"\"\n    a = yaml.safe_dump(old,\
+      \ sort_keys=False, default_flow_style=False).splitlines()\n    b = yaml.safe_dump(new,\
+      \ sort_keys=False, default_flow_style=False).splitlines()\n    # Use lineterm=''\
+      \ + join with '\\n' so control records (---, +++, @@) and\n    # body lines\
+      \ all end with one newline (codex-rev-004).\n    diff_lines = list(difflib.unified_diff(a,\
+      \ b, fromfile=\"existing\", tofile=\"proposed\", lineterm=\"\"))\n    return\
+      \ \"\\n\".join(diff_lines)\n\n\ndef update_gitignore(repo_root: Path) -> bool:\n\
+      \    \"\"\"Add managed paths to .gitignore between bracketed markers. Returns\
+      \ True if changed.\n\n    Idempotent: complete marker pairs are stripped, then\
+      \ a single fresh managed\n    block is appended. If the file contains an OPEN\
+      \ marker without a CLOSE\n    marker (or vice versa), the file is treated as\
+      \ foreign and left untouched\n    — a fresh block is appended but no existing\
+      \ lines are deleted\n    (codex-rev-005).\n    \"\"\"\n    gi = repo_root /\
+      \ \".gitignore\"\n    existing = gi.read_text(encoding=\"utf-8\") if gi.exists()\
+      \ else \"\"\n\n    # Validate that markers are well-ordered: each open is followed\
+      \ by a close\n    # before another open, and there are no orphans. Counts must\
+      \ match AND\n    # ordering must be valid (codex pass-2 rev-005 + codex pass-3\
+      \ rev-001).\n    markers_well_formed = True\n    depth = 0\n    for line in\
+      \ existing.splitlines():\n        if line == GITIGNORE_OPEN_MARKER:\n      \
+      \      depth += 1\n            if depth != 1:\n                markers_well_formed\
+      \ = False\n                break\n        elif line == GITIGNORE_CLOSE_MARKER:\n\
+      \            depth -= 1\n            if depth != 0:\n                markers_well_formed\
+      \ = False\n                break\n    if depth != 0:\n        markers_well_formed\
+      \ = False\n\n    stripped_lines: list[str] = []\n    if markers_well_formed:\n\
+      \        in_block = False\n        for line in existing.splitlines():\n    \
+      \        if line == GITIGNORE_OPEN_MARKER:\n                in_block = True\n\
+      \                continue\n            if line == GITIGNORE_CLOSE_MARKER:\n\
+      \                in_block = False\n                continue\n            if\
+      \ not in_block:\n                stripped_lines.append(line)\n    else:\n  \
+      \      # Malformed (orphan markers, reversed order, nested, etc.):\n       \
+      \ # preserve every existing line; never silently drop content.\n        # BUT\
+      \ we still strip OUR own previously appended exact managed block at\n      \
+      \  # the tail so reruns remain idempotent (codex pass-4 rev-001).\n        raw_lines\
+      \ = existing.splitlines()\n        block_size = len(GITIGNORE_MANAGED_PATHS)\
+      \ + 2  # open + paths + close\n        if (\n            len(raw_lines) >= block_size\n\
+      \            and raw_lines[-block_size] == GITIGNORE_OPEN_MARKER\n         \
+      \   and raw_lines[-1] == GITIGNORE_CLOSE_MARKER\n            and raw_lines[-(block_size\
+      \ - 1):-1] == list(GITIGNORE_MANAGED_PATHS)\n        ):\n            # Drop\
+      \ the trailing managed block + any blank separator immediately\n           \
+      \ # before it so the next append doesn't accumulate blank lines.\n         \
+      \   raw_lines = raw_lines[:-block_size]\n            while raw_lines and raw_lines[-1].strip()\
+      \ == \"\":\n                raw_lines.pop()\n        stripped_lines = raw_lines\n\
+      \n    new_block = [GITIGNORE_OPEN_MARKER, *GITIGNORE_MANAGED_PATHS, GITIGNORE_CLOSE_MARKER]\n\
+      \    new_content_lines = list(stripped_lines)\n    if new_content_lines and\
+      \ new_content_lines[-1].strip() != \"\":\n        new_content_lines.append(\"\
+      \")\n    new_content_lines.extend(new_block)\n    new_content = \"\\n\".join(new_content_lines)\
+      \ + \"\\n\"\n\n    if new_content == existing:\n        return False\n    gi.write_text(new_content,\
+      \ encoding=\"utf-8\")\n    return True\n\n\ndef cmd_init(args) -> int:\n   \
+      \ \"\"\"Implement the `consensus init` command.\"\"\"\n    repo_root = _detect_repo_root()\n\
+      \    config_path = _resolve_config_path(args, repo_root)\n\n    if args.check:\n\
+      \        if not config_path.exists():\n            print(f\"error: {config_path}\
+      \ does not exist\", file=sys.stderr)\n            return 2\n        try:\n \
+      \           loaded = cfg.load(config_path)\n        except cfg.ConfigValidationError\
+      \ as exc:\n            print(f\"error: invalid config: {exc}\", file=sys.stderr)\n\
+      \            return 3\n        print(yaml.safe_dump(loaded, sort_keys=False,\
+      \ default_flow_style=False))\n        return 0\n\n    if args.print_defaults:\n\
+      \        print(yaml.safe_dump(cfg.default_config(), sort_keys=False, default_flow_style=False))\n\
+      \        return 0\n\n    # iter-0040 hot-fix: `--install-claude-code` is a one-time\
+      \ GLOBAL operation\n    # (copy skill + slash command into ~/.claude). It is\
+      \ NOT a per-project\n    # bootstrap, and should not trigger the interactive\
+      \ wizard or write\n    # .consensus/config.yaml / .mcp.json. Short-circuit here,\
+      \ run the install,\n    # and exit. Users who want BOTH the global pack install\
+      \ AND a per-project\n    # bootstrap should run the two commands separately.\n\
+      \    if getattr(args, \"install_claude_code\", False):\n        claude_home\
+      \ = _resolve_claude_home()\n        for line in _install_claude_extensions(claude_home,\
+      \ force=args.force):\n            print(line)\n        return 0\n\n    # gemini\
+      \ pass-3 rev-001: --dry-run no longer forces non-interactive. Users\n    # can\
+      \ preview an interactive session via `consensus init --dry-run`.\n    # Interactivity\
+      \ is suppressed only by --non-interactive or --accept-defaults.\n    # codex\
+      \ pass-4 rev-002: check existing-config guard BEFORE we build / prompt\n   \
+      \ # so exit 4 wins over exit 1 (user abort during interactive) and exit 3\n\
+      \    # (invalid construction).\n    if config_path.exists() and not (args.reconfigure\
+      \ or args.force):\n        print(\n            f\"error: {config_path} already\
+      \ exists. Use --reconfigure to update \"\n            f\"or --force to overwrite.\"\
+      ,\n            file=sys.stderr,\n        )\n        return 4\n\n    interactive\
+      \ = not (args.non_interactive or args.accept_defaults)\n\n    try:\n       \
+      \ new_config = build_config_from_flags(args, repo_root, interactive=interactive)\n\
+      \    except cfg.ConfigValidationError as exc:\n        print(f\"error: invalid\
+      \ config: {exc}\", file=sys.stderr)\n        return 3\n    except KeyboardInterrupt:\n\
+      \        print(\"\\naborted by user\", file=sys.stderr)\n        return 1\n\n\
+      \    if args.reconfigure and config_path.exists():\n        try:\n         \
+      \   existing = cfg.load(config_path)\n            diff = _config_diff(existing,\
+      \ new_config)\n            if diff:\n                print(\"--- reconfigure\
+      \ diff ---\")\n                print(diff)\n                print(\"--- end\
+      \ diff ---\")\n            else:\n                print(\"reconfigure: no changes\"\
+      )\n        except cfg.ConfigValidationError:\n            print(f\"note: existing\
+      \ config at {config_path} is invalid; overwriting\")\n\n    if args.dry_run:\n\
+      \        print(f\"DRY RUN: would write {config_path}\")\n        print(yaml.safe_dump(new_config,\
+      \ sort_keys=False, default_flow_style=False))\n        if not args.no_update_gitignore:\n\
+      \            print(f\"would update .gitignore at {repo_root / '.gitignore'}\
+      \ (managed block)\")\n        else:\n            print(\".gitignore update skipped\
+      \ (--no-update-gitignore)\")\n        if not args.no_mcp_json:\n           \
+      \ mcp_path = _resolve_mcp_json_path(repo_root)\n            print(f\"would write\
+      \ .mcp.json at {mcp_path} (consensus-mcp registered)\")\n        else:\n   \
+      \         print(\".mcp.json write skipped (--no-mcp-json)\")\n        if not\
+      \ args.no_instructions:\n            print(\"would seed per-AI instruction files\
+      \ (managed block)\")\n        else:\n            print(\"instruction-file seeding\
+      \ skipped (--no-instructions)\")\n        return 0\n\n    write_config(new_config,\
+      \ config_path)\n    print(f\"wrote {config_path}\")\n\n    if not args.no_update_gitignore:\n\
+      \        changed = update_gitignore(repo_root)\n        if changed:\n      \
+      \      print(f\"updated .gitignore at {repo_root / '.gitignore'}\")\n      \
+      \  else:\n            print(\".gitignore already up to date\")\n\n    # v1.18.0:\
+      \ detect+guide for missing CLIs and seed per-AI instruction files\n    # for\
+      \ the contributors that ended up enabled. Best-effort: profile load\n    # failures\
+      \ must not abort a successful config write.\n    try:\n        existing_profiles\
+      \ = (new_config.get(\"contributors\") or {}).get(\"profiles\")\n        merged_profiles\
+      \ = _load_merged_profiles(existing_profiles)\n        enabled = (new_config.get(\"\
+      contributors\") or {}).get(\"enabled\") or []\n        _detect_and_guide(enabled,\
+      \ merged_profiles)\n        if not args.no_instructions:\n            for path\
+      \ in _provision_instruction_files(enabled, merged_profiles, repo_root):\n  \
+      \              print(f\"seeded instruction file {path}\")\n        else:\n \
+      \           print(\"instruction-file seeding skipped (--no-instructions)\")\n\
+      \    except (OSError, ValueError) as exc:\n        print(f\"WARN: instruction/detect-guide\
+      \ step skipped: {exc}\", file=sys.stderr)\n\n    # iter-0031: write .mcp.json\
+      \ by default (per iter-0030 converged plan).\n    if not args.no_mcp_json:\n\
+      \        try:\n            command, mcp_args, is_portable = _resolve_mcp_command(args.mcp_command)\n\
+      \        except ValueError as exc:\n            print(f\"WARN: --mcp-command\
+      \ invalid: {exc}; skipping .mcp.json\", file=sys.stderr)\n            return\
+      \ 0\n        state_root = repo_root / \"consensus-state\"\n        project_root\
+      \ = repo_root\n        status, mcp_path = _write_mcp_json(\n            repo_root,\n\
+      \            state_root,\n            project_root,\n            command,\n\
+      \            mcp_args,\n            force=args.mcp_force,\n        )\n     \
+      \   if status == \"wrote\":\n            print(f\"wrote {mcp_path} (consensus-mcp\
+      \ registered)\")\n        elif status == \"merged\":\n            print(f\"\
+      merged consensus-mcp into existing {mcp_path}\")\n        elif status == \"\
+      already-current\":\n            print(f\"consensus-mcp entry in {mcp_path} already\
+      \ current\")\n        elif status == \"blocked-conflict\":\n            print(\n\
+      \                f\"BLOCKED: existing consensus-mcp entry in {mcp_path} differs\
+      \ \"\n                f\"from desired config. Use --mcp-force to replace, or\
+      \ edit \"\n                f\"manually.\",\n                file=sys.stderr,\n\
+      \            )\n        elif status.startswith(\"parse-error:\"):\n        \
+      \    err_detail = status[len(\"parse-error:\"):]\n            print(\n     \
+      \           f\"WARN: {mcp_path} failed to parse as JSON ({err_detail}); \"\n\
+      \                f\"not modifying. Fix the file manually or delete it and re-run.\"\
+      ,\n                file=sys.stderr,\n            )\n        else:\n        \
+      \    print(f\"WARN: unknown mcp-json status {status!r}\", file=sys.stderr)\n\
+      \    else:\n        print(\".mcp.json write skipped (--no-mcp-json)\")\n\n \
+      \   # iter-0040: when invoked from inside a Claude Code session, print\n   \
+      \ # contextual restart guidance so the user knows what to do next.\n    if getattr(args,\
+      \ \"from_claude_code\", False):\n        print()\n        print(\n         \
+      \   \"Detected --from-claude-code: Claude Code must reload to \"\n         \
+      \   \"activate the consensus-mcp server. Either restart Claude \"\n        \
+      \    \"Code in this project (Ctrl-C, then `claude code`), or run \"\n      \
+      \      \"`/mcp` to reload MCP servers if your build supports it.\"\n       \
+      \ )\n\n    return 0\n\n\ndef main(argv: list[str] | None = None) -> int:\n \
+      \   # iter-0040 (per iter-0039 converged plan Q6 bonus): the package also ships\n\
+      \    # a `consensus` console-script alias. When invoked as `consensus init ...`,\n\
+      \    # argv[0] is the literal subcommand \"init\". Strip it so argparse sees\
+      \ the\n    # same arguments as `consensus-init ...`. Any other leading token\
+      \ is left\n    # in place (treated as an unrecognized argument by argparse,\
+      \ which\n    # produces the expected usage error).\n    if argv is None:\n \
+      \       raw = sys.argv[1:]\n    else:\n        raw = list(argv)\n    if raw\
+      \ and raw[0] == \"init\":\n        raw = raw[1:]\n    argv = raw\n\n    parser\
+      \ = argparse.ArgumentParser(\n        prog=\"consensus init\",\n        description=\"\
+      Initialize .consensus/config.yaml for cross-AI workflow\",\n    )\n    parser.add_argument(\"\
+      --check\", action=\"store_true\", help=\"validate existing config and exit\"\
+      )\n    parser.add_argument(\"--print-defaults\", action=\"store_true\", help=\"\
+      print default YAML to stdout\")\n    parser.add_argument(\"--dry-run\", action=\"\
+      store_true\", help=\"show intended config; do not write\")\n    parser.add_argument(\"\
+      --non-interactive\", action=\"store_true\", help=\"no prompts\")\n    parser.add_argument(\"\
+      --accept-defaults\", action=\"store_true\", help=\"non-interactive with defaults\"\
+      )\n    parser.add_argument(\"--reconfigure\", action=\"store_true\", help=\"\
+      re-prompt with existing as defaults; show diff\")\n    parser.add_argument(\"\
+      --force\", action=\"store_true\", help=\"overwrite without prompt\")\n    parser.add_argument(\"\
+      --no-update-gitignore\", action=\"store_true\", help=\"skip .gitignore marker\
+      \ write\")\n    parser.add_argument(\"--no-instructions\", action=\"store_true\"\
+      ,\n                        help=(\"skip seeding per-AI instruction files \"\n\
+      \                              \"(CLAUDE.md/AGENTS.md/GEMINI.md managed block)\"\
+      ))\n    parser.add_argument(\"--config\", default=None, help=\"override config\
+      \ path\")\n\n    # iter-0031: .mcp.json bootstrap flags (per iter-0030 converged\
+      \ plan).\n    parser.add_argument(\"--no-mcp-json\", action=\"store_true\",\n\
+      \                        help=\"skip writing .mcp.json (default: auto-write)\"\
+      )\n    parser.add_argument(\"--mcp-command\", default=None,\n              \
+      \          help=(\"override the command written into .mcp.json. \"\n       \
+      \                       \"Whitespace-split; first token = command, rest = args.\
+      \ \"\n                              \"Default: discover via PATH (consensus-mcp),\
+      \ else \"\n                              \"fall back to sys.executable -m consensus_mcp.server.\"\
+      ))\n    parser.add_argument(\"--mcp-force\", action=\"store_true\",\n      \
+      \                  help=(\"replace existing consensus-mcp entry in .mcp.json\
+      \ \"\n                              \"even when it differs from the desired\
+      \ config. \"\n                              \"Does NOT overwrite other servers\
+      \ in mcpServers.\"))\n\n    # iter-0040: Claude Code bootstrap pack flags (per\
+      \ iter-0039 converged plan).\n    parser.add_argument(\"--install-claude-code\"\
+      , action=\"store_true\",\n                        help=(\"copy shipped skill\
+      \ + slash-command into \"\n                              \"$CLAUDE_HOME or ~/.claude\
+      \ so Claude Code can \"\n                              \"trigger consensus-init\
+      \ from chat. Idempotent; \"\n                              \"use --force to\
+      \ overwrite user-edited content.\"))\n    parser.add_argument(\"--from-claude-code\"\
+      , action=\"store_true\",\n                        help=(\"the caller is a Claude\
+      \ Code skill / slash \"\n                              \"command; print contextual\
+      \ restart guidance \"\n                              \"after init.\"))\n\n \
+      \   parser.add_argument(\"--workflow\", default=None,\n                    \
+      \    choices=[\n                            # Letter aliases (canonical operator\
+      \ vocabulary as of v1.14.4)\n                            \"A\", \"B\", \"C\"\
+      , \"a\", \"b\", \"c\",\n                            # Numeric aliases (deprecated;\
+      \ emit DeprecationWarning)\n                            \"3\", \"4\",\n    \
+      \                        # Semantic strings (canonical internal values)\n  \
+      \                          \"post-review\", \"propose-converge\", \"advisory\"\
+      , \"autonomous-execute\",\n                        ],\n                    \
+      \    help=(\"workflow mode. A=propose-converge (default; \"\n              \
+      \                \"all contributors propose blindly then converge), \"\n   \
+      \                           \"B=post-review (lightweight; one AI implements,\
+      \ \"\n                              \"others review), C=autonomous-execute (overnight;\
+      \ \"\n                              \"v1.14.4 contract, v1.15.0 engine). Numeric\
+      \ \"\n                              \"aliases 3/4 deprecated.\"))\n    parser.add_argument(\"\
+      --contributors\", default=None,\n                        help=\"comma-separated\
+      \ list of enabled contributors\")\n    parser.add_argument(\"--independence\"\
+      , default=None,\n                        choices=list(cfg.VALID_INDEPENDENCE),\n\
+      \                        help=\"independence model\")\n    parser.add_argument(\"\
+      --convergence\", default=None,\n                        choices=list(cfg.VALID_CONVERGENCE),\n\
+      \                        help=\"convergence rule\")\n    parser.add_argument(\"\
+      --finding-disposition\", default=None,\n                        choices=list(cfg.VALID_DISPOSITION),\n\
+      \                        help=\"finding disposition granularity\")\n    parser.add_argument(\"\
+      --snapshot-trigger\", default=None,\n                        choices=list(cfg.VALID_SNAPSHOT_TRIGGER),\n\
+      \                        help=\"snapshot trigger policy\")\n    parser.add_argument(\"\
+      --snapshot-every-iterations\", type=int, default=None,\n                   \
+      \     help=\"periodic snapshot iteration cadence\")\n    parser.add_argument(\"\
+      --patch-authoring\", default=None,\n                        choices=list(cfg.VALID_PATCH_AUTHORING),\n\
+      \                        help=\"patch authoring permission\")\n    parser.add_argument(\"\
+      --timeout-policy\", default=None,\n                        choices=list(cfg.VALID_TIMEOUT_POLICY),\n\
+      \                        help=\"contributor timeout policy\")\n\n    args =\
+      \ parser.parse_args(argv)\n    return cmd_init(args)\n\n\nif __name__ == \"\
+      __main__\":\n    sys.exit(main())\n"
+schema_version: 1
+iteration_id: iteration-init-supplemental-review-2026-05-22

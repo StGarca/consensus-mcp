@@ -184,3 +184,7 @@
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-22T15:12:10Z", "findings_at_boot": 0}
 {"event": "mcp_server_stopped", "timestamp_utc": "2026-05-22T15:47:05Z", "reason": "stdin_eof"}
 {"event": "mcp_server_started", "timestamp_utc": "2026-05-22T15:47:05Z", "findings_at_boot": 0}
+{"event": "mcp_server_stopped", "timestamp_utc": "2026-05-22T20:10:32Z", "reason": "stdin_eof"}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-22T20:11:28Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-22T20:31:43Z", "findings_at_boot": 0}
+{"event": "mcp_server_started", "timestamp_utc": "2026-05-22T20:36:20Z", "findings_at_boot": 0}

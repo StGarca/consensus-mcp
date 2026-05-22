@@ -1,0 +1,110 @@
+iteration_id: iteration-init-supplemental-review-2026-05-22
+reviewer_id: gemini-init-supp-1
+pass_id: gemini-init-supp-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The seed spec correctly establishes the user-facing UI changes
+  but is incomplete on enforcement and backward-compatibility. It overlooks the critical
+  dependency between a `host_peer` (e.g., `claude-swe-reviewer`) and its `host` (`claude`),
+  which could lead to invalid configurations via the `--contributors` flag or on the
+  reconfigure path. It also doesn't fully detail the migration experience for users
+  with existing configurations that become invalid under the new '>=2 independent'
+  rule. My proposed changes ensure validation is robust and centralized, guaranteeing
+  a valid state regardless of the user's entry point (new init, reconfigure, or non-interactive
+  flags) and providing a clear, non-surprising path for users with legacy configs.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 42d9eb07fa8c5616f912e66a31ab04255f43b64cb5efb509788b30174038f9bc
+  output_sha256: 59fb8c7719b585fd890a8562db3286a46187b9092632adae0d647f8cf438a4e7
+  goal_packet_sha256: d0b0135cff9c5a5163ea275c1da00ffbda86a7229428a4da024caa9e36bcd744
+  scope_signature: e29b7e0fa42cdcc649d8b41a59491d06ddbf60e1dbceea2d2ac135b1b2c8527b
+  review_target_path: null
+  review_target_hash: null
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: C:\Users\steve\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: spec-needs-changes
+  rationale_vs_alternatives: The seed spec correctly establishes the user-facing UI
+    changes but is incomplete on enforcement and backward-compatibility. It overlooks
+    the critical dependency between a `host_peer` (e.g., `claude-swe-reviewer`) and
+    its `host` (`claude`), which could lead to invalid configurations via the `--contributors`
+    flag or on the reconfigure path. It also doesn't fully detail the migration experience
+    for users with existing configurations that become invalid under the new '>=2
+    independent' rule. My proposed changes ensure validation is robust and centralized,
+    guaranteeing a valid state regardless of the user's entry point (new init, reconfigure,
+    or non-interactive flags) and providing a clear, non-surprising path for users
+    with legacy configs.
+  deliverable_scope:
+    next_iteration_id: impl-init-contributor-selection-redesign
+    files_in_scope:
+    - consensus_mcp/_init_wizard.py
+    - consensus_mcp/config.py
+    - consensus_mcp/tests/test_init_wizard.py
+    - docs/design-consults/init-contributor-selection-supplemental-review.md
+    files_out_of_scope:
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/contributor_profiles/
+    key_design_decisions:
+    - '**1. Floor Enforcement:** The rule `count(enabled where kind != host_peer)
+      >= 2` MUST be enforced in a single, centralized validation function called from
+      ALL paths: interactive selection, `--contributors` flag resolution, and the
+      reconfigure path.'
+    - '**2. Dependency Enforcement:** A new validation rule MUST be added: a `host_peer`
+      profile can ONLY be enabled if its corresponding `host` profile (matched via
+      the `family` attribute) is also enabled. This prevents orphaned `host_peer`
+      configurations and must be enforced on all paths.'
+    - '**3. Backward Compatibility (Reconfigure Path):** When `consensus init` runs
+      on an existing project, it loads the previous configuration. The new validation
+      rules (floor + dependency) are then applied. If the configuration is now invalid
+      (e.g., previously had `claude` and `claude-swe-reviewer`), the user MUST be
+      gracefully forced into the interactive selection wizard to resolve the issue,
+      with the wizard pre-populated with their old selections and a clear explanatory
+      message.'
+    - '**4. Conditional Prompt Defaulting:** On a fresh init, the conditional prompt
+      for the `host_peer` defaults to ''No''. On the reconfigure path, if the legacy
+      config already had the `host_peer` enabled, the prompt MUST default to ''Yes''
+      to preserve user intent, while still allowing them to opt-out.'
+    - '**5. UI Separation:** The main multi-select list presented to the user will
+      be filtered to exclude all profiles of `kind: host_peer`.'
+    - '**6. Messaging:** The proposed messaging (''no vote at the gate BUT good ideas
+      still used'') is accurate and should be implemented, as it correctly reflects
+      the `host_peer`''s supplementary role in weighted synthesis without being a
+      `gate_eligible` participant.'
+    acceptance_gates:
+    - 'A new or updated test suite for `_init_wizard.py` confirms floor enforcement:
+      `init --contributors=claude,claude-swe-reviewer` fails validation.'
+    - 'New tests confirm dependency enforcement: `init --contributors=gemini,claude-swe-reviewer`
+      fails validation because `claude` is missing.'
+    - 'New tests confirm conditional UI: the `host_peer` follow-up prompt is only
+      shown when `claude` is in the selected set.'
+    - A test for the reconfigure path confirms that a legacy config with `['claude',
+      'claude-swe-reviewer']` triggers a validation failure and forces the user to
+      add another independent contributor.
+    - A test for the reconfigure path confirms that a legacy config with `['claude',
+      'gemini', 'claude-swe-reviewer']` loads, and the conditional prompt for the
+      supplemental reviewer defaults to 'Yes'.
+    - A test confirms that if a user interactively deselects `claude` during a reconfigure,
+      `claude-swe-reviewer` is automatically disabled.
+  risks:
+  - The primary risk is failing to apply the new, stricter validation rules on one
+    of the configuration paths (interactive, non-interactive, reconfigure). This could
+    result in an invalid `consensus.yaml` file that causes a runtime error when the
+    `workflow_engine` is invoked. Centralizing the validation logic is the key mitigation.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T20:36:25Z'
+packet_sha256: 3c0a1f64d0c2c0187d1f468df405f4fdbbc33dd8f3d773c6274d1b6737d92d51

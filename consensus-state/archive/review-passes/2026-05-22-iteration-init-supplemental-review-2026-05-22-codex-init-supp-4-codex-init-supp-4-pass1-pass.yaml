@@ -1,0 +1,157 @@
+iteration_id: iteration-init-supplemental-review-2026-05-22
+reviewer_id: codex-init-supp-4
+pass_id: codex-init-supp-4-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'Prior/differential: the init wizard is only the UX front-end;
+  the real invariant must be profile-kind based and enforced at config validation,
+  because flags, --check, reconfigure, and non-interactive defaults can bypass prompts.
+  Current artifacts make the mechanism falsifiable: _init_wizard.py::_profile_installed
+  treats host_peer as installed, _select_contributors_interactive prechecks installed
+  profiles, and config.py uses n_contributors=len(enabled) for contributor floors.
+  I pick spec-needs-changes because the seed design is directionally right, but as-is
+  leaves ambiguity in reconfigure preservation, unknown/open contributor classification,
+  orphan host_peer rejection, and multiple host_peer mapping. spec-sound-as-is would
+  risk implementing the right first screen while leaving bypass paths and backward-compat
+  surprises.'
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.133.0
+  prompt_sha256: 3dd6d23b9c807f4c69a24dd5d3dfa78d0ba6787b2ad44224593b57472e0e9298
+  output_sha256: 9d06f4e2c5d3facd7c1a8b1c0a75fb13b8a0c6a9fd0cc743bb9225fcc7d30370
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: d0b0135cff9c5a5163ea275c1da00ffbda86a7229428a4da024caa9e36bcd744
+  scope_signature: e29b7e0fa42cdcc649d8b41a59491d06ddbf60e1dbceea2d2ac135b1b2c8527b
+  review_target_path: consensus-state/active/iteration-init-supplemental-review-2026-05-22/review-packet.yaml
+  review_target_hash: 99d2f222adbe9fcb54f92f16558e3bde95e0adb7501120b8bb3babb66954c430
+  mode: proposal
+proposal:
+  selected_target: spec-needs-changes
+  rationale_vs_alternatives: 'Prior/differential: the init wizard is only the UX front-end;
+    the real invariant must be profile-kind based and enforced at config validation,
+    because flags, --check, reconfigure, and non-interactive defaults can bypass prompts.
+    Current artifacts make the mechanism falsifiable: _init_wizard.py::_profile_installed
+    treats host_peer as installed, _select_contributors_interactive prechecks installed
+    profiles, and config.py uses n_contributors=len(enabled) for contributor floors.
+    I pick spec-needs-changes because the seed design is directionally right, but
+    as-is leaves ambiguity in reconfigure preservation, unknown/open contributor classification,
+    orphan host_peer rejection, and multiple host_peer mapping. spec-sound-as-is would
+    risk implementing the right first screen while leaving bypass paths and backward-compat
+    surprises.'
+  deliverable_scope:
+    next_iteration_id: iteration-init-supplemental-review-redesign-2026-05-22
+    files_in_scope:
+    - docs/design-consults/init-contributor-selection-supplemental-review.md
+    - consensus_mcp/_init_wizard.py
+    - consensus_mcp/config.py
+    - tests/test_init_wizard.py
+    - tests/test_init_wizard_contributors.py
+    - tests/test_config.py
+    - tests/test_n_contributor_acceptance.py
+    files_out_of_scope:
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/contributor_profiles/*.yaml
+    - consensus_mcp/dispatch_templates/*
+    - release, package, registry, or install-channel workflows
+    key_design_decisions:
+    - 'Verification boundary: no external distribution/publish/install channel is
+      touched in this iteration; verified via seed spec Scope: _init_wizard.py plus
+      tests, NO engine/gate/convergence changes. Do not make shipped/fixed claims
+      without a later version plus commit/tag.'
+    - 'Floor-enforcement completeness: enforce >=2 independent in all paths: fresh
+      interactive multi-select, --contributors, interactive reconfigure, non-interactive/default
+      detection, --accept-defaults, cfg.load/cfg.validate, and --check. The seed spec
+      names most paths but should explicitly add non-interactive defaults/accept-defaults
+      because build_config_from_flags can derive contributors without prompting.'
+    - 'Floor rule: independent_count = count(enabled where resolved profile kind !=
+      host_peer). Known host_peer profiles never satisfy the floor. Raw count remains
+      useful only for display/uniqueness, not policy gates.'
+    - 'Config-layer classification: resolve enabled names through built-in profiles
+      plus contributors.profiles overlay. To preserve config.py''s open-contributor
+      model, names with no profile should not be rejected solely by the floor; count
+      them as independent unless resolved as host_peer, and leave constructibility
+      failure to engine_factory. Wizard/flag validation can still reject unknown names
+      because it has an explicit merged profile set.'
+    - 'Backward compatibility: an existing v1.18.0 config containing claude-swe-reviewer
+      should not be silently dropped during --reconfigure. Correct behavior: split
+      existing enabled into independent defaults plus a visible supplemental keep/drop
+      prompt; preserve the host_peer only if independent_count >=2 and the matching
+      host family is selected. claude,codex,claude-swe-reviewer remains valid; claude,claude-swe-reviewer
+      is rejected with a clear >=2 independent error.'
+    - 'Default-state correctness: no fresh path should add host_peer by default. Main
+      selection must filter host_peer before installed/prechecked calculation; _detect_available_contributors
+      must filter kind != host_peer; empty response to the supplemental prompt means
+      No. Existing reconfigure preservation is not a fresh default-on, but it must
+      be explicit and diff-visible.'
+    - 'Conditional follow-up: trigger on selected independent host profile plus at
+      least one host_peer profile with the same family. In current claude-only scope
+      this selects claude-swe-reviewer. If claude/the matching host is not selected,
+      no follow-up is shown and any host_peer supplied by --contributors or existing
+      config is invalid as an orphan supplemental.'
+    - 'Multiple host_peer future: family matching is acceptable as a filter, not as
+      a unique selector. If multiple same-family host_peer profiles exist, present
+      a supplemental mini-select defaulting to none, or fail closed with an ambiguity
+      message; never append the first sorted profile silently.'
+    - 'Messaging: the proposed wording is mostly correct, but change ''counts as 0.5''
+      to ''shown as +0.5 in the init summary only'' so users do not infer a gate vote.
+      Keep the explicit language: supplemental, same-model blind spots, no gate vote,
+      cannot close consensus, good ideas still applied on merit under weighted synthesis.'
+    - 'Dynamic detection/defaults: replace hardcoded available contributor lists with
+      merged-profile iteration over installed independents. default_config enabled
+      should derive from built-in independent profiles in stable profile order; adapters
+      may remain optional per config.py''s structural-open model.'
+    - 'Test omissions to add beyond the seed Test impact: --accept-defaults/non-interactive
+      dynamic detection excludes host_peer; config --check rejects host_peer padding;
+      reconfigure with existing host_peer preserves visibly when valid; reconfigure
+      with only one independent plus host_peer fails; --contributors rejects orphan
+      host_peer; multiple same-family host_peers are deterministic; unknown open contributors
+      in config.py do not break structural validation; explicit --contributors claude,codex
+      does not trigger a supplemental prompt or append host_peer.'
+    acceptance_gates:
+    - Fresh interactive prompt lists only independent profiles, prechecks installed
+      independents, excludes claude-swe-reviewer, and rejects fewer than 2 independents.
+    - Fresh interactive claude+codex then empty supplemental response writes only
+      claude,codex; yes appends claude-swe-reviewer and prints a 2.5 reviewer summary.
+    - Fresh interactive selection without claude never shows the supplemental prompt.
+    - --contributors claude,claude-swe-reviewer fails; --contributors claude,codex,claude-swe-reviewer
+      passes; --contributors codex,gemini,claude-swe-reviewer fails as orphan host_peer.
+    - --reconfigure for claude,codex,claude-swe-reviewer surfaces the existing supplemental
+      reviewer and preserves it only through an explicit keep/default-current path;
+      the diff shows any removal.
+    - cfg.validate/cfg.load enforce independent_count for propose-converge, autonomous-execute,
+      strict-majority N=1, and sequential, while preserving raw enabled uniqueness
+      checks.
+    - Non-interactive defaults and --accept-defaults derive installed independent
+      contributors from merged profiles, include installed kimi/custom cli_reviewer
+      profiles, and exclude host_peer.
+    - config.py tests cover a custom overlay host_peer being excluded from independent_count
+      and an unknown open contributor not being rejected merely because no profile
+      exists.
+    - No tests or implementation change engine gate math; host_peer remains supplementary/no
+      gate vote by boundary.
+  risks:
+  - Reconfigure semantics can look like a conflict between opt-in default No and backward-compatible
+    preservation; explicit current-state prompting and diff output must pin the intended
+    behavior.
+  - Importing built-in profile loading into config.py can create coupling; keep the
+    independent-count helper small and avoid importing wizard code.
+  - Counting unknown open contributors as independent preserves the open model but
+    cannot prove real independence until engine construction; document that constructibility
+    remains engine_factory's fail-closed job.
+  - Dynamic default_config will change printed defaults when new built-in independent
+    profiles are added; that is intended, but tests must pin stable ordering.
+  - Multiple host_peer profiles are future-facing; failing closed or showing a mini-select
+    prevents silent wrong selection.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T20:47:01Z'
+packet_sha256: 0c6d7ee0b52f2dc80cb50d6cd17255ef04b3703373d32a5bf000e4923390d244

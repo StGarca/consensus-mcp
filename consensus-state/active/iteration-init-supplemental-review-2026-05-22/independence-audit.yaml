@@ -1,0 +1,47 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T20:36:25Z'
+  event_id: 2026-05-22T20:36:25Z_review_returned_and_sealed_gemini-init-supp-1
+  actor: gemini-init-supp-1
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-init-supplemental-review-2026-05-22-gemini-init-supp-1-gemini-init-supp-1-pass1-pass.yaml
+  sha256: 3c0a1f64d0c2c0187d1f468df405f4fdbbc33dd8f3d773c6274d1b6737d92d51
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T20:42:18Z'
+  event_id: 2026-05-22T20:42:18Z_review_returned_and_sealed_codex-init-supp-3
+  actor: codex-init-supp-3
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-init-supplemental-review-2026-05-22-codex-init-supp-3-codex-init-supp-3-pass1-pass.yaml
+  sha256: af7a973984c6fe580e2598d0b7624d1cda1926a382a1d2df3d3bb84dbf7eb989
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T20:47:01Z'
+  event_id: 2026-05-22T20:47:01Z_review_returned_and_sealed_codex-init-supp-4
+  actor: codex-init-supp-4
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-init-supplemental-review-2026-05-22-codex-init-supp-4-codex-init-supp-4-pass1-pass.yaml
+  sha256: 0c6d7ee0b52f2dc80cb50d6cd17255ef04b3703373d32a5bf000e4923390d244
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true

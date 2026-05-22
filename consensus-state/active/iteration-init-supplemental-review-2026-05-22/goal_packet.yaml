@@ -1,0 +1,105 @@
+schema_version: 1
+pilot_id: iteration-init-supplemental-review-2026-05-22
+goal:
+  summary: >-
+    Workflow A (propose-converge) design consult: VALIDATE the first-init
+    contributor-selection redesign spec for consensus-mcp's `consensus init`
+    wizard BEFORE implementation. The main multi-select should offer the
+    INDEPENDENT in-house AIs only (claude/codex/gemini/kimi); the same-model
+    claude reviewer (host_peer `claude-swe-reviewer`) becomes a CONDITIONAL,
+    opt-in follow-up worth 0.5 (presentational), never a flat sibling.
+  desired_end_state: |
+    Read the seed spec
+    (docs/design-consults/init-contributor-selection-supplemental-review.md)
+    and the CURRENT code it changes:
+      - consensus_mcp/_init_wizard.py — esp. _ordered_profile_names,
+        _profile_installed, _contributor_option_note,
+        _select_contributors_interactive, _validate_contributor_selection,
+        _resolve_contributor_selection, interactive_overrides,
+        build_config_from_flags (lines ~358-500, ~677-840).
+      - consensus_mcp/config.py — any independently-enforced contributor minimum.
+      - consensus_mcp/_engine_factory.py — host_peer routing (~line 169-193);
+        host_peer is built only when host_peer_review_callback is wired.
+      - consensus_mcp/contributor_profiles/*.yaml — claude (kind:host), codex,
+        gemini, kimi (kind:cli_reviewer), claude-swe-reviewer (kind:host_peer).
+
+    OPERATOR DECISIONS ARE FIXED — do NOT relitigate:
+      (1) Host scope = claude-only for now (reuse existing claude-swe-reviewer).
+      (2) The same-model reviewer is a CONDITIONAL opt-in follow-up (default No),
+          NOT an item in the main multi-select.
+      (3) The 0.5 weight is PRESENTATIONAL only (init minimum framing + summary
+          line). The consensus GATE is UNTOUCHED: host_peer stays
+          gate_eligible=false / weight=supplementary, excluded from the
+          cross-family closure invariant (v1.20.0). It gets NO gate vote and
+          cannot close consensus.
+      (4) The floor is ">=2 INDEPENDENT" reviewers:
+          count(enabled where kind != host_peer) >= 2. A host_peer never
+          satisfies the floor.
+      (5) Messaging must convey: supplemental, no gate vote, BUT every good idea
+          it raises is still applied on merit (weighted-synthesis).
+
+    CENTRAL QUESTIONS — validate the design and surface defects; do not
+    relitigate the fixed decisions. Put answers in
+    deliverable_scope.key_design_decisions:
+      1. Floor-enforcement completeness: must the ">=2 independent" rule hold in
+         ALL of {interactive multi-select, --contributors flag, reconfigure
+         path, config.py validation}? Name any path the spec misses. Is the rule
+         correctly specified as count(enabled where kind != host_peer) >= 2?
+      2. Backward-compat: an existing config from v1.18.0 may already list
+         `claude-swe-reviewer` in contributors.enabled. Does excluding host_peer
+         from the NEW main list, plus the floor change, break or surprise the
+         RECONFIGURE path for such a config? What is the correct behavior?
+      3. Conditional follow-up trigger: shown iff claude is selected AND a
+         host-family host_peer profile exists. Is mapping host->host_peer by
+         `family` robust if multiple host_peer profiles exist later? Edge: claude
+         not selected; host_peer present but unusable.
+      4. Default-state correctness: today _profile_installed returns True for
+         kind:host_peer, so it is pre-checked / default-ON. Confirm the redesign
+         makes host_peer strictly opt-in (default No) on EVERY path, with no
+         pre-check that silently re-enables it.
+      5. Messaging accuracy: is the proposed follow-up wording correct and not
+         misleading, especially "no vote at the gate BUT good ideas still used"?
+      6. Test coverage: enumerate the test cases that MUST exist; flag any the
+         spec's "Test impact" section omits.
+
+    State the prior/differential you reason from (convergence-correctness
+    mandate). Set selected_target to EITHER
+    "spec-sound-as-is" OR "spec-needs-changes" and, if the latter, list the
+    concrete changes. Honest structural_abstention beats confabulation.
+  non_goals:
+    - relitigate the fixed operator decisions above
+    - any change to convergence / quorum / closure / gate math
+    - generic (non-claude) host or per-AI swe-reviewer profiles
+    - authoring new host_peer profiles
+    - a GUI/TUI selector
+allowed_files:
+  - consensus_mcp/_init_wizard.py
+  - consensus_mcp/config.py
+  - consensus_mcp/contributor_profiles/
+  - docs/design-consults/init-contributor-selection-supplemental-review.md
+  - consensus_mcp/tests/test_init_wizard.py
+  - consensus_mcp/tests/test_init_wizard_contributors.py
+  - consensus_mcp/tests/test_n_contributor_acceptance.py
+allowed_sections: []
+forbidden_files:
+  - consensus-state/
+max_iterations: 1
+max_patch_size: 4000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: >-
+      converged plan judges the spec sound or lists concrete required changes,
+      answering all 6 central questions (floor enforcement, backward-compat,
+      follow-up trigger, default-state, messaging, test coverage)
+    check: 'manual — orchestrator authors converged-plan.yaml from the proposals'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - no_convergence
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: e29b7e0fa42cdcc649d8b41a59491d06ddbf60e1dbceea2d2ac135b1b2c8527b

@@ -1,0 +1,202 @@
+schema_version: 1
+iteration_id: iteration-init-supplemental-review-2026-05-22
+workflow: propose-converge
+convergence_model: weighted-synthesis
+contributors: [claude, gemini, codex]
+convergence_rule: strict-majority
+selected_target: spec-needs-changes
+
+summary: >-
+  Workflow A design consult on the first-init contributor-selection redesign.
+  UNANIMOUS spec-needs-changes: the core UX design is sound and ships as-is, but
+  the enforcement layer must move from the wizard into config validation, gain
+  orphan-host_peer and open-contributor rules, and the detection paths must be
+  made dynamic. No conflicts between proposals; this is an integration, not a
+  vote winner. Codex abstained on pass 1 (sandbox blocked file access); re-run
+  with the spec + config.py + _init_wizard.py embedded inline produced a
+  substantive proposal.
+
+vote_by_decision:
+  core_ux: {claude: adopt, gemini: adopt, codex: adopt}
+  floor_at_config_layer: {claude: adopt, gemini: adopt, codex: adopt}
+  orphan_host_peer_rejection: {claude: adopt, gemini: adopt, codex: adopt}
+  open_contributor_preservation: {codex: proposed, claude: adopt, gemini: silent}
+  reconfigure_backward_compat: {gemini: proposed, codex: refined, claude: adopt}
+  dynamic_detection: {claude: proposed, codex: adopt, gemini: silent}
+  multiple_host_peer_determinism: {codex: proposed, claude: adopt, gemini: silent}
+  messaging: {claude: ok, gemini: ok, codex: refined}
+
+synthesis:
+  - id: D1-core-ux
+    decision: >-
+      SHIP AS DESIGNED. Main multi-select lists independent profiles only
+      (kind != host_peer); same-model reviewer is a conditional opt-in follow-up;
+      0.5 is presentational; consensus gate untouched (host_peer stays
+      gate_eligible=false, no vote, cannot close).
+    positions: All three adopt. Unanimous and uncontroversial.
+
+  - id: D2-floor-at-config-layer
+    decision: >-
+      The >=2-INDEPENDENT floor is enforced at the config-validation layer
+      (cfg.validate), not only the wizard, because flags, --check,
+      --accept-defaults, reconfigure, and non-interactive default-derivation all
+      bypass the prompt. A single small independent_count helper:
+      count(enabled where resolved kind != host_peer). Applied to the
+      propose-converge (>=2), autonomous-execute (==3), strict-majority (N=1),
+      and sequential gates (config.py:405-461 currently use raw len(enabled)).
+    positions: >-
+      claude found config.py is the authoritative raw-count floor + the
+      autonomous ==3 case; codex named the additional bypass paths
+      (--accept-defaults, --check, cfg.validate) and flagged that
+      build_config_from_flags derives contributors without prompting; gemini
+      pushed centralization. Integrated all.
+
+  - id: D3-open-contributor-preservation
+    decision: >-
+      At the CONFIG layer, names with no resolvable profile are NOT rejected by
+      the floor — count them as independent unless resolved as host_peer; leave
+      constructibility to engine_factory (its fail-closed job). This preserves
+      config.py's open "any AI" model. The WIZARD/flag layer MAY still reject
+      unknown names because it holds the explicit merged profile set. Keep the
+      independent_count helper small; do NOT import wizard code into config.py.
+    positions: >-
+      codex proposed (protects the open-contributor model that backs the "any
+      number of AIs" promise) + named the coupling risk; claude adopts (refines
+      its earlier "config.py resolves kinds" to NOT reject unknowns). gemini
+      silent — no conflict.
+
+  - id: D4-orphan-host_peer-rejection
+    decision: >-
+      A host_peer may be enabled ONLY if its host (matched by the profile
+      `family` field) is also enabled. Enforced on all paths.
+      `--contributors codex,gemini,claude-swe-reviewer` is rejected as an orphan
+      supplemental; `claude,codex,claude-swe-reviewer` is valid;
+      `claude,claude-swe-reviewer` is rejected (1 independent < 2).
+    positions: >-
+      gemini proposed the dependency rule; codex independently confirmed orphan
+      rejection; claude had it implicitly as the follow-up trigger. Promoted from
+      a UI condition to a hard validation rule.
+
+  - id: D5-reconfigure-backward-compat
+    decision: >-
+      A v1.18.0 config listing claude-swe-reviewer must NOT be silently dropped
+      on reconfigure. Behavior: split existing enabled into independent defaults
+      + a visible, diff-visible keep/drop prompt for the supplemental, defaulting
+      to the CURRENT state (Yes if it was enabled). Preserve the host_peer only
+      if independent_count >= 2 AND the matching host family is selected. If the
+      legacy config is now invalid (e.g. [claude, claude-swe-reviewer]), guide
+      the user to add an independent contributor with a clear ">=2 independent"
+      message rather than erroring opaquely.
+    positions: >-
+      gemini proposed force-into-wizard + default-Yes-on-reconfigure; codex
+      refined to explicit current-state prompt + diff visibility + the valid/
+      invalid split. Synthesis adopts both (guide-on-invalid; preserve-on-valid;
+      default current state; diff-visible).
+
+  - id: D6-default-state
+    decision: >-
+      No fresh path adds host_peer by default. Main list filters host_peer BEFORE
+      installed/precheck calculation; _detect_available_contributors filters
+      kind != host_peer; empty supplemental response = No. Reconfigure
+      preservation is explicit + diff-visible (not a fresh default-on).
+    positions: Unanimous.
+
+  - id: D7-conditional-followup-trigger
+    decision: >-
+      Triggered by a SELECTED independent host profile + >=1 same-family
+      host_peer profile. Claude-only scope -> claude-swe-reviewer. If the host is
+      not selected, no follow-up is shown and any host_peer from --contributors
+      or existing config is an invalid orphan (D4).
+    positions: All three converge.
+
+  - id: D8-multiple-host_peer-determinism
+    decision: >-
+      Family match is a FILTER, not a unique selector. If multiple same-family
+      host_peer profiles ever exist, present a supplemental mini-select
+      (default none) or fail closed with an ambiguity message — NEVER silently
+      append the first sorted profile. For the current single-profile case this
+      is a fail-closed guard.
+    positions: codex proposed; claude adopts; gemini silent. Cheap future-proofing.
+
+  - id: D9-dynamic-detection
+    decision: >-
+      Replace hardcoded available-contributor lists with merged-profile
+      iteration over installed independents. default_config() enabled derives
+      from built-in independent profile names in STABLE profile order (tests must
+      pin ordering). Auto-includes installed kimi + any operator custom profile.
+      Honors the "add any AI with no code / any number of AIs" promise.
+    positions: >-
+      Operator-added requirement (2026-05-22), pre-stated in the spec as decision
+      7; codex independently confirmed + added the stable-ordering test
+      requirement; claude proposed. gemini silent.
+
+  - id: D10-messaging
+    decision: >-
+      Reword "counts as 0.5" -> "shown as +0.5 in the init summary only" so users
+      cannot infer a gate vote. Keep: supplemental, same-model blind spots, no
+      gate vote, cannot close consensus, good ideas still applied on merit under
+      weighted synthesis.
+    positions: claude + gemini judged the wording accurate; codex refined the 0.5
+      phrasing. Adopted codex's precision.
+
+not_adopted: []
+
+deferred: []
+
+falsification:
+  empirical_status: proven
+  rationale: >-
+    All decisions are pure-code/config and unit-test-falsifiable. No external/
+    hardware/timing claims. The acceptance gates below are the discriminating
+    tests; "proven" is established when they pass in the implementation iteration.
+
+independent_safeguard:
+  applicable: false
+  rationale: >-
+    No safety-critical / data-loss / irreversible surface. Worst case of a bug is
+    an invalid config caught by cfg.validate (fail-closed) before any run.
+
+decisive_experiment_before_next_iteration: >-
+  Run the union test matrix (D2-D10) red-first, then implement. The single most
+  partitioning test: `--contributors claude,claude-swe-reviewer` MUST fail with a
+  ">=2 independent" error (proves the floor moved to the config layer and counts
+  by kind, not raw length).
+
+acceptance_gates:
+  - Fresh interactive list shows only independent profiles, prechecks installed
+    independents, excludes claude-swe-reviewer, rejects < 2 independents.
+  - claude+codex then empty supplemental -> writes claude,codex; "yes" appends
+    claude-swe-reviewer and prints a "2.5 reviewers" summary.
+  - Interactive selection without claude never shows the supplemental prompt.
+  - --contributors claude,claude-swe-reviewer FAILS; claude,codex,claude-swe-reviewer
+    PASSES; codex,gemini,claude-swe-reviewer FAILS (orphan).
+  - cfg.validate enforces independent_count for propose-converge, autonomous-execute,
+    strict-majority N=1, and sequential, preserving raw-uniqueness checks.
+  - Non-interactive defaults / --accept-defaults derive installed independents
+    from merged profiles, INCLUDE installed kimi/custom cli_reviewers, EXCLUDE
+    host_peer; default_config ordering is stable + pinned.
+  - config.py: a custom-overlay host_peer is excluded from independent_count; an
+    unknown open contributor is NOT rejected merely for lacking a profile.
+  - Reconfigure of claude,codex,claude-swe-reviewer surfaces + preserves the
+    supplemental via an explicit current-state path, diff shows any removal;
+    reconfigure of claude,claude-swe-reviewer fails ">=2 independent".
+  - Multiple same-family host_peers are deterministic (mini-select/fail-closed).
+  - No implementation or test changes engine gate math; host_peer stays
+    supplementary / no gate vote.
+
+files_in_scope:
+  - docs/design-consults/init-contributor-selection-supplemental-review.md
+  - consensus_mcp/_init_wizard.py
+  - consensus_mcp/config.py
+  - consensus_mcp/tests/test_init_wizard.py
+  - consensus_mcp/tests/test_init_wizard_contributors.py
+  - consensus_mcp/tests/test_config.py
+  - consensus_mcp/tests/test_n_contributor_acceptance.py
+files_out_of_scope:
+  - consensus_mcp/_engine_factory.py
+  - consensus_mcp/contributor_profiles/
+  - consensus_mcp/dispatch_templates/
+  - release/package/registry/install-channel workflows
+
+estimated_complexity: medium
+sealed_at_utc: '2026-05-22T20:50:00Z'
