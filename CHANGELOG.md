@@ -1,8 +1,12 @@
 # Changelog
 
-## 1.18.1 - unreleased
+## 1.19.0 - unreleased
 
-_Unreleased._
+In progress: **result logging** — a per-run, schema-versioned results record
+written automatically at iteration close, aggregated into a project-level
+scorecard via `consensus results`. Closes the gap where findings/fixes/
+dispositions weren't aggregatable. Designed via a 4-way Workflow A consult
+(see `docs/design-consults/v1.19.0-result-logging.md`).
 
 ## 1.18.0 - 2026-05-22
 
