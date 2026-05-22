@@ -1,0 +1,48 @@
+audit_log:
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T16:44:32Z'
+  event_id: 2026-05-22T16:44:32Z_review_returned_and_sealed_codex-v1180-1
+  actor: codex-v1180-1
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-v1180-contributor-design-2026-05-22-codex-v1180-1-codex-v1180-pass1-pass.yaml
+  sha256: 219c753a1b70356e7f7f9626013c18b5af2221789a1870fc64efda81462b6baf
+  independence_attestation:
+    method: auto_codex_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T16:46:04Z'
+  event_id: 2026-05-22T16:46:04Z_review_returned_and_sealed_gemini-v1180-1
+  actor: gemini-v1180-1
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-v1180-contributor-design-2026-05-22-gemini-v1180-1-gemini-v1180-pass1-pass.yaml
+  sha256: 5327bc0e53fc1b720f0a8a06b2b65748d039c354852b661fa1951df567b5338c
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true
+- event: review_returned_and_sealed
+  timestamp_utc: '2026-05-22T16:48:03Z'
+  event_id: 2026-05-22T16:48:03Z_review_returned_and_sealed_kimi-v1180-1
+  actor: kimi-v1180-1
+  artifact: consensus-state/archive/review-passes/2026-05-22-iteration-v1180-contributor-design-2026-05-22-kimi-v1180-1-kimi-v1180-pass1-pass.yaml
+  sha256: 170aa8f94fbcf7c28d7fc77776a41dcdd6669d8cdfbfe71db210ffc7d9c13b94
+  independence_attestation:
+    method: auto_gemini_dispatch
+    reviewer_isolated_by_construction: true
+    no_peer_review_visible_at_dispatch: true
+    input_sources:
+    - goal_packet (path passed via --goal-packet)
+    - prompt_template (substituted by _build_prompt)
+    - review_target (path passed via --review-target; may be unspecified)
+    - model (gemini CLI --model flag; no --output-schema enforcement)
+    see_dispatch_provenance_for_input_hashes: true

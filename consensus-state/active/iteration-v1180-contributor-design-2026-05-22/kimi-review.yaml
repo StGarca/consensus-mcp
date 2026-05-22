@@ -1,0 +1,181 @@
+iteration_id: iteration-v1180-contributor-design-2026-05-22
+reviewer_id: kimi-v1180-1
+pass_id: kimi-v1180-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "Differential / prior: I reason from the project's demonstrated\
+  \ safety culture (fail-closed, minimal diff, 'NO behavior change' invariants \u2014\
+  \ e.g., _dispatch_base extraction iter-0009) and the empirical precedent of the\
+  \ kimi wrapper, which successfully adds a 4th contributor by swapping ONLY the CLI\
+  \ invoker while reusing prompt-build, JSON parse, and T6 seal. This proves the abstraction\
+  \ boundary is sound but that the current module structure does not natively support\
+  \ parameterization.\n\nWhy (B) over (A): (A) requires refactoring the battle-tested\
+  \ codex and gemini dispatchers \u2014 both contain safety-critical, platform-specific\
+  \ logic (streaming stall-detection, process-tree termination, Windows extended-path\
+  \ containment, iter-0028 patch validation) that has been hardened across many iterations.\
+  \ Refactoring them into parameterized invokers in the same release that introduces\
+  \ a new feature violates the conservative extraction pattern the project follows.\
+  \ The risk of a regression in the two most-used adapters outweighs the aesthetic\
+  \ benefit of eliminating duplication. Duplication is already heavily reduced by\
+  \ _dispatch_base; what remains in codex/gemini modules is genuinely CLI-specific\
+  \ invocation logic.\n\nWhy (B) over (C): (C) adds indirection without reducing code\
+  \ or risk. It makes profiles the config surface for ALL AIs, but codex/gemini would\
+  \ still need their existing modules \u2014 the profile just carries a 'module' pointer.\
+  \ This leaks implementation detail into config and complicates the factory (profile\
+  \ \u2192 module lookup \u2192 delegate vs generic invoker). It delivers no concrete\
+  \ advantage over (B) while increasing cognitive load.\n\nValue delta of (B): Ships\
+  \ extensibility + kimi-as-profile in v1.18.0 with ZERO change to existing adapter\
+  \ paths, satisfying R8 automatically. Preserves all existing regression tests for\
+  \ codex/gemini unchanged. Formalizes the proven monkeypatch pattern into a first-class,\
+  \ testable adapter."
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: kimi, version 1.44.0
+  model: gemini-2.5-pro
+  prompt_sha256: ae0d49e5c2440378940a78c4359a1218d0c81457da475a06ef26cdf2f04b4a69
+  output_sha256: fb295ee664577e6e9e7c790caaae4b8c6e3b0505811397b07cab9ebe6b988770
+  goal_packet_sha256: c06d958b7cc9b46cf46cb75aca8fd9a678dd3150f17772afab1c4a4ee97c9f57
+  scope_signature: 5bc643efd39d8c9e6806cd685d6d865047aace2eb219344f651ddfeac342e67c
+  review_target_path: consensus-state/active/iteration-v1180-contributor-design-2026-05-22/review-packet.yaml
+  review_target_hash: 8ad701278cb6058d3ea14a4ae60dfcd542014d541d7ddcb75723beb157509e01
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: /mnt/c/Users/steve/Downloads/consensus-mcp/consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: (B) Additive generic ProfileAdapter
+  rationale_vs_alternatives: "Differential / prior: I reason from the project's demonstrated\
+    \ safety culture (fail-closed, minimal diff, 'NO behavior change' invariants \u2014\
+    \ e.g., _dispatch_base extraction iter-0009) and the empirical precedent of the\
+    \ kimi wrapper, which successfully adds a 4th contributor by swapping ONLY the\
+    \ CLI invoker while reusing prompt-build, JSON parse, and T6 seal. This proves\
+    \ the abstraction boundary is sound but that the current module structure does\
+    \ not natively support parameterization.\n\nWhy (B) over (A): (A) requires refactoring\
+    \ the battle-tested codex and gemini dispatchers \u2014 both contain safety-critical,\
+    \ platform-specific logic (streaming stall-detection, process-tree termination,\
+    \ Windows extended-path containment, iter-0028 patch validation) that has been\
+    \ hardened across many iterations. Refactoring them into parameterized invokers\
+    \ in the same release that introduces a new feature violates the conservative\
+    \ extraction pattern the project follows. The risk of a regression in the two\
+    \ most-used adapters outweighs the aesthetic benefit of eliminating duplication.\
+    \ Duplication is already heavily reduced by _dispatch_base; what remains in codex/gemini\
+    \ modules is genuinely CLI-specific invocation logic.\n\nWhy (B) over (C): (C)\
+    \ adds indirection without reducing code or risk. It makes profiles the config\
+    \ surface for ALL AIs, but codex/gemini would still need their existing modules\
+    \ \u2014 the profile just carries a 'module' pointer. This leaks implementation\
+    \ detail into config and complicates the factory (profile \u2192 module lookup\
+    \ \u2192 delegate vs generic invoker). It delivers no concrete advantage over\
+    \ (B) while increasing cognitive load.\n\nValue delta of (B): Ships extensibility\
+    \ + kimi-as-profile in v1.18.0 with ZERO change to existing adapter paths, satisfying\
+    \ R8 automatically. Preserves all existing regression tests for codex/gemini unchanged.\
+    \ Formalizes the proven monkeypatch pattern into a first-class, testable adapter."
+  deliverable_scope:
+    next_iteration_id: iter-v1180-profile-adapter-impl-2026-05-22
+    files_in_scope:
+    - consensus_mcp/contributors/profile_adapter.py
+    - consensus_mcp/contributor_profiles/__init__.py
+    - consensus_mcp/contributor_profiles/kimi.yaml
+    - consensus_mcp/contributor_profiles/codex.yaml
+    - consensus_mcp/contributor_profiles/gemini.yaml
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/_init_wizard.py
+    - consensus_mcp/config.py
+    - .mcp.json
+    - pyproject.toml
+    - consensus_mcp/contributors/base.py
+    - consensus_mcp/tests/test_profile_adapter.py
+    - consensus_mcp/tests/test_init_wizard_profiles.py
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - consensus_mcp/contributors/codex.py
+    - consensus_mcp/contributors/gemini.py
+    - consensus_mcp/contributors/claude.py
+    - consensus-state/
+    key_design_decisions:
+    - "1. Profile schema completeness: The \xA74 schema captures gemini GEMINI_CLI_TRUST_WORKSPACE\
+      \ via the 'env' dict and captures kimi stdin-not-`-p` via 'invoke.transport:\
+      \ stdin' + 'prompt_flag: null'. It does NOT fully capture codex token-auth as\
+      \ an env-var fallback (codex can use OPENAI_API_KEY non-interactively; schema\
+      \ lacks an 'auth.env_vars' list). More critically, the schema is missing two\
+      \ fields required for correct operation: (a) 'model' (string, optional) \u2014\
+      \ needed for accurate dispatch_provenance.model sealing and for CLIs that accept\
+      \ a model flag; (b) 'sealed_filename' (string, default '<name>-review.yaml')\
+      \ \u2014 needed for the T6 local mirror in _seal_via_t6. Also missing: 'invoke.model_flag'\
+      \ (optional string, e.g. '--model') so base_args doesn't have to carry paired\
+      \ values as a flattened list, but this is lower priority since base_args can\
+      \ absorb it."
+    - '2. Provenance correctness: ProfileAdapter.dispatch() shall construct its own
+      provenance dict explicitly, passing it to _build_sealed_packet. The provenance
+      block MUST contain: ''model'' from profile[''model''], ''adapter'': ''profile'',
+      ''contributor'': profile[''name''], ''bin'': profile[''detect''][''command''],
+      plus SHA256 hashes of prompt, output, schema, and goal_packet computed via _sha256_str
+      from _dispatch_base. The attestation_method passed to _build_sealed_packet shall
+      be f''auto_{profile_name}_dispatch'' and attestation_input_sources shall name
+      the profile-driven sources. This isolates provenance from any other adapter
+      and eliminates the monkeypatch bug where kimi inherited gemini-2.5-pro.'
+    - "3. Profile location and registry merge: Built-in profiles ship as YAML files\
+      \ in consensus_mcp/contributor_profiles/ (kimi.yaml, codex.yaml, gemini.yaml).\
+      \ _engine_factory.build_adapters loads all built-in YAMLs into a dict, then\
+      \ overlays config.get('contributors', {}).get('profiles', {}). Resolution order\
+      \ per enabled key: (a) _REGISTERED_ADAPTERS, (b) _BUILTIN_ADAPTERS (claude,\
+      \ codex, gemini), (c) merged built-in + config profiles for kind: cli_reviewer\
+      \ \u2192 instantiate ProfileAdapter(profile_dict). This preserves R8: existing\
+      \ installs with contributors.enabled: [claude, codex, gemini] get the exact\
+      \ same adapter classes as before."
+    - "4. consensus init selection UX: _init_wizard.py builds the available-profile\
+      \ list (built-ins + config profiles). For each, shutil.which(profile.detect.command)\
+      \ determines installed status, shown as '[x] kimi \u2713 installed' or '[ ]\
+      \ kimi \u2717 missing'. Interactive multi-select uses plain CLI numbered toggles\
+      \ (no TUI library). Default selection pre-checks all installed profiles. The\
+      \ wizard re-prompts until \u22652 contributors are selected. Claude is listed\
+      \ as an ordinary option (kind: host, always 'installed'). Non-interactive path:\
+      \ --contributors kim,codex skips the prompt entirely (flags-over-prompts), still\
+      \ runs detect+guide output after writing config."
+    - '5. detect+guide: After writing contributors.enabled, the wizard iterates the
+      selected profiles. For each where shutil.which returns None, it prints: (a)
+      install[sys.platform] if present, else ''No install instructions for this OS'';
+      (b) auth.command and auth.note; (c) a static reminder that these commands are
+      not executed automatically. Nothing is shelled out. OS awareness comes solely
+      from indexing the ''install'' block by sys.platform.'
+    acceptance_gates:
+    - ProfileAdapter instantiates from a profile dict, invokes a fake CLI (stdin and
+      flag transports), strips output per strip_patterns, parses JSON, and seals a
+      YAML with dispatch_provenance.model equal to the profile's model field.
+    - 'build_adapters with contributors.enabled: [kimi, codex] returns a ProfileAdapter
+      for kimi and a CodexAdapter for codex; existing configs with [claude, codex,
+      gemini] return the same types as v1.17.5 (R8 regression gate).'
+    - 'consensus init interactive: selecting 1 contributor triggers re-prompt; selecting
+      2+ writes config; --contributors a,b skips interactive and still prints guide.'
+    - config.validate rejects a profile missing required fields (name, kind, detect.command,
+      invoke.transport) and rejects unknown transport values.
+    - pyproject.toml requires-python is '>=3.11' and .mcp.json uses the consensus-mcp
+      entry point without py -3.11.
+    - 'Monkeypatch test: sys.platform set to ''win32'' + shutil.which returning None
+      causes wizard to print the windows install string; on ''linux'' it prints the
+      linux string.'
+  risks:
+  - 'Profile schema may be insufficient for a future AI with an unusual transport
+    (e.g., REST API instead of CLI subprocess). Mitigation: schema is intentionally
+    versioned and additive; v1.18.0 only needs to cover the 4 known CLIs.'
+  - 'shutil.which can find the wrong binary on a polluted PATH. Mitigation: documented
+    limitation; operator can override via full path in profile config or via KIMI_BIN-style
+    env var convention.'
+  - 'If codex/gemini eventually migrate to profiles in a future (A)-style refactor,
+    the profile schema must be rich enough to express their advanced features (streaming,
+    stall-detection). Mitigation: codex/gemini profile YAMLs designed now as forward-compatible
+    documentation, even though they are not consumed by ProfileAdapter in v1.18.0.'
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T16:48:03Z'
+packet_sha256: 170aa8f94fbcf7c28d7fc77776a41dcdd6669d8cdfbfe71db210ffc7d9c13b94

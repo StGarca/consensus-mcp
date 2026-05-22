@@ -1,0 +1,134 @@
+iteration_id: iteration-v1180-contributor-design-2026-05-22
+reviewer_id: gemini-v1180-1
+pass_id: gemini-v1180-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "My reasoning prioritizes long-term maintainability and\
+  \ incremental risk reduction. The project already has multiple similar-but-different\
+  \ dispatch implementations; adding another bespoke adapter (Option B) would worsen\
+  \ this architectural fragmentation. Option A (Extract-and-parameterize) is the ideal\
+  \ end-state but carries a high immediate risk of destabilizing the battle-tested\
+  \ codex and gemini dispatchers.\n\nOption (C) is the superior strategic choice because\
+  \ it provides the best of both worlds: \n1. It immediately delivers a unified, user-facing\
+  \ configuration model ('profiles') for ALL contributors, meeting the core requirement.\n\
+  2. It isolates risk by leaving the existing, complex codex/gemini dispatchers untouched,\
+  \ merely delegating to them from a profile.\n3. It introduces a generic `ProfileAdapter`\
+  \ for simpler, new contributors like Kimi at low risk.\n4. It creates a clear, incremental\
+  \ migration path towards Option (A): the generic adapter can be enhanced over time,\
+  \ and legacy contributors can be migrated to it simply by removing the 'module'\
+  \ key from their profile, without a big-bang refactor."
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.42.0
+  model: gemini-2.5-pro
+  prompt_sha256: ae0d49e5c2440378940a78c4359a1218d0c81457da475a06ef26cdf2f04b4a69
+  output_sha256: 20af1c5077bc974616467a5e577511b5eef5c9f14afe46c093bc7dee122b7ca0
+  goal_packet_sha256: c06d958b7cc9b46cf46cb75aca8fd9a678dd3150f17772afab1c4a4ee97c9f57
+  scope_signature: 5bc643efd39d8c9e6806cd685d6d865047aace2eb219344f651ddfeac342e67c
+  review_target_path: consensus-state/active/iteration-v1180-contributor-design-2026-05-22/review-packet.yaml
+  review_target_hash: 8ad701278cb6058d3ea14a4ae60dfcd542014d541d7ddcb75723beb157509e01
+  adapter: gemini
+  mode: proposal
+  proposal_schema_path: /mnt/c/Users/steve/Downloads/consensus-mcp/consensus_mcp/dispatch_templates/gemini_proposal_schema.json
+  proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
+proposal:
+  selected_target: '(C) Profile-as-front, modules-as-back: profiles are the single
+    config surface for ALL AIs; codex/gemini profiles declare module=_dispatch_* so
+    the generic adapter delegates; data-only profiles use the built-in invoker.'
+  rationale_vs_alternatives: "My reasoning prioritizes long-term maintainability and\
+    \ incremental risk reduction. The project already has multiple similar-but-different\
+    \ dispatch implementations; adding another bespoke adapter (Option B) would worsen\
+    \ this architectural fragmentation. Option A (Extract-and-parameterize) is the\
+    \ ideal end-state but carries a high immediate risk of destabilizing the battle-tested\
+    \ codex and gemini dispatchers.\n\nOption (C) is the superior strategic choice\
+    \ because it provides the best of both worlds: \n1. It immediately delivers a\
+    \ unified, user-facing configuration model ('profiles') for ALL contributors,\
+    \ meeting the core requirement.\n2. It isolates risk by leaving the existing,\
+    \ complex codex/gemini dispatchers untouched, merely delegating to them from a\
+    \ profile.\n3. It introduces a generic `ProfileAdapter` for simpler, new contributors\
+    \ like Kimi at low risk.\n4. It creates a clear, incremental migration path towards\
+    \ Option (A): the generic adapter can be enhanced over time, and legacy contributors\
+    \ can be migrated to it simply by removing the 'module' key from their profile,\
+    \ without a big-bang refactor."
+  deliverable_scope:
+    next_iteration_id: v1.18.0-contributor-profile-impl
+    files_in_scope:
+    - consensus_mcp/config.py
+    - consensus_mcp/_init_wizard.py
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/contributors/base.py
+    - consensus_mcp/contributors/profile_adapter.py
+    - consensus_mcp/contributor_profiles/claude.yaml
+    - consensus_mcp/contributor_profiles/codex.yaml
+    - consensus_mcp/contributor_profiles/gemini.yaml
+    - consensus_mcp/contributor_profiles/kimi.yaml
+    - consensus_mcp/tests/test_engine_factory.py
+    - consensus_mcp/tests/test_init_wizard.py
+    - consensus_mcp/tests/test_profile_adapter.py
+    files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - consensus_mcp/contributors/codex.py
+    - consensus_mcp/contributors/gemini.py
+    key_design_decisions:
+    - '**1. Profile Schema:** The proposed schema is mostly complete. It will be augmented
+      with two fields: `provenance.model_name` (string) to ensure accurate data is
+      sealed, and `install.darwin` (string) for macOS install instructions. The `env`
+      block correctly handles Gemini''s `GEMINI_CLI_TRUST_WORKSPACE`, and the `invoke.transport`
+      field handles Kimi''s stdin requirement.'
+    - '**2. Provenance Correctness:** A new generic `ProfileAdapter` will read the
+      `provenance.model_name` field from the contributor''s profile and pass it to
+      `_dispatch_base._build_sealed_packet`. This ensures the sealed artifact contains
+      the correct model information, directly addressing the bug in the Kimi wrapper
+      precedent.'
+    - '**3. Profile Loading:** `_engine_factory.py` will be updated to load built-in
+      profiles from a new `consensus_mcp/contributor_profiles/` directory. It will
+      then merge these with custom profiles from `config.contributors.profiles`. The
+      `build_adapters` function will inspect the final profile for a `module` key.
+      If present, it delegates instantiation to the specified legacy adapter class;
+      otherwise, it instantiates the new generic `ProfileAdapter`.'
+    - '**4. `consensus init` UX:** `_init_wizard.py` will be modified to present an
+      interactive multi-select list of all available contributors (built-in and custom).
+      It will use `shutil.which` to indicate which are already installed and enforce
+      a minimum selection of two. This interaction will be skipped if the `--contributors`
+      flag is provided.'
+    - '**5. Detect-and-Guide:** After selection, for any chosen contributor whose
+      CLI is not found on the system `PATH`, the wizard will use `sys.platform` to
+      look up the OS-specific (`windows`, `linux`, `darwin`) `install` command and
+      the `auth` command from the profile, and print them as non-executable instructions
+      for the user.'
+    acceptance_gates:
+    - Running `consensus init` in a new repo interactively prompts to select from
+      claude, codex, gemini, and kimi.
+    - 'After selecting `gemini` and `kimi`, the generated `.consensus/config.yaml`
+      contains `contributors: {enabled: [gemini, kimi]}`.'
+    - Running an iteration successfully dispatches both Gemini and Kimi.
+    - 'The sealed `kimi-review.yaml` artifact contains `dispatch_provenance.model:
+      ''kimi-code/kimi-for-coding (managed, +thinking)''`.'
+    - On a machine where `kimi` is not installed, `consensus init` prints the correct
+      `pipx install` and `kimi login` commands.
+    - An existing project with a pre-v1.18.0 config runs without change.
+    - Unit tests for the `ProfileAdapter` pass for both `stdin` and `flag` transport
+      modes using a mock subprocess.
+  risks:
+  - The logic in `_engine_factory.build_adapters` for merging profiles and deciding
+    whether to delegate or use the generic adapter is new and complex; it must be
+    covered by robust unit tests to prevent regressions.
+  - The generic invoker within `ProfileAdapter` must correctly handle subtle differences
+    in CLI behaviors (e.g., exit codes, stderr noise) beyond what is defined in the
+    profile. Initial implementation should be conservative and tested against real
+    CLIs.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T16:46:04Z'
+packet_sha256: 5327bc0e53fc1b720f0a8a06b2b65748d039c354852b661fa1951df567b5338c

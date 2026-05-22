@@ -1,0 +1,83 @@
+schema_version: 1
+pilot_id: iteration-v1180-contributor-design-2026-05-22
+goal:
+  summary: >-
+    Workflow A (propose-converge) design consult: how to implement extensible,
+    config-driven AI contributor profiles in consensus-mcp v1.18.0 so the panel
+    can grow beyond claude/codex/gemini/kimi WITHOUT new code, with interactive
+    selection at `consensus init` and OS-aware detect-and-guide setup.
+  desired_end_state: |
+    Read the embedded seed design spec
+    (docs/design-consults/v1.18.0-contributor-selection-design.md) and the
+    embedded current code (contributors/base.py = the adapter interface,
+    _engine_factory.py = the registry, _dispatch_base.py = the shared dispatch
+    core all reviewers would reuse, kimi_wrapper_reference.py = the parent
+    project's monkeypatch precedent that already parameterizes the invoke step).
+
+    Operator decisions are FIXED (do not relitigate): config-driven profiles
+    (not per-AI Python adapters); detect+guide setup (no auto-exec); claude is
+    fully optional (strict any-AI/min-2); cross-platform + Python >=3.11.
+
+    THE CENTRAL QUESTION — pick ONE candidate and justify vs the others:
+      (A) Extract-and-parameterize: pull the shared core into _dispatch_base and
+          make codex/gemini/kimi/new-AIs thin profile-driven invokers over it.
+      (B) Additive generic ProfileAdapter: leave codex/gemini modules as-is; add
+          a ProfileAdapter (reusing _dispatch_base for prompt-build + T6 seal)
+          that handles stdin/flag invoke + parse for kimi and new AIs.
+      (C) Profile-as-front, modules-as-back: profiles are the single config
+          surface for ALL AIs; codex/gemini profiles declare module=_dispatch_*
+          so the generic adapter delegates; data-only profiles use the built-in
+          invoker.
+    The author's lean is (B) for v1.18.0 with (A) as a tracked follow-up — refute
+    or confirm.
+
+    Also address, concretely, in your deliverable_scope.key_design_decisions:
+      1. Profile schema completeness — does the §4 schema capture codex
+         token-auth, gemini GEMINI_CLI_TRUST_WORKSPACE, and kimi stdin-not-`-p`?
+         Name any missing field.
+      2. Provenance correctness — the parent kimi wrapper seals
+         dispatch_provenance.model="gemini-2.5-pro" (wrong). A real ProfileAdapter
+         MUST seal accurate model/adapter provenance. How?
+      3. Where profiles live (packaged built-ins vs config `contributors.profiles`)
+         and how _engine_factory.build_adapters merges + instantiates them.
+      4. `consensus init` selection UX: interactive multi-select, min-2
+         enforcement, claude-optional, non-interactive `--contributors` flag.
+      5. detect+guide: OS-aware install/auth output for missing CLIs (no exec).
+
+    State the differential/prior you reason from (per the convergence-correctness
+    mandate). pick ONE of A/B/C as selected_target. Honest structural_abstention
+    beats confabulation if context is insufficient.
+  non_goals:
+    - relitigate the fixed operator decisions above
+    - auto-executing installs or auth
+    - a GUI/TUI selector
+allowed_files:
+  - consensus_mcp/contributors/base.py
+  - consensus_mcp/_engine_factory.py
+  - consensus_mcp/_dispatch_base.py
+  - consensus_mcp/contributors/
+  - consensus_mcp/_init_wizard.py
+  - consensus_mcp/config.py
+  - consensus_mcp/contributor_profiles/
+  - .mcp.json
+  - pyproject.toml
+allowed_sections: []
+forbidden_files:
+  - consensus-state/
+max_iterations: 1
+max_patch_size: 4000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: converged plan picks one integration option (A/B/C) with rationale + schema/provenance/UX decisions
+    check: 'manual — orchestrator authors converged-plan.yaml from the 3 proposals'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - no_convergence
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 5bc643efd39d8c9e6806cd685d6d865047aace2eb219344f651ddfeac342e67c

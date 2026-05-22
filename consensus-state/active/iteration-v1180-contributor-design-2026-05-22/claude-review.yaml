@@ -1,0 +1,77 @@
+iteration_id: iteration-v1180-contributor-design-2026-05-22
+reviewer_id: claude-v1180-1
+pass_id: claude-v1180-pass1
+mode: proposal
+note: >-
+  Orchestrator's blind round-1 proposal, authored before any peer output was
+  read (peers dispatched to background first; independence is by visibility,
+  not temporal order).
+differential_prior: >-
+  My prior: consensus-mcp's dispatchers are not generic plumbing — they are
+  accreted, battle-tested quirk-handlers (streaming, stall-detection, retries,
+  CRLF base-sha, gemini trust-workspace, codex native --output-schema, kimi
+  stdin-not-`-p`, backpressure modeling). Hard-won correctness, refuted twice
+  on-device elsewhere. So the cost of REWRITING them (option A) is a regression
+  risk far larger than the architectural tidiness it buys. BUT: the wizard's
+  selection + detect-and-guide needs UNIFORM per-AI metadata for ALL four AIs
+  (including codex/gemini), not just the new ones — so a design where only
+  kimi/new-AIs get profiles (pure B) creates a two-concept split (profiles for
+  new, a separate descriptor for built-ins). The kimi wrapper proves invoke-
+  parameterization over the shared core works without touching it.
+selected_target: >-
+  C (profile-as-front, modules-as-back) — but scoped to be as safe as B:
+  profiles are the single uniform config surface for ALL AIs (so the wizard,
+  detect+guide, and "add an AI" are uniform), while codex/gemini profiles carry
+  a `module: _dispatch_codex|_dispatch_gemini` delegation field so their
+  battle-tested modules are reused UNCHANGED. Data-only profiles (kimi + future
+  AIs) are dispatched by a new generic ProfileAdapter over _dispatch_base. This
+  gets B's risk profile (no rewrite of codex/gemini) with C's single-concept
+  uniformity (the operator's "grow without code" goal).
+rationale_vs_alternatives: >-
+  vs A (extract-and-parameterize): A is the cleanest end-state but rewrites
+  _dispatch_codex/_dispatch_gemini — the highest-correctness, most-tested code in
+  the repo — for marginal benefit; reject for v1.18.0, keep as a tracked
+  follow-up once the ProfileAdapter has soaked. vs pure B (additive adapter,
+  built-ins untouched and profile-less): B leaves codex/gemini without profiles,
+  but the wizard MUST list+detect+guide them uniformly, forcing a second
+  metadata concept — drift. C with a `module` delegation field removes that
+  split at the cost of one indirection in build_adapters, which is cheap and
+  testable. Net value delta: uniform "add an AI = add a profile" surface
+  (operator's explicit goal) without rewriting tested dispatchers.
+deliverable_scope:
+  next_iteration_id: iteration-v1180-contributor-impl
+  files_in_scope:
+    - consensus_mcp/contributor_profiles/{claude,codex,gemini,kimi}.yaml   # new built-ins (packaged in wheel like dispatch_templates)
+    - consensus_mcp/contributors/profile_adapter.py                        # new generic ProfileAdapter over _dispatch_base
+    - consensus_mcp/_engine_factory.py                                     # merge built-in + config profiles; route by `module` else ProfileAdapter
+    - consensus_mcp/_init_wizard.py                                        # interactive multi-select + detect+guide + --contributors flag
+    - consensus_mcp/config.py                                              # contributors.profiles schema + validate; requires-python note
+    - consensus_mcp/_contributor_profiles.py                              # loader/merger/validator for profiles (or fold into config)
+    - .mcp.json                                                            # cross-platform: drop py -3.11 -> consensus-mcp entry point
+    - pyproject.toml                                                       # requires-python >=3.11; package contributor_profiles/*.yaml
+    - tests for each of the above
+  files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py    # unchanged (delegated to via profile.module)
+    - consensus_mcp/_dispatch_gemini.py   # unchanged
+  key_design_decisions:
+    - "Profile schema additions beyond spec §4: `model` (for accurate provenance), `id_prefix` (the rev-id regex, e.g. codex-rev/gemini-rev/kimi-rev), `output.schema_enforced` (codex enforces JSON natively; gemini/kimi do not), and `module` (optional delegation to a bespoke dispatcher). §4 already covers gemini trust-workspace (env), kimi stdin (transport=stdin, prompt_flag=null), codex token-auth (auth.command)."
+    - "Provenance correctness: ProfileAdapter seals dispatch_provenance.adapter=profile.name and model=profile.model (or a version probe), NEVER a hardcoded 'gemini' — this is the concrete fix for the parent wrapper's gemini-2.5-pro mislabel."
+    - "Profiles live as packaged built-ins consensus_mcp/contributor_profiles/*.yaml (shipped in the wheel via pyproject package-data, mirroring dispatch_templates), merged with user .consensus/config.yaml contributors.profiles (config overrides built-in by name)."
+    - "_engine_factory.build_adapters: for each enabled contributor, resolve its profile; if profile.module is set, delegate to that dispatcher module; else instantiate ProfileAdapter(profile). claude stays the in-process host adapter."
+    - "Wizard: numbered multi-select (no TUI dependency), pre-check shutil.which-detected CLIs, loop until >=2 selected, claude optional, write contributors.enabled; --contributors a,b,c bypasses the prompt (flags-over-prompts)."
+    - "detect+guide: OS-aware (sys.platform) print of profile.install[os] + profile.auth.command + note for each MISSING selected CLI; nothing executed."
+    - "Cross-platform: committed .mcp.json -> consensus-mcp entry point; requires-python >=3.11; reconcile README python range."
+  acceptance_gates:
+    - "Profile schema validation rejects malformed profiles (missing required fields, bad transport enum, missing OS install keys)."
+    - "ProfileAdapter invoke against a fake CLI (stdin AND flag transports): env injected, output stripped+parsed, T6 seal carries ACCURATE adapter+model provenance."
+    - "build_adapters routes codex/gemini to bespoke modules (delegation) and kimi to ProfileAdapter; existing contributors.enabled configs build unchanged."
+    - "Wizard: min-2 enforced; --contributors non-interactive path; config write correct."
+    - "detect+guide emits correct per-OS lines for missing CLIs, silence for present ones (monkeypatch sys.platform + shutil.which)."
+    - "Full suite green incl. a kimi 4-reviewer end-to-end smoke (gated, optional in CI)."
+risks:
+  - "build_adapters delegation indirection could mis-route if a profile both sets `module` and looks data-only — validate mutual exclusivity."
+  - "Packaging: contributor_profiles/*.yaml must be added to pyproject package-data or pip-installed users get no built-ins (mirror the dispatch_templates packaging that already works)."
+  - "Profile schema may not capture every future CLI quirk; mitigate with the `module` escape hatch (delegate to a bespoke adapter when a quirk exceeds the schema)."
+  - "Wizard interactivity must degrade cleanly in non-TTY/CI (the --contributors flag + a non-interactive guard)."
+estimated_complexity: medium
+structural_abstention: false

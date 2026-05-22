@@ -1,0 +1,177 @@
+iteration_id: iteration-v1180-contributor-design-2026-05-22
+reviewer_id: codex-v1180-1
+pass_id: codex-v1180-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: "Differential/prior: v1.18.0 is primarily an extension-surface\
+  \ release, not a dispatcher rewrite. The highest-value move is to make new data-only\
+  \ contributors possible while preserving the already battle-tested codex/gemini\
+  \ dispatch paths. Candidate B best matches that prior: it ships the open profile\
+  \ mechanism and kimi/new-AI path with the smallest behavioral blast radius. A is\
+  \ the cleanest long-term architecture, but it couples the feature to a risky refactor\
+  \ of codex/gemini streaming, watchdog, retry, parse, and seal behavior. C gives\
+  \ a nicer unified config story than B, but it introduces two execution modes behind\
+  \ one generic adapter surface, which raises provenance, error-reporting, and migration\
+  \ complexity without being required to satisfy v1.18.0. I confirm the author's lean:\
+  \ implement B now, but make the profile schema and factory merge rules compatible\
+  \ with later A/C evolution. Verification-first note: the only external install/auth\
+  \ strings in evidence are illustrative and explicitly unverified in docs/design-consults/v1.18.0-contributor-selection-design.md\
+  \ \xA74, so the implementation must not ship invented package-manager commands until\
+  \ each built-in profile cites a verified source or marks guidance unavailable. Mechanism\
+  \ claims here are falsifiable from the embedded artifacts except real CLI install/auth\
+  \ details; the external refuting observation for any built-in install/auth command\
+  \ is the vendor CLI documentation or package registry showing that the command does\
+  \ not install/authenticate that CLI on the named OS."
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.132.0
+  prompt_sha256: c940b5f53fc2dfec77e29190742097422aad8410e3d1487a0cc6cd8d8d228803
+  output_sha256: 8b9b1efa8c80071498b51e57dbdf0a62d1fa08958dc2e11e16afc156ce0f4469
+  schema_sha256: 8e4724d7cb56d8f96e193e59383244fe53b733f80d32af5f724a3da5e30b448c
+  goal_packet_sha256: c06d958b7cc9b46cf46cb75aca8fd9a678dd3150f17772afab1c4a4ee97c9f57
+  scope_signature: 5bc643efd39d8c9e6806cd685d6d865047aace2eb219344f651ddfeac342e67c
+  review_target_path: consensus-state/active/iteration-v1180-contributor-design-2026-05-22/review-packet.yaml
+  review_target_hash: 8ad701278cb6058d3ea14a4ae60dfcd542014d541d7ddcb75723beb157509e01
+  mode: proposal
+proposal:
+  selected_target: B
+  rationale_vs_alternatives: "Differential/prior: v1.18.0 is primarily an extension-surface\
+    \ release, not a dispatcher rewrite. The highest-value move is to make new data-only\
+    \ contributors possible while preserving the already battle-tested codex/gemini\
+    \ dispatch paths. Candidate B best matches that prior: it ships the open profile\
+    \ mechanism and kimi/new-AI path with the smallest behavioral blast radius. A\
+    \ is the cleanest long-term architecture, but it couples the feature to a risky\
+    \ refactor of codex/gemini streaming, watchdog, retry, parse, and seal behavior.\
+    \ C gives a nicer unified config story than B, but it introduces two execution\
+    \ modes behind one generic adapter surface, which raises provenance, error-reporting,\
+    \ and migration complexity without being required to satisfy v1.18.0. I confirm\
+    \ the author's lean: implement B now, but make the profile schema and factory\
+    \ merge rules compatible with later A/C evolution. Verification-first note: the\
+    \ only external install/auth strings in evidence are illustrative and explicitly\
+    \ unverified in docs/design-consults/v1.18.0-contributor-selection-design.md \xA7\
+    4, so the implementation must not ship invented package-manager commands until\
+    \ each built-in profile cites a verified source or marks guidance unavailable.\
+    \ Mechanism claims here are falsifiable from the embedded artifacts except real\
+    \ CLI install/auth details; the external refuting observation for any built-in\
+    \ install/auth command is the vendor CLI documentation or package registry showing\
+    \ that the command does not install/authenticate that CLI on the named OS."
+  deliverable_scope:
+    next_iteration_id: iteration-v1180-profile-adapter
+    files_in_scope:
+    - consensus_mcp/contributor_profiles/*.yaml
+    - consensus_mcp/contributors/profile.py
+    - consensus_mcp/_engine_factory.py
+    - consensus_mcp/config.py
+    - consensus_mcp/_init_wizard.py
+    - consensus_mcp/_dispatch_base.py
+    - consensus_mcp/_dispatch_codex.py
+    - consensus_mcp/_dispatch_gemini.py
+    - consensus_mcp/dispatch_templates/*
+    - tests/test_profile_adapter.py
+    - tests/test_engine_factory_profiles.py
+    - tests/test_init_wizard_contributors.py
+    - tests/test_config_profiles.py
+    - .mcp.json
+    - pyproject.toml
+    - README.md
+    files_out_of_scope:
+    - Rewriting codex/gemini dispatchers into a fully parameterized shared core
+    - Changing the parent project's kimi monkeypatch wrapper
+    - Auto-installing CLIs or running auth commands
+    - Publishing/distribution changes beyond already verified project-local packaging
+      metadata
+    key_design_decisions:
+    - 'Use candidate B: existing ClaudeAdapter, CodexAdapter, and GeminiAdapter remain
+      the default constructors; add ProfileAdapter only for profile-backed cli_reviewer
+      contributors such as kimi and user-defined AIs.'
+    - "Profile schema completeness: \xA74 captures kimi stdin-not--p via invoke.transport=stdin\
+      \ and prompt_flag=null, captures gemini GEMINI_CLI_TRUST_WORKSPACE via env,\
+      \ and captures generic flag transport. It is missing explicit auth/provenance\
+      \ fields for codex token auth and model identity. Add auth.kind/auth.env_vars/auth.command/auth.note\
+      \ and provenance.model/provenance.model_source/provenance.adapter fields. Do\
+      \ not log token values."
+    - 'Provenance correctness: ProfileAdapter builds dispatch_provenance from the
+      resolved profile, not copied module defaults: contributor name, adapter=''profile'',
+      profile name/version/source, invoke transport, binary/version probe when available,
+      effective model label from profile.provenance.model or a configured env/config
+      source, prompt/output/schema/goal hashes, and sealed filename. Kimi must seal
+      model as the managed kimi profile label, not gemini-2.5-pro.'
+    - Profiles live in packaged built-ins under consensus_mcp/contributor_profiles
+      and user overrides/additions live under config contributors.profiles. _engine_factory.build_adapters
+      merges built-ins first, then config profiles by name; config profiles may add
+      names and may override built-in profile fields only by explicit same-name override.
+      Existing contributors.enabled keys claude/codex/gemini resolve to existing adapters
+      unless a profile-only custom key is enabled.
+    - 'Instantiation rule: build_adapters reads contributors.enabled plus contributors.adapters.
+      If key resolves to built-in adapter class, instantiate existing class with adapter_config.
+      Else if key resolves to merged profile kind=cli_reviewer, instantiate ProfileAdapter(profile,
+      adapter_config). kind=host is reserved for claude/in-process hosts and must
+      not silently become a subprocess adapter.'
+    - 'consensus init UX: interactive multi-select over merged profiles plus built-in
+      host entries, showing installed/missing status from detect.command when applicable.
+      Enforce at least two selected contributors. Claude is optional and selected
+      only if the user chooses it or defaults include it. Non-interactive --contributors
+      a,b,c skips prompting, validates known names and min-2, writes contributors.enabled,
+      and still emits detect+guide.'
+    - "Detect+guide: use shutil.which for detect.command, select install guidance\
+      \ by sys.platform/os.name, print install/auth/note for missing or unauthenticated\
+      \ contributors, and never execute install or login commands. Because \xA74 install\
+      \ commands are illustrative, built-in profile install guidance must be populated\
+      \ only after verification with inline source comments or explicit unavailable\
+      \ guidance."
+    - 'Completion scope: include the small cross-platform metadata updates requested
+      by R7 in the same iteration: committed .mcp.json should use the consensus-mcp
+      entry point rather than Windows-only py -3.11, pyproject requires-python becomes
+      >=3.11, and README Python support text is reconciled. These have clear gates
+      and no named blocker.'
+    acceptance_gates:
+    - A config with contributors.enabled=[codex,gemini] builds the same adapter classes
+      as before and does not require contributors.profiles.
+    - A config with contributors.enabled=[kimi,custom] and valid cli_reviewer profiles
+      builds ProfileAdapter instances without registering new Python adapter classes.
+    - Profile validation rejects missing name/kind/detect/invoke/output/provenance
+      requirements, invalid transport values, missing prompt_flag for flag transport,
+      non-null prompt_flag for stdin transport unless explicitly allowed, and malformed
+      OS install maps.
+    - Fake CLI tests prove ProfileAdapter sends prompt via stdin for kimi-style profiles
+      with no -p flag, sends prompt via configured flag for flag profiles, injects
+      env, sets cwd/workdir flag, strips configured output chrome, parses JSON, and
+      seals through T6 with accurate contributor/model/adapter provenance.
+    - Wizard tests cover interactive min-2 re-prompt, claude-optional selection, non-interactive
+      --contributors precedence, unknown-name failure, and detect+guide output on
+      Windows/Linux without executing commands.
+    - Provenance regression test verifies a kimi profile seal cannot contain dispatch_provenance.model='gemini-2.5-pro'
+      unless the profile explicitly says so.
+    - Detect+guide tests assert missing CLIs print OS-specific verified or unavailable
+      guidance plus auth note, while present CLIs do not print install instructions.
+    - R7 tests or snapshot checks confirm .mcp.json is cross-platform, pyproject requires
+      Python >=3.11, and README support text matches.
+    - No external publish/install/distribution claim is made without a checked-in
+      verification citation or test fixture documenting the source.
+  risks:
+  - B leaves duplication between ProfileAdapter and codex/gemini dispatchers; this
+    is acceptable for v1.18.0 but should be tracked only after real duplication pain
+    appears.
+  - The profile schema can overfit current CLIs; keep it conservative but include
+    provenance/auth fields now so secrets and model labels are not improvised later.
+  - Install/auth command verification is an external dependency; if exact vendor guidance
+    cannot be verified before release, built-in profiles should ship detect plus auth
+    notes with install guidance marked unavailable rather than invented.
+  - Generic subprocess behavior may not cover streaming/stall semantics of future
+    CLIs; ProfileAdapter should start with simple timeout-based invocation and make
+    advanced streaming a later, evidence-driven extension.
+  - User overrides of built-in profiles can create confusing support cases; the merge
+    policy should make override source visible in diagnostics and provenance.
+  estimated_complexity: medium
+  structural_abstention: false
+sealed_at_utc: '2026-05-22T16:44:32Z'
+packet_sha256: 219c753a1b70356e7f7f9626013c18b5af2221789a1870fc64efda81462b6baf

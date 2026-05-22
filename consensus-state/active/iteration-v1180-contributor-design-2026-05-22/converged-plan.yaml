@@ -1,0 +1,176 @@
+iteration_id: iteration-v1180-contributor-design-2026-05-22
+authored_by: claude-v1180-1 (orchestrator)
+convergence_model: weighted-synthesis
+question: >-
+  Integration architecture for extensible, config-driven AI contributor profiles
+  (v1.18.0): option A (extract-and-parameterize), B (additive ProfileAdapter), or
+  C (profile-as-front, module delegation)? + profile schema, provenance, location,
+  wizard UX, detect+guide.
+
+votes:
+  claude: C (with B-safety framing)
+  codex: B
+  gemini: C
+  kimi: B
+  tally: "B x2 (codex, kimi), C x2 (gemini, claude) — a 2-2 split, resolved by synthesis, not count."
+
+synthesis: >-
+  The A/B/C labels overstated the disagreement. ALL FOUR proposals author YAML
+  profiles for ALL FOUR AIs (codex+kimi explicitly list codex.yaml/gemini.yaml in
+  scope as metadata/forward-compat). So the uniform-profile surface that the C
+  camp (gemini, claude) wanted — for the wizard, detect+guide, and "add an AI" —
+  is delivered under B too. The ONLY substantive difference is where built-in
+  dispatch routing lives: in code (`_BUILTIN_ADAPTERS`, B) or in a config
+  `module:` field on the profile (C). kimi's decisive argument: a `module:`
+  pointer leaks an implementation detail into user config and complicates the
+  factory (lookup → delegate vs generic); codex: C adds "two execution modes
+  behind one adapter surface" (provenance/error complexity) "without being
+  required for v1.18.0." gemini's pro-C migration-path-to-A is preserved under B
+  anyway, because the profiles already exist for all four — when A lands,
+  codex/gemini move from a built-in class to ProfileAdapter consuming their
+  existing profile. So the weighted synthesis takes B's routing (cleaner, lower
+  risk, no config leak, auto-satisfies R8) AND the universal-profile authoring
+  (the C insight) — every good idea kept, no rewrite of tested dispatchers.
+
+decision:
+  integration: >-
+    B-ROUTING + UNIVERSAL PROFILES. (1) Author YAML profiles for all four built-in
+    AIs (claude/codex/gemini/kimi) — these supply the wizard list, detect status,
+    install/auth guidance, model/provenance labels, and forward-compat docs for a
+    future option-A refactor. (2) Dispatch routing stays in `_engine_factory`:
+    `_BUILTIN_ADAPTERS` (claude/codex/gemini) keep their existing adapter classes
+    UNCHANGED; a new generic `ProfileAdapter` is instantiated for any enabled
+    contributor whose profile is `kind: cli_reviewer` and is NOT a built-in class
+    (kimi + all user-added AIs). NO `module:` field in profiles. Codex/gemini
+    dispatch code is untouched (R8 auto-satisfied). Option A remains a tracked
+    future follow-up.
+  profile_schema:   # §4 of the spec, augmented per the unanimous additions
+    required: [name, kind, detect, invoke, output]
+    fields:
+      name: "contributor id (claude/codex/gemini/kimi/...)"
+      kind: "host | cli_reviewer  (claude=host/in-process; others=cli_reviewer)"
+      model: "label sealed into dispatch_provenance.model (FIXES the kimi gemini-2.5-pro mislabel)"
+      detect: {command: "binary name for shutil.which"}
+      invoke: {transport: "stdin|flag", base_args: "[...]", prompt_flag: "flag for transport=flag, null for stdin", workdir_flag: "optional, e.g. -w", model_flag: "optional, e.g. --model"}
+      env: "dict injected into the subprocess (e.g. GEMINI_CLI_TRUST_WORKSPACE=true)"
+      output: {strip_patterns: "[regex] chrome to remove before JSON parse", schema_enforced: "bool — codex enforces JSON natively; gemini/kimi do not"}
+      sealed_filename: "default <name>-review.yaml (kimi raised)"
+      id_prefix: "rev-id regex prefix, e.g. codex-rev / gemini-rev / kimi-rev"
+      install: {windows: "...", linux: "...", darwin: "optional"}    # detect+guide ONLY, never executed
+      auth: {command: "login cmd", env_vars: "[optional non-interactive creds, e.g. OPENAI_API_KEY — names only, never values]", note: "..."}
+      instructions: {filename: "per-AI convention file (see instruction_files block)"}
+      timeout_seconds: "default 1800"
+    verification_first: >-
+      CRITICAL (codex, unanimous): built-in profiles' install/auth strings must be
+      VERIFIED against vendor docs/registry and cited inline, OR shipped as
+      detect+auth-note with install marked 'unavailable — see <vendor> docs'. NEVER
+      ship invented package-manager commands.
+  provenance: >-
+    ProfileAdapter constructs dispatch_provenance EXPLICITLY from the resolved
+    profile: model=profile.model, adapter='profile', contributor=profile.name,
+    bin=profile.detect.command, attestation_method=f'auto_{name}_dispatch', + the
+    prompt/output/schema/goal sha256s via _dispatch_base._sha256_str. Never copies
+    another adapter's defaults. Regression gate: a kimi seal must NOT contain
+    model='gemini-2.5-pro'.
+  profile_location: >-
+    Packaged built-ins: consensus_mcp/contributor_profiles/*.yaml (added to
+    pyproject package-data, mirroring dispatch_templates packaging). User
+    overrides/additions: .consensus/config.yaml contributors.profiles (overlay;
+    config overrides built-in by same name; may add new names). config.validate
+    validates merged profiles.
+  engine_factory: >-
+    build_adapters resolution order per enabled key: (a) _REGISTERED_ADAPTERS,
+    (b) _BUILTIN_ADAPTERS (claude/codex/gemini), (c) merged profile kind:cli_reviewer
+    → ProfileAdapter(profile). kind:host reserved for claude (never a subprocess).
+    Existing contributors.enabled=[claude,codex,gemini] resolves to the same
+    classes as v1.17.5 (R8 gate).
+  wizard_ux: >-
+    _init_wizard: numbered multi-select over merged profiles (no TUI dep); show
+    '✓ installed / ✗ missing' via shutil.which(detect.command); pre-check installed;
+    re-prompt until ≥2 selected; claude is an ordinary optional entry; write
+    contributors.enabled. Non-interactive --contributors a,b,c bypasses the prompt
+    (flags-over-prompts) and still runs detect+guide. Degrade cleanly in non-TTY.
+  detect_guide: >-
+    For each selected contributor whose detect.command is NOT on PATH: print
+    install[os] (os from sys.platform; 'unavailable' message if absent) + auth.command
+    + auth.note + a static 'not executed automatically' reminder. Nothing shelled out.
+  cross_platform_R7: >-
+    Committed .mcp.json → consensus-mcp entry point (drop Windows-only py -3.11).
+    pyproject requires-python ">=3.10" → ">=3.11". Reconcile README python range.
+
+# ---- NEW component (operator add, post-consult): per-AI instruction files ----
+instruction_files:
+  requirement: >-
+    Each selected consultant AI must have its convention instruction file seeded
+    with shared operating guidelines sourced from
+    https://github.com/multica-ai/andrej-karpathy-skills/blob/main/CLAUDE.md
+    (verified 2026-05-22: HTTP 200, 65 lines — "Behavioral guidelines to reduce
+    common LLM coding mistakes": think-before-coding, simplicity-first,
+    surgical-changes, etc.). Strong fit with consensus-mcp doctrine.
+  filename_map:   # the REAL per-AI convention (NOT codex.md/kimi.md)
+    claude: CLAUDE.md
+    codex: AGENTS.md
+    gemini: GEMINI.md
+    kimi: AGENTS.md          # codex AND kimi both read AGENTS.md → dedupe to one file
+  vendoring: >-
+    Vendor a copy of the Karpathy guidelines INTO the repo (e.g.
+    consensus_mcp/contributor_instructions/base.md) with a header citing the source
+    URL + fetch date. Do NOT fetch from GitHub at `consensus init` time (offline /
+    reliability / verify-before-invent). The profile's instructions.filename names
+    the per-AI target.
+  provisioning_behavior: >-
+    OPEN DECISION for the operator (touches end-users' own files): if the target
+    file (e.g. CLAUDE.md) already exists, do we (a) NON-DESTRUCTIVE: append/refresh
+    a clearly-delimited managed block between sentinels (<!-- consensus-mcp:begin -->
+    ... <!-- consensus-mcp:end -->), creating the file if absent — RECOMMENDED; or
+    (b) write a separate file (e.g. .consensus/instructions/<conv>.md) and leave the
+    user's own file untouched; or (c) overwrite. Dedupe by target filename
+    (codex+kimi share AGENTS.md → write once). Default lean: (a).
+
+deliverable_scope:
+  next_iteration_id: iteration-v1180-contributor-impl
+  files_in_scope:
+    - consensus_mcp/contributor_profiles/{claude,codex,gemini,kimi}.yaml   # NEW built-in profiles (verified install/auth)
+    - consensus_mcp/contributors/profile_adapter.py                        # NEW generic ProfileAdapter over _dispatch_base
+    - consensus_mcp/_contributor_profiles.py                               # NEW loader/merger/validator (or fold into config.py)
+    - consensus_mcp/contributor_instructions/base.md                       # NEW vendored Karpathy guidelines (cited)
+    - consensus_mcp/_engine_factory.py                                     # resolution order incl. ProfileAdapter
+    - consensus_mcp/config.py                                              # contributors.profiles schema + validate
+    - consensus_mcp/_init_wizard.py                                        # multi-select + detect+guide + instruction-file provisioning + --contributors
+    - .mcp.json                                                            # cross-platform entry point
+    - pyproject.toml                                                       # requires-python >=3.11; package contributor_profiles + contributor_instructions
+    - README.md                                                           # python range reconcile
+    - consensus_mcp/tests/test_profile_adapter.py
+    - consensus_mcp/tests/test_engine_factory_profiles.py
+    - consensus_mcp/tests/test_init_wizard_contributors.py
+    - consensus_mcp/tests/test_config_profiles.py
+    - consensus_mcp/tests/test_instruction_files.py
+  files_out_of_scope:
+    - consensus_mcp/_dispatch_codex.py     # UNCHANGED (B-routing)
+    - consensus_mcp/_dispatch_gemini.py    # UNCHANGED
+    - consensus_mcp/contributors/{codex,gemini,claude}.py   # UNCHANGED
+    - the parent project's kimi monkeypatch wrapper   # replaced in-spirit by kimi.yaml profile
+    - auto-installing CLIs / running auth   # operator chose detect+guide
+    - option A dispatcher refactor          # tracked future follow-up
+
+acceptance_gates:
+  - "R8: contributors.enabled=[claude,codex,gemini] builds the same adapter classes as v1.17.5 (regression)."
+  - "contributors.enabled=[kimi,<custom>] with valid cli_reviewer profiles builds ProfileAdapter without new Python classes."
+  - "Profile validation rejects missing required fields, bad transport enum, prompt_flag/transport mismatch, malformed OS install maps."
+  - "ProfileAdapter fake-CLI test (stdin + flag): env injected, output stripped, JSON parsed, T6 seal carries ACCURATE model/adapter/contributor provenance."
+  - "Provenance regression: a kimi profile seal cannot contain model='gemini-2.5-pro'."
+  - "Wizard: min-2 re-prompt; claude-optional; --contributors precedence; unknown-name failure; non-TTY degrade."
+  - "detect+guide: monkeypatch sys.platform + shutil.which → correct per-OS install/auth lines for missing CLIs; silence for present ones; nothing executed."
+  - "Instruction files: per-AI filename map honored; codex+kimi dedupe to one AGENTS.md; existing file gets a managed block, not a clobber (per chosen behavior); base.md cites the source URL."
+  - "R7: .mcp.json cross-platform; requires-python >=3.11; README reconciled."
+  - "Built-in profile install/auth strings are verified-and-cited OR marked unavailable (no invented commands)."
+  - "Full suite green + a gated 4-reviewer end-to-end smoke."
+
+risks:
+  - "Packaging: contributor_profiles/*.yaml + contributor_instructions/*.md MUST be in pyproject package-data or pip users get no built-ins (mirror dispatch_templates)."
+  - "Install/auth verification is an external dependency — if a vendor command can't be verified before release, ship detect + auth-note with install 'unavailable', not invented."
+  - "shutil.which can hit a polluted PATH — documented; profile/env override is the escape hatch."
+  - "Profile schema may not fit a future non-CLI (API) AI — schema is versioned/additive; v1.18.0 covers the 4 CLIs."
+  - "Instruction-file provisioning writes into the user's project — non-destructive default + dedupe-by-filename mitigate clobbering."
+
+estimated_complexity: medium-large
