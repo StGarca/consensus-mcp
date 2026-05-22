@@ -146,11 +146,16 @@ experiment. The point isn't a tally; it's that a *different* AI family
 than the one that wrote the code signs off on the exact final state,
 and every finding is settled on the record.
 
-It isn't only exercised on itself. A separate, unrelated codebase —
-one involving text recognition and speech synthesis — uses
+It isn't only exercised on itself. A separate, larger codebase — an
+expressive neural text-to-speech system (multi-speaker voice modeling,
+an emotion/prosody engine, and LoRA voice fine-tuning) — uses
 consensus-mcp as its review harness, with roughly 100 consensus
-iterations driven there across the same four-AI panel. (That project
-keeps its own sealed archive; the figures above are this repo's.)
+iterations across the same four-AI panel. The catch-and-adjudicate
+pattern holds on real ML code: one panel rescan of the emotion engine
+surfaced **6 genuine bugs (5 fixed, 1 reviewer claim refuted on
+evidence)**, and a deeper rescan shipped **3 more high-severity fixes**.
+(That project keeps its own sealed archive; the figures above are this
+repo's.)
 
 ## Status
 
