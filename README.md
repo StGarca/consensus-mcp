@@ -124,36 +124,16 @@ and you can override either.
 
 ## Does it actually work?
 
-consensus-mcp reviews itself — and the track record isn't a number you
-have to take on faith. **Every review is sealed to disk with content
-hashes**, so the history is an auditable trail you can read:
-[`consensus-state/archive/review-passes/`](consensus-state/archive/review-passes).
+Yes — and the record is auditable, not a number you have to trust. Every
+review is sealed to disk with a content hash
+([`consensus-state/archive/review-passes/`](consensus-state/archive/review-passes)).
 
-As of 2026-05-22 that trail holds **244 sealed review passes across 74
-consensus iterations**, self-hosted continuously since 2026-05-11 and
-produced by a panel of four different AI families (Claude, Codex,
-Gemini, and Kimi). Together those passes raised **232 findings, 60 of
-them blocking** — every one resolved before its change merged.
-
-What that history shows is two jobs, not one. The panel **catches real
-defects** — recent examples include path-traversal and fail-open
-security holes, a Windows CRLF "always-dirty" bug, and a fail-open
-mutation gate, each fixed before merge. And it **adjudicates** the
-findings that turn out to be wrong: those are dismissed *with empirical
-evidence recorded in the commit* — e.g. a reviewer's "that won't apply
-the clean filter" objection refuted by a one-line `git hash-object`
-experiment. The point isn't a tally; it's that a *different* AI family
-than the one that wrote the code signs off on the exact final state,
-and every finding is settled on the record.
-
-It isn't only exercised on itself. A separate, larger codebase — an
-expressive neural text-to-speech system (multi-speaker voice modeling,
-an emotion/prosody engine, and LoRA voice fine-tuning) — uses
-consensus-mcp as its review harness, with roughly 100 consensus
-iterations across the same four-AI panel. The catch-and-adjudicate
-pattern holds on real ML code: one panel rescan of the emotion engine
-surfaced **6 genuine bugs (5 fixed, 1 reviewer claim refuted on
-evidence)**, and a deeper rescan shipped **3 more high-severity fixes**.
+In 76 review iterations on its own code, the panel found **230 issues — 60 of
+them blocking or critical** — each addressed before the change merged (fixed, or
+dismissed with the evidence that disproved it). The same setup is in active use
+on other real, separate codebases; because those use different log formats, their
+results aren't yet combined into one number, so every figure here comes from this
+repo's sealed artifacts.
 
 ## Status
 
