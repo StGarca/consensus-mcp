@@ -162,42 +162,6 @@ def test_interactive_overrides_fresh_wires_numbered_multiselect(tmp_path, monkey
 
 
 # ============================================================
-# 2. --contributors non-interactive precedence + validation
-# ============================================================
-
-def test_validate_selection_accepts_known_min2():
-    profiles = wiz._load_merged_profiles(None)
-    result = wiz._validate_contributor_selection(["claude", "codex"], profiles)
-    assert result == ["claude", "codex"]
-
-
-def test_validate_selection_unknown_name_errors():
-    profiles = wiz._load_merged_profiles(None)
-    with pytest.raises(wiz.WizardError) as exc:
-        wiz._validate_contributor_selection(["claude", "bogus"], profiles)
-    assert "bogus" in str(exc.value)
-
-
-def test_validate_selection_under_two_errors():
-    profiles = wiz._load_merged_profiles(None)
-    with pytest.raises(wiz.WizardError) as exc:
-        wiz._validate_contributor_selection(["codex"], profiles)
-    assert "at least 2" in str(exc.value).lower()
-
-
-def test_contributors_flag_bypasses_prompt(monkeypatch):
-    """Non-interactive selection: --contributors list is honored without prompting."""
-    profiles = wiz._load_merged_profiles(None)
-    def _explode(prompt=""):
-        raise AssertionError("prompt invoked despite --contributors")
-    monkeypatch.setattr(builtins, "input", _explode)
-    chosen = wiz._resolve_contributor_selection(
-        explicit="codex,gemini", profiles=profiles, interactive=True,
-    )
-    assert chosen == ["codex", "gemini"]
-
-
-# ============================================================
 # 3. detect + guide
 # ============================================================
 
@@ -439,26 +403,6 @@ def test_followup_default_yes_on_empty(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda *_: "")
     add = wiz._prompt_host_peer_followup(["claude", "codex"], _PROFILES, default_yes=True)
     assert add == "claude-swe-reviewer"
-
-
-# ============================================================
-# Task 7: --contributors flag floor + orphan rejection
-# ============================================================
-
-def test_flag_rejects_host_peer_padding():
-    with pytest.raises(wiz.WizardError, match="independent"):
-        wiz._validate_contributor_selection(["claude", "claude-swe-reviewer"], _PROFILES)
-
-
-def test_flag_rejects_orphan_host_peer():
-    with pytest.raises(wiz.WizardError, match="orphan|host"):
-        wiz._validate_contributor_selection(["codex", "kimi", "claude-swe-reviewer"], _PROFILES)
-
-
-def test_flag_accepts_independents_plus_supplemental():
-    assert wiz._validate_contributor_selection(
-        ["claude", "codex", "claude-swe-reviewer"], _PROFILES
-    ) == ["claude", "codex", "claude-swe-reviewer"]
 
 
 # ============================================================

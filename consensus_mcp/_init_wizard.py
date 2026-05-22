@@ -57,10 +57,6 @@ GITIGNORE_MANAGED_PATHS = (
 )
 
 
-class WizardError(RuntimeError):
-    pass
-
-
 def _detect_repo_root(start: Path | None = None) -> Path:
     """Resolve project root for the iteration.
 
@@ -516,44 +512,6 @@ def _reconfigure_contributors(base: dict, profiles: dict) -> None:
     if hp:
         selection.append(hp)
     base["contributors"]["enabled"] = selection
-
-
-def _validate_contributor_selection(selection: list[str], profiles: dict) -> list[str]:
-    """Validate a name list: known names only (wizard layer holds the profile
-    set), >=2 INDEPENDENT, and no orphan host_peer."""
-    unknown = [n for n in selection if n not in profiles]
-    if unknown:
-        raise WizardError(f"unknown contributor(s) {unknown}; known: {sorted(profiles)}")
-    if profiles_mod.independent_count(selection, profiles) < 2:
-        raise WizardError(
-            f"at least 2 independent contributors are required (a same-model "
-            f"supplemental does not count); got {selection!r}"
-        )
-    orphans = profiles_mod.orphan_host_peers(selection, profiles)
-    if orphans:
-        raise WizardError(
-            f"orphan supplemental reviewer(s) {orphans}: a host_peer requires its "
-            f"host to also be enabled"
-        )
-    return list(selection)
-
-
-def _resolve_contributor_selection(
-    explicit: str | None, profiles: dict, interactive: bool,
-) -> list[str]:
-    """Resolve the contributor list (flags-over-prompts).
-
-    If `explicit` (the --contributors flag) is set, it bypasses the prompt and
-    is validated against known profiles + min-2. Otherwise, when interactive,
-    the multi-select prompt runs; non-interactive with no flag is left to the
-    caller's existing default-detection path (returns None to signal that).
-    """
-    if explicit is not None:
-        selection = [c.strip() for c in explicit.split(",") if c.strip()]
-        return _validate_contributor_selection(selection, profiles)
-    if interactive:
-        return _select_contributors_interactive(profiles)
-    return None
 
 
 def _install_os_key() -> str:
