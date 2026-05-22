@@ -1,12 +1,37 @@
 # Changelog
 
-## 1.19.0 - unreleased
+## 1.19.0 - 2026-05-22
 
-In progress: **result logging** — a per-run, schema-versioned results record
-written automatically at iteration close, aggregated into a project-level
-scorecard via `consensus results`. Closes the gap where findings/fixes/
-dispositions weren't aggregatable. Designed via a 4-way Workflow A consult
-(see `docs/design-consults/v1.19.0-result-logging.md`).
+**Result logging.** consensus-mcp now records the RESULTS of every run, not just
+the sealed review passes — so findings, dispositions, and fixes aggregate into a
+trustworthy project scorecard. Closes the gap where the history existed but
+wasn't queryable. Designed via a 4-way Workflow A consult
+(`docs/design-consults/v1.19.0-result-logging.md`); Workflow B review skipped per
+operator. +21 tests; full suite 1076 passed / 1 skipped.
+
+### Added
+- **Per-run results record** written automatically at `iteration_closed`: findings
+  by severity + source pass, each finding's **disposition** (validated-and-fixed /
+  dismissed-with-evidence / deferred / open), fixes applied, and the convergence
+  outcome — conforming to a versioned schema (`schemas/results-v1.schema.json`).
+  Written to a durable, gitignored project ledger
+  (`consensus-state/state/results-v1.jsonl`, one snapshot per iteration) plus a
+  co-located human-readable `iteration-results.yaml`.
+- **`consensus results`** (and `consensus-results --json`) — a read-only project
+  scorecard: total findings by severity, validated vs dismissed-with-evidence vs
+  deferred, fixes applied, iteration count, convergence rate, and date span.
+  Backfilled/best-effort records are reported separately, never folded into the
+  authoritative totals. Also exposed as a read-only MCP tool.
+
+### Changed
+- Audit events carry structured result fields at event time —
+  `apply_step_landed` gains `{finding_ids, files_touched, fix_summary}` and
+  `iteration_closed` gains `{finding_dispositions}` (additive, backward-
+  compatible). This is what makes "fixes applied" and "validated vs dismissed"
+  machine-countable instead of prose-only.
+- README "Why": replaced the vague "skip assumptions" with a concrete
+  description (acting on unstated assumptions — a signature, a dependency, what
+  "done" means).
 
 ## 1.18.0 - 2026-05-22
 

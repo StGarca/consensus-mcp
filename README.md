@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.18.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.19.0
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -93,6 +93,12 @@ run, say, Codex + Gemini + Kimi with no Claude at all.
 > seeds shared reviewer "house rules" into each AI's own instructions
 > file (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`) so every model on the
 > panel plays by the same guidelines.
+
+**See your track record.** `consensus results` prints a project
+scorecard — findings by severity, how each was resolved (fixed, or
+dismissed with evidence), fixes applied, and the convergence rate
+across every run (`consensus-results --json` for the machine-readable
+form).
 
 ## How it works (the short version)
 
@@ -138,7 +144,7 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.18.0 — stable.** 1,000+ regression tests, green on
+**Current: v1.19.0 — stable.** 1,000+ regression tests, green on
 CI across Linux + Windows and Python 3.11+. Self-hosted:
 every release is built through consensus-mcp's own cross-AI
 review.
