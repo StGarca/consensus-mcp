@@ -96,7 +96,15 @@ def build_adapters(
     if not enabled:
         raise EngineFactoryError("config.contributors.enabled is empty")
 
-    per_contributor = config.get("contributors", {}).get("config", {}) or {}
+    # 1.17 review (codex-002): read per-contributor config from `contributors.
+    # adapters` — the key default_config() + validate() actually use. The old
+    # `contributors.config` key was never populated, so adapter_config (e.g.
+    # model overrides) was silently always empty. Fall back to the legacy
+    # `.config` key for any pre-existing config that used it.
+    contributors_block = config.get("contributors", {}) or {}
+    per_contributor = (contributors_block.get("adapters")
+                       or contributors_block.get("config")
+                       or {})
 
     adapters: dict[str, ContributorAdapter] = {}
     for key in enabled:

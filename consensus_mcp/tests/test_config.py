@@ -306,6 +306,16 @@ def test_engine_factory_gates_unregistered_contributor():
         ef.unregister_contributor("aider")
 
 
+def test_validate_rejects_whitespace_only_contributor_name():
+    """1.17 review (kimi-004): structural validation must reject whitespace-only
+    names, not just empty strings."""
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "   "]
+    c["contributors"]["adapters"] = {"claude": {}, "   ": {}}
+    with pytest.raises(cfg.ConfigValidationError, match="non-whitespace"):
+        cfg.validate(c)
+
+
 def test_validate_requires_claude():
     """Per converged-plan: schema_version 1 requires claude as orchestrator."""
     c = cfg.default_config()
