@@ -439,3 +439,23 @@ def test_followup_default_yes_on_empty(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda *_: "")
     add = wiz._prompt_host_peer_followup(["claude", "codex"], _PROFILES, default_yes=True)
     assert add == "claude-swe-reviewer"
+
+
+# ============================================================
+# Task 7: --contributors flag floor + orphan rejection
+# ============================================================
+
+def test_flag_rejects_host_peer_padding():
+    with pytest.raises(wiz.WizardError, match="independent"):
+        wiz._validate_contributor_selection(["claude", "claude-swe-reviewer"], _PROFILES)
+
+
+def test_flag_rejects_orphan_host_peer():
+    with pytest.raises(wiz.WizardError, match="orphan|host"):
+        wiz._validate_contributor_selection(["codex", "kimi", "claude-swe-reviewer"], _PROFILES)
+
+
+def test_flag_accepts_independents_plus_supplemental():
+    assert wiz._validate_contributor_selection(
+        ["claude", "codex", "claude-swe-reviewer"], _PROFILES
+    ) == ["claude", "codex", "claude-swe-reviewer"]
