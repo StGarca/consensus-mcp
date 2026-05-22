@@ -1,12 +1,46 @@
 # Changelog
 
-## 1.18.0 - unreleased
+## 1.18.0 - 2026-05-22
 
-In progress: extensible, cross-platform contributor selection at `consensus init`
-— config-driven AI profiles (add an AI without code), interactive multi-select
-(min 2, Claude optional), and OS-aware detect-and-guide for missing CLIs. Plus a
-cross-platform committed `.mcp.json` (drop the Windows-only `py -3.11`) and
-`requires-python >=3.11`. Design via the 4-way Workflow A consult.
+**Extensible, config-driven contributor profiles + cross-platform install.** Add
+an AI reviewer to the consensus panel without writing code, choose your panel at
+`consensus init`, and install consistently on Windows or Linux. Designed via a
+4-way Workflow A consult (claude+codex+gemini+kimi) and reviewed via Workflow B
+(codex). Strict TDD; full suite green.
+
+### Added
+- **Config-driven contributor profiles.** A profile (`name`, `kind`, `detect`,
+  `invoke`, `env`, `output`, `install`, `auth`, `model`, `instructions`, …)
+  describes everything quirky about one AI as data. Built-in profiles ship for
+  claude/codex/gemini/kimi; add more via `contributors.profiles` in
+  `.consensus/config.yaml`. **Adding an AI = adding a profile, no new code.**
+- **`ProfileAdapter`** — a generic contributor adapter that reuses the shared
+  dispatch core and is driven entirely by a profile. Kimi is now a first-class
+  built-in profile (no more out-of-tree wrapper); its sealed provenance reports
+  the correct model.
+- **`consensus init` contributor selection** — interactive numbered multi-select
+  with installed/missing status, a minimum of two contributors, and Claude
+  optional. Non-interactive `--contributors a,b,c` for scripted installs.
+- **Detect-and-guide setup** — for any selected AI whose CLI isn't installed,
+  the wizard prints the OS-appropriate install + login commands (it never runs
+  them).
+- **Per-AI instruction files** — seeds shared operating guidelines into each
+  selected AI's convention file (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`) as a
+  non-destructive, idempotent managed block (`--no-instructions` to skip).
+
+### Changed
+- Committed `.mcp.json` now uses the cross-platform `consensus-mcp` entry point
+  instead of the Windows-only `py -3.11` launcher.
+- `requires-python` is now `>=3.11`.
+- Contributor configs are more flexible: `claude` is optional and a per-contributor
+  `contributors.adapters` entry is optional — whether a contributor is
+  constructible is enforced (fail-closed) when the engine is built.
+
+### Workflow B review (codex)
+codex caught two real issues (gemini + kimi, run as bonus, were clean), both
+fixed before release: the new multi-select UX was not yet wired into the wizard
+flow, and `ProfileAdapter` computed the project root one level too deep. Both are
+regression-tested.
 
 ## 1.17.5 - 2026-05-22
 
