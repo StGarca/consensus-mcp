@@ -146,9 +146,11 @@ experiment. The point isn't a tally; it's that a *different* AI family
 than the one that wrote the code signs off on the exact final state,
 and every finding is settled on the record.
 
-(consensus-mcp grew out of an earlier project, where its first
-deployment caught defects across several subsystems that single-AI
-review had missed — which is why it exists.)
+It isn't only exercised on itself. A separate, unrelated codebase —
+one involving text recognition and speech synthesis — uses
+consensus-mcp as its review harness, with roughly 100 consensus
+iterations driven there across the same four-AI panel. (That project
+keeps its own sealed archive; the figures above are this repo's.)
 
 ## Status
 
