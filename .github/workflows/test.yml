@@ -18,7 +18,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python: ["3.10", "3.11", "3.12"]
+        # Must match pyproject `requires-python`. v1.18.0 raised the floor to
+        # >=3.11, so `pip install -e .` (and its deps) refuses py3.10 — testing
+        # 3.10 here only fails at install. Keep this list == the supported range.
+        python: ["3.11", "3.12"]
     env:
       # Skip codex-cli-dependent tests; CI does not install the real codex binary.
       CONSENSUS_MCP_SKIP_CODEX_CLI_TESTS: "1"
