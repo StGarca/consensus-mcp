@@ -1,9 +1,10 @@
 # consensus-mcp
 
-**Automated peer review for AI-written code.** Instead of trusting one
-AI to check its own work, consensus-mcp puts a small panel of AIs
-(Claude, Codex, and Gemini by default) on every change — and the
-change only ships when they agree.
+**A second opinion for AI-written code — from other AIs.** Instead of
+trusting one AI to grade its own homework, consensus-mcp puts a small
+panel of *different* AIs (Claude, Codex, and Gemini by default) on
+every change, has them review it independently, and only lets the
+change through when they agree.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
@@ -51,7 +52,7 @@ agree."
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/stgarca/consensus-mcp.git@v1.17.4
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.17.4
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -117,7 +118,7 @@ tool built to catch inflated metrics shouldn't inflate its own.)
 
 ## Status
 
-**Current: v1.15.10 — stable.** ~970 regression tests, green on
+**Current: v1.17.4 — stable.** 1,000+ regression tests, green on
 CI across Linux + Windows and Python 3.10–3.12. Self-hosted:
 every release is built through consensus-mcp's own cross-AI
 review.
@@ -135,8 +136,9 @@ then restarted as a standalone tool.
 - [`docs/architecture/orchestration-spec.md`](docs/architecture/orchestration-spec.md)
   — the full multi-AI orchestration design
 - [`docs/workflows/`](docs/workflows/) — the review modes
-  (propose-converge, post-review, advisory, autonomous-execute) and
-  when to use each
+  (propose-converge and post-review are the day-to-day modes; an
+  autonomous-execute mode is staged but not yet runnable) and when to
+  use each
 - [`docs/advisories.md`](docs/advisories.md) — known-issue releases
   and the right version to upgrade to
 
