@@ -459,3 +459,37 @@ def test_flag_accepts_independents_plus_supplemental():
     assert wiz._validate_contributor_selection(
         ["claude", "codex", "claude-swe-reviewer"], _PROFILES
     ) == ["claude", "codex", "claude-swe-reviewer"]
+
+
+# ============================================================
+# Task 8: _reconfigure_contributors — preserves legacy host_peer
+# ============================================================
+
+def test_reconfigure_preserves_existing_host_peer(monkeypatch):
+    monkeypatch.setattr(wiz, "_load_merged_profiles", lambda *_: _PROFILES)
+    monkeypatch.setattr(wiz.shutil, "which", lambda c: "/x/" + c)
+    # accept preselected independents (empty), then accept supplemental (empty -> default Yes)
+    answers = iter(["", ""])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    base_cfg = {"contributors": {"enabled": ["claude", "codex", "claude-swe-reviewer"]},
+                "workflow": {"mode": "x", "independence": "y"},
+                "convergence": {"rule": "z"}}
+    wiz._reconfigure_contributors(base_cfg, _PROFILES)
+    assert "claude-swe-reviewer" in base_cfg["contributors"]["enabled"]
+    assert set(base_cfg["contributors"]["enabled"]) >= {"claude", "codex"}
+
+
+def test_reconfigure_invalid_legacy_forces_two_independents(monkeypatch):
+    monkeypatch.setattr(wiz, "_load_merged_profiles", lambda *_: _PROFILES)
+    monkeypatch.setattr(wiz.shutil, "which", lambda c: "/x/" + c)
+    # legacy [claude, claude-swe-reviewer] -> 1 independent; multi-select must
+    # re-prompt until >=2; user adds codex, then declines supplemental
+    # _independent_ordered_names(_PROFILES) = [claude, codex, kimi] (host first, then sorted)
+    # so "1,2" = claude+codex
+    answers = iter(["1,2", "n"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    base_cfg = {"contributors": {"enabled": ["claude", "claude-swe-reviewer"]},
+                "workflow": {"mode": "x", "independence": "y"},
+                "convergence": {"rule": "z"}}
+    wiz._reconfigure_contributors(base_cfg, _PROFILES)
+    assert wiz.profiles_mod.independent_count(base_cfg["contributors"]["enabled"], _PROFILES) >= 2
