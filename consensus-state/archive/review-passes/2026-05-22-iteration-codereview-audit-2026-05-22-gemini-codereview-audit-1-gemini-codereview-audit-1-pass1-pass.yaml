@@ -1,0 +1,127 @@
+iteration_id: iteration-codereview-audit-2026-05-22
+reviewer_id: gemini-codereview-audit-1
+pass_id: gemini-codereview-audit-1-pass1
+findings:
+- id: gemini-rev-001
+  severity: critical
+  summary: 'Arbitrary file write: apply_codex_patch.py does not validate that patched
+    file paths are within the repository root.'
+  citation: consensus_mcp/tools/apply_codex_patch.py:418-423
+  risk: A maliciously crafted or hallucinated patch from codex could write to any
+    file on the filesystem the user has access to, such as `~/.bashrc` or system files,
+    leading to arbitrary code execution. This is a remote code execution (RCE) vulnerability
+    exploitable by a compromised or malicious AI model.
+  recommendation: Copy the path containment guard from `patch_apply_consensus_patch.py`
+    into `apply_codex_patch.py`. Specifically, before applying patches, resolve each
+    target path and ensure it is relative to the repository root using `path.relative_to(repo_root)`
+    inside a try/except block. Refuse the operation if the check fails.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+- id: gemini-rev-002
+  severity: critical
+  summary: 'Scope bypass: apply_codex_patch.py does not check `files_touched` against
+    the `goal_packet.allowed_files` list.'
+  citation: consensus_mcp/tools/apply_codex_patch.py:239
+  risk: A codex-authored patch can modify files outside the scope authorized by the
+    operator in the goal_packet. This defeats a core security boundary of the consensus
+    process, allowing an AI to make unauthorized changes to the codebase, violating
+    the principle of least privilege.
+  recommendation: After loading the `goal_packet.yaml` and extracting `files_touched`
+    from the patch proposal, add a validation step. For each file in `files_touched`,
+    check that it matches a pattern in `goal_packet.get('allowed_files', [])`. Refuse
+    to apply the patch if any file is out of scope.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+- id: gemini-rev-003
+  severity: critical
+  summary: 'Arbitrary file read: build_review_packet.py reads files for excerpts without
+    a repository-containment check.'
+  citation: consensus_mcp/validators/build_review_packet.py:352-354
+  risk: 'An operator-supplied `input.yaml` with a path traversal payload (e.g., `target_files:
+    [''../../.ssh/id_rsa'']`) can exfiltrate sensitive files from the user''s machine
+    into the review packet, which is then accessible to AI reviewers.'
+  recommendation: Before reading a file specified in `target_files`, resolve its absolute
+    path and verify it is located within the repository root. The same `path.relative_to(REPO_ROOT)`
+    pattern from CR-1 applies here. Refuse to process any file path that attempts
+    to traverse outside the repository.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+- id: gemini-rev-004
+  severity: critical
+  summary: 'Fail-open scope check: An empty `allowed_files` list in `consensus.yaml`
+    causes the scope check to approve all file changes.'
+  citation: consensus_mcp/validators/scope_check.py:379
+  risk: A misconfigured or maliciously emptied `implementation_scope.allowed_files`
+    list effectively disables the scope check gate, allowing any and all file modifications
+    to pass validation. This is a critical fail-open vulnerability in a core security
+    gate.
+  recommendation: Modify the check at line 379 to correctly handle an empty `allowed_files`
+    list as 'allow none'. The condition should be changed from `if allowed_files and
+    not _matches_any(...)` to something like `if not allowed_files or not _matches_any(...)`,
+    or more robustly, treat an empty list as a hard failure unless a specific flag
+    indicates otherwise. The logic in `check_autonomy_scope` is a good model.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+- id: gemini-rev-005
+  severity: high
+  summary: Uncaught ValueError in patch_stage_and_dry_run.py on path traversal leads
+    to tool crash.
+  citation: consensus_mcp/tools/patch_stage_and_dry_run.py:290
+  risk: 'An input `proposed_patches` with a path traversal payload (e.g., `file: ''../../../foo''`)
+    will cause the tool to crash with an unhandled ValueError, violating the MCP tool
+    contract. This breaks any workflow that relies on this tool, such as `apply_codex_patch`.'
+  recommendation: Add a path containment check at the beginning of the `handle` function
+    in `patch_stage_and_dry_run.py`. Iterate through `proposed_patches` and for each
+    `file` path, verify it is contained within the project root before proceeding.
+    This is a defense-in-depth measure; callers should also validate, but the tool
+    itself should be robust.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+- id: gemini-rev-006
+  severity: medium
+  summary: Staging gate in `patch_stage_and_dry_run` does not block on 'critical'
+    severity findings.
+  citation: consensus_mcp/tools/patch_stage_and_dry_run.py:381
+  risk: The dry-run gate can return 'APPROVED' even if a validator finds a 'critical'
+    issue. This can lead to the application of patches with known critical flaws if
+    the calling tool does not perform its own check on the findings.
+  recommendation: Update the gate logic to include 'critical' in the set of severities
+    that trigger a 'BLOCKED' decision. The line should be `all(f.get('severity') not
+    in ('high', 'blocking', 'critical') for f in all_findings)`.
+  patch_proposal: null
+  patch_not_proposed_reason: null
+goal_satisfied: false
+goal_satisfied_rationale: The audit confirms multiple CRITICAL and HIGH severity findings
+  from Claude's review. The core goal of auditing the review is met, but the product
+  is not secure. The identified vulnerabilities (arbitrary file read/write, scope
+  bypass, fail-open gates) must be addressed.
+blocking_objections:
+- gemini-rev-001
+- gemini-rev-002
+- gemini-rev-003
+- gemini-rev-004
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: d1984eef2d5ade123ba3b566146604b09ac633c58887f440ff95590600d3b8e4
+  output_sha256: 0520b519e11a6569717d8fa959a82858efac6d64c848072ba3e65705fa4c8f79
+  goal_packet_sha256: db73f7fe68f903d93514ea9e36bb1f78c7aa9b550cfb8f4c2d22a2bc4b0a87eb
+  scope_signature: b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0
+  review_target_path: consensus-state/active/iteration-codereview-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 914198d4bee771644f5d999034a95ba36f500bc3f9f30983bf093eea9eb5b64b
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-22T14:51:00Z'
+packet_sha256: a8546cb27cf1baa1076851d6d236e26613a94a4d048393d618fd666d53f0907c

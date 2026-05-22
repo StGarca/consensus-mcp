@@ -37,7 +37,7 @@ dispatch_provenance:
   review_target_hash: 15298870ff36ca18fdbd822bf79ede12c93fef1264b60405953c3b5362d8e51c
   adapter: gemini
   mode: proposal
-  proposal_schema_path: C:\Users\<you>\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_path: C:\Users\steve\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
   proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
 proposal:
   selected_target: 'Acknowledge and defer: Ship v1.15.9 to lock in stability gains;

@@ -1,0 +1,827 @@
+defect_target:
+  files:
+  - consensus_mcp/_paths.py
+  - consensus_mcp/tools/apply_codex_patch.py
+  - consensus_mcp/tools/patch_stage_and_dry_run.py
+  - consensus_mcp/tests/test_security_cluster_2026_05_22.py
+  base_sha: 7e82acf7a8a76615a6f45baffd4dcb3b548de4918487d001c64198f8d8f34a3d
+  touched_files_contents:
+    consensus_mcp/_paths.py: "\"\"\"Lazy path resolution helpers.\n\nPer the iter-0024\
+      \ converged plan (SHIP-PHASED, Phase A): introduce a single\nsource of truth\
+      \ for resolving repo / state / archive / audit-log paths\nthat re-reads environment\
+      \ state on every call so tests can\n`monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\"\
+      , str(tmp_path))` AFTER import\nand have it actually work.\n\nThis module is\
+      \ PURELY ADDITIVE in Phase A — no existing tool is touched.\nTools migrate one\
+      \ at a time in iter-0026+ (Phase B). iter-0019's\n`_isolate_archive_root` test\
+      \ helper continues to monkeypatch the cached\nmodule-level attributes of un-migrated\
+      \ tools.\n\nResolution semantics mirror `server.py`'s `_resolve_*` functions\
+      \ exactly,\nsince v1.13.0 (iter-0007) already split REPO_ROOT into three orthogonal\n\
+      concerns (spec / state / project). This module is the reusable embodiment\n\
+      of that split.\n\nEnvironment variable precedence (per resolver):\n  - `repo_root()`\
+      \         — `CONSENSUS_MCP_REPO_ROOT` → walked-up `__file__` → cwd\n  - `spec_path()`\
+      \         — `CONSENSUS_MCP_SPEC_PATH` → legacy under repo_root → walked-up →\
+      \ packaged template\n  - `state_root()`        — `CONSENSUS_MCP_STATE_ROOT`\
+      \ → legacy under repo_root → cwd\n  - `project_root()`      — `CONSENSUS_MCP_PROJECT_ROOT`\
+      \ → legacy repo_root → cwd\n\nDerived paths build on the resolvers and inherit\
+      \ their laziness.\n\"\"\"\nfrom __future__ import annotations\n\nimport os\n\
+      import sys\nfrom pathlib import Path\n\n\n# ---------------------------------------------------------------------------\n\
+      # Resolvers — read env state on every call.\n# ---------------------------------------------------------------------------\n\
+      \n\ndef repo_root() -> Path:\n    \"\"\"Resolve repo root.\n\n    Precedence:\n\
+      \      1. `CONSENSUS_MCP_REPO_ROOT` env var (operator override)\n      2. Walked-up\
+      \ `__file__` (dev checkout layout: this file's parent.parent\n         is the\
+      \ repo root)\n      3. Current working directory (installed wheel / unusual\
+      \ layouts)\n    \"\"\"\n    override = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\"\
+      )\n    if override:\n        return Path(override).resolve()\n    walked = Path(__file__).resolve().parent.parent\n\
+      \    # Dev checkout: walked-up parent contains repo markers (pyproject.toml\n\
+      \    # or .git). In an installed wheel, walked = site-packages/ which has\n\
+      \    # `consensus_mcp/` as a sibling but neither pyproject.toml nor .git, so\n\
+      \    # we must NOT return site-packages as the repo root.\n    if (walked /\
+      \ \"pyproject.toml\").exists() or (walked / \".git\").exists():\n        return\
+      \ walked\n    # Installed wheel / unusual layouts: cwd is the right fallback\
+      \ so the\n    # orchestrator can still locate consensus-state/.\n    return\
+      \ Path.cwd().resolve()\n\n\ndef spec_path() -> Path:\n    \"\"\"Resolve spec\
+      \ path (orchestration-spec.md or packaged template).\n\n    Precedence:\n  \
+      \    1. `CONSENSUS_MCP_SPEC_PATH` env override\n      2. Legacy under CONSENSUS_MCP_REPO_ROOT/docs/architecture/orchestration-spec.md\n\
+      \      3. Walked-up dev-checkout spec\n      4. Packaged `spec_template.md`\
+      \ (frozen-wheel fallback)\n    \"\"\"\n    override = os.environ.get(\"CONSENSUS_MCP_SPEC_PATH\"\
+      )\n    if override:\n        return Path(override).resolve()\n    repo_root_env\
+      \ = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if repo_root_env:\n   \
+      \     legacy = (\n            Path(repo_root_env).resolve()\n            / \"\
+      docs\" / \"architecture\" / \"orchestration-spec.md\"\n        )\n        if\
+      \ legacy.exists():\n            return legacy\n    walked = (\n        Path(__file__).resolve().parent.parent\n\
+      \        / \"docs\" / \"architecture\" / \"orchestration-spec.md\"\n    )\n\
+      \    if walked.exists():\n        return walked\n    return Path(__file__).resolve().parent\
+      \ / \"spec_template.md\"\n\n\ndef state_root() -> Path:\n    \"\"\"Resolve state\
+      \ root (consensus-state/ location).\n\n    Precedence:\n      1. `CONSENSUS_MCP_STATE_ROOT`\
+      \ env override\n      2. Legacy under `CONSENSUS_MCP_REPO_ROOT`\n      3. `<cwd>/consensus-state`\n\
+      \    \"\"\"\n    override = os.environ.get(\"CONSENSUS_MCP_STATE_ROOT\")\n \
+      \   if override:\n        return Path(override).resolve()\n    repo_root_env\
+      \ = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if repo_root_env:\n   \
+      \     return Path(repo_root_env).resolve() / \"consensus-state\"\n    return\
+      \ Path.cwd().resolve() / \"consensus-state\"\n\n\ndef project_root() -> Path:\n\
+      \    \"\"\"Resolve project root (reviewable-file root for goal_packet.allowed_files).\n\
+      \n    Precedence:\n      1. `CONSENSUS_MCP_PROJECT_ROOT` env override\n    \
+      \  2. Legacy `CONSENSUS_MCP_REPO_ROOT`\n      3. Current working directory\n\
+      \    \"\"\"\n    override = os.environ.get(\"CONSENSUS_MCP_PROJECT_ROOT\")\n\
+      \    if override:\n        return Path(override).resolve()\n    repo_root_env\
+      \ = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if repo_root_env:\n   \
+      \     return Path(repo_root_env).resolve()\n    return Path.cwd().resolve()\n\
+      \n\n# ---------------------------------------------------------------------------\n\
+      # Derived paths — compose the resolvers above; inherit laziness.\n# ---------------------------------------------------------------------------\n\
+      \n\ndef archive_dir() -> Path:\n    \"\"\"consensus-state/archive/review-passes/\
+      \ — sealed review-pass archive.\"\"\"\n    return state_root() / \"archive\"\
+      \ / \"review-passes\"\n\n\ndef index_path() -> Path:\n    \"\"\"consensus-state/archive/review-passes/index.yaml\
+      \ — pass index.\"\"\"\n    return archive_dir() / \"index.yaml\"\n\n\ndef active_dir()\
+      \ -> Path:\n    \"\"\"consensus-state/active/ — per-iteration working directories.\"\
+      \"\"\n    return state_root() / \"active\"\n\n\ndef audit_log_path() -> Path:\n\
+      \    \"\"\"consensus-state/state/audit-log.jsonl — append-only audit event log.\"\
+      \"\"\n    return state_root() / \"state\" / \"audit-log.jsonl\"\n\n\ndef dispatch_log_path()\
+      \ -> Path:\n    \"\"\"consensus-state/state/dispatch-log.jsonl — append-only\
+      \ dispatch event log.\"\"\"\n    return state_root() / \"state\" / \"dispatch-log.jsonl\"\
+      \n\n\n# ---------------------------------------------------------------------------\n\
+      # Path containment — shared fail-closed guard for operator/AI-supplied paths.\n\
+      # 2026-05-22 consensus security review (CR-1/CR-3/CR-5, H-2): every caller that\n\
+      # joins an untrusted relative/absolute path to a base directory before reading\n\
+      # or writing MUST route it through resolve_contained() so a `../` traversal,\n\
+      # an absolute path, or an in-base symlink-to-outside fails closed.\n# ---------------------------------------------------------------------------\n\
+      \n\nclass PathTraversalError(ValueError):\n    \"\"\"A caller-supplied path\
+      \ resolves outside its permitted base directory.\"\"\"\n\n\ndef is_contained(resolved:\
+      \ Path, base_resolved: Path) -> bool:\n    \"\"\"True iff ``resolved`` is inside\
+      \ ``base_resolved`` (both already resolved).\n\n    Mirrors ``_author_review_packet._is_contained``,\
+      \ including the Windows\n    case-fold fallback: ``Path.relative_to`` is a case-sensitive\
+      \ string\n    compare, but Windows filesystems are case-insensitive, so a mixed-case\n\
+      \    base vs path would otherwise trigger a false-positive rejection.\n    \"\
+      \"\"\n    try:\n        resolved.relative_to(base_resolved)\n        return\
+      \ True\n    except ValueError:\n        if sys.platform == \"win32\":\n    \
+      \        resolved_lc = str(resolved).lower().replace(\"\\\\\", \"/\")\n    \
+      \        base_lc = str(base_resolved).lower().replace(\"\\\\\", \"/\")\n   \
+      \         if resolved_lc == base_lc or resolved_lc.startswith(base_lc.rstrip(\"\
+      /\") + \"/\"):\n                return True\n        return False\n\n\ndef resolve_contained(base:\
+      \ Path, rel: str) -> Path:\n    \"\"\"Resolve ``rel`` under ``base`` and confirm\
+      \ it stays inside ``base``.\n\n    Resolves symlinks and ``..`` BEFORE the containment\
+      \ check (fail-closed):\n    an absolute path, a ``../`` traversal, or an in-base\
+      \ symlink whose real\n    target is outside ``base`` all raise :class:`PathTraversalError`.\
+      \ Returns\n    the resolved absolute path on success.\n    \"\"\"\n    base_resolved\
+      \ = Path(base).resolve()\n    candidate = (base_resolved / rel).resolve()\n\
+      \    if not is_contained(candidate, base_resolved):\n        raise PathTraversalError(\n\
+      \            f\"{rel!r} resolves to {candidate} which is outside {base_resolved}\"\
+      \n        )\n    return candidate\n"
+    consensus_mcp/tools/apply_codex_patch.py: "\"\"\"apply.codex_patch MCP tool —\
+      \ Task #26 (iter-0016).\n\nPer codex 2026-05-10 v4 directive (memory/project_codex_fix_author_directive.md):\n\
+      Staged-apply of a codex-emitted patch that has been claude-verified per\nCLAUDE.md.\n\
+      \nRefuses by default. Application requires BOTH:\n  1. goal_packet.authorization.codex_patch_apply_authorized\
+      \ == True\n  2. env CONSENSUS_MCP_CODEX_PATCH_APPLY == \"1\"\n\nRefuses without\
+      \ claude verification (verdict=approved). Detects base_sha drift\nbetween codex\
+      \ review time and apply time (touched-file content changed under\ncodex's feet).\
+      \ On success emits canonical apply_step_landed audit event with\nthe structured\
+      \ last_mutation event object (per #28 closure invariant).\n\nThe implementation:\n\
+      \  - REUSES patch.stage_and_dry_run (T4) for the staged dry-run validator gate\n\
+      \  - DOES NOT reuse patch.apply_consensus_patch (T5); the apply step is bespoke\n\
+      \    (per-file os.replace atomic apply or unified-diff applier). T5 expects\n\
+      \    consensus.yaml-driven full-file overwrites with consensus_patch_id\n  \
+      \  semantics; codex patches use a different shape (patch_proposal with\n   \
+      \ base_sha/unified_diff) so apply_codex_patch authors its own apply step.\n\
+      \    If T5's apply contract evolves to match patch_proposal shape, the bespoke\n\
+      \    apply could be replaced with a T5 call — currently they diverge.\n\"\"\"\
+      \nfrom __future__ import annotations\n\nimport hashlib\nimport os\nimport re\n\
+      from datetime import datetime, timezone\nfrom pathlib import Path\nfrom typing\
+      \ import Any\n\nimport yaml\n\n\nSCHEMA = {\n    \"name\": \"apply.codex_patch\"\
+      ,\n    \"description\": (\n        \"Apply a codex-emitted patch that has been\
+      \ claude-verified per CLAUDE.md. \"\n        \"Refuses by default; requires\
+      \ both goal_packet.authorization.\"\n        \"codex_patch_apply_authorized=true\
+      \ AND env CONSENSUS_MCP_CODEX_PATCH_APPLY=1. \"\n        \"Refuses if no claude\
+      \ verification with verdict=approved exists. \"\n        \"Refuses if patch_proposal.base_sha\
+      \ doesn't match current state of touched files \"\n        \"(drift detection).\
+      \ On success, emits apply_step_landed audit event with the \"\n        \"structured\
+      \ last_mutation event object.\"\n    ),\n    \"input_schema\": {\n        \"\
+      type\": \"object\",\n        \"properties\": {\n            \"iteration_dir\"\
+      : {\"type\": \"string\"},\n            \"patch_id\": {\"type\": \"string\",\
+      \ \"pattern\": \"^codex-rev-\\\\d+-patch$\"},\n            \"actor\": {\n  \
+      \              \"type\": \"object\",\n                \"properties\": {\n  \
+      \                  \"id\": {\"type\": \"string\"},\n                    \"model_family\"\
+      : {\"enum\": [\"codex\", \"claude\"]},\n                    \"role\": {\"enum\"\
+      : [\"fix_author\", \"correction_author\"]},\n                    \"pass_id\"\
+      : {\"type\": \"string\"},\n                },\n                \"required\"\
+      : [\"id\", \"model_family\", \"role\", \"pass_id\"],\n                \"additionalProperties\"\
+      : False,\n            },\n        },\n        \"required\": [\"iteration_dir\"\
+      , \"patch_id\", \"actor\"],\n        \"additionalProperties\": False,\n    },\n\
+      \    \"output_schema\": {\n        \"type\": \"object\",\n        \"properties\"\
+      : {\n            \"ok\": {\"type\": \"boolean\"},\n            \"applied\":\
+      \ {\"type\": \"boolean\"},\n            \"last_mutation\": {\"type\": [\"object\"\
+      , \"null\"]},\n            \"error\": {\"type\": [\"string\", \"null\"]},\n\
+      \            \"audit_event_id\": {\"type\": [\"string\", \"null\"]},\n     \
+      \   },\n        \"required\": [\"ok\", \"applied\"],\n    },\n}\n\n\n_PATCH_ID_PATTERN\
+      \ = re.compile(r\"^codex-rev-\\d+-patch$\")\n\n\ndef _resolve_repo_root() ->\
+      \ Path:\n    \"\"\"CONSENSUS_MCP_REPO_ROOT env-var override -> source-tree-relative\
+      \ discovery.\n\n    Mirrors the resolver used by audit_append_event + patch_stage_and_dry_run\n\
+      \    so this tool, T4, and T6 always agree on REPO_ROOT.\n    \"\"\"\n    override\
+      \ = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if override:\n        return\
+      \ Path(override)\n    return Path(__file__).resolve().parent.parent.parent\n\
+      \n\ndef _now_utc() -> str:\n    return (\n        datetime.now(timezone.utc)\n\
+      \        .replace(microsecond=0)\n        .isoformat()\n        .replace(\"\
+      +00:00\", \"Z\")\n    )\n\n\ndef _read_yaml(path: Path) -> dict:\n    if not\
+      \ path.exists():\n        return {}\n    try:\n        data = yaml.safe_load(path.read_text(encoding=\"\
+      utf-8\"))\n    except Exception:\n        return {}\n    return data if isinstance(data,\
+      \ dict) else {}\n\n\ndef _refuse(error: str, last_mutation: dict | None = None)\
+      \ -> dict:\n    return {\n        \"ok\": False,\n        \"applied\": False,\n\
+      \        \"last_mutation\": last_mutation,\n        \"error\": error,\n    \
+      \    \"audit_event_id\": None,\n    }\n\n\ndef _validate_actor(actor: dict)\
+      \ -> str | None:\n    \"\"\"Defense-in-depth actor validation for direct Python\
+      \ handle() calls.\n\n    iter-0026 F4-001 (claude-iter0025-001 fix): the prior\
+      \ key-presence check\n    accepted ``id=\"\"`` / ``pass_id=None`` / ``id=42``\
+      \ which corrupt the\n    audit-log provenance. Both id and pass_id MUST be non-empty\
+      \ strings.\n    \"\"\"\n    if not isinstance(actor, dict):\n        return\
+      \ \"actor_invalid: actor must be a dict\"\n    required = (\"id\", \"model_family\"\
+      , \"role\", \"pass_id\")\n    missing = [key for key in required if key not\
+      \ in actor]\n    if missing:\n        return \"actor_invalid: missing required\
+      \ actor key(s): \" + \", \".join(missing)\n    # iter-0026 F4-001: id and pass_id\
+      \ must be non-empty strings.\n    for key in (\"id\", \"pass_id\"):\n      \
+      \  value = actor.get(key)\n        if not isinstance(value, str) or not value:\n\
+      \            return (\n                f\"actor_invalid: {key} must be a non-empty\
+      \ string; \"\n                f\"got {type(value).__name__}={value!r}\"\n  \
+      \          )\n    if actor.get(\"model_family\") not in (\"codex\", \"claude\"\
+      ):\n        return \"actor_invalid: model_family must be 'codex' or 'claude'\"\
+      \n    if actor.get(\"role\") not in (\"fix_author\", \"correction_author\"):\n\
+      \        return \"actor_invalid: role must be 'fix_author' or 'correction_author'\"\
+      \n    return None\n\n\ndef handle(\n    iteration_dir: str,\n    patch_id: str,\n\
+      \    actor: dict,\n) -> dict:\n    \"\"\"Apply a verified codex patch under\
+      \ operator authorization.\"\"\"\n    iter_dir = Path(iteration_dir)\n    repo_root\
+      \ = _resolve_repo_root()\n\n    # --- CR-5 (2026-05-22 security review): iteration_dir\
+      \ trust boundary ------\n    # iteration_dir is caller-supplied and authorization\
+      \ is read FROM it\n    # (goal_packet.yaml below). A caller could point T6 at\
+      \ a crafted dir whose\n    # own goal_packet self-grants codex_patch_apply_authorized,\
+      \ defeating that\n    # half of the dual interlock. Require it under the canonical\
+      \ active root\n    # before reading any authorization or patch artifact.\n \
+      \   from consensus_mcp._paths import is_contained\n    _active_root = (repo_root\
+      \ / \"consensus-state\" / \"active\").resolve()\n    if not is_contained(iter_dir.resolve(),\
+      \ _active_root):\n        return _refuse(\n            \"iteration_dir_outside_canonical_root:\
+      \ iteration_dir must be under \"\n            f\"consensus-state/active/ (got\
+      \ {iter_dir})\"\n        )\n\n    actor_error = _validate_actor(actor)\n   \
+      \ if actor_error:\n        return _refuse(actor_error)\n\n    # Defense-in-depth:\
+      \ validate patch_id format. The MCP layer enforces this\n    # via the input_schema\
+      \ pattern; record_verdict validates likewise. We\n    # re-check here so a misuse\
+      \ via direct python import can't slip past.\n    if not _PATCH_ID_PATTERN.match(patch_id):\n\
+      \        return _refuse(\n            f\"invalid_patch_id_format: must match\
+      \ ^codex-rev-\\\\d+-patch$; \"\n            f\"got {patch_id!r}\"\n        )\n\
+      \n    # --- Step 1: authorization gate (FAILS-CLOSED) ---------------------------\n\
+      \    env_flag = os.environ.get(\"CONSENSUS_MCP_CODEX_PATCH_APPLY\") == \"1\"\
+      \n    goal_packet = _read_yaml(iter_dir / \"goal_packet.yaml\")\n    auth =\
+      \ goal_packet.get(\"authorization\") or {}\n    gp_flag = auth.get(\"codex_patch_apply_authorized\"\
+      ) is True\n\n    if not (env_flag and gp_flag):\n        missing: list[str]\
+      \ = []\n        if not env_flag:\n            missing.append(\"env CONSENSUS_MCP_CODEX_PATCH_APPLY=1\"\
+      )\n        if not gp_flag:\n            missing.append(\"goal_packet.authorization.codex_patch_apply_authorized=true\"\
+      )\n        return _refuse(\n            \"operator_authorization_missing: \"\
+      \ + \" AND \".join(missing)\n        )\n\n    # --- Step 2: load codex-review.yaml\
+      \ and locate the patch_proposal --------\n    review = _read_yaml(iter_dir /\
+      \ \"codex-review.yaml\")\n    if not review:\n        return _refuse(\"codex_review_missing:\
+      \ codex-review.yaml not found or unreadable\")\n    findings = review.get(\"\
+      findings\") or []\n    patch_proposal: dict | None = None\n    finding_id: str\
+      \ | None = None\n    for f in findings:\n        if not isinstance(f, dict):\n\
+      \            continue\n        pp = f.get(\"patch_proposal\")\n        if isinstance(pp,\
+      \ dict) and pp.get(\"patch_id\") == patch_id:\n            patch_proposal =\
+      \ pp\n            finding_id = f.get(\"id\")\n            break\n    if patch_proposal\
+      \ is None:\n        return _refuse(\n            f\"patch_proposal_missing:\
+      \ no finding in codex-review.yaml has \"\n            f\"patch_proposal.patch_id={patch_id!r}\"\
+      \n        )\n\n    files_touched = list(patch_proposal.get(\"files_touched\"\
+      ) or [])\n    base_sha = patch_proposal.get(\"base_sha\") or \"\"\n    unified_diff\
+      \ = patch_proposal.get(\"unified_diff\") or \"\"\n\n    # --- CR-1 + CR-2 (2026-05-22\
+      \ security review): containment + scope gate ---\n    # files_touched is AI-supplied.\
+      \ Fail CLOSED before any read/write:\n    #   CR-1 each path must resolve INSIDE\
+      \ repo_root (no ../ or absolute escape)\n    #   CR-2 each path must be within\
+      \ goal_packet.allowed_files and must not\n    #        match forbidden_files.\
+      \ Previously only validate_disposition_index\n    #        ran in the staging\
+      \ gate, which never checks source-file targets.\n    from consensus_mcp._paths\
+      \ import resolve_contained, PathTraversalError\n    from consensus_mcp.validators.scope_check\
+      \ import _matches_any\n    _gp_allowed = goal_packet.get(\"allowed_files\")\n\
+      \    _gp_forbidden = goal_packet.get(\"forbidden_files\")\n    _gp_allowed =\
+      \ _gp_allowed if isinstance(_gp_allowed, list) else []\n    _gp_forbidden =\
+      \ _gp_forbidden if isinstance(_gp_forbidden, list) else []\n    for _rel in\
+      \ files_touched:\n        try:\n            resolve_contained(repo_root, _rel)\n\
+      \        except PathTraversalError as exc:\n            return _refuse(f\"path_traversal:\
+      \ {exc}\")\n        if _matches_any(_gp_forbidden, _rel) or not _matches_any(_gp_allowed,\
+      \ _rel):\n            return _refuse(\n                f\"out_of_scope: files_touched\
+      \ entry {_rel!r} is not within \"\n                \"goal_packet.allowed_files\"\
+      \n            )\n\n    # --- Step 3: claude verification gate ------------------------------------\n\
+      \    verif_path = iter_dir / \"codex-patch-verifications\" / f\"{patch_id}.yaml\"\
+      \n    if not verif_path.exists():\n        return _refuse(\"claude_verification_missing\"\
+      )\n    verif = _read_yaml(verif_path)\n    verdict = verif.get(\"verdict\")\n\
+      \    if verdict != \"approved\":\n        return _refuse(f\"claude_verification_not_approved:\
+      \ verdict={verdict!r}\")\n\n    # --- Step 4: drift detection --------------------------------------------\n\
+      \    # Lazy import: keep _closure_invariant a soft dependency.\n    from consensus_mcp._closure_invariant\
+      \ import bundle_sha\n    # Defense-in-depth: refuse if base_sha is empty/missing.\
+      \ Codex schema\n    # requires it, but apply layer must not silently skip drift\
+      \ detection\n    # when the field is empty (review caught this; per codex 2026-05-10\
+      \ v4\n    # the drift gate is non-optional).\n    if not base_sha:\n       \
+      \ return _refuse(\n            \"base_sha_missing: patch_proposal.base_sha is\
+      \ empty/missing; \"\n            \"drift detection requires the codex-reviewed\
+      \ bundle hash\"\n        )\n    current_bundle = bundle_sha(repo_root, files_touched)\n\
+      \    if current_bundle != base_sha:\n        return _refuse(\n            f\"\
+      base_sha_drift: codex saw base_sha={base_sha}, \"\n            f\"current bundle_sha={current_bundle}\
+      \ (touched files changed since codex review)\"\n        )\n\n    # --- Step\
+      \ 5: stage + dry-run via existing T4 primitive -------------------\n    # Build\
+      \ proposed_patches in the form patch.stage_and_dry_run expects:\n    # full-file\
+      \ old_string -> new_string substitution. We synthesize old_string\n    # from\
+      \ the file's current on-disk content and new_string from applying the\n    #\
+      \ codex unified_diff. v1.0: codex's patch_proposal already serializes the\n\
+      \    # post-patch full content via the test fixture's _new_content side-channel\n\
+      \    # for unit tests, AND production codex emissions provide a unified_diff\n\
+      \    # we re-apply via a minimal text patcher.\n    #\n    # For #26 this tool\
+      \ accepts full-file replacement via the unified_diff\n    # being apply-able\
+      \ by patching against the current file content. To keep\n    # the surgical\
+      \ scope per the task brief we use the simplest viable path:\n    # require the\
+      \ patch_proposal to contain pre/post content as a structured\n    # `_old_content`\
+      \ + `_new_content` pair OR derive both from unified_diff.\n    # Prefer structured\
+      \ fields when present; otherwise fall back to text\n    # diff application.\n\
+      \    new_contents: dict[str, str] = {}\n    old_content = patch_proposal.get(\"\
+      _old_content\")\n    new_content = patch_proposal.get(\"_new_content\")\n  \
+      \  if (\n        old_content is not None\n        and new_content is not None\n\
+      \        and len(files_touched) == 1\n    ):\n        # Single-file fast-path:\
+      \ structured fields specify pre/post directly.\n        rel = files_touched[0]\n\
+      \        target = repo_root / rel\n        if target.exists():\n           \
+      \ on_disk = target.read_text(encoding=\"utf-8\")\n            if on_disk !=\
+      \ old_content:\n                # Should have been caught by base_sha_drift,\
+      \ but defense-in-depth.\n                return _refuse(\n                 \
+      \   \"base_sha_drift: on-disk content of \"\n                    f\"{rel} does\
+      \ not match patch_proposal._old_content\"\n                )\n        new_contents[rel]\
+      \ = new_content\n    else:\n        # Multi-file or no structured fields: derive\
+      \ from unified_diff.\n        try:\n            new_contents = _apply_unified_diff(repo_root,\
+      \ files_touched, unified_diff)\n        except _DiffApplyError as exc:\n   \
+      \         return _refuse(f\"diff_apply_failed: {exc}\")\n\n    # Build proposed_patches\
+      \ for the staging gate.\n    proposed_patches: list[dict] = []\n    for rel,\
+      \ new_text in new_contents.items():\n        target = repo_root / rel\n    \
+      \    old_text = target.read_text(encoding=\"utf-8\") if target.exists() else\
+      \ \"\"\n        proposed_patches.append({\n            \"file\": rel,\n    \
+      \        \"old_string\": old_text,\n            \"new_string\": new_text,\n\
+      \        })\n\n    # Run staged dry-run. Codex patches target source-code files\
+      \ in\n    # goal_packet.allowed_files; the iteration/review/consensus validators\n\
+      \    # check different artifacts (yaml under iteration_dir) and do not apply\n\
+      \    # to source-code mutations. Limit the gate to validate_disposition_index,\n\
+      \    # which is canonical-006's primary anti-regression safeguard. On internal\n\
+      \    # error or BLOCKED gate or any high/blocking finding -> refuse.\n    from\
+      \ consensus_mcp.tools.patch_stage_and_dry_run import handle as stage_handle\n\
+      \    stage_result = stage_handle(\n        iteration_id=iter_dir.name,\n   \
+      \     proposed_patches=proposed_patches,\n        validators_to_run=[\"validate_disposition_index\"\
+      ],\n    )\n    if \"error\" in stage_result:\n        return _refuse(f\"stage_or_dry_run_failed:\
+      \ {stage_result['error']}\")\n    gate = stage_result.get(\"gate_decision\"\
+      , \"BLOCKED\")\n    findings_out = stage_result.get(\"dry_run_findings\", [])\
+      \ or []\n    high = [f for f in findings_out if f.get(\"severity\") in (\"high\"\
+      , \"blocking\", \"critical\")]\n    if gate != \"APPROVED\" or high:\n     \
+      \   return _refuse(\n            f\"stage_or_dry_run_failed: gate_decision={gate},\
+      \ high_findings={len(high)}\"\n        )\n\n    # --- Step 6: apply ------------------------------------------------------\n\
+      \    # iter-0026 F4-002 (claude-iter0025-002 fix): capture per-file pre-apply\n\
+      \    # content BEFORE the os.replace loop so we can roll back already-applied\n\
+      \    # files on any per-file failure. Prior behaviour left file_a mutated on\n\
+      \    # disk while reporting applied=False (untruthful).\n    pre_apply_state:\
+      \ dict[str, str | None] = {}\n    for rel in new_contents:\n        target =\
+      \ repo_root / rel\n        if target.exists():\n            try:\n         \
+      \       pre_apply_state[rel] = target.read_text(encoding=\"utf-8\")\n      \
+      \      except OSError:\n                pre_apply_state[rel] = None  # unreadable;\
+      \ treat as missing\n        else:\n            pre_apply_state[rel] = None \
+      \ # didn't exist pre-apply\n\n    applied_files: list[str] = []\n    try:\n\
+      \        for rel, new_text in new_contents.items():\n            target = repo_root\
+      \ / rel\n            target.parent.mkdir(parents=True, exist_ok=True)\n    \
+      \        tmp_path = target.with_suffix(target.suffix + \".tmp\")\n         \
+      \   tmp_path.write_text(new_text, encoding=\"utf-8\")\n            os.replace(str(tmp_path),\
+      \ str(target))\n            applied_files.append(rel)\n    except Exception\
+      \ as exc:\n        # iter-0026 F4-002: roll back already-applied files. Truthful\
+      \ applied=False.\n        rollback_errors: list[str] = []\n        for rel_applied\
+      \ in applied_files:\n            try:\n                target = repo_root /\
+      \ rel_applied\n                prior = pre_apply_state.get(rel_applied)\n  \
+      \              if prior is None:\n                    # File didn't exist pre-apply;\
+      \ remove the newly-written file.\n                    if target.exists():\n\
+      \                        target.unlink()\n                else:\n          \
+      \          target.write_text(prior, encoding=\"utf-8\")\n            except\
+      \ Exception as rb_exc:\n                rollback_errors.append(\n          \
+      \          f\"{rel_applied}:{type(rb_exc).__name__}:{rb_exc}\"\n           \
+      \     )\n        err_msg = (\n            f\"partial_apply_failed: applied={applied_files}\
+      \ failed={rel} \"\n            f\"exception={type(exc).__name__}:{exc}\"\n \
+      \       )\n        if rollback_errors:\n            err_msg += f\" rollback_errors={rollback_errors}\"\
+      \n        return _refuse(err_msg)\n\n    # --- Step 7: compute post_sha + emit\
+      \ apply_step_landed audit event ------\n    post_sha = bundle_sha(repo_root,\
+      \ files_touched)\n    # iter-0020: prefer helper-stamped unified_diff_sha256\
+      \ from patch_proposal\n    # (computed by _dispatch_codex._validate_patch_proposal);\
+      \ recompute\n    # defensively if absent (older patches written before iter-0020\
+      \ helper\n    # stamping landed).\n    diff_sha = patch_proposal.get(\"unified_diff_sha256\"\
+      )\n    if not diff_sha:\n        diff_sha = (\n            hashlib.sha256(unified_diff.encode(\"\
+      utf-8\")).hexdigest()\n            if unified_diff\n            else \"\"\n\
+      \        )\n    timestamp = _now_utc()\n\n    last_mutation = {\n        \"\
+      actor\": dict(actor),\n        \"patch_id\": patch_id,\n        \"files_touched\"\
+      : list(files_touched),\n        \"base_sha\": base_sha,\n        \"post_sha\"\
+      : post_sha,\n        \"unified_diff_sha256\": diff_sha,\n        \"timestamp\"\
+      : timestamp,\n    }\n\n    from consensus_mcp.tools.audit_append_event import\
+      \ handle as audit_handle\n    audit_result = audit_handle(\n        iteration_id=iter_dir.name,\n\
+      \        event_type=\"apply_step_landed\",\n        actor=actor.get(\"id\"),\n\
+      \        effect=\"codex_patch_applied\",\n        files_modified=applied_files,\n\
+      \        extra_fields={\n            \"mutation_actor\": last_mutation[\"actor\"\
+      ],\n            \"patch_id\": patch_id,\n            \"base_sha\": base_sha,\n\
+      \            \"post_sha\": post_sha,\n            \"timestamp\": timestamp,\n\
+      \            \"last_mutation\": last_mutation,\n            \"codex_finding_id\"\
+      : finding_id,\n        },\n    )\n    if \"error\" in audit_result:\n      \
+      \  # Files already on disk; surface the audit failure for operator follow-up.\n\
+      \        return {\n            \"ok\": False,\n            \"applied\": True,\n\
+      \            \"last_mutation\": last_mutation,\n            \"error\": f\"audit_write_failed:\
+      \ {audit_result['error']}\",\n            \"audit_event_id\": None,\n      \
+      \  }\n\n    return {\n        \"ok\": True,\n        \"applied\": True,\n  \
+      \      \"last_mutation\": last_mutation,\n        \"error\": None,\n       \
+      \ \"audit_event_id\": audit_result.get(\"event_id\"),\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+      # Minimal unified-diff applier (single-hunk-per-file, additive/replace)\n# ---------------------------------------------------------------------------\n\
+      \nclass _DiffApplyError(Exception):\n    pass\n\n\ndef _apply_unified_diff(\n\
+      \    repo_root: Path,\n    files_touched: list[str],\n    unified_diff: str,\n\
+      ) -> dict[str, str]:\n    \"\"\"Apply a unified diff against the current files;\
+      \ return new content per file.\n\n    Minimal applier sufficient for the codex\
+      \ patch_proposal shape. Splits the\n    diff into per-file segments by '+++\
+      \ b/<path>' headers; for each file,\n    walks each hunk and applies +/-/space\
+      \ lines to the current content.\n\n    Raises _DiffApplyError on any hunk that\
+      \ doesn't match expected context.\n    Production v1.0 caveat: this is intentionally\
+      \ simple. Codex emits patches\n    we generated and reviewed; pathological diffs\
+      \ SHOULD be caught by the\n    staged dry-run gate downstream (or fail here\
+      \ cleanly). Prefer the\n    structured _old_content/_new_content side-channel\
+      \ when feasible.\n    \"\"\"\n    if not unified_diff.strip():\n        raise\
+      \ _DiffApplyError(\"empty unified_diff\")\n\n    # Split into per-file segments\
+      \ by +++ header lines.\n    # iter-0026 F4-004 (claude-iter0025-004 fix): explicit\
+      \ `+++ /dev/null`\n    # recognition. The v1.0 applier does NOT support file\
+      \ deletions; refuse\n    # with named reason `file_deletion_unsupported` instead\
+      \ of coincidentally\n    # failing via files_touched lookup further down the\
+      \ pipeline. The matching\n    # `--- /dev/null` (file-add) case works correctly\
+      \ via the existing\n    # target.exists()==False branch — no explicit handling\
+      \ needed.\n    lines = unified_diff.splitlines(keepends=False)\n    file_segments:\
+      \ dict[str, list[str]] = {}\n    current_file: str | None = None\n    seg_lines:\
+      \ list[str] = []\n    for ln in lines:\n        if ln.startswith(\"+++ \"):\n\
+      \            if current_file is not None:\n                file_segments[current_file]\
+      \ = seg_lines\n            path = ln[4:].strip()\n            # iter-0026 F4-004:\
+      \ explicit `+++ /dev/null` -> delete (unsupported).\n            if path ==\
+      \ \"/dev/null\":\n                raise _DiffApplyError(\n                 \
+      \   \"file_deletion_unsupported: +++ /dev/null detected; v1.0 \"\n         \
+      \           \"unified-diff applier does not support file deletion\"\n      \
+      \          )\n            if path.startswith(\"b/\"):\n                path\
+      \ = path[2:]\n            current_file = path\n            seg_lines = []\n\
+      \            continue\n        if ln.startswith(\"--- \"):\n            # New\
+      \ file being introduced; reset for this segment.\n            if current_file\
+      \ is not None:\n                # Already inside a segment; finalize previous.\n\
+      \                file_segments[current_file] = seg_lines\n                current_file\
+      \ = None\n                seg_lines = []\n            continue\n        if current_file\
+      \ is not None:\n            seg_lines.append(ln)\n    if current_file is not\
+      \ None:\n        file_segments[current_file] = seg_lines\n\n    out: dict[str,\
+      \ str] = {}\n    for rel in files_touched:\n        seg = file_segments.get(rel)\n\
+      \        if seg is None:\n            raise _DiffApplyError(f\"no diff segment\
+      \ for file {rel!r}\")\n        target = repo_root / rel\n        original =\
+      \ target.read_text(encoding=\"utf-8\") if target.exists() else \"\"\n      \
+      \  new_text = _apply_one_file_diff(original, seg, rel)\n        out[rel] = new_text\n\
+      \    return out\n\n\n# iter-0026 F2: parse @@ -orig_start,orig_count +new_start,new_count\
+      \ @@ headers.\n# Counts are optional in the unified-diff format (default 1).\
+      \ When orig_count\n# is 0 the hunk starts AT orig_start - 1 conceptually but\
+      \ anchors against the\n# trailing context-line position; standard convention.\n\
+      _HUNK_HEADER_RE = re.compile(\n    r\"^@@ -(?P<orig_start>\\d+)(?:,(?P<orig_count>\\\
+      d+))? \"\n    r\"\\+(?P<new_start>\\d+)(?:,(?P<new_count>\\d+))? @@\"\n)\n\n\
+      \ndef _apply_one_file_diff(original: str, seg_lines: list[str], rel: str) ->\
+      \ str:\n    \"\"\"Apply a list of hunks (split by @@ headers) to ``original``.\n\
+      \n    Per iter-0026 F2 (codex review codex-rev-001, 2026-05-10): each hunk is\n\
+      \    anchored at ``orig_start - 1`` (zero-indexed) into the original file. The\n\
+      \    PRIOR implementation did pure linear context-matching, ignoring @@ line\n\
+      \    numbers, which mutated the wrong occurrence when context lines repeated.\n\
+      \n    Behaviour at each hunk:\n      - Emit all original lines BEFORE orig_start\
+      \ - 1 verbatim (gap copy).\n      - Walk the hunk body:\n          - context\
+      \ (\" \") line: must match orig_lines[orig_idx]; emit + advance.\n         \
+      \ - delete (\"-\") line: must match orig_lines[orig_idx]; skip in output.\n\
+      \          - add (\"+\") line: emit; do not advance orig_idx.\n          - blank/other\
+      \ line: ignored (intra-hunk blank).\n      - On any context-line OR delete-line\
+      \ mismatch at the anchored position,\n        raise _DiffApplyError with reason\
+      \ ``hunk_context_mismatch`` referencing\n        the hunk header so the operator\
+      \ can re-anchor.\n\n    After all hunks: emit remaining original lines verbatim.\
+      \ Preserves trailing\n    newline state of the original (or adds one when original\
+      \ was nonempty +\n    newline-terminated and result is not).\n\n    Hunks MUST\
+      \ be in increasing orig_start order (standard unified-diff form);\n    the prior-line-cursor\
+      \ enforces it. Out-of-order hunks raise\n    _DiffApplyError.\n    \"\"\"\n\
+      \    orig_lines = original.splitlines(keepends=False)\n    has_trailing_nl =\
+      \ original.endswith(\"\\n\") if original else True\n\n    # Split seg_lines\
+      \ into hunks at @@ headers.\n    hunks: list[tuple[re.Match, list[str]]] = []\n\
+      \    current_header: re.Match | None = None\n    current_body: list[str] = []\n\
+      \    for ln in seg_lines:\n        if ln.startswith(\"@@\"):\n            if\
+      \ current_header is not None:\n                hunks.append((current_header,\
+      \ current_body))\n            m = _HUNK_HEADER_RE.match(ln)\n            if\
+      \ m is None:\n                raise _DiffApplyError(\n                    f\"\
+      hunk_header_malformed: cannot parse {ln!r} in {rel!r}\"\n                )\n\
+      \            current_header = m\n            current_body = []\n           \
+      \ continue\n        if current_header is None:\n            # Pre-@@ noise (e.g.,\
+      \ stray blank lines between +++/--- headers and\n            # the first hunk).\
+      \ Skip silently.\n            continue\n        current_body.append(ln)\n  \
+      \  if current_header is not None:\n        hunks.append((current_header, current_body))\n\
+      \n    if not hunks:\n        # No-op diff segment; return original unchanged.\n\
+      \        return original\n\n    out_lines: list[str] = []\n    orig_idx = 0\
+      \  # zero-indexed position in orig_lines\n\n    for header, body in hunks:\n\
+      \        orig_start = int(header.group(\"orig_start\"))\n        # Anchor: orig_start\
+      \ is 1-indexed; convert to 0-indexed.\n        # Special case: orig_start=0\
+      \ means file-add hunk (--- /dev/null); the\n        # anchor is 0 (empty original).\n\
+      \        anchor = max(0, orig_start - 1) if orig_start > 0 else 0\n\n      \
+      \  if anchor < orig_idx:\n            raise _DiffApplyError(\n             \
+      \   f\"hunk_out_of_order: hunk at orig_start={orig_start} (anchor \"\n     \
+      \           f\"{anchor}) precedes already-processed line {orig_idx} of {rel!r}\"\
+      \n            )\n\n        # Emit gap (verbatim originals between previous hunk\
+      \ and this anchor).\n        while orig_idx < anchor:\n            if orig_idx\
+      \ >= len(orig_lines):\n                raise _DiffApplyError(\n            \
+      \        f\"hunk_context_mismatch: hunk anchor at line {orig_start} \"\n   \
+      \                 f\"is past end of file ({len(orig_lines)} lines) in {rel!r}\"\
+      \n                )\n            out_lines.append(orig_lines[orig_idx])\n  \
+      \          orig_idx += 1\n\n        # Walk hunk body anchored at orig_idx.\n\
+      \        for ln in body:\n            if ln.startswith(\"+\"):\n           \
+      \     out_lines.append(ln[1:])\n                continue\n            if ln.startswith(\"\
+      -\"):\n                if orig_idx >= len(orig_lines) or orig_lines[orig_idx]\
+      \ != ln[1:]:\n                    actual = (\n                        orig_lines[orig_idx]\n\
+      \                        if orig_idx < len(orig_lines)\n                   \
+      \     else \"<eof>\"\n                    )\n                    raise _DiffApplyError(\n\
+      \                        f\"hunk_context_mismatch: delete line {ln[1:]!r} does\
+      \ \"\n                        f\"not match original at line {orig_idx + 1} (got\
+      \ \"\n                        f\"{actual!r}) for hunk @@ -{orig_start} in {rel!r}\"\
+      \n                    )\n                orig_idx += 1\n                continue\n\
+      \            if ln.startswith(\" \"):\n                if orig_idx >= len(orig_lines)\
+      \ or orig_lines[orig_idx] != ln[1:]:\n                    actual = (\n     \
+      \                   orig_lines[orig_idx]\n                        if orig_idx\
+      \ < len(orig_lines)\n                        else \"<eof>\"\n              \
+      \      )\n                    raise _DiffApplyError(\n                     \
+      \   f\"hunk_context_mismatch: context line {ln[1:]!r} does \"\n            \
+      \            f\"not match original at line {orig_idx + 1} (got \"\n        \
+      \                f\"{actual!r}) for hunk @@ -{orig_start} in {rel!r}\"\n   \
+      \                 )\n                out_lines.append(orig_lines[orig_idx])\n\
+      \                orig_idx += 1\n                continue\n            # Blank\
+      \ or other line; ignore (intra-hunk blank).\n\n    # Emit remaining original\
+      \ lines after the last hunk.\n    while orig_idx < len(orig_lines):\n      \
+      \  out_lines.append(orig_lines[orig_idx])\n        orig_idx += 1\n\n    result\
+      \ = \"\\n\".join(out_lines)\n    if has_trailing_nl and not result.endswith(\"\
+      \\n\"):\n        result += \"\\n\"\n    return result\n\n\ndef register(registry)\
+      \ -> None:\n    registry.register(SCHEMA[\"name\"], SCHEMA, handle)\n"
+    consensus_mcp/tools/patch_stage_and_dry_run.py: "\"\"\"patch.stage_and_dry_run\
+      \ MCP tool. Phase 1 G2 partial (dry-run; not apply).\n\nImplements the canonical-006\
+      \ anti_regression_criterion.iteration_applied_changes_extension\nas a technical\
+      \ gate. Replaces manual orchestrator staging mechanism with\nmediated staging\
+      \ + isolated subprocess validation.\n\nCONCURRENCY NOTE: validators write to\
+      \ shared consensus-state/state/validate-*-report.yaml\npaths. This tool redirects\
+      \ all validator output to temp paths, so concurrent\ncalls do NOT race on the\
+      \ shared report files. Phase 0 is single-writer anyway.\n\"\"\"\nfrom __future__\
+      \ import annotations\nimport json\nimport shutil\nimport subprocess\nimport\
+      \ sys\nimport tempfile\nfrom pathlib import Path\n\nfrom consensus_mcp._paths\
+      \ import (\n    project_root, active_dir, spec_path, resolve_contained, PathTraversalError,\n\
+      )\n\n# iter-0035 (Phase B step 5 per iter-0024 plan): migrated from module-level\n\
+      # REPO_ROOT / SPEC_PATH / ACTIVE_DIR captures to lazy `_paths` resolvers.\n\n\
+      \ndef __getattr__(name: str):\n    \"\"\"Lazy module-level constants (PEP 562\
+      \ backward compat for callers\n    that referenced REPO_ROOT / SPEC_PATH / ACTIVE_DIR\
+      \ as module attributes).\"\"\"\n    if name == \"REPO_ROOT\":\n        return\
+      \ project_root()\n    if name == \"SPEC_PATH\":\n        return spec_path()\n\
+      \    if name == \"ACTIVE_DIR\":\n        return active_dir()\n    raise AttributeError(f\"\
+      module {__name__!r} has no attribute {name!r}\")\n\nDEFAULT_VALIDATORS = [\n\
+      \    \"validate_disposition_index\",\n    \"validate_review\",\n    \"validate_consensus\"\
+      ,\n    \"validate_iteration\",\n]\n\ndef _validator_scripts() -> dict:\n   \
+      \ \"\"\"Resolve validator script paths under the current project root.\n\n \
+      \   iter-0035: lazy resolution per-call so monkeypatch.setenv() works.\n   \
+      \ The validators dir lives under project_root (source-tree-relative),\n    not\
+      \ state_root.\n    \"\"\"\n    base = project_root() / \"consensus_mcp\" / \"\
+      validators\"\n    return {\n        \"validate_disposition_index\": str(base\
+      \ / \"validate_disposition_index.py\"),\n        \"validate_review\":      \
+      \       str(base / \"validate_review.py\"),\n        \"validate_consensus\"\
+      :          str(base / \"validate_consensus.py\"),\n        \"validate_iteration\"\
+      :          str(base / \"validate_iteration.py\"),\n    }\n\nSCHEMA = {\n   \
+      \ \"name\": \"patch.stage_and_dry_run\",\n    \"description\": (\n        \"\
+      Stage proposed patches to a temp dir + run validators on hypothetical \"\n \
+      \       \"post-edit state + return findings + gate decision per canonical-006\
+      \ \"\n        \"anti-regression rule.\"\n    ),\n    \"input_schema\": {\n \
+      \       \"type\": \"object\",\n        \"properties\": {\n            \"iteration_id\"\
+      : {\n                \"type\": [\"string\", \"null\"],\n                \"description\"\
+      : \"Iteration this dry-run targets; null for spec-only patches\",\n        \
+      \    },\n            \"proposed_patches\": {\n                \"type\": \"array\"\
+      ,\n                \"items\": {\n                    \"type\": \"object\",\n\
+      \                    \"properties\": {\n                        \"file\": {\"\
+      type\": \"string\"},\n                        \"old_string\": {\"type\": \"\
+      string\"},\n                        \"new_string\": {\"type\": \"string\"},\n\
+      \                    },\n                    \"required\": [\"file\", \"old_string\"\
+      , \"new_string\"],\n                },\n            },\n            \"validators_to_run\"\
+      : {\n                \"type\": \"array\",\n                \"items\": {\"type\"\
+      : \"string\"},\n                \"description\": \"Validator names to run; defaults\
+      \ to all 4 main validators\",\n            },\n        },\n        \"required\"\
+      : [\"proposed_patches\"],\n        \"additionalProperties\": False,\n    },\n\
+      \    \"output_schema\": {\n        \"type\": \"object\",\n        \"properties\"\
+      : {\n            \"staging_dir_used\": {\n                \"type\": \"string\"\
+      ,\n                \"description\": (\n                    \"Temp dir used for\
+      \ staging (already deleted by return time). \"\n                    \"Past tense:\
+      \ signals the dir was used and cleaned, not that it still exists.\"\n      \
+      \          ),\n            },\n            \"dry_run_findings\": {\"type\":\
+      \ \"array\"},\n            \"gate_decision\": {\"type\": \"string\", \"enum\"\
+      : [\"APPROVED\", \"BLOCKED\"]},\n            \"dry_run_isolation_caveats\":\
+      \ {\n                \"type\": \"array\",\n                \"items\": {\"type\"\
+      : \"string\"},\n                \"description\": (\n                    \"Validator\
+      \ checks that are NOT fully isolated from the real repo during \"\n        \
+      \            \"dry-run. Callers should inspect this list before trusting dry-run\
+      \ results \"\n                    \"for patches that touch archived_at entries,\
+      \ gitignore, or archive index.\"\n                ),\n            },\n     \
+      \   },\n        \"required\": [\"staging_dir_used\", \"dry_run_findings\", \"\
+      gate_decision\", \"dry_run_isolation_caveats\"],\n    },\n}\n\n\ndef _apply_patch(text:\
+      \ str, old_string: str, new_string: str, file_label: str) -> tuple[str, str\
+      \ | None]:\n    \"\"\"Apply one old->new substitution. Returns (new_text, error_or_None).\"\
+      \"\"\n    if old_string not in text:\n        return text, f\"old_string not\
+      \ found in {file_label}\"\n    return text.replace(old_string, new_string, 1),\
+      \ None\n\n\ndef _read_report_findings(report_path: Path) -> list[dict]:\n  \
+      \  \"\"\"Parse a validator YAML report; return its findings list (empty on error).\"\
+      \"\"\n    if not report_path.exists():\n        return []\n    try:\n      \
+      \  import yaml\n        data = yaml.safe_load(report_path.read_text(encoding=\"\
+      utf-8\"))\n    except Exception:\n        return []\n    if not isinstance(data,\
+      \ dict):\n        return []\n    findings = data.get(\"findings\", [])\n   \
+      \ if not isinstance(findings, list):\n        return []\n    return [f for f\
+      \ in findings if isinstance(f, dict)]\n\n\ndef _run_validator(name: str, extra_args:\
+      \ list[str], out_path: Path) -> tuple[list[dict], str | None]:\n    \"\"\"Run\
+      \ one validator subprocess; return (findings, error_or_None).\"\"\"\n    script\
+      \ = _validator_scripts().get(name)\n    if script is None:\n        return [],\
+      \ f\"unknown validator: {name}\"\n    cmd = [sys.executable, script] + extra_args\
+      \ + [\"--out\", str(out_path)]\n    try:\n        result = subprocess.run(\n\
+      \            cmd,\n            capture_output=True,\n            text=True,\n\
+      \            cwd=str(project_root()),\n            timeout=60,\n        )\n\
+      \    except subprocess.TimeoutExpired:\n        return [], f\"validator {name}\
+      \ timed out\"\n    except Exception as exc:\n        return [], f\"validator\
+      \ {name} failed: {exc}\"\n    if result.returncode not in (0, 1):\n        stderr_snippet\
+      \ = result.stderr.strip()[:300]\n        return [], f\"validator {name} exited\
+      \ {result.returncode}: {stderr_snippet}\"\n    return _read_report_findings(out_path),\
+      \ None\n\n\n_DRY_RUN_ISOLATION_CAVEATS: list[str] = [\n    \"Validator 1 (archived_at\
+      \ file existence): resolves paths against real REPO_ROOT, not staging dir. \"\
+      \n    \"Patches that add/remove archived_at entries will produce inaccurate\
+      \ dry-run findings.\",\n    \"Validator 5 (phase_0 deliverables gitignore status):\
+      \ resolves against real .gitignore. \"\n    \"Patches modifying gitignore +\
+      \ script set are not fully dry-run-testable.\",\n    \"Validator 6 (archive\
+      \ index pass list): cross-checks against real consensus-state/archive/review-passes/index.yaml.\"\
+      ,\n]\n\n\n_GATE_BLOCK_SEVERITIES = (\"high\", \"blocking\", \"critical\")\n\n\
+      \ndef _gate_decision(all_findings: list[dict]) -> str:\n    \"\"\"APPROVED unless\
+      \ any finding is high/blocking/critical severity.\n\n    M-6 (2026-05-22 security\
+      \ review): ``critical`` was previously omitted from\n    the block set, so the\
+      \ public ``gate_decision`` could read APPROVED while a\n    critical dry-run\
+      \ finding was present.\n    \"\"\"\n    return \"APPROVED\" if all(\n      \
+      \  f.get(\"severity\") not in _GATE_BLOCK_SEVERITIES for f in all_findings\n\
+      \    ) else \"BLOCKED\"\n\n\ndef handle(\n    iteration_id: str | None = None,\n\
+      \    proposed_patches: list | None = None,\n    validators_to_run: list | None\
+      \ = None,\n) -> dict:\n    \"\"\"Stage patches; run validators against staged\
+      \ state; return findings + gate.\n\n    Empty proposed_patches runs validators\
+      \ against real (un-patched) state.\n\n    Isolation limitation: REPO_ROOT is\
+      \ resolved at module import time. Validators 1\n    (archived_at file existence),\
+      \ 5 (phase_0 script gitignore), and 6 (archive index\n    xref) resolve file\
+      \ paths against the real filesystem, not the staging dir. Dry-run\n    results\
+      \ for patches that add/remove archived_at entries, change gitignore rules, or\n\
+      \    modify the archive pass index are therefore inaccurate. The output field\n\
+      \    dry_run_isolation_caveats documents which checks are affected; callers\
+      \ should inspect\n    it before trusting dry-run results for those patch classes.\n\
+      \    \"\"\"\n    if proposed_patches is None:\n        proposed_patches = []\n\
+      \    if validators_to_run is None:\n        validators_to_run = list(DEFAULT_VALIDATORS)\n\
+      \n    # Refuse empty validator list: canonical-006 requires SOME validation;\
+      \ an empty\n    # list would silently bypass the gate (every patch returns APPROVED\
+      \ with no\n    # findings). To run zero validators, the caller must say so explicitly\
+      \ via the\n    # _force_zero_validators=True escape hatch reserved for diagnostics;\
+      \ production\n    # callers must never pass that flag.\n    if not validators_to_run:\n\
+      \        return {\n            \"error\": (\n                \"validators_to_run\
+      \ is empty; canonical-006 requires at least one \"\n                \"validator.\
+      \ Pass None to use DEFAULT_VALIDATORS, or name specific \"\n               \
+      \ \"validators from _validator_scripts().\"\n            )\n        }\n\n  \
+      \  # Validate requested validator names early.\n    unknown = [v for v in validators_to_run\
+      \ if v not in _validator_scripts()]\n    if unknown:\n        return {\"error\"\
+      : f\"unknown validator(s): {', '.join(unknown)}\"}\n\n    # Determine which\
+      \ iteration dir to stage (may be None).\n    iter_dir: Path | None = None\n\
+      \    if iteration_id is not None:\n        iter_dir = active_dir() / iteration_id\n\
+      \        if not iter_dir.exists():\n            return {\"error\": f\"iteration\
+      \ dir not found: {iter_dir}\"}\n\n    # Build a map: real_path -> patched_text\
+      \ for every patched file.\n    patched: dict[Path, str] = {}\n    for patch\
+      \ in proposed_patches:\n        file_rel = patch.get(\"file\", \"\")\n     \
+      \   old_str = patch.get(\"old_string\", \"\")\n        new_str = patch.get(\"\
+      new_string\", \"\")\n        # H-2 (2026-05-22 security review): file_rel is\
+      \ caller-supplied. Resolve\n        # with containment BEFORE any read or staging\
+      \ write. An unresolved ../\n        # relpath otherwise passes relative_to()\
+      \ lexically and escapes staging.\n        try:\n            real_path = resolve_contained(project_root(),\
+      \ file_rel)\n        except PathTraversalError as exc:\n            return {\"\
+      error\": f\"path_traversal: {exc}\"}\n        if real_path in patched:\n   \
+      \         current_text = patched[real_path]\n        else:\n            if not\
+      \ real_path.exists():\n                if old_str == \"\":\n               \
+      \     # New-file creation: empty old_string is the \"before\" state.\n     \
+      \               current_text = \"\"\n                else:\n               \
+      \     return {\"error\": f\"file not found: {file_rel}\"}\n            else:\n\
+      \                current_text = real_path.read_text(encoding=\"utf-8\")\n  \
+      \      new_text, err = _apply_patch(current_text, old_str, new_str, file_rel)\n\
+      \        if err:\n            return {\"error\": err}\n        patched[real_path]\
+      \ = new_text\n\n    # Write staged copies to a temp dir (auto-cleaned on exit\
+      \ via try/finally).\n    staging = tempfile.mkdtemp(prefix=\"mcp-stage-\")\n\
+      \    staging_path = Path(staging)\n\n    all_findings: list[dict] = []\n   \
+      \ staged_dir_str = staging  # reported back; cleaned before return\n\n    try:\n\
+      \        # Stage patched files.\n        for real_path, text in patched.items():\n\
+      \            # Mirror directory structure under staging_path.\n            rel\
+      \ = real_path.relative_to(project_root())\n            dest = staging_path /\
+      \ rel\n            dest.parent.mkdir(parents=True, exist_ok=True)\n        \
+      \    dest.write_text(text, encoding=\"utf-8\")\n\n        # Determine staged\
+      \ spec path: use staged copy if it was patched, else real.\n        _spec =\
+      \ spec_path()\n        staged_spec = staging_path / _spec.relative_to(project_root())\
+      \ if _spec in patched else _spec\n\n        # Determine staged iteration dir:\
+      \ copy real dir if iteration_id given, then overlay patches.\n        staged_iter_dir:\
+      \ Path | None = None\n        if iter_dir is not None:\n            staged_iter_dir\
+      \ = staging_path / iteration_id\n            shutil.copytree(str(iter_dir),\
+      \ str(staged_iter_dir))\n            # Overlay any iteration-file patches.\n\
+      \            for real_path, text in patched.items():\n                if real_path.is_relative_to(iter_dir):\n\
+      \                    rel_in_iter = real_path.relative_to(iter_dir)\n       \
+      \             (staged_iter_dir / rel_in_iter).write_text(text, encoding=\"utf-8\"\
+      )\n\n        # Run each requested validator.\n        for name in validators_to_run:\n\
+      \            out_path = staging_path / f\"{name}-report.yaml\"\n\n         \
+      \   if name == \"validate_disposition_index\":\n                extra = [\"\
+      --spec\", str(staged_spec)]\n                findings, err = _run_validator(name,\
+      \ extra, out_path)\n                if err:\n                    return {\"\
+      error\": err}\n                all_findings.extend(_tag_findings(findings, name))\n\
+      \n            elif name == \"validate_iteration\":\n                if staged_iter_dir\
+      \ is None:\n                    # No iteration context; skip silently.\n   \
+      \                 continue\n                extra = [\"--iteration-dir\", str(staged_iter_dir)]\n\
+      \                findings, err = _run_validator(name, extra, out_path)\n   \
+      \             if err:\n                    return {\"error\": err}\n       \
+      \         all_findings.extend(_tag_findings(findings, name))\n\n           \
+      \ elif name == \"validate_review\":\n                if staged_iter_dir is None:\n\
+      \                    continue\n                for review_file in (\"codex-review.yaml\"\
+      , \"claude-review.yaml\"):\n                    review_path = staged_iter_dir\
+      \ / review_file\n                    if not review_path.exists():\n        \
+      \                continue\n                    rout = staging_path / f\"validate_review-{review_file}.yaml\"\
+      \n                    extra = [\"--review\", str(review_path)]\n           \
+      \         findings, err = _run_validator(name, extra, rout)\n              \
+      \      if err:\n                        return {\"error\": err}\n          \
+      \          all_findings.extend(_tag_findings(findings, f\"{name}:{review_file}\"\
+      ))\n\n            elif name == \"validate_consensus\":\n                if staged_iter_dir\
+      \ is None:\n                    continue\n                consensus_path = staged_iter_dir\
+      \ / \"consensus.yaml\"\n                if not consensus_path.exists():\n  \
+      \                  continue\n                extra = [\"--consensus\", str(consensus_path)]\n\
+      \                findings, err = _run_validator(name, extra, out_path)\n   \
+      \             if err:\n                    return {\"error\": err}\n       \
+      \         all_findings.extend(_tag_findings(findings, name))\n\n    finally:\n\
+      \        shutil.rmtree(staging, ignore_errors=True)\n\n    gate = _gate_decision(all_findings)\n\
+      \n    return {\n        \"staging_dir_used\": staged_dir_str,\n        \"dry_run_findings\"\
+      : all_findings,\n        \"gate_decision\": gate,\n        \"dry_run_isolation_caveats\"\
+      : _DRY_RUN_ISOLATION_CAVEATS,\n    }\n\n\ndef _tag_findings(findings: list[dict],\
+      \ source: str) -> list[dict]:\n    \"\"\"Add a _validator tag to each finding\
+      \ for traceability.\"\"\"\n    tagged = []\n    for f in findings:\n       \
+      \ f2 = dict(f)\n        f2[\"_validator\"] = source\n        tagged.append(f2)\n\
+      \    return tagged\n\n\ndef register(registry) -> None:\n    registry.register(SCHEMA[\"\
+      name\"], SCHEMA, handle)\n"
+    consensus_mcp/tests/test_security_cluster_2026_05_22.py: "\"\"\"Security-cluster\
+      \ regression tests — consensus review 2026-05-22.\n\nCloses CR-1..CR-5, H-2,\
+      \ M-6 from CODE_REVIEW_2026-05-22.md, validated by the\ncodex+gemini consensus\
+      \ audit (iteration-codereview-audit-2026-05-22):\n\n  CR-1 apply_codex_patch:\
+      \ arbitrary write via files_touched path traversal\n  CR-2 apply_codex_patch:\
+      \ files_touched not constrained to goal_packet.allowed_files\n  CR-3 build_review_packet:\
+      \ arbitrary read/exfil via target_files traversal\n  CR-4 scope_check: empty/missing/non-list\
+      \ allowed_files fails OPEN (allow-all)\n  CR-5 apply_codex_patch: non-canonical\
+      \ iteration_dir self-authorizes (auth bypass)\n  H-2  patch_stage_and_dry_run:\
+      \ file_rel traversal (silent staging-write escape)\n  M-6  patch_stage_and_dry_run:\
+      \ gate_decision does not block on \"critical\"\n\nEach test asserts the FAIL-CLOSED\
+      \ behavior the fix introduces; it FAILS against\nthe pre-fix code (demonstrating\
+      \ the vulnerability) and PASSES after.\n\"\"\"\nfrom __future__ import annotations\n\
+      \nimport importlib\nfrom pathlib import Path\n\nimport pytest\nimport yaml\n\
+      \nfrom consensus_mcp import _paths\nfrom consensus_mcp.tests.test_apply_codex_patch\
+      \ import (\n    _make_active_iter,\n    _build_patch_proposal,\n    _write_codex_review,\n\
+      \    _write_goal_packet,\n    _write_claude_verification,\n    _make_actor,\n\
+      )\n\n\ndef _reload_apply():\n    import consensus_mcp.tools.apply_codex_patch\
+      \ as acp\n    importlib.reload(acp)\n    return acp\n\n\n# --------------------------------------------------------------------------\n\
+      # _paths.resolve_contained — shared containment helper (basis for CR-1/3/5,\
+      \ H-2)\n# --------------------------------------------------------------------------\n\
+      \ndef test_resolve_contained_inside_returns_resolved(tmp_path):\n    (tmp_path\
+      \ / \"sub\").mkdir()\n    f = tmp_path / \"sub\" / \"ok.txt\"\n    f.write_text(\"\
+      ok\", encoding=\"utf-8\")\n    assert _paths.resolve_contained(tmp_path, \"\
+      sub/ok.txt\") == f.resolve()\n\n\ndef test_resolve_contained_absolute_outside_raises(tmp_path):\n\
+      \    outside = tmp_path.parent / f\"{tmp_path.name}_secret.txt\"\n    with pytest.raises(_paths.PathTraversalError):\n\
+      \        _paths.resolve_contained(tmp_path, str(outside))\n\n\ndef test_resolve_contained_dotdot_traversal_raises(tmp_path):\n\
+      \    with pytest.raises(_paths.PathTraversalError):\n        _paths.resolve_contained(tmp_path,\
+      \ \"../escape.txt\")\n\n\n# --------------------------------------------------------------------------\n\
+      # CR-1 — apply_codex_patch refuses a path-traversal files_touched (no outside\
+      \ write)\n# --------------------------------------------------------------------------\n\
+      \ndef test_apply_codex_patch_refuses_traversal_write(tmp_path, monkeypatch):\n\
+      \    monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\", str(tmp_path))\n    monkeypatch.setenv(\"\
+      CONSENSUS_MCP_CODEX_PATCH_APPLY\", \"1\")\n    acp = _reload_apply()\n    iter_dir\
+      \ = _make_active_iter(tmp_path, \"iteration-sec-cr1\")\n    _write_goal_packet(iter_dir)\n\
+      \    pp = _build_patch_proposal(\n        tmp_path, files_touched=[\"../escape.txt\"\
+      ], base_sha=\"0\" * 64,\n        old_content=\"\", new_content=\"PWNED\\n\"\
+      ,\n    )\n    _write_codex_review(iter_dir, pp)\n    _write_claude_verification(iter_dir,\
+      \ pp[\"patch_id\"])\n\n    res = acp.handle(iteration_dir=str(iter_dir), patch_id=pp[\"\
+      patch_id\"], actor=_make_actor())\n\n    assert res[\"ok\"] is False and res[\"\
+      applied\"] is False\n    err = res.get(\"error\", \"\").lower()\n    assert\
+      \ \"traversal\" in err or \"outside\" in err\n    assert not (tmp_path.parent\
+      \ / \"escape.txt\").exists(), \\\n        \"traversal write must not land outside\
+      \ repo_root\"\n\n\n# --------------------------------------------------------------------------\n\
+      # CR-2 — apply_codex_patch refuses a files_touched not in goal_packet.allowed_files\n\
+      # --------------------------------------------------------------------------\n\
+      \ndef test_apply_codex_patch_refuses_out_of_scope_file(tmp_path, monkeypatch):\n\
+      \    monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\", str(tmp_path))\n    monkeypatch.setenv(\"\
+      CONSENSUS_MCP_CODEX_PATCH_APPLY\", \"1\")\n    acp = _reload_apply()\n    iter_dir\
+      \ = _make_active_iter(tmp_path, \"iteration-sec-cr2\")\n    _write_goal_packet(iter_dir,\
+      \ allowed_files=[\"scripts/foo.py\"])  # evil.py NOT in scope\n    evil = tmp_path\
+      \ / \"scripts\" / \"evil.py\"\n    evil.parent.mkdir(parents=True, exist_ok=True)\n\
+      \    evil.write_text(\"original\\n\", encoding=\"utf-8\")\n    pp = _build_patch_proposal(\n\
+      \        tmp_path, files_touched=[\"scripts/evil.py\"], base_sha=\"0\" * 64,\n\
+      \        old_content=\"original\\n\", new_content=\"HACKED\\n\",\n    )\n  \
+      \  _write_codex_review(iter_dir, pp)\n    _write_claude_verification(iter_dir,\
+      \ pp[\"patch_id\"])\n\n    res = acp.handle(iteration_dir=str(iter_dir), patch_id=pp[\"\
+      patch_id\"], actor=_make_actor())\n\n    assert res[\"ok\"] is False and res[\"\
+      applied\"] is False\n    assert \"scope\" in res.get(\"error\", \"\").lower()\n\
+      \    assert evil.read_text(encoding=\"utf-8\") == \"original\\n\", \\\n    \
+      \    \"out-of-scope file must be left untouched\"\n\n\n# --------------------------------------------------------------------------\n\
+      # CR-5 — apply_codex_patch refuses a non-canonical iteration_dir (auth bypass)\n\
+      # --------------------------------------------------------------------------\n\
+      \ndef test_apply_codex_patch_refuses_noncanonical_iteration_dir(tmp_path, monkeypatch):\n\
+      \    monkeypatch.setenv(\"CONSENSUS_MCP_REPO_ROOT\", str(tmp_path))\n    monkeypatch.setenv(\"\
+      CONSENSUS_MCP_CODEX_PATCH_APPLY\", \"1\")\n    acp = _reload_apply()\n    #\
+      \ A crafted dir OUTSIDE consensus-state/active/ carrying a self-authorizing\n\
+      \    # goal_packet — the exact attack codex-rev-003 describes.\n    rogue =\
+      \ tmp_path / \"rogue-iter\"\n    rogue.mkdir(parents=True, exist_ok=True)\n\
+      \    (rogue / \"independence-audit.yaml\").write_text(\n        yaml.safe_dump({\"\
+      audit_log\": []}), encoding=\"utf-8\")\n    _write_goal_packet(rogue)\n    pp\
+      \ = _build_patch_proposal(\n        tmp_path, files_touched=[\"scripts/foo.py\"\
+      ], base_sha=\"0\" * 64,\n        old_content=\"\", new_content=\"x\\n\",\n \
+      \   )\n    _write_codex_review(rogue, pp)\n    _write_claude_verification(rogue,\
+      \ pp[\"patch_id\"])\n\n    res = acp.handle(iteration_dir=str(rogue), patch_id=pp[\"\
+      patch_id\"], actor=_make_actor())\n\n    assert res[\"ok\"] is False and res[\"\
+      applied\"] is False\n    err = res.get(\"error\", \"\").lower()\n    assert\
+      \ \"iteration_dir\" in err or \"canonical\" in err or \"active\" in err\n\n\n\
+      # --------------------------------------------------------------------------\n\
+      # CR-3 — build_review_packet does not read a traversal target_file into the\
+      \ packet\n# --------------------------------------------------------------------------\n\
+      \ndef test_build_review_packet_skips_traversal_target_file(tmp_path, monkeypatch):\n\
+      \    import consensus_mcp.validators.build_review_packet as brp\n    monkeypatch.setattr(brp,\
+      \ \"REPO_ROOT\", tmp_path, raising=True)\n    secret = tmp_path.parent / f\"\
+      {tmp_path.name}_id_rsa\"\n    secret.write_text(\"PRIVATE_KEY_MATERIAL\\n\"\
+      , encoding=\"utf-8\")\n    inp = tmp_path / \"input.yaml\"\n    inp.write_text(yaml.safe_dump({\n\
+      \        \"iteration_id\": \"iteration-sec-cr3\",\n        \"objective\": \"\
+      x\",\n        \"mode\": \"review\",\n        \"gate_state\": \"open\",\n   \
+      \     \"target_files\": [f\"../{secret.name}\"],\n    }), encoding=\"utf-8\"\
+      )\n    try:\n        packet = brp.build_review_packet(inp)\n        blob = yaml.safe_dump(packet)\n\
+      \        assert \"PRIVATE_KEY_MATERIAL\" not in blob, \\\n            \"traversal\
+      \ target_file content must not be read into the review packet\"\n    finally:\n\
+      \        secret.unlink(missing_ok=True)\n\n\n# --------------------------------------------------------------------------\n\
+      # CR-4 — scope_check fails CLOSED when allowed_files is empty (was allow-all)\n\
+      # --------------------------------------------------------------------------\n\
+      \ndef _write_consensus(tmp_path: Path, allowed_files) -> Path:\n    impl_scope:\
+      \ dict = {\"forbidden_files\": [], \"forbidden_actions\": []}\n    if allowed_files\
+      \ is not _OMIT:\n        impl_scope[\"allowed_files\"] = allowed_files\n   \
+      \ cpath = tmp_path / \"consensus.yaml\"\n    cpath.write_text(yaml.safe_dump({\"\
+      implementation_scope\": impl_scope}), encoding=\"utf-8\")\n    return cpath\n\
+      \n\n_OMIT = object()\n\n\n@pytest.mark.parametrize(\"allowed_files\", [[], _OMIT,\
+      \ \"scripts/foo.py\", [123, None]])\ndef test_scope_check_fails_closed_without_valid_allowed_files(tmp_path,\
+      \ allowed_files):\n    from consensus_mcp.validators import scope_check\n  \
+      \  cpath = _write_consensus(tmp_path, allowed_files)\n    report = scope_check.scope_check(\n\
+      \        cpath, \"a\", \"b\", _touched_files_override=[\"scripts/foo.py\"])\n\
+      \    assert any(f.get(\"id\") == \"FILE_OUTSIDE_ALLOWED_SCOPE\" for f in report[\"\
+      findings\"]), \\\n        \"a touched file must be out-of-scope when no valid\
+      \ allowed_files patterns exist\"\n    assert report[\"scope_check_block\"][\"\
+      passed\"] is False\n\n\n# --------------------------------------------------------------------------\n\
+      # H-2 — patch_stage_and_dry_run refuses a path-traversal file_rel\n# --------------------------------------------------------------------------\n\
+      \ndef test_patch_stage_refuses_traversal_file(tmp_path, monkeypatch):\n    monkeypatch.setenv(\"\
+      CONSENSUS_MCP_REPO_ROOT\", str(tmp_path))\n    monkeypatch.setenv(\"CONSENSUS_MCP_PROJECT_ROOT\"\
+      , str(tmp_path))\n    import consensus_mcp.tools.patch_stage_and_dry_run as\
+      \ psd\n    importlib.reload(psd)\n    secret = tmp_path.parent / f\"{tmp_path.name}_psd_secret.txt\"\
+      \n    secret.write_text(\"SECRET\\n\", encoding=\"utf-8\")\n    try:\n     \
+      \   res = psd.handle(\n            iteration_id=None,\n            proposed_patches=[{\n\
+      \                \"file\": f\"../{secret.name}\",\n                \"old_string\"\
+      : \"SECRET\\n\",\n                \"new_string\": \"OWNED\\n\",\n          \
+      \  }],\n            validators_to_run=[\"validate_disposition_index\"],\n  \
+      \      )\n        assert \"error\" in res\n        assert \"traversal\" in res[\"\
+      error\"].lower() or \"outside\" in res[\"error\"].lower()\n    finally:\n  \
+      \      secret.unlink(missing_ok=True)\n\n\n# --------------------------------------------------------------------------\n\
+      # M-6 — gate_decision blocks on \"critical\" severity findings\n# --------------------------------------------------------------------------\n\
+      \ndef test_gate_decision_blocks_on_critical():\n    import consensus_mcp.tools.patch_stage_and_dry_run\
+      \ as psd\n    assert psd._gate_decision([{\"severity\": \"critical\"}]) == \"\
+      BLOCKED\"\n    assert psd._gate_decision([{\"severity\": \"high\"}]) == \"BLOCKED\"\
+      \n    assert psd._gate_decision([{\"severity\": \"blocking\"}]) == \"BLOCKED\"\
+      \n    assert psd._gate_decision([{\"severity\": \"low\"}]) == \"APPROVED\"\n\
+      \    assert psd._gate_decision([]) == \"APPROVED\"\n"
+schema_version: 1
+iteration_id: iteration-secfix-audit-2026-05-22

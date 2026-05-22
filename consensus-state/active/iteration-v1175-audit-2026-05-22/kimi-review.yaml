@@ -1,0 +1,40 @@
+iteration_id: iteration-v1175-audit-2026-05-22
+reviewer_id: kimi-v1175-1
+pass_id: kimi-v1175-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: 'All 7 findings (H-3, H-4, H-5, H-6, H-7, H-8, M-11) are
+  fixed with correct mechanisms and no regressions. The 4 design-judgment calls are
+  well-reasoned: (1) H-7 Option B correctly vetoes only timeout-blocks under majority,
+  preserving responsive soft-no semantics; (2) H-5 hard fail-closed is correct because
+  consensus-mcp is inherently git-based with no git-optional design; (3) M-11 contract-correction
+  is the right minimal fix, avoiding a drift-prone parallel state writer; (4) the
+  capstone test stub faithfully simulates ''git ran, no changes'' and does not mask
+  real problems. Tests are thorough and cover edge cases including boundary conditions,
+  failure-word detection, and regression locks.'
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: kimi, version 1.44.0
+  model: gemini-2.5-pro
+  prompt_sha256: 63917685388bfb61d065708dd9a8c9b75a60ec61c9bfd7622d465feefde13c1b
+  output_sha256: 15a6b1972b759f658c23b59a0c3801384abf6c91eb16da68fd89c4e14654ceeb
+  goal_packet_sha256: 4de0e35bc40ecca2a2d14b30d961b43d6eda7cba6706c1ad64239e882bc2b2e6
+  scope_signature: 203303fc9ffbe6276fe25ac2f926141d6548447740a626f49f37a74f7e82d944
+  review_target_path: consensus-state/active/iteration-v1175-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 7f14e2af1479e970fc81a6cd7d7911a6d5b59b03fbe35f9a41a34afb58be6b29
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-22T16:23:32Z'
+packet_sha256: f06ddbd0aecd193b29bf31ff925c2a853a037b5abed0aa5fc4c292f42e451ace

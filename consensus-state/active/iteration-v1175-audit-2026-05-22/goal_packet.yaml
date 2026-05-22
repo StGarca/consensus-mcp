@@ -1,0 +1,107 @@
+schema_version: 1
+pilot_id: iteration-v1175-audit-2026-05-22
+goal:
+  summary: >-
+    Workflow B (post-review) audit of the v1.17.5 batch: 7 findings (H-3, H-4,
+    H-5, H-6, H-7, H-8, M-11) from the 2026-05-22 consensus-mcp code review,
+    fixed by claude via strict TDD. Audit each change for correctness and
+    regressions, and REFUTE the design-judgment calls if wrong.
+  desired_end_state: |
+    The review-target is a unified diff (v1.17.5.diff) of claude's fixes for the
+    remaining 2026-05-22 code-review findings, plus a per-finding rationale
+    (rationale.md). The security cluster (CR-1..CR-5, H-2, M-6) already shipped
+    in tag v1.17.4; H-1 was DISMISSED as a false finding (intentional
+    multi-project cwd fallback). This batch covers the gates/state + orchestration
+    clusters.
+
+    What the diff does (one line each; full reasoning in the embedded rationale.md):
+      H-3  _self_drive.cmd_close  — emitted 5 JSON blobs; now suppresses the 4
+           sub-commands' stdout and emits ONE {can_close, components} object.
+      M-11 _self_drive.cmd_transition — was a no-op whose docstring claimed it
+           "records" transitions; contract corrected to STATELESS (no 2nd state
+           writer added — disposition-ledger has a single authorized writer).
+      H-4  _snapshot_state._detect_dirty_paths — Python blob SHA-1 over CRLF
+           working-tree bytes never matched git's LF-normalized OID under
+           core.autocrlf=true (always-dirty on Windows); now uses `git hash-object`.
+      H-5  audit_append_event._detect_working_tree_changes — returned [] on git
+           failure => iteration_closed mutation-completeness gate FAIL-OPEN; now
+           raises GitUnavailableError on total git failure and the gate fails
+           CLOSED with `mutation_completeness_unverifiable`.
+      H-6  _release_gate_check — gates passed on literal count strings
+           ("95 passed", "60/60 tests passed"); brittle (already broke: suite
+           collects 96). Now robust parse: returncode==0 + no failure word +
+           passed >= floor. Also fixed a dead `scripts/` path in the
+           dispatch-codex gate.
+      H-7  workflow_engine._evaluate_convergence — under TIMEOUT_BLOCKING, a
+           timed-out contributor was counted in n_block but NOT in the majority
+           veto (blocking_ids only came from responsive artifacts). Now a
+           timeout-blocking vote vetoes the majority too (Option B); rationale
+           reports n_block.
+      H-8  _resume.py — narrowed 6 bare `except Exception` to the iter-0036
+           parity set (OSError/UnicodeDecodeError/yaml.YAMLError; ValueError for
+           the timestamp parse) so programmer errors propagate. NOTE: the code
+           review's HIGH "silent nothing-in-flight" framing was found NOT
+           supported (the dispatch-log read already warns); this is a
+           doctrine-parity refactor, behavior for missing/malformed files
+           unchanged.
+
+    DESIGN-JUDGMENT CALLS to scrutinize and refute if wrong:
+      (1) H-7 Option B (timeout-only veto) vs Option A (n_block==0): Option A
+          would also make a responsive "soft no" (goal_satisfied=False, no formal
+          blocking_objection) veto a majority, defeating majority semantics.
+          Is Option B the right line?
+      (2) H-5 hard fail-closed (non-configurable) vs a "git optional" mode: claim
+          is no git-optional design exists in consensus-mcp. Correct?
+      (3) M-11 contract-correction (stateless) vs persisting state / adding a
+          terminal-state guard. Right minimal fix?
+      (4) H-5 ripple: 3 capstone tests now stub _detect_working_tree_changes via
+          a new fixture. Does the stub mask a real problem, or is it the correct
+          "git ran, no changes" simulation?
+
+    Acceptance: full suite green (977 passed, 1 skipped, 0 failed at author time).
+    Close when codex + gemini + kimi emit goal_satisfied=true OR the operator
+    dispositions findings.
+  non_goals:
+    - re-litigate the security cluster (shipped in v1.17.4) or H-1 (dismissed)
+    - require changes outside the listed files
+    - demand the optional H-8 cosmetic narrowings (L48/L802 left as-is by design)
+allowed_files:
+  - consensus_mcp/_self_drive.py
+  - consensus_mcp/_snapshot_state.py
+  - consensus_mcp/tools/audit_append_event.py
+  - consensus_mcp/_release_gate_check.py
+  - consensus_mcp/workflow_engine.py
+  - consensus_mcp/_resume.py
+  - consensus_mcp/tests/test_self_drive_stop_rules.py
+  - consensus_mcp/tests/test_snapshot_crlf_dirty.py
+  - consensus_mcp/tests/test_iter_0018_cross_ai_invariant.py
+  - consensus_mcp/tests/test_release_gate_count_robustness.py
+  - consensus_mcp/tests/test_workflow_engine.py
+  - consensus_mcp/tests/test_resume.py
+  - consensus_mcp/tests/test_capstone_full_fix_loop.py
+allowed_sections: []
+forbidden_files:
+  - consensus_mcp/_dispatch_codex.py
+  - consensus_mcp/_dispatch_gemini.py
+  - consensus_mcp/server.py
+  - consensus_mcp/validators/
+  - consensus_mcp/dispatch_templates/
+  - README.md
+  - pyproject.toml
+max_iterations: 1
+max_patch_size: 3000
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: full test suite green
+    check: 'python -m pytest consensus_mcp/tests/ -q'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - blocking_finding_unresolved
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 203303fc9ffbe6276fe25ac2f926141d6548447740a626f49f37a74f7e82d944

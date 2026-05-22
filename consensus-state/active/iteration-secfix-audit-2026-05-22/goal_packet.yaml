@@ -1,0 +1,113 @@
+schema_version: 1
+pilot_id: iteration-secfix-audit-2026-05-22
+workflow_mode: post-review
+independence: blind-first-reveal
+goal:
+  summary: |
+    WORKFLOW B AUDIT of the security-cluster FIX (claude authored; codex +
+    gemini audit). These patches close the findings the codex+gemini consensus
+    audit confirmed on 2026-05-22 (iteration-codereview-audit-2026-05-22):
+
+      CR-1 apply_codex_patch: arbitrary write via files_touched path traversal
+      CR-2 apply_codex_patch: files_touched not constrained to allowed_files
+      CR-3 build_review_packet: arbitrary read/exfil via target_files traversal
+      CR-4 scope_check: empty/missing/non-list allowed_files failed OPEN (allow-all)
+      CR-5 apply_codex_patch: non-canonical iteration_dir self-authorizes
+      H-2  patch_stage_and_dry_run: file_rel traversal (silent staging-write escape)
+      M-6  patch_stage_and_dry_run: gate_decision did not block on "critical"
+
+    EMBEDDED (touched_files_contents — authoritative; do NOT read disk):
+      - consensus_mcp/_paths.py
+          NEW: PathTraversalError, is_contained(), resolve_contained() — the
+          shared fail-closed containment helper all the fixes route through.
+      - consensus_mcp/tools/apply_codex_patch.py
+          CR-5 guard after repo_root resolution; CR-1+CR-2 guard right after
+          files_touched is read (before verification/drift/apply).
+      - consensus_mcp/tools/patch_stage_and_dry_run.py
+          H-2 resolve_contained() on file_rel; M-6 _gate_decision() incl "critical".
+      - consensus_mcp/tests/test_security_cluster_2026_05_22.py
+          The 13 regression tests (each fails pre-fix, passes post-fix).
+
+    The two SMALL validator changes are NOT embedded in full (large files);
+    audit them from these verbatim quotes:
+
+    (CR-4) consensus_mcp/validators/scope_check.py ~line 379, inside the
+    per-touched-file loop. allowed_files has already been coerced to [] when
+    missing/null/non-list (lines 300-309, unchanged):
+      BEFORE:  if allowed_files and not _matches_any(allowed_files, path):
+      AFTER:   if not _matches_any(allowed_files, path):
+      => empty/[] now matches nothing -> every touched file is out-of-scope
+         (FILE_OUTSIDE_ALLOWED_SCOPE), instead of the previous allow-all.
+
+    (CR-3) consensus_mcp/validators/build_review_packet.py — added module
+    import `from consensus_mcp._paths import is_contained`, and in the
+    target_files loop immediately after `abs_path = (REPO_ROOT / rel).resolve()`:
+      ADDED:
+        if not is_contained(abs_path, REPO_ROOT.resolve()):
+            out.append({... "excerpt": "", ...,
+                        "resolution_warning": f"path outside repo root refused: {rel}"})
+            continue
+      => a ../ or absolute target_files entry is skipped (empty excerpt) instead
+         of read into the sealed packet.
+
+    Full suite after the fix: 947 passed, 1 skipped, 4 failed. The 4 failures
+    are PRE-EXISTING test_visibility_watchdog.py failures (verified: they fail
+    with the patches stashed too) and are out of scope for this audit.
+  question: |
+    Independently audit the fix. For EACH finding (CR-1..CR-5, H-2, M-6) decide,
+    citing embedded file:line:
+
+      - CLOSED   — the guard correctly and completely closes the vuln.
+      - INCOMPLETE— a bypass remains (e.g. a path/scope/auth route the guard
+                    misses; TOCTOU between the check and the read/write; an
+                    escaping form the containment resolve() does not catch).
+      - REGRESSION— the change breaks legitimate behavior or weakens another gate.
+
+    Then look for NEW issues introduced by the patches themselves:
+      - resolve_contained(): does resolving BEFORE the containment check fully
+        defeat ../, absolute, and symlink-to-outside on both POSIX and Windows
+        (case-fold)? Any input that bypasses it (UNC paths, drive-relative,
+        empty string, ".")?
+      - apply_codex_patch CR-1/CR-2 placement: is checking files_touched (not
+        new_contents keys) sufficient given new_contents is derived from
+        files_touched? Is the scope match (_matches_any) consistent with the
+        gate used elsewhere? Does empty allowed_files now correctly refuse?
+      - CR-5: is "under consensus-state/active/" the right canonical boundary?
+        Can a symlink/junction under active/ still escape?
+      - H-2: is returning {"error": ...} the correct contract, and are ALL
+        downstream uses (read at :242, staging write) now safe?
+      - Do the 13 tests actually PROVE each fix (assert the secure outcome),
+        or could they pass against still-vulnerable code?
+
+    Cite real embedded lines only; if something you need is not embedded, say so.
+  non_goals:
+    - the 4 pre-existing test_visibility_watchdog.py failures
+    - proposing unrelated refactors (e.g. migrating patch_apply_consensus_patch
+      / _author_review_packet to the new shared helper — note as follow-up only)
+    - style/formatting nits
+  type: review_audit
+allowed_files: []
+allowed_sections: []
+forbidden_files: []
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex + gemini reviews sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - reviewer_dispatch_failure
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: all-or-nothing

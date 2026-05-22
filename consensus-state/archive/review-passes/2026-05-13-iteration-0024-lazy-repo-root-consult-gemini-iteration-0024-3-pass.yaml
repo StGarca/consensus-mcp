@@ -5,7 +5,7 @@ findings:
 - id: gemini-rev-001
   severity: blocking
   summary: Review target file is missing or inaccessible.
-  citation: C:\Users\<you>\Downloads\consensus-mcp\consensus-state\active\iteration-0024-lazy-repo-root-consult\claude-proposal.yaml
+  citation: C:\Users\steve\Downloads\consensus-mcp\consensus-state\active\iteration-0024-lazy-repo-root-consult\claude-proposal.yaml
   risk: The review cannot be completed as the core proposal artifact is unavailable.
     The goal of reaching a converged plan is therefore blocked.
   recommendation: The orchestrator (claude) needs to ensure the `review_target_path`

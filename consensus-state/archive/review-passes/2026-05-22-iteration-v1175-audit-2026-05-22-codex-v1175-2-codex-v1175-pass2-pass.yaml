@@ -1,0 +1,44 @@
+iteration_id: iteration-v1175-audit-2026-05-22
+reviewer_id: codex-v1175-2
+pass_id: codex-v1175-pass2
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: CRLF dirty detection still hashes raw working-tree bytes because `git hash-object
+    -- <path>` does not apply clean filters without a path context.
+  citation: consensus_mcp/_snapshot_state.py:526
+  risk: 'H-4 remains unfixed on Windows/core.autocrlf=true: unchanged CRLF text files
+    can still be reported dirty, so restore dirty guards can continue to misfire.'
+  recommendation: Compute the blob id with clean filters applied, for example `git
+    hash-object --path=<repo-relative-path> -- <path>` or another git plumbing command
+    that demonstrably matches the indexed/tree blob under autocrlf.
+  patch_not_proposed_reason: The review packet only embeds a partial diff, not the
+    full current file with exact surrounding lines needed to emit an apply-safe unified
+    diff against the authoritative contents.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: "Most changes are directionally correct, but H-4\u2019s\
+  \ mechanism appears to preserve the raw-byte hashing behavior it was meant to replace,\
+  \ leaving a high-impact Windows regression unresolved."
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.132.0
+  prompt_sha256: 3f03133373233fa4ed1005b8ceeeabd8bf4930ad357b2211cce4ea4a0f4f8d3f
+  output_sha256: fad0293002da498f2a5645df3dd2d0ed0eae8b67b69a6bae4b7e76332c5e904b
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 113c3d17e22235847204cab962116c5f6b5b8d884f2a741bb915a5a4bef3fa85
+  scope_signature: 203303fc9ffbe6276fe25ac2f926141d6548447740a626f49f37a74f7e82d944
+  review_target_path: consensus-state/active/iteration-v1175-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 7f14e2af1479e970fc81a6cd7d7911a6d5b59b03fbe35f9a41a34afb58be6b29
+  mode: review
+sealed_at_utc: '2026-05-22T16:25:34Z'
+packet_sha256: a7a8ade496c0a55c0bf387105f086aed8ae11220092e2676a43436d86027bee7

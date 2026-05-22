@@ -1,0 +1,2 @@
+{"ok": false, "error": "goal_packet.fix_author_policy='review_only' is not a recognized value; allowed: 'permissive' (default), 'strict'", "error_type": "CodexOutputParseError"}
+codex rc=1

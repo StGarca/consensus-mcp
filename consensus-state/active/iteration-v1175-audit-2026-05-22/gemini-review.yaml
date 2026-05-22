@@ -1,0 +1,38 @@
+iteration_id: iteration-v1175-audit-2026-05-22
+reviewer_id: gemini-v1175-1
+pass_id: gemini-v1175-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The v1.17.5 batch correctly addresses all 7 findings (H-3,
+  H-4, H-5, H-6, H-7, H-8, M-11). Each fix is logically sound, directly targets the
+  identified issue, and is accompanied by robust, specific regression tests that verify
+  the new behavior and guard against regressions. The four design judgment calls outlined
+  in the rationale are well-reasoned and represent correct architectural decisions
+  that improve the system's robustness and maintainability. The changes meet the desired
+  end state with no identified defects.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.42.0
+  model: gemini-2.5-pro
+  prompt_sha256: 63917685388bfb61d065708dd9a8c9b75a60ec61c9bfd7622d465feefde13c1b
+  output_sha256: e1d184f7bce123cd180042829b9954269fe3462553036bcda61acf6763313448
+  goal_packet_sha256: 4de0e35bc40ecca2a2d14b30d961b43d6eda7cba6706c1ad64239e882bc2b2e6
+  scope_signature: 203303fc9ffbe6276fe25ac2f926141d6548447740a626f49f37a74f7e82d944
+  review_target_path: consensus-state/active/iteration-v1175-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 7f14e2af1479e970fc81a6cd7d7911a6d5b59b03fbe35f9a41a34afb58be6b29
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-22T16:23:18Z'
+packet_sha256: 4ca2bf4243dae8cfe275edc4c1ecde85c31070a3bef55ea1046ef5c73cc9e89f

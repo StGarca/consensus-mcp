@@ -793,7 +793,7 @@ defect_target:
       \ yaml.safe_dump(plan, sort_keys=False, default_flow_style=False, allow_unicode=True),\n\
       \            encoding=\"utf-8\",\n        )\n        return out\n"
     consensus_mcp/schemas/converged_plan_convention.schema.json: "{\n  \"$schema\"\
-      : \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://example.org/consensus-mcp/converged_plan_convention.schema.json\"\
+      : \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://arcaspirit.org/consensus-mcp/converged_plan_convention.schema.json\"\
       ,\n  \"title\": \"Converged-plan convention block (v1.15.0 doctrine, machine-enforced\
       \ from v1.15.1)\",\n  \"description\": \"Machine contract for the falsification\
       \ / independent_safeguard / decisive_experiment_before_next_iteration blocks\

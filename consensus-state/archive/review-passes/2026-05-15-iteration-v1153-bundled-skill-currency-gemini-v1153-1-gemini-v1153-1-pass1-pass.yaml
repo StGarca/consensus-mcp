@@ -59,7 +59,7 @@ dispatch_provenance:
   review_target_hash: 3a5ca3013c3cc7cbe3e59459a7b159e60c88d4d89469fdf9fdccf4d6228a9cae
   adapter: gemini
   mode: proposal
-  proposal_schema_path: C:\Users\<you>\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_path: C:\Users\steve\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
   proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
 proposal:
   selected_target: Q1:(d), Q2:(b), Q3:Yes, Q4:Yes, Q5:No blocker - ship full scope

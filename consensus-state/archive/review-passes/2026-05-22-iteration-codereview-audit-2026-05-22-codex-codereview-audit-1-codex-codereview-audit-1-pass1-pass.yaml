@@ -1,0 +1,80 @@
+iteration_id: iteration-codereview-audit-2026-05-22
+reviewer_id: codex-codereview-audit-1
+pass_id: codex-codereview-audit-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: 'CR-4 is too narrow: missing, null, non-list, or all-invalid allowed_files
+    also become allow-all, not only allowed_files: [].'
+  citation: consensus_mcp/validators/scope_check.py:379
+  risk: A fix aimed only at explicit empty lists can leave malformed or absent scope
+    declarations failing open for every touched file.
+  recommendation: Revise the finding and fix to require a non-empty list of valid
+    string patterns before scope matching; fail closed otherwise.
+  patch_not_proposed_reason: No files are in allowed_files for this sealed review,
+    so a source patch would be outside scope.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: high
+  summary: 'H-2 understates the traversal mode: unresolved relative .. paths may not
+    raise ValueError and can escape the staging directory path construction.'
+  citation: consensus_mcp/tools/patch_stage_and_dry_run.py:259
+  risk: Remediation focused only on catching relative_to() ValueError can miss the
+    more dangerous relative traversal case, where staging writes are built from '../'
+    relpaths.
+  recommendation: Require resolved project-root containment before any read, patch
+    map insert, relative_to(), or staging destination write.
+  patch_not_proposed_reason: No files are in allowed_files for this sealed review,
+    so a source patch would be outside scope.
+  patch_proposal: null
+- id: codex-rev-003
+  severity: high
+  summary: 'Claude missed an apply_codex_patch trust-boundary bug: iteration_dir is
+    accepted directly, so authorization can be read from a caller-selected directory.'
+  citation: consensus_mcp/tools/apply_codex_patch.py:162
+  risk: With the env interlock enabled, a caller can point T6 at a non-canonical directory
+    containing its own goal_packet, codex-review, and verification files, bypassing
+    the intended active-iteration provenance boundary.
+  recommendation: Resolve iteration_dir and require it to be under the canonical active
+    iterations root before reading authorization or patch artifacts.
+  patch_not_proposed_reason: No files are in allowed_files for this sealed review,
+    so a source patch would be outside scope.
+  patch_proposal: null
+- id: codex-rev-004
+  severity: medium
+  summary: 'M-6 is correctly identified but under-ranked: patch.stage_and_dry_run''s
+    public gate_decision can approve critical findings.'
+  citation: consensus_mcp/tools/patch_stage_and_dry_run.py:329
+  risk: Because gate_decision is part of the tool contract, downstream callers may
+    rely on APPROVED even when dry_run_findings contains critical issues.
+  recommendation: Promote the review item to HIGH or explicitly scope it as safe only
+    for current T5/T6 callers, and include critical in the gate severity set.
+  patch_not_proposed_reason: No files are in allowed_files for this sealed review,
+    so a source patch would be outside scope.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: Claude's core CRITICAL/HIGH claims are mostly supported,
+  but the review misses or under-specifies security-relevant boundary cases in the
+  same cluster.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: 1bdc9c4cdf7bfd0b6a81b813429e1f76dd312b1ad96dcb756ea660b6f4eace33
+  output_sha256: bd1a1e4d7b2c3f3a37d016bf1102a70abad96890e2ff1e7064ace311f4dddb10
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: db73f7fe68f903d93514ea9e36bb1f78c7aa9b550cfb8f4c2d22a2bc4b0a87eb
+  scope_signature: b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0
+  review_target_path: consensus-state/active/iteration-codereview-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 914198d4bee771644f5d999034a95ba36f500bc3f9f30983bf093eea9eb5b64b
+  mode: review
+sealed_at_utc: '2026-05-22T14:51:50Z'
+packet_sha256: ea067d63584335d606a6752103dfd95fbb2c44d7c597ec5ae7deea9967491ab3

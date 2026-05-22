@@ -230,8 +230,8 @@ deliverable_scope:
       - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # add "Decision-audit pattern" section
       - consensus_mcp/dispatch_templates/codex_proposal_template.md  # add worked-example
       - consensus_mcp/dispatch_templates/gemini_proposal_template.md  # add worked-example
-      - C:/Users/<you>/.claude/projects/.../memory/feedback_decision_audit_pattern.md  # NEW
-      - C:/Users/<you>/.claude/projects/.../memory/feedback_verification_report_template.md  # NEW (for formal verifications only)
+      - C:/Users/steve/.claude/projects/.../memory/feedback_decision_audit_pattern.md  # NEW
+      - C:/Users/steve/.claude/projects/.../memory/feedback_verification_report_template.md  # NEW (for formal verifications only)
       - CHANGELOG.md  # v1.14.5 entry (or appended to v1.14.4)
   files_out_of_scope:
     - consensus_mcp/_dispatch_codex.py  # no code change

@@ -1,0 +1,2295 @@
+diff --git a/consensus_mcp/_release_gate_check.py b/consensus_mcp/_release_gate_check.py
+index fcc97a7..a329fba 100644
+--- a/consensus_mcp/_release_gate_check.py
++++ b/consensus_mcp/_release_gate_check.py
+@@ -7,126 +7,193 @@ Gates:
+   G_smoke           : in-tree _smoke_test.py exits 0 with "60/60 tests passed"
+   G_validators      : run_validator_tests.py exits 0 with "21/21 tests passed"
+   G_frontmatter     : YAML frontmatter parses OK in every shippable .md
+   G_unstaged        : git diff --quiet on shippable boundary paths
+   G_untracked_pkg   : git ls-files --others --exclude-standard on boundary -> 0
+   G_install         : python -m build wheel + pip install in clean tempvenv
+   G_install_smoke   : installed package smoke run -> 60/60
+   G_server_starts   : consensus-mcp --boot-and-exit returns 0 in <2s
+   G_real_iter       : iteration-outcome.yaml.closing_state contains
+                       "implementation_ready_apply_landed"
+   G_pytest_dispatch_codex : pytest test_dispatch_codex.py exits 0 with N passed
+ 
+ Exit 0 iff all 10 pass. Exit 1 otherwise. Writes per-gate result dict to
+ stdout in human-readable form, then a final SUMMARY block.
+ 
+ Usage:
+   python -m consensus_mcp._release_gate_check [--repo-root PATH]
+ 
+ Path-resolution: same env-var override as server.py / _smoke_test.py
+ (CONSENSUS_MCP_REPO_ROOT) plus a --repo-root CLI flag for explicit
+ override. Default: in-tree parent walk.
+ """
+ from __future__ import annotations
+ import argparse
+ import os
++import re
+ import shutil
+ import subprocess
+ import sys
+ import tempfile
+ import time
+ from pathlib import Path
+ 
+ import yaml
+ 
+ 
++# --- H-6: robust test-count gating ----------------------------------------
++# Gates used to decide PASS by a literal substring match on a hardcoded count
++# (e.g. `"60/60 tests passed"`, `"95 passed"`). That brittle rule failed a good
++# build whenever tests were ADDED (count grew past the literal) and passed a
++# build where a test was deleted then re-added (count restored). It was already
++# broken for the pytest dispatch gate (suite collects 96, literal said "95").
++#
++# These two parsers cover the two distinct output formats. They are deliberately
++# separate so the smoke `X/Y tests passed` regex never silently matches pytest's
++# `N passed` output (and vice-versa) — one parser must not "pass" text it can't
++# actually parse.
++_PYTEST_FAILURE_WORDS = ("failed", "error")
++# pytest summary line: "<N> passed[, ...] in <t>s"
++_PYTEST_PASSED_RE = re.compile(r"\b(\d+)\s+passed\b")
++# smoke/validator harness line: "<X>/<Y> tests passed"
++_SMOKE_PASSED_RE = re.compile(r"\b(\d+)\s*/\s*(\d+)\s+tests passed\b")
++
++
++def _pytest_gate_pass(returncode: int, stdout: str, floor: int) -> bool:
++    """Decision rule for pytest-format output (`N passed`).
++
++    PASS iff returncode == 0 AND no pytest failure indicator ("failed"/"error",
++    which can appear even with rc 0 from a misbehaving runner) AND parsed
++    passed-count >= floor.
++
++    NOTE: `floor` is intentionally a FLOOR (`>= N`), not exact equality, so
++    adding tests never breaks the gate while a deletion below the floor still
++    trips it. The stronger anti-deletion signal (exact count) is deliberately
++    relaxed here; if it is ever wanted back, a `pytest --co -q` collected-count
++    baseline is the better mechanism than pinning the passed-count literal.
++    """
++    if returncode != 0:
++        return False
++    text = (stdout or "")
++    lowered = text.lower()
++    if any(word in lowered for word in _PYTEST_FAILURE_WORDS):
++        return False
++    m = _PYTEST_PASSED_RE.search(text)
++    if not m:
++        return False
++    return int(m.group(1)) >= floor
++
++
++def _smoke_gate_pass(returncode: int, stdout: str, floor: int) -> bool:
++    """Decision rule for smoke/validator-format output (`X/Y tests passed`).
++
++    PASS iff returncode == 0 AND the line parses AND numerator == denominator
++    (no partial pass like 46/60) AND numerator >= floor.
++
++    NOTE: `floor` is intentionally a FLOOR (`>= N`); see _pytest_gate_pass for
++    the floor-vs-exact rationale (a `pytest --co` baseline is the stronger
++    anti-deletion alternative if exact gating is ever wanted).
++    """
++    if returncode != 0:
++        return False
++    m = _SMOKE_PASSED_RE.search(stdout or "")
++    if not m:
++        return False
++    num, den = int(m.group(1)), int(m.group(2))
++    if num != den:
++        return False
++    return num >= floor
++
++
+ def _resolve_repo_root(cli_override: str | None) -> Path:
+     if cli_override:
+         return Path(cli_override).resolve()
+     env = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+     if env:
+         return Path(env).resolve()
+     return Path(__file__).resolve().parent.parent
+ 
+ 
+ # Paths (relative to REPO_ROOT) that the wheel ships.
+ SHIPPABLE_BOUNDARY = [
+     "consensus_mcp",
+     "consensus_mcp/validators",
+ ]
+ 
+ # Paths to gate G_unstaged scoping. Same as boundary plus the new artifacts.
+ UNSTAGED_SCOPE = [
+     "pyproject.toml",
+     "consensus_mcp/_release_gate_check.py",
+     "consensus_mcp/docs",
+     "consensus_mcp",
+     "consensus_mcp/validators",
+ ]
+ 
+ 
+ def _print_gate(name: str, passed: bool, detail: str = "") -> None:
+     mark = "PASS" if passed else "FAIL"
+     line = f"  [{mark}] {name}"
+     if detail:
+         line += f" -- {detail}"
+     print(line)
+ 
+ 
+ def gate_smoke(repo_root: Path, python: str) -> tuple[bool, str]:
+     """G_smoke: in-tree smoke 60/60 (was 59/59 pre-iter-0021)."""
+     try:
+         result = subprocess.run(
+             [python, str(repo_root / "consensus_mcp" / "_smoke_test.py")],
+             capture_output=True,
+             text=True,
+             cwd=str(repo_root),
+             timeout=120,
+         )
+     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError) as exc:
+         return False, f"exception: {exc}"
+     tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
+     last = tail[0]
+-    ok = result.returncode == 0 and "60/60 tests passed" in last
++    # H-6: floor-based parse (>=60) instead of literal "60/60" substring.
++    ok = _smoke_gate_pass(result.returncode, result.stdout or "", floor=60)
+     return ok, f"exit={result.returncode} last={last!r}"
+ 
+ 
+ def gate_validators(repo_root: Path, python: str) -> tuple[bool, str]:
+     """G_validators: run_validator_tests 21/21."""
+     try:
+         result = subprocess.run(
+             [python, str(repo_root / "consensus_mcp" / "validators" / "run_validator_tests.py")],
+             capture_output=True,
+             text=True,
+             cwd=str(repo_root),
+             timeout=120,
+         )
+     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError) as exc:
+         return False, f"exception: {exc}"
+     tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
+     last = tail[0]
+-    ok = result.returncode == 0 and "21/21 tests passed" in last
++    # H-6: floor-based parse (>=21) instead of literal "21/21" substring.
++    ok = _smoke_gate_pass(result.returncode, result.stdout or "", floor=21)
+     return ok, f"exit={result.returncode} last={last!r}"
+ 
+ 
+ def gate_frontmatter(repo_root: Path) -> tuple[bool, str]:
+     """G_frontmatter: every shippable .md has parseable frontmatter (or no frontmatter is OK)."""
+     md_files: list[Path] = []
+     for rel in SHIPPABLE_BOUNDARY:
+         base = repo_root / rel
+         if not base.exists():
+             continue
+         md_files.extend(base.rglob("*.md"))
+     md_files.append(repo_root / "consensus_mcp" / "docs" / "README.md")
+     md_files.append(repo_root / "consensus_mcp" / "docs" / "tool-reference.md")
+     md_files.append(repo_root / "consensus_mcp" / "docs" / "state-schema.md")
+     bad: list[str] = []
+     for path in sorted(set(md_files)):
+         if not path.exists():
+             continue
+         try:
+             text = path.read_text(encoding="utf-8")
+         except (OSError, UnicodeDecodeError) as exc:
+             bad.append(f"{path.name}: read failed ({exc})")
+             continue
+         if not text.startswith("---"):
+             # No frontmatter is acceptable for ship docs.
+@@ -282,51 +349,52 @@ def gate_install(repo_root: Path, python: str, work: Path) -> tuple[bool, str, P
+     )
+     if pip_proc.returncode != 0:
+         return False, f"pip install failed: {(pip_proc.stderr or pip_proc.stdout)[-400:]}", None, None
+     return True, f"wheel={wheel.name}", venv_python, venv_console
+ 
+ 
+ def gate_install_smoke(repo_root: Path, venv_python: Path) -> tuple[bool, str]:
+     """G_install_smoke: smoke from installed package -> 60/60 (was 59/59 pre-iter-0021).
+ 
+     Smoke needs CONSENSUS_MCP_REPO_ROOT env var so it can find fixtures
+     + spec md back in the source repo.
+     """
+     env = dict(os.environ)
+     env["CONSENSUS_MCP_REPO_ROOT"] = str(repo_root)
+     try:
+         result = subprocess.run(
+             [str(venv_python), "-m", "consensus_mcp._smoke_test"],
+             capture_output=True,
+             text=True,
+             timeout=180,
+             env=env,
+         )
+     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError) as exc:
+         return False, f"exception: {exc}"
+     last = (result.stdout or "").strip().splitlines()[-1:] or [""]
+-    ok = result.returncode == 0 and "60/60 tests passed" in last[0]
++    # H-6: floor-based parse (>=60) instead of literal "60/60" substring.
++    ok = _smoke_gate_pass(result.returncode, result.stdout or "", floor=60)
+     return ok, f"exit={result.returncode} last={last[0]!r}"
+ 
+ 
+ def gate_server_starts(repo_root: Path, venv_console: Path) -> tuple[bool, str]:
+     """G_server_starts: consensus-mcp --boot-and-exit -> exit 0 in <2s."""
+     env = dict(os.environ)
+     env["CONSENSUS_MCP_REPO_ROOT"] = str(repo_root)
+     audit_sink = Path(tempfile.gettempdir()) / f"gate-check-mcp-audit-{os.getpid()}.jsonl"
+     if audit_sink.exists():
+         audit_sink.unlink()
+     env["CONSENSUS_MCP_AUDIT_LOG"] = str(audit_sink)
+     t0 = time.monotonic()
+     try:
+         result = subprocess.run(
+             [str(venv_console), "--boot-and-exit"],
+             capture_output=True,
+             text=True,
+             timeout=10,
+             env=env,
+         )
+     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError) as exc:
+         return False, f"exception: {exc}"
+     elapsed = time.monotonic() - t0
+     if audit_sink.exists():
+         try:
+@@ -406,73 +474,73 @@ def gate_archive_section_24_synced(repo_root: Path, python: str) -> tuple[bool,
+             timeout=30,
+             env=env,
+         )
+     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError) as exc:
+         return False, f"exception: {exc}"
+     ok = result.returncode == 0
+     if ok:
+         return True, "spec md section 24 in sync with archive index"
+     return False, (
+         f"DRIFT: archive-index has passes not in spec md section 24. "
+         f"Run: python_env\\python.exe -m consensus_mcp._sync_section_24 --apply"
+     )
+ 
+ 
+ def gate_pytest_dispatch_codex(repo_root: Path, python: str) -> tuple[bool, str]:
+     """G_pytest_dispatch_codex: pytest test_dispatch_codex.py exits 0 with current expected count.
+ 
+     Per F7 (codex review 2026-05-09): smoke covers import/help/template-loading;
+     this gate runs the full pytest behavior suite so parser/subprocess/sealing
+     regressions can't pass the release gate undetected.
+     """
+     try:
+         result = subprocess.run(
+             [
+                 python, "-m", "pytest",
+-                str(repo_root / "scripts" / "consensus_mcp" / "tests" / "test_dispatch_codex.py"),
++                # H-6: was repo_root/"scripts"/... — that directory does not
++                # exist in the extracted standalone repo, so the gate never ran
++                # the suite. The real path is consensus_mcp/tests/.
++                str(repo_root / "consensus_mcp" / "tests" / "test_dispatch_codex.py"),
+                 "-q",
+             ],
+             capture_output=True,
+             text=True,
+             cwd=str(repo_root),
+             timeout=120,
+         )
+     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError) as exc:
+         return False, f"exception: {exc}"
+     tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
+     last = tail[0]
+-    # iter-0028 bumped: +14 new tests (F4 diff-body scope, F1/F2 template+validate,
+-    # F5 env-fail-closed). Prior: 67 (iter-0026 baseline).
+-    # 2026-05-10 schema/validator alignment: +1 regression test
+-    # (test_patch_proposal_missing_expected_tests_rejected). Then: 82.
+-    # v1.10.5 hardening: +5 regression tests (4 containment + 1 dispatch_failed
+-    # with review-target). Then: 87.
+-    # iter-0033: +3 regression tests (outside_repo_review_target_via_main,
+-    # mkdir_oserror_during_preflight, containment_case_insensitive_on_windows
+-    # which skips on non-win32 — but counts in "passed" via skip). Local
+-    # baseline 90; Windows includes the win32 test too so still 90 on Win.
+-    ok = result.returncode == 0 and "95 passed" in last
++    # H-6: floor-based parse instead of a hardcoded "95 passed" literal.
++    # The literal broke a good build the moment the suite grew (it collects 96
++    # now: 95 passed + 1 skipped on legs with no real codex). Floor=90 keeps
++    # headroom for added tests while still tripping on a large deletion.
++    # Count history (for the floor's sizing): iter-0026 ~67 -> iter-0028 +14 ->
++    # 2026-05-10 +1 (82) -> v1.10.5 +5 (87) -> iter-0033 +3 (90) -> now 95
++    # passed of 96 collected.
++    ok = _pytest_gate_pass(result.returncode, result.stdout or "", floor=90)
+     return ok, f"exit={result.returncode} last={last!r}"
+ 
+ 
+ def main(argv: list[str] | None = None) -> int:
+     parser = argparse.ArgumentParser(
+         description="Run all 10 release gates for consensus-mcp v1.11.0."
+     )
+     parser.add_argument("--repo-root", default=None, help="Override REPO_ROOT.")
+     args = parser.parse_args(argv)
+ 
+     repo_root = _resolve_repo_root(args.repo_root)
+     python = sys.executable
+     print(f"REPO_ROOT: {repo_root}")
+     print(f"PYTHON   : {python}\n")
+ 
+     results: dict[str, tuple[bool, str]] = {}
+ 
+     print("Gates 1-3 (in-tree):")
+     results["G_smoke"] = gate_smoke(repo_root, python)
+     _print_gate("G_smoke", *results["G_smoke"])
+     results["G_validators"] = gate_validators(repo_root, python)
+     _print_gate("G_validators", *results["G_validators"])
+     results["G_frontmatter"] = gate_frontmatter(repo_root)
+     _print_gate("G_frontmatter", *results["G_frontmatter"])
+ 
+diff --git a/consensus_mcp/_resume.py b/consensus_mcp/_resume.py
+index a566743..8784eff 100644
+--- a/consensus_mcp/_resume.py
++++ b/consensus_mcp/_resume.py
+@@ -111,83 +111,88 @@ def _resolve_repo_root(override: Path | None = None) -> Path:
+ def _utc_now_iso() -> str:
+     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # auto-detection (§3): authorized_at_utc DESC primary, dir name DESC tiebreaker.
+ # ---------------------------------------------------------------------------
+ 
+ def _list_active_iterations(active_dir: Path) -> list[tuple[Path, str | None]]:
+     """Return [(iter_dir, authorized_at_utc), ...] sorted DESC by auth time then name DESC."""
+     if not active_dir.exists() or not active_dir.is_dir():
+         return []
+     entries: list[tuple[Path, str | None]] = []
+     for child in active_dir.iterdir():
+         if not child.is_dir():
+             continue
+         gp = child / "goal_packet.yaml"
+         if not gp.is_file():
+             continue
+         auth_at: str | None = None
+         try:
+             data = yaml.safe_load(gp.read_text(encoding="utf-8"))
+             if isinstance(data, dict):
+                 auth = data.get("authorization") or {}
+                 auth_at = auth.get("authorized_at_utc")
+-        except Exception:
++        # iter-0036 parity (H-8): narrow to IO/decode/parse classes so unrelated
++        # programmer errors propagate instead of being swallowed as "no auth time".
++        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+             auth_at = None
+         entries.append((child, auth_at))
+     # Sort: authorized_at_utc DESC primary (None last), then dir name DESC.
+     entries.sort(key=lambda t: (t[1] is None, t[1] or "", t[0].name), reverse=False)
+     # The default ascending sort with reverse=False above sorts None-first by
+     # the t[1] is None key; flip carefully:
+     #   - want None timestamps LAST → sort key (t[1] is None, -timestamp, -name).
+     # Achieve with a two-pass approach:
+     with_ts = [(d, ts) for d, ts in entries if ts is not None]
+     without_ts = [(d, ts) for d, ts in entries if ts is None]
+     with_ts.sort(key=lambda t: (t[1], t[0].name), reverse=True)
+     without_ts.sort(key=lambda t: t[0].name, reverse=True)
+     return with_ts + without_ts
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # dispatch-log walking.
+ # ---------------------------------------------------------------------------
+ 
+ def _walk_dispatch_log(log_path: Path, iteration_id: str) -> tuple[list[dict], list[str]]:
+     """Return (events, warnings). Events are JSONL-parsed dicts for this iteration only.
+ 
+     Each event has _line_number injected (rev-005 tiebreaker). Malformed lines
+     are skipped with a warning citing the line number (not the content).
+     """
+     events: list[dict] = []
+     warnings: list[str] = []
+     if not log_path.is_file():
+         return events, warnings
+     try:
+         text = log_path.read_text(encoding="utf-8")
+-    except Exception as exc:
++    # iter-0036 parity (H-8): narrow to IO/decode classes (KEEP the loud warning —
++    # this path was never silent, so the orchestrator still learns nothing is
++    # readable). Programmer errors now propagate instead of being mislabeled.
++    except (OSError, UnicodeDecodeError) as exc:
+         warnings.append(f"dispatch-log.jsonl read failed: {type(exc).__name__}")
+         return events, warnings
+     for idx, line in enumerate(text.splitlines(), start=1):
+         line = line.strip()
+         if not line:
+             continue
+         try:
+             e = json.loads(line)
+         except json.JSONDecodeError:
+             warnings.append(f"dispatch-log.jsonl line {idx}: malformed JSON skipped")
+             continue
+         if not isinstance(e, dict):
+             warnings.append(f"dispatch-log.jsonl line {idx}: non-object skipped")
+             continue
+         if e.get("iteration_id") != iteration_id:
+             continue
+         e["_line_number"] = idx
+         events.append(e)
+     return events, warnings
+ 
+ 
+ def _event_kind(event: dict) -> str | None:
+     """Dispatch-log events use 'event' key for kind."""
+     return event.get("event")
+ 
+@@ -209,51 +214,52 @@ def _compute_current_bundle_sha(
+     """
+     # rev-003: scan events for the latest bundle-mutation kind.
+     mutation_events = [e for e in events if _event_kind(e) in BUNDLE_MUTATION_KINDS]
+     if mutation_events:
+         # latest by timestamp_utc, tiebreaker by line number
+         mutation_events.sort(key=lambda e: (e.get("timestamp_utc", ""), e.get("_line_number", 0)))
+         latest = mutation_events[-1]
+         sha = latest.get("bundle_sha256") or latest.get("review_target_hash")
+         if isinstance(sha, str) and sha:
+             return sha, "dispatch_log_bundle_mutation"
+         # codex-iter0003-3 rev-001 fix: a bundle-mutation event WITHOUT a usable
+         # hash means we cannot fall through to the review-packet base_sha — that
+         # would classify post-mutation state against the pre-mutation hash and
+         # leave stale reviews looking "open" when they are actually superseded.
+         # Report unknown + force the caller to surface a warning.
+         return None, "mutation_event_missing_hash"
+     # rev-004: fallback to review-packet.yaml base_sha ONLY when no mutation event exists.
+     if review_packet_path.is_file():
+         try:
+             rp = yaml.safe_load(review_packet_path.read_text(encoding="utf-8"))
+             if isinstance(rp, dict):
+                 dt = rp.get("defect_target") or {}
+                 sha = dt.get("base_sha")
+                 if isinstance(sha, str) and sha:
+                     return sha, "review_packet_base_sha"
+-        except Exception:
++        # iter-0036 parity (H-8): narrow to IO/decode/parse classes.
++        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+             pass
+     return None, "none"
+ 
+ 
+ def _compute_bundle_mutation(events: list[dict]) -> dict | None:
+     """Return the latest bundle-mutation event projected into the §4 bundle_mutation shape."""
+     candidates = [e for e in events if _event_kind(e) in BUNDLE_MUTATION_KINDS]
+     if not candidates:
+         return None
+     candidates.sort(key=lambda e: (e.get("timestamp_utc", ""), e.get("_line_number", 0)))
+     e = candidates[-1]
+     return {
+         "actor": e.get("actor") or {"id": e.get("actor_id"), "model_family": e.get("model_family")},
+         "kind": _event_kind(e),
+         "timestamp_utc": e.get("timestamp_utc"),
+         "bundle_sha256": e.get("bundle_sha256") or e.get("review_target_hash"),
+     }
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # recent_activity (rev-002 + rev-005)
+ # ---------------------------------------------------------------------------
+ 
+ def _compute_recent_activity(events: list[dict], max_count: int = 10) -> list[dict]:
+     """rev-002: enum includes bundle-mutation kinds. rev-005: (ts DESC, line DESC) sort."""
+@@ -308,80 +314,83 @@ def _compute_in_flight(
+             slot["end"] = e
+         elif kind == "dispatch_streamed_line":
+             slot["last_line"] = e
+             if include_streamed:
+                 streams.setdefault(pid, []).append({
+                     "timestamp_utc": e.get("timestamp_utc"),
+                     "line": (e.get("line") or "")[:200],
+                 })
+         elif kind == "dispatch_heartbeat":
+             slot["last_hb"] = e
+ 
+     now = datetime.now(timezone.utc)
+     capped_lines = max(0, min(int(max_streamed_lines), 500))
+     result: list[dict] = []
+     for pid, slot in by_pass.items():
+         if slot["start"] is None or slot["end"] is not None:
+             continue
+         started = slot["start"].get("timestamp_utc")
+         last_line_evt = slot["last_line"] or slot["last_hb"] or slot["start"]
+         last_line_ts = last_line_evt.get("timestamp_utc") if last_line_evt else None
+         seconds_since = None
+         if last_line_ts:
+             try:
+                 t = datetime.fromisoformat(last_line_ts.replace("Z", "+00:00"))
+                 seconds_since = max(0.0, (now - t).total_seconds())
+-            except Exception:
++            # iter-0036 parity (H-8): ValueError is what datetime.fromisoformat
++            # raises on a malformed timestamp; programmer errors now propagate.
++            except ValueError:
+                 seconds_since = None
+         abort_signal_path = iter_dir.parent.parent / f"abort-dispatch-{pid}.signal"
+         entry = {
+             "pass_id": pid,
+             "reviewer_id": slot["start"].get("reviewer_id"),
+             "started_at_utc": started,
+             "last_heartbeat_utc": (slot["last_hb"] or {}).get("timestamp_utc"),
+             "seconds_since_last_line": seconds_since,
+             "stall_silence_threshold_seconds": STALL_SILENCE_SECONDS,
+             "abort_signal_path": str(abort_signal_path),
+             "abort_signal_present": abort_signal_path.is_file(),
+             "looks_stuck": (seconds_since is not None and seconds_since >= STALL_SILENCE_SECONDS),
+         }
+         if include_streamed:
+             entry["streamed_lines"] = (streams.get(pid) or [])[-capped_lines:]
+         result.append(entry)
+     result.sort(key=lambda r: r["pass_id"])
+     return result
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # review classification (uses current_bundle_sha — rev-003 prereq satisfied).
+ # ---------------------------------------------------------------------------
+ 
+ def _parse_review(path: Path) -> dict | None:
+     try:
+         data = yaml.safe_load(path.read_text(encoding="utf-8"))
+         return data if isinstance(data, dict) else None
+-    except Exception:
++    # iter-0036 parity (H-8): narrow to IO/decode/parse classes.
++    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+         return None
+ 
+ 
+ def _review_target_hash(review: dict) -> str | None:
+     prov = review.get("dispatch_provenance") or {}
+     h = prov.get("review_target_hash")
+     if isinstance(h, str):
+         return h
+     # fallback: some review shapes carry it at top level
+     h = review.get("review_target_hash")
+     return h if isinstance(h, str) else None
+ 
+ 
+ def _classify_review(
+     review: dict,
+     current_bundle_sha: str | None,
+     closure_cert: dict | None,
+     iteration_state: str,
+ ) -> tuple[str, str | None, str | None]:
+     """Return (classification, superseded_by_pass_id, closure_source_path)."""
+     pid = review.get("pass_id")
+     hash_ = _review_target_hash(review)
+ 
+     if closure_cert is not None:
+         closer_pids = closure_cert.get("closing_review_pass_ids") or []
+@@ -432,51 +441,55 @@ def _compute_watermark(iter_dir: Path, log_path: Path) -> str:
+     # presence + mtimes in the watermark. Otherwise a cached fast-path snapshot
+     # can report stale abort_signal_present after an operator writes or removes
+     # an abort signal. Signals live in consensus-state/ (sibling of active/).
+     signal_dir = iter_dir.parent.parent
+     signal_parts: list[str] = []
+     if signal_dir.is_dir():
+         for sig in sorted(signal_dir.glob("abort-dispatch-*.signal")):
+             try:
+                 signal_parts.append(f"{sig.name}:{sig.stat().st_mtime_ns}")
+             except FileNotFoundError:
+                 continue
+     parts.append("|".join(signal_parts))
+     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # iteration_state, closure_invariant_status, expected_next_action
+ # ---------------------------------------------------------------------------
+ 
+ def _load_yaml(path: Path) -> dict | None:
+     if not path.is_file():
+         return None
+     try:
+         data = yaml.safe_load(path.read_text(encoding="utf-8"))
+         return data if isinstance(data, dict) else None
+-    except Exception:
++    # iter-0036 parity (H-8): mirror _self_drive._read_yaml_or_empty — narrow to
++    # the IO/decode/parse classes so programmer errors (TypeError, AttributeError,
++    # KeyboardInterrupt) propagate instead of being mislabeled as a parse failure.
++    # Behavior on missing/unreadable/unparseable files is unchanged (still None).
++    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+         return None
+ 
+ 
+ def _compute_iteration_state(
+     goal_packet: dict | None,
+     iteration_outcome: dict | None,
+     closure_cert: dict | None,
+ ) -> str:
+     if goal_packet is None:
+         return "unknown"
+     if closure_cert is not None:
+         verdict = closure_cert.get("verdict")
+         if verdict == "quorum_close_passed":
+             return "closed_passed"
+         if verdict == "quorum_close_failed":
+             return "closed_failed"
+     if iteration_outcome is not None:
+         state = iteration_outcome.get("state")
+         if state == "blocked_needs_operator":
+             return "blocked_operator"
+     return "open"
+ 
+ 
+ def _compute_closure_invariant_status(
+     bundle_mutation: dict | None,
+diff --git a/consensus_mcp/_self_drive.py b/consensus_mcp/_self_drive.py
+index 3543084..1ef6d6a 100644
+--- a/consensus_mcp/_self_drive.py
++++ b/consensus_mcp/_self_drive.py
+@@ -1,82 +1,88 @@
+ """Phase 4 bounded self-drive PARTIAL helper. NOT an autonomous API executor.
+ 
+ Per autonomy contract (docs/architecture/2026-05-09-autonomy-contract.md
+ Section 8): Phase 4 v1.0 implements Level 2 via the supervised-quorum-orchestrator
+ pattern. The orchestrator-LLM (caller) follows the autonomy contract on a sealed
+ goal_packet; this script provides PARTIAL enforcement via:
+ 
+   - goal_packet schema validation (load + check required fields)
+   - scope-signature computation + verification over the safety-critical field set
+     (goal, allowed_files, allowed_sections, forbidden_files, max_iterations,
+     max_patch_size, validators_required, acceptance_gates, stop_conditions,
+     operator_escalation_triggers, authorization.authorized_by)
+-  - state-machine transitions recorded as canonical event types
++  - state-machine transition VALIDATION (checks new_state is a known state and
++    reports whether it's terminal) — STATELESS: persists nothing. The canonical
++    state store (disposition-ledger.yaml) has a single authorized writer by
++    design; the orchestrator owns state via file-presence + ledger.
+   - acceptance-gate evaluation (running each `check` command + recording result)
+   - changed-files-in-scope verification using exact-file, dir-prefix (trailing /),
+     and fnmatch glob matchers
+   - stop-rule checks for ALL 9 contract rules (full coverage):
+       max_iteration_count_reached, patch_would_touch_forbidden_files,
+       claude_codex_goal_satisfaction_disagreement, patch_size_exceeds_max,
+       any_acceptance_gate_returns_undefined, repeated_finding_class_unresolved,
+       cross_document_drift_detected, validator_reviewer_disagreement,
+       closure_cross_verification_failed.
+ 
+ The script does NOT call Anthropic API or dispatch reviewers; that remains the
+ orchestrator's job. This script is an enforcement helper for stop-rule + scope
+ + acceptance-gate enforcement. Reviewer dispatch + consensus synthesis remain
+ out-of-band orchestrator responsibilities.
+ 
+ USAGE
+ -----
+   # 1. Validate goal_packet
+   python -m consensus_mcp._self_drive validate <goal_packet.yaml>
+ 
+-  # 2. Record state transition
++  # 2. Validate a state transition (STATELESS — validates new_state + reports
++  #    terminality; persists NOTHING)
+   python -m consensus_mcp._self_drive transition <goal_packet.yaml> <new_state> [--note "<text>"]
+ 
+   # 3. Check stop rules
+   python -m consensus_mcp._self_drive check_stop_rules <goal_packet.yaml> <iteration_dir>
+ 
+   # 4. Evaluate acceptance gates
+   python -m consensus_mcp._self_drive evaluate_gates <goal_packet.yaml>
+ 
+   # 5. Verify scope (changed files match allowed_files)
+   python -m consensus_mcp._self_drive verify_scope <goal_packet.yaml>
+ 
+   # 6. Close (combined check; pass iff all gates green + all stop rules clear + scope clean)
+   python -m consensus_mcp._self_drive close <goal_packet.yaml> <iteration_dir>
+ 
+ OUTPUT
+ ------
+ JSON to stdout. Exit 0 = pass; non-zero = fail (stop rule fired or gate not met).
+ """
+ from __future__ import annotations
+ 
+ import argparse
++import contextlib
+ import fnmatch
+ import hashlib
++import io
+ import json
+ import os
+ import subprocess
+ import sys
+ from pathlib import Path
+ 
+ import yaml
+ 
+ 
+ STOP_RULES_REQUIRED_BY_CONTRACT = (
+     "max_iteration_count_reached",
+     "patch_would_touch_forbidden_files",
+     "patch_size_exceeds_max",
+     "any_acceptance_gate_returns_undefined",
+     "repeated_finding_class_unresolved",
+     "cross_document_drift_detected",
+     "validator_reviewer_disagreement",
+     "claude_codex_goal_satisfaction_disagreement",
+     "closure_cross_verification_failed",
+ )
+ STOP_RULES_IMPLEMENTED = (
+     "max_iteration_count_reached",
+     "patch_would_touch_forbidden_files",
+     "claude_codex_goal_satisfaction_disagreement",
+     "patch_size_exceeds_max",
+@@ -303,51 +309,63 @@ def cmd_validate(args) -> int:
+     missing = REQUIRED_GOAL_PACKET_FIELDS - set(packet.keys())
+     if missing:
+         print(json.dumps({"valid": False, "error": "missing_required_fields", "missing": sorted(missing)}))
+         return 1
+     auth = packet.get("authorization", {})
+     if "authorized_by" not in auth or auth.get("authorized_by") != "operator":
+         print(json.dumps({"valid": False, "error": "authorization_missing_or_not_operator"}))
+         return 1
+     expected_sig = _scope_signature(packet)
+     recorded_sig = auth.get("scope_signature")
+     sig_match = recorded_sig == expected_sig
+     print(json.dumps({
+         "valid": True,
+         "pilot_id": packet["pilot_id"],
+         "scope_signature_match": sig_match,
+         "scope_signature_expected": expected_sig,
+         "scope_signature_recorded": recorded_sig,
+         "allowed_files_count": len(packet["allowed_files"]),
+         "acceptance_gates_count": len(packet["acceptance_gates"]),
+         "max_iterations": packet["max_iterations"],
+     }))
+     return 0 if sig_match else 2
+ 
+ 
+ def cmd_transition(args) -> int:
+-    """Record state transition. State must be in VALID_STATES."""
++    """Validate a state transition. STATELESS — persists NOTHING.
++
++    Checks that new_state is in VALID_STATES and reports whether it is a
++    terminal state. It does NOT write to the canonical state store
++    (disposition-ledger.yaml), which has a single authorized writer by design;
++    the orchestrator owns state via file-presence + ledger. This command is a
++    pure validator/reporter — the prior "Record state transition" docstring was
++    inaccurate (M-11 contract correction).
++
++    NOTE: a terminal-state guard (rejecting transitions OUT of a terminal state,
++    via a current_state arg) was considered and DEFERRED to consensus — it is a
++    separate API decision, not part of this contract-honesty fix.
++    """
+     if args.new_state not in VALID_STATES:
+         print(json.dumps({"ok": False, "error": "invalid_state", "valid_states": sorted(VALID_STATES)}))
+         return 1
+     print(json.dumps({
+         "ok": True,
+         "state": args.new_state,
+         "terminal": args.new_state in TERMINAL_STATES,
+         "note": args.note,
+     }))
+     return 0
+ 
+ 
+ def _evaluate_one_gate(gate: dict, repo_root: Path) -> dict:
+     """Evaluate a single acceptance gate. Returns the per-gate result dict.
+ 
+     Result-dict keys (per cmd_evaluate_gates contract):
+       - id: gate id
+       - passed: bool
+       - One of:
+           exit_code + stdout_tail (clean run)
+           error: "no_check_command"  (empty/missing check field)
+           exception: <str>           (subprocess raised)
+     """
+     gate_id = gate.get("id", "?")
+     check = gate.get("check", "")
+@@ -1126,59 +1144,71 @@ def cmd_verify_scope(args) -> int:
+     # iter-0036 perf-rev-003 + xplat-rev-005 fix: partition once and use the
+     # partitioned matcher to avoid the O(N * M) double loop hidden inside
+     # ``_path_in_scope``.
+     a_exacts, a_dirs, a_globs = _partition_patterns(allowed)
+     out_of_scope = [
+         c for c in changed
+         if _match_partitioned(c, a_exacts, a_dirs, a_globs) is None
+     ]
+     has_allowed_sections = bool(packet.get("allowed_sections"))
+     print(json.dumps({
+         "in_scope": len(out_of_scope) == 0,
+         "changed_count": len(changed),
+         "out_of_scope": out_of_scope,
+         "allowed_sections_evaluated": False,
+         "allowed_sections_note": (
+             "allowed_sections present in goal_packet but section-level scope is NOT evaluated by this helper "
+             "(per Round 9 F6: section-level scope requires T9/T10 integration; not in iter-0009 stabilization scope). "
+             "Orchestrator must verify allowed_sections out-of-band."
+             if has_allowed_sections else "no allowed_sections specified in goal_packet"
+         ),
+     }))
+     return 0 if not out_of_scope else 1
+ 
+ 
+ def cmd_close(args) -> int:
+-    """Combined: validate + check_stop_rules + evaluate_gates + verify_scope. Pass iff all pass."""
++    """Combined: validate + check_stop_rules + evaluate_gates + verify_scope. Pass iff all pass.
++
++    H-3: each of the four sub-commands ``print(json.dumps(...))`` its own blob.
++    Calling them directly would emit five JSON objects on stdout, so a caller's
++    ``json.loads(stdout)`` would raise "Extra data". We redirect their stdout
++    into a throwaway buffer (collecting only their return codes) and emit a
++    SINGLE final object: {can_close, components}. The four sub-commands keep
++    their standalone CLI contract (they still print when invoked directly).
++    """
+     overall = {"validate": None, "stop_rules": None, "gates": None, "scope": None}
+-    rc_validate = cmd_validate(argparse.Namespace(goal_packet=args.goal_packet))
++    # Suppress the sub-commands' own JSON prints; we only need their return codes.
++    with contextlib.redirect_stdout(io.StringIO()):
++        rc_validate = cmd_validate(argparse.Namespace(goal_packet=args.goal_packet))
++        rc_stop = cmd_check_stop_rules(
++            argparse.Namespace(goal_packet=args.goal_packet, iteration_dir=args.iteration_dir)
++        )
++        rc_gates = cmd_evaluate_gates(argparse.Namespace(goal_packet=args.goal_packet))
++        rc_scope = cmd_verify_scope(argparse.Namespace(goal_packet=args.goal_packet))
+     overall["validate"] = rc_validate == 0
+-    rc_stop = cmd_check_stop_rules(argparse.Namespace(goal_packet=args.goal_packet, iteration_dir=args.iteration_dir))
+     overall["stop_rules"] = rc_stop == 0
+-    rc_gates = cmd_evaluate_gates(argparse.Namespace(goal_packet=args.goal_packet))
+     overall["gates"] = rc_gates == 0
+-    rc_scope = cmd_verify_scope(argparse.Namespace(goal_packet=args.goal_packet))
+     overall["scope"] = rc_scope == 0
+     can_close = all(overall.values())
+     print(json.dumps({"can_close": can_close, "components": overall}, default=str))
+     return 0 if can_close else 1
+ 
+ 
+ def main(argv: list[str] | None = None) -> int:
+     p = argparse.ArgumentParser(description="Phase 4 bounded self-drive enforcement harness.")
+     sub = p.add_subparsers(dest="cmd", required=True)
+ 
+     sp = sub.add_parser("validate")
+     sp.add_argument("goal_packet")
+     sp.set_defaults(func=cmd_validate)
+ 
+     sp = sub.add_parser("transition")
+     sp.add_argument("goal_packet")
+     sp.add_argument("new_state")
+     sp.add_argument("--note", default="")
+     sp.set_defaults(func=cmd_transition)
+ 
+     sp = sub.add_parser("check_stop_rules")
+     sp.add_argument("goal_packet")
+     sp.add_argument("iteration_dir")
+     sp.set_defaults(func=cmd_check_stop_rules)
+ 
+diff --git a/consensus_mcp/_snapshot_state.py b/consensus_mcp/_snapshot_state.py
+index 4d51b9a..5d44c41 100644
+--- a/consensus_mcp/_snapshot_state.py
++++ b/consensus_mcp/_snapshot_state.py
+@@ -10,51 +10,50 @@ Architecture:
+   across snapshots so the on-disk cost is bounded by actual delta size.
+ - Each snapshot uses a `git worktree` so the main working tree is never
+   touched during snapshot/restore.
+ - Tag format: `snapshot-<ISO-UTC>[-<label>]` where ISO is normalized to
+   `YYYY-MM-DDTHHMMSSZ` (no colons; some refspecs reject colons in tags).
+ - Label is operator-supplied via `--label`; sanitized to ^[A-Za-z0-9_-]{1,64}$.
+ 
+ CLI surface (per iter-0012 F5a):
+   snapshot [--label <free-text>]
+   list [--limit N]
+   restore --tag <snapshot-tag> [--dry-run] [--iteration <id>] [--force] [--abort-on-dirty]
+   diff --tag <snapshot-tag>
+ 
+ Per iter-0012 F6a + F9d: restore auto-pre-snapshots the current dirty state
+ before overwriting (--force skips; --abort-on-dirty refuses if dirty).
+ 
+ Per iter-0012 F9a: remote durability is opt-in by operator via
+ `git push origin consensus-state-snapshots`. README documents.
+ 
+ NOT an MCP tool. CLI-only. Operator invokes from the repo root:
+   python -m consensus_mcp._snapshot_state <command> [args]
+ """
+ from __future__ import annotations
+ 
+ import argparse
+-import hashlib
+ import os
+ import re
+ import shutil
+ import subprocess
+ import sys
+ import tempfile
+ from datetime import datetime, timezone
+ from pathlib import Path
+ 
+ from consensus_mcp._dispatch_base import (
+     RepoRootResolutionError,
+     _resolve_repo_root,
+ )
+ 
+ 
+ SNAPSHOT_BRANCH = "consensus-state-snapshots"
+ SNAPSHOT_TAG_PREFIX = "snapshot-"
+ LABEL_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+ # Iteration directory names look like `iteration-NNNN-slug` or
+ # `iteration-audit-YYYY-MM-DD-slug`. The pattern below allows alphanumerics,
+ # dots (for date components), hyphens, and underscores, but rejects path
+ # separators and ".." traversal — preventing codex-rev-001 round-3 (critical).
+ ITERATION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+ SNAPSHOTTED_PATHS = ("consensus-state",)  # Top-level dirs included in each snapshot.
+ 
+@@ -509,56 +508,68 @@ def _detect_dirty_paths(repo_root: Path, target_tag: str | None = None) -> list[
+                 continue
+             meta = parts[0].split()
+             if len(meta) < 3:
+                 continue
+             oid, path = meta[2], parts[1]
+             snapshotted.add((path, oid))
+             if commit == target_sha:
+                 target_paths.add(path)
+ 
+     snapshotted_paths = {p for p, _ in snapshotted}
+     snapshotted_oids_by_path: dict[str, set[str]] = {}
+     for p, o in snapshotted:
+         snapshotted_oids_by_path.setdefault(p, set()).add(o)
+ 
+     dirty: set[str] = set()
+ 
+     # 1) Modified-not-snapshotted: any current file whose (path, oid) isn't in any snapshot.
+     for rel in SNAPSHOTTED_PATHS:
+         root = repo_root / rel
+         if not root.exists():
+             continue
+         for f in root.rglob("*"):
+             if f.is_dir():
+                 continue
+             rel_path = f.relative_to(repo_root).as_posix()
+-            try:
+-                content = f.read_bytes()
+-            except OSError:
++            # Compute the git blob OID via `git hash-object`, NOT a raw Python
++            # SHA-1 over working-tree bytes. With core.autocrlf=true (and no
++            # .gitattributes) git stores LF-normalized blobs while the working
++            # tree keeps CRLF, so a Python hash over raw bytes would never match
++            # the stored OID -> every CRLF text file would read as always-dirty
++            # (H-4). `git hash-object` applies the repo's clean filter so the
++            # OID matches the stored blob.
++            hash_result = _run_git(
++                ["hash-object", "--", str(f)],
++                cwd=repo_root,
++                check=False,
++            )
++            if hash_result.returncode != 0:
++                # git unavailable / unreadable file: conservatively treat as
++                # dirty so a real change is never silently skipped.
++                dirty.add(rel_path)
+                 continue
+-            header = f"blob {len(content)}\0".encode("utf-8")
+-            oid = hashlib.sha1(header + content).hexdigest()
++            oid = hash_result.stdout.strip()
+             if rel_path not in snapshotted_paths or oid not in snapshotted_oids_by_path.get(rel_path, set()):
+                 dirty.add(rel_path)
+ 
+     # 2) Deletion-dirty (codex-rev-002 round-3): paths in the target tag (or
+     # any snapshot if no target given) that no longer exist on disk under
+     # SNAPSHOTTED_PATHS. Without this, a restore that reintroduces a deleted
+     # file would silently overwrite the operator's deletion intent.
+     candidate_paths = target_paths if target_paths else snapshotted_paths
+     for path in candidate_paths:
+         if not path.startswith(tuple(p + "/" for p in SNAPSHOTTED_PATHS)) and \
+            path not in SNAPSHOTTED_PATHS:
+             continue
+         if not (repo_root / path).exists():
+             dirty.add(path)
+ 
+     return sorted(dirty)
+ 
+ 
+ # ----- subcommands -----
+ 
+ 
+ def cmd_snapshot(args: argparse.Namespace, repo_root: Path) -> int:
+     """Create a new snapshot. Optional --label appended to the tag."""
+     try:
+         tag = _build_tag(args.label)
+diff --git a/consensus_mcp/tests/test_capstone_full_fix_loop.py b/consensus_mcp/tests/test_capstone_full_fix_loop.py
+index 6ce539a..09ffb29 100644
+--- a/consensus_mcp/tests/test_capstone_full_fix_loop.py
++++ b/consensus_mcp/tests/test_capstone_full_fix_loop.py
+@@ -63,50 +63,68 @@ def repo_root_env(tmp_path, monkeypatch):
+     importlib.reload(_pac)
+     importlib.reload(apply_codex_patch)
+     return tmp_path
+ 
+ 
+ @pytest.fixture
+ def stub_clean_dry_run(monkeypatch):
+     """Stub patch.stage_and_dry_run to return APPROVED with no findings.
+ 
+     Matches the stubbing pattern from test_apply_codex_patch.py — the staged
+     dry-run gate has its own tests; this capstone focuses on the end-to-end
+     fix-loop wiring, not validator gating.
+     """
+     def _stub(iteration_id=None, proposed_patches=None, validators_to_run=None):
+         return {
+             "staging_dir_used": "/tmp/stub",
+             "dry_run_findings": [],
+             "gate_decision": "APPROVED",
+             "dry_run_isolation_caveats": [],
+         }
+     import consensus_mcp.tools.patch_stage_and_dry_run as _psd_mod
+     monkeypatch.setattr(_psd_mod, "handle", _stub)
+     return _stub
+ 
+ 
++@pytest.fixture
++def stub_clean_working_tree(repo_root_env, monkeypatch):
++    """Stub audit's working-tree detection to a clean tree (no changes).
++
++    H-5 (v1.17.5) made the iteration_closed mutation-completeness gate fail
++    CLOSED when git is unavailable. These capstone tests run in a non-git
++    tmp_path, so the real _detect_working_tree_changes now (correctly) raises
++    GitUnavailableError and pre-empts the closure-invariant gate these tests
++    actually exercise. Stubbing to [] supplies the legitimate "git ran, no
++    changes" signal — matching the Finding-3/Finding-5 idiom in
++    test_iter_0018_cross_ai_invariant.py — so the mutation gate passes and the
++    closure-invariant path is reached. Depends on repo_root_env so it patches
++    the post-reload module object.
++    """
++    import consensus_mcp.tools.audit_append_event as _aae
++    monkeypatch.setattr(_aae, "_detect_working_tree_changes", lambda repo_root: [])
++
++
+ def _make_iter_dir(repo_root: Path, iter_name: str = "iteration-0017-capstone") -> Path:
+     """Create the consensus-state/active/<iter_name> dir layout audit_append_event expects."""
+     iter_dir = repo_root / "consensus-state" / "active" / iter_name
+     iter_dir.mkdir(parents=True)
+     (iter_dir / "independence-audit.yaml").write_text(
+         yaml.safe_dump({"audit_log": []}), encoding="utf-8"
+     )
+     return iter_dir
+ 
+ 
+ def _write_target_file(repo_root: Path, content: str = OLD_CONTENT) -> Path:
+     full = repo_root / TARGET_REL
+     full.parent.mkdir(parents=True, exist_ok=True)
+     full.write_text(content, encoding="utf-8")
+     return full
+ 
+ 
+ def _write_goal_packet(iter_dir: Path, codex_patch_apply_authorized: bool = True) -> Path:
+     """Goal packet with codex_patch_apply_authorized + scope_signature so cmd_validate accepts."""
+     packet = {
+         "schema_version": 1,
+         "pilot_id": "test-capstone-fix-loop",
+         "goal": {"summary": "fix off-by-one defect in sample"},
+         "allowed_files": [TARGET_REL],
+         "allowed_sections": [],
+@@ -210,51 +228,53 @@ def _author_codex_review_with_patch(
+         "blocking_objections": parsed["blocking_objections"],
+     }
+     p = iter_dir / "codex-review.yaml"
+     p.write_text(yaml.safe_dump(review), encoding="utf-8")
+     return p
+ 
+ 
+ def _make_codex_actor() -> dict:
+     return {
+         "id": "codex-iter0017-1",
+         "model_family": "codex",
+         "role": "fix_author",
+         "pass_id": "codex-iter0017-1-pass1",
+     }
+ 
+ 
+ def _now_iso(offset_seconds: int = 0) -> str:
+     from datetime import datetime, timedelta, timezone
+     t = datetime.now(timezone.utc) + timedelta(seconds=offset_seconds)
+     return t.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+ 
+ 
+ # ---- happy-path capstone --------------------------------------------------
+ 
+ 
+-def test_capstone_full_codex_fix_loop_end_to_end(repo_root_env, monkeypatch, stub_clean_dry_run):
++def test_capstone_full_codex_fix_loop_end_to_end(
++    repo_root_env, monkeypatch, stub_clean_dry_run, stub_clean_working_tree
++):
+     """The 14-step full cycle from codex 2026-05-10 v4 directive (revised v5).
+ 
+     Setup: iteration-0017-capstone with goal_packet, target source file with
+     a known off-by-one. Codex emits patch_proposal -> claude builds verifier
+     inputs + records approved verdict -> apply.codex_patch under operator
+     authorization mutates the file + emits apply_step_landed -> CLAUDE
+     post-mutation review (cross-FAMILY closer per CLAUDE.md verification
+     duty) -> audit.append_event iteration_closed authors
+     closure-certificate.yaml with all PASS.
+ 
+     Per iter-0018 Finding 2 (codex 2026-05-10 v5): the closer MUST be the
+     OPPOSITE family from the LAST MUTATOR. Codex applied; claude must verify
+     + close. Codex closing its own mutation is BLOCKED at the cross_family
+     check (regardless of actor.id difference).
+     """
+     monkeypatch.setenv("CONSENSUS_MCP_CODEX_PATCH_APPLY", "1")
+     iter_dir = _make_iter_dir(repo_root_env)
+     _write_goal_packet(iter_dir, codex_patch_apply_authorized=True)
+     _write_target_file(repo_root_env, OLD_CONTENT)
+ 
+     # Pre-conditions for loop.run_goal to reach codex_patch_proposed:
+     # review-packet.yaml + claude-review.yaml + codex-review.yaml (the last
+     # one carries the patch_proposal). claude-review.yaml from earlier
+     # claude-rev pass; the patch verification is a separate flow.
+     (iter_dir / "review-packet.yaml").write_text(
+@@ -431,51 +451,51 @@ def test_capstone_full_codex_fix_loop_end_to_end(repo_root_env, monkeypatch, stu
+             },
+         },
+     )
+     assert "error" not in close_result, f"close blocked: {close_result}"
+     assert close_result.get("event_id")
+ 
+     cert_path = iter_dir / "closure-certificate.yaml"
+     assert cert_path.exists(), "closure-certificate.yaml not authored on PASS"
+     cert = yaml.safe_load(cert_path.read_text(encoding="utf-8"))
+     assert cert["overall"] == "PASS", f"cert not PASS: {cert}"
+     assert cert["invariant_checks"]["cross_family"] == "PASS"
+     assert cert["invariant_checks"]["hash_match"] == "PASS"
+     assert cert["invariant_checks"]["freshness"] == "PASS"
+     # Cert references the right last_mutation + claude closer.
+     assert cert["last_mutation"]["actor"]["id"] == "codex-iter0017-1"
+     assert cert["last_mutation"]["actor"]["model_family"] == "codex"
+     assert cert["closing_verdict"]["actor"]["id"] == "claude-iter0017-verifier"
+     assert cert["closing_verdict"]["actor"]["model_family"] == "claude"
+     assert cert["closing_verdict"]["review_target_hash"] == apply_post_sha
+ 
+ 
+ # ---- forbidden-transition test --------------------------------------------
+ 
+ 
+ def test_capstone_corrected_resubmit_refuses_apply_and_close(
+-    repo_root_env, monkeypatch, stub_clean_dry_run,
++    repo_root_env, monkeypatch, stub_clean_dry_run, stub_clean_working_tree,
+ ):
+     """Forbidden transition: verdict=corrected_resubmit blocks apply, and
+     iteration_closed without an approved+applied patch + cross-actor closer
+     is refused at the T6 layer.
+ 
+     Two assertions:
+       1. apply.codex_patch refuses when verdict != approved.
+       2. audit.append_event(iteration_closed) refuses with
+          closure_cross_verification_failed when the closure invariant fails
+          (here: claude is the closer but no cross-actor closer-verdict was
+          authored after the apply — so T6's no-fresh-review branch fires).
+     """
+     monkeypatch.setenv("CONSENSUS_MCP_CODEX_PATCH_APPLY", "1")
+     iter_dir = _make_iter_dir(repo_root_env, "iteration-0017-capstone-forbid")
+     _write_goal_packet(iter_dir, codex_patch_apply_authorized=True)
+     _write_target_file(repo_root_env, OLD_CONTENT)
+ 
+     codex_output_json, patch_proposal = _build_synthetic_codex_output_with_patch(repo_root_env)
+     _author_codex_review_with_patch(iter_dir, codex_output_json)
+ 
+     # Record verdict=corrected_resubmit (claude says the patch is wrong).
+     rv_result = loop_verify_codex_patch.handle(
+         iteration_dir=str(iter_dir),
+         codex_finding_id="codex-rev-001",
+         mode="record_verdict",
+@@ -558,51 +578,51 @@ def test_capstone_corrected_resubmit_refuses_apply_and_close(
+         },
+         "review_target_hash": "POST_HASH_TEST",
+         "created_at_utc": _now_iso(),
+         "goal_satisfied": True,
+     }
+     (iter_dir / "codex-review.yaml").write_text(
+         yaml.safe_dump(same_actor_closer), encoding="utf-8"
+     )
+ 
+     close_result = audit_append_event.handle(
+         iteration_id=iter_dir.name,
+         event_type="iteration_closed",
+         actor="codex-iter0017-1",
+         closing_state="quorum_close_passed",
+     )
+     assert "error" in close_result
+     assert "closure_cross_verification_failed" in close_result["error"]
+     # No certificate authored on refusal.
+     assert not (iter_dir / "closure-certificate.yaml").exists()
+ 
+ 
+ # ---- iter-0018 Finding 2: codex post-correction re-review is blocked ----
+ 
+ 
+ def test_capstone_codex_apply_then_codex_post_review_blocked(
+-    repo_root_env, monkeypatch, stub_clean_dry_run,
++    repo_root_env, monkeypatch, stub_clean_dry_run, stub_clean_working_tree,
+ ):
+     """Per iter-0018 Finding 2 (codex 2026-05-10 v5): the closer MUST be the
+     OPPOSITE family from the LAST MUTATOR. Codex applies + codex (different
+     actor.id) post-correction reviews and tries to close = BLOCKED at
+     cross_family.
+ 
+     Pre-iter-0018 this passed because actor.id differed; post-iter-0018 the
+     family check catches it.
+     """
+     monkeypatch.setenv("CONSENSUS_MCP_CODEX_PATCH_APPLY", "1")
+     iter_dir = _make_iter_dir(repo_root_env, "iteration-0018-codex-codex-blocked")
+     _write_goal_packet(iter_dir, codex_patch_apply_authorized=True)
+     _write_target_file(repo_root_env, OLD_CONTENT)
+ 
+     # Pre-conditions for the loop to reach codex_patch_proposed.
+     (iter_dir / "review-packet.yaml").write_text(
+         yaml.safe_dump({"iteration_artifacts": []}), encoding="utf-8"
+     )
+     (iter_dir / "claude-review.yaml").write_text(
+         yaml.safe_dump({"goal_satisfied": False}), encoding="utf-8"
+     )
+ 
+     codex_output_json, patch_proposal = _build_synthetic_codex_output_with_patch(repo_root_env)
+     _author_codex_review_with_patch(iter_dir, codex_output_json)
+ 
+diff --git a/consensus_mcp/tests/test_iter_0018_cross_ai_invariant.py b/consensus_mcp/tests/test_iter_0018_cross_ai_invariant.py
+index 9d7dedb..cafcb13 100644
+--- a/consensus_mcp/tests/test_iter_0018_cross_ai_invariant.py
++++ b/consensus_mcp/tests/test_iter_0018_cross_ai_invariant.py
+@@ -256,50 +256,135 @@ def test_unaudited_working_tree_changes_block_close(tmp_path, monkeypatch):
+         yaml.safe_dump(closer), encoding="utf-8"
+     )
+ 
+     # Monkeypatch the unaudited-detection helper to report the unaudited file
+     # as a working-tree change. The real implementation uses git; tests can't
+     # rely on a git repo. The hardening adds a hook that the tool calls.
+     from consensus_mcp.tools import audit_append_event as aae
+     monkeypatch.setattr(
+         aae,
+         "_detect_working_tree_changes",
+         lambda repo_root: [audited_rel, unaudited_rel],
+     )
+ 
+     result = aae.handle(
+         iteration_id=iter_id,
+         event_type="iteration_closed",
+         actor="claude-iter0018-2",
+         closing_state="quorum_close_passed",
+     )
+     assert "error" in result
+     assert "unaudited_mutation_detected" in result["error"]
+     # Both unaudited paths should be surfaced.
+     assert unaudited_rel in result["error"]
+ 
+ 
++def test_git_unavailable_blocks_close_fail_closed(tmp_path, monkeypatch):
++    """H-5: the mutation-completeness gate must FAIL CLOSED when git is
++    unavailable, not silently allow close (fail-open).
++
++    Setup: a normal closeable iteration (apply event + cross-family closer
++    review). Then monkeypatch subprocess.run to raise FileNotFoundError (git
++    binary missing). Unlike the Finding-3/Finding-5 tests, this test does NOT
++    stub _detect_working_tree_changes — it lets the real function body run so
++    it raises GitUnavailableError, which handle() must surface as
++    mutation_completeness_unverifiable.
++
++    RED today: current code's _detect_working_tree_changes swallows the
++    FileNotFoundError (per-cmd `continue`) and returns [], so handle() treats
++    the empty set as "no unaudited mutation" and allows the close (success).
++    """
++    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
++    importlib.reload(audit_append_event)
++
++    iter_id = "iteration-test-git-unavailable"
++    iter_dir = tmp_path / "consensus-state" / "active" / iter_id
++    iter_dir.mkdir(parents=True)
++
++    audited_rel = "audited_file.py"
++    (tmp_path / audited_rel).write_text("audited content\n", encoding="utf-8")
++
++    apply_event = {
++        "event": "apply_step_landed",
++        "timestamp_utc": _now_iso(-100),
++        "event_id": f"{_now_iso(-100)}_apply_step_landed_codex",
++        "effect": "applied patch",
++        "actor": {
++            "id": "codex-iter0018-1",
++            "model_family": "codex",
++            "role": "fix_author",
++            "pass_id": "codex-iter0018-1-pass1",
++        },
++        "patch_id": "codex-rev-001-patch",
++        "files_touched": [audited_rel],
++        "base_sha": "base",
++        "post_sha": "POST",
++        "unified_diff_sha256": "diff",
++        "timestamp": _now_iso(-100),
++        "files_modified": [audited_rel],
++    }
++    audit_path = iter_dir / "independence-audit.yaml"
++    audit_path.write_text(
++        yaml.safe_dump({"audit_log": [apply_event]}), encoding="utf-8"
++    )
++
++    closer = {
++        "actor": {
++            "id": "claude-iter0018-2",
++            "model_family": "claude",
++            "pass_id": "claude-iter0018-2-pass1",
++        },
++        "review_target_hash": "POST",
++        "created_at_utc": _now_iso(0),
++        "goal_satisfied": True,
++    }
++    (iter_dir / "claude-review.yaml").write_text(
++        yaml.safe_dump(closer), encoding="utf-8"
++    )
++
++    from consensus_mcp.tools import audit_append_event as aae
++
++    # Simulate git missing: every subprocess.run raises FileNotFoundError.
++    # The real _detect_working_tree_changes body must run and raise
++    # GitUnavailableError, which handle() surfaces fail-closed.
++    import subprocess as _subprocess
++
++    def _no_git(*args, **kwargs):
++        raise FileNotFoundError("git: command not found")
++
++    monkeypatch.setattr(_subprocess, "run", _no_git)
++
++    result = aae.handle(
++        iteration_id=iter_id,
++        event_type="iteration_closed",
++        actor="claude-iter0018-2",
++        closing_state="quorum_close_passed",
++    )
++    assert "error" in result, f"expected fail-closed error, got: {result}"
++    assert "mutation_completeness_unverifiable" in result["error"]
++
++
+ def test_audited_working_tree_changes_allowed_to_close(tmp_path, monkeypatch):
+     """When all working-tree changes are accounted for in apply_step_landed,
+     no unaudited_mutation_detected refusal."""
+     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+     importlib.reload(audit_append_event)
+ 
+     iter_id = "iteration-test-audited"
+     iter_dir = tmp_path / "consensus-state" / "active" / iter_id
+     iter_dir.mkdir(parents=True)
+ 
+     audited_rel = "audited_file.py"
+     (tmp_path / audited_rel).write_text("audited content\n", encoding="utf-8")
+ 
+     apply_event = {
+         "event": "apply_step_landed",
+         "timestamp_utc": _now_iso(-100),
+         "event_id": f"{_now_iso(-100)}_apply_step_landed_codex",
+         "effect": "applied patch",
+         "actor": {
+             "id": "codex-iter0018-1",
+             "model_family": "codex",
+             "role": "fix_author",
+             "pass_id": "codex-iter0018-1-pass1",
+         },
+         "patch_id": "codex-rev-001-patch",
+@@ -611,33 +696,41 @@ def test_t6_fails_closed_when_invariant_evaluator_returns_none(tmp_path, monkeyp
+     assert "closure_invariant_evaluation_failed" in result["error"]
+ 
+ 
+ def test_t6_no_mutation_evaluator_none_still_allowed(tmp_path, monkeypatch):
+     """When NO apply_step_landed events exist, evaluator returning None is
+     fine (no mutation = no gate). Refusal only fires when the audit log has
+     apply_step_landed events but the evaluator can't give a verdict."""
+     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+     importlib.reload(audit_append_event)
+ 
+     iter_id = "iteration-test-no-mutation-eval"
+     iter_dir = tmp_path / "consensus-state" / "active" / iter_id
+     iter_dir.mkdir(parents=True)
+ 
+     audit_path = iter_dir / "independence-audit.yaml"
+     audit_path.write_text(
+         yaml.safe_dump({"audit_log": []}), encoding="utf-8"
+     )
+ 
+     from consensus_mcp.tools import audit_append_event as aae
+     # Even if the evaluator returns None, with no apply_step_landed events the
+     # close should be allowed.
+     monkeypatch.setattr(
+         aae, "_evaluate_closure_invariant", lambda *a, **kw: None,
+     )
++    # H-5: the mutation-completeness gate now FAILS CLOSED when git is
++    # unavailable. The pytest tmp_path is not a git repo, so the real helper
++    # would (correctly) raise GitUnavailableError. Stub it to return [] — the
++    # legitimate "git ran, no working-tree changes" signal — so this test
++    # exercises ONLY the no-mutation/evaluator-None path it was written for.
++    monkeypatch.setattr(
++        aae, "_detect_working_tree_changes", lambda repo_root: [],
++    )
+ 
+     result = aae.handle(
+         iteration_id=iter_id,
+         event_type="iteration_closed",
+         actor="orchestrator",
+         closing_state="blocked_needs_operator",
+     )
+     assert "error" not in result, f"unexpected error: {result.get('error')}"
+diff --git a/consensus_mcp/tests/test_release_gate_count_robustness.py b/consensus_mcp/tests/test_release_gate_count_robustness.py
+new file mode 100644
+index 0000000..672bdff
+--- /dev/null
++++ b/consensus_mcp/tests/test_release_gate_count_robustness.py
+@@ -0,0 +1,175 @@
++"""H-6: robustness of test-count gating in _release_gate_check.
++
++Before the fix the gates decided PASS by a literal substring match on a
++hardcoded count (`"60/60 tests passed"`, `"21/21 tests passed"`,
++`"95 passed"`). That brittle rule:
++  - FAILS a good build when tests are ADDED (count grows past the literal),
++  - PASSES a build where a test was deleted then re-added (count restored),
++  - and was ALREADY broken for gate_pytest_dispatch_codex (suite collects 96
++    now, so the hardcoded "95 passed" mismatches a green run on some legs).
++  - gate_pytest_dispatch_codex additionally pointed pytest at a non-existent
++    `scripts/consensus_mcp/tests/...` path (dead gate).
++
++The fix replaces the literal match with a floor-based parse:
++PASS iff returncode == 0 AND no failure indicator AND parsed passed-count
++>= floor. These tests mock subprocess.run (convention from
++test_dispatch_codex.py: a MagicMock with .returncode/.stdout/.stderr) and
++assert directly against the real gate functions.
++"""
++from __future__ import annotations
++
++import unittest.mock as _mock
++from pathlib import Path
++
++from consensus_mcp import _release_gate_check as rgc
++
++
++def _fake_run_factory(returncode: int, stdout: str, stderr: str = ""):
++    """Return a fake subprocess.run that ignores args and yields a MagicMock
++    result carrying the supplied returncode/stdout/stderr (test_dispatch_codex
++    convention)."""
++
++    def fake_run(cmd, **kwargs):
++        result = _mock.MagicMock()
++        result.returncode = returncode
++        result.stdout = stdout
++        result.stderr = stderr
++        return result
++
++    return fake_run
++
++
++REPO = Path("C:/does/not/matter")
++PY = "python"
++
++
++# ---------------------------------------------------------------------------
++# (a) count grows but all green -> PASS  (RED today: literal substring miss)
++# ---------------------------------------------------------------------------
++
++def test_smoke_passes_when_count_grows_above_floor(monkeypatch):
++    """gate_smoke: a green run reporting MORE tests than the old literal
++    (e.g. 72/72) must PASS — adding tests must never break the gate."""
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "72/72 tests passed\n"))
++    ok, detail = rgc.gate_smoke(REPO, PY)
++    assert ok is True, f"expected PASS for green 72/72, got FAIL: {detail}"
++
++
++def test_validators_pass_when_count_grows_above_floor(monkeypatch):
++    """gate_validators: green 25/25 (>21 floor) must PASS."""
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "25/25 tests passed\n"))
++    ok, detail = rgc.gate_validators(REPO, PY)
++    assert ok is True, f"expected PASS for green 25/25, got FAIL: {detail}"
++
++
++def test_install_smoke_passes_when_count_grows_above_floor(monkeypatch):
++    """gate_install_smoke: green 72/72 (>60 floor) must PASS."""
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "72/72 tests passed\n"))
++    ok, detail = rgc.gate_install_smoke(REPO, Path("venv-python"))
++    assert ok is True, f"expected PASS for green 72/72, got FAIL: {detail}"
++
++
++def test_dispatch_codex_passes_when_count_grows_above_floor(monkeypatch):
++    """gate_pytest_dispatch_codex: green run reporting 96 passed (>90 floor)
++    must PASS. RED today: the hardcoded literal is '95 passed' and the suite
++    now collects 96."""
++    monkeypatch.setattr(
++        rgc.subprocess, "run", _fake_run_factory(0, "96 passed, 1 skipped in 2.00s\n")
++    )
++    ok, detail = rgc.gate_pytest_dispatch_codex(REPO, PY)
++    assert ok is True, f"expected PASS for green 96 passed, got FAIL: {detail}"
++
++
++# ---------------------------------------------------------------------------
++# (b) non-zero returncode -> FAIL
++# ---------------------------------------------------------------------------
++
++def test_smoke_fails_on_nonzero_returncode(monkeypatch):
++    """gate_smoke: even with a passing-looking line, a non-zero rc must FAIL."""
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(1, "72/72 tests passed\n"))
++    ok, detail = rgc.gate_smoke(REPO, PY)
++    assert ok is False, f"expected FAIL for rc=1, got PASS: {detail}"
++
++
++def test_dispatch_codex_fails_on_nonzero_returncode(monkeypatch):
++    """gate_pytest_dispatch_codex: non-zero rc must FAIL despite enough passes."""
++    monkeypatch.setattr(
++        rgc.subprocess, "run", _fake_run_factory(1, "96 passed in 2.00s\n")
++    )
++    ok, detail = rgc.gate_pytest_dispatch_codex(REPO, PY)
++    assert ok is False, f"expected FAIL for rc=1, got PASS: {detail}"
++
++
++def test_validators_fail_on_nonzero_returncode(monkeypatch):
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(2, "25/25 tests passed\n"))
++    ok, detail = rgc.gate_validators(REPO, PY)
++    assert ok is False, f"expected FAIL for rc=2, got PASS: {detail}"
++
++
++# ---------------------------------------------------------------------------
++# (c) returncode 0 but failure word in output -> FAIL
++# ---------------------------------------------------------------------------
++
++def test_dispatch_codex_fails_when_failure_word_present_despite_rc0(monkeypatch):
++    """A buggy runner can exit 0 while reporting failures. The gate must read
++    the failure indicator, not just rc + passed-count."""
++    monkeypatch.setattr(
++        rgc.subprocess,
++        "run",
++        _fake_run_factory(0, "94 passed, 2 failed in 2.00s\n"),
++    )
++    ok, detail = rgc.gate_pytest_dispatch_codex(REPO, PY)
++    assert ok is False, f"expected FAIL when 'failed' present (rc0), got PASS: {detail}"
++
++
++def test_dispatch_codex_fails_when_errors_present_despite_rc0(monkeypatch):
++    monkeypatch.setattr(
++        rgc.subprocess,
++        "run",
++        _fake_run_factory(0, "90 passed, 1 error in 2.00s\n"),
++    )
++    ok, detail = rgc.gate_pytest_dispatch_codex(REPO, PY)
++    assert ok is False, f"expected FAIL when 'error' present (rc0), got PASS: {detail}"
++
++
++def test_smoke_fails_when_numerator_below_denominator_rc0(monkeypatch):
++    """smoke format 'X/Y tests passed': partial pass (46/60) means failures
++    even if rc happened to be 0. Must FAIL (numerator != denominator)."""
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "46/60 tests passed\n"))
++    ok, detail = rgc.gate_smoke(REPO, PY)
++    assert ok is False, f"expected FAIL for partial 46/60, got PASS: {detail}"
++
++
++# ---------------------------------------------------------------------------
++# (d) below-floor deletion still trips the gate (anti-deletion guard)
++# ---------------------------------------------------------------------------
++
++def test_smoke_fails_when_count_drops_below_floor(monkeypatch):
++    """Floor still guards against large deletions: a green 10/10 is below the
++    smoke floor (60) and must FAIL."""
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "10/10 tests passed\n"))
++    ok, detail = rgc.gate_smoke(REPO, PY)
++    assert ok is False, f"expected FAIL for 10/10 below floor, got PASS: {detail}"
++
++
++def test_dispatch_codex_fails_when_count_drops_below_floor(monkeypatch):
++    """Green 50 passed is below the dispatch_codex floor (90) -> FAIL."""
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "50 passed in 1.00s\n"))
++    ok, detail = rgc.gate_pytest_dispatch_codex(REPO, PY)
++    assert ok is False, f"expected FAIL for 50 passed below floor, got PASS: {detail}"
++
++
++# ---------------------------------------------------------------------------
++# (e) at-floor exactly -> PASS (boundary)
++# ---------------------------------------------------------------------------
++
++def test_smoke_passes_at_exact_floor(monkeypatch):
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "60/60 tests passed\n"))
++    ok, detail = rgc.gate_smoke(REPO, PY)
++    assert ok is True, f"expected PASS at exact floor 60/60, got FAIL: {detail}"
++
++
++def test_dispatch_codex_passes_at_exact_floor(monkeypatch):
++    monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "90 passed in 2.00s\n"))
++    ok, detail = rgc.gate_pytest_dispatch_codex(REPO, PY)
++    assert ok is True, f"expected PASS at exact floor 90 passed, got FAIL: {detail}"
+diff --git a/consensus_mcp/tests/test_resume.py b/consensus_mcp/tests/test_resume.py
+index 3f8e080..84f3dfc 100644
+--- a/consensus_mcp/tests/test_resume.py
++++ b/consensus_mcp/tests/test_resume.py
+@@ -482,25 +482,94 @@ def test_watermark_drift_warning_when_files_change_during_snapshot(fake_repo: Pa
+     assert snap.get("snapshot_watermark_drift") is None
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # expected_next_action exhaustiveness (codex-rev-001 pass-1).
+ # ---------------------------------------------------------------------------
+ 
+ def test_expected_next_action_kind_always_in_enum(fake_repo: Path):
+     _write_iter(fake_repo, "iter-ena")
+     snap = _resume.snapshot(repo_root=fake_repo)
+     assert snap["expected_next_action"]["kind"] in {
+         "dispatch_cross_family_reviewer", "wait_for_dispatch", "apply_proposed_patch",
+         "close_iteration", "operator_decision_required",
+     }
+ 
+ 
+ def test_expected_next_action_dispatch_path_when_no_reviews(fake_repo: Path):
+     _write_iter(fake_repo, "iter-fresh")
+     snap = _resume.snapshot(repo_root=fake_repo)
+     # Fresh iteration: no mutation, no reviews → dispatch a cross-family reviewer.
+     # (Or operator_decision_required because there's nothing to close yet — both are valid;
+     # the spec's tree picks dispatch_cross_family_reviewer as the default leaf.)
+     assert snap["expected_next_action"]["kind"] in (
+         "dispatch_cross_family_reviewer", "operator_decision_required",
+     )
++
++
++# ---------------------------------------------------------------------------
++# H-8 (iter-0036 parity narrowing): YAML/IO helpers narrow their except clauses
++# so PROGRAMMER errors propagate instead of being mislabeled as parse/IO
++# failures. Behavior for genuinely missing/malformed files is UNCHANGED.
++#
++# NOTE on H-8's "silent wrong-state" headline: the dispatch-log read path was
++# NEVER bare/silent — it already appends a warning. The third test below is a
++# regression-lock documenting that the scary framing is not supported by the
++# code; it PASSES today.
++# ---------------------------------------------------------------------------
++
++def test_load_yaml_propagates_unexpected_exception(fake_repo: Path, monkeypatch):
++    """A non-IO/parse exception (programmer error) from yaml.safe_load must
++    propagate, not be swallowed and returned as None.
++
++    RED today: _load_yaml's bare ``except Exception`` catches TypeError and
++    returns None. After narrowing to (OSError, UnicodeDecodeError, yaml.YAMLError)
++    the TypeError propagates.
++    """
++    iter_dir = _write_iter(fake_repo, "iter-load-prop")
++    gp_path = iter_dir / "goal_packet.yaml"
++
++    def boom(*_args, **_kwargs):
++        raise TypeError("programmer error, not a parse failure")
++
++    monkeypatch.setattr(_resume.yaml, "safe_load", boom)
++    with pytest.raises(TypeError, match="programmer error"):
++        _resume._load_yaml(gp_path)
++
++
++def test_load_yaml_returns_none_on_parse_error(fake_repo: Path):
++    """Genuinely malformed YAML still yields None (behavior unchanged before & after).
++
++    yaml.YAMLError is the legitimate parse-failure class; _load_yaml must keep
++    swallowing it and return None.
++    """
++    iter_dir = _write_iter(fake_repo, "iter-load-malformed")
++    bad = iter_dir / "bad.yaml"
++    # Unbalanced flow mapping → yaml.YAMLError on safe_load.
++    bad.write_text("{ this is: not, valid: yaml: ::: [unclosed", encoding="utf-8")
++    assert _resume._load_yaml(bad) is None
++
++
++def test_dispatch_log_read_failure_is_not_silent(fake_repo: Path, monkeypatch):
++    """Regression-lock for H-8's FALSE 'silent wrong-state' headline.
++
++    When the dispatch-log read raises (e.g. PermissionError), the orchestrator
++    must NOT silently think nothing is in-flight — it must surface a warning AND
++    return an empty in_flight list. This PASSES today (the path already warns);
++    the test documents that the HIGH 'silent wrong-state' framing is unfounded.
++    """
++    _write_iter(fake_repo, "iter-logfail")
++    log_path = fake_repo / "consensus-state" / "state" / "dispatch-log.jsonl"
++    # Make the log exist (so is_file() passes) but its read raise PermissionError.
++    log_path.write_text("", encoding="utf-8")
++
++    real_read_text = Path.read_text
++
++    def guarded_read_text(self, *args, **kwargs):
++        if self == log_path:
++            raise PermissionError("denied")
++        return real_read_text(self, *args, **kwargs)
++
++    monkeypatch.setattr(Path, "read_text", guarded_read_text)
++    snap = _resume.snapshot(repo_root=fake_repo)
++    assert snap["in_flight_dispatches"] == []
++    assert any("dispatch-log.jsonl read failed" in w for w in snap["warnings"])
+diff --git a/consensus_mcp/tests/test_self_drive_stop_rules.py b/consensus_mcp/tests/test_self_drive_stop_rules.py
+index 5edea46..8e0bfc9 100644
+--- a/consensus_mcp/tests/test_self_drive_stop_rules.py
++++ b/consensus_mcp/tests/test_self_drive_stop_rules.py
+@@ -1574,25 +1574,97 @@ def test_verify_scope_clean_when_all_views_in_scope(tmp_path, monkeypatch, capsy
+     packet = _write_goal_packet(
+         tmp_path,
+         allowed_files=["scripts/foo.py", "scripts/bar.py"],
+     )
+ 
+     def fake_run(cmd, **kwargs):
+         result = _mock.MagicMock()
+         result.returncode = 0
+         result.stderr = ""
+         if cmd[:3] == ["git", "diff", "--cached"]:
+             result.stdout = "scripts/foo.py\n"
+         elif cmd[:3] == ["git", "diff", "--name-only"]:
+             result.stdout = "scripts/bar.py\n"
+         elif cmd[:2] == ["git", "ls-files"]:
+             result.stdout = ""
+         else:
+             result.stdout = ""
+         return result
+ 
+     monkeypatch.setattr(_self_drive.subprocess, "run", fake_run)
+     rc = _self_drive.cmd_verify_scope(argparse.Namespace(goal_packet=str(packet)))
+     out = _json.loads(capsys.readouterr().out)
+     assert out["in_scope"] is True
+     assert out["out_of_scope"] == []
+     assert rc == 0
++
++
++# ---- H-3: cmd_close emits exactly ONE JSON blob ----------------------------
++
++
++def test_close_emits_single_json_blob(tmp_path, capsys, monkeypatch):
++    """cmd_close must print exactly ONE JSON object on stdout.
++
++    Pre-fix it called four sub-commands (validate, check_stop_rules,
++    evaluate_gates, verify_scope) that each `print(json.dumps(...))`, then
++    printed its own blob -> 5 JSON objects -> ``json.loads(stdout)`` raised
++    "Extra data". The sub-command prints must be suppressed so the parsed
++    output is a single object carrying can_close + a components dict.
++    """
++    import argparse
++    iter_dir = tmp_path / "iter"
++    iter_dir.mkdir()
++    packet = _write_goal_packet(tmp_path)
++
++    def fake_run(cmd, **kwargs):
++        r = _mock.MagicMock(); r.returncode = 0; r.stdout = ""; r.stderr = ""
++        return r
++
++    monkeypatch.setattr(_self_drive.subprocess, "run", fake_run)
++    rc = _self_drive.cmd_close(
++        argparse.Namespace(goal_packet=str(packet), iteration_dir=str(iter_dir))
++    )
++    out = capsys.readouterr().out
++    # A single JSON object -> json.loads must succeed (pre-fix: "Extra data").
++    parsed = _json.loads(out)
++    assert "can_close" in parsed
++    assert isinstance(parsed["can_close"], bool)
++    assert "components" in parsed
++    for key in ("validate", "stop_rules", "gates", "scope"):
++        assert key in parsed["components"], f"components missing {key}: {parsed}"
++        assert isinstance(parsed["components"][key], bool)
++    # rc mirrors can_close (0 iff can_close).
++    assert (rc == 0) == parsed["can_close"]
++
++
++# ---- M-11: cmd_transition is stateless (validates + reports only) -----------
++
++
++def test_transition_is_stateless(tmp_path, capsys):
++    """cmd_transition validates new_state and reports terminality but persists
++    NOTHING. The real behavioral contract: invoking it writes no files.
++
++    M-11 was a contract-honesty fix — the docstring claimed transitions are
++    "recorded" while the function only printed. This asserts the true (no
++    side-effect) behavior so the corrected contract cannot silently regress
++    into an actual writer without failing this test.
++    """
++    import argparse
++    work = tmp_path / "work"
++    work.mkdir()
++    packet = _write_goal_packet(work)
++    before = sorted(p.name for p in work.iterdir())
++
++    rc = _self_drive.cmd_transition(
++        argparse.Namespace(
++            goal_packet=str(packet),
++            new_state="patch_planned",
++            note="",
++        )
++    )
++    out = _json.loads(capsys.readouterr().out)
++    assert rc == 0
++    assert out["ok"] is True
++    assert out["state"] == "patch_planned"
++    # Behavioral contract: NO new files written as a side effect.
++    after = sorted(p.name for p in work.iterdir())
++    assert after == before, f"cmd_transition must persist nothing; new files: {set(after) - set(before)}"
+diff --git a/consensus_mcp/tests/test_snapshot_crlf_dirty.py b/consensus_mcp/tests/test_snapshot_crlf_dirty.py
+new file mode 100644
+index 0000000..47126a7
+--- /dev/null
++++ b/consensus_mcp/tests/test_snapshot_crlf_dirty.py
+@@ -0,0 +1,103 @@
++"""Regression tests for H-4: SHA-1 dirty-detection ignores CRLF normalization.
++
++With ``core.autocrlf=true`` (and no .gitattributes), git stores LF-normalized
++blobs but the working tree keeps CRLF. The old ``_detect_dirty_paths`` hashed
++the RAW working-tree bytes in Python, so the computed OID never matched the
++stored (LF) blob OID -> every CRLF text file read as ALWAYS-DIRTY.
++
++The fix delegates OID computation to ``git hash-object``, which applies the
++repo's clean filter (autocrlf) so the OID matches the stored blob.
++
++NOTE: these tests require real git and CANNOT mock it. Git's clean-filter
++(autocrlf) behavior is the entire point under test; a mock would have to
++reimplement that behavior, which would test the mock, not the code.
++"""
++from __future__ import annotations
++
++import subprocess
++import sys
++from pathlib import Path
++
++# Make consensus_mcp importable without install.
++ROOT = Path(__file__).resolve().parent.parent.parent
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++from consensus_mcp import _snapshot_state as ss
++
++
++def _git(args: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
++    r = subprocess.run(["git"] + args, cwd=str(cwd), capture_output=True, text=True, encoding="utf-8")
++    if check and r.returncode != 0:
++        raise RuntimeError(f"git {args} failed: {r.stderr}")
++    return r
++
++
++def _make_autocrlf_repo(tmp_path: Path) -> tuple[Path, Path]:
++    """Create a minimal git repo with core.autocrlf=true and a CRLF text file
++    under consensus-state/ (so it falls within SNAPSHOTTED_PATHS).
++
++    Returns (repo_root, crlf_file_path).
++    """
++    repo = tmp_path / "repo"
++    repo.mkdir()
++    _git(["init", "-b", "main"], repo)
++    _git(["config", "user.email", "test@example.com"], repo)
++    _git(["config", "user.name", "Test"], repo)
++    # The crux: autocrlf=true makes git store LF blobs from CRLF working trees.
++    _git(["config", "core.autocrlf", "true"], repo)
++    # Repo markers expected by _resolve_repo_root.
++    (repo / "consensus_mcp").mkdir()
++    (repo / "consensus_mcp" / "validators").mkdir()
++    iter_dir = repo / "consensus-state" / "active" / "iteration-0001-alpha"
++    iter_dir.mkdir(parents=True)
++    crlf_file = iter_dir / "notes.txt"
++    # Write CRLF bytes directly -- this is what makes the working tree differ
++    # from the LF-normalized blob git stores.
++    crlf_file.write_bytes(b"line one\r\nline two\r\nline three\r\n")
++    # Gitignore the iteration dirs (mimics real repo); snapshot force-adds them.
++    (repo / ".gitignore").write_text("consensus-state/active/iteration-*/\n", encoding="utf-8")
++    (repo / "README.md").write_text("# crlf repo\n", encoding="utf-8")
++    _git(["add", "README.md", ".gitignore"], repo)
++    _git(["commit", "-m", "init"], repo)
++    return repo, crlf_file
++
++
++def _with_repo_root(monkeypatch, repo: Path) -> None:
++    monkeypatch.setattr(ss, "_resolve_repo_root", lambda: repo)
++
++
++def test_untouched_crlf_file_is_not_dirty(tmp_path, monkeypatch):
++    """An UNTOUCHED CRLF text file must NOT be reported dirty after snapshot.
++
++    This is the RED case today: the Python SHA-1 over raw CRLF bytes never
++    matches the stored LF blob OID, so the file is wrongly flagged dirty.
++    """
++    repo, crlf_file = _make_autocrlf_repo(tmp_path)
++    _with_repo_root(monkeypatch, repo)
++    ss.main(["snapshot", "--label", "base"])
++    tag = _git(["tag", "-l", "snapshot-*-base"], repo).stdout.strip()
++    dirty = ss._detect_dirty_paths(repo, target_tag=tag)
++    rel = "consensus-state/active/iteration-0001-alpha/notes.txt"
++    assert rel not in dirty, (
++        f"untouched CRLF file wrongly flagged dirty (autocrlf normalization "
++        f"not honored); got {dirty}"
++    )
++
++
++def test_modified_crlf_file_is_dirty(tmp_path, monkeypatch):
++    """A genuinely modified CRLF file MUST still be reported dirty.
++
++    Guards against over-correcting H-4 into 'never dirty' for CRLF files.
++    """
++    repo, crlf_file = _make_autocrlf_repo(tmp_path)
++    _with_repo_root(monkeypatch, repo)
++    ss.main(["snapshot", "--label", "base"])
++    # Change the content (still CRLF) AFTER the snapshot.
++    crlf_file.write_bytes(b"line one CHANGED\r\nline two\r\nline three\r\n")
++    tag = _git(["tag", "-l", "snapshot-*-base"], repo).stdout.strip()
++    dirty = ss._detect_dirty_paths(repo, target_tag=tag)
++    rel = "consensus-state/active/iteration-0001-alpha/notes.txt"
++    assert rel in dirty, (
++        f"genuinely modified CRLF file must be flagged dirty; got {dirty}"
++    )
+diff --git a/consensus_mcp/tests/test_workflow_engine.py b/consensus_mcp/tests/test_workflow_engine.py
+index 30cea31..4ab31de 100644
+--- a/consensus_mcp/tests/test_workflow_engine.py
++++ b/consensus_mcp/tests/test_workflow_engine.py
+@@ -272,38 +272,81 @@ def test_timeout_policy_shrink_quorum(tmp_path):
+     iter_dir, goal, target = _make_iter_dir(tmp_path)
+     outcome = engine.run_iteration(iter_dir, goal, target)
+     # responsive N=2, both approve, strict-maj threshold (2//2)+1=2, 2>=2 → passes.
+     assert outcome.convergence.converged is True
+ 
+ 
+ def test_timeout_policy_treat_as_blocking(tmp_path):
+     """treat-as-blocking: timed-out contributors count as block votes."""
+     config = _three_contributor_config(rule=cfg.CONVERGE_UNANIMOUS)
+     config["workflow"]["timeout_policy"] = cfg.TIMEOUT_BLOCKING
+     config["workflow"]["max_convergence_rounds"] = 1
+     cfg.validate(config)
+     adapters = {
+         "claude": FakeAlwaysApprove(),
+         "codex": FakeRaisesDispatchError(),
+         "gemini": FakeAlwaysApprove(),
+     }
+     engine = WorkflowEngine(config, adapters, tmp_path)
+     iter_dir, goal, target = _make_iter_dir(tmp_path)
+     outcome = engine.run_iteration(iter_dir, goal, target)
+     # Unanimous requires all approve; codex counted as block under treat-as-blocking → fails.
+     assert outcome.convergence.converged is False
+     assert "codex" in outcome.convergence.block_votes
+ 
+ 
++def test_timeout_policy_blocking_vetoes_strict_majority(tmp_path):
++    """H-7: under TIMEOUT_BLOCKING a timed-out contributor MUST veto even a
++    strict-majority. 3 enabled, strict-majority, codex times out, claude+gemini
++    approve. Two approvals reach the strict-maj threshold ((3//2)+1 == 2), so the
++    approve count alone would converge — but the operator chose treat-as-blocking,
++    so codex's non-response is a block that vetoes the majority."""
++    config = _three_contributor_config(rule=cfg.CONVERGE_STRICT_MAJ)
++    config["workflow"]["timeout_policy"] = cfg.TIMEOUT_BLOCKING
++    config["workflow"]["max_convergence_rounds"] = 1
++    cfg.validate(config)
++    adapters = {
++        "claude": FakeAlwaysApprove(),
++        "codex": FakeRaisesDispatchError(),  # times out → no artifact
++        "gemini": FakeAlwaysApprove(),
++    }
++    engine = WorkflowEngine(config, adapters, tmp_path)
++    iter_dir, goal, target = _make_iter_dir(tmp_path)
++    outcome = engine.run_iteration(iter_dir, goal, target)
++    assert "codex" in outcome.convergence.block_votes
++    assert outcome.convergence.converged is False
++
++
++def test_timeout_blocking_inclusive_majority_two_party(tmp_path):
++    """H-7: under TIMEOUT_BLOCKING a timeout vetoes an inclusive-majority too.
++    enabled=[claude,codex], inclusive-majority, claude approves, codex times out.
++    inclusive-maj threshold ceil(2/2) == 1, so claude's lone approval would
++    otherwise converge — but treat-as-blocking makes codex's timeout a veto."""
++    config = _three_contributor_config(rule=cfg.CONVERGE_INCL_MAJ)
++    config["contributors"]["enabled"] = ["claude", "codex"]
++    config["workflow"]["timeout_policy"] = cfg.TIMEOUT_BLOCKING
++    config["workflow"]["max_convergence_rounds"] = 1
++    cfg.validate(config)
++    adapters = {
++        "claude": FakeAlwaysApprove(),
++        "codex": FakeRaisesDispatchError(),  # times out → no artifact
++    }
++    engine = WorkflowEngine(config, adapters, tmp_path)
++    iter_dir, goal, target = _make_iter_dir(tmp_path)
++    outcome = engine.run_iteration(iter_dir, goal, target)
++    assert "codex" in outcome.convergence.block_votes
++    assert outcome.convergence.converged is False
++
++
+ # ---------- failure mode: all contributors blow up ----------
+ 
+ def test_workflow_4_all_contributors_fail(tmp_path):
+     config = _three_contributor_config()
+     config["workflow"]["max_convergence_rounds"] = 1
+     cfg.validate(config)
+     adapters = {n: FakeRaisesDispatchError() for n in ["claude", "codex", "gemini"]}
+     engine = WorkflowEngine(config, adapters, tmp_path)
+     iter_dir, goal, target = _make_iter_dir(tmp_path)
+     outcome = engine.run_iteration(iter_dir, goal, target)
+     # All three failed blind phase; engine raises WorkflowError captured in outcome.
+     assert outcome.error is not None
+     assert "no contributors produced blind proposals" in outcome.error
+diff --git a/consensus_mcp/tools/audit_append_event.py b/consensus_mcp/tools/audit_append_event.py
+index 0509ba9..9b49758 100644
+--- a/consensus_mcp/tools/audit_append_event.py
++++ b/consensus_mcp/tools/audit_append_event.py
+@@ -41,50 +41,61 @@ import yaml
+ from consensus_mcp._paths import project_root, active_dir
+ 
+ # iter-0036 (Phase B step 9 per iter-0024 plan, HIGH-impact audit trail
+ # tool): migrated from module-level REPO_ROOT/ACTIVE_DIR captures to lazy
+ # `_paths` resolvers. Tests redirect paths via `monkeypatch.setenv`
+ # (CONSENSUS_MCP_REPO_ROOT / CONSENSUS_MCP_STATE_ROOT), NOT
+ # `monkeypatch.setattr` on this module — the latter is unsafe because
+ # pytest's monkeypatch saves __getattr__-synthesized values into __dict__
+ # at teardown, permanently shadowing the lazy resolver for subsequent
+ # tests. iter_0018 already uses the setenv pattern; closure_invariant
+ # was updated to match in this iteration. PEP 562 `__getattr__` still
+ # provides backward compat for any external read of `module.REPO_ROOT`
+ # / `module.ACTIVE_DIR`.
+ 
+ 
+ def __getattr__(name: str):
+     """PEP 562 backward compat for external `module.REPO_ROOT` /
+     `module.ACTIVE_DIR` reads. Internal code should call `project_root()`
+     / `active_dir()` directly."""
+     if name == "REPO_ROOT":
+         return project_root()
+     if name == "ACTIVE_DIR":
+         return active_dir()
+     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+ 
++
++class GitUnavailableError(RuntimeError):
++    """Raised when NO git command could be executed (git binary missing,
++    timeout, or OS error on every sub-command).
++
++    iter-0018 H-5: consensus-mcp is inherently git-based — the closure
++    invariant uses SHAs and snapshots use git. There is no "git is optional /
++    not a git repo" design. When git is wholly unavailable the
++    mutation-completeness gate cannot be verified, so the gate must FAIL CLOSED
++    (refuse the close) rather than allow-empty (fail-open)."""
++
+ CANONICAL_EVENT_TYPES: dict[str, dict] = {
+     "review_packet_built": {"required": ["artifact", "sha256"], "optional": []},
+     "reviewer_invoked": {"required": ["actor", "artifact", "independence_attestation"], "optional": ["invocation_protocol"]},
+     "review_returned_and_sealed": {"required": ["actor", "artifact", "sha256", "independence_attestation"], "optional": ["validator_status"]},
+     "reviewer_invocation_pending": {"required": ["actor"], "optional": ["next_constraint"]},
+     "sealed_inputs_recorded": {"required": ["sealed_inputs"], "optional": []},
+     "both_reviews_sealed": {"required": ["actor"], "optional": ["note"]},
+     "consensus_built": {"required": ["artifact", "sha256"], "optional": ["consensus_state"]},
+     "operator_authorization_received": {"required": ["actor"], "optional": ["authorization_form_response", "interpretation"]},
+     "staged_changes": {"required": ["staging_dir"], "optional": ["staged_files"]},
+     "canonical_006_dry_run_executed": {"required": ["validator"], "optional": ["findings", "gate_decision"]},
+     "apply_step_landed": {"required": ["effect"], "optional": ["files_modified"]},
+     "iteration_closed": {"required": ["closing_state"], "optional": ["governance_milestone_closed"]},
+ }
+ 
+ # Per-agent-prefixed names grandfathered at validator level but REJECTED by this tool.
+ FORBIDDEN_PER_AGENT_PREFIXED: dict[str, str] = {
+     "codex_reviewer_invoked": "reviewer_invoked",
+     "claude_reviewer_invoked": "reviewer_invoked",
+     "codex_review_returned_and_sealed": "review_returned_and_sealed",
+     "claude_review_returned_and_sealed": "review_returned_and_sealed",
+     "codex_reviewer_invocation_pending": "reviewer_invocation_pending",
+     "claude_reviewer_invocation_pending": "reviewer_invocation_pending",
+ }
+ 
+@@ -277,51 +288,58 @@ def handle(
+         return {
+             "error": (
+                 f"event_type '{event_type}' requires fields: {missing}; "
+                 f"provided: {sorted(supplied)}"
+             )
+         }
+ 
+     # --- load existing audit or start fresh ---
+     if audit_path.exists():
+         raw = audit_path.read_bytes()
+         data = yaml.safe_load(raw) or {}
+     else:
+         data = {}
+ 
+     audit_log: list = data.get("audit_log", [])
+ 
+     # --- Task #28: closure-cross-verification-and-freshness invariant ---
+     # T6 is the LAST gate; refuse to record `iteration_closed` when invariant
+     # fails. Defense-in-depth pairs with the _self_drive stop rule and
+     # loop.run_goal transition guard.
+     invariant_result = None
+     if event_type == "iteration_closed":
+         # iter-0018 Finding 3: mutation-completeness check. If the working tree
+         # has paths that are NOT in any apply_step_landed event's files_touched
+         # set, refuse. Conservative-fail-closed for manual edits.
+-        unaudited = _detect_unaudited_mutation(audit_log, project_root())
++        # iter-0018 H-5: if git is wholly unavailable the gate cannot be
++        # verified — FAIL CLOSED rather than allow-empty (fail-open). Scoped to
++        # only this call so it does not swallow the separate closure-invariant
++        # try/except below.
++        try:
++            unaudited = _detect_unaudited_mutation(audit_log, project_root())
++        except GitUnavailableError as exc:
++            return {"error": f"mutation_completeness_unverifiable: {exc}"}
+         if unaudited:
+             return {
+                 "error": (
+                     f"unaudited_mutation_detected: working-tree paths not "
+                     f"covered by any apply_step_landed event: {sorted(unaudited)}"
+                 ),
+             }
+ 
+         # iter-0018 Finding 5: fail-closed when invariant evaluator returns
+         # None or raises AND the audit log carries apply_step_landed events.
+         # Treat un-evaluable as failed.
+         has_apply_events = any(
+             isinstance(e, dict) and e.get("event") == "apply_step_landed"
+             for e in audit_log
+         )
+         try:
+             invariant_result = _evaluate_closure_invariant(audit_log, iteration_dir)
+         except Exception as exc:
+             if has_apply_events:
+                 return {
+                     "error": (
+                         f"closure_invariant_evaluation_failed: evaluator raised "
+                         f"{type(exc).__name__}: {exc}"
+                     ),
+                 }
+@@ -394,81 +412,93 @@ def handle(
+             )
+         except Exception as exc:
+             # Non-fatal: invariant gate already passed; certificate authoring
+             # failure is a follow-up concern, not a close-blocker. BUT log to
+             # stderr so the operator notices when their primary close-validity
+             # artifact (closure-certificate.yaml) failed to author. Silent
+             # failure here = operator reviews a non-existent certificate.
+             print(
+                 f"WARN: closure-certificate.yaml authoring failed for "
+                 f"iteration {iteration_id}: {type(exc).__name__}: {exc}",
+                 file=sys.stderr,
+             )
+ 
+     post_sha = _canonical_sha256(audit_path)
+     return {"event_id": event_id, "audit_yaml_post_sha256": post_sha}
+ 
+ 
+ def _detect_working_tree_changes(repo_root: Path) -> list[str]:
+     """Return repo-relative paths that have working-tree or staged changes.
+ 
+     Used by iter-0018 Finding 3 (mutation-completeness check). Implementation
+     runs `git diff --name-only HEAD` (covers both staged and unstaged) plus
+     `git ls-files --others --exclude-standard` (untracked files) and returns
+     the union.
+ 
+-    Returns [] on any git error (treat as no detectable changes — caller
+-    decides whether that's safe; the close gate logic still relies on the
+-    apply_step_landed events for cross-checking).
++    A single sub-command that fails (non-zero exit, or raises
++    FileNotFoundError/TimeoutExpired/OSError) is tolerated via `continue` so
++    that one odd sub-command does not nuke the whole check while the other
++    still succeeds. BUT if NO sub-command succeeds at all — git is wholly
++    unavailable — this raises `GitUnavailableError` instead of returning [].
++    iter-0018 H-5: consensus-mcp is inherently git-based, so an unverifiable
++    mutation-completeness gate must FAIL CLOSED at the caller, never silently
++    pass on an empty set (fail-open).
+ 
+     Tests can monkeypatch this function to inject simulated working-tree
+     state without needing a real git repo.
+     """
+     import subprocess
+     paths: set[str] = set()
++    any_ok = False
+     for cmd in (
+         ["git", "diff", "--name-only", "HEAD"],
+         ["git", "ls-files", "--others", "--exclude-standard"],
+     ):
+         try:
+             result = subprocess.run(
+                 cmd,
+                 cwd=str(repo_root),
+                 capture_output=True,
+                 text=True,
+                 encoding="utf-8",
+                 errors="replace",
+                 timeout=15,
+             )
+             if result.returncode != 0:
+                 continue
++            any_ok = True
+             for line in result.stdout.splitlines():
+                 line = line.strip()
+                 if line:
+                     paths.add(line)
+         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+             continue
++    if not any_ok:
++        raise GitUnavailableError(
++            "no git command succeeded (git missing, timed out, or errored on "
++            "every sub-command); cannot verify mutation-completeness"
++        )
+     return sorted(paths)
+ 
+ 
+ def _detect_unaudited_mutation(audit_log: list, repo_root: Path) -> list[str]:
+     """Return working-tree paths NOT covered by any apply_step_landed event.
+ 
+     Iter-0018 Finding 3: if code is changed OUTSIDE apply.codex_patch (manual
+     edit, direct write), the audit log has no apply_step_landed event for it,
+     so the closure invariant trivially passes ("no mutation = no gate"). But
+     there WAS a mutation. This helper computes the set difference:
+       working_tree_paths - audited_paths
+     and returns the unaudited subset. Empty list means nothing unaudited.
+     """
+     audited: set[str] = set()
+     for e in audit_log or []:
+         if not isinstance(e, dict):
+             continue
+         if e.get("event") != "apply_step_landed":
+             continue
+         # Top-level files_touched (post-#28 emitter shape)
+         ft = e.get("files_touched")
+         if isinstance(ft, list):
+             audited.update(str(p) for p in ft)
+         # Top-level files_modified (legacy shape preserved for compat)
+         fm = e.get("files_modified")
+diff --git a/consensus_mcp/workflow_engine.py b/consensus_mcp/workflow_engine.py
+index 15af92f..95c255f 100644
+--- a/consensus_mcp/workflow_engine.py
++++ b/consensus_mcp/workflow_engine.py
+@@ -442,63 +442,71 @@ class WorkflowEngine:
+         # Per-contributor vote evaluation, indexed by contributor KEY.
+         approve_votes: list[str] = []
+         block_votes: list[str] = []
+         blocking_ids: list[str] = []
+         for art, key in zip(artifacts, artifact_keys):
+             p = art.parsed
+             if p.get("goal_satisfied") and not p.get("blocking_objections"):
+                 approve_votes.append(key)
+             else:
+                 block_votes.append(key)
+             for bid in (p.get("blocking_objections") or []):
+                 blocking_ids.append(bid)
+ 
+         # Apply timeout policy to the effective denominator + extra block votes.
+         if timeout_policy == cfg.TIMEOUT_BLOCKING:
+             block_votes.extend(timed_out)
+             n = len(enabled)
+         elif timeout_policy == cfg.TIMEOUT_SHRINK:
+             n = len(responsive)
+         else:  # TIMEOUT_NO_VOTE
+             n = len(enabled)
+ 
+         # Apply convergence rule.
+         n_approve = len(approve_votes)
+         n_block = len(block_votes)
++        # H-7: under TIMEOUT_BLOCKING the operator explicitly chose to treat a
++        # non-response as a block, so a timeout MUST veto even under majority
++        # rules. We narrowly add ONLY the timeout-block votes to the majority
++        # veto (Option B) — a responsive soft-no (goal_satisfied=False with NO
++        # formal blocking_objection) is intentionally NOT a veto under majority,
++        # because that is precisely what majority rules mean. (Option A —
++        # vetoing on `n_block == 0` — would let a soft-no override the majority.)
++        timeout_block = timed_out if timeout_policy == cfg.TIMEOUT_BLOCKING else []
+         converged: bool
+         rationale: str
+         if rule == cfg.CONVERGE_UNANIMOUS:
+             converged = n_block == 0 and n_approve == n and n > 0
+             rationale = f"unanimous: need all {n} approve; got {n_approve} approve, {n_block} block"
+         elif rule == cfg.CONVERGE_STRICT_MAJ:
+             threshold = (n // 2) + 1
+-            converged = n_approve >= threshold and not blocking_ids
+-            rationale = f"strict-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {len(blocking_ids)} blocking-id(s)"
++            converged = n_approve >= threshold and not blocking_ids and not timeout_block
++            rationale = f"strict-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {n_block} block ({len(blocking_ids)} blocking-id(s))"
+         elif rule == cfg.CONVERGE_INCL_MAJ:
+             threshold = math.ceil(n / 2)
+-            converged = n_approve >= threshold and not blocking_ids
+-            rationale = f"inclusive-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {len(blocking_ids)} blocking-id(s)"
++            converged = n_approve >= threshold and not blocking_ids and not timeout_block
++            rationale = f"inclusive-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {n_block} block ({len(blocking_ids)} blocking-id(s))"
+         elif rule == cfg.CONVERGE_ADVISORY:
+             converged = True
+             rationale = "advisory: claude decides regardless"
+         else:
+             converged = False
+             rationale = f"unknown convergence rule {rule!r}"
+ 
+         return ConvergenceOutcome(
+             converged=converged,
+             rule=rule,
+             contributors_responsive=responsive,
+             contributors_timed_out=timed_out,
+             approve_votes=approve_votes,
+             block_votes=block_votes,
+             blocking_objection_ids=blocking_ids,
+             rationale=rationale,
+         )
+ 
+     def _collect_blocking_ids(self, artifacts: list[SealedArtifact]) -> list[str]:
+         ids: list[str] = []
+         for a in artifacts:
+             for bid in (a.parsed.get("blocking_objections") or []):
+                 ids.append(bid)
+         return ids
+ 

@@ -42,7 +42,7 @@ dispatch_provenance:
   review_target_hash: 36ec502a0388608de23334e9a19695d39cdd4f57a32ee2d2b01e69852d835d2c
   adapter: gemini
   mode: proposal
-  proposal_schema_path: C:\Users\<you>\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_path: C:\Users\steve\Downloads\consensus-mcp\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
   proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
 proposal:
   selected_target: Replace the real `time.sleep` + `_ControllableClock` pattern with

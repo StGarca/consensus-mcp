@@ -1,0 +1,61 @@
+iteration_id: iteration-secfix-audit-2026-05-22
+reviewer_id: codex-secfix-audit-1
+pass_id: codex-secfix-audit-1-pass1
+findings:
+- id: codex-rev-001
+  severity: high
+  summary: apply_codex_patch still applies via uncanonicalized target paths after
+    only validating files_touched strings
+  citation: consensus_mcp/tools/apply_codex_patch.py:239
+  risk: A malicious patch_proposal can pass the new files_touched containment check
+    with an in-scope path, then use a unified_diff header such as ../../../escape.txt;
+    _apply_unified_diff returns that diff path as the key, and the later os.replace
+    loop writes repo_root / rel without a second containment or allowed_files check.
+    This leaves CR-1 and CR-2 bypassable for the non-structured unified_diff path.
+  recommendation: After deriving new_contents, require its keys to exactly match files_touched
+    and resolve every key through resolve_contained(repo_root, rel) plus the same
+    allowed_files/forbidden_files scope check before staging or applying.
+  patch_not_proposed_reason: No patch proposed because the goal packet declares no
+    allowed files, so any patch_proposal files_touched entry would be out of scope.
+  patch_proposal: null
+- id: codex-rev-002
+  severity: medium
+  summary: patch_stage_and_dry_run validates file_rel against project_root but stages
+    relative to a fresh project_root() call
+  citation: consensus_mcp/tools/patch_stage_and_dry_run.py:261
+  risk: project_root() is lazy and environment-driven. If the process environment
+    changes between resolving real_path and computing real_path.relative_to(project_root()),
+    the function can error or compute staging paths against a different base than
+    the one used for containment. That weakens the fail-closed H-2 fix and can turn
+    a valid request into an unhandled exception.
+  recommendation: Snapshot project_root().resolve() once at the start of handle()
+    and reuse that Path for resolve_contained, relative_to, validator cwd decisions,
+    and staged spec relative calculations.
+  patch_not_proposed_reason: No patch proposed because the goal packet declares no
+    allowed files, so any patch_proposal files_touched entry would be out of scope.
+  patch_proposal: null
+goal_satisfied: false
+goal_satisfied_rationale: The security-cluster goal is not fully satisfied because
+  apply_codex_patch still has a unified_diff-path bypass for the CR-1/CR-2 controls.
+blocking_objections: []
+independence_attestation:
+  method: auto_codex_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  codex_version: codex-cli 0.130.0
+  prompt_sha256: c822a7c280ca9fb6a831a1efb37d28a1af76588146578d5400fbdfd72ef6266c
+  output_sha256: 2fbb6837909f04515c79c9d9373c675b4ed5948ed99881d8e0129173f604937d
+  schema_sha256: 90cb7fa1b2fa8731898b52df8d4ce482e2d9491acbc3ba53b4d309a6c69c8b53
+  goal_packet_sha256: 8b00949e4e38c3c0268e60f28711525a720ba2236dadf4e206b5a2d969dfa4c3
+  scope_signature: b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0
+  review_target_path: consensus-state/active/iteration-secfix-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 615b17b617f941f23a08b3deaa9635edf6722a8a0fb4f108cb612af9072e8eb3
+  mode: review
+sealed_at_utc: '2026-05-22T15:12:34Z'
+packet_sha256: 6a6f01c11f3257cb317f4d8c4176338e0cf217207b7ec0e80523be5c37992fb4

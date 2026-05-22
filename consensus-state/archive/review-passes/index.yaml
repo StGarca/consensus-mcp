@@ -1385,4 +1385,46 @@ passes:
   packet_sha256: d7a69c2a1852b9f5d955dc27c98a6c019ade1754c35fdb17161f66a2488326b9
   iteration_id: iteration-v11510-backpressure-harness
   reviewer_id: codex-v11510-wfb-3
-last_updated_utc: '2026-05-16T02:42:30Z'
+- id: gemini-codereview-audit-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-codereview-audit-2026-05-22-gemini-codereview-audit-1-gemini-codereview-audit-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T14:51:00Z'
+  packet_sha256: a8546cb27cf1baa1076851d6d236e26613a94a4d048393d618fd666d53f0907c
+  iteration_id: iteration-codereview-audit-2026-05-22
+  reviewer_id: gemini-codereview-audit-1
+- id: codex-codereview-audit-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-codereview-audit-2026-05-22-codex-codereview-audit-1-codex-codereview-audit-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T14:51:50Z'
+  packet_sha256: ea067d63584335d606a6752103dfd95fbb2c44d7c597ec5ae7deea9967491ab3
+  iteration_id: iteration-codereview-audit-2026-05-22
+  reviewer_id: codex-codereview-audit-1
+- id: codex-secfix-audit-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-secfix-audit-2026-05-22-codex-secfix-audit-1-codex-secfix-audit-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T15:12:34Z'
+  packet_sha256: 6a6f01c11f3257cb317f4d8c4176338e0cf217207b7ec0e80523be5c37992fb4
+  iteration_id: iteration-secfix-audit-2026-05-22
+  reviewer_id: codex-secfix-audit-1
+- id: gemini-secfix-audit-1-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-secfix-audit-2026-05-22-gemini-secfix-audit-1-gemini-secfix-audit-1-pass1-pass.yaml
+  sealed_at: '2026-05-22T15:12:57Z'
+  packet_sha256: 4fa72d50afa61a0d1c35de681ce2c248315e61d997d3be577e07a656309ed095
+  iteration_id: iteration-secfix-audit-2026-05-22
+  reviewer_id: gemini-secfix-audit-1
+- id: gemini-v1175-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-v1175-audit-2026-05-22-gemini-v1175-1-gemini-v1175-pass1-pass.yaml
+  sealed_at: '2026-05-22T16:23:18Z'
+  packet_sha256: 4ca2bf4243dae8cfe275edc4c1ecde85c31070a3bef55ea1046ef5c73cc9e89f
+  iteration_id: iteration-v1175-audit-2026-05-22
+  reviewer_id: gemini-v1175-1
+- id: kimi-v1175-pass1
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-v1175-audit-2026-05-22-kimi-v1175-1-kimi-v1175-pass1-pass.yaml
+  sealed_at: '2026-05-22T16:23:32Z'
+  packet_sha256: f06ddbd0aecd193b29bf31ff925c2a853a037b5abed0aa5fc4c292f42e451ace
+  iteration_id: iteration-v1175-audit-2026-05-22
+  reviewer_id: kimi-v1175-1
+- id: codex-v1175-pass2
+  path: consensus-state/archive/review-passes/2026-05-22-iteration-v1175-audit-2026-05-22-codex-v1175-2-codex-v1175-pass2-pass.yaml
+  sealed_at: '2026-05-22T16:25:34Z'
+  packet_sha256: a7a8ade496c0a55c0bf387105f086aed8ae11220092e2676a43436d86027bee7
+  iteration_id: iteration-v1175-audit-2026-05-22
+  reviewer_id: codex-v1175-2
+last_updated_utc: '2026-05-22T16:25:34Z'

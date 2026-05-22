@@ -1,0 +1,87 @@
+schema_version: 1
+pilot_id: iteration-codereview-audit-2026-05-22
+workflow_mode: post-review
+independence: blind-first-reveal
+goal:
+  summary: |
+    REVIEW-OF-A-REVIEW (Workflow B audit). Claude produced a thorough
+    code review of consensus-mcp (CODE_REVIEW_2026-05-22.md). This
+    consult dispatches codex + gemini to independently AUDIT that
+    review against the actual source, focused on the CRITICAL/HIGH
+    SECURITY cluster.
+
+    The embedded touched_files_contents (authoritative — read these AS
+    the repo state, do NOT read disk) contain:
+      - CODE_REVIEW_2026-05-22.md  (Claude's findings — the artifact under audit)
+      - consensus_mcp/tools/apply_codex_patch.py            (T6 — Claude CR-1, CR-2)
+      - consensus_mcp/tools/patch_apply_consensus_patch.py  (T5 — the sibling Claude claims HAS the guards)
+      - consensus_mcp/tools/patch_stage_and_dry_run.py      (Claude H-2)
+      - consensus_mcp/validators/build_review_packet.py     (Claude CR-3)
+      - consensus_mcp/validators/scope_check.py             (Claude CR-4)
+
+    Claude's claims to audit (summarized — full text in the embedded .md):
+      CR-1: apply_codex_patch.py writes files_touched targets with NO
+            repo-containment check -> arbitrary write outside repo. Claims
+            patch_apply_consensus_patch.py (T5) HAS this guard; T6 does not.
+      CR-2: apply_codex_patch.py never checks files_touched against
+            goal_packet.allowed_files -> scope-gate bypass for codex patches.
+      CR-3: build_review_packet.py reads target_files after .resolve() with
+            NO containment check -> arbitrary file read/exfil into the packet.
+            (NOTE: the embedded _author_review_packet.py-style containment is a
+            DIFFERENT module; verify build_review_packet.py specifically.)
+      CR-4: scope_check.py:~379 `if allowed_files and not _matches_any(...)`
+            -> an empty allowed_files:[] short-circuits to ALLOW-ALL (fail-open).
+      H-2:  patch_stage_and_dry_run.py reads file_rel with no traversal guard
+            and raises an uncaught ValueError on relative_to() for outside paths.
+      M-6:  patch_stage_and_dry_run gate_decision blocks on (high,blocking) but
+            not "critical".
+  question: |
+    Independently audit Claude's security-cluster findings against the
+    embedded source. For EACH finding, state your stance and back it with
+    a precise citation (file:line) from the embedded contents:
+
+      - VALIDATE  — the bug is real; cite the exact lines proving it.
+      - REFUTE    — the bug is NOT real (e.g. a guard Claude missed exists);
+                    cite the lines that disprove it. (Claude WANTS refutations
+                    where wrong — do not validate to be agreeable.)
+      - REFINE    — partially right; correct the severity, trigger, or scope.
+
+    Then add any NEW correctness/security findings in these 6 files that
+    Claude MISSED (especially: other unguarded operator/AI-supplied paths,
+    other fail-open gates, TOCTOU between dry-run and apply, auth-interlock
+    bypasses).
+
+    Put your stance + which Claude finding (CR-1/CR-2/CR-3/CR-4/H-2/M-6) or
+    "NEW" in each finding's `summary`. Cite real embedded lines only — do
+    not invent content; if a file you need is not embedded, say so rather
+    than hallucinate.
+  non_goals:
+    - proposing patches (this is an audit consult; recommendations only)
+    - re-reviewing files outside the embedded 6 (other clusters are separate)
+    - style/formatting nits
+  type: review_audit
+allowed_files: []
+allowed_sections: []
+forbidden_files: []
+max_iterations: 1
+max_patch_size: 0
+fix_author_policy: permissive
+validators_required: []
+acceptance_gates:
+  - id: A1
+    description: codex + gemini reviews sealed
+    check: 'true'
+stop_conditions:
+  - max_iteration_count_reached
+operator_escalation_triggers:
+  - reviewer_dispatch_failure
+authorization:
+  authorized_by: operator
+  authorized_at_utc: '2026-05-22T00:00:00Z'
+  codex_patch_apply_authorized: false
+  scope_signature: 'b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0'
+contributors:
+  enabled: [claude, codex, gemini]
+convergence:
+  rule: weighted-synthesis
+  finding_disposition: all-or-nothing

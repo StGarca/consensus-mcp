@@ -1,0 +1,38 @@
+iteration_id: iteration-secfix-audit-2026-05-22
+reviewer_id: gemini-secfix-audit-1
+pass_id: gemini-secfix-audit-1-pass1
+findings: []
+goal_satisfied: true
+goal_satisfied_rationale: The submitted patches correctly and robustly address all
+  specified security findings (CR-1, CR-2, CR-3, CR-4, CR-5, H-2, M-6). The core path
+  traversal vulnerabilities are solved with the new shared utility `_paths.resolve_contained`,
+  which is a strong, fail-closed design. The logic changes in the validator and tools
+  are precise and correctly applied at the appropriate boundaries. The accompanying
+  regression test suite is comprehensive and provides high confidence that the vulnerabilities
+  are closed and will not regress.
+blocking_objections: []
+independence_attestation:
+  method: auto_gemini_dispatch
+  reviewer_isolated_by_construction: true
+  no_peer_review_visible_at_dispatch: true
+  input_sources:
+  - goal_packet (path passed via --goal-packet)
+  - prompt_template (substituted by _build_prompt)
+  - review_target (path passed via --review-target; may be unspecified)
+  - model (gemini CLI --model flag; no --output-schema enforcement)
+  see_dispatch_provenance_for_input_hashes: true
+dispatch_provenance:
+  gemini_version: 0.43.0-preview.0
+  model: gemini-2.5-pro
+  prompt_sha256: 1a5e8dc41832544b5c874b19d7ea6031a4a2f7d24374fb1b8c7ca13d236eb06f
+  output_sha256: d646fd2dc3d9f659a99768f3b4f81e318701f59a5a28770e46403500d39a5bbe
+  goal_packet_sha256: 8b00949e4e38c3c0268e60f28711525a720ba2236dadf4e206b5a2d969dfa4c3
+  scope_signature: b0ea71430a075b00b5104faceb000feedfacecafebabedeadbeef0a14430303a0
+  review_target_path: consensus-state/active/iteration-secfix-audit-2026-05-22/review-packet.yaml
+  review_target_hash: 615b17b617f941f23a08b3deaa9635edf6722a8a0fb4f108cb612af9072e8eb3
+  adapter: gemini
+  mode: review
+  proposal_schema_path: null
+  proposal_schema_sha256: null
+sealed_at_utc: '2026-05-22T15:12:57Z'
+packet_sha256: 4fa72d50afa61a0d1c35de681ce2c248315e61d997d3be577e07a656309ed095

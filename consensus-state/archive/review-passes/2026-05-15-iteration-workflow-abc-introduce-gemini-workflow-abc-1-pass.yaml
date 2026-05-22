@@ -34,7 +34,7 @@ dispatch_provenance:
   review_target_hash: null
   adapter: gemini
   mode: proposal
-  proposal_schema_path: C:\Users\<you>\pipx\venvs\consensus-mcp\Lib\site-packages\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
+  proposal_schema_path: C:\Users\steve\pipx\venvs\consensus-mcp\Lib\site-packages\consensus_mcp\dispatch_templates\gemini_proposal_schema.json
   proposal_schema_sha256: ac76109b9b0334bf2a3267c5a9906943836b302f03ba2228d26354580a7ce273
 proposal:
   selected_target: Implement Workflow C (autonomous consensus-to-completion) and rename

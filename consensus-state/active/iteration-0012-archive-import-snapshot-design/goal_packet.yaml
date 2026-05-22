@@ -27,7 +27,7 @@ goal:
       - Maintainer already chose namespace import + orphan-branch snapshot.
         Codex should NOT re-litigate those two decisions — only F1..F8
         sub-choices are open.
-      - Parent project at C:\\Users\\<you>\\Downloads\\upstream-26.4.16\\
+      - Parent project at C:\\Users\\steve\\Downloads\\upstream-26.4.16\\
         is READ-ONLY source for the import; do not propose modifying it.
       - The .gitignore line excluding consensus-state/active/iteration-*/ is
         the structural data-loss risk this design addresses. Orphan branch
@@ -35,7 +35,7 @@ goal:
   non_goals:
     - implement snapshot/import code (this is design + scoping; iter-0013 implements)
     - challenge maintainer's two governance decisions (namespace import, orphan-branch snapshot)
-    - touch parent project at C:\\Users\\<you>\\Downloads\\upstream-26.4.16\\
+    - touch parent project at C:\\Users\\steve\\Downloads\\upstream-26.4.16\\
     - propose schema changes to existing iter-0001..0011 YAML files
 allowed_files:
   - docs/design-consults/iter-0012-archive-import-and-snapshot.md

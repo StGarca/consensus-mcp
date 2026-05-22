@@ -17,7 +17,7 @@ defect_target:
       \nThe operator's stated requirement: consensus-mcp should \"just work\" in any\
       \ project — open Claude Code anywhere, the MCP server boots clean, state auto-initializes\
       \ in the project, codex can review the project's files. Dev folder (`C:\\Users\\\
-      <you>\\Downloads\\consensus-mcp`) is the single exception: it overrides via\
+      steve\\Downloads\\consensus-mcp`) is the single exception: it overrides via\
       \ its existing project-scope `.mcp.json`.\n\n## Current resolution logic (v1.12.0\
       \ `server.py`)\n\n```python\ndef _resolve_repo_root() -> Path:\n    override\
       \ = os.environ.get(\"CONSENSUS_MCP_REPO_ROOT\")\n    if override:\n        return\
@@ -63,7 +63,7 @@ defect_target:
       \ |\n| ChilipadScreen (frozen wheel, no env) | (unset) | (unset) | site-packages/consensus_mcp/spec_template.md\
       \ | `D:\\Projects\\ChilipadScreen\\consensus-state\\` |\n| Test folder (clone,\
       \ run from it) | (unset, walks up) | (unset) | tools/consensus-mcp/docs/architecture/orchestration-spec.md\
-      \ | CWD/consensus-state/ |\n| Shared-state mode (legacy user) | C:/Users/<you>/tools/consensus-mcp\
+      \ | CWD/consensus-state/ |\n| Shared-state mode (legacy user) | C:/Users/steve/tools/consensus-mcp\
       \ | (unset) | tools/consensus-mcp/docs/architecture/orchestration-spec.md |\
       \ tools/consensus-mcp/consensus-state/ |\n\nEnd user opens Claude Code in any\
       \ project → frozen wheel boots against the shipped spec template, state directory\

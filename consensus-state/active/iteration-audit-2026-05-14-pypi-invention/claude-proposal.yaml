@@ -219,11 +219,11 @@ proposal:
 deliverable_scope:
   next_iteration_id: iteration-0044-or-followup-prevention-codify
   files_in_scope:
-    - C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-consensus-mcp/memory/feedback_verify_before_invent.md  # NEW — broad verify-before-invent rule with citation requirement
-    - C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-consensus-mcp/memory/feedback_partial_fix_surfacing.md  # NEW — Q5 partial-fix rule
-    - C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-consensus-mcp/memory/feedback_disconfirming_evidence.md  # NEW — Q6 disconfirming-evidence pattern
-    - C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-consensus-mcp/memory/reference_default_priors_to_distrust.md  # NEW — Q3 list of high-risk default priors
-    - C:/Users/<you>/.claude/projects/C--Users-<you>-Downloads-consensus-mcp/memory/MEMORY.md  # update index
+    - C:/Users/steve/.claude/projects/C--Users-steve-Downloads-consensus-mcp/memory/feedback_verify_before_invent.md  # NEW — broad verify-before-invent rule with citation requirement
+    - C:/Users/steve/.claude/projects/C--Users-steve-Downloads-consensus-mcp/memory/feedback_partial_fix_surfacing.md  # NEW — Q5 partial-fix rule
+    - C:/Users/steve/.claude/projects/C--Users-steve-Downloads-consensus-mcp/memory/feedback_disconfirming_evidence.md  # NEW — Q6 disconfirming-evidence pattern
+    - C:/Users/steve/.claude/projects/C--Users-steve-Downloads-consensus-mcp/memory/reference_default_priors_to_distrust.md  # NEW — Q3 list of high-risk default priors
+    - C:/Users/steve/.claude/projects/C--Users-steve-Downloads-consensus-mcp/memory/MEMORY.md  # update index
     - consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md  # add "Verify before invent" + "Partial-fix surfacing" sections
     - CHANGELOG.md  # iter-audit entry under v1.14.2 unreleased
   files_out_of_scope:
