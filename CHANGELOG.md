@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.17.4 - 2026-05-22
+
+**Security cluster — fail-closed path/scope/auth boundaries.** A thorough code
+review (codex+gemini consensus-audited) found several tools using operator/AI-
+supplied file paths without containment or scope checks. All now fail closed via
+a shared `_paths.resolve_contained` helper (mirrors the existing
+`_author_review_packet` containment guard, Windows case-fold included). Each fix
+has a TDD regression test (`tests/test_security_cluster_2026_05_22.py`).
+
+### Fixed (security)
+- **CR-1** `apply.codex_patch`: a `files_touched` path traversal could write
+  outside the repo — now containment-checked before any read/write.
+- **CR-2** `apply.codex_patch`: `files_touched` is now constrained to
+  `goal_packet.allowed_files` (previously only `validate_disposition_index` ran,
+  which never checks source-file targets).
+- **CR-3** `build_review_packet`: `target_files` entries resolving outside the
+  repo are skipped (previously read/exfil'd into the sealed packet).
+- **CR-4** `scope_check`: empty / missing / non-list `allowed_files` now fails
+  CLOSED (every touched file out-of-scope) instead of a silent allow-all.
+- **CR-5** `apply.codex_patch`: `iteration_dir` must be under
+  `consensus-state/active/` before authorization is read (a caller-chosen dir
+  could otherwise self-authorize, defeating the goal_packet interlock).
+- **H-2** `patch.stage_and_dry_run`: `file` paths are containment-resolved before
+  read/stage (a `../` relpath previously escaped the staging dir on write).
+- **M-6** `patch.stage_and_dry_run`: `gate_decision` now blocks on `critical`
+  severity, not only high/blocking.
+
+### Changed
+- `.mcp.json`: dropped the hardcoded absolute-path env block; the server resolves
+  the repo root via cwd + `__file__` walk-up, so the committed file is portable.
+- Public-readiness: the git history rewrite + author-email scrub that 1.17.3 left
+  "for an explicit decision" is **done** — all commits now use the GitHub noreply
+  identity and the personal email/domain are removed from history (force-pushed).
+
+### Known issues
+- 4 `test_visibility_watchdog` tests fail. **Pre-existing, NOT a 1.17.4
+  regression** (they fail on 1.17.3 too — verified by stashing the 1.17.4
+  patches). Scoped for the next cut.
+
 ## 1.17.3 - 2026-05-22
 
 **Public-readiness sanitization (round 2): removed remaining host-project name
