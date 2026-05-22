@@ -154,8 +154,6 @@ iterations across the same four-AI panel. The catch-and-adjudicate
 pattern holds on real ML code: one panel rescan of the emotion engine
 surfaced **6 genuine bugs (5 fixed, 1 reviewer claim refuted on
 evidence)**, and a deeper rescan shipped **3 more high-severity fixes**.
-(That project keeps its own sealed archive; the figures above are this
-repo's.)
 
 ## Status
 
