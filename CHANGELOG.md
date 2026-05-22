@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.16.1 - 2026-05-22
+
+**Follow-up completeness gate — mechanically binds the *existing*
+complete-fulfillment rule.** Extends the 1.16.0 delivery-gate so a task that
+declares an `action_class` cannot mint a delivery token while that class's
+required follow-ups are unresolved. Prevents the "tunnel-vision" failure mode
+(e.g. merge a version bump to main but skip cutting the GitHub release). This is
+NOT a new rule — CLAUDE.md "Complete fulfillment" + Karpathy #4 already require
+it; passive rules don't bind, so this enforces it the same way 1.16.0 enforced
+verify-before-report.
+
+### Added
+- `consensus_mcp/_followup_completeness.py` + `consensus_mcp/data/required_followups.yaml`
+  (config-driven action-class → required-follow-ups map: e.g. `version_bump` →
+  `[tag, github_release, changelog_entry]`). A follow-up is satisfied when
+  RESOLVED or EXPLICITLY DEFERRED-WITH-REASON.
+- `consensus_mcp/tests/test_followup_completeness.py` (6 tests).
+
+### Changed
+- `consensus_mcp/_delivery_readiness.py`: `mint_delivery_token()` accepts
+  `action_classes` and REFUSES while required follow-ups are unresolved; token
+  gains `followups_resolved` / `open_followups`; `verify_delivery_token()`
+  re-checks against the live ledger. Declared `action_class` is authoritative;
+  heuristics may only ADD requirements (fail-toward-enforcement).
+
+### Deferred (with reason)
+- Wiring a `required_followups_unresolved` stop-rule into `_self_drive.close`
+  (a second enforcement at iteration-close): editing the core stop-rule
+  contract needs its own pass against the contract validator + full self_drive
+  suite. The token chokepoint already blocks the failure at delivery time.
+  Deferred *explicitly with reason* — the discipline this gate enforces.
+
 ## 1.16.0 - 2026-05-22
 
 **Delivery-readiness gate (anti-self-judge enforcement) — HEADLINE FEATURE.**
