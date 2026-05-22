@@ -1,8 +1,21 @@
 # Changelog
 
-## 1.20.2 - unreleased
+## 1.20.2 - 2026-05-22
 
-_Unreleased._
+**Internal cleanup — no functional change.** Test-coverage and dead-code
+follow-ups from the v1.20.1 final review; `consensus init` behaves identically
+to v1.20.1. Full suite 1114 passed / 1 skipped.
+
+### Changed
+- Removed dead wizard helpers `_validate_contributor_selection` and
+  `_resolve_contributor_selection` (and the now-orphaned `WizardError`). They
+  were never wired into the live `--contributors` path, which already enforces
+  the ≥2-independent floor + orphan rejection via config validation — the single
+  gate, consistent with the open-contributor model.
+
+### Tests
+- Added coverage for the multiple-same-family `host_peer` mini-select (numbered
+  choice, default none, never silently picks the first).
 
 ## 1.20.1 - 2026-05-22
 
