@@ -511,12 +511,22 @@ and no tag.
 6. `git push origin refs/heads/v<X.Y.Z> refs/tags/v<X.Y.Z>` (use
    explicit `refs/heads/` and `refs/tags/` to disambiguate; the
    branch and tag now share a name).
-7. **Release is complete.** Distribution is git-tag-based — users
-   install via `pipx install git+https://github.com/stgarca/
-   consensus-mcp.git@v<X.Y.Z>`. There is NO PyPI publish step;
-   the package is not registered on PyPI. Optional: build wheel
-   + sdist locally (`python -m build`) for local smoke-testing
-   only, not for upload.
+7. **Create the GitHub Release (REQUIRED — EVERY cut, no exceptions).**
+   Pushing a tag does NOT create a GitHub Release object — the
+   Releases page stays stale (showing the previous version) until
+   you do this explicitly:
+   `gh release create v<X.Y.Z> --verify-tag --latest --title
+   "v<X.Y.Z> — <headline>" --notes-from-tag`. **A cut is NOT
+   complete until ALL THREE hold: (a) the tag is on origin, (b)
+   README + project info are current (step 3 — install URLs, the
+   `## Status` line, and the GitHub repo description/topics if they
+   changed), AND (c) the GitHub Release exists and is marked Latest.**
+   Distribution is git-tag-based — users install via `pipx install
+   git+https://github.com/StGarca/consensus-mcp.git@v<X.Y.Z>`; there
+   is NO PyPI step. But the operator rule (2026-05-22) is explicit:
+   the README/project info AND the Releases page are updated on
+   EVERY version, every single time — never leave either lagging the
+   installable tag. Optional: `python -m build` for local smoke only.
 8. **Fast-forward `main` to the just-cut tag**
    (`git push origin refs/tags/v<X.Y.Z>^{}:refs/heads/main`, or
    `git push origin v<X.Y.Z>-tip:main`). This is ALWAYS a clean
