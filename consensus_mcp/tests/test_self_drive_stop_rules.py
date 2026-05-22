@@ -1596,3 +1596,75 @@ def test_verify_scope_clean_when_all_views_in_scope(tmp_path, monkeypatch, capsy
     assert out["in_scope"] is True
     assert out["out_of_scope"] == []
     assert rc == 0
+
+
+# ---- H-3: cmd_close emits exactly ONE JSON blob ----------------------------
+
+
+def test_close_emits_single_json_blob(tmp_path, capsys, monkeypatch):
+    """cmd_close must print exactly ONE JSON object on stdout.
+
+    Pre-fix it called four sub-commands (validate, check_stop_rules,
+    evaluate_gates, verify_scope) that each `print(json.dumps(...))`, then
+    printed its own blob -> 5 JSON objects -> ``json.loads(stdout)`` raised
+    "Extra data". The sub-command prints must be suppressed so the parsed
+    output is a single object carrying can_close + a components dict.
+    """
+    import argparse
+    iter_dir = tmp_path / "iter"
+    iter_dir.mkdir()
+    packet = _write_goal_packet(tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        r = _mock.MagicMock(); r.returncode = 0; r.stdout = ""; r.stderr = ""
+        return r
+
+    monkeypatch.setattr(_self_drive.subprocess, "run", fake_run)
+    rc = _self_drive.cmd_close(
+        argparse.Namespace(goal_packet=str(packet), iteration_dir=str(iter_dir))
+    )
+    out = capsys.readouterr().out
+    # A single JSON object -> json.loads must succeed (pre-fix: "Extra data").
+    parsed = _json.loads(out)
+    assert "can_close" in parsed
+    assert isinstance(parsed["can_close"], bool)
+    assert "components" in parsed
+    for key in ("validate", "stop_rules", "gates", "scope"):
+        assert key in parsed["components"], f"components missing {key}: {parsed}"
+        assert isinstance(parsed["components"][key], bool)
+    # rc mirrors can_close (0 iff can_close).
+    assert (rc == 0) == parsed["can_close"]
+
+
+# ---- M-11: cmd_transition is stateless (validates + reports only) -----------
+
+
+def test_transition_is_stateless(tmp_path, capsys):
+    """cmd_transition validates new_state and reports terminality but persists
+    NOTHING. The real behavioral contract: invoking it writes no files.
+
+    M-11 was a contract-honesty fix — the docstring claimed transitions are
+    "recorded" while the function only printed. This asserts the true (no
+    side-effect) behavior so the corrected contract cannot silently regress
+    into an actual writer without failing this test.
+    """
+    import argparse
+    work = tmp_path / "work"
+    work.mkdir()
+    packet = _write_goal_packet(work)
+    before = sorted(p.name for p in work.iterdir())
+
+    rc = _self_drive.cmd_transition(
+        argparse.Namespace(
+            goal_packet=str(packet),
+            new_state="patch_planned",
+            note="",
+        )
+    )
+    out = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["ok"] is True
+    assert out["state"] == "patch_planned"
+    # Behavioral contract: NO new files written as a side effect.
+    after = sorted(p.name for p in work.iterdir())
+    assert after == before, f"cmd_transition must persist nothing; new files: {set(after) - set(before)}"

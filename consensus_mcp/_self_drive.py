@@ -10,7 +10,10 @@ goal_packet; this script provides PARTIAL enforcement via:
     (goal, allowed_files, allowed_sections, forbidden_files, max_iterations,
     max_patch_size, validators_required, acceptance_gates, stop_conditions,
     operator_escalation_triggers, authorization.authorized_by)
-  - state-machine transitions recorded as canonical event types
+  - state-machine transition VALIDATION (checks new_state is a known state and
+    reports whether it's terminal) — STATELESS: persists nothing. The canonical
+    state store (disposition-ledger.yaml) has a single authorized writer by
+    design; the orchestrator owns state via file-presence + ledger.
   - acceptance-gate evaluation (running each `check` command + recording result)
   - changed-files-in-scope verification using exact-file, dir-prefix (trailing /),
     and fnmatch glob matchers
@@ -31,7 +34,8 @@ USAGE
   # 1. Validate goal_packet
   python -m consensus_mcp._self_drive validate <goal_packet.yaml>
 
-  # 2. Record state transition
+  # 2. Validate a state transition (STATELESS — validates new_state + reports
+  #    terminality; persists NOTHING)
   python -m consensus_mcp._self_drive transition <goal_packet.yaml> <new_state> [--note "<text>"]
 
   # 3. Check stop rules
@@ -53,8 +57,10 @@ JSON to stdout. Exit 0 = pass; non-zero = fail (stop rule fired or gate not met)
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fnmatch
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -325,7 +331,19 @@ def cmd_validate(args) -> int:
 
 
 def cmd_transition(args) -> int:
-    """Record state transition. State must be in VALID_STATES."""
+    """Validate a state transition. STATELESS — persists NOTHING.
+
+    Checks that new_state is in VALID_STATES and reports whether it is a
+    terminal state. It does NOT write to the canonical state store
+    (disposition-ledger.yaml), which has a single authorized writer by design;
+    the orchestrator owns state via file-presence + ledger. This command is a
+    pure validator/reporter — the prior "Record state transition" docstring was
+    inaccurate (M-11 contract correction).
+
+    NOTE: a terminal-state guard (rejecting transitions OUT of a terminal state,
+    via a current_state arg) was considered and DEFERRED to consensus — it is a
+    separate API decision, not part of this contract-honesty fix.
+    """
     if args.new_state not in VALID_STATES:
         print(json.dumps({"ok": False, "error": "invalid_state", "valid_states": sorted(VALID_STATES)}))
         return 1
@@ -1148,15 +1166,27 @@ def cmd_verify_scope(args) -> int:
 
 
 def cmd_close(args) -> int:
-    """Combined: validate + check_stop_rules + evaluate_gates + verify_scope. Pass iff all pass."""
+    """Combined: validate + check_stop_rules + evaluate_gates + verify_scope. Pass iff all pass.
+
+    H-3: each of the four sub-commands ``print(json.dumps(...))`` its own blob.
+    Calling them directly would emit five JSON objects on stdout, so a caller's
+    ``json.loads(stdout)`` would raise "Extra data". We redirect their stdout
+    into a throwaway buffer (collecting only their return codes) and emit a
+    SINGLE final object: {can_close, components}. The four sub-commands keep
+    their standalone CLI contract (they still print when invoked directly).
+    """
     overall = {"validate": None, "stop_rules": None, "gates": None, "scope": None}
-    rc_validate = cmd_validate(argparse.Namespace(goal_packet=args.goal_packet))
+    # Suppress the sub-commands' own JSON prints; we only need their return codes.
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_validate = cmd_validate(argparse.Namespace(goal_packet=args.goal_packet))
+        rc_stop = cmd_check_stop_rules(
+            argparse.Namespace(goal_packet=args.goal_packet, iteration_dir=args.iteration_dir)
+        )
+        rc_gates = cmd_evaluate_gates(argparse.Namespace(goal_packet=args.goal_packet))
+        rc_scope = cmd_verify_scope(argparse.Namespace(goal_packet=args.goal_packet))
     overall["validate"] = rc_validate == 0
-    rc_stop = cmd_check_stop_rules(argparse.Namespace(goal_packet=args.goal_packet, iteration_dir=args.iteration_dir))
     overall["stop_rules"] = rc_stop == 0
-    rc_gates = cmd_evaluate_gates(argparse.Namespace(goal_packet=args.goal_packet))
     overall["gates"] = rc_gates == 0
-    rc_scope = cmd_verify_scope(argparse.Namespace(goal_packet=args.goal_packet))
     overall["scope"] = rc_scope == 0
     can_close = all(overall.values())
     print(json.dumps({"can_close": can_close, "components": overall}, default=str))

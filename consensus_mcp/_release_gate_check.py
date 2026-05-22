@@ -29,6 +29,7 @@ override. Default: in-tree parent walk.
 from __future__ import annotations
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,70 @@ import time
 from pathlib import Path
 
 import yaml
+
+
+# --- H-6: robust test-count gating ----------------------------------------
+# Gates used to decide PASS by a literal substring match on a hardcoded count
+# (e.g. `"60/60 tests passed"`, `"95 passed"`). That brittle rule failed a good
+# build whenever tests were ADDED (count grew past the literal) and passed a
+# build where a test was deleted then re-added (count restored). It was already
+# broken for the pytest dispatch gate (suite collects 96, literal said "95").
+#
+# These two parsers cover the two distinct output formats. They are deliberately
+# separate so the smoke `X/Y tests passed` regex never silently matches pytest's
+# `N passed` output (and vice-versa) — one parser must not "pass" text it can't
+# actually parse.
+_PYTEST_FAILURE_WORDS = ("failed", "error")
+# pytest summary line: "<N> passed[, ...] in <t>s"
+_PYTEST_PASSED_RE = re.compile(r"\b(\d+)\s+passed\b")
+# smoke/validator harness line: "<X>/<Y> tests passed"
+_SMOKE_PASSED_RE = re.compile(r"\b(\d+)\s*/\s*(\d+)\s+tests passed\b")
+
+
+def _pytest_gate_pass(returncode: int, stdout: str, floor: int) -> bool:
+    """Decision rule for pytest-format output (`N passed`).
+
+    PASS iff returncode == 0 AND no pytest failure indicator ("failed"/"error",
+    which can appear even with rc 0 from a misbehaving runner) AND parsed
+    passed-count >= floor.
+
+    NOTE: `floor` is intentionally a FLOOR (`>= N`), not exact equality, so
+    adding tests never breaks the gate while a deletion below the floor still
+    trips it. The stronger anti-deletion signal (exact count) is deliberately
+    relaxed here; if it is ever wanted back, a `pytest --co -q` collected-count
+    baseline is the better mechanism than pinning the passed-count literal.
+    """
+    if returncode != 0:
+        return False
+    text = (stdout or "")
+    lowered = text.lower()
+    if any(word in lowered for word in _PYTEST_FAILURE_WORDS):
+        return False
+    m = _PYTEST_PASSED_RE.search(text)
+    if not m:
+        return False
+    return int(m.group(1)) >= floor
+
+
+def _smoke_gate_pass(returncode: int, stdout: str, floor: int) -> bool:
+    """Decision rule for smoke/validator-format output (`X/Y tests passed`).
+
+    PASS iff returncode == 0 AND the line parses AND numerator == denominator
+    (no partial pass like 46/60) AND numerator >= floor.
+
+    NOTE: `floor` is intentionally a FLOOR (`>= N`); see _pytest_gate_pass for
+    the floor-vs-exact rationale (a `pytest --co` baseline is the stronger
+    anti-deletion alternative if exact gating is ever wanted).
+    """
+    if returncode != 0:
+        return False
+    m = _SMOKE_PASSED_RE.search(stdout or "")
+    if not m:
+        return False
+    num, den = int(m.group(1)), int(m.group(2))
+    if num != den:
+        return False
+    return num >= floor
 
 
 def _resolve_repo_root(cli_override: str | None) -> Path:
@@ -86,7 +151,8 @@ def gate_smoke(repo_root: Path, python: str) -> tuple[bool, str]:
         return False, f"exception: {exc}"
     tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
     last = tail[0]
-    ok = result.returncode == 0 and "60/60 tests passed" in last
+    # H-6: floor-based parse (>=60) instead of literal "60/60" substring.
+    ok = _smoke_gate_pass(result.returncode, result.stdout or "", floor=60)
     return ok, f"exit={result.returncode} last={last!r}"
 
 
@@ -104,7 +170,8 @@ def gate_validators(repo_root: Path, python: str) -> tuple[bool, str]:
         return False, f"exception: {exc}"
     tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
     last = tail[0]
-    ok = result.returncode == 0 and "21/21 tests passed" in last
+    # H-6: floor-based parse (>=21) instead of literal "21/21" substring.
+    ok = _smoke_gate_pass(result.returncode, result.stdout or "", floor=21)
     return ok, f"exit={result.returncode} last={last!r}"
 
 
@@ -304,7 +371,8 @@ def gate_install_smoke(repo_root: Path, venv_python: Path) -> tuple[bool, str]:
     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError) as exc:
         return False, f"exception: {exc}"
     last = (result.stdout or "").strip().splitlines()[-1:] or [""]
-    ok = result.returncode == 0 and "60/60 tests passed" in last[0]
+    # H-6: floor-based parse (>=60) instead of literal "60/60" substring.
+    ok = _smoke_gate_pass(result.returncode, result.stdout or "", floor=60)
     return ok, f"exit={result.returncode} last={last[0]!r}"
 
 
@@ -428,7 +496,10 @@ def gate_pytest_dispatch_codex(repo_root: Path, python: str) -> tuple[bool, str]
         result = subprocess.run(
             [
                 python, "-m", "pytest",
-                str(repo_root / "scripts" / "consensus_mcp" / "tests" / "test_dispatch_codex.py"),
+                # H-6: was repo_root/"scripts"/... — that directory does not
+                # exist in the extracted standalone repo, so the gate never ran
+                # the suite. The real path is consensus_mcp/tests/.
+                str(repo_root / "consensus_mcp" / "tests" / "test_dispatch_codex.py"),
                 "-q",
             ],
             capture_output=True,
@@ -440,17 +511,14 @@ def gate_pytest_dispatch_codex(repo_root: Path, python: str) -> tuple[bool, str]
         return False, f"exception: {exc}"
     tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
     last = tail[0]
-    # iter-0028 bumped: +14 new tests (F4 diff-body scope, F1/F2 template+validate,
-    # F5 env-fail-closed). Prior: 67 (iter-0026 baseline).
-    # 2026-05-10 schema/validator alignment: +1 regression test
-    # (test_patch_proposal_missing_expected_tests_rejected). Then: 82.
-    # v1.10.5 hardening: +5 regression tests (4 containment + 1 dispatch_failed
-    # with review-target). Then: 87.
-    # iter-0033: +3 regression tests (outside_repo_review_target_via_main,
-    # mkdir_oserror_during_preflight, containment_case_insensitive_on_windows
-    # which skips on non-win32 — but counts in "passed" via skip). Local
-    # baseline 90; Windows includes the win32 test too so still 90 on Win.
-    ok = result.returncode == 0 and "95 passed" in last
+    # H-6: floor-based parse instead of a hardcoded "95 passed" literal.
+    # The literal broke a good build the moment the suite grew (it collects 96
+    # now: 95 passed + 1 skipped on legs with no real codex). Floor=90 keeps
+    # headroom for added tests while still tripping on a large deletion.
+    # Count history (for the floor's sizing): iter-0026 ~67 -> iter-0028 +14 ->
+    # 2026-05-10 +1 (82) -> v1.10.5 +5 (87) -> iter-0033 +3 (90) -> now 95
+    # passed of 96 collected.
+    ok = _pytest_gate_pass(result.returncode, result.stdout or "", floor=90)
     return ok, f"exit={result.returncode} last={last!r}"
 
 

@@ -85,6 +85,24 @@ def stub_clean_dry_run(monkeypatch):
     return _stub
 
 
+@pytest.fixture
+def stub_clean_working_tree(repo_root_env, monkeypatch):
+    """Stub audit's working-tree detection to a clean tree (no changes).
+
+    H-5 (v1.17.5) made the iteration_closed mutation-completeness gate fail
+    CLOSED when git is unavailable. These capstone tests run in a non-git
+    tmp_path, so the real _detect_working_tree_changes now (correctly) raises
+    GitUnavailableError and pre-empts the closure-invariant gate these tests
+    actually exercise. Stubbing to [] supplies the legitimate "git ran, no
+    changes" signal — matching the Finding-3/Finding-5 idiom in
+    test_iter_0018_cross_ai_invariant.py — so the mutation gate passes and the
+    closure-invariant path is reached. Depends on repo_root_env so it patches
+    the post-reload module object.
+    """
+    import consensus_mcp.tools.audit_append_event as _aae
+    monkeypatch.setattr(_aae, "_detect_working_tree_changes", lambda repo_root: [])
+
+
 def _make_iter_dir(repo_root: Path, iter_name: str = "iteration-0017-capstone") -> Path:
     """Create the consensus-state/active/<iter_name> dir layout audit_append_event expects."""
     iter_dir = repo_root / "consensus-state" / "active" / iter_name
@@ -232,7 +250,9 @@ def _now_iso(offset_seconds: int = 0) -> str:
 # ---- happy-path capstone --------------------------------------------------
 
 
-def test_capstone_full_codex_fix_loop_end_to_end(repo_root_env, monkeypatch, stub_clean_dry_run):
+def test_capstone_full_codex_fix_loop_end_to_end(
+    repo_root_env, monkeypatch, stub_clean_dry_run, stub_clean_working_tree
+):
     """The 14-step full cycle from codex 2026-05-10 v4 directive (revised v5).
 
     Setup: iteration-0017-capstone with goal_packet, target source file with
@@ -453,7 +473,7 @@ def test_capstone_full_codex_fix_loop_end_to_end(repo_root_env, monkeypatch, stu
 
 
 def test_capstone_corrected_resubmit_refuses_apply_and_close(
-    repo_root_env, monkeypatch, stub_clean_dry_run,
+    repo_root_env, monkeypatch, stub_clean_dry_run, stub_clean_working_tree,
 ):
     """Forbidden transition: verdict=corrected_resubmit blocks apply, and
     iteration_closed without an approved+applied patch + cross-actor closer
@@ -580,7 +600,7 @@ def test_capstone_corrected_resubmit_refuses_apply_and_close(
 
 
 def test_capstone_codex_apply_then_codex_post_review_blocked(
-    repo_root_env, monkeypatch, stub_clean_dry_run,
+    repo_root_env, monkeypatch, stub_clean_dry_run, stub_clean_working_tree,
 ):
     """Per iter-0018 Finding 2 (codex 2026-05-10 v5): the closer MUST be the
     OPPOSITE family from the LAST MUTATOR. Codex applies + codex (different

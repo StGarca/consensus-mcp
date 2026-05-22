@@ -464,6 +464,14 @@ class WorkflowEngine:
         # Apply convergence rule.
         n_approve = len(approve_votes)
         n_block = len(block_votes)
+        # H-7: under TIMEOUT_BLOCKING the operator explicitly chose to treat a
+        # non-response as a block, so a timeout MUST veto even under majority
+        # rules. We narrowly add ONLY the timeout-block votes to the majority
+        # veto (Option B) — a responsive soft-no (goal_satisfied=False with NO
+        # formal blocking_objection) is intentionally NOT a veto under majority,
+        # because that is precisely what majority rules mean. (Option A —
+        # vetoing on `n_block == 0` — would let a soft-no override the majority.)
+        timeout_block = timed_out if timeout_policy == cfg.TIMEOUT_BLOCKING else []
         converged: bool
         rationale: str
         if rule == cfg.CONVERGE_UNANIMOUS:
@@ -471,12 +479,12 @@ class WorkflowEngine:
             rationale = f"unanimous: need all {n} approve; got {n_approve} approve, {n_block} block"
         elif rule == cfg.CONVERGE_STRICT_MAJ:
             threshold = (n // 2) + 1
-            converged = n_approve >= threshold and not blocking_ids
-            rationale = f"strict-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {len(blocking_ids)} blocking-id(s)"
+            converged = n_approve >= threshold and not blocking_ids and not timeout_block
+            rationale = f"strict-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {n_block} block ({len(blocking_ids)} blocking-id(s))"
         elif rule == cfg.CONVERGE_INCL_MAJ:
             threshold = math.ceil(n / 2)
-            converged = n_approve >= threshold and not blocking_ids
-            rationale = f"inclusive-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {len(blocking_ids)} blocking-id(s)"
+            converged = n_approve >= threshold and not blocking_ids and not timeout_block
+            rationale = f"inclusive-majority: need >={threshold}/{n} approve and no blocking; got {n_approve} approve, {n_block} block ({len(blocking_ids)} blocking-id(s))"
         elif rule == cfg.CONVERGE_ADVISORY:
             converged = True
             rationale = "advisory: claude decides regardless"

@@ -32,7 +32,6 @@ NOT an MCP tool. CLI-only. Operator invokes from the repo root:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import re
 import shutil
@@ -531,12 +530,24 @@ def _detect_dirty_paths(repo_root: Path, target_tag: str | None = None) -> list[
             if f.is_dir():
                 continue
             rel_path = f.relative_to(repo_root).as_posix()
-            try:
-                content = f.read_bytes()
-            except OSError:
+            # Compute the git blob OID via `git hash-object`, NOT a raw Python
+            # SHA-1 over working-tree bytes. With core.autocrlf=true (and no
+            # .gitattributes) git stores LF-normalized blobs while the working
+            # tree keeps CRLF, so a Python hash over raw bytes would never match
+            # the stored OID -> every CRLF text file would read as always-dirty
+            # (H-4). `git hash-object` applies the repo's clean filter so the
+            # OID matches the stored blob.
+            hash_result = _run_git(
+                ["hash-object", "--", str(f)],
+                cwd=repo_root,
+                check=False,
+            )
+            if hash_result.returncode != 0:
+                # git unavailable / unreadable file: conservatively treat as
+                # dirty so a real change is never silently skipped.
+                dirty.add(rel_path)
                 continue
-            header = f"blob {len(content)}\0".encode("utf-8")
-            oid = hashlib.sha1(header + content).hexdigest()
+            oid = hash_result.stdout.strip()
             if rel_path not in snapshotted_paths or oid not in snapshotted_oids_by_path.get(rel_path, set()):
                 dirty.add(rel_path)
 
