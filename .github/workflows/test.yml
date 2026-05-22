@@ -10,6 +10,13 @@ on:
   pull_request:
     branches: [main, 'v*']
 
+# Least-privilege GITHUB_TOKEN (CodeQL actions/missing-workflow-permissions):
+# this workflow only checks out the repo and runs tests — it never writes via
+# the token (no releases/comments/pushes/uploads), so read-only contents is
+# the minimal sufficient scope.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: pytest (${{ matrix.os }}, py${{ matrix.python }})
