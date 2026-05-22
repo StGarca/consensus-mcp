@@ -80,7 +80,7 @@ DEFAULT_OUT = REPO_ROOT / "consensus-state" / "state" / "scope-check-report.yaml
 # Default ships with one example mapping ("publish release artifact" ->
 # any binary under dist/ or build/). Downstream consensus-mcp users override
 # this dict in their own scope_check wrapper to add project-specific
-# heuristics (e.g. mapping "render production audio" -> "host-projects/**/*.wav"
+# heuristics (e.g. mapping "render production media" -> "outputs/**/*.bin"
 # is a downstream override, not a built-in default).
 FORBIDDEN_ACTION_PATH_PATTERNS: dict[str, list[str]] = {
     "publish release artifact": ["dist/**/*", "build/**/*"],

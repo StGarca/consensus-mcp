@@ -234,7 +234,7 @@ claude-iter0006-004 carried both as Phase 1.x test-coverage debt. But Phase 1.x 
 
 ### Q4 — Standalone extraction: when does it happen, and does decouple come before or after package?
 
-Per operator: "we will then copy it out of host-project creator so it can be a standalone tool" — operator-manual move. Two preceding tasks were deferred:
+Per operator: "we will then copy it out of the host project so it can be a standalone tool" — operator-manual move. Two preceding tasks were deferred:
 - T9 decouple from host-project paths (configurable REPO_ROOT + artifact dirs)
 - T10 package as installable (pyproject.toml, console_scripts, bundle agent_loop validators + consensus_mcp server)
 
