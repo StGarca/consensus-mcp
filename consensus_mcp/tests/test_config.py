@@ -137,12 +137,13 @@ def test_normalize_letter_alias_no_deprecation_warning():
 
 
 def test_validate_autonomous_execute_requires_3_contributors():
-    """Workflow C requires exactly 3 contributors (autonomous safety floor)."""
+    """Workflow C requires exactly 3 independent contributors (autonomous safety floor).
+    v1.20.1: message updated to say 'independent' — host_peer no longer counts."""
     config = cfg.default_config()
     config["project"]["name"] = "test"
     config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
-    config["contributors"]["enabled"] = ["claude", "codex"]  # only 2
-    with pytest.raises(cfg.ConfigValidationError, match="requires exactly 3 contributors"):
+    config["contributors"]["enabled"] = ["claude", "codex"]  # only 2 independent
+    with pytest.raises(cfg.ConfigValidationError, match="requires exactly 3 independent"):
         cfg.validate(config)
 
 
@@ -526,6 +527,39 @@ def test_load_malformed_yaml_raises_config_validation_error(tmp_path):
     p.write_text("schema_version: [\n", encoding="utf-8")
     with pytest.raises(cfg.ConfigValidationError, match="malformed YAML"):
         cfg.load(p)
+
+
+# ---------- v1.20.1: independent floor + orphan host_peer rejection ----------
+
+def _base_config(enabled):
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = list(enabled)
+    c["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    c["convergence"]["rule"] = cfg.CONVERGE_UNANIMOUS
+    return c
+
+
+def test_host_peer_does_not_satisfy_floor():
+    """A host_peer (same-model supplemental) must NOT count toward the ≥2
+    independent floor; only claude + claude-swe-reviewer → 1 independent → rejected."""
+    with pytest.raises(cfg.ConfigValidationError, match="2 independent|at least 2"):
+        cfg.validate(_base_config(["claude", "claude-swe-reviewer"]))
+
+
+def test_independent_pair_plus_host_peer_is_valid():
+    """claude + codex (2 independents) + claude-swe-reviewer (supplemental) is valid."""
+    cfg.validate(_base_config(["claude", "codex", "claude-swe-reviewer"]))
+
+
+def test_orphan_host_peer_rejected():
+    """claude-swe-reviewer without its host (claude) must be rejected as orphan."""
+    with pytest.raises(cfg.ConfigValidationError, match="orphan|requires its host|host"):
+        cfg.validate(_base_config(["codex", "gemini", "claude-swe-reviewer"]))
+
+
+def test_unknown_open_contributor_counts_independent():
+    """Unknown contributor names count as independent (open-contributor model)."""
+    cfg.validate(_base_config(["claude", "my-custom-ai"]))
 
 
 # ---------- effective_config_sha256 ----------

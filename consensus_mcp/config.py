@@ -402,24 +402,50 @@ def validate(config: dict) -> None:
         )
 
     # === Cross-validation rules per converged-plan.yaml ===
+    # Floor is INDEPENDENT count (host_peer is a 0.5 supplemental, never a vote).
+    # Resolve kinds via merged built-in + overlay profiles; unknown names count
+    # as independent (open-contributor model). Keep the helper small — do NOT
+    # import wizard code here.
+    from consensus_mcp._contributor_profiles import (
+        load_builtin_profiles,
+        merge_profiles,
+        independent_count,
+        orphan_host_peers,
+    )
+    _merged = merge_profiles(load_builtin_profiles(), contributors.get("profiles") or {})
+    n_independent = independent_count(enabled, _merged)
+    # Keep raw count for checks that are logically about total list size (e.g.
+    # uniqueness, non-empty) — those are already done above.
     n_contributors = len(enabled)
 
-    # Rule: workflow.mode=propose-converge requires N>=2
-    if mode == WORKFLOW_PROPOSE_CONVERGE and n_contributors < 2:
+    # Rule: a host_peer may be enabled only if its host family is also enabled.
+    _orphans = orphan_host_peers(enabled, _merged)
+    if _orphans:
         raise ConfigValidationError(
-            f"workflow.mode=propose-converge requires at least 2 contributors; "
-            f"got {n_contributors} ({enabled!r}). Use post-review or advisory for solo setups."
+            f"contributors.enabled has orphan supplemental reviewer(s) {_orphans!r}: "
+            f"a host_peer (same-model supplemental) requires its host to also be "
+            f"enabled. Add the host or remove the supplemental."
         )
 
-    # Rule: workflow.mode=autonomous-execute requires N==3 contributors
+    # Rule: workflow.mode=propose-converge requires N>=2 independent contributors
+    if mode == WORKFLOW_PROPOSE_CONVERGE and n_independent < 2:
+        raise ConfigValidationError(
+            f"workflow.mode=propose-converge requires at least 2 independent "
+            f"contributors (a same-model supplemental does not count); "
+            f"got {n_independent} independent ({enabled!r}). "
+            f"Use post-review or advisory for solo setups."
+        )
+
+    # Rule: workflow.mode=autonomous-execute requires N==3 independent contributors
     # (iter-workflow-abc-introduce safety floor: autonomous mode runs
     # without operator-in-the-loop, so the wide cross-AI safety net is
     # mandatory; v1.15.0+ may relax with explicit operator opt-in).
-    if mode == WORKFLOW_AUTONOMOUS_EXECUTE and n_contributors != 3:
+    if mode == WORKFLOW_AUTONOMOUS_EXECUTE and n_independent != 3:
         raise ConfigValidationError(
-            f"workflow.mode=autonomous-execute requires exactly 3 contributors "
-            f"(claude + codex + gemini) for the wide cross-AI safety net "
-            f"required by autonomous runs; got {n_contributors} ({enabled!r}). "
+            f"workflow.mode=autonomous-execute requires exactly 3 independent "
+            f"contributors (a same-model supplemental does not count) "
+            f"for the wide cross-AI safety net "
+            f"required by autonomous runs; got {n_independent} independent ({enabled!r}). "
             f"Use propose-converge for 2-AI setups."
         )
 
@@ -450,18 +476,20 @@ def validate(config: dict) -> None:
             f"got workflow.mode={mode!r}"
         )
 
-    # Rule: strict-majority with N=1 is invalid
-    if rule == CONVERGE_STRICT_MAJ and n_contributors == 1:
+    # Rule: strict-majority with N=1 independent is invalid
+    if rule == CONVERGE_STRICT_MAJ and n_independent == 1:
         raise ConfigValidationError(
-            "convergence.rule=strict-majority is invalid with only 1 contributor; "
+            "convergence.rule=strict-majority is invalid with only 1 independent "
+            "contributor (a same-model supplemental does not count); "
             "use unanimous or advisory"
         )
 
-    # Rule: sequential independence requires N>=2
-    if independence == INDEPENDENCE_SEQUENTIAL and n_contributors < 2:
+    # Rule: sequential independence requires N>=2 independent contributors
+    if independence == INDEPENDENCE_SEQUENTIAL and n_independent < 2:
         raise ConfigValidationError(
-            f"workflow.independence=sequential requires at least 2 contributors; "
-            f"got {n_contributors}"
+            f"workflow.independence=sequential requires at least 2 independent "
+            f"contributors (a same-model supplemental does not count); "
+            f"got {n_independent} independent"
         )
 
     # === patches ===
