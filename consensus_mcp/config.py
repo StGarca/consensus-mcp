@@ -138,7 +138,13 @@ TIMEOUT_SHRINK = "shrink-quorum"
 VALID_TIMEOUT_POLICY = {TIMEOUT_NO_VOTE, TIMEOUT_BLOCKING, TIMEOUT_SHRINK}
 
 # === Allowed contributor identities (v1 closed enum per converged plan SO-5) ===
-KNOWN_CONTRIBUTORS = ("claude", "codex", "gemini")
+# kimi added 2026-05-22: it is a real default contributor; excluding it from the
+# allow-list (a) made `validate()` reject any project that configures kimi and
+# (b) made the anchoring linter blind to kimi-anchoring — the exact bias it was
+# built to catch. (Found by independent QA, not self-review.) Note: enabling
+# kimi still requires a KimiAdapter in the engine (tracked separately); this
+# allow-list entry just stops kimi being a second-class identity.
+KNOWN_CONTRIBUTORS = ("claude", "codex", "gemini", "kimi")
 CLAUDE = "claude"
 
 
@@ -322,15 +328,26 @@ def validate(config: dict) -> None:
         raise ConfigValidationError(
             f"contributors.enabled must be unique; got {enabled!r}"
         )
+    # OPEN contributor set (2026-05-22, "2-or-20-or-200 AIs" acceptance):
+    # validation is STRUCTURAL only — it no longer rejects names outside a closed
+    # enum, so a clean install supports ANY number of contributors with ANY
+    # names (min-2 / max-N). Whether a name is actually CONSTRUCTIBLE is checked
+    # at build time by engine_factory (fail-closed with a register_contributor
+    # hint), which is the only layer that knows the open adapter registry.
+    # Names must still be non-empty strings.
     for c in enabled:
-        if c not in KNOWN_CONTRIBUTORS:
+        if not c or not isinstance(c, str):
             raise ConfigValidationError(
-                f"contributors.enabled contains unknown identifier {c!r}; "
-                f"v1 supports {KNOWN_CONTRIBUTORS}"
+                f"contributors.enabled entries must be non-empty strings; got {c!r}"
             )
+    # NOTE: min-2 is NOT blanket-enforced here — it is MODE-SPECIFIC below
+    # (propose-converge / sequential / strict-majority each require >=2), so
+    # single-contributor modes (e.g. solo-claude post-review) stay valid. There
+    # is NO upper cap on N anywhere.
     if CLAUDE not in enabled:
         raise ConfigValidationError(
-            f"contributors.enabled must contain 'claude' (orchestrator); got {enabled!r}"
+            f"contributors.enabled must contain 'claude' (the orchestrator that "
+            f"runs the loop); got {enabled!r}"
         )
     adapters = contributors.get("adapters", {})
     if not isinstance(adapters, dict):
