@@ -161,6 +161,20 @@ def handle(
     iter_dir = Path(iteration_dir)
     repo_root = _resolve_repo_root()
 
+    # --- CR-5 (2026-05-22 security review): iteration_dir trust boundary ------
+    # iteration_dir is caller-supplied and authorization is read FROM it
+    # (goal_packet.yaml below). A caller could point T6 at a crafted dir whose
+    # own goal_packet self-grants codex_patch_apply_authorized, defeating that
+    # half of the dual interlock. Require it under the canonical active root
+    # before reading any authorization or patch artifact.
+    from consensus_mcp._paths import is_contained
+    _active_root = (repo_root / "consensus-state" / "active").resolve()
+    if not is_contained(iter_dir.resolve(), _active_root):
+        return _refuse(
+            "iteration_dir_outside_canonical_root: iteration_dir must be under "
+            f"consensus-state/active/ (got {iter_dir})"
+        )
+
     actor_error = _validate_actor(actor)
     if actor_error:
         return _refuse(actor_error)
@@ -214,6 +228,29 @@ def handle(
     files_touched = list(patch_proposal.get("files_touched") or [])
     base_sha = patch_proposal.get("base_sha") or ""
     unified_diff = patch_proposal.get("unified_diff") or ""
+
+    # --- CR-1 + CR-2 (2026-05-22 security review): containment + scope gate ---
+    # files_touched is AI-supplied. Fail CLOSED before any read/write:
+    #   CR-1 each path must resolve INSIDE repo_root (no ../ or absolute escape)
+    #   CR-2 each path must be within goal_packet.allowed_files and must not
+    #        match forbidden_files. Previously only validate_disposition_index
+    #        ran in the staging gate, which never checks source-file targets.
+    from consensus_mcp._paths import resolve_contained, PathTraversalError
+    from consensus_mcp.validators.scope_check import _matches_any
+    _gp_allowed = goal_packet.get("allowed_files")
+    _gp_forbidden = goal_packet.get("forbidden_files")
+    _gp_allowed = _gp_allowed if isinstance(_gp_allowed, list) else []
+    _gp_forbidden = _gp_forbidden if isinstance(_gp_forbidden, list) else []
+    for _rel in files_touched:
+        try:
+            resolve_contained(repo_root, _rel)
+        except PathTraversalError as exc:
+            return _refuse(f"path_traversal: {exc}")
+        if _matches_any(_gp_forbidden, _rel) or not _matches_any(_gp_allowed, _rel):
+            return _refuse(
+                f"out_of_scope: files_touched entry {_rel!r} is not within "
+                "goal_packet.allowed_files"
+            )
 
     # --- Step 3: claude verification gate ------------------------------------
     verif_path = iter_dir / "codex-patch-verifications" / f"{patch_id}.yaml"

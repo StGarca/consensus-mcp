@@ -27,6 +27,7 @@ Derived paths build on the resolvers and inherit their laziness.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -150,3 +151,53 @@ def audit_log_path() -> Path:
 def dispatch_log_path() -> Path:
     """consensus-state/state/dispatch-log.jsonl — append-only dispatch event log."""
     return state_root() / "state" / "dispatch-log.jsonl"
+
+
+# ---------------------------------------------------------------------------
+# Path containment — shared fail-closed guard for operator/AI-supplied paths.
+# 2026-05-22 consensus security review (CR-1/CR-3/CR-5, H-2): every caller that
+# joins an untrusted relative/absolute path to a base directory before reading
+# or writing MUST route it through resolve_contained() so a `../` traversal,
+# an absolute path, or an in-base symlink-to-outside fails closed.
+# ---------------------------------------------------------------------------
+
+
+class PathTraversalError(ValueError):
+    """A caller-supplied path resolves outside its permitted base directory."""
+
+
+def is_contained(resolved: Path, base_resolved: Path) -> bool:
+    """True iff ``resolved`` is inside ``base_resolved`` (both already resolved).
+
+    Mirrors ``_author_review_packet._is_contained``, including the Windows
+    case-fold fallback: ``Path.relative_to`` is a case-sensitive string
+    compare, but Windows filesystems are case-insensitive, so a mixed-case
+    base vs path would otherwise trigger a false-positive rejection.
+    """
+    try:
+        resolved.relative_to(base_resolved)
+        return True
+    except ValueError:
+        if sys.platform == "win32":
+            resolved_lc = str(resolved).lower().replace("\\", "/")
+            base_lc = str(base_resolved).lower().replace("\\", "/")
+            if resolved_lc == base_lc or resolved_lc.startswith(base_lc.rstrip("/") + "/"):
+                return True
+        return False
+
+
+def resolve_contained(base: Path, rel: str) -> Path:
+    """Resolve ``rel`` under ``base`` and confirm it stays inside ``base``.
+
+    Resolves symlinks and ``..`` BEFORE the containment check (fail-closed):
+    an absolute path, a ``../`` traversal, or an in-base symlink whose real
+    target is outside ``base`` all raise :class:`PathTraversalError`. Returns
+    the resolved absolute path on success.
+    """
+    base_resolved = Path(base).resolve()
+    candidate = (base_resolved / rel).resolve()
+    if not is_contained(candidate, base_resolved):
+        raise PathTraversalError(
+            f"{rel!r} resolves to {candidate} which is outside {base_resolved}"
+        )
+    return candidate

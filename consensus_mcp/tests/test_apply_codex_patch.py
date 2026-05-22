@@ -126,11 +126,20 @@ def _write_codex_review(iter_dir: Path, patch_proposal: dict, finding_id: str = 
     (iter_dir / "codex-review.yaml").write_text(yaml.safe_dump(review), encoding="utf-8")
 
 
-def _write_goal_packet(iter_dir: Path, codex_patch_apply_authorized: bool | None = True) -> None:
+def _write_goal_packet(
+    iter_dir: Path,
+    codex_patch_apply_authorized: bool | None = True,
+    allowed_files: list | None = None,
+) -> None:
     """Write a goal_packet with the codex_patch_apply_authorized authorization flag.
 
     If codex_patch_apply_authorized=None, omit the field entirely; if False,
     set it to False. If True (default), set it to True.
+
+    allowed_files defaults to ["scripts/*.py"] so the diff-application test
+    fixtures (which touch scripts/<various>.py) satisfy the CR-2 scope gate
+    added in the 2026-05-22 security review; pass a narrower list to exercise
+    out-of-scope refusal.
     """
     auth: dict = {"authorized_by": "operator", "scope_signature": "test-sig"}
     if codex_patch_apply_authorized is True:
@@ -141,7 +150,7 @@ def _write_goal_packet(iter_dir: Path, codex_patch_apply_authorized: bool | None
         "schema_version": 1,
         "pilot_id": "test-apply-codex-patch",
         "goal": {"summary": "test goal", "desired_end_state": "applied"},
-        "allowed_files": ["scripts/foo.py"],
+        "allowed_files": allowed_files if allowed_files is not None else ["scripts/*.py"],
         "allowed_sections": [],
         "forbidden_files": [],
         "max_iterations": 10,

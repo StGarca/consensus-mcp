@@ -16,7 +16,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from consensus_mcp._paths import project_root, active_dir, spec_path
+from consensus_mcp._paths import (
+    project_root, active_dir, spec_path, resolve_contained, PathTraversalError,
+)
 
 # iter-0035 (Phase B step 5 per iter-0024 plan): migrated from module-level
 # REPO_ROOT / SPEC_PATH / ACTIVE_DIR captures to lazy `_paths` resolvers.
@@ -174,6 +176,21 @@ _DRY_RUN_ISOLATION_CAVEATS: list[str] = [
 ]
 
 
+_GATE_BLOCK_SEVERITIES = ("high", "blocking", "critical")
+
+
+def _gate_decision(all_findings: list[dict]) -> str:
+    """APPROVED unless any finding is high/blocking/critical severity.
+
+    M-6 (2026-05-22 security review): ``critical`` was previously omitted from
+    the block set, so the public ``gate_decision`` could read APPROVED while a
+    critical dry-run finding was present.
+    """
+    return "APPROVED" if all(
+        f.get("severity") not in _GATE_BLOCK_SEVERITIES for f in all_findings
+    ) else "BLOCKED"
+
+
 def handle(
     iteration_id: str | None = None,
     proposed_patches: list | None = None,
@@ -222,13 +239,25 @@ def handle(
         if not iter_dir.exists():
             return {"error": f"iteration dir not found: {iter_dir}"}
 
+    # codex-rev-002 (secfix audit): snapshot project_root() ONCE. It is lazy /
+    # env-driven; calling it separately for the H-2 containment check and the
+    # staging relative_to could resolve against two different bases if the
+    # environment shifted mid-call. One resolved base for all path math below.
+    _proot = project_root().resolve()
+
     # Build a map: real_path -> patched_text for every patched file.
     patched: dict[Path, str] = {}
     for patch in proposed_patches:
         file_rel = patch.get("file", "")
         old_str = patch.get("old_string", "")
         new_str = patch.get("new_string", "")
-        real_path = project_root() / file_rel
+        # H-2 (2026-05-22 security review): file_rel is caller-supplied. Resolve
+        # with containment BEFORE any read or staging write. An unresolved ../
+        # relpath otherwise passes relative_to() lexically and escapes staging.
+        try:
+            real_path = resolve_contained(_proot, file_rel)
+        except PathTraversalError as exc:
+            return {"error": f"path_traversal: {exc}"}
         if real_path in patched:
             current_text = patched[real_path]
         else:
@@ -256,14 +285,14 @@ def handle(
         # Stage patched files.
         for real_path, text in patched.items():
             # Mirror directory structure under staging_path.
-            rel = real_path.relative_to(project_root())
+            rel = real_path.relative_to(_proot)
             dest = staging_path / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text, encoding="utf-8")
 
         # Determine staged spec path: use staged copy if it was patched, else real.
         _spec = spec_path()
-        staged_spec = staging_path / _spec.relative_to(project_root()) if _spec in patched else _spec
+        staged_spec = staging_path / _spec.relative_to(_proot) if _spec in patched else _spec
 
         # Determine staged iteration dir: copy real dir if iteration_id given, then overlay patches.
         staged_iter_dir: Path | None = None
@@ -326,7 +355,7 @@ def handle(
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
-    gate = "APPROVED" if all(f.get("severity") not in ("high", "blocking") for f in all_findings) else "BLOCKED"
+    gate = _gate_decision(all_findings)
 
     return {
         "staging_dir_used": staged_dir_str,
