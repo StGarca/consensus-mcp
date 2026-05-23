@@ -82,7 +82,10 @@ def test_merge_writes_consensus_hook_entries(tmp_path):
         # The hook script path embedded in the command is absolute.
         # command shape: "<python>" "<abs script path>"
         assert ".py" in c
-        script_part = c.rsplit('" "', 1)[-1].rstrip('"')
+        # last whitespace-token is the script path; strip surrounding quotes —
+        # POSIX shlex.join uses ', Windows list2cmdline uses " (and neither quotes
+        # a space-free path). Parse robustly across both quoting conventions.
+        script_part = c.rsplit(None, 1)[-1].strip('"\'')
         assert Path(script_part).is_absolute(), c
 
 

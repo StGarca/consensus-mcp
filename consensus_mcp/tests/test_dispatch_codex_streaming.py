@@ -1073,7 +1073,12 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
     # mid-run operator-abort + termination path.
     _advance_until_streamed(clock, th, log_path, min_streamed=1, step=1.0)
     signal_path = repo_root / "consensus-state" / "state" / "abort-dispatch-codex-test-pass1.signal"
-    signal_path.write_text("operator manual abort", encoding="utf-8")
+    # Write ATOMICALLY (tmp + replace) so the poller never observes the signal file
+    # existing-but-empty — on a slow CI, write_text creates the file before the content
+    # lands, and the reader falls back to "operator_signal_file" instead of this reason.
+    _sig_tmp = signal_path.with_suffix(".signal.tmp")
+    _sig_tmp.write_text("operator manual abort", encoding="utf-8")
+    _sig_tmp.replace(signal_path)
     _drive(clock, th, until=lambda: len(_events(log_path, "dispatch_aborted")) >= 1)
     assert not th.is_alive(), "runner did not abort"
     assert "e" in holder, "expected CodexInvocationError"

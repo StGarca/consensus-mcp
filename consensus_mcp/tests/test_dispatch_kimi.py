@@ -400,7 +400,7 @@ def test_invoke_kimi_builds_expected_argv():
     assert "--quiet" in cmd
     assert "--thinking" in cmd
     assert "--work-dir" in cmd
-    assert "/tmp/workdir-copy" in cmd
+    assert str(Path("/tmp/workdir-copy")) in cmd  # OS-native sep (Windows: \tmp\...)
     # The legacy print/-p/--afk transport (which auto-approved tool use and hit
     # the arg-size limit) must be GONE.
     assert "--print" not in cmd

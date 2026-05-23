@@ -140,10 +140,13 @@ def test_json_semantically_equal_helper():
 # Fix 4: the hook command is valid shell even when the path has a double quote.
 # --------------------------------------------------------------------------- #
 
+@pytest.mark.skipif(os.name == "nt",
+                    reason="a '\"' in a path is POSIX-only; Windows quoting (list2cmdline) "
+                           "is the canonical Windows convention and isn't shlex-splittable")
 def test_hook_command_quote_safe(monkeypatch):
     weird = Path('/tmp/we"ird path/hook.py')
     cmd = wiz._build_consensus_hook_command(weird)
-    # shlex must round-trip the command back to [sys.executable, str(weird)].
+    # POSIX: shlex must round-trip the command back to [sys.executable, str(weird)].
     import shlex
     parts = shlex.split(cmd)
     assert parts == [sys.executable, str(weird)], (cmd, parts)
@@ -152,8 +155,9 @@ def test_hook_command_quote_safe(monkeypatch):
 def test_hook_command_plain_path_unchanged():
     plain = Path("/usr/share/hooks/hook.py")
     cmd = wiz._build_consensus_hook_command(plain)
-    import shlex
-    assert shlex.split(cmd) == [sys.executable, str(plain)]
+    # Platform-aware quoting (shlex.join on POSIX, list2cmdline on Windows). A
+    # space-free path is bare on both, so both tokens appear verbatim in the command.
+    assert sys.executable in cmd and str(plain) in cmd, cmd
 
 
 # --------------------------------------------------------------------------- #

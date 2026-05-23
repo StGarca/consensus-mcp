@@ -391,13 +391,18 @@ def _build_consensus_hook_command(script_path: Path) -> str:
     Uses sys.executable so the hook runs under the same Python the wizard ran
     under (which has consensus_mcp importable).
 
-    v1.24 (fix 4): build with shlex.join so a path containing a double quote (or
-    other shell metacharacter) produces a VALID shell command. The previous
-    manual f'"{...}" "{...}"' wrapping broke on embedded double quotes and could
-    even inject shell syntax. shlex.join quotes each token only as needed, so the
-    common no-metacharacter case is unchanged.
+    Quoting is PLATFORM-AWARE (v1.26 CI fix): shlex.join is POSIX quoting — it
+    single-quotes any backslash-bearing path, which Windows cmd/PowerShell cannot
+    run (`'C:\\...python.exe'`). So on Windows use subprocess.list2cmdline (the
+    Windows quoting convention: double-quote only args that need it). This keeps the
+    v1.24 goal (a path with a space/quote produces a VALID command) correct on BOTH
+    platforms.
     """
-    return shlex.join([sys.executable, str(script_path)])
+    parts = [sys.executable, str(script_path)]
+    if os.name == "nt":
+        import subprocess
+        return subprocess.list2cmdline(parts)
+    return shlex.join(parts)
 
 
 def _build_consensus_hook_groups(claude_home: Path) -> dict[str, list[dict]]:

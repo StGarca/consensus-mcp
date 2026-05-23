@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.28.0 - 2026-05-23
+
+**CI green on Windows + py3.12 (the matrix was red on `push`, masked by a passing
+parallel run).** Fixes a real Windows product bug + three test-portability issues.
+
+### Fixed
+- **Windows hook command was invalid (product bug from v1.24).** `_build_consensus_hook_command`
+  used `shlex.join`, whose POSIX quoting single-quotes backslash paths
+  (`'C:\…python.exe'`) — which Windows cmd/PowerShell cannot run. Now platform-aware:
+  `subprocess.list2cmdline` on Windows, `shlex.join` on POSIX.
+
+### Tests (portability — no product change)
+- `test_invoke_kimi_builds_expected_argv`: compare against `str(Path(...))` (OS-native
+  separator) instead of a hardcoded `/tmp/...`.
+- `test_merge_writes_consensus_hook_entries`: parse the hook command's script token
+  robustly across POSIX/Windows quoting.
+- `test_hook_command_quote_safe`: POSIX-only (a `"` in a path is not a Windows case).
+- `test_operator_abort_signal_file_triggers_abort`: write the signal file atomically so
+  a slow CI never reads it empty (it was falling back to `operator_signal_file`).
+
 ## 1.27.0 - 2026-05-23
 
 **Init-review convergence.** Round-4 of the full-panel init review came back with the
