@@ -52,10 +52,16 @@ consensus_mcp = [
   "tests/fixtures/dispatch_codex/*",
   # iter-0040: Claude Code bootstrap pack (skill + slash command), copied
   # into ~/.claude by `consensus-init --install-claude-code`.
-  "claude_extensions/skills/consensus/SKILL.md",
   "claude_extensions/commands/consensus-init.md",
-  # iter-0041: operating-procedure skill carrying the transferable
-  # consensus-mcp workflow rules (workflow #3 vs #4, dispatch order,
-  # gemini 429, snapshot/restore, dispatcher hazards).
-  "claude_extensions/skills/consensus-workflow/SKILL.md",
+  # iter-0041 / v1.21: ALL claude_extensions skills (consensus, consensus-workflow,
+  # + the 10 vendored superpowers-derived consensus-* skills), the MIT attribution,
+  # the provenance ledger, and the enforcement hook scripts. The wildcards prevent
+  # the packaging gap where new vendored skills/hooks shipped in source but were
+  # absent from the wheel — so `--install-claude-code` silently skipped skills and
+  # activated settings.json hooks pointing at non-existent scripts. Enforced by
+  # tests/test_package_data_completeness.py.
+  "claude_extensions/skills/*/SKILL.md",
+  "claude_extensions/NOTICE",
+  "claude_extensions/VENDORED.md",
+  "claude_extensions/hooks/*.py",
 ]

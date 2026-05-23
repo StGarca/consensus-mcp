@@ -147,6 +147,14 @@ _CLAUDE_EXTENSION_FILES = (
     ("skills/consensus-verification-before-completion/SKILL.md", "skills/consensus-verification-before-completion/SKILL.md"),
     ("skills/consensus-finishing-a-development-branch/SKILL.md", "skills/consensus-finishing-a-development-branch/SKILL.md"),
     ("skills/consensus-using-git-worktrees/SKILL.md", "skills/consensus-using-git-worktrees/SKILL.md"),
+    # v1.21 packaging fix: copy the enforcement hook scripts into <claude_home>/hooks/
+    # so the settings.json activation (_install_claude_settings_json) points at REAL
+    # files. Without this, _installed_hook_script_path fell back to the in-package
+    # source dir, which is absent in a wheel -> hooks activated but scripts missing
+    # -> enforcement silently dead. (Names mirror _CONSENSUS_HOOK_SPECS.)
+    ("hooks/consensus_sessionstart.py", "hooks/consensus_sessionstart.py"),
+    ("hooks/consensus_pretooluse_gate.py", "hooks/consensus_pretooluse_gate.py"),
+    ("hooks/consensus_stop_gate.py", "hooks/consensus_stop_gate.py"),
 )
 
 
