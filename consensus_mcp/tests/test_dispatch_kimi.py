@@ -763,8 +763,8 @@ def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
     cleanup_calls: list = []
     monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir",
                         lambda wd: cleanup_calls.append(wd))
-    # Integrity check: real repo is CLEAN -> seal proceeds.
-    monkeypatch.setattr(_dispatch_kimi, "_real_repo_is_dirty", lambda _root: (False, ""))
+    # Integrity check: before/after snapshots IDENTICAL (no new changes) -> seal proceeds.
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: set())
 
     monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
     monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
@@ -841,9 +841,12 @@ def test_main_integrity_check_rejects_when_real_repo_dirty(monkeypatch, capsys):
     monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry",
                         lambda **kw: (final_text, _dispatch_kimi._parse_kimi_output(final_text)))
     monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
-    # Simulate: the real repo is DIRTY after dispatch (kimi mutated it).
-    monkeypatch.setattr(_dispatch_kimi, "_real_repo_is_dirty",
-                        lambda _root: (True, " M consensus_mcp/some_real_file.py"))
+    # Simulate: before snapshot CLEAN, after snapshot has a NEW entry (kimi mutated
+    # the real repo). The two bracketing calls return successive snapshots, so the
+    # after-minus-before diff is non-empty -> integrity violation.
+    _snaps = iter([set(), {" M consensus_mcp/some_real_file.py"}])
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot",
+                        lambda _root: next(_snaps))
 
     rc = _dispatch_kimi.main([
         "--goal-packet", str(rel_goal),
@@ -968,23 +971,22 @@ def test_cleanup_disposable_workdir_tolerates_none():
     _dispatch_kimi._cleanup_disposable_workdir(None)
 
 
-# ---------- _real_repo_is_dirty (post-dispatch integrity probe) ----------
+# ---------- _repo_status_snapshot (post-dispatch integrity probe) ----------
 
-def test_real_repo_is_dirty_true_when_status_nonempty(monkeypatch, tmp_path):
+def test_repo_status_snapshot_returns_line_set(monkeypatch, tmp_path):
     (tmp_path / ".git").mkdir()
     monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
 
     class _Result:
         returncode = 0
-        stdout = " M consensus_mcp/foo.py\n"
+        stdout = " M consensus_mcp/foo.py\n?? bar.py\n"
 
     monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
-    dirty, raw = _dispatch_kimi._real_repo_is_dirty(tmp_path)
-    assert dirty is True
-    assert "consensus_mcp/foo.py" in raw
+    snap = _dispatch_kimi._repo_status_snapshot(tmp_path)
+    assert snap == {" M consensus_mcp/foo.py", "?? bar.py"}
 
 
-def test_real_repo_is_dirty_false_when_status_clean(monkeypatch, tmp_path):
+def test_repo_status_snapshot_empty_when_clean(monkeypatch, tmp_path):
     (tmp_path / ".git").mkdir()
     monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
 
@@ -993,17 +995,47 @@ def test_real_repo_is_dirty_false_when_status_clean(monkeypatch, tmp_path):
         stdout = "\n"
 
     monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
-    dirty, raw = _dispatch_kimi._real_repo_is_dirty(tmp_path)
-    assert dirty is False
-    assert raw == ""
+    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == set()
 
 
-def test_real_repo_is_dirty_failsafe_when_no_git(monkeypatch, tmp_path):
-    # No git binary / not a git tree -> cannot prove dirtiness -> report clean
-    # (the temp-workdir isolation is the primary control; this is a backstop).
+def test_repo_status_snapshot_failsafe_empty_when_no_git(monkeypatch, tmp_path):
+    # No git binary / not a git tree -> cannot check -> EMPTY set (with the before
+    # snapshot also empty, the diff is empty -> do not block; backstop only).
     monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: None)
-    dirty, raw = _dispatch_kimi._real_repo_is_dirty(tmp_path)
-    assert dirty is False
+    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == set()
+
+
+def test_integrity_diff_ignores_preexisting_dirt():
+    # re-audit codex-rev-002: a pre-existing dirty entry present in BOTH snapshots
+    # is NOT a kimi mutation -> after-minus-before is empty -> no violation.
+    before = {" M preexisting_wip.py", "?? other_wip.py"}
+    after = set(before)
+    assert (after - before) == set()
+    # A genuinely new entry IS flagged.
+    after_mutated = before | {" M kimi_touched.py"}
+    assert (after_mutated - before) == {" M kimi_touched.py"}
+
+
+# ---------- _strip_symlinks (re-audit: temp-copy sandbox escape) ----------
+
+def test_strip_symlinks_removes_symlinks_keeps_regular(tmp_path):
+    root = tmp_path / "copy"
+    (root / "sub").mkdir(parents=True)
+    real = root / "real.txt"
+    real.write_text("data", encoding="utf-8")
+    # A symlink pointing OUTSIDE the copy (the escape vector).
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+    link = root / "sub" / "escape"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    assert link.is_symlink()
+    _dispatch_kimi._strip_symlinks(root)
+    assert not link.is_symlink()                            # symlink removed
+    assert real.read_text(encoding="utf-8") == "data"       # regular file kept
+    assert outside.read_text(encoding="utf-8") == "secret"  # target untouched
 
 
 # ---------- _sealed_mirror_filename (H1: reviewer+pass bound) ----------

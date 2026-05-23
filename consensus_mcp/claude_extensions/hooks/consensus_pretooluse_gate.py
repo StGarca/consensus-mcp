@@ -66,9 +66,12 @@ _BASH_SEGMENT_SPLIT = re.compile(r"\|\||&&|;|\||\n")
 # `git <subcommand>` / `python -m pytest`) is on this list. Default-deny: an
 # unknown leading token is DENIED (fail-safe).
 _READ_ONLY_COMMANDS = frozenset({
-    "ls", "cat", "head", "tail", "wc", "grep", "rg", "find",
+    "ls", "cat", "head", "tail", "wc", "grep", "rg",
     "echo", "pwd", "which", "pytest",
 })
+# NOTE: `find` is deliberately NOT allowlisted — `find -exec`/`-delete`/`-fprintf`
+# mutate the filesystem (re-audit codex-rev-001). A leading-token allowlist cannot
+# safely admit a command whose own primaries can write/exec.
 # git subcommands that are read-only.
 _READ_ONLY_GIT_SUBCOMMANDS = frozenset({
     "status", "diff", "log", "show", "branch", "rev-parse",
@@ -118,8 +121,11 @@ def _segment_is_read_only(segment: str) -> bool:
     seg = segment.strip()
     if not seg:
         return False
-    # Any redirection in a segment makes it a writer -> not read-only.
-    if ">" in seg or "<" in seg:
+    # A redirection OR a command substitution makes a segment a potential writer
+    # / arbitrary-exec, even if the leading token looks read-only
+    # (e.g. `echo $(rm x)`). Re-audit (gemini-rev-001): the allowlist must reject
+    # these before trusting the leading token.
+    if any(marker in seg for marker in (">", "<", "$(", "`", "${")):
         return False
     try:
         import shlex
@@ -132,7 +138,18 @@ def _segment_is_read_only(segment: str) -> bool:
     if head in _READ_ONLY_COMMANDS:
         return True
     if head == "git":
-        return len(tokens) >= 2 and tokens[1] in _READ_ONLY_GIT_SUBCOMMANDS
+        if len(tokens) < 2 or tokens[1] not in _READ_ONLY_GIT_SUBCOMMANDS:
+            return False
+        # git config/pager/exec-path/output injection can EXECUTE arbitrary
+        # commands (e.g. `git -c core.pager='!sh -c …' log`) or WRITE a file
+        # (`git diff --output=f`). Reject those even on a read-only subcommand.
+        for t in tokens[1:]:
+            # Exact `-c` = config injection (pager exec); `--output`/`--exec-path`
+            # (incl. `=value` forms) write a file / set the exec path. Use exact +
+            # prefix matches that do NOT catch benign flags like `--color`.
+            if t == "-c" or t.startswith("--output") or t.startswith("--exec-path"):
+                return False
+        return True
     if head in ("python", "python3"):
         # Allow only `python -m pytest …` (a test runner), nothing else.
         return len(tokens) >= 3 and tokens[1] == "-m" and tokens[2] == "pytest"

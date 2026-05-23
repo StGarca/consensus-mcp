@@ -191,7 +191,6 @@ def test_pretooluse_bash_default_deny_no_marker(tmp_path, command):
     "wc -l src/x.py",
     "grep -r foo src",
     "rg foo src",
-    "find . -name '*.py'",
     "git status",
     "git diff HEAD",
     "git log --oneline",
@@ -222,6 +221,17 @@ def test_pretooluse_read_only_allowlist_bash_allows(tmp_path, command):
     # Unknown command -> DENIED (fail-safe).
     "frobnicate --do-stuff",
     "",
+    # re-audit codex-rev-001: `find` is NOT allowlisted (its own primaries write/exec).
+    "find . -name '*.py'",
+    "find . -delete",
+    "find . -exec rm {} ;",
+    # re-audit gemini-rev-001: command substitution can run a writer even under an
+    # allowlisted leading token.
+    "echo $(rm -rf x)",
+    "cat `rm x`",
+    # git config/pager/output injection can EXEC or WRITE even on a read-only subcommand.
+    "git -c core.pager=!sh log",
+    "git diff --output=stolen.txt",
 ])
 def test_pretooluse_bash_pipeline_or_unknown_denies(tmp_path, command):
     ev = {"tool_name": "Bash", "tool_input": {"command": command},

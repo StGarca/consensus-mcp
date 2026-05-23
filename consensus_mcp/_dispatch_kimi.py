@@ -219,6 +219,28 @@ def _kimi_subprocess_env() -> dict:
     return env
 
 
+def _strip_symlinks(root: Path) -> None:
+    """Remove every symlink under `root` (the disposable temp copy).
+
+    A tracked/copied symlink can point BACK into the real repo (or anywhere), so
+    a write "inside" the temp work-dir could follow it and ESCAPE the sandbox
+    (re-audit codex-rev-003 / gemini-rev-002). Reviewers need no symlinks. Walks
+    WITHOUT following links (followlinks=False) and unlinks each. Best-effort;
+    never raises (the post-dispatch snapshot diff is the backstop).
+    """
+    try:
+        for dirpath, dirnames, filenames in os.walk(str(root), followlinks=False):
+            for name in list(dirnames) + list(filenames):
+                fp = Path(dirpath) / name
+                try:
+                    if fp.is_symlink():
+                        fp.unlink()
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
 def _make_disposable_workdir(repo_root: Path) -> Path:
     """Create a disposable temp COPY of the repo to use as kimi's --work-dir.
 
@@ -267,6 +289,9 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
 
         shutil.copytree(str(repo_root), str(dest), ignore=_ignore, symlinks=True)
 
+    # SYMLINK SCRUB: a tracked/copied symlink in the copy can point back into the
+    # real repo or outside it, letting a write "inside" the temp work-dir escape.
+    _strip_symlinks(dest)
     return dest
 
 
@@ -286,22 +311,23 @@ def _cleanup_disposable_workdir(workdir: Path | None) -> None:
         pass
 
 
-def _real_repo_is_dirty(repo_root: Path) -> tuple[bool, str]:
-    """Return (is_dirty, raw_status) for the REAL repo via `git status --short`.
+def _repo_status_snapshot(repo_root: Path) -> set[str]:
+    """Return the set of `git status --short` lines for the REAL repo.
 
-    Independent post-dispatch safeguard (converged-plan B4): a non-empty
-    `git status --short` after kimi returns means the real repo was mutated.
+    Used to BRACKET a kimi dispatch (snapshot before + after): only lines present
+    AFTER but not BEFORE are changes kimi INTRODUCED. The real repo is routinely
+    already dirty (in-flight work), so a plain "dirty after" test false-positives
+    (re-audit codex-rev-002) — diffing snapshots isolates kimi's own mutations.
 
     Fail-SAFE on inability to check: if git is missing, the path is not a git
-    work-tree, or the command errors/times out, we CANNOT prove cleanliness, so
-    we report dirty=False (do not block) — the temp-workdir isolation is the
-    primary control and a missing git binary is an environment issue, not a
-    kimi violation. (The check is a backstop, not the only control.) The raw
-    status text is returned for logging.
+    work-tree, or the command errors/times out, return an EMPTY set. With the
+    `before` snapshot also empty, the after-minus-before diff is empty (do not
+    block) — the temp-workdir isolation is the primary control; this is a
+    backstop, not the only control.
     """
     git_bin = shutil.which("git")
     if git_bin is None or not (repo_root / ".git").exists():
-        return False, ""
+        return set()
     try:
         result = subprocess.run(
             [git_bin, "status", "--short"],
@@ -311,11 +337,10 @@ def _real_repo_is_dirty(repo_root: Path) -> tuple[bool, str]:
             timeout=60,
         )
     except (subprocess.TimeoutExpired, OSError):
-        return False, ""
+        return set()
     if result.returncode != 0:
-        return False, ""
-    raw = result.stdout.strip()
-    return (bool(raw), raw)
+        return set()
+    return {ln for ln in result.stdout.splitlines() if ln.strip()}
 
 
 def _effective_stall_silence(default: float = _DEFAULT_STALL_SILENCE_SECONDS) -> float:
@@ -1266,6 +1291,12 @@ def main(argv: list[str] | None = None) -> int:
         kimi_version = _get_kimi_version(ns.kimi_bin)
         _t0 = time.monotonic()
 
+        # Snapshot the REAL repo's git status BEFORE dispatch. The post-dispatch
+        # integrity check compares against this so only changes kimi INTRODUCES
+        # count — the real repo is routinely already dirty (in-flight work), so a
+        # plain "dirty after" test false-positives (re-audit codex-rev-002).
+        status_before = _repo_status_snapshot(repo_root)
+
         # DISPOSABLE TEMP WORKDIR (B4): run kimi against a throwaway copy of the
         # repo (git clone --local --shared, fallback shutil.copytree) so it
         # physically cannot touch the real tree. Cleaned up in finally.
@@ -1300,25 +1331,28 @@ def main(argv: list[str] | None = None) -> int:
         landed_seconds = time.monotonic() - _t0
         output_sha = _sha256_str(raw_output)
 
-        # POST-DISPATCH INTEGRITY CHECK (B4, independent safeguard): if the REAL
-        # repo's `git status --short` is non-empty after the dispatch, kimi
-        # mutated the real workspace despite the temp-copy isolation — REJECT the
-        # review + log the violation. Backstop regardless of root cause.
-        dirty, status_raw = _real_repo_is_dirty(repo_root)
-        if dirty:
+        # POST-DISPATCH INTEGRITY CHECK (B4, independent safeguard): compare the
+        # REAL repo's git status to the pre-dispatch snapshot. Only NEW entries
+        # (after - before) indicate kimi mutated the real workspace despite the
+        # temp-copy isolation — REJECT + log. Pre-existing dirt is ignored so a
+        # normally-dirty repo does not false-positive (re-audit codex-rev-002).
+        status_after = _repo_status_snapshot(repo_root)
+        new_changes = status_after - status_before
+        if new_changes:
+            new_raw = "\n".join(sorted(new_changes))
             _log_dispatch(log_path, {
                 "event": "dispatch_integrity_violation",
                 "iteration_id": iteration_id,
                 "reviewer_id": reviewer_id,
                 "pass_id": pass_id,
-                "git_status_short": status_raw[:4000],
+                "git_status_new": new_raw[:4000],
                 "adapter": "kimi",
             })
             raise KimiIntegrityError(
-                "post-dispatch integrity check FAILED: the real repo is dirty "
-                "after the kimi dispatch (kimi mutated the workspace despite the "
-                "disposable temp work-dir). Review output REJECTED. "
-                f"git status --short:\n{status_raw[:2000]}"
+                "post-dispatch integrity check FAILED: the kimi dispatch "
+                "INTRODUCED new changes in the real repo (vs the pre-dispatch "
+                "snapshot) despite the disposable temp work-dir. Review output "
+                f"REJECTED. New `git status --short` entries:\n{new_raw[:2000]}"
             )
 
         proposal_schema_sha = None
