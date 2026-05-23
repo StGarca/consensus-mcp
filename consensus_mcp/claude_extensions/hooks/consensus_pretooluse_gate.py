@@ -169,8 +169,10 @@ def _segment_is_read_only(segment: str) -> bool:
                 "--edit-description", "--set-upstream-to", "-u", "--unset-upstream",
                 "-f", "--force", "--create-reflog",
             }
+            # v1.27 (codex+kimi): `--list <pattern>` is a read-only listing form whose
+            # positional is a glob, not a new branch name — its positional is safe.
             _FILTER_FLAGS = {"--contains", "--no-contains", "--merged",
-                             "--no-merged", "--points-at"}
+                             "--no-merged", "--points-at", "--list"}
             args = tokens[2:]
             for t in args:
                 if t.split("=", 1)[0] in _WRITE_BRANCH:
