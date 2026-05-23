@@ -57,6 +57,10 @@ def _is_skill_path_ref(ref: str) -> bool:
         return False
     if any(c in ref for c in "<>") or "YYYY" in ref:
         return False
+    # Reject domain-like refs (a dot before the .md extension), e.g. a URL path
+    # component such as example.com/foo.md that the path regex can capture.
+    if "." in ref[:-len(".md")]:
+        return False
     return True
 
 
@@ -67,6 +71,8 @@ def _resolves(ref: str, skill_dir: Path) -> bool:
         SKILLS / ref,                                           # relative to skills root
         SKILLS / ("consensus-" + parts[0]) / "/".join(parts[1:]),  # upstream name + prefix
     ]
+    if parts[0] == "skills" and len(parts) > 1:                 # `skills/consensus-x/y.md`
+        candidates.append(SKILLS / "/".join(parts[1:]))
     return any(c.exists() for c in candidates)
 
 
@@ -101,3 +107,19 @@ def test_skill_cross_references_are_consensus_namespace_and_exist():
                 elif not (SKILLS / f"consensus-{name}").is_dir():
                     bad.append(f"{md.relative_to(SKILLS)}: 'consensus:{name}' -> no consensus-{name}")
     assert not bad, "bad skill cross-references:\n" + "\n".join(bad)
+
+
+# --- resolver/heuristic unit proofs (round-3 re-review findings) ------------- #
+
+def test_resolver_handles_skills_prefixed_refs():
+    # A real `skills/consensus-*/x.md` ref must RESOLVE, not false-positive
+    # (codex/kimi round-3: the extra `skills/` segment regressed resolution).
+    d = _skill_dirs()[0]
+    assert _resolves("skills/consensus-brainstorming/SKILL.md", d)
+
+
+def test_heuristic_ignores_urlish_md_refs_but_keeps_real_ones():
+    # kimi round-3: a URL component like example.com/foo.md must NOT be treated
+    # as a skill ref; a real sibling ref still must be.
+    assert not _is_skill_path_ref("example.com/page.md")
+    assert _is_skill_path_ref("requesting-code-review/code-reviewer.md")
