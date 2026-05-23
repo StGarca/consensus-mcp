@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-version = "1.20.3.dev0"
+version = "1.21.0.dev0"
 description = "Cross-AI consensus code review: a panel of different AI models you choose (Claude, Codex, Gemini, Kimi, or add your own) review each change independently, and it ships only when they agree. An MCP server for AI coding tools."
 authors = [{name = "stgarca"}]
 requires-python = ">=3.11"
@@ -19,6 +19,7 @@ dependencies = [
 consensus-mcp = "consensus_mcp.server:main"
 consensus-mcp-dispatch-codex = "consensus_mcp._dispatch_codex:main"
 consensus-mcp-dispatch-gemini = "consensus_mcp._dispatch_gemini:main"
+consensus-mcp-dispatch-kimi = "consensus_mcp._dispatch_kimi:main"
 consensus-init = "consensus_mcp._init_wizard:main"
 # v1.19.0: read-only project scorecard rollup over results-v1.jsonl.
 consensus-results = "consensus_mcp._results_rollup:main"

@@ -1,0 +1,756 @@
+"""Unit tests for consensus_mcp._dispatch_kimi.
+
+UX-parity sibling of test_dispatch_gemini.py. Focused on kimi-specific
+behavior, all kept BEHIND the same surface as gemini so the operator sees
+identical CLI flags + sealed kimi-review.yaml + timing/log lines:
+
+  - _kimi_subprocess_env (scrubs KIMI_API_KEY + OPENAI_API_KEY so a stray
+    external key can't hijack the OAuth file-cred call — the INVERSE of
+    gemini's GEMINI_CLI_TRUST_WORKSPACE injection)
+  - _peel_assistant_content (peels `content` off the stream-json line)
+  - _extract_json_from_text (reused from gemini; content is free text inside)
+  - _parse_kimi_output (validates JSON shape; kimi-rev-N IDs; patch_proposal null)
+  - _invoke_kimi argv construction (kimi --print --output-format stream-json
+    --final-message-only --max-steps-per-turn 1 --work-dir <repo> -p <prompt>)
+  - _invoke_kimi exit-code mapping: 0 -> success, 1 -> hard fail (non-retryable),
+    75 -> retryable (treated like gemini's 429 retry path)
+  - watchdog / stall handling (default stall_silence 240s; honors
+    CONSENSUS_MCP_STALL_SILENCE_SECONDS)
+  - _invoke_kimi_with_retry (validator-retry on first-pass parse fail)
+
+Does NOT call the real kimi binary (smoke env-gated to
+CONSENSUS_MCP_RUN_REAL_KIMI_SMOKE=1).
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import threading
+from pathlib import Path
+
+import pytest
+
+# Allow imports of consensus_mcp from the repo root without install.
+ROOT = Path(__file__).resolve().parent.parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from consensus_mcp import _dispatch_kimi  # noqa: E402
+
+
+# ---------- _kimi_subprocess_env (scrub stray keys) ----------
+# CRITICAL (inverse of gemini's trust injection): kimi auth is OAuth file
+# creds at ~/.kimi/credentials/kimi-code.json. A stray KIMI_API_KEY or
+# OPENAI_API_KEY in the environment could hijack the OAuth call, so the
+# subprocess env must SCRUB both before spawning kimi.
+
+def test_kimi_subprocess_env_scrubs_kimi_api_key(monkeypatch):
+    monkeypatch.setenv("KIMI_API_KEY", "sk-stray-kimi")
+    env = _dispatch_kimi._kimi_subprocess_env()
+    assert "KIMI_API_KEY" not in env
+
+
+def test_kimi_subprocess_env_scrubs_openai_api_key(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-stray-openai")
+    env = _dispatch_kimi._kimi_subprocess_env()
+    assert "OPENAI_API_KEY" not in env
+
+
+def test_kimi_subprocess_env_preserves_parent_env(monkeypatch):
+    monkeypatch.setenv("PATH", "/sentinel/path")
+    monkeypatch.setenv("SOME_UNRELATED_VAR", "keepme")
+    env = _dispatch_kimi._kimi_subprocess_env()
+    assert env["PATH"] == "/sentinel/path"          # PATH not clobbered
+    assert env["SOME_UNRELATED_VAR"] == "keepme"     # full inheritance
+
+
+def test_kimi_subprocess_env_does_not_mutate_os_environ(monkeypatch):
+    monkeypatch.setenv("KIMI_API_KEY", "sk-stray")
+    _dispatch_kimi._kimi_subprocess_env()
+    # helper returns a copy; never touches os.environ
+    assert os.environ.get("KIMI_API_KEY") == "sk-stray"
+
+
+def test_kimi_subprocess_env_does_not_set_kimi_api_key():
+    # Per task: do NOT set KIMI_API_KEY (OAuth file creds are authoritative).
+    env = _dispatch_kimi._kimi_subprocess_env()
+    assert "KIMI_API_KEY" not in env
+
+
+# ---------- _peel_assistant_content (stream-json content peel) ----------
+
+def test_peel_extracts_content_from_single_stream_json_line():
+    payload = {"role": "assistant", "content": '{"findings": []}'}
+    line = json.dumps(payload)
+    assert _dispatch_kimi._peel_assistant_content(line) == '{"findings": []}'
+
+
+def test_peel_handles_trailing_newline():
+    payload = {"role": "assistant", "content": "the answer"}
+    line = json.dumps(payload) + "\n"
+    assert _dispatch_kimi._peel_assistant_content(line) == "the answer"
+
+
+def test_peel_ignores_non_assistant_lines_and_finds_assistant():
+    lines = "\n".join([
+        json.dumps({"role": "system", "content": "ready"}),
+        json.dumps({"role": "assistant", "content": '{"goal_satisfied": true}'}),
+    ])
+    assert _dispatch_kimi._peel_assistant_content(lines) == '{"goal_satisfied": true}'
+
+
+def test_peel_falls_back_to_raw_when_not_stream_json():
+    # If kimi (against expectation) emits raw JSON not wrapped in a
+    # stream-json envelope, peel returns the text unchanged so the
+    # downstream _extract_json_from_text still gets a chance.
+    raw = '{"findings": [], "goal_satisfied": true}'
+    assert _dispatch_kimi._peel_assistant_content(raw) == raw
+
+
+def test_peel_raises_on_empty_output():
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError):
+        _dispatch_kimi._peel_assistant_content("")
+
+
+# ---------- _extract_json_from_text (reused; content carries free text) ----------
+
+def test_extract_pure_json_passes_through():
+    text = '{"findings": [], "goal_satisfied": true}'
+    assert _dispatch_kimi._extract_json_from_text(text) == text
+
+
+def test_extract_handles_json_markdown_fence():
+    text = 'Sure thing:\n```json\n{"findings": []}\n```\nhope that helps'
+    assert _dispatch_kimi._extract_json_from_text(text) == '{"findings": []}'
+
+
+# ---------- _parse_kimi_output ----------
+
+def _minimal_valid():
+    return {
+        "findings": [],
+        "goal_satisfied": True,
+        "goal_satisfied_rationale": "No issues found.",
+        "blocking_objections": [],
+    }
+
+
+def test_parse_minimal_valid():
+    parsed = _dispatch_kimi._parse_kimi_output(json.dumps(_minimal_valid()))
+    assert parsed["goal_satisfied"] is True
+    assert parsed["findings"] == []
+
+
+def test_parse_rejects_invalid_json():
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="not valid JSON"):
+        _dispatch_kimi._parse_kimi_output("{not json")
+
+
+def test_parse_rejects_non_object_root():
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="must be an object"):
+        _dispatch_kimi._parse_kimi_output("[1,2,3]")
+
+
+def test_parse_rejects_unknown_top_level_key():
+    payload = _minimal_valid()
+    payload["unexpected"] = "field"
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="unexpected top-level"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+def test_parse_rejects_missing_required():
+    payload = _minimal_valid()
+    del payload["goal_satisfied"]
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="missing required"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+def test_parse_rejects_finding_with_gemini_id_prefix():
+    payload = _minimal_valid()
+    payload["findings"] = [{
+        "id": "gemini-rev-001",
+        "severity": "low",
+        "summary": "wrong adapter prefix",
+        "citation": "x:1",
+        "risk": "r",
+        "recommendation": "use kimi-rev-N",
+    }]
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match=r"\^kimi-rev"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+def test_parse_accepts_kimi_rev_id():
+    payload = _minimal_valid()
+    payload["findings"] = [{
+        "id": "kimi-rev-001",
+        "severity": "low",
+        "summary": "minor stylistic suggestion",
+        "citation": "consensus_mcp/foo.py:1",
+        "risk": "very low",
+        "recommendation": "consider renaming",
+    }]
+    parsed = _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+    assert parsed["findings"][0]["id"] == "kimi-rev-001"
+
+
+def test_parse_rejects_non_null_patch_proposal():
+    payload = _minimal_valid()
+    payload["findings"] = [{
+        "id": "kimi-rev-001",
+        "severity": "low",
+        "summary": "x",
+        "citation": "x:1",
+        "risk": "r",
+        "recommendation": "rec",
+        "patch_proposal": {"patch_id": "kimi-rev-001-patch"},
+    }]
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="patch_proposal must be null"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+def test_parse_blocking_invariant_violated():
+    payload = _minimal_valid()
+    payload["findings"] = [{
+        "id": "kimi-rev-001",
+        "severity": "blocking",
+        "summary": "x",
+        "citation": "x:1",
+        "risk": "r",
+        "recommendation": "rec",
+    }]
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="blocking_objections invariant"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+def test_parse_rejects_goal_satisfied_true_with_blocking_objections():
+    payload = _minimal_valid()
+    payload["findings"] = [{
+        "id": "kimi-rev-001",
+        "severity": "blocking",
+        "summary": "x",
+        "citation": "x:1",
+        "risk": "r",
+        "recommendation": "rec",
+    }]
+    payload["blocking_objections"] = ["kimi-rev-001"]
+    payload["goal_satisfied"] = True  # incoherent
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="incoherent"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+def test_parse_blocking_invariant_satisfied():
+    payload = _minimal_valid()
+    payload["findings"] = [{
+        "id": "kimi-rev-001",
+        "severity": "critical",
+        "summary": "x",
+        "citation": "x:1",
+        "risk": "r",
+        "recommendation": "rec",
+    }]
+    payload["blocking_objections"] = ["kimi-rev-001"]
+    payload["goal_satisfied"] = False
+    parsed = _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+    assert parsed["blocking_objections"] == ["kimi-rev-001"]
+
+
+def test_parse_extracts_from_wrapped_output():
+    payload_str = json.dumps(_minimal_valid())
+    wrapped = f"Sure, here's the review:\n```json\n{payload_str}\n```\nDone."
+    parsed = _dispatch_kimi._parse_kimi_output(wrapped)
+    assert parsed["goal_satisfied"] is True
+
+
+def test_parse_rejects_empty_summary():
+    payload = _minimal_valid()
+    payload["findings"] = [{
+        "id": "kimi-rev-001",
+        "severity": "low",
+        "summary": "",
+        "citation": "x:1",
+        "risk": "r",
+        "recommendation": "rec",
+    }]
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="non-empty"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+def test_parse_rejects_empty_rationale():
+    payload = _minimal_valid()
+    payload["goal_satisfied_rationale"] = ""
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError, match="non-empty"):
+        _dispatch_kimi._parse_kimi_output(json.dumps(payload))
+
+
+# ---------- _parse_kimi_output end-to-end through the content peel ----------
+
+def test_parse_through_stream_json_content_peel():
+    """Full kimi path: stream-json line -> peel content -> extract -> parse."""
+    review = _minimal_valid()
+    review["findings"] = [{
+        "id": "kimi-rev-001",
+        "severity": "low",
+        "summary": "minor",
+        "citation": "x:1",
+        "risk": "low",
+        "recommendation": "rec",
+    }]
+    review["goal_satisfied"] = False  # has a finding; keep coherent
+    line = json.dumps({"role": "assistant", "content": json.dumps(review)})
+    content = _dispatch_kimi._peel_assistant_content(line)
+    parsed = _dispatch_kimi._parse_kimi_output(content)
+    assert parsed["findings"][0]["id"] == "kimi-rev-001"
+
+
+# ---------- _invoke_kimi argv construction + exit-code mapping ----------
+
+class _FakeProc:
+    """Minimal Popen stand-in driven by scripted stdout bytes + returncode."""
+
+    def __init__(self, stdout_lines: list[bytes], returncode: int):
+        self._stdout_lines = list(stdout_lines)
+        self._stderr_lines: list[bytes] = []
+        self.returncode = returncode
+        self._polled = False
+        self.stdin = _FakeStdin()
+        self.stdout = _FakeStream(self._stdout_lines)
+        self.stderr = _FakeStream(self._stderr_lines)
+        self.pid = 4321
+
+    def poll(self):
+        # First poll: still "running" so the watchdog loop body executes once
+        # (lets the reader threads drain). Subsequent polls: exited.
+        if not self._polled:
+            self._polled = True
+            return None
+        return self.returncode
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def send_signal(self, sig):
+        pass
+
+    def terminate(self):
+        pass
+
+    def kill(self):
+        pass
+
+
+class _FakeStdin:
+    def write(self, _data):
+        pass
+
+    def close(self):
+        pass
+
+
+class _FakeStream:
+    def __init__(self, lines: list[bytes]):
+        self._lines = list(lines)
+
+    def readline(self):
+        if self._lines:
+            return self._lines.pop(0)
+        return b""
+
+
+def _make_factory(stdout_lines, returncode, captured_cmd, captured_env):
+    def factory(cmd, **kwargs):
+        captured_cmd.append(cmd)
+        captured_env.append(kwargs.get("env"))
+        return _FakeProc(stdout_lines, returncode)
+    return factory
+
+
+def test_invoke_kimi_builds_expected_argv():
+    review_line = json.dumps({"role": "assistant", "content": '{"ok": 1}'}).encode("utf-8")
+    captured_cmd: list = []
+    captured_env: list = []
+    factory = _make_factory([review_line], 0, captured_cmd, captured_env)
+    out = _dispatch_kimi._invoke_kimi(
+        prompt="REVIEW PROMPT BODY",
+        kimi_bin="kimi",
+        timeout_seconds=1800,
+        repo_root=Path("/tmp/repo"),
+        poll_interval=0.0,
+        popen_factory=factory,
+    )
+    assert out == json.dumps({"role": "assistant", "content": '{"ok": 1}'})
+    cmd = captured_cmd[0]
+    # Structural analog of gemini -p: print mode, stream-json single line,
+    # final-message-only, workdir, and the full prompt carried by -p.
+    # NOTE: deliberately NO --max-steps-per-turn cap. A cap of 1 made kimi die
+    # with "Max number of steps reached: 1" before it could read the embedded
+    # review packet and emit the review (caught on the first live dispatch).
+    # The proven profile config (kimi.yaml, used 20x) sets no step cap.
+    assert "--print" in cmd
+    assert "--output-format" in cmd
+    assert "stream-json" in cmd
+    assert "--final-message-only" in cmd
+    assert "--max-steps-per-turn" not in cmd
+    assert "--work-dir" in cmd
+    assert "/tmp/repo" in cmd
+    # -p carries the FULL prompt (kimi print-mode contract; unlike gemini's
+    # short -p directive + stdin prompt).
+    assert "-p" in cmd
+    assert "REVIEW PROMPT BODY" in cmd
+
+
+def test_invoke_kimi_scrubs_keys_in_subprocess_env(monkeypatch):
+    monkeypatch.setenv("KIMI_API_KEY", "sk-stray-kimi")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-stray-openai")
+    review_line = json.dumps({"role": "assistant", "content": '{"ok": 1}'}).encode("utf-8")
+    captured_cmd: list = []
+    captured_env: list = []
+    factory = _make_factory([review_line], 0, captured_cmd, captured_env)
+    _dispatch_kimi._invoke_kimi(
+        prompt="P",
+        kimi_bin="kimi",
+        timeout_seconds=1800,
+        repo_root=Path("/tmp/repo"),
+        poll_interval=0.0,
+        popen_factory=factory,
+    )
+    env = captured_env[0]
+    assert env is not None
+    assert "KIMI_API_KEY" not in env
+    assert "OPENAI_API_KEY" not in env
+
+
+def test_invoke_kimi_exit_0_returns_output():
+    review_line = json.dumps({"role": "assistant", "content": '{"ok": 1}'}).encode("utf-8")
+    factory = _make_factory([review_line], 0, [], [])
+    out = _dispatch_kimi._invoke_kimi(
+        prompt="P", kimi_bin="kimi", timeout_seconds=1800,
+        repo_root=Path("/tmp/repo"), poll_interval=0.0, popen_factory=factory,
+    )
+    assert '"role": "assistant"' in out
+
+
+def test_invoke_kimi_exit_1_hard_fail_non_retryable():
+    factory = _make_factory([b'{"role":"assistant","content":""}'], 1, [], [])
+    with pytest.raises(_dispatch_kimi.KimiInvocationError) as exc_info:
+        _dispatch_kimi._invoke_kimi(
+            prompt="P", kimi_bin="kimi", timeout_seconds=1800,
+            repo_root=Path("/tmp/repo"), poll_interval=0.0, popen_factory=factory,
+        )
+    assert exc_info.value.retryable is False
+
+
+def test_invoke_kimi_exit_75_retryable():
+    factory = _make_factory([b'{"role":"assistant","content":""}'], 75, [], [])
+    with pytest.raises(_dispatch_kimi.KimiInvocationError) as exc_info:
+        _dispatch_kimi._invoke_kimi(
+            prompt="P", kimi_bin="kimi", timeout_seconds=1800,
+            repo_root=Path("/tmp/repo"), poll_interval=0.0, popen_factory=factory,
+        )
+    assert exc_info.value.retryable is True
+
+
+def test_invoke_kimi_binary_not_found_raises():
+    def factory(cmd, **kwargs):
+        raise FileNotFoundError("no kimi")
+    with pytest.raises(_dispatch_kimi.KimiInvocationError, match="not found"):
+        _dispatch_kimi._invoke_kimi(
+            prompt="P", kimi_bin="kimi", timeout_seconds=1800,
+            repo_root=Path("/tmp/repo"), poll_interval=0.0, popen_factory=factory,
+        )
+
+
+# ---------- watchdog / stall handling ----------
+
+class _StuckProc(_FakeProc):
+    """Never exits; readers never produce a line so the watchdog must abort."""
+
+    def __init__(self):
+        super().__init__([], 0)
+
+    def poll(self):
+        return None  # always running
+
+
+def test_invoke_kimi_watchdog_aborts_on_silence():
+    # No output ever; with a controllable clock the pre-first-byte silence
+    # exceeds the timeout budget and the watchdog terminates + raises.
+    clock = {"t": 1000.0}
+
+    def time_fn():
+        return clock["t"]
+
+    def factory(cmd, **kwargs):
+        return _StuckProc()
+
+    # Advance the clock past timeout_seconds on each poll sleep.
+    def fake_sleep(_interval):
+        clock["t"] += 100.0
+
+    import time as _time
+    orig_sleep = _time.sleep
+    _time.sleep = fake_sleep
+    try:
+        with pytest.raises(_dispatch_kimi.KimiInvocationError, match="stuck|no output"):
+            _dispatch_kimi._invoke_kimi(
+                prompt="P", kimi_bin="kimi", timeout_seconds=5,
+                repo_root=Path("/tmp/repo"), poll_interval=0.01,
+                time_fn=time_fn, popen_factory=factory,
+            )
+    finally:
+        _time.sleep = orig_sleep
+
+
+def test_invoke_kimi_default_stall_silence_is_240(monkeypatch):
+    monkeypatch.delenv("CONSENSUS_MCP_STALL_SILENCE_SECONDS", raising=False)
+    assert _dispatch_kimi._DEFAULT_STALL_SILENCE_SECONDS == 240.0
+
+
+def test_invoke_kimi_honors_stall_silence_env(monkeypatch):
+    monkeypatch.setenv("CONSENSUS_MCP_STALL_SILENCE_SECONDS", "12")
+    assert _dispatch_kimi._effective_stall_silence(240.0) == 12.0
+
+
+def test_invoke_kimi_stall_silence_env_invalid_keeps_default(monkeypatch):
+    monkeypatch.setenv("CONSENSUS_MCP_STALL_SILENCE_SECONDS", "not-a-number")
+    assert _dispatch_kimi._effective_stall_silence(240.0) == 240.0
+
+
+# ---------- _invoke_kimi_with_retry ----------
+
+class _FakeInvokeFactory:
+    """Captures prompts _invoke_kimi receives + returns scripted stream-json lines."""
+
+    def __init__(self, contents: list[str]):
+        # Each entry is the `content` string; wrap it in a stream-json line.
+        self.lines = [
+            json.dumps({"role": "assistant", "content": c}) for c in contents
+        ]
+        self.prompts: list[str] = []
+
+    def __call__(self, *, prompt, **_kwargs):
+        self.prompts.append(prompt)
+        return self.lines.pop(0)
+
+
+def test_retry_succeeds_on_first_attempt(monkeypatch):
+    factory = _FakeInvokeFactory([json.dumps(_minimal_valid())])
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi", factory)
+    raw, parsed = _dispatch_kimi._invoke_kimi_with_retry(
+        prompt="initial",
+        kimi_bin="kimi",
+        timeout_seconds=1800,
+        repo_root=Path("."),
+    )
+    assert parsed["goal_satisfied"] is True
+    assert len(factory.prompts) == 1
+    assert factory.prompts[0] == "initial"
+
+
+def test_retry_succeeds_on_second_attempt(monkeypatch):
+    factory = _FakeInvokeFactory([
+        "not json at all{",                    # parse will fail
+        json.dumps(_minimal_valid()),          # valid
+    ])
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi", factory)
+    raw, parsed = _dispatch_kimi._invoke_kimi_with_retry(
+        prompt="initial",
+        kimi_bin="kimi",
+        timeout_seconds=1800,
+        repo_root=Path("."),
+    )
+    assert parsed["goal_satisfied"] is True
+    assert len(factory.prompts) == 2
+    assert "Retry" in factory.prompts[1]
+    assert "Parse error" in factory.prompts[1]
+
+
+def test_retry_fails_when_both_attempts_invalid(monkeypatch):
+    factory = _FakeInvokeFactory(["garbage 1", "garbage 2"])
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi", factory)
+    with pytest.raises(_dispatch_kimi.KimiOutputParseError):
+        _dispatch_kimi._invoke_kimi_with_retry(
+            prompt="initial",
+            kimi_bin="kimi",
+            timeout_seconds=1800,
+            repo_root=Path("."),
+        )
+    assert len(factory.prompts) == 2
+
+
+def test_retry_on_retryable_invocation_error(monkeypatch):
+    """A 75-exit (retryable) on first attempt re-invokes once; success on retry."""
+    state = {"calls": 0}
+    valid_line = json.dumps({"role": "assistant", "content": json.dumps(_minimal_valid())})
+
+    def fake_invoke(*, prompt, **_kwargs):
+        state["calls"] += 1
+        if state["calls"] == 1:
+            raise _dispatch_kimi.KimiInvocationError("429-ish", retryable=True)
+        return valid_line
+
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi", fake_invoke)
+    raw, parsed = _dispatch_kimi._invoke_kimi_with_retry(
+        prompt="initial",
+        kimi_bin="kimi",
+        timeout_seconds=1800,
+        repo_root=Path("."),
+    )
+    assert parsed["goal_satisfied"] is True
+    assert state["calls"] == 2
+
+
+def test_no_retry_on_non_retryable_invocation_error(monkeypatch):
+    """A hard-fail (exit 1, retryable=False) is NOT retried; it propagates."""
+    state = {"calls": 0}
+
+    def fake_invoke(*, prompt, **_kwargs):
+        state["calls"] += 1
+        raise _dispatch_kimi.KimiInvocationError("auth fail", retryable=False)
+
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi", fake_invoke)
+    with pytest.raises(_dispatch_kimi.KimiInvocationError):
+        _dispatch_kimi._invoke_kimi_with_retry(
+            prompt="initial",
+            kimi_bin="kimi",
+            timeout_seconds=1800,
+            repo_root=Path("."),
+        )
+    assert state["calls"] == 1
+
+
+# ---------- _resolve_kimi_bin ----------
+
+def test_resolve_returns_input_when_path_separator_present():
+    if sys.platform == "win32":
+        out = _dispatch_kimi._resolve_kimi_bin(r"C:\nonexistent\kimi.exe")
+        assert out == r"C:\nonexistent\kimi.exe"
+    else:
+        out = _dispatch_kimi._resolve_kimi_bin("/nonexistent/kimi")
+        assert out == "/nonexistent/kimi"
+
+
+def test_resolve_returns_input_when_which_misses(monkeypatch):
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _: None)
+    out = _dispatch_kimi._resolve_kimi_bin("definitely-not-kimi")
+    assert out == "definitely-not-kimi"
+
+
+# ---------- main() argparse surface (UX parity with gemini) ----------
+
+def test_main_argparse_has_same_flags_as_gemini():
+    """The kimi CLI surface MUST match gemini's flags (UX parity), with
+    --kimi-bin as the analog of --gemini-bin."""
+    import argparse
+
+    parser_holder = {}
+    real_parse = argparse.ArgumentParser.parse_args
+
+    def capture_parse(self, *a, **k):
+        parser_holder["parser"] = self
+        # Raise to short-circuit before doing real work.
+        raise SystemExit(0)
+
+    argparse.ArgumentParser.parse_args = capture_parse
+    try:
+        with pytest.raises(SystemExit):
+            _dispatch_kimi.main(["--goal-packet", "g.yaml", "--iteration-dir", "iter"])
+    finally:
+        argparse.ArgumentParser.parse_args = real_parse
+
+    parser = parser_holder["parser"]
+    opt_strings = set()
+    for action in parser._actions:
+        opt_strings.update(action.option_strings)
+    for flag in (
+        "--goal-packet", "--iteration-dir", "--reviewer-id", "--pass-id",
+        "--prompt-template", "--schema", "--mode", "--kimi-bin",
+        "--timeout-seconds", "--review-target",
+    ):
+        assert flag in opt_strings, f"missing CLI flag {flag} (UX parity)"
+
+
+# ---------- full main() pipeline -> sealed kimi-review.yaml via T6 ----------
+
+def _write_goal_packet(path: Path):
+    path.write_text(
+        "goal:\n"
+        "  summary: test goal\n"
+        "  desired_end_state: it works\n"
+        "allowed_files:\n"
+        "  - consensus_mcp/foo.py\n"
+        "acceptance_gates: []\n"
+        "authorization:\n"
+        "  scope_signature: sig-abc\n"
+        "  authorized_by: tester\n"
+        "  authorized_at_utc: 2026-05-22T00:00:00Z\n",
+        encoding="utf-8",
+    )
+
+
+def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
+    """End-to-end: mocked kimi subprocess -> sealed kimi-review.yaml via T6,
+    id_prefix kimi-rev, timing log line emitted, ok=True JSON to stdout."""
+    repo_root = ROOT
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
+
+    iter_name = "iteration-kimi-test-0001"
+    iter_dir = repo_root / "consensus-state" / "archive" / "scratch-kimi-test" / iter_name
+    iter_dir.mkdir(parents=True, exist_ok=True)
+    rel_iter_dir = iter_dir.relative_to(repo_root)
+
+    goal_packet = iter_dir / "goal_packet.yaml"
+    _write_goal_packet(goal_packet)
+    rel_goal = goal_packet.relative_to(repo_root)
+
+    review = _minimal_valid()
+    stream_line = json.dumps({"role": "assistant", "content": json.dumps(review)})
+
+    def fake_invoke_with_retry(**kwargs):
+        return stream_line, _dispatch_kimi._parse_kimi_output(
+            _dispatch_kimi._peel_assistant_content(stream_line)
+        )
+
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
+    monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
+
+    rc = _dispatch_kimi.main([
+        "--goal-packet", str(rel_goal),
+        "--iteration-dir", str(rel_iter_dir),
+    ])
+    captured = capsys.readouterr()
+    assert rc == 0, f"main returned {rc}; stdout={captured.out}"
+
+    sealed = iter_dir / "kimi-review.yaml"
+    assert sealed.exists(), "kimi-review.yaml not sealed to iteration dir"
+
+    import yaml as _yaml
+    data = _yaml.safe_load(sealed.read_text(encoding="utf-8"))
+    assert data["reviewer_id"].startswith("kimi-")
+    assert data["dispatch_provenance"]["adapter"] == "kimi"
+
+    # ok=True JSON line on stdout (parity with gemini/codex).
+    out_lines = [l for l in captured.out.splitlines() if l.strip().startswith("{")]
+    assert out_lines, f"no JSON line on stdout: {captured.out!r}"
+    result = json.loads(out_lines[-1])
+    assert result["ok"] is True
+
+    # Timing line emitted (parity: [kimi-timing] landed in Ns ...).
+    assert "[kimi-timing]" in captured.out or "[kimi-timing]" in captured.err
+
+    # Cleanup scratch dir to avoid polluting the repo tree.
+    import shutil as _shutil
+    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-test",
+                   ignore_errors=True)
+
+
+# ---------- real-kimi smoke (env-gated; never runs in CI) ----------
+
+@pytest.mark.skipif(
+    os.environ.get("CONSENSUS_MCP_RUN_REAL_KIMI_SMOKE") != "1",
+    reason="real-kimi smoke gated by CONSENSUS_MCP_RUN_REAL_KIMI_SMOKE=1",
+)
+def test_real_kimi_smoke():  # pragma: no cover
+    # Intentionally minimal: presence proves the gate exists. A full smoke
+    # run would invoke the real binary, which we never do in unit tests.
+    assert os.environ.get("CONSENSUS_MCP_RUN_REAL_KIMI_SMOKE") == "1"
