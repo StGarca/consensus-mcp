@@ -203,6 +203,76 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
     return statuses
 
 
+# --- v1.21 (converged-plan E): per-project Claude Code subagent install ---
+#
+# Two subagent definitions are written into the PROJECT's .claude/agents/ during
+# per-project bootstrap (alongside .mcp.json / config), so they version with the
+# repo and drive the per-project consensus config:
+#
+#   - consensus-orchestrator.md       (Agent + consensus MCP tools + Read/Bash/Grep/Glob)
+#   - consensus-host-peer-reviewer.md (read-only: Read/Grep/Glob/Bash — NO Agent)
+#
+# Mechanics mirror _install_claude_extensions: byte-identical => unchanged;
+# divergent => SKIP unless force; missing => write. Honored by --dry-run and
+# opt-out via --no-agents. PROJECT-ONLY — not part of the global
+# --install-claude-code path.
+
+_PROJECT_AGENT_FILES = (
+    "consensus-orchestrator.md",
+    "consensus-host-peer-reviewer.md",
+)
+
+
+def _agents_source_root() -> Path:
+    """In-package source directory for the shipped subagent definitions."""
+    return _claude_extensions_source_root() / "agents"
+
+
+def _install_project_agents(repo_root: Path, force: bool) -> list[str]:
+    """Copy the shipped subagent definitions into <repo_root>/.claude/agents/.
+
+    Non-destructive (mirrors _install_claude_extensions force semantics):
+      - destination byte-identical to source => no-op ("unchanged")
+      - destination diverges AND force=False => skip ("SKIP ... --force")
+      - force=True => overwrite divergent destinations
+      - missing destination => write fresh
+
+    Returns human-readable status lines (also printed by the caller).
+    """
+    source_root = _agents_source_root()
+    if not source_root.is_dir():
+        return [f"WARN: agents source missing at {source_root}; "
+                f"reinstall consensus-mcp to repair"]
+
+    dest_dir = repo_root / ".claude" / "agents"
+    statuses: list[str] = []
+    for fname in _PROJECT_AGENT_FILES:
+        src = source_root / fname
+        dst = dest_dir / fname
+        if not src.exists():
+            statuses.append(f"WARN: source agent {src} missing; skipped")
+            continue
+
+        src_text = src.read_text(encoding="utf-8")
+        if dst.exists():
+            existing_text = dst.read_text(encoding="utf-8")
+            if existing_text == src_text:
+                statuses.append(f"unchanged: {dst}")
+                continue
+            if not force:
+                statuses.append(
+                    f"SKIP: {dst} diverges from shipped content; pass --force to overwrite"
+                )
+                continue
+            # force=True: fall through to write.
+
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(src_text, encoding="utf-8")
+        statuses.append(f"wrote: {dst}")
+
+    return statuses
+
+
 # --- v1.21 (converged-plan B5): settings.json hook ACTIVATION merge ---
 #
 # Background (the bug this fixes): the installer copied a `hooks.json` manifest
@@ -1362,6 +1432,12 @@ def cmd_init(args) -> int:
             print(f"would write .mcp.json at {mcp_path} (consensus-mcp registered)")
         else:
             print(".mcp.json write skipped (--no-mcp-json)")
+        if not args.no_agents:
+            agents_dir = repo_root / ".claude" / "agents"
+            for fname in _PROJECT_AGENT_FILES:
+                print(f"would write subagent {agents_dir / fname}")
+        else:
+            print("subagent install skipped (--no-agents)")
         if not args.no_instructions:
             print("would seed per-AI instruction files (managed block)")
         else:
@@ -1437,6 +1513,19 @@ def cmd_init(args) -> int:
     else:
         print(".mcp.json write skipped (--no-mcp-json)")
 
+    # v1.21 (converged-plan E): write the per-project Claude Code subagents into
+    # .claude/agents/. Non-destructive (skip-if-exists unless --force); opt-out
+    # via --no-agents. Best-effort: a copy failure must not abort a successful
+    # config write.
+    if not args.no_agents:
+        try:
+            for line in _install_project_agents(repo_root, force=args.force):
+                print(line)
+        except OSError as exc:
+            print(f"WARN: subagent install skipped: {exc}", file=sys.stderr)
+    else:
+        print("subagent install skipped (--no-agents)")
+
     # iter-0040: when invoked from inside a Claude Code session, print
     # contextual restart guidance so the user knows what to do next.
     if getattr(args, "from_claude_code", False):
@@ -1486,6 +1575,12 @@ def main(argv: list[str] | None = None) -> int:
     # iter-0031: .mcp.json bootstrap flags (per iter-0030 converged plan).
     parser.add_argument("--no-mcp-json", action="store_true",
                         help="skip writing .mcp.json (default: auto-write)")
+    # v1.21 (converged-plan E): per-project Claude Code subagent install.
+    parser.add_argument("--no-agents", action="store_true",
+                        help=("skip writing the consensus-orchestrator + "
+                              "consensus-host-peer-reviewer subagent files into "
+                              ".claude/agents/ (default: auto-write; "
+                              "non-destructive skip-if-exists unless --force)"))
     parser.add_argument("--mcp-command", default=None,
                         help=("override the command written into .mcp.json. "
                               "Whitespace-split; first token = command, rest = args. "

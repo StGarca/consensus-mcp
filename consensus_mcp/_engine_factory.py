@@ -186,6 +186,14 @@ def build_adapters(
                     "family": profile.get("family"),
                     "role": profile.get("role"),
                 }
+                # v1.21 (converged-plan D): a profile / adapter_config may
+                # declare `runtime_isolation: claude_code_subagent` when the
+                # host_peer review is dispatched as a real Claude Code subagent.
+                # Thread it (profile value wins if set) so the adapter can stamp
+                # the additive isolation provenance; absent => no isolation
+                # field (backward-compat inline path).
+                if profile.get("runtime_isolation"):
+                    hp_config["runtime_isolation"] = profile.get("runtime_isolation")
                 adapters[key] = HostPeerAdapter(
                     adapter_config=hp_config,
                     host_peer_review_callback=host_peer_review_callback,

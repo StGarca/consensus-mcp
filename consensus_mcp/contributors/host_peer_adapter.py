@@ -64,6 +64,17 @@ class HostPeerAdapter(ContributorAdapter):
         # `family`). `role` defaults to swe_reviewer.
         self.family = self.adapter_config.get("family")
         self.role = self.adapter_config.get("role") or _ROLE_SWE_REVIEWER
+        # v1.21 (converged-plan D): when the review was dispatched as a REAL
+        # Claude Code subagent, the host runtime gives the reviewer an isolated
+        # context window — strengthening fresh_context from a runtime CONTRACT
+        # to a structural guarantee. Recorded as an ADDITIVE provenance field
+        # (not a `method` rename) so no existing consumer of `method` breaks.
+        # PROVISIONAL per codex's falsifiability point: consensus-mcp cannot
+        # mechanically verify memory isolation, so this is a host-runtime
+        # attestation, falsifiable only by an external transcript showing
+        # leaked context. Absent by default (backward-compat: callback-driven
+        # inline dispatch stamps no isolation field).
+        self.runtime_isolation = self.adapter_config.get("runtime_isolation")
 
     def dispatch(self, packet: DispatchPacket) -> SealedArtifact:
         if self.host_peer_review_callback is None:
@@ -116,6 +127,11 @@ class HostPeerAdapter(ContributorAdapter):
             "fresh_context": True,
             "no_peer_review_visible_at_dispatch": True,
         }
+        # v1.21 additive: stamp the (PROVISIONAL) subagent-isolation claim only
+        # when the host indicated the review ran as a real Claude Code subagent.
+        # `method` stays host_peer_callback for backward-compat.
+        if self.runtime_isolation:
+            independence_attestation["runtime_isolation"] = self.runtime_isolation
         dispatch_provenance = {
             "adapter": "host_peer",
             "family": self.family,

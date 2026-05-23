@@ -34,6 +34,7 @@ import yaml
 
 from consensus_mcp import config as cfg
 from consensus_mcp import _engine_factory as factory
+from consensus_mcp import _contributor_profiles as profiles
 from consensus_mcp.contributors.base import DispatchPacket
 
 
@@ -88,6 +89,23 @@ SCHEMA = {
                     "(list)."
                 ),
             },
+            "host_peer_review_yaml": {
+                "type": ["string", "null"],
+                "description": (
+                    "YAML string for the same-family blind SWE-reviewer's "
+                    "(host_peer) contributor artifact, dispatched by the host "
+                    "(e.g. consensus-host-peer-reviewer subagent) and handed "
+                    "back here. SUPPLEMENTARY by construction: the adapter "
+                    "stamps gate_eligible=false / weight=supplementary "
+                    "authoritatively, so nothing supplied here can make a "
+                    "host_peer close the cross-family gate. When an enabled "
+                    "host_peer profile has no host_peer_review_yaml the "
+                    "iteration GRACEFULLY soft-skips it (it is not load-bearing) "
+                    "and reports it under supplementary_skipped. Must validate "
+                    "as a contributor-artifact YAML: top-level fields findings "
+                    "(list), goal_satisfied (bool), blocking_objections (list)."
+                ),
+            },
             "repo_root": {
                 "type": ["string", "null"],
                 "description": (
@@ -113,6 +131,7 @@ SCHEMA = {
             "blocking_objection_ids": {"type": "array"},
             "final_artifact_path": {"type": ["string", "null"]},
             "rationale": {"type": ["string", "null"]},
+            "supplementary_skipped": {"type": "array"},
             "error": {"type": ["string", "null"]},
             "error_type": {"type": ["string", "null"]},
         },
@@ -199,6 +218,85 @@ def _build_claude_callback(claude_proposal_yaml: str | None):
     return _callback
 
 
+def _build_host_peer_callback(host_peer_review_yaml: str | None):
+    """Return a host_peer_review_callback that echoes the supplied review YAML.
+
+    Mirrors `_build_claude_callback` exactly: the YAML is parsed once, validated
+    to a mapping carrying findings (list) / goal_satisfied (bool) /
+    blocking_objections (list), and a deepcopy is returned on each call so
+    multi-round mutations don't leak. Returns None when no YAML is supplied so
+    the engine factory gracefully omits any enabled host_peer profile (it is
+    SUPPLEMENTARY, not load-bearing).
+
+    NOTE: nothing in this YAML can make a host_peer gate-eligible — the
+    HostPeerAdapter stamps the canonical gate_eligible=false / weight=
+    supplementary provenance AFTER spreading the callback output, so any
+    `gate_eligible: true` / `weight: independent` claim here is overwritten.
+    """
+    if host_peer_review_yaml is None:
+        return None
+
+    try:
+        parsed = yaml.safe_load(host_peer_review_yaml)
+    except yaml.YAMLError as exc:
+        raise ValueError(
+            f"host_peer_review_yaml is not valid YAML: {exc}"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"host_peer_review_yaml must parse to a mapping; got "
+            f"{type(parsed).__name__}"
+        )
+    for required in ("findings", "goal_satisfied", "blocking_objections"):
+        if required not in parsed:
+            raise ValueError(
+                f"host_peer_review_yaml missing required field {required!r}"
+            )
+    if not isinstance(parsed["findings"], list):
+        raise ValueError(
+            f"host_peer_review_yaml.findings must be a list; got "
+            f"{type(parsed['findings']).__name__}"
+        )
+    if not isinstance(parsed["blocking_objections"], list):
+        raise ValueError(
+            f"host_peer_review_yaml.blocking_objections must be a list; got "
+            f"{type(parsed['blocking_objections']).__name__}"
+        )
+    if not isinstance(parsed["goal_satisfied"], bool):
+        raise ValueError(
+            f"host_peer_review_yaml.goal_satisfied must be a bool; got "
+            f"{type(parsed['goal_satisfied']).__name__}"
+        )
+
+    def _callback(packet: DispatchPacket) -> dict:
+        return copy.deepcopy(parsed)
+
+    return _callback
+
+
+def _enabled_host_peers(loaded_config: dict) -> list[str]:
+    """Return the enabled contributor keys whose merged profile is kind:host_peer.
+
+    These are SUPPLEMENTARY same-family reviewers. When no host_peer_review_yaml
+    is supplied the tool prunes them from contributors.enabled before building
+    the engine (graceful soft-skip) and reports them under supplementary_skipped.
+    """
+    contributors = loaded_config.get("contributors", {}) or {}
+    enabled = contributors.get("enabled", []) or []
+    try:
+        merged = profiles.merge_profiles(
+            profiles.load_builtin_profiles(),
+            contributors.get("profiles") or {},
+        )
+    except Exception:  # noqa: BLE001 — profile IO failure must not break the run
+        return []
+    return [
+        name for name in enabled
+        if profiles.resolve_kind(name, merged) == profiles.KIND_HOST_PEER
+    ]
+
+
 def _resolve_path(p: str | Path, repo_root: Path) -> Path:
     """Resolve `p` against `repo_root` when relative (codex pass-1 rev-002).
 
@@ -218,9 +316,11 @@ def handle(
     target_path: str,
     config_path: str | None = None,
     claude_proposal_yaml: str | None = None,
+    host_peer_review_yaml: str | None = None,
     repo_root: str | None = None,
 ) -> dict:
     """Run one iteration end-to-end. Returns structured outcome dict."""
+    supplementary_skipped: list[str] = []
     try:
         rr = _resolve_repo_root(repo_root)
         iter_dir = _resolve_path(iteration_dir, rr)
@@ -260,11 +360,33 @@ def handle(
             }
 
         claude_callback = _build_claude_callback(claude_proposal_yaml)
+        # Validates host_peer_review_yaml (malformed -> ValueError -> ok:false).
+        host_peer_callback = _build_host_peer_callback(host_peer_review_yaml)
+
+        # GRACEFUL SOFT-SKIP (converged-plan B): when a host_peer profile is
+        # enabled but no host_peer_review_yaml was supplied, the factory would
+        # build NO adapter for it and the engine would then fail-closed on the
+        # missing adapter. host_peer is SUPPLEMENTARY, so instead prune those
+        # enabled keys before building the engine and surface them in the result
+        # as an informational note. (When the yaml IS supplied, the callback is
+        # wired, the adapter is built, and nothing is pruned.)
+        if host_peer_callback is None:
+            host_peers = _enabled_host_peers(loaded_config)
+            if host_peers:
+                supplementary_skipped = list(host_peers)
+                pruned = copy.deepcopy(loaded_config)
+                contributors = pruned.setdefault("contributors", {})
+                contributors["enabled"] = [
+                    c for c in contributors.get("enabled", [])
+                    if c not in host_peers
+                ]
+                loaded_config = pruned
 
         engine = factory.build_engine(
             loaded_config,
             repo_root=rr,
             claude_artifact_callback=claude_callback,
+            host_peer_review_callback=host_peer_callback,
         )
 
         outcome = engine.run_iteration(iter_dir, gp_path, tgt_path)
@@ -302,6 +424,7 @@ def handle(
             str(outcome.final_artifact_path) if outcome.final_artifact_path else None
         ),
         "rationale": (conv.rationale if conv else None),
+        "supplementary_skipped": supplementary_skipped,
         "error": outcome.error,
         "error_type": None,
     }

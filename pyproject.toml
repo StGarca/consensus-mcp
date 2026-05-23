@@ -64,4 +64,9 @@ consensus_mcp = [
   "claude_extensions/NOTICE",
   "claude_extensions/VENDORED.md",
   "claude_extensions/hooks/*.py",
+  # v1.21 (AGENTS-INIT): per-project Claude Code subagent definitions, copied
+  # into a project's .claude/agents/ by `consensus init`. Without this glob a
+  # wheel install ships them missing and the per-project bootstrap silently
+  # skips the subagents.
+  "claude_extensions/agents/*.md",
 ]
