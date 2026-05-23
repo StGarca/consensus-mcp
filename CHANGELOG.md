@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.28.1 - 2026-05-23
+
+**Non-interactive init no longer crashes under Claude Code / CI / pipes.** Running
+`consensus-init --from-claude-code` (or any bare `consensus init`) without
+`--non-interactive`/`--accept-defaults` from a non-TTY stdin drove the interactive
+wizard straight into an `input()` EOF: the contributor multi-select aborted with
+"aborted by user", and — once contributor input was piped — the host-peer follow-up
+prompt raised an **uncaught `EOFError` traceback**. The `--from-claude-code` flag, of
+all paths, signals "I'm being called by Claude Code" (which has no interactive
+terminal), so it should never have prompted.
+
+### Fixed
+- **The wizard now detects a non-TTY stdin and falls back to the non-interactive
+  path** (auto-detected reviewers + defaults) instead of crashing/aborting, printing
+  a guidance note on how to customize (explicit flags, or `consensus init
+  --reconfigure` in a real terminal). New `_stdin_is_interactive()` gate in
+  `cmd_init`; `--from-claude-code` gets a Claude-Code-specific note.
+- **`_prompt_host_peer_followup` now catches `EOFError` → `KeyboardInterrupt`**,
+  matching its sibling `_select_contributors_interactive` — a Ctrl+D mid-session is a
+  clean exit 1, never an uncaught traceback.
+
+### Tests
+- `test_init_wizard_non_tty.py` (new): `_stdin_is_interactive` detection, host-peer
+  EOF handling, `cmd_init` interactive/non-interactive gating, and end-to-end
+  `--from-claude-code` + bare non-TTY init.
+- `test_init_wizard.py`: the 5 interactive tests now force the TTY precondition the
+  gate makes explicit (no behavior change to what they assert).
+
 ## 1.28.0 - 2026-05-23
 
 **CI green on Windows + py3.12 (the matrix was red on `push`, masked by a passing
