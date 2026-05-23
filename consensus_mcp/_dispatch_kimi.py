@@ -80,6 +80,7 @@ seal fail). JSON to stdout on success.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -311,36 +312,61 @@ def _cleanup_disposable_workdir(workdir: Path | None) -> None:
         pass
 
 
-def _repo_status_snapshot(repo_root: Path) -> set[str]:
-    """Return the set of `git status --short` lines for the REAL repo.
+def _repo_status_snapshot(repo_root: Path) -> dict[str, str]:
+    """Return {path: content-signature} for every dirty/untracked path in the REAL repo.
 
-    Used to BRACKET a kimi dispatch (snapshot before + after): only lines present
-    AFTER but not BEFORE are changes kimi INTRODUCED. The real repo is routinely
-    already dirty (in-flight work), so a plain "dirty after" test false-positives
-    (re-audit codex-rev-002) — diffing snapshots isolates kimi's own mutations.
+    Used to BRACKET a kimi dispatch (snapshot before + after): a path whose signature
+    APPEARS, DISAPPEARS, or CHANGES between the two snapshots is a mutation kimi
+    introduced. Hashing CONTENT (not just `git status` lines) is load-bearing —
+    re-audit codex-rev-001: a status line like `M file` is identical before+after even
+    if kimi rewrites that already-dirty file's content, so a line-set diff MISSES it;
+    a content hash does not.
 
-    Fail-SAFE on inability to check: if git is missing, the path is not a git
-    work-tree, or the command errors/times out, return an EMPTY set. With the
-    `before` snapshot also empty, the after-minus-before diff is empty (do not
-    block) — the temp-workdir isolation is the primary control; this is a
-    backstop, not the only control.
+    Fail-SAFE on inability to check: git missing / not a work-tree / command error ->
+    return {} (empty before+after => empty diff => do not block; the temp-workdir
+    isolation is the primary control, this is a backstop).
+
+    NOTE: the snapshot reflects the WHOLE working tree, so a CONCURRENT orchestrator
+    edit during the dispatch also registers as a change (false positive). Do not edit
+    the repo while a kimi dispatch is in flight (see the kimi-integrity-concurrency
+    note); normal consensus usage dispatches against a quiescent repo.
     """
     git_bin = shutil.which("git")
     if git_bin is None or not (repo_root / ".git").exists():
-        return set()
+        return {}
     try:
         result = subprocess.run(
-            [git_bin, "status", "--short"],
+            [git_bin, "status", "--porcelain"],
             cwd=str(repo_root),
             capture_output=True,
             text=True,
             timeout=60,
         )
     except (subprocess.TimeoutExpired, OSError):
-        return set()
+        return {}
     if result.returncode != 0:
-        return set()
-    return {ln for ln in result.stdout.splitlines() if ln.strip()}
+        return {}
+    snap: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        code, path = line[:2], line[3:]
+        if " -> " in path:  # rename/copy: signature the destination path
+            path = path.split(" -> ", 1)[1]
+        path = path.strip().strip('"')
+        if not path:
+            continue
+        full = repo_root / path
+        try:
+            if full.is_file() and not full.is_symlink():
+                snap[path] = hashlib.sha256(full.read_bytes()).hexdigest()
+            else:
+                # deleted / symlink / dir / special: the status code is the signature
+                # (a delete or type change still differs from the before snapshot).
+                snap[path] = "code:" + code
+        except OSError:
+            snap[path] = "code:" + code
+    return snap
 
 
 def _effective_stall_silence(default: float = _DEFAULT_STALL_SILENCE_SECONDS) -> float:
@@ -1337,22 +1363,28 @@ def main(argv: list[str] | None = None) -> int:
         # temp-copy isolation — REJECT + log. Pre-existing dirt is ignored so a
         # normally-dirty repo does not false-positive (re-audit codex-rev-002).
         status_after = _repo_status_snapshot(repo_root)
-        new_changes = status_after - status_before
-        if new_changes:
-            new_raw = "\n".join(sorted(new_changes))
+        # A path is a kimi mutation if its content-signature appeared, disappeared, or
+        # CHANGED vs the before snapshot (catches new files, deletes, AND rewrites of
+        # already-dirty files — re-audit codex-rev-001).
+        changed = sorted(
+            p for p in set(status_before) | set(status_after)
+            if status_before.get(p) != status_after.get(p)
+        )
+        if changed:
+            new_raw = "\n".join(changed)
             _log_dispatch(log_path, {
                 "event": "dispatch_integrity_violation",
                 "iteration_id": iteration_id,
                 "reviewer_id": reviewer_id,
                 "pass_id": pass_id,
-                "git_status_new": new_raw[:4000],
+                "changed_paths": new_raw[:4000],
                 "adapter": "kimi",
             })
             raise KimiIntegrityError(
                 "post-dispatch integrity check FAILED: the kimi dispatch "
-                "INTRODUCED new changes in the real repo (vs the pre-dispatch "
-                "snapshot) despite the disposable temp work-dir. Review output "
-                f"REJECTED. New `git status --short` entries:\n{new_raw[:2000]}"
+                "INTRODUCED, DELETED, or MODIFIED files in the real repo (vs the "
+                "pre-dispatch content snapshot) despite the disposable temp work-dir. "
+                f"Review output REJECTED. Changed paths:\n{new_raw[:2000]}"
             )
 
         proposal_schema_sha = None

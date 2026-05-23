@@ -764,7 +764,7 @@ def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir",
                         lambda wd: cleanup_calls.append(wd))
     # Integrity check: before/after snapshots IDENTICAL (no new changes) -> seal proceeds.
-    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: set())
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: {})
 
     monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
     monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
@@ -844,7 +844,7 @@ def test_main_integrity_check_rejects_when_real_repo_dirty(monkeypatch, capsys):
     # Simulate: before snapshot CLEAN, after snapshot has a NEW entry (kimi mutated
     # the real repo). The two bracketing calls return successive snapshots, so the
     # after-minus-before diff is non-empty -> integrity violation.
-    _snaps = iter([set(), {" M consensus_mcp/some_real_file.py"}])
+    _snaps = iter([{}, {"consensus_mcp/some_real_file.py": "mutated-hash"}])
     monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot",
                         lambda _root: next(_snaps))
 
@@ -973,8 +973,11 @@ def test_cleanup_disposable_workdir_tolerates_none():
 
 # ---------- _repo_status_snapshot (post-dispatch integrity probe) ----------
 
-def test_repo_status_snapshot_returns_line_set(monkeypatch, tmp_path):
+def test_repo_status_snapshot_hashes_dirty_files(monkeypatch, tmp_path):
     (tmp_path / ".git").mkdir()
+    (tmp_path / "consensus_mcp").mkdir()
+    (tmp_path / "consensus_mcp" / "foo.py").write_text("alpha", encoding="utf-8")
+    (tmp_path / "bar.py").write_text("beta", encoding="utf-8")
     monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
 
     class _Result:
@@ -983,7 +986,31 @@ def test_repo_status_snapshot_returns_line_set(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
     snap = _dispatch_kimi._repo_status_snapshot(tmp_path)
-    assert snap == {" M consensus_mcp/foo.py", "?? bar.py"}
+    # dict {path: content-hash} — content is hashed so mutations to already-dirty
+    # files are detectable (re-audit codex-rev-001).
+    assert set(snap) == {"consensus_mcp/foo.py", "bar.py"}
+    import hashlib as _h
+    assert snap["bar.py"] == _h.sha256(b"beta").hexdigest()
+
+
+def test_repo_status_snapshot_detects_mutation_to_already_dirty_file(monkeypatch, tmp_path):
+    # codex-rev-001: a file already dirty BEFORE dispatch, rewritten DURING dispatch,
+    # keeps the same `git status` line but a different content hash -> detected.
+    (tmp_path / ".git").mkdir()
+    f = tmp_path / "already_dirty.py"
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
+
+    class _Result:
+        returncode = 0
+        stdout = " M already_dirty.py\n"
+
+    monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
+    f.write_text("before", encoding="utf-8")
+    before = _dispatch_kimi._repo_status_snapshot(tmp_path)
+    f.write_text("AFTER (mutated)", encoding="utf-8")  # same status line, new content
+    after = _dispatch_kimi._repo_status_snapshot(tmp_path)
+    changed = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
+    assert changed == {"already_dirty.py"}
 
 
 def test_repo_status_snapshot_empty_when_clean(monkeypatch, tmp_path):
@@ -995,25 +1022,27 @@ def test_repo_status_snapshot_empty_when_clean(monkeypatch, tmp_path):
         stdout = "\n"
 
     monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
-    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == set()
+    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == {}
 
 
 def test_repo_status_snapshot_failsafe_empty_when_no_git(monkeypatch, tmp_path):
-    # No git binary / not a git tree -> cannot check -> EMPTY set (with the before
-    # snapshot also empty, the diff is empty -> do not block; backstop only).
+    # No git binary / not a git tree -> cannot check -> EMPTY dict (before+after both
+    # empty -> empty diff -> do not block; backstop only).
     monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: None)
-    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == set()
+    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == {}
 
 
 def test_integrity_diff_ignores_preexisting_dirt():
-    # re-audit codex-rev-002: a pre-existing dirty entry present in BOTH snapshots
-    # is NOT a kimi mutation -> after-minus-before is empty -> no violation.
-    before = {" M preexisting_wip.py", "?? other_wip.py"}
-    after = set(before)
-    assert (after - before) == set()
-    # A genuinely new entry IS flagged.
-    after_mutated = before | {" M kimi_touched.py"}
-    assert (after_mutated - before) == {" M kimi_touched.py"}
+    # A pre-existing dirty path with the SAME content-hash in both snapshots is NOT a
+    # kimi mutation (re-audit codex-rev-002: no false-positive on a normally-dirty repo).
+    before = {"preexisting_wip.py": "h1", "other_wip.py": "h2"}
+    after = dict(before)
+    changed = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
+    assert changed == set()
+    # New path, deleted path, and a content change to an already-dirty path are ALL flagged.
+    after2 = {"preexisting_wip.py": "h1_CHANGED", "kimi_new.py": "h3"}  # other_wip deleted
+    changed2 = {p for p in set(before) | set(after2) if before.get(p) != after2.get(p)}
+    assert changed2 == {"preexisting_wip.py", "kimi_new.py", "other_wip.py"}
 
 
 # ---------- _strip_symlinks (re-audit: temp-copy sandbox escape) ----------
