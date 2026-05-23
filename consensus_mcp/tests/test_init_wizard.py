@@ -497,6 +497,9 @@ def test_interactive_default_path_prompts(tmp_path, monkeypatch, capsys):
 def test_interactive_eof_returns_user_abort(tmp_path, monkeypatch, capsys):
     """codex-rev-001 / gemini-rev-001: Ctrl+D / EOF must yield exit code 1."""
     monkeypatch.chdir(tmp_path)
+    # v1.28.1: the interactive path now requires a real TTY; force it so this
+    # test exercises the interactive EOF->abort behavior under pytest's non-TTY.
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
     def _eof(prompt=""):
         raise EOFError
     monkeypatch.setattr(builtins, "input", _eof)
@@ -509,6 +512,8 @@ def test_interactive_eof_returns_user_abort(tmp_path, monkeypatch, capsys):
 def test_interactive_keyboard_interrupt_returns_user_abort(tmp_path, monkeypatch, capsys):
     """Ctrl+C during prompt must yield exit code 1."""
     monkeypatch.chdir(tmp_path)
+    # v1.28.1: interactive path now requires a real TTY; force it for this test.
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
     def _kbi(prompt=""):
         raise KeyboardInterrupt
     monkeypatch.setattr(builtins, "input", _kbi)
@@ -525,6 +530,8 @@ def test_interactive_user_overrides_workflow(tmp_path, monkeypatch):
     machines/CI, and the first answer is a numeric selection (display order:
     1=claude,2=codex,3=gemini,4=kimi → "1,2,3" picks claude,codex,gemini)."""
     monkeypatch.chdir(tmp_path)
+    # v1.28.1: interactive path now requires a real TTY; force it for this test.
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     monkeypatch.setattr(builtins, "input", _stub_input([
         "1,2,3",                         # contributors (claude,codex,gemini)
@@ -548,6 +555,8 @@ def test_interactive_prompts_all_nine_dimensions(tmp_path, monkeypatch, capsys):
     """codex-rev-002: every configurability dimension must be prompted in
     interactive mode (not just contributors/workflow/convergence)."""
     monkeypatch.chdir(tmp_path)
+    # v1.28.1: interactive path now requires a real TTY; force it for this test.
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     monkeypatch.setattr(builtins, "input", _stub_input([
         "1,2,3",                         # contributors (claude,codex,gemini)
@@ -574,6 +583,8 @@ def test_interactive_defaults_reflect_cli_overrides(tmp_path, monkeypatch, capsy
     """codex-rev-003: when --workflow advisory is passed, convergence prompt
     default must be 'advisory', not the count-derived default."""
     monkeypatch.chdir(tmp_path)
+    # v1.28.1: interactive path now requires a real TTY; force it for this test.
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     captured_prompts: list[str] = []
     # First answer is a numeric multi-select (1,2,3 → claude,codex,gemini) now

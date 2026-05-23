@@ -1086,13 +1086,19 @@ def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes
     )
     if len(candidates) == 1:
         default = "y" if default_yes else "n"
-        ans = (input(f"Add it? [{'Y/n' if default_yes else 'y/N'}]: ").strip().lower() or default)
+        try:
+            ans = (input(f"Add it? [{'Y/n' if default_yes else 'y/N'}]: ").strip().lower() or default)
+        except EOFError as exc:
+            raise KeyboardInterrupt from exc
         return candidates[0] if ans.startswith("y") else None
 
     print("Multiple same-model reviewers available (choose one or none):")
     for i, hp in enumerate(candidates, start=1):
         print(f"  {i}. {hp}")
-    raw = input("Number to add [default: none]: ").strip()
+    try:
+        raw = input("Number to add [default: none]: ").strip()
+    except EOFError as exc:
+        raise KeyboardInterrupt from exc
     if raw.isdigit() and 1 <= int(raw) <= len(candidates):
         return candidates[int(raw) - 1]
     return None
@@ -1593,6 +1599,24 @@ def update_gitignore(repo_root: Path) -> bool:
     return True
 
 
+def _stdin_is_interactive() -> bool:
+    """True only when stdin is a real interactive TTY.
+
+    Claude Code's Bash tool, CI runners, and pipes all present a non-TTY stdin;
+    there, the wizard's input() prompts hit EOF on the first read (an uncaught
+    EOFError crash, or a premature "aborted by user"). Callers downgrade to the
+    non-interactive path when this is False. Defensive: a closed / detached
+    stdin can make isatty() raise (ValueError/OSError) or stdin can be None.
+    """
+    stream = getattr(sys, "stdin", None)
+    if stream is None:
+        return False
+    try:
+        return bool(stream.isatty())
+    except (ValueError, OSError):
+        return False
+
+
 def cmd_init(args) -> int:
     """Implement the `consensus init` command."""
     repo_root = _detect_repo_root()
@@ -1715,6 +1739,28 @@ def cmd_init(args) -> int:
         return 4
 
     interactive = not (args.non_interactive or args.accept_defaults)
+    if interactive and not _stdin_is_interactive():
+        # No interactive terminal (Claude Code's Bash tool, CI, a pipe): the
+        # input() prompts would hit EOF on the first read and crash / abort.
+        # Fall back to the non-interactive path, which auto-detects available
+        # reviewers and applies defaults; any explicit flags still take effect.
+        interactive = False
+        if getattr(args, "from_claude_code", False):
+            print(
+                "note: no interactive terminal detected (running under Claude "
+                "Code); initializing with auto-detected reviewers + defaults. To "
+                "customize, re-run with flags (e.g. --contributors, --workflow) "
+                "or run `consensus init --reconfigure` in a terminal.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "note: stdin is not a TTY; initializing non-interactively with "
+                "auto-detected reviewers + defaults. Pass --accept-defaults to "
+                "silence this note, or explicit flags (--contributors, "
+                "--workflow, ...) to customize.",
+                file=sys.stderr,
+            )
 
     try:
         new_config = build_config_from_flags(args, repo_root, interactive=interactive)
