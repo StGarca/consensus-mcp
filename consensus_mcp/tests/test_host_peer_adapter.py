@@ -115,6 +115,50 @@ def test_host_peer_seals_artifact_with_supplementary_provenance(tmp_path):
     assert sealed.sealed_path.exists()
 
 
+def test_host_peer_runtime_isolation_absent_by_default(tmp_path):
+    """Backward-compat: with no subagent flag, method stays host_peer_callback
+    and NO runtime_isolation field is stamped (existing consumers unchanged)."""
+    iter_dir = tmp_path / "active" / "iteration-host-peer-noiso"
+    packet = _make_packet(iter_dir)
+    adapter = HostPeerAdapter(
+        adapter_config={"family": "claude", "role": "swe_reviewer"},
+        host_peer_review_callback=_clean_review_callback,
+    )
+    with patch("consensus_mcp.tools.review_write_and_seal.handle",
+               side_effect=_fake_t6_factory(tmp_path)):
+        sealed = adapter.dispatch(packet)
+    att = sealed.parsed["independence_attestation"]
+    assert att["method"] == "host_peer_callback"
+    assert "runtime_isolation" not in att
+
+
+def test_host_peer_runtime_isolation_subagent_flag(tmp_path):
+    """v1.21: when the review was dispatched as a Claude Code subagent, an
+    ADDITIVE runtime_isolation: claude_code_subagent field is recorded in the
+    independence_attestation + dispatch_provenance. method stays host_peer_callback."""
+    iter_dir = tmp_path / "active" / "iteration-host-peer-iso"
+    packet = _make_packet(iter_dir)
+    adapter = HostPeerAdapter(
+        adapter_config={
+            "family": "claude",
+            "role": "swe_reviewer",
+            "runtime_isolation": "claude_code_subagent",
+        },
+        host_peer_review_callback=_clean_review_callback,
+    )
+    with patch("consensus_mcp.tools.review_write_and_seal.handle",
+               side_effect=_fake_t6_factory(tmp_path)):
+        sealed = adapter.dispatch(packet)
+    parsed = sealed.parsed
+    att = parsed["independence_attestation"]
+    prov = parsed["dispatch_provenance"]
+    # method UNCHANGED for backward-compat.
+    assert att["method"] == "host_peer_callback"
+    # additive isolation provenance.
+    assert att["runtime_isolation"] == "claude_code_subagent"
+    assert prov["independence_attestation"]["runtime_isolation"] == "claude_code_subagent"
+
+
 def test_host_peer_callback_receives_only_packet_no_peer_artifacts(tmp_path):
     """Structural blindness: the callback is invoked with ONLY the DispatchPacket
     (no revealed peer artifacts)."""
