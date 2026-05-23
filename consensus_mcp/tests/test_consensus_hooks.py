@@ -709,3 +709,14 @@ def test_v126_git_exec_flags_and_branch_positionals(tmp_path, command, allowed):
     ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
     assert cp.returncode == (0 if allowed else 2), (command, cp.stderr)
+
+
+@pytest.mark.parametrize("command,allowed", [
+    ("git branch --list 'feat*'", True),    # v1.27: read-only listing pattern allowed
+    ("git branch --list", True),
+    ("git branch evil", False),             # still: bare positional = create
+])
+def test_v127_git_branch_list_pattern(tmp_path, command, allowed):
+    ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == (0 if allowed else 2), (command, cp.stderr)

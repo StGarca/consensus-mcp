@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.27.0 - 2026-05-23
+
+**Init-review convergence.** Round-4 of the full-panel init review came back with the
+security classes clean (gemini `goal_satisfied: True`; no symlink/exec/TOCTOU
+residuals) — the only finding, raised by both codex and kimi, was a benign over-deny.
+
+### Fixed
+- **`git branch --list <pattern>` no longer over-denied.** `--list` is a read-only
+  listing form whose positional is a glob (not a new branch name); added to the gate's
+  read-only branch-filter set. Bare-name creates (`git branch evil`) and write flags
+  are still denied.
+
+This closes the init/install + enforcement review loop (16 → 5 → 6 → 1 findings across
+four fix→push→re-review rounds; all resolved, no security residuals).
+
 ## 1.26.0 - 2026-05-23
 
 **Root fixes for the recurring symlink / git-allowlist residuals (codex + gemini +
