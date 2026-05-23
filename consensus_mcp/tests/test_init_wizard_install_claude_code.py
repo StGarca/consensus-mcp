@@ -123,11 +123,13 @@ def test_install_claude_code_refuses_overwrite_on_divergent_existing(
     skill.write_text("# user-edited skill content do not clobber\n", encoding="utf-8")
 
     rc = wiz.main(["--install-claude-code"])
-    # Refusal is rc=0 (skipped, not failed); a warning is printed.
-    assert rc == 0
-    out = capsys.readouterr().out + capsys.readouterr().err
-    # Verify user content preserved.
+    captured = capsys.readouterr()
+    # v1.23 (finding 4): a divergent managed file is PRESERVED (not clobbered), but
+    # the skip is now surfaced LOUDLY and returns a distinct nonzero (was silently
+    # rc=0 — a silent stale skill is the failure mode codex flagged).
+    assert rc == 5
     assert "user-edited skill content" in skill.read_text(encoding="utf-8")
+    assert "SKIPPED" in captured.err and "--force" in captured.err
 
 
 def test_install_claude_code_force_replaces_divergent_existing(

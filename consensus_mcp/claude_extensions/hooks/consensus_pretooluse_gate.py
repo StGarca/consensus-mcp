@@ -55,11 +55,11 @@ if str(_PKG_ROOT) not in sys.path:
 # Tools whose every invocation modifies a file at `tool_input.file_path`.
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
-# Shell operators that split a command line into segments we evaluate
-# independently (a pipeline / sequence is allowed only if EVERY segment is
-# allowlisted). Conservative on purpose — anything we can't cleanly split or
-# recognise is denied.
-_BASH_SEGMENT_SPLIT = re.compile(r"\|\||&&|;|\||\n")
+# A command line is split into segments (pipeline / sequence) that are each
+# allowlisted independently — see _split_segments. Splitting is QUOTE-AWARE: a
+# `|`/`;`/`&&` INSIDE a quoted string (e.g. `grep -E 'a|b'`) is part of the
+# argument, not a separator (re-audit 2026-05-23: the old regex split mis-denied
+# such read-only commands). Conservative — anything unrecognised is denied.
 
 # Conservative READ-ONLY ALLOWLIST (decision B2 + claude's usability fold-in).
 # A single command segment is allowed iff its LEADING token (or a recognised
@@ -156,13 +156,45 @@ def _segment_is_read_only(segment: str) -> bool:
     return False
 
 
+def _split_segments(command: str) -> list[str]:
+    """Split on |, ||, &&, ;, newline — but ONLY outside quotes. A `|` inside
+    `grep -E 'a|b'` is part of the regex, not a pipeline separator. Returns the
+    non-empty segments."""
+    segs: list[str] = []
+    cur: list[str] = []
+    quote: str | None = None
+    i, n = 0, len(command)
+    while i < n:
+        c = command[i]
+        if quote is not None:
+            cur.append(c)
+            if c == "\\" and quote == '"' and i + 1 < n:
+                cur.append(command[i + 1]); i += 2; continue
+            if c == quote:
+                quote = None
+            i += 1; continue
+        if c in ("'", '"'):
+            quote = c; cur.append(c); i += 1; continue
+        if c in (";", "\n"):
+            segs.append("".join(cur)); cur = []; i += 1; continue
+        if c == "|":
+            segs.append("".join(cur)); cur = []
+            i += 2 if (i + 1 < n and command[i + 1] == "|") else 1
+            continue
+        if c == "&" and i + 1 < n and command[i + 1] == "&":
+            segs.append("".join(cur)); cur = []; i += 2; continue
+        cur.append(c); i += 1
+    segs.append("".join(cur))
+    return [s for s in segs if s.strip()]
+
+
 def _bash_is_read_only(command: str) -> bool:
     """DEFAULT-DENY allowlist check for a whole command line. A pipeline /
-    sequence (split on | || && ; newline) is read-only iff EVERY non-empty
-    segment is read-only. Empty / unknown -> False (denied)."""
+    sequence (split QUOTE-AWARE on | || && ; newline) is read-only iff EVERY
+    non-empty segment is read-only. Empty / unknown -> False (denied)."""
     if not command or not command.strip():
         return False
-    segments = [s for s in _BASH_SEGMENT_SPLIT.split(command) if s.strip()]
+    segments = _split_segments(command)
     if not segments:
         return False
     return all(_segment_is_read_only(s) for s in segments)
@@ -176,6 +208,24 @@ def _deny(reason: str) -> int:
           f"seal — a hand-written marker cannot self-approve.)",
           file=sys.stderr)
     return 2
+
+
+def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
+    """True iff the edit target is consensus GOVERNANCE state (under `.consensus/`
+    or `consensus-state/`), not gated code. These must stay writable so the
+    consensus workflow can bootstrap its own approval — the design-approved marker
+    is re-validated against the live seal on use, so permitting its WRITE is safe.
+    """
+    try:
+        p = file_path if file_path.is_absolute() else (repo_root / file_path)
+        p = p.resolve()
+        for gov in (".consensus", "consensus-state"):
+            base = (repo_root / gov).resolve()
+            if p == base or base in p.parents:
+                return True
+    except Exception:
+        return False
+    return False
 
 
 def main(argv=None) -> int:
@@ -202,10 +252,25 @@ def main(argv=None) -> int:
 
     repo_root = _repo_root(event)
 
+    # Finding 1 (opt-in): enforce ONLY in repos that opted into consensus (a
+    # `.consensus/` dir present). A repo that never enabled consensus — including
+    # the consensus-mcp repo itself, and any unrelated project — fails OPEN so the
+    # gate never bricks development it was never meant to govern.
+    # CONSENSUS_MCP_FORCE_OPTED_IN forces enforcement deterministically for tests.
+    opted_in = (repo_root / ".consensus").is_dir()
+    if not (opted_in or os.environ.get("CONSENSUS_MCP_FORCE_OPTED_IN")):
+        return 0
+
     if tool in EDIT_TOOLS:
         file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         if not file_path:
             return 0  # nothing to gate
+        # Finding 2 (bootstrap): governance-state writes (.consensus/ incl. the
+        # marker, and consensus-state/) are always permitted — otherwise the gate
+        # cannot mint its own approval marker (a circular lock). The marker is
+        # re-validated against the live seal on use, so allowing its write is safe.
+        if _is_governance_path(Path(file_path), repo_root):
+            return 0
         res = da.verify_design_approval(Path(file_path), repo_root=repo_root)
         return 0 if res.ok else _deny(res.reason)
 
