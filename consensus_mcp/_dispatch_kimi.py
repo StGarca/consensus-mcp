@@ -2,9 +2,9 @@
 
 UX-parity sibling of _dispatch_gemini.py. To the operator, dispatching kimi
 looks and behaves EXACTLY like consensus-mcp-dispatch-gemini: identical CLI
-flags, an identically-shaped sealed `kimi-review.yaml` artifact (via the
-shared T6 path), and the same log/timing lines. All kimi-specific transport
-quirks are hidden inside this module.
+flags, an identically-shaped sealed review artifact (via the shared T6 path),
+and the same log/timing lines. All kimi-specific transport quirks are hidden
+inside this module.
 
 It reuses the generic dispatch infrastructure from _dispatch_base.py
 (repo-root resolution, path normalization, goal_packet/template loading,
@@ -12,20 +12,33 @@ prompt building, process-tree termination, sealing, dispatch-log writing) and
 imports gemini's `_extract_json_from_text` (kimi, like gemini, lacks a native
 output-schema enforcer, so its review JSON may be wrapped in free text).
 
-The ONLY real difference from gemini is the CLI transport:
+FIX TRACK 2 (B4/H1/H3/L3 — converged-plan 2026-05-22): the kimi reviewer is
+now READ-ONLY + portable. The CLI transport changed from the print/-p form to
+the verified kimi.yaml profile (stdin transport, --quiet --thinking,
+prompt_flag null):
 
-  kimi --print --output-format stream-json --final-message-only \\
-       --work-dir <repo_root> -p "<PROMPT>"
+  kimi --quiet --thinking --work-dir <TEMP_COPY_OF_REPO>      # prompt on STDIN
 
-  - Output: a single JSONL line {"role":"assistant","content":"<final text>"}.
-    The contributor review JSON lives INSIDE `content` as a string — peel
-    `content` off the line (_peel_assistant_content), then run it through
-    `_extract_json_from_text` exactly like gemini does with free text.
-  - `--print` auto-enables `--afk` (no workspace-trust gate; auto-approves
-    tools). We deliberately do NOT cap `--max-steps-per-turn`: a cap of 1 made
-    kimi die ("Max number of steps reached: 1") before it could read the
-    embedded packet and emit the review (caught on the first live dispatch).
-    The run is bounded by timeout_seconds instead.
+  - PROMPT ON STDIN (not -p). --quiet does NOT auto-enable --afk (the tool
+    auto-approval that --print did), so a REVIEW can no longer mutate the
+    workspace (B4). Putting the full prompt on stdin also removes the
+    ~128KB POSIX / 32767-char Windows single-arg limit (H3).
+  - OUTPUT: --quiet emits the model's final answer as PLAIN TEXT (verified
+    against the real CLI 2026-05-22), followed by a "To resume this session:
+    kimi -r <id>" trailer. We apply the kimi.yaml `strip_patterns` to peel
+    that trailer, then run the remaining text through `_extract_json_from_text`
+    exactly like gemini does with free text. (The legacy stream-json
+    `_peel_assistant_content` peel is retained as a robustness fallback for
+    any older CLI that still emits the assistant envelope.)
+  - DISPOSABLE TEMP WORKDIR (B4): before invoking kimi we make a throwaway
+    copy of the repo (git clone --local --shared, fallback shutil.copytree)
+    and pass it as --work-dir so kimi physically cannot touch the real repo.
+    The temp copy is removed after the dispatch.
+  - POST-DISPATCH INTEGRITY CHECK (B4 independent safeguard): after kimi
+    returns we run `git status --short` in the REAL repo_root; if it is
+    non-empty (kimi mutated the real repo despite the temp workdir) we REJECT
+    the review (KimiIntegrityError) and log the violation. This is valuable
+    even if the temp-copy isolation fails for any reason.
   - ENV: kimi auth is OAuth file creds at ~/.kimi/credentials/kimi-code.json.
     Do NOT set KIMI_API_KEY. CRITICAL (inverse of gemini's
     GEMINI_CLI_TRUST_WORKSPACE injection): SCRUB KIMI_API_KEY and
@@ -34,6 +47,13 @@ The ONLY real difference from gemini is the CLI transport:
   - EXIT CODES: 0 = success, 1 = non-retryable (auth/quota/config), 75 =
     retryable (429/5xx/timeout). 75 maps to the same retry path gemini uses
     for 429; 1 maps to hard fail.
+
+H1: the sealed local-mirror filename is now bound to reviewer+pass (not a
+fixed kimi-review.yaml) so multi-pass dispatches no longer overwrite.
+
+L3: the pre-first-byte watchdog is relaxed (cold-start headroom = the wall
+timeout budget plus the stall grace); the post-first-byte stall threshold is
+unchanged.
 
 Default stall_silence_seconds is 240 (cold start); honors
 CONSENSUS_MCP_STALL_SILENCE_SECONDS like the others. timeout_seconds default
@@ -112,6 +132,44 @@ _DEFAULT_TIMEOUT_SECONDS = 1800
 # non-retryable EXCEPT this code.
 _KIMI_RETRYABLE_EXIT = 75
 
+# Output chrome to strip before _extract_json_from_text. Sourced from the
+# verified kimi.yaml profile (output.strip_patterns). --quiet emits the final
+# answer text followed by a "To resume this session: kimi -r <id>" trailer;
+# this peels that trailer. Applied with no flags: the trailing `$` anchors at
+# end-of-string and `\s*` consumes the trailing newline.
+_KIMI_STRIP_PATTERNS = (
+    re.compile(r"\n*To resume this session:\s*kimi -r \S+\s*$"),
+)
+
+# Directory names skipped by the shutil.copytree fallback when cloning the repo
+# into a disposable temp work-dir (git clone is preferred; this list only
+# matters when git is unavailable). Keeps the copy fast + small.
+_TEMP_WORKDIR_IGNORE_DIRS = (
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    "dist",
+    "build",
+    ".ruff_cache",
+)
+
+
+def _strip_kimi_output_chrome(text: str) -> str:
+    """Strip kimi.yaml output chrome (the resume-session trailer) from `text`.
+
+    Applies the verified kimi.yaml `strip_patterns` BEFORE _extract_json_from_text
+    so the JSON extractor never trips on the "To resume this session: kimi -r ..."
+    line that --quiet appends after the final answer.
+    """
+    for pat in _KIMI_STRIP_PATTERNS:
+        text = pat.sub("", text)
+    return text
+
 
 class KimiInvocationError(RuntimeError):
     """Raised when the kimi CLI exits non-zero, times out, or is not found.
@@ -128,6 +186,18 @@ class KimiInvocationError(RuntimeError):
 
 class KimiOutputParseError(ValueError):
     """Raised when kimi output is not parseable JSON or lacks the expected top-level shape."""
+
+
+class KimiIntegrityError(RuntimeError):
+    """Raised when the post-dispatch integrity check finds the REAL repo mutated.
+
+    Independent safeguard (converged-plan B4): even though kimi runs against a
+    disposable temp copy of the repo, after the dispatch returns we run
+    `git status --short` in the REAL repo_root. A non-empty result means kimi
+    (or some bug) mutated the real workspace despite the isolation, so the
+    review output is REJECTED rather than trusted. Valuable even if the
+    temp-copy isolation or the --quiet/no-afk assumption is wrong.
+    """
 
 
 def _kimi_subprocess_env() -> dict:
@@ -147,6 +217,105 @@ def _kimi_subprocess_env() -> dict:
     env.pop("KIMI_API_KEY", None)
     env.pop("OPENAI_API_KEY", None)
     return env
+
+
+def _make_disposable_workdir(repo_root: Path) -> Path:
+    """Create a disposable temp COPY of the repo to use as kimi's --work-dir.
+
+    Converged-plan B4: kimi must run against a throwaway copy so it physically
+    cannot touch the real repo. Strategy ladder:
+
+      1. `git clone --local --shared <repo_root> <tmp>` — fast + hardlinked
+         (objects shared via the source repo's object store; the working tree
+         is a fresh checkout). Preferred when the repo is a git work-tree and
+         the git binary is available.
+      2. shutil.copytree fallback (git unavailable / repo is not a git tree):
+         copies the tree skipping .git + heavy/derived dirs
+         (_TEMP_WORKDIR_IGNORE_DIRS) so the copy stays fast + small.
+
+    Returns the Path to the temp work-dir copy. The caller MUST remove it via
+    _cleanup_disposable_workdir in a finally block. Raises OSError on a copy
+    failure the caller can surface as a dispatch failure.
+    """
+    import tempfile
+
+    tmp_root = Path(tempfile.mkdtemp(prefix="kimi-workdir-"))
+    dest = tmp_root / "repo"
+
+    git_bin = shutil.which("git")
+    cloned = False
+    if git_bin is not None and (repo_root / ".git").exists():
+        try:
+            result = subprocess.run(
+                [git_bin, "clone", "--local", "--shared",
+                 str(repo_root), str(dest)],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            cloned = result.returncode == 0 and dest.exists()
+        except (subprocess.TimeoutExpired, OSError):
+            cloned = False
+
+    if not cloned:
+        # Fallback: copytree, skipping .git + heavy/derived dirs.
+        if dest.exists():
+            shutil.rmtree(dest, ignore_errors=True)
+
+        def _ignore(_dir, names):
+            return [n for n in names if n in _TEMP_WORKDIR_IGNORE_DIRS]
+
+        shutil.copytree(str(repo_root), str(dest), ignore=_ignore, symlinks=True)
+
+    return dest
+
+
+def _cleanup_disposable_workdir(workdir: Path | None) -> None:
+    """Remove a disposable temp work-dir (and its tempfile parent) best-effort.
+
+    `workdir` is the `<tmp>/repo` path returned by _make_disposable_workdir;
+    we remove its PARENT (the mkdtemp root) so no stray tempdir is left behind.
+    Never raises.
+    """
+    if workdir is None:
+        return
+    try:
+        target = workdir.parent if workdir.name == "repo" else workdir
+        shutil.rmtree(str(target), ignore_errors=True)
+    except OSError:
+        pass
+
+
+def _real_repo_is_dirty(repo_root: Path) -> tuple[bool, str]:
+    """Return (is_dirty, raw_status) for the REAL repo via `git status --short`.
+
+    Independent post-dispatch safeguard (converged-plan B4): a non-empty
+    `git status --short` after kimi returns means the real repo was mutated.
+
+    Fail-SAFE on inability to check: if git is missing, the path is not a git
+    work-tree, or the command errors/times out, we CANNOT prove cleanliness, so
+    we report dirty=False (do not block) — the temp-workdir isolation is the
+    primary control and a missing git binary is an environment issue, not a
+    kimi violation. (The check is a backstop, not the only control.) The raw
+    status text is returned for logging.
+    """
+    git_bin = shutil.which("git")
+    if git_bin is None or not (repo_root / ".git").exists():
+        return False, ""
+    try:
+        result = subprocess.run(
+            [git_bin, "status", "--short"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return False, ""
+    if result.returncode != 0:
+        return False, ""
+    raw = result.stdout.strip()
+    return (bool(raw), raw)
 
 
 def _effective_stall_silence(default: float = _DEFAULT_STALL_SILENCE_SECONDS) -> float:
@@ -336,14 +505,17 @@ def _invoke_kimi(
       - Auto-abort on heartbeat-silence
       - log_path + anchors optional (None disables streaming events for tests)
 
-    kimi-specific CLI shape (the ONLY real difference from gemini):
-      kimi --print --output-format stream-json --final-message-only \\
-           --work-dir <repo_root> -p "<PROMPT>"
-    The full prompt is carried by -p (kimi print-mode contract; unlike
-    gemini, which pipes the prompt body via stdin and uses a short -p
-    directive). --print auto-enables --afk; --max-steps-per-turn 1 keeps the
-    dispatch review-only. The subprocess env scrubs KIMI_API_KEY/OPENAI_API_KEY
-    (see _kimi_subprocess_env) so the OAuth file creds are authoritative.
+    kimi CLI shape (verified kimi.yaml profile — stdin transport):
+      kimi --quiet --thinking --work-dir <WORKDIR>      # prompt written to STDIN
+
+    The FULL PROMPT is written to the subprocess STDIN (prompt_flag is null in
+    the profile — there is no -p). `--quiet` does NOT auto-enable --afk (the
+    tool auto-approval --print enabled), so the reviewer is READ-ONLY (B4); the
+    stdin transport also removes the single-arg size limit (H3). `repo_root`
+    here is the --work-dir, which the caller sets to a DISPOSABLE TEMP COPY of
+    the repo so kimi physically cannot touch the real tree. The subprocess env
+    scrubs KIMI_API_KEY/OPENAI_API_KEY (see _kimi_subprocess_env) so the OAuth
+    file creds are authoritative.
 
     EXIT-CODE MAPPING:
       0  -> success (return stdout)
@@ -352,7 +524,8 @@ def _invoke_kimi(
       *  -> non-retryable hard fail (KimiInvocationError(retryable=False)).
 
     stall_silence defaults to 240s (cold start); honors
-    CONSENSUS_MCP_STALL_SILENCE_SECONDS.
+    CONSENSUS_MCP_STALL_SILENCE_SECONDS. L3: the pre-first-byte watchdog is
+    relaxed (cold-start headroom) — see the silence block below.
     """
     if time_fn is None:
         time_fn = time.time
@@ -362,13 +535,14 @@ def _invoke_kimi(
 
     stall_silence_seconds = _effective_stall_silence(stall_silence_seconds)
 
+    # Verified kimi.yaml profile: stdin transport, --quiet --thinking, no -p.
+    # --quiet (unlike --print) does NOT auto-enable --afk, so kimi runs the
+    # review READ-ONLY. --work-dir points at a disposable temp copy.
     cmd = [
         _resolve_kimi_bin(kimi_bin),
-        "--print",
-        "--output-format", "stream-json",
-        "--final-message-only",
+        "--quiet",
+        "--thinking",
         "--work-dir", str(repo_root),
-        "-p", prompt,
     ]
     if sys.platform == "win32":
         popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -388,8 +562,15 @@ def _invoke_kimi(
     except FileNotFoundError:
         raise KimiInvocationError(f"kimi binary not found: {kimi_bin}", retryable=False) from None
 
-    # The prompt is carried by -p (not stdin), but close stdin so kimi does
-    # not block waiting for input.
+    # STDIN TRANSPORT: write the FULL PROMPT to kimi's stdin, then close it so
+    # kimi sees EOF and begins the turn (no -p; no arg-size limit). A large
+    # (>128KB) prompt flows through here, not through argv (H3 fix). Writing to
+    # a 0-buffered binary pipe needs bytes; tolerate a closed pipe (kimi may
+    # exit early on a hard error).
+    try:
+        proc.stdin.write(prompt.encode("utf-8"))
+    except (BrokenPipeError, OSError, AttributeError):
+        pass
     try:
         proc.stdin.close()
     except (BrokenPipeError, OSError, AttributeError):
@@ -483,12 +664,17 @@ def _invoke_kimi(
             silence_age = now - lst
             silence_trigger_threshold = stall_silence_seconds
         else:
-            # Pre-first-byte silence. kimi cold-start (managed +thinking model)
-            # can take a long time before emitting; use the operator-visible
-            # timeout_seconds budget as the threshold here, not stall_silence,
-            # so the watchdog doesn't abort a valid in-progress review.
+            # Pre-first-byte silence. L3 (converged-plan): the kimi cold-start
+            # (managed +thinking model, on stdin so the whole prompt must be
+            # consumed before the first token) can be slow; the previous
+            # threshold (timeout_seconds) was too aggressive and could abort a
+            # valid in-progress review. Relax it to the FULL wall budget
+            # (timeout_seconds + the stall grace) so the only thing that ends a
+            # silent-but-alive cold start is the hard wall-time ceiling below.
+            # The post-first-byte stall threshold (stall_silence_seconds) is
+            # unchanged.
             silence_age = now - start_ts
-            silence_trigger_threshold = float(timeout_seconds)
+            silence_trigger_threshold = float(timeout_seconds) + stall_silence_seconds
 
         if silence_age >= silence_trigger_threshold:
             _terminate_process_tree(proc)
@@ -811,7 +997,8 @@ def _invoke_kimi_with_retry(
     immediately without a retry.
 
     Returns (raw_output_of_last_attempt, parsed_dict). The raw output is the
-    full stream-json line(s); the parsed dict is the peeled+validated review.
+    verbatim kimi stdout; the parsed dict is the chrome-stripped + JSON-extracted
+    + validated review.
     """
     def _one_call(call_prompt: str) -> tuple[str, dict]:
         raw = _invoke_kimi(
@@ -822,7 +1009,14 @@ def _invoke_kimi_with_retry(
             log_path=log_path,
             anchors=anchors,
         )
-        content = _peel_assistant_content(raw)
+        # OUTPUT HANDLING (stdin/--quiet): kimi emits the final answer as plain
+        # text + a "To resume this session: kimi -r ..." trailer. Strip that
+        # chrome (kimi.yaml strip_patterns) BEFORE extraction. _peel_assistant_content
+        # is retained only as a robustness fallback: if an older CLI still
+        # emits a stream-json {"role":"assistant","content":...} envelope it
+        # peels `content`; otherwise it returns the (stripped) text unchanged
+        # so _extract_json_from_text (inside the parser) sees the free text.
+        content = _peel_assistant_content(_strip_kimi_output_chrome(raw))
         if mode == "proposal":
             parsed = _parse_kimi_proposal_output(content, schema_path=proposal_schema_path)
         else:
@@ -859,6 +1053,31 @@ def _invoke_kimi_with_retry(
             + "and ending with `}`."
         )
         return _one_call(retry_prompt)
+
+
+def _sealed_mirror_filename(reviewer_id: str, pass_id: str) -> str:
+    """H1: bind the iteration-local sealed mirror filename to reviewer+pass.
+
+    The previous fixed `kimi-review.yaml` meant a multi-pass dispatch (pass1,
+    pass2, ...) overwrote the prior pass's local mirror. Mirroring the
+    codex/gemini convention of a per-reviewer artifact, we key the local mirror
+    on the pass_id (which already encodes reviewer + pass, e.g.
+    `kimi-iter0007-1-pass2`) so each pass writes its own
+    `kimi-review-<pass_id>.yaml`. Falls back to reviewer_id, then the legacy
+    fixed name, if those anchors are somehow empty. Filesystem-unsafe chars in
+    the anchor are normalized to '-'.
+    """
+    anchor = (pass_id or reviewer_id or "").strip()
+    if not anchor:
+        return "kimi-review.yaml"
+    # Allow [A-Za-z0-9_-]; map everything else (incl. '.', '/', whitespace) to
+    # '-'. Dropping '.' too removes any '..' path-traversal segment from the
+    # mirror filename. Collapse repeats + trim leading/trailing '-'.
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "-", anchor)
+    safe = re.sub(r"-{2,}", "-", safe).strip("-")
+    if not safe:
+        return "kimi-review.yaml"
+    return f"kimi-review-{safe}.yaml"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1046,22 +1265,61 @@ def main(argv: list[str] | None = None) -> int:
 
         kimi_version = _get_kimi_version(ns.kimi_bin)
         _t0 = time.monotonic()
-        raw_output, extracted = _invoke_kimi_with_retry(
-            prompt=prompt,
-            kimi_bin=ns.kimi_bin,
-            timeout_seconds=ns.timeout_seconds,
-            repo_root=repo_root,
-            log_path=log_path,
-            anchors={
+
+        # DISPOSABLE TEMP WORKDIR (B4): run kimi against a throwaway copy of the
+        # repo (git clone --local --shared, fallback shutil.copytree) so it
+        # physically cannot touch the real tree. Cleaned up in finally.
+        kimi_workdir: Path | None = None
+        try:
+            kimi_workdir = _make_disposable_workdir(repo_root)
+            _log_dispatch(log_path, {
+                "event": "dispatch_workdir_prepared",
                 "iteration_id": iteration_id,
                 "reviewer_id": reviewer_id,
                 "pass_id": pass_id,
-            },
-            mode=ns.mode,
-            proposal_schema_path=proposal_schema_path,
-        )
+                "workdir": str(kimi_workdir),
+                "adapter": "kimi",
+            })
+            raw_output, extracted = _invoke_kimi_with_retry(
+                prompt=prompt,
+                kimi_bin=ns.kimi_bin,
+                timeout_seconds=ns.timeout_seconds,
+                repo_root=kimi_workdir,
+                log_path=log_path,
+                anchors={
+                    "iteration_id": iteration_id,
+                    "reviewer_id": reviewer_id,
+                    "pass_id": pass_id,
+                },
+                mode=ns.mode,
+                proposal_schema_path=proposal_schema_path,
+            )
+        finally:
+            _cleanup_disposable_workdir(kimi_workdir)
+
         landed_seconds = time.monotonic() - _t0
         output_sha = _sha256_str(raw_output)
+
+        # POST-DISPATCH INTEGRITY CHECK (B4, independent safeguard): if the REAL
+        # repo's `git status --short` is non-empty after the dispatch, kimi
+        # mutated the real workspace despite the temp-copy isolation — REJECT the
+        # review + log the violation. Backstop regardless of root cause.
+        dirty, status_raw = _real_repo_is_dirty(repo_root)
+        if dirty:
+            _log_dispatch(log_path, {
+                "event": "dispatch_integrity_violation",
+                "iteration_id": iteration_id,
+                "reviewer_id": reviewer_id,
+                "pass_id": pass_id,
+                "git_status_short": status_raw[:4000],
+                "adapter": "kimi",
+            })
+            raise KimiIntegrityError(
+                "post-dispatch integrity check FAILED: the real repo is dirty "
+                "after the kimi dispatch (kimi mutated the workspace despite the "
+                "disposable temp work-dir). Review output REJECTED. "
+                f"git status --short:\n{status_raw[:2000]}"
+            )
 
         proposal_schema_sha = None
         proposal_schema_path_str = None
@@ -1095,11 +1353,14 @@ def main(argv: list[str] | None = None) -> int:
                 "goal_packet (path passed via --goal-packet)",
                 "prompt_template (substituted by _build_prompt)",
                 "review_target (path passed via --review-target; may be unspecified)",
-                "kimi CLI --print --output-format stream-json (no native output-schema enforcement)",
+                "kimi CLI --quiet --thinking (stdin transport, read-only; no native output-schema enforcement)",
             ],
         )
-        result = _seal_via_t6(packet, iter_dir, sealed_filename="kimi-review.yaml")
-    except (KimiInvocationError, KimiOutputParseError) as exc:
+        result = _seal_via_t6(
+            packet, iter_dir,
+            sealed_filename=_sealed_mirror_filename(reviewer_id, pass_id),
+        )
+    except (KimiInvocationError, KimiOutputParseError, KimiIntegrityError) as exc:
         _log_dispatch(log_path, _failed_event(type(exc).__name__, str(exc)))
         print(json.dumps({"ok": False, "error": str(exc), "error_type": type(exc).__name__}))
         return 1

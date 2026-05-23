@@ -340,8 +340,15 @@ class _FakeProc:
 
 
 class _FakeStdin:
-    def write(self, _data):
-        pass
+    def __init__(self):
+        self.written = b""
+
+    def write(self, data):
+        # New stdin transport writes the prompt as bytes; capture it so tests
+        # can assert the full prompt flowed through stdin (not argv).
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        self.written += data
 
     def close(self):
         pass
@@ -357,46 +364,78 @@ class _FakeStream:
         return b""
 
 
-def _make_factory(stdout_lines, returncode, captured_cmd, captured_env):
+def _make_factory(stdout_lines, returncode, captured_cmd, captured_env, captured_procs=None):
     def factory(cmd, **kwargs):
         captured_cmd.append(cmd)
         captured_env.append(kwargs.get("env"))
-        return _FakeProc(stdout_lines, returncode)
+        proc = _FakeProc(stdout_lines, returncode)
+        if captured_procs is not None:
+            captured_procs.append(proc)
+        return proc
     return factory
 
 
 def test_invoke_kimi_builds_expected_argv():
-    review_line = json.dumps({"role": "assistant", "content": '{"ok": 1}'}).encode("utf-8")
+    """FIX TRACK 2 (B4/H3): the argv is the verified kimi.yaml STDIN-transport
+    profile — `kimi --quiet --thinking --work-dir <workdir>` with the prompt on
+    STDIN. NO --print (which auto-enabled --afk tool approval), NO --afk, and NO
+    -p (the prompt is not carried on argv, so the single-arg size limit can't
+    be hit). --quiet keeps the reviewer read-only."""
+    review_line = b"OK final answer"
     captured_cmd: list = []
     captured_env: list = []
-    factory = _make_factory([review_line], 0, captured_cmd, captured_env)
+    captured_procs: list = []
+    factory = _make_factory([review_line], 0, captured_cmd, captured_env, captured_procs)
     out = _dispatch_kimi._invoke_kimi(
         prompt="REVIEW PROMPT BODY",
         kimi_bin="kimi",
         timeout_seconds=1800,
-        repo_root=Path("/tmp/repo"),
+        repo_root=Path("/tmp/workdir-copy"),
         poll_interval=0.0,
         popen_factory=factory,
     )
-    assert out == json.dumps({"role": "assistant", "content": '{"ok": 1}'})
+    assert out == "OK final answer"
     cmd = captured_cmd[0]
-    # Structural analog of gemini -p: print mode, stream-json single line,
-    # final-message-only, workdir, and the full prompt carried by -p.
-    # NOTE: deliberately NO --max-steps-per-turn cap. A cap of 1 made kimi die
-    # with "Max number of steps reached: 1" before it could read the embedded
-    # review packet and emit the review (caught on the first live dispatch).
-    # The proven profile config (kimi.yaml, used 20x) sets no step cap.
-    assert "--print" in cmd
-    assert "--output-format" in cmd
-    assert "stream-json" in cmd
-    assert "--final-message-only" in cmd
-    assert "--max-steps-per-turn" not in cmd
+    # Verified kimi.yaml profile: --quiet --thinking --work-dir, stdin prompt.
+    assert "--quiet" in cmd
+    assert "--thinking" in cmd
     assert "--work-dir" in cmd
-    assert "/tmp/repo" in cmd
-    # -p carries the FULL prompt (kimi print-mode contract; unlike gemini's
-    # short -p directive + stdin prompt).
-    assert "-p" in cmd
-    assert "REVIEW PROMPT BODY" in cmd
+    assert "/tmp/workdir-copy" in cmd
+    # The legacy print/-p/--afk transport (which auto-approved tool use and hit
+    # the arg-size limit) must be GONE.
+    assert "--print" not in cmd
+    assert "--afk" not in cmd
+    assert "-p" not in cmd
+    assert "--output-format" not in cmd
+    assert "stream-json" not in cmd
+    assert "--final-message-only" not in cmd
+    assert "--max-steps-per-turn" not in cmd
+    # The FULL prompt is NOT on argv (no -p); it flows through stdin.
+    assert "REVIEW PROMPT BODY" not in cmd
+    assert captured_procs[0].stdin.written == b"REVIEW PROMPT BODY"
+
+
+def test_invoke_kimi_writes_large_prompt_to_stdin():
+    """H3: a >128KB prompt (over the POSIX single-arg limit) must flow through
+    STDIN, not argv. Confirms the full payload is written to the subprocess
+    stdin and never appears on the command line."""
+    big_prompt = "X" * (200 * 1024)  # 200 KB, well over the ~128KB POSIX arg cap
+    review_line = b"OK"
+    captured_cmd: list = []
+    captured_env: list = []
+    captured_procs: list = []
+    factory = _make_factory([review_line], 0, captured_cmd, captured_env, captured_procs)
+    _dispatch_kimi._invoke_kimi(
+        prompt=big_prompt,
+        kimi_bin="kimi",
+        timeout_seconds=1800,
+        repo_root=Path("/tmp/workdir-copy"),
+        poll_interval=0.0,
+        popen_factory=factory,
+    )
+    cmd = captured_cmd[0]
+    assert big_prompt not in cmd  # not on argv (would blow the arg-size limit)
+    assert captured_procs[0].stdin.written == big_prompt.encode("utf-8")
 
 
 def test_invoke_kimi_scrubs_keys_in_subprocess_env(monkeypatch):
@@ -689,8 +728,13 @@ def _write_goal_packet(path: Path):
 
 
 def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
-    """End-to-end: mocked kimi subprocess -> sealed kimi-review.yaml via T6,
-    id_prefix kimi-rev, timing log line emitted, ok=True JSON to stdout."""
+    """End-to-end: mocked kimi subprocess -> sealed pass-bound mirror via T6,
+    id_prefix kimi-rev, timing log line emitted, ok=True JSON to stdout.
+
+    The disposable temp work-dir creation and the post-dispatch integrity
+    check are stubbed: the work-dir copy is replaced with a stub path (no real
+    clone), and the integrity check reports the real repo CLEAN so the seal
+    proceeds (the dirty-repo rejection path has its own test below)."""
     repo_root = ROOT
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
 
@@ -704,25 +748,53 @@ def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
     rel_goal = goal_packet.relative_to(repo_root)
 
     review = _minimal_valid()
-    stream_line = json.dumps({"role": "assistant", "content": json.dumps(review)})
+    final_text = json.dumps(review)  # --quiet emits the final answer as plain text
+
+    captured_workdirs: list = []
 
     def fake_invoke_with_retry(**kwargs):
-        return stream_line, _dispatch_kimi._parse_kimi_output(
-            _dispatch_kimi._peel_assistant_content(stream_line)
-        )
+        captured_workdirs.append(kwargs.get("repo_root"))
+        return final_text, _dispatch_kimi._parse_kimi_output(final_text)
+
+    # Stub the disposable work-dir so no real clone/copytree happens; the stub
+    # path is what kimi would be invoked against.
+    stub_workdir = tmp_path / "kimi-workdir-stub" / "repo"
+    monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir", lambda _root: stub_workdir)
+    cleanup_calls: list = []
+    monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir",
+                        lambda wd: cleanup_calls.append(wd))
+    # Integrity check: real repo is CLEAN -> seal proceeds.
+    monkeypatch.setattr(_dispatch_kimi, "_real_repo_is_dirty", lambda _root: (False, ""))
 
     monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
     monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
 
+    # Unique pass-id per run so the T6 archive seal never collides with a prior
+    # run's content under the same pass_id.
+    import uuid as _uuid
+    pass_id = f"kimi-iteration-kimi-test-0001-1-pass-{_uuid.uuid4().hex[:8]}"
+
     rc = _dispatch_kimi.main([
         "--goal-packet", str(rel_goal),
         "--iteration-dir", str(rel_iter_dir),
+        "--pass-id", pass_id,
     ])
     captured = capsys.readouterr()
     assert rc == 0, f"main returned {rc}; stdout={captured.out}"
 
-    sealed = iter_dir / "kimi-review.yaml"
-    assert sealed.exists(), "kimi-review.yaml not sealed to iteration dir"
+    # kimi was invoked against the disposable temp work-dir copy, NOT the real repo.
+    assert captured_workdirs == [stub_workdir]
+    # The temp work-dir was cleaned up.
+    assert cleanup_calls == [stub_workdir]
+
+    # H1: the sealed local mirror is bound to reviewer+pass, not a fixed name.
+    sealed = iter_dir / f"kimi-review-{pass_id}.yaml"
+    assert sealed.exists(), (
+        "pass-bound sealed mirror not written to iteration dir; "
+        f"dir contents: {[p.name for p in iter_dir.iterdir()]}"
+    )
+    # The legacy fixed filename must NOT be used.
+    assert not (iter_dir / "kimi-review.yaml").exists()
 
     import yaml as _yaml
     data = _yaml.safe_load(sealed.read_text(encoding="utf-8"))
@@ -742,6 +814,224 @@ def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
     import shutil as _shutil
     _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-test",
                    ignore_errors=True)
+
+
+def test_main_integrity_check_rejects_when_real_repo_dirty(monkeypatch, capsys):
+    """FIX TRACK 2 (B4 independent safeguard): if the REAL repo's
+    `git status --short` is non-empty after the dispatch, the review output is
+    REJECTED (ok:false, KimiIntegrityError, rc=1) — kimi mutated the real repo
+    despite the disposable temp work-dir."""
+    repo_root = ROOT
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
+
+    iter_name = "iteration-kimi-integrity-0001"
+    iter_dir = repo_root / "consensus-state" / "archive" / "scratch-kimi-integrity" / iter_name
+    iter_dir.mkdir(parents=True, exist_ok=True)
+    rel_iter_dir = iter_dir.relative_to(repo_root)
+
+    goal_packet = iter_dir / "goal_packet.yaml"
+    _write_goal_packet(goal_packet)
+    rel_goal = goal_packet.relative_to(repo_root)
+
+    final_text = json.dumps(_minimal_valid())
+
+    monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir",
+                        lambda _root: Path("/tmp/kimi-stub/repo"))
+    monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir", lambda _wd: None)
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry",
+                        lambda **kw: (final_text, _dispatch_kimi._parse_kimi_output(final_text)))
+    monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
+    # Simulate: the real repo is DIRTY after dispatch (kimi mutated it).
+    monkeypatch.setattr(_dispatch_kimi, "_real_repo_is_dirty",
+                        lambda _root: (True, " M consensus_mcp/some_real_file.py"))
+
+    rc = _dispatch_kimi.main([
+        "--goal-packet", str(rel_goal),
+        "--iteration-dir", str(rel_iter_dir),
+    ])
+    captured = capsys.readouterr()
+    assert rc == 1, f"expected rejection rc=1; got {rc}; stdout={captured.out}"
+
+    out_lines = [l for l in captured.out.splitlines() if l.strip().startswith("{")]
+    result = json.loads(out_lines[-1])
+    assert result["ok"] is False
+    assert result["error_type"] == "KimiIntegrityError"
+
+    # No sealed mirror should have been written (review was rejected).
+    assert not any(p.name.startswith("kimi-review") for p in iter_dir.iterdir())
+
+    import shutil as _shutil
+    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-integrity",
+                   ignore_errors=True)
+
+
+# ---------- _strip_kimi_output_chrome (kimi.yaml strip_patterns) ----------
+
+def test_strip_removes_resume_session_trailer():
+    """--quiet appends 'To resume this session: kimi -r <id>'; strip it before
+    JSON extraction (kimi.yaml output.strip_patterns)."""
+    raw = "OK final answer\n\nTo resume this session: kimi -r 6c02599a-abcd\n"
+    assert _dispatch_kimi._strip_kimi_output_chrome(raw) == "OK final answer"
+
+
+def test_strip_preserves_json_and_removes_trailer():
+    raw = '```json\n{"findings": []}\n```\n\nTo resume this session: kimi -r abc123\n'
+    cleaned = _dispatch_kimi._strip_kimi_output_chrome(raw)
+    assert cleaned == '```json\n{"findings": []}\n```'
+
+
+def test_strip_noop_when_no_trailer():
+    raw = '{"findings": [], "goal_satisfied": true}'
+    assert _dispatch_kimi._strip_kimi_output_chrome(raw) == raw
+
+
+def test_one_call_path_strips_then_parses_plain_text(monkeypatch):
+    """Full new output path: plain final text + resume trailer -> strip chrome
+    -> _extract_json_from_text -> parse (no stream-json envelope)."""
+    final_text = (
+        json.dumps(_minimal_valid())
+        + "\n\nTo resume this session: kimi -r deadbeef\n"
+    )
+
+    def fake_invoke(*, prompt, **_kwargs):
+        return final_text
+
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi", fake_invoke)
+    raw, parsed = _dispatch_kimi._invoke_kimi_with_retry(
+        prompt="initial", kimi_bin="kimi", timeout_seconds=1800, repo_root=Path("."),
+    )
+    assert parsed["goal_satisfied"] is True
+
+
+# ---------- _make_disposable_workdir / _cleanup_disposable_workdir ----------
+
+def test_make_disposable_workdir_prefers_git_clone(monkeypatch, tmp_path):
+    """When git is available + the source is a git tree, use
+    `git clone --local --shared <repo> <tmp>/repo`."""
+    src = tmp_path / "src"
+    (src / ".git").mkdir(parents=True)
+
+    calls: list = []
+
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
+
+    class _Result:
+        returncode = 0
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        # Simulate a successful clone by creating the dest dir.
+        Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
+        return _Result()
+
+    monkeypatch.setattr(_dispatch_kimi.subprocess, "run", fake_run)
+
+    def fail_copytree(*a, **k):  # must NOT be called on the git path
+        raise AssertionError("copytree fallback used despite a successful clone")
+
+    monkeypatch.setattr(_dispatch_kimi.shutil, "copytree", fail_copytree)
+
+    dest = _dispatch_kimi._make_disposable_workdir(src)
+    assert dest.exists()
+    assert dest.name == "repo"
+    assert calls and calls[0][:3] == ["/usr/bin/git", "clone", "--local"]
+    assert "--shared" in calls[0]
+    # Cleanup removes the tempdir parent.
+    _dispatch_kimi._cleanup_disposable_workdir(dest)
+    assert not dest.exists()
+
+
+def test_make_disposable_workdir_copytree_fallback_skips_git(monkeypatch, tmp_path):
+    """No git binary -> copytree fallback, skipping .git + heavy dirs."""
+    src = tmp_path / "src"
+    (src / ".git").mkdir(parents=True)
+    (src / ".git" / "HEAD").write_text("ref: refs/heads/main", encoding="utf-8")
+    (src / "node_modules").mkdir()
+    (src / "node_modules" / "junk.js").write_text("x", encoding="utf-8")
+    (src / "consensus_mcp").mkdir()
+    (src / "consensus_mcp" / "real.py").write_text("print('hi')", encoding="utf-8")
+
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: None)  # no git
+
+    dest = _dispatch_kimi._make_disposable_workdir(src)
+    try:
+        assert (dest / "consensus_mcp" / "real.py").exists()  # real source copied
+        assert not (dest / ".git").exists()                   # .git skipped
+        assert not (dest / "node_modules").exists()           # heavy dir skipped
+    finally:
+        _dispatch_kimi._cleanup_disposable_workdir(dest)
+    assert not dest.exists()
+
+
+def test_cleanup_disposable_workdir_tolerates_none():
+    # Must never raise.
+    _dispatch_kimi._cleanup_disposable_workdir(None)
+
+
+# ---------- _real_repo_is_dirty (post-dispatch integrity probe) ----------
+
+def test_real_repo_is_dirty_true_when_status_nonempty(monkeypatch, tmp_path):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
+
+    class _Result:
+        returncode = 0
+        stdout = " M consensus_mcp/foo.py\n"
+
+    monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
+    dirty, raw = _dispatch_kimi._real_repo_is_dirty(tmp_path)
+    assert dirty is True
+    assert "consensus_mcp/foo.py" in raw
+
+
+def test_real_repo_is_dirty_false_when_status_clean(monkeypatch, tmp_path):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
+
+    class _Result:
+        returncode = 0
+        stdout = "\n"
+
+    monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
+    dirty, raw = _dispatch_kimi._real_repo_is_dirty(tmp_path)
+    assert dirty is False
+    assert raw == ""
+
+
+def test_real_repo_is_dirty_failsafe_when_no_git(monkeypatch, tmp_path):
+    # No git binary / not a git tree -> cannot prove dirtiness -> report clean
+    # (the temp-workdir isolation is the primary control; this is a backstop).
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: None)
+    dirty, raw = _dispatch_kimi._real_repo_is_dirty(tmp_path)
+    assert dirty is False
+
+
+# ---------- _sealed_mirror_filename (H1: reviewer+pass bound) ----------
+
+def test_sealed_mirror_filename_binds_pass_id():
+    name = _dispatch_kimi._sealed_mirror_filename(
+        "kimi-iter0007-1", "kimi-iter0007-1-pass2"
+    )
+    assert name == "kimi-review-kimi-iter0007-1-pass2.yaml"
+
+
+def test_sealed_mirror_filename_distinct_per_pass():
+    n1 = _dispatch_kimi._sealed_mirror_filename("kimi-iter0007-1", "kimi-iter0007-1-pass1")
+    n2 = _dispatch_kimi._sealed_mirror_filename("kimi-iter0007-1", "kimi-iter0007-1-pass2")
+    assert n1 != n2  # multi-pass no longer overwrites (H1)
+
+
+def test_sealed_mirror_filename_falls_back_to_reviewer_then_legacy():
+    assert _dispatch_kimi._sealed_mirror_filename("kimi-rev-x", "") == "kimi-review-kimi-rev-x.yaml"
+    assert _dispatch_kimi._sealed_mirror_filename("", "") == "kimi-review.yaml"
+
+
+def test_sealed_mirror_filename_sanitizes_unsafe_chars():
+    name = _dispatch_kimi._sealed_mirror_filename("r", "pass/../etc passwd")
+    assert "/" not in name
+    assert ".." not in name  # no path-traversal segment survives
+    assert name.startswith("kimi-review-")
+    assert name.endswith(".yaml")
 
 
 # ---------- real-kimi smoke (env-gated; never runs in CI) ----------
