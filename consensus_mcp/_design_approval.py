@@ -6,33 +6,62 @@ artifact is consensus-vetted); this module gates IMPLEMENTATION (you may not
 Edit/Write until a Workflow A consult has SEALED a converged plan covering the
 scope you are about to touch).
 
+Trust model (FIX TRACK 1 / decision B1 — UNANIMOUS):
+  The `.consensus/design-approved` marker is a POINTER/CACHE, **not** the trust
+  root. It does NOT carry a self-asserted `cross_family_sealed: true` boolean
+  (that was forgeable: any process could write `true` in plain YAML and defeat
+  the closure invariant). Instead the marker only *points* at a consensus
+  iteration, and `verify_design_approval` ALWAYS re-validates that pointer
+  against the LIVE consensus-state/ seal:
+
+    1. `resolve_consensus_ref(ref, repo_root)` (from `_delivery_readiness`) must
+       report the referenced iteration as a real CLOSED/SEALED iteration. A
+       hand-written marker pointing at a non-existent or non-sealed ref FAILS.
+    2. the sealed iteration must carry >=2 NON-CLAUDE reviewer artifacts
+       (mirrors the >=2-non-claude rule in `mint_delivery_token`) — no
+       single-family self-approval.
+    3. the marker's `converged_plan_sha256` must match the iteration's
+       `converged-plan.yaml` hash (`compute_artifact_hash`) — tamper guard.
+    4. the edit target is repo-confined (resolve(strict=False); reject anything
+       outside `repo_root` or any `..`/absolute-unsafe ref) and the
+       repo-relative path must fnmatch `scope_glob`.
+
+  Forging an accepted approval therefore requires forging the sealed cross-family
+  artifacts — exactly what the T6 seal + closure invariant already protect.
+
 Marker contract (fixed — `consensus_pretooluse_gate.py` codes against this):
-  `.consensus/design-approved` is a YAML file with fields
-  {iteration_id, scope_glob, converged_plan_sha256, sealed_at_utc,
-   cross_family_sealed}.
+  `.consensus/design-approved` is a YAML mapping with fields
+  {schema_version, design_consensus_ref, converged_plan_sha256, scope_glob,
+   repo_root_id}.
 
-A marker is VALID iff:
-  1. the file parses (YAML mapping), AND
-  2. `cross_family_sealed` is true, AND
-  3. the edited repo-relative path matches `scope_glob` (fnmatch).
-
-A marker with `cross_family_sealed=False` is ADVISORY ONLY = treated as NOT
-approved. This preserves the cross-family closure invariant: a single-Claude
-step can't self-approve its own implementation (no laundering).
-
-Fail-closed: any error (missing/unparseable/wrong-type/path-resolution) yields
-a NOT-approved Result with a reason — never raises out of `verify_*`.
+Fail-closed: any error (missing/unparseable/wrong-type/path-resolution/seal
+re-validation failure) yields a NOT-approved Result with a reason — never raises
+out of `verify_*` / `marker_is_sealed`.
 """
 from __future__ import annotations
 
 import dataclasses
-import datetime as _dt
 import fnmatch
 from pathlib import Path
 
 import yaml
 
+from consensus_mcp._delivery_readiness import (
+    compute_artifact_hash,
+    resolve_consensus_ref,
+)
+
 MARKER_RELPATH = Path(".consensus") / "design-approved"
+SCHEMA_VERSION = 1
+
+# scope_globs that are too broad to be a meaningful confinement (decision B3,
+# kimi): a sealed plan must name the files it covers, not "everything".
+_OVERBROAD_SCOPE_GLOBS = frozenset({"*", "**", "**/*", "*/*"})
+
+# Minimum DISTINCT non-claude reviewer families a sealed iteration must carry for
+# the marker to authorize implementation (mirrors mint_delivery_token's
+# >=2-non-claude rule).
+_MIN_NON_CLAUDE_REVIEWERS = 2
 
 
 @dataclasses.dataclass
@@ -44,36 +73,46 @@ class Result:
     reason: str
 
 
-def _utcnow() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _marker_path(repo_root: Path) -> Path:
     return Path(repo_root) / MARKER_RELPATH
 
 
+def _is_overbroad_scope(scope_glob: str) -> bool:
+    return scope_glob.strip() in _OVERBROAD_SCOPE_GLOBS
+
+
 def mint_design_approval(
     repo_root: Path,
-    iteration_id: str,
+    design_consensus_ref: str,
     scope_glob: str,
     converged_plan_sha256: str,
-    cross_family_sealed: bool,
+    repo_root_id: str | None = None,
 ) -> dict:
-    """Write `.consensus/design-approved` with the marker-contract fields.
+    """Write the POINTER marker `.consensus/design-approved`.
 
-    Called when a Workflow A consult seals a converged plan. `cross_family_sealed`
-    must be True for the marker to actually authorize implementation; a False
-    value is written but is advisory only (verify treats it as NOT approved).
+    Called when a Workflow A consult seals a converged plan. The marker carries
+    NO trust by itself — it merely points at `design_consensus_ref`, which
+    `verify_design_approval` re-validates against the live seal on every check.
+
+    Rejects an overly-broad `scope_glob` ('*'/'**'/…) at mint time (decision B3):
+    a sealed plan must confine itself to the files it actually covers.
 
     Returns the marker dict that was written.
     """
+    if not isinstance(scope_glob, str) or not scope_glob.strip():
+        raise ValueError("scope_glob must be a non-empty string")
+    if _is_overbroad_scope(scope_glob):
+        raise ValueError(
+            f"scope_glob {scope_glob!r} is too broad to confine a sealed plan — "
+            f"name the files the converged plan covers (e.g. 'consensus_mcp/_x.py')"
+        )
     repo_root = Path(repo_root)
     marker = {
-        "iteration_id": iteration_id,
-        "scope_glob": scope_glob,
+        "schema_version": SCHEMA_VERSION,
+        "design_consensus_ref": design_consensus_ref,
         "converged_plan_sha256": converged_plan_sha256,
-        "sealed_at_utc": _utcnow(),
-        "cross_family_sealed": bool(cross_family_sealed),
+        "scope_glob": scope_glob,
+        "repo_root_id": repo_root_id if repo_root_id is not None else repo_root.name,
     }
     path = _marker_path(repo_root)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,84 +120,176 @@ def mint_design_approval(
     return marker
 
 
-def _rel_to_repo(target_path: Path, repo_root: Path) -> str:
-    """Return the repo-relative POSIX path for `target_path`. Accepts absolute
-    or relative targets; falls back to the raw string if it is not under the
-    repo root (so an out-of-repo edit still gets a deterministic, non-matching
-    string rather than an exception)."""
-    repo_root = Path(repo_root).resolve()
+def _load_marker(repo_root: Path) -> tuple[dict | None, Result | None]:
+    """Load + minimally validate the marker mapping. Returns (data, None) on
+    success, or (None, deny-Result) on any failure. Fail-closed."""
+    path = _marker_path(repo_root)
+    if not path.exists():
+        return None, Result(
+            False,
+            f"no design-approval marker at {MARKER_RELPATH} "
+            f"(scope not consensus-sealed — run a Workflow A consult)",
+        )
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        return None, Result(False, f"design-approval marker unparseable (fail-closed): {exc}")
+    if not isinstance(data, dict):
+        return None, Result(False, "design-approval marker is not a YAML mapping (fail-closed)")
+    return data, None
+
+
+def _count_non_claude_reviewers(iter_dir: Path) -> int:
+    """Count DISTINCT non-claude reviewer families in a sealed iteration by its
+    `<family>-review.yaml` artifacts (codex-review.yaml, gemini-review.yaml,
+    kimi-review.yaml, …). Mirrors the >=2-non-claude reviewer rule in
+    `_delivery_readiness.mint_delivery_token`."""
+    families: set[str] = set()
+    try:
+        for art in iter_dir.glob("*-review.yaml"):
+            fam = art.name[: -len("-review.yaml")].strip().lower()
+            if fam and "claude" not in fam:
+                families.add(fam)
+    except OSError:
+        return 0
+    return len(families)
+
+
+def _revalidate_seal(data: dict, repo_root: Path) -> tuple[bool, str]:
+    """The TRUST ROOT. Re-validate the marker's pointer against the live seal:
+    (a) `resolve_consensus_ref` reports the iteration SEALED, (b) >=2 non-claude
+    reviewer artifacts, (c) marker `converged_plan_sha256` matches the
+    iteration's converged-plan.yaml hash. Returns (ok, reason). Fail-closed."""
+    repo_root = Path(repo_root)
+    ref = data.get("design_consensus_ref")
+    if not isinstance(ref, str) or not ref:
+        return False, "design-approval marker has no design_consensus_ref (fail-closed)"
+
+    # (a) the iteration MUST resolve as a real CLOSED/SEALED consensus iteration.
+    status = resolve_consensus_ref(ref, repo_root)
+    if not status.sealed:
+        return False, (
+            f"design_consensus_ref {ref!r} is NOT a sealed consensus iteration: "
+            f"{status.detail} — a hand-written marker cannot self-approve "
+            f"(the seal is the trust root, not the marker)"
+        )
+
+    iter_dir = repo_root / "consensus-state" / "active" / ref
+
+    # (b) >=2 distinct non-claude reviewer families (no single-family approval).
+    n = _count_non_claude_reviewers(iter_dir)
+    if n < _MIN_NON_CLAUDE_REVIEWERS:
+        return False, (
+            f"sealed iteration {ref!r} has only {n} non-claude reviewer "
+            f"artifact(s); need >={_MIN_NON_CLAUDE_REVIEWERS} different families "
+            f"(no single-family self-approval)"
+        )
+
+    # (c) converged_plan_sha256 must match the iteration's converged-plan.yaml.
+    plan = iter_dir / "converged-plan.yaml"
+    if not plan.exists():
+        return False, f"sealed iteration {ref!r} has no converged-plan.yaml (fail-closed)"
+    marker_sha = data.get("converged_plan_sha256")
+    if not isinstance(marker_sha, str) or not marker_sha:
+        return False, "design-approval marker has no converged_plan_sha256 (fail-closed)"
+    try:
+        actual_sha = compute_artifact_hash(plan)
+    except Exception as exc:  # fail-closed
+        return False, f"could not hash converged-plan.yaml (fail-closed): {exc}"
+    if marker_sha != actual_sha:
+        return False, (
+            f"converged_plan_sha256 mismatch for {ref!r} "
+            f"(marker={marker_sha[:12]}… live={actual_sha[:12]}…) — re-mint the marker"
+        )
+    return True, f"seal re-validated (sealed iteration {ref!r}, {n} non-claude reviewers)"
+
+
+def _confine_to_repo(target_path: Path, repo_root: Path) -> tuple[str | None, str]:
+    """Repo-confine the target (decision B3): canonicalize with
+    resolve(strict=False); REJECT anything that resolves outside `repo_root`.
+    Returns (repo-relative-posix, "") on success, or (None, reason) on rejection.
+    """
+    repo_root = Path(repo_root).resolve(strict=False)
     tp = Path(target_path)
     if not tp.is_absolute():
-        tp = (repo_root / tp)
+        tp = repo_root / tp
     tp = tp.resolve(strict=False)
     try:
         rel = tp.relative_to(repo_root)
     except ValueError:
-        # Outside the repo; use the path as-given (POSIX) so scope_glob can
-        # still (not) match deterministically.
-        return Path(target_path).as_posix()
-    return rel.as_posix()
-
-
-def marker_is_sealed(repo_root: Path) -> Result:
-    """Path-agnostic check: a `.consensus/design-approved` marker exists, parses,
-    and is `cross_family_sealed=True`. Used by the PreToolUse gate for Bash
-    file-modifying commands, whose target scope cannot be pinned to a single
-    path — so we require only that a cross-family-sealed plan is in force. Edit
-    tools instead use `verify_design_approval` for full per-path scope checks.
-    Fail-closed."""
-    try:
-        path = _marker_path(repo_root)
-        if not path.exists():
-            return Result(False, f"no design-approval marker at {MARKER_RELPATH} "
-                                 f"(scope not consensus-sealed — run a Workflow A consult)")
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
-            return Result(False, f"design-approval marker unparseable (fail-closed): {exc}")
-        if not isinstance(data, dict):
-            return Result(False, "design-approval marker is not a YAML mapping (fail-closed)")
-        if data.get("cross_family_sealed") is not True:
-            return Result(False, "design-approval marker is ADVISORY ONLY "
-                                 "(cross_family_sealed not true) — a single-Claude step "
-                                 "cannot self-approve implementation")
-        return Result(True, f"cross-family-sealed design marker in force "
-                            f"(iteration {data.get('iteration_id')})")
-    except Exception as exc:  # fail-closed
-        return Result(False, f"design-approval verify error (fail-closed): {exc}")
+        return None, (
+            f"target {Path(target_path).as_posix()!r} resolves OUTSIDE the repo "
+            f"({repo_root}) — out-of-repo edits are not consensus-sealable"
+        )
+    return rel.as_posix(), ""
 
 
 def verify_design_approval(target_path: Path, repo_root: Path) -> Result:
     """Validate the design-approval marker against `target_path`. Fail-closed.
 
-    NOT approved (ok=False) if any of: marker missing, unparseable, not a
-    mapping, `cross_family_sealed` not true (advisory-only / single-Claude), or
-    the repo-relative target does not fnmatch `scope_glob`. Any unexpected error
-    is caught and returned as a fail-closed deny.
+    Order: (a) load marker; (b) re-validate the pointer against the LIVE seal
+    (`resolve_consensus_ref` sealed + >=2 non-claude reviewers + matching
+    converged-plan hash); (c) repo-confine the target; (d) fnmatch the
+    repo-relative path against `scope_glob`. Any failure -> NOT approved.
     """
     try:
-        path = _marker_path(repo_root)
-        if not path.exists():
-            return Result(False, f"no design-approval marker at {MARKER_RELPATH} "
-                                 f"(scope not consensus-sealed — run a Workflow A consult)")
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
-            return Result(False, f"design-approval marker unparseable (fail-closed): {exc}")
-        if not isinstance(data, dict):
-            return Result(False, "design-approval marker is not a YAML mapping (fail-closed)")
-        if data.get("cross_family_sealed") is not True:
-            return Result(False, "design-approval marker is ADVISORY ONLY "
-                                 "(cross_family_sealed not true) — a single-Claude step "
-                                 "cannot self-approve implementation")
+        data, deny = _load_marker(repo_root)
+        if deny is not None:
+            return deny
+
+        ok, reason = _revalidate_seal(data, repo_root)
+        if not ok:
+            return Result(False, reason)
+
         scope_glob = data.get("scope_glob")
         if not isinstance(scope_glob, str) or not scope_glob:
             return Result(False, "design-approval marker has no scope_glob (fail-closed)")
-        rel = _rel_to_repo(target_path, repo_root)
+
+        rel, reject = _confine_to_repo(target_path, repo_root)
+        if rel is None:
+            return Result(False, reject)
+
         if not fnmatch.fnmatch(rel, scope_glob):
-            return Result(False, f"{rel} is OUT OF SCOPE for the sealed plan "
-                                 f"(scope_glob={scope_glob!r})")
-        return Result(True, f"consensus-sealed: {rel} matches scope_glob={scope_glob!r} "
-                            f"(iteration {data.get('iteration_id')})")
+            return Result(
+                False,
+                f"{rel} is OUT OF SCOPE for the sealed plan (scope_glob={scope_glob!r})",
+            )
+        return Result(
+            True,
+            f"consensus-sealed: {rel} matches scope_glob={scope_glob!r}; {reason}",
+        )
+    except Exception as exc:  # fail-closed
+        return Result(False, f"design-approval verify error (fail-closed): {exc}")
+
+
+def marker_is_sealed(repo_root: Path) -> Result:
+    """Path-agnostic check used by the PreToolUse Bash branch: a VALID sealed
+    marker with a TIGHT scope_glob is in force. "Valid" = the pointer re-validates
+    against the live seal (`_revalidate_seal`); "tight" = the scope_glob is not
+    one of the overbroad globs ('*'/'**'/…). Fail-closed.
+
+    The Bash branch cannot pin a single target path, so it requires only that a
+    genuinely sealed, tightly-scoped plan is in force (not a per-path scope
+    match). Edit tools instead use `verify_design_approval` for the full check.
+    """
+    try:
+        data, deny = _load_marker(repo_root)
+        if deny is not None:
+            return deny
+
+        scope_glob = data.get("scope_glob")
+        if not isinstance(scope_glob, str) or not scope_glob:
+            return Result(False, "design-approval marker has no scope_glob (fail-closed)")
+        if _is_overbroad_scope(scope_glob):
+            return Result(
+                False,
+                f"design-approval marker scope_glob {scope_glob!r} is too broad to "
+                f"authorize Bash (a tight, file-naming scope is required)",
+            )
+
+        ok, reason = _revalidate_seal(data, repo_root)
+        if not ok:
+            return Result(False, reason)
+        return Result(True, f"tight-scope sealed design marker in force; {reason}")
     except Exception as exc:  # fail-closed
         return Result(False, f"design-approval verify error (fail-closed): {exc}")
