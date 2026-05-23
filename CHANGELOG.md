@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.24.0 - 2026-05-23
+
+**Full init-workflow review fixes (codex + gemini + kimi).** A full-panel review of
+the init/install code found 16 issues — including 2 BLOCKING security holes in the
+v1.23 gate fixes. All fixed, each with tests.
+
+### Fixed — enforcement gate (security)
+- **[BLOCKING] Governance-path symlink escape.** `_is_governance_path` now requires the
+  resolved base (`.consensus/`, `consensus-state/`) to be strictly inside `repo_root`,
+  so a `.consensus` symlink to `/` or the repo root can't turn the bootstrap allow into
+  a universal write bypass.
+- **[BLOCKING] Single `&` not split.** The quote-aware splitter now treats a lone `&`
+  (background) as a separator, so `allowed_cmd & rm -rf y` no longer slips a writer past
+  the allowlist.
+- **[HIGH] `pytest` removed from the read-only allowlist.** Running tests executes
+  arbitrary test/conftest/plugin code, so `pytest` / `python -m pytest` are no longer
+  pre-approval read-only (run them behind a sealed marker, or in a non-opted-in repo).
+
+### Fixed — init/install workflow
+- **[HIGH]** Install no longer crashes on a single file IO error — each read/write is
+  guarded; failures `WARN` and continue.
+- Instruction-file **path-traversal** refused + **atomic** write; **destination symlinks**
+  no longer followed on install; `CLAUDE_HOME` override is resolved; `.mcp.json` compares
+  semantically (key-order); hook commands are `shlex`-quoted (safe with quotes in paths).
+- **Incomplete installs now surface + return distinct nonzero codes** instead of a silent
+  rc 0: freshness-stale aborts before copying (**6**, `--force` overrides), settings.json
+  activation failure (**6**), per-project agent SKIP (**7**), managed-file SKIP (**5**).
+
 ## 1.23.0 - 2026-05-23
 
 **Enforcement + install-workflow fixes (codex install-workflow review).** A codex

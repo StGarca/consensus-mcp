@@ -63,11 +63,15 @@ EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
 # Conservative READ-ONLY ALLOWLIST (decision B2 + claude's usability fold-in).
 # A single command segment is allowed iff its LEADING token (or a recognised
-# `git <subcommand>` / `python -m pytest`) is on this list. Default-deny: an
-# unknown leading token is DENIED (fail-safe).
+# `git <subcommand>`) is on this list. Default-deny: an unknown leading token is
+# DENIED (fail-safe).
+# v1.24 (codex finding): `pytest` / `python -m pytest` are REMOVED — running tests
+# executes arbitrary test/conftest/plugin code, so they are not "read-only" and
+# must not be allowed pre-approval. Run tests behind a sealed marker (or in a
+# non-opted-in repo, where the gate fails open anyway).
 _READ_ONLY_COMMANDS = frozenset({
     "ls", "cat", "head", "tail", "wc", "grep", "rg",
-    "echo", "pwd", "which", "pytest",
+    "echo", "pwd", "which",
 })
 # NOTE: `find` is deliberately NOT allowlisted — `find -exec`/`-delete`/`-fprintf`
 # mutate the filesystem (re-audit codex-rev-001). A leading-token allowlist cannot
@@ -150,9 +154,8 @@ def _segment_is_read_only(segment: str) -> bool:
             if t == "-c" or t.startswith("--output") or t.startswith("--exec-path"):
                 return False
         return True
-    if head in ("python", "python3"):
-        # Allow only `python -m pytest …` (a test runner), nothing else.
-        return len(tokens) >= 3 and tokens[1] == "-m" and tokens[2] == "pytest"
+    # v1.24 (codex finding): `python -m pytest` is NO LONGER allowed — pytest runs
+    # arbitrary test/conftest/plugin code, so it is not read-only. python is denied.
     return False
 
 
@@ -181,8 +184,13 @@ def _split_segments(command: str) -> list[str]:
             segs.append("".join(cur)); cur = []
             i += 2 if (i + 1 < n and command[i + 1] == "|") else 1
             continue
-        if c == "&" and i + 1 < n and command[i + 1] == "&":
-            segs.append("".join(cur)); cur = []; i += 2; continue
+        if c == "&":
+            # v1.24 (kimi BLOCKING): a SINGLE `&` (background) is also a separator —
+            # otherwise `cat x & rm -rf y` is one allowlisted segment and the writer
+            # after `&` slips through. Split on both `&` and `&&`.
+            segs.append("".join(cur)); cur = []
+            i += 2 if (i + 1 < n and command[i + 1] == "&") else 1
+            continue
         cur.append(c); i += 1
     segs.append("".join(cur))
     return [s for s in segs if s.strip()]
@@ -217,10 +225,17 @@ def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
     is re-validated against the live seal on use, so permitting its WRITE is safe.
     """
     try:
+        rr = repo_root.resolve()
         p = file_path if file_path.is_absolute() else (repo_root / file_path)
         p = p.resolve()
         for gov in (".consensus", "consensus-state"):
             base = (repo_root / gov).resolve()
+            # v1.24 (kimi BLOCKING): reject symlink escape — `base` must be a real
+            # subdir STRICTLY inside repo_root. If `.consensus` symlinks to `/` or the
+            # repo root, the resolved base would wrongly be an ancestor of every path,
+            # turning the bootstrap allow into a universal write bypass.
+            if base == rr or rr not in base.parents:
+                continue
             if p == base or base in p.parents:
                 return True
     except Exception:
