@@ -9,7 +9,10 @@ the fail-open vs fail-closed branches are deterministic without touching PATH.
 Verified hook semantics (cited in the deliverable):
   - PreToolUse blocks via exit code 2 + stderr reason (matches
     contrib/delivery_gate_pretooluse.py); exit 0 allows.
-  - hooks.json schema matches Superpowers v5.1.0 hooks/hooks.json.
+
+v1.21: the pre-v1.21 inert hooks.json manifest was removed (recon #7); hook
+activation now happens via the settings.json merge (see test_hook_activation.py),
+so the stale manifest-shape test was removed alongside the file.
 """
 from __future__ import annotations
 
@@ -30,7 +33,6 @@ _HOOKS_DIR = (
 PRETOOLUSE = _HOOKS_DIR / "consensus_pretooluse_gate.py"
 STOP = _HOOKS_DIR / "consensus_stop_gate.py"
 SESSIONSTART = _HOOKS_DIR / "consensus_sessionstart.py"
-HOOKS_JSON = _HOOKS_DIR / "hooks.json"
 
 
 def _run_hook(script: Path, event: dict, *, repo_root: Path,
@@ -517,37 +519,8 @@ def test_userpromptsubmit_runtime_absent_noop(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Task B5 — hooks.json manifest + degradation integration test
+# Task B5 — degradation integration test
 # --------------------------------------------------------------------------- #
-
-def test_hooks_json_schema_matches_superpowers_shape():
-    data = json.loads(HOOKS_JSON.read_text(encoding="utf-8"))
-    assert set(data) == {"hooks"}
-    hooks = data["hooks"]
-    for event in ("SessionStart", "UserPromptSubmit", "PreToolUse", "Stop"):
-        assert event in hooks, event
-        groups = hooks[event]
-        assert isinstance(groups, list) and groups
-        for grp in groups:
-            assert "matcher" in grp
-            assert isinstance(grp["hooks"], list) and grp["hooks"]
-            for h in grp["hooks"]:
-                assert h["type"] == "command"
-                assert "command" in h and h["command"]
-    # PreToolUse matcher covers the gated tools.
-    matcher = hooks["PreToolUse"][0]["matcher"]
-    for tool in ("Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"):
-        assert tool in matcher, (tool, matcher)
-    # Each registered command points at an existing script.
-    for event, groups in hooks.items():
-        for grp in groups:
-            for h in grp["hooks"]:
-                ref = h["command"]
-                for name in ("consensus_sessionstart.py", "consensus_pretooluse_gate.py",
-                             "consensus_stop_gate.py"):
-                    if name in ref:
-                        assert (_HOOKS_DIR / name).exists(), name
-
 
 def test_integration_runtime_absent_all_gates_noop(tmp_path):
     # No marker, modified source, etc. — with runtime absent EVERY gate is a

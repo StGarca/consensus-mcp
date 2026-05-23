@@ -571,6 +571,23 @@ def _resolve_mcp_command(
     return sys.executable, ["-m", "consensus_mcp.server"], False
 
 
+def _mcp_command_resolves(command: str) -> bool:
+    """True if the MCP server `command` can be spawned (recon #5).
+
+    Absolute / relative paths are checked for existence; bare names are looked
+    up on PATH via shutil.which. sys.executable (the dev-fallback command) is
+    always considered resolvable. A False result means Claude Code may register
+    a silently-dead server, so the caller warns (but never fails).
+    """
+    if not command:
+        return False
+    if command == sys.executable:
+        return True
+    if "/" in command or "\\" in command:
+        return Path(command).exists()
+    return shutil.which(command) is not None
+
+
 def _resolve_mcp_json_path(repo_root: Path) -> Path:
     return repo_root / ".mcp.json"
 
@@ -822,6 +839,83 @@ def _print_panel_summary(enabled: list[str], profiles: dict) -> None:
         )
     else:
         print(f"Panel: {len(indep)} independent reviewers ({', '.join(indep)}).")
+
+
+def _warn_degenerate_panel(enabled: list[str], profiles: dict) -> None:
+    """recon #6: warn (non-interactive path) when <2 independent contributors.
+
+    Consensus needs >=2 independent (non-host_peer) reviewers for cross-family
+    cross-review; a single-reviewer config is degraded. The interactive path
+    re-prompts for >=2, so this guard is only wired into the non-interactive
+    bootstrap. Warn-only — never fails the init.
+    """
+    independent = [
+        n for n in enabled
+        if profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST_PEER
+    ]
+    if len(independent) >= 2:
+        return
+    print(
+        f"WARNING: only {len(independent)} independent contributor enabled "
+        f"({', '.join(independent) or 'none'}). Consensus needs >=2 contributors "
+        f"for cross-family review; this config is single-reviewer (degraded). "
+        f"Re-run `consensus init --reconfigure` to add another reviewer.",
+        file=sys.stderr,
+    )
+
+
+def _print_status_summary(
+    config_path: Path,
+    enabled: list[str],
+    profiles: dict,
+    *,
+    mcp_command: str | None,
+    mcp_resolves: bool | None,
+    from_claude_code: bool,
+) -> None:
+    """recon #4: print a concise friendly post-init next-steps / status block.
+
+    Only called from the fresh / --reconfigure per-project bootstrap path (never
+    --check / --print-defaults / --install-claude-code). Surfaces: config path,
+    panel composition, present/missing contributor CLIs, MCP-command
+    resolvability (recon #5), and the FIRST concrete next step.
+    """
+    independent = [
+        n for n in enabled
+        if profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST_PEER
+    ]
+    present, missing = [], []
+    for name in enabled:
+        profile = profiles.get(name)
+        if profile is None:
+            continue
+        if _profile_installed(profile):
+            present.append(name)
+        else:
+            missing.append(name)
+
+    print()
+    print("Next steps:")
+    print(f"  config:  {config_path}")
+    print(f"  Panel:   {len(independent)} independent reviewers "
+          f"({', '.join(independent) or 'none'}).")
+    print(f"  CLIs present: {', '.join(present) or 'none'}")
+    if missing:
+        print(f"  CLIs missing: {', '.join(missing)} "
+              f"(install them or they will be skipped)")
+    if mcp_command is not None:
+        if mcp_resolves:
+            print(f"  MCP server: '{mcp_command}' resolves on PATH.")
+        else:
+            print(f"  MCP server: WARNING — '{mcp_command}' does NOT resolve on "
+                  f"PATH; the registered consensus-mcp server may not start.")
+    if from_claude_code:
+        print("  -> Restart Claude Code in this project (or run `/mcp` to reload "
+              "MCP servers) to activate consensus-mcp.")
+    else:
+        print("  -> Run a consult with the consensus-workflow skill (or restart "
+              "Claude Code to load the consensus-mcp server), then start a "
+              "consult.")
 
 
 def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes: bool) -> str | None:
@@ -1471,13 +1565,40 @@ def cmd_init(args) -> int:
     except (OSError, ValueError) as exc:
         print(f"WARN: instruction/detect-guide step skipped: {exc}", file=sys.stderr)
 
+    # recon #6: degenerate-panel guard for the NON-interactive bootstrap path.
+    # The interactive path already re-prompts for >=2 reviewers; this warns when
+    # a non-interactive run lands a single-reviewer (degraded) config.
+    if not interactive:
+        try:
+            guard_profiles = _load_merged_profiles(
+                (new_config.get("contributors") or {}).get("profiles")
+            )
+            guard_enabled = (new_config.get("contributors") or {}).get("enabled") or []
+            _warn_degenerate_panel(guard_enabled, guard_profiles)
+        except (OSError, ValueError):
+            pass  # best-effort; never abort a successful write on a guard.
+
     # iter-0031: write .mcp.json by default (per iter-0030 converged plan).
+    # recon #5: also record whether the resolved command resolves on PATH so the
+    # status summary can warn about a silently-dead server.
+    mcp_command_for_summary: str | None = None
+    mcp_resolves_for_summary: bool | None = None
     if not args.no_mcp_json:
         try:
             command, mcp_args, is_portable = _resolve_mcp_command(args.mcp_command)
         except ValueError as exc:
             print(f"WARN: --mcp-command invalid: {exc}; skipping .mcp.json", file=sys.stderr)
             return 0
+        mcp_command_for_summary = command
+        mcp_resolves_for_summary = _mcp_command_resolves(command)
+        if not mcp_resolves_for_summary:
+            print(
+                f"WARNING: the resolved MCP server command '{command}' does not "
+                f"resolve on PATH; the registered consensus-mcp server may not "
+                f"start. Install consensus-mcp so it is on PATH, or pass "
+                f"--mcp-command with a working command.",
+                file=sys.stderr,
+            )
         state_root = repo_root / "consensus-state"
         project_root = repo_root
         status, mcp_path = _write_mcp_json(
@@ -1526,16 +1647,26 @@ def cmd_init(args) -> int:
     else:
         print("subagent install skipped (--no-agents)")
 
-    # iter-0040: when invoked from inside a Claude Code session, print
-    # contextual restart guidance so the user knows what to do next.
-    if getattr(args, "from_claude_code", False):
-        print()
-        print(
-            "Detected --from-claude-code: Claude Code must reload to "
-            "activate the consensus-mcp server. Either restart Claude "
-            "Code in this project (Ctrl-C, then `claude code`), or run "
-            "`/mcp` to reload MCP servers if your build supports it."
+    # recon #4: concise post-init next-steps / status summary. Only on the
+    # fresh/--reconfigure per-project bootstrap path (we already short-circuited
+    # --check / --print-defaults / --install-claude-code above). Folds in the
+    # MCP-command resolvability result (recon #5) and the --from-claude-code
+    # restart guidance (formerly a standalone iter-0040 block).
+    try:
+        summary_profiles = _load_merged_profiles(
+            (new_config.get("contributors") or {}).get("profiles")
         )
+        summary_enabled = (new_config.get("contributors") or {}).get("enabled") or []
+        _print_status_summary(
+            config_path,
+            summary_enabled,
+            summary_profiles,
+            mcp_command=mcp_command_for_summary,
+            mcp_resolves=mcp_resolves_for_summary,
+            from_claude_code=getattr(args, "from_claude_code", False),
+        )
+    except (OSError, ValueError) as exc:
+        print(f"WARN: status summary skipped: {exc}", file=sys.stderr)
 
     return 0
 
