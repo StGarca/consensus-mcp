@@ -130,6 +130,23 @@ _CLAUDE_EXTENSION_FILES = (
     # transferable consensus-mcp memories forward into any project that
     # runs `consensus-init --install-claude-code`.
     ("skills/consensus-workflow/SKILL.md", "skills/consensus-workflow/SKILL.md"),
+    # v1.21: vendored Superpowers skills (MIT, obra/superpowers v5.1.0 @ f2cbfbe),
+    # adapted to hand off to consensus. Ship the attribution alongside. The 4 spine
+    # skills (brainstorming, requesting/receiving-code-review,
+    # verification-before-completion) carry consensus hand-offs; the rest are
+    # near-verbatim. See claude_extensions/VENDORED.md + NOTICE.
+    ("NOTICE", "NOTICE"),
+    ("VENDORED.md", "VENDORED.md"),
+    ("skills/consensus-brainstorming/SKILL.md", "skills/consensus-brainstorming/SKILL.md"),
+    ("skills/consensus-writing-plans/SKILL.md", "skills/consensus-writing-plans/SKILL.md"),
+    ("skills/consensus-executing-plans/SKILL.md", "skills/consensus-executing-plans/SKILL.md"),
+    ("skills/consensus-subagent-driven-development/SKILL.md", "skills/consensus-subagent-driven-development/SKILL.md"),
+    ("skills/consensus-test-driven-development/SKILL.md", "skills/consensus-test-driven-development/SKILL.md"),
+    ("skills/consensus-requesting-code-review/SKILL.md", "skills/consensus-requesting-code-review/SKILL.md"),
+    ("skills/consensus-receiving-code-review/SKILL.md", "skills/consensus-receiving-code-review/SKILL.md"),
+    ("skills/consensus-verification-before-completion/SKILL.md", "skills/consensus-verification-before-completion/SKILL.md"),
+    ("skills/consensus-finishing-a-development-branch/SKILL.md", "skills/consensus-finishing-a-development-branch/SKILL.md"),
+    ("skills/consensus-using-git-worktrees/SKILL.md", "skills/consensus-using-git-worktrees/SKILL.md"),
 )
 
 
