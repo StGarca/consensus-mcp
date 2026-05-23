@@ -9,7 +9,9 @@ Use this template when dispatching a code quality reviewer subagent.
 
 ```
 Task tool (general-purpose):
-  Use template at requesting-code-review/code-reviewer.md
+  Review the task's diff against the code-quality criteria below. This is the fast
+  INNER-LOOP check; the BINDING code review is a consensus Workflow B sealed
+  cross-family review (consensus:requesting-code-review), not this local pass.
 
   DESCRIPTION: [task summary, from implementer's report]
   PLAN_OR_REQUIREMENTS: Task N from [plan-file]
