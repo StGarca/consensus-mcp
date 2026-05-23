@@ -46,3 +46,9 @@ consensus-state/archive/review-passes/*.yaml
 # Hook tooling logs
 .remember/
 
+# CLI state + local secrets (never commit)
+.codex/
+
+# Delivery artifacts (git bundles are built on demand, not source)
+*.bundle
+

@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.21.0 - 2026-05-23
+
+**Consensus-enforced host integration + self-contained Superpowers workflows.**
+v1.21 wires the consensus discipline into the editing host itself: edits are
+gated behind a real cross-family seal, the host-family roles install as callable
+subagents, and ten Superpowers workflow skills ship vendored (MIT) so no external
+prerequisite is required. Full suite 1326 passed / 7 skipped.
+
+### Added
+- **Vendored Superpowers skills (MIT).** Ten workflow skills (brainstorming,
+  writing/executing plans, subagent-driven & test-driven development, requesting/
+  receiving code review, verification-before-completion, finishing-a-branch,
+  using-git-worktrees) copied + adapted under `claude_extensions/skills/` with
+  NOTICE + VENDORED.md attribution (obra/superpowers v5.1.0). No Superpowers
+  install required.
+- **Consensus enforcement hooks.** PreToolUse design-approval gate (Edit/Write/
+  MultiEdit blocked until a sealed cross-family iteration mints a scoped
+  `.consensus/design-approved` marker; Bash default-deny with a read-only
+  allowlist), Stop gate (committed-but-unverified guard), and a SessionStart
+  bootstrap. Installed + activated in `.claude/settings.json` at `init`.
+- **Design-approval marker as pointer.** The marker re-validates against the live
+  T6 seal (≥2 non-claude reviewers, converged-plan hash match, repo-confined
+  fnmatch scope) on every check — no trusted boolean to forge.
+- **Host-family subagents installed at init.** `consensus-orchestrator` (holds
+  `Agent` + the consensus MCP tools) and the read-only
+  `consensus-host-peer-reviewer` (no `Agent`, no mutation) written to
+  `.claude/agents/` so the host roles are real, callable subagents.
+- **Host-peer ".5" review path activated.** `consensus.run_iteration` accepts
+  `host_peer_review_yaml`; an enabled host_peer profile seals a supplementary
+  review (`gate_eligible=false`), and gracefully soft-skips (surfacing
+  `supplementary_skipped`) when none is supplied.
+- **Kimi reviewer + dispatcher.** `consensus-mcp-dispatch-kimi` mirrors the
+  gemini path with UX parity: stdin transport, a disposable temp work-dir, a
+  post-dispatch content+symlink integrity check, and API-key scrubbing — the kimi
+  reviewer is strictly read-only and portable.
+- **End-to-end integration test.** `test_integration_host_peer_flow.py` dogfoods
+  the full flow: marker→gate deny/allow flip, forged-marker rejection, host_peer
+  activation + soft-skip, and the Agent-only-on-orchestrator dispatch contract.
+
+### Changed
+- **Smooth init.** Post-init status summary, `.mcp.json` command-resolvability
+  warning, and a degenerate-panel guard (warns on <2 independent contributors in
+  the non-interactive path) — all fail-soft.
+- **LF line-ending policy.** Added `.gitattributes` (`* text=auto eol=lf`) to
+  normalize the tree and prevent CRLF churn from Windows-side editors; normalized
+  `_engine_factory.py` (the one file committed with CRLF).
+
 ## 1.20.3 - unreleased
 
 _Unreleased._
