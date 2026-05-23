@@ -691,3 +691,21 @@ def test_v125_governance_dir_symlink_to_inrepo_denied(tmp_path):
           "tool_input": {"file_path": ".consensus/design-approved"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
     assert cp.returncode == 2, cp.stderr
+
+
+# --- v1.26 gate hardening (round-3 convergence re-review) -------------------- #
+
+@pytest.mark.parametrize("command,allowed", [
+    ("git diff --ext-diff", False),            # runs a repo-configured external diff
+    ("git log --textconv", False),             # runs a repo-configured textconv
+    ("git diff --output=/tmp/x", False),       # writes a file
+    ("git branch --contains abc123", True),    # read-only positional now allowed
+    ("git branch --merged main", True),
+    ("git branch --points-at HEAD", True),
+    ("git branch -d feature", False),          # still: delete is a write
+    ("git branch newbranch", False),           # still: bare positional = create
+])
+def test_v126_git_exec_flags_and_branch_positionals(tmp_path, command, allowed):
+    ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == (0 if allowed else 2), (command, cp.stderr)

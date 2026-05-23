@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.26.0 - 2026-05-23
+
+**Root fixes for the recurring symlink / git-allowlist residuals (codex + gemini +
+kimi, round-3).** Earlier per-site patches kept leaving cousin holes, so this release
+fixes them at the root. Suite 1393 passed / 7 skipped.
+
+### Fixed
+- **One hardened atomic-write primitive everywhere.** `_atomic_write_bytes` creates the
+  temp file with `O_CREAT|O_EXCL|O_WRONLY` and an **unpredictable** name, then
+  `os.replace` — so a pre-planted `<dst>.tmp` symlink can't redirect the write, and a
+  destination symlink is replaced (the link, not its target). All writers
+  (`_atomic_write_text`, `_atomic_write_json`, `write_config`, `update_gitignore`) now
+  route through it (the predictable-`<dst>.tmp` symlink class is closed in every site).
+- **gov-dir check via a single `lstat`** (no `is_symlink()`→`resolve()` double-stat
+  TOCTOU); an absent `.consensus` still permits the bootstrap write.
+- **Git allowlist:** reject `--ext-diff`/`--textconv` (run repo-configured external
+  commands); `git branch` now allows read-only positional args (`--contains <sha>`,
+  `--merged <branch>`) while still denying write flags and bare-name creates.
+- **Uninstall** settings.json write now fails soft (WARN) like install.
+
 ## 1.25.0 - 2026-05-23
 
 **Convergence re-review fixes (codex + gemini + kimi).** The full re-review of the
