@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.22.0 - 2026-05-23
+
+**Completed the vendored-skills (the v1.21 vendoring shipped with dangling
+references).** A 3-family consensus review (codex/gemini/kimi) found several adapted
+`SKILL.md` files referenced companion files that were never vendored — links the
+install/packaging tests didn't catch. Resolved over three review→fix→re-review rounds.
+
+### Fixed
+- **Vendored the 4 referenced companions** (MIT-attributed): `implementer-prompt.md`,
+  `spec-reviewer-prompt.md`, `code-quality-reviewer-prompt.md`
+  (`consensus-subagent-driven-development`); `testing-anti-patterns.md`
+  (`consensus-test-driven-development`).
+- **Stripped out-of-scope dependencies** instead of vendoring them into a code-review
+  tool: removed the `consensus-brainstorming` "Visual Companion" feature (an upstream
+  browser-based mockup HTTP server + its `scripts/`), and replaced the dangling
+  `elements-of-style:writing-clearly-and-concisely` skill reference with plain prose.
+- **Rewrote** `code-quality-reviewer-prompt.md`'s reference to the un-vendored
+  `requesting-code-review/code-reviewer.md` to point at the consensus flow.
+- **Clarified** that `consensus-subagent-driven-development`'s two-stage local review is
+  a fast inner loop and the BINDING gate is a consensus Workflow B cross-family review.
+
+### Added
+- **`tests/test_vendored_skill_references.py`** — mechanically enforces reference
+  integrity (same-dir `./x.md`/`@x.md`, subdirectory `dir/x.md` in any wrapper, and
+  `consensus:`-namespaced skill cross-refs all resolve). This is the guard that was
+  missing; verified non-vacuous against a reintroduced dangling ref.
+
+### Changed
+- **Packaging**: skills glob `SKILL.md` → `*.md` so vendored companions ship in the
+  wheel; installer (`_CLAUDE_EXTENSION_FILES`) enumerates the 4 companions.
+
 ## 1.21.0 - 2026-05-23
 
 **Consensus-enforced host integration + self-contained Superpowers workflows.**
