@@ -141,7 +141,13 @@ _CLAUDE_EXTENSION_FILES = (
     ("skills/consensus-writing-plans/SKILL.md", "skills/consensus-writing-plans/SKILL.md"),
     ("skills/consensus-executing-plans/SKILL.md", "skills/consensus-executing-plans/SKILL.md"),
     ("skills/consensus-subagent-driven-development/SKILL.md", "skills/consensus-subagent-driven-development/SKILL.md"),
+    # v1.22: companion prompt files the skill references — the 3-family review
+    # (2026-05-23) found these dangling. Vendored from upstream, MIT-attributed.
+    ("skills/consensus-subagent-driven-development/implementer-prompt.md", "skills/consensus-subagent-driven-development/implementer-prompt.md"),
+    ("skills/consensus-subagent-driven-development/spec-reviewer-prompt.md", "skills/consensus-subagent-driven-development/spec-reviewer-prompt.md"),
+    ("skills/consensus-subagent-driven-development/code-quality-reviewer-prompt.md", "skills/consensus-subagent-driven-development/code-quality-reviewer-prompt.md"),
     ("skills/consensus-test-driven-development/SKILL.md", "skills/consensus-test-driven-development/SKILL.md"),
+    ("skills/consensus-test-driven-development/testing-anti-patterns.md", "skills/consensus-test-driven-development/testing-anti-patterns.md"),
     ("skills/consensus-requesting-code-review/SKILL.md", "skills/consensus-requesting-code-review/SKILL.md"),
     ("skills/consensus-receiving-code-review/SKILL.md", "skills/consensus-receiving-code-review/SKILL.md"),
     ("skills/consensus-verification-before-completion/SKILL.md", "skills/consensus-verification-before-completion/SKILL.md"),

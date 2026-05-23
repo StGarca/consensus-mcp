@@ -25,3 +25,30 @@ header. The four "spine" skills carry additional consensus hand-off adaptations.
 | consensus-verification-before-completion | skills/verification-before-completion/SKILL.md | 5.1.0 | f2cbfbe | spine: add to gate — before any completion claim mint/verify a delivery-readiness token (consensus_mcp/_delivery_readiness.py) + run gate_evaluate_production_with_scope_match (the token the consensus Stop hook checks); keep "evidence before claims" iron law + ref-rewrite + precedence header |
 | consensus-finishing-a-development-branch | skills/finishing-a-development-branch/SKILL.md | 5.1.0 | f2cbfbe | verbatim+ref-rewrite (no superpowers:* skill refs; `~/.config/superpowers/worktrees` path repointed to `~/.config/consensus/worktrees`) + precedence header |
 | consensus-using-git-worktrees | skills/using-git-worktrees/SKILL.md | 5.1.0 | f2cbfbe | verbatim+ref-rewrite (no superpowers:* skill refs; `~/.config/superpowers/worktrees` path repointed to `~/.config/consensus/worktrees`) + precedence header |
+
+## Companion files (v1.22 — after the 2026-05-23 3-family review)
+
+The review found several adapted `SKILL.md` files referenced companion files that had
+NOT been vendored alongside them (dangling links the install/packaging tests missed).
+Resolved by vendoring the companions (verbatim + MIT attribution header):
+
+| companion | skill | source path |
+|-----------|-------|-------------|
+| implementer-prompt.md | consensus-subagent-driven-development | skills/subagent-driven-development/ |
+| spec-reviewer-prompt.md | consensus-subagent-driven-development | skills/subagent-driven-development/ |
+| code-quality-reviewer-prompt.md | consensus-subagent-driven-development | skills/subagent-driven-development/ |
+| testing-anti-patterns.md | consensus-test-driven-development | skills/test-driven-development/ |
+
+**Deliberately NOT vendored (out of scope for a cross-AI code-review tool):**
+- `visual-companion.md` + its `scripts/` (a browser-based mockup HTTP server). The
+  `consensus-brainstorming` "Visual Companion" feature was REMOVED instead.
+- `elements-of-style:writing-clearly-and-concisely` (a separate upstream skill). The
+  brainstorming reference was replaced with a plain "write the spec clearly and
+  concisely".
+
+Also (v1.22): `consensus-subagent-driven-development` now states explicitly that its
+two-stage local subagent review is a fast INNER LOOP, and the BINDING review gate is a
+consensus Workflow B cross-family review (a different family than the author signs off).
+
+Reference integrity is now enforced mechanically by
+`consensus_mcp/tests/test_vendored_skill_references.py`.

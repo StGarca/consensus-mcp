@@ -60,7 +60,10 @@ consensus_mcp = [
   # absent from the wheel — so `--install-claude-code` silently skipped skills and
   # activated settings.json hooks pointing at non-existent scripts. Enforced by
   # tests/test_package_data_completeness.py.
-  "claude_extensions/skills/*/SKILL.md",
+  # *.md (not just SKILL.md) so vendored COMPANION files (prompt templates,
+  # testing-anti-patterns) ship too — the 3-family review (2026-05-23) found the
+  # SKILL.md-only glob left companion references dangling in the wheel.
+  "claude_extensions/skills/*/*.md",
   "claude_extensions/NOTICE",
   "claude_extensions/VENDORED.md",
   "claude_extensions/hooks/*.py",

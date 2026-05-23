@@ -10,6 +10,15 @@ description: "Consensus-adapted: Use when executing implementation plans with in
 
 Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review.
 
+> **Consensus is the binding review gate (consensus adaptation).** The two-stage
+> review below — spec-reviewer + code-quality-reviewer subagents, driven by the
+> prompts vendored in this skill (`./spec-reviewer-prompt.md`,
+> `./code-quality-reviewer-prompt.md`) — is a FAST INNER LOOP for catching defects
+> per task. It is NOT the approval. The binding sign-off is a consensus **Workflow B
+> sealed cross-family review** (`consensus:requesting-code-review`): a model family
+> DIFFERENT from the author must approve before the work counts as reviewed. Local
+> subagent review never substitutes for that cross-family closure.
+
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
 **Core principle:** Fresh subagent per task + two-stage review (spec then quality) = high quality, fast iteration
