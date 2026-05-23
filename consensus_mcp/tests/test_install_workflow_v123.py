@@ -32,9 +32,30 @@ def test_install_freshness_warns_when_below_floor(tmp_path, monkeypatch, capsys)
     # Raise the floor so the real (complete) package trips the staleness warning.
     monkeypatch.setattr(wiz, "_EXPECTED_VENDORED_SKILLS", 999)
 
-    wiz.main(["--install-claude-code"])
+    # v1.24 (fix 8): below-floor now ABORTS before copying any asset and returns a
+    # distinct nonzero (6, incomplete) instead of warning-then-installing-stale.
+    rc = wiz.main(["--install-claude-code"])
     err = capsys.readouterr().err
+    assert rc == 6, err
     assert "STALE or partial" in err
+    assert "ABORTING" in err
+    # Nothing was copied — the install aborted before touching CLAUDE_HOME.
+    assert not (home / "skills" / "consensus" / "SKILL.md").exists()
+
+
+def test_install_freshness_force_proceeds_despite_below_floor(tmp_path, monkeypatch, capsys):
+    home = tmp_path / "claude_home"
+    home.mkdir()
+    monkeypatch.setenv("CLAUDE_HOME", str(home))
+    monkeypatch.setattr(wiz, "_EXPECTED_VENDORED_SKILLS", 999)
+
+    # v1.24 (fix 8): --force overrides the staleness abort and installs anyway,
+    # with the warning still printed.
+    rc = wiz.main(["--install-claude-code", "--force"])
+    err = capsys.readouterr().err
+    assert rc == 0, err
+    assert "STALE or partial" in err
+    assert (home / "skills" / "consensus" / "SKILL.md").exists()
 
 
 def test_install_clean_install_is_rc0_no_freshness_warning(tmp_path, monkeypatch, capsys):

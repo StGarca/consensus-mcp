@@ -25,6 +25,8 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -59,6 +61,15 @@ GITIGNORE_MANAGED_PATHS = (
 
 def _detect_repo_root(start: Path | None = None) -> Path:
     """Resolve project root for the iteration.
+
+    v1.24 (fix 10): this is the wizard's single, reusable repo-root detector —
+    `cmd_init` calls it instead of inlining its own walk, so a future shared
+    util is a trivial lift. NOTE: the PreToolUse gate currently has its OWN copy
+    of root detection in
+    consensus_mcp/claude_extensions/hooks/consensus_pretooluse_gate.py:_repo_root
+    (which defers to consensus_mcp._self_drive._resolve_repo_root). Unifying the
+    two onto one shared helper is pending; this function is the intended landing
+    spot for that. The gate is intentionally NOT edited here.
 
     iter-0031 (per iter-0030 converged plan Q3): use marker-based detection
     instead of .git-only walking. Precedence:
@@ -112,7 +123,11 @@ def _resolve_claude_home() -> Path:
     import os as _os
     override = _os.environ.get("CLAUDE_HOME")
     if override:
-        return Path(override)
+        # v1.24 (fix 2): a relative CLAUDE_HOME override must be normalized so
+        # later path comparisons / os.replace operate on an absolute path
+        # (otherwise the install destination is resolved against the *current*
+        # cwd at each call, which can drift). expanduser handles a leading "~".
+        return Path(override).expanduser().resolve()
     return Path.home() / ".claude"
 
 
@@ -197,22 +212,34 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
             statuses.append(f"WARN: source asset {src} missing; skipped")
             continue
 
-        src_text = src.read_text(encoding="utf-8")
-        if dst.exists():
-            existing_text = dst.read_text(encoding="utf-8")
-            if existing_text == src_text:
-                statuses.append(f"unchanged: {dst}")
-                continue
-            if not force:
-                statuses.append(
-                    f"SKIP: {dst} diverges from shipped content; pass --force to overwrite"
-                )
-                continue
-            # force=True: fall through to write.
+        # v1.24 (fix 1): wrap every per-file read/write in try/except OSError and
+        # CONTINUE rather than crash mid-install — a single bad file (permission
+        # denied, ENOSPC, ...) must not abort the rest of the install.
+        try:
+            src_text = src.read_text(encoding="utf-8")
+            if dst.exists():
+                existing_text = dst.read_text(encoding="utf-8")
+                if existing_text == src_text:
+                    statuses.append(f"unchanged: {dst}")
+                    continue
+                if not force:
+                    statuses.append(
+                        f"SKIP: {dst} diverges from shipped content; pass --force to overwrite"
+                    )
+                    continue
+                # force=True: fall through to write.
 
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(src_text, encoding="utf-8")
-        statuses.append(f"wrote: {dst}")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            # v1.24 (fix 6): never write THROUGH a destination symlink (that would
+            # clobber the link's target, possibly outside claude_home). Unlink the
+            # symlink first so we overwrite the link itself with a regular file.
+            if dst.is_symlink():
+                dst.unlink()
+            dst.write_text(src_text, encoding="utf-8")
+            statuses.append(f"wrote: {dst}")
+        except OSError as exc:
+            statuses.append(f"WARN: {dst} failed: {exc}")
+            continue
 
     return statuses
 
@@ -267,22 +294,31 @@ def _install_project_agents(repo_root: Path, force: bool) -> list[str]:
             statuses.append(f"WARN: source agent {src} missing; skipped")
             continue
 
-        src_text = src.read_text(encoding="utf-8")
-        if dst.exists():
-            existing_text = dst.read_text(encoding="utf-8")
-            if existing_text == src_text:
-                statuses.append(f"unchanged: {dst}")
-                continue
-            if not force:
-                statuses.append(
-                    f"SKIP: {dst} diverges from shipped content; pass --force to overwrite"
-                )
-                continue
-            # force=True: fall through to write.
+        # v1.24 (fix 1): wrap every per-file read/write in try/except OSError and
+        # CONTINUE rather than crash mid-install (mirrors _install_claude_extensions).
+        try:
+            src_text = src.read_text(encoding="utf-8")
+            if dst.exists():
+                existing_text = dst.read_text(encoding="utf-8")
+                if existing_text == src_text:
+                    statuses.append(f"unchanged: {dst}")
+                    continue
+                if not force:
+                    statuses.append(
+                        f"SKIP: {dst} diverges from shipped content; pass --force to overwrite"
+                    )
+                    continue
+                # force=True: fall through to write.
 
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(src_text, encoding="utf-8")
-        statuses.append(f"wrote: {dst}")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            # v1.24 (fix 6, parity): don't write through a destination symlink.
+            if dst.is_symlink():
+                dst.unlink()
+            dst.write_text(src_text, encoding="utf-8")
+            statuses.append(f"wrote: {dst}")
+        except OSError as exc:
+            statuses.append(f"WARN: {dst} failed: {exc}")
+            continue
 
     return statuses
 
@@ -357,9 +393,15 @@ def _build_consensus_hook_command(script_path: Path) -> str:
     """Hook command string that runs the script with the active interpreter.
 
     Uses sys.executable so the hook runs under the same Python the wizard ran
-    under (which has consensus_mcp importable); quotes the path for spaces.
+    under (which has consensus_mcp importable).
+
+    v1.24 (fix 4): build with shlex.join so a path containing a double quote (or
+    other shell metacharacter) produces a VALID shell command. The previous
+    manual f'"{...}" "{...}"' wrapping broke on embedded double quotes and could
+    even inject shell syntax. shlex.join quotes each token only as needed, so the
+    common no-metacharacter case is unchanged.
     """
-    return f'"{sys.executable}" "{script_path}"'
+    return shlex.join([sys.executable, str(script_path)])
 
 
 def _build_consensus_hook_groups(claude_home: Path) -> dict[str, list[dict]]:
@@ -643,8 +685,58 @@ def _load_existing_mcp_json(path: Path) -> tuple[dict | None, str | None]:
         return None, f"read error: {exc}"
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write text atomically via tmp file + os.replace (fix 5b / fix 11).
+
+    Mirrors _atomic_write_json's durability contract for non-JSON files
+    (instruction files). os.replace is an atomic rename, so a concurrent reader
+    never observes a half-written file and concurrent writers are last-writer-wins
+    rather than corrupting. Full file locking is overkill; atomic replace suffices.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _path_is_within(repo_root: Path, target: Path) -> bool:
+    """True if `target` resolves to repo_root itself or a path strictly inside it.
+
+    v1.24 (fix 5a): guards instruction-file provisioning against path traversal —
+    a profile-supplied filename like '../../etc/evil' must not let us write
+    outside the repo. Both sides are fully resolved before comparison.
+    """
+    rr = repo_root.resolve()
+    p = target.resolve()
+    return rr == p or rr in p.parents
+
+
+def _json_semantically_equal(a, b) -> bool:
+    """True if two JSON-able values are equal ignoring object key ORDER.
+
+    v1.24 (fix 3): used to compare an existing `.mcp.json` server entry against the
+    desired one so a difference that is ONLY key ordering is not flagged as a
+    conflict. json.dumps(..., sort_keys=True) canonicalizes key order at every
+    nesting level. None compares unequal to a real entry (so a missing entry is
+    not "already current").
+    """
+    if a is None or b is None:
+        return a is b
+    try:
+        return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    except (TypeError, ValueError):
+        return a == b
+
+
 def _atomic_write_json(path: Path, data: dict) -> None:
-    """Pretty-print JSON, write atomically via tmp+rename."""
+    """Pretty-print JSON, write atomically via tmp+rename.
+
+    v1.24 (fix 11): the tmp-file + os.replace pattern makes config writes atomic —
+    a concurrent writer races to last-writer-wins rather than corrupting a
+    half-written file (os.replace is an atomic rename on POSIX and Windows).
+    Full cross-process file locking is overkill here; atomic replace is
+    sufficient. Reused by .mcp.json AND settings.json writers.
+    """
     text = json.dumps(data, indent=2, sort_keys=False) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -696,10 +788,15 @@ def _write_mcp_json(
         return ("parse-error:mcpServers is not a JSON object", path)
 
     existing_entry = mcp_servers.get("consensus-mcp")
-    if existing_entry == desired:
+    # v1.24 (fix 3): compare for SEMANTIC equality (key-order-insensitive) so an
+    # existing entry that differs only in JSON key ordering is NOT reported as a
+    # conflict. Python dict == is already order-independent, but normalizing via
+    # json.dumps(..., sort_keys=True) makes the intent explicit and is robust even
+    # if an entry was hand-written as a differently-ordered object.
+    if _json_semantically_equal(existing_entry, desired):
         return ("already-current", path)
 
-    if existing_entry is not None and existing_entry != desired and not force:
+    if existing_entry is not None and not force:
         return ("blocked-conflict", path)
 
     # Add or replace consensus-mcp entry; preserve all other servers.
@@ -1084,11 +1181,22 @@ def _provision_instruction_files(
     written: list[Path] = []
     for filename in targets:
         path = repo_root / filename
+        # v1.24 (fix 5a): refuse to write outside repo_root. A malicious/buggy
+        # profile filename ('../../x', or an absolute path) must not let us escape
+        # the project tree.
+        if not _path_is_within(repo_root, path):
+            print(
+                f"WARN: refusing to write instruction file outside repo: "
+                f"{filename!r} resolves to {path.resolve()}",
+                file=sys.stderr,
+            )
+            continue
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         new_text = _upsert_managed_block(existing, block_body)
         if new_text != existing:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(new_text, encoding="utf-8")
+            # fix 5b: write atomically (tmp + os.replace) so a crash mid-write
+            # never leaves a truncated instruction file.
+            _atomic_write_text(path, new_text)
         written.append(path)
     return written
 
@@ -1350,7 +1458,13 @@ def build_config_from_flags(args, repo_root: Path, interactive: bool = False) ->
 
 
 def write_config(config: dict, path: Path) -> None:
-    """Atomically write config YAML to path."""
+    """Atomically write config YAML to path.
+
+    v1.24 (fix 11): confirmed atomic — tmp.replace() is an atomic rename, so a
+    concurrent writer is last-writer-wins rather than corrupting config.yaml. Full
+    cross-process locking is overkill; atomic replace suffices. (Same contract as
+    _atomic_write_json / _atomic_write_text.)
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
@@ -1480,9 +1594,21 @@ def cmd_init(args) -> int:
         return 0
 
     if getattr(args, "install_claude_code", False):
+        # --- return-code convention for the global --install-claude-code path ---
+        #   0  ok
+        #   5  managed-file SKIP (a divergent installed file was KEPT, not updated)
+        #   6  INCOMPLETE install: freshness-stale ABORT (fix 8) OR settings.json
+        #      hook-activation failure (fix 7)
+        # Precedence (more severe / earlier-detected wins): the freshness ABORT
+        # (fix 8) happens BEFORE any asset is copied, so it returns 6 first. After
+        # copying, an activation failure (6, incomplete) outranks a managed-file
+        # SKIP (5, stale-but-functional) because a dead hook set leaves enforcement
+        # OFF, which is the worse state. (.consensus per-project agent SKIP -> 7 is
+        # a separate, project-only path; it never co-occurs here.)
         claude_home = _resolve_claude_home()
-        # Finding 5 (freshness self-check): warn before deploying a STALE or partial
-        # package instead of silently shipping an old/incomplete asset set.
+        # Finding 5 / fix 8 (freshness self-check): a STALE or partial package
+        # must NOT silently deploy an old/incomplete asset set. ABORT before
+        # copying anything (return 6, incomplete) unless --force overrides.
         src_root = _claude_extensions_source_root()
         present_vendored = sum(
             1 for rel, _ in _CLAUDE_EXTENSION_FILES
@@ -1496,17 +1622,32 @@ def cmd_init(args) -> int:
                 f"STALE or partial. Upgrade the package (e.g. "
                 f"`pipx install --force consensus-mcp`) before installing, or you will "
                 f"deploy an old/incomplete skill set.", file=sys.stderr)
+            if not args.force:
+                # fix 8: abort BEFORE copying any asset; --force allows proceeding
+                # (with the warning already printed above).
+                print(
+                    "ABORTING: refusing to deploy a stale/partial skill pack. "
+                    "Upgrade consensus-mcp, or pass --force to install anyway.",
+                    file=sys.stderr)
+                return 6
         ext_lines = list(_install_claude_extensions(claude_home, force=args.force))
         for line in ext_lines:
             print(line)
         # v1.21 (B5): copying the skill/command files does NOT activate the
         # enforcement hooks — Claude Code reads hooks only from settings.json.
         # Merge them in (idempotent, preserves unrelated user hooks).
-        for line in _install_claude_settings_json(claude_home, force=args.force):
+        settings_lines = list(_install_claude_settings_json(claude_home, force=args.force))
+        for line in settings_lines:
             print(line)
+        # fix 7: if hooks could NOT be activated (e.g. a malformed existing
+        # settings.json that _install_claude_settings_json refused to clobber),
+        # the install is INCOMPLETE — enforcement is OFF. Return a distinct
+        # nonzero (6) instead of a misleading 0. The function signals failure via
+        # a WARN: status line (it never raises; it fails soft to avoid clobbering).
+        settings_failed = any(ln.startswith("WARN:") for ln in settings_lines)
         # Finding 4 (stale-skill SKIP): a divergent managed file was KEPT (not
-        # updated). Surface it LOUDLY + return a distinct nonzero so an incomplete
-        # upgrade is detectable; silent staleness is the failure mode here.
+        # updated). Surface it LOUDLY so an incomplete upgrade is detectable;
+        # silent staleness is the failure mode here.
         skipped = [ln for ln in ext_lines if ln.startswith("SKIP:")]
         if skipped:
             print(
@@ -1516,6 +1657,13 @@ def cmd_init(args) -> int:
                 file=sys.stderr)
             for ln in skipped:
                 print(f"  - {ln[len('SKIP: '):]}", file=sys.stderr)
+        if settings_failed:
+            print(
+                "\nERROR: consensus hooks were NOT activated (settings.json could "
+                "not be updated) — enforcement is OFF. Fix the reported settings.json "
+                "problem and re-run.", file=sys.stderr)
+            return 6  # activation failure outranks a managed-file SKIP (see above)
+        if skipped:
             return 5
         return 0
 
@@ -1681,10 +1829,19 @@ def cmd_init(args) -> int:
     # .claude/agents/. Non-destructive (skip-if-exists unless --force); opt-out
     # via --no-agents. Best-effort: a copy failure must not abort a successful
     # config write.
+    #
+    # v1.24 (fix 9): a divergent agent is SKIPPED (kept), but the per-project init
+    # used to report plain success — masking a stale agent. Collect SKIP lines and
+    # mark the init INCOMPLETE (rc 7) unless --force, mirroring the global
+    # managed-file SKIP -> rc 5 behavior. (rc 7 is per-project-agent-specific so it
+    # does not collide with the global path's 5/6.)
+    agent_skipped: list[str] = []
     if not args.no_agents:
         try:
             for line in _install_project_agents(repo_root, force=args.force):
                 print(line)
+                if line.startswith("SKIP:"):
+                    agent_skipped.append(line)
         except OSError as exc:
             print(f"WARN: subagent install skipped: {exc}", file=sys.stderr)
     else:
@@ -1710,6 +1867,21 @@ def cmd_init(args) -> int:
         )
     except (OSError, ValueError) as exc:
         print(f"WARN: status summary skipped: {exc}", file=sys.stderr)
+
+    # v1.24 (fix 9): surface any divergent (SKIPPED) subagent loudly and mark the
+    # per-project init INCOMPLETE (rc 7) unless --force. The config + .mcp.json
+    # were still written (so the bootstrap is usable), but a stale agent is a
+    # detectable, non-silent partial — mirrors the global managed-file SKIP path.
+    if agent_skipped and not args.force:
+        print(
+            f"\nWARNING: {len(agent_skipped)} subagent file(s) were SKIPPED because "
+            f"the on-disk copy diverges from this version — they are now STALE. "
+            f"Re-run with --force to update them (this overwrites local edits):",
+            file=sys.stderr,
+        )
+        for ln in agent_skipped:
+            print(f"  - {ln[len('SKIP: '):]}", file=sys.stderr)
+        return 7
 
     return 0
 

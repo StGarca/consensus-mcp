@@ -205,8 +205,6 @@ def test_pretooluse_bash_default_deny_no_marker(tmp_path, command):
     "git show HEAD",
     "git branch",
     "git rev-parse --show-toplevel",
-    "pytest -q",
-    "python -m pytest tests/ -q",
     "echo hello",
     "pwd",
     "which python",
@@ -603,5 +601,50 @@ def test_v123_real_pipeline_still_denied(tmp_path):
     """Regression: a genuine pipeline with a non-allowlisted segment is still denied
     (the splitter fix must not over-allow)."""
     ev = {"tool_name": "Bash", "tool_input": {"command": "cat x | rm -rf y"}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+# --- v1.24 gate hardening (full-init review 2026-05-23) ---------------------- #
+
+@pytest.mark.parametrize("command", [
+    "pytest -q",
+    "python -m pytest tests/ -q",
+    "python3 -m pytest",
+])
+def test_v124_pytest_no_longer_allowlisted(tmp_path, command):
+    """codex: pytest executes arbitrary test/conftest code -> not read-only."""
+    ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+@pytest.mark.parametrize("command", [
+    "cat x & rm -rf y",          # single & background -> writer after it
+    "ls & python -c 'x'",
+    "grep foo x & sh -c 'bad'",
+])
+def test_v124_single_ampersand_writer_denied(tmp_path, command):
+    """kimi BLOCKING: a single & is a separator; a writer after it must be denied."""
+    ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_v124_grep_with_escaped_quote_and_pipe_allowed(tmp_path):
+    """gemini: backslash-escaped quote + | inside double quotes stays ONE read-only
+    segment (boundary detection must not be fooled by the escape)."""
+    ev = {"tool_name": "Bash",
+          "tool_input": {"command": 'grep -E "a\\"b|c" file'}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_v124_governance_symlink_escape_denied(tmp_path):
+    """kimi BLOCKING: if .consensus symlinks to the repo root (or /), the governance
+    bootstrap allow must NOT become a universal write bypass."""
+    import os as _os
+    (tmp_path / ".consensus").symlink_to(tmp_path)  # .consensus -> repo root
+    ev = {"tool_name": "Write", "tool_input": {"file_path": "src/evil.py"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
     assert cp.returncode == 2, cp.stderr

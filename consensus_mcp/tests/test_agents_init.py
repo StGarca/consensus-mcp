@@ -110,7 +110,11 @@ def test_rerun_skips_existing_divergent_agent(tmp_path, monkeypatch):
     orch = agents_dir / "consensus-orchestrator.md"
     # User edits the file; a plain rerun must NOT clobber it.
     orch.write_text("USER EDITED CONTENT\n", encoding="utf-8")
-    assert wiz.main(["--reconfigure", *_init_args()]) == 0
+    # v1.24 (fix 9): a divergent agent is still PRESERVED (no clobber), but the
+    # per-project init now reports INCOMPLETE (rc 7) instead of a silent rc 0 —
+    # mirroring the global managed-file SKIP -> nonzero behavior. The no-clobber
+    # contract this test guards is unchanged.
+    assert wiz.main(["--reconfigure", *_init_args()]) == 7
     assert orch.read_text(encoding="utf-8") == "USER EDITED CONTENT\n"
 
 
