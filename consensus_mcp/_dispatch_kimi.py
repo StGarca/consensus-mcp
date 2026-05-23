@@ -358,11 +358,18 @@ def _repo_status_snapshot(repo_root: Path) -> dict[str, str]:
             continue
         full = repo_root / path
         try:
-            if full.is_file() and not full.is_symlink():
+            if full.is_symlink():
+                # Sign by the link TARGET so a rewrite of an already-dirty symlink's
+                # target is detected (final-2 codex-rev-001), not just a type change.
+                # Check is_symlink BEFORE is_file (is_file follows the link).
+                snap[path] = "link:" + hashlib.sha256(
+                    os.readlink(full).encode("utf-8", "surrogateescape")
+                ).hexdigest()
+            elif full.is_file():
                 snap[path] = hashlib.sha256(full.read_bytes()).hexdigest()
             else:
-                # deleted / symlink / dir / special: the status code is the signature
-                # (a delete or type change still differs from the before snapshot).
+                # deleted / dir / special: the status code is the signature (a delete
+                # or type change still differs from the before snapshot).
                 snap[path] = "code:" + code
         except OSError:
             snap[path] = "code:" + code

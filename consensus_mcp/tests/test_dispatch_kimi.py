@@ -1013,6 +1013,30 @@ def test_repo_status_snapshot_detects_mutation_to_already_dirty_file(monkeypatch
     assert changed == {"already_dirty.py"}
 
 
+def test_repo_status_snapshot_detects_symlink_target_rewrite(monkeypatch, tmp_path):
+    # final-2 codex-rev-001: an already-dirty symlink whose TARGET is rewritten keeps
+    # the same git-status code but a different target -> must be detected (sign by readlink).
+    (tmp_path / ".git").mkdir()
+    link = tmp_path / "thelink"
+    try:
+        link.symlink_to("a.txt")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
+
+    class _Result:
+        returncode = 0
+        stdout = " M thelink\n"
+
+    monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
+    before = _dispatch_kimi._repo_status_snapshot(tmp_path)
+    link.unlink()
+    link.symlink_to("b.txt")  # repoint: same status line, different target
+    after = _dispatch_kimi._repo_status_snapshot(tmp_path)
+    changed = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
+    assert changed == {"thelink"}
+
+
 def test_repo_status_snapshot_empty_when_clean(monkeypatch, tmp_path):
     (tmp_path / ".git").mkdir()
     monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: "/usr/bin/git")
