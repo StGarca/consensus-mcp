@@ -229,13 +229,11 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
                     continue
                 # force=True: fall through to write.
 
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            # v1.24 (fix 6): never write THROUGH a destination symlink (that would
-            # clobber the link's target, possibly outside claude_home). Unlink the
-            # symlink first so we overwrite the link itself with a regular file.
-            if dst.is_symlink():
-                dst.unlink()
-            dst.write_text(src_text, encoding="utf-8")
+            # v1.25 (gemini BLOCKING / kimi): write ATOMICALLY. os.replace replaces a
+            # destination symlink (the link itself, never its target) in ONE atomic
+            # step — closing the TOCTOU window the prior is_symlink()->unlink()->write
+            # left open, and never exposing a partial file to a concurrent reader.
+            _atomic_write_text(dst, src_text)
             statuses.append(f"wrote: {dst}")
         except OSError as exc:
             statuses.append(f"WARN: {dst} failed: {exc}")
@@ -310,11 +308,9 @@ def _install_project_agents(repo_root: Path, force: bool) -> list[str]:
                     continue
                 # force=True: fall through to write.
 
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            # v1.24 (fix 6, parity): don't write through a destination symlink.
-            if dst.is_symlink():
-                dst.unlink()
-            dst.write_text(src_text, encoding="utf-8")
+            # v1.25 (gemini BLOCKING / kimi, parity): atomic write — os.replace
+            # replaces a dst symlink without following it, no TOCTOU window.
+            _atomic_write_text(dst, src_text)
             statuses.append(f"wrote: {dst}")
         except OSError as exc:
             statuses.append(f"WARN: {dst} failed: {exc}")
@@ -558,7 +554,13 @@ def _install_claude_settings_json(claude_home: Path, force: bool = False) -> lis
     if merged == existing:
         return [f"settings.json hooks already current: {path}"]
 
-    _atomic_write_json(path, merged)
+    # v1.25 (kimi): an IO failure writing settings.json must NOT crash the install —
+    # fail soft with a WARN so the handler surfaces an incomplete install (rc 6),
+    # mirroring the extension/agent installers.
+    try:
+        _atomic_write_json(path, merged)
+    except OSError as exc:
+        return [f"WARN: {path} could not be written ({exc}); hook activation skipped."]
     events = ", ".join(sorted({e for e, _, _ in _CONSENSUS_HOOK_SPECS}))
     return [f"activated consensus hooks in {path} (events: {events})"]
 

@@ -42,7 +42,9 @@ def test_install_extensions_io_error_warns_and_continues(tmp_path, monkeypatch):
     boom_target = home / "skills" / "consensus" / "SKILL.md"
 
     def flaky_write_text(self, data, *a, **k):
-        if self == boom_target:
+        # v1.25: writes now go through _atomic_write_text (a `<dst>.tmp` sibling),
+        # so match the target by prefix to catch the atomic tmp write too.
+        if str(self).startswith(str(boom_target)):
             raise OSError("simulated ENOSPC")
         return real_write(self, data, *a, **k)
 
@@ -63,7 +65,8 @@ def test_install_project_agents_io_error_warns_and_continues(tmp_path, monkeypat
     first_agent = repo / ".claude" / "agents" / wiz._PROJECT_AGENT_FILES[0]
 
     def flaky_write_text(self, data, *a, **k):
-        if self == first_agent:
+        # v1.25: atomic write -> match the `<dst>.tmp` sibling by prefix too.
+        if str(self).startswith(str(first_agent)):
             raise OSError("simulated EACCES")
         return real_write(self, data, *a, **k)
 
@@ -375,3 +378,46 @@ def test_write_config_is_atomic(tmp_path):
     wiz.write_config(cfg.default_config(), p)
     assert p.exists()
     assert not p.with_suffix(p.suffix + ".tmp").exists()
+
+
+# --- v1.25 (convergence re-review fixes) ------------------------------------- #
+
+def test_v125_install_replaces_dst_symlink_without_following(tmp_path, monkeypatch):
+    """gemini BLOCKING: installing over a destination symlink must replace the LINK
+    (atomically), never write through it to clobber the outside target."""
+    home = tmp_path / "home"; home.mkdir()
+    monkeypatch.setenv("CLAUDE_HOME", str(home))
+    outside = tmp_path / "outside.txt"; outside.write_text("SECRET\n", encoding="utf-8")
+    sk = home / "skills" / "consensus"; sk.mkdir(parents=True)
+    (sk / "SKILL.md").symlink_to(outside)            # managed dst is a symlink
+
+    wiz.main(["--install-claude-code", "--force"])    # --force overwrites divergent
+
+    dstfile = home / "skills" / "consensus" / "SKILL.md"
+    assert not dstfile.is_symlink()                   # link replaced with a real file
+    assert dstfile.read_text(encoding="utf-8") != "SECRET\n"
+    assert outside.read_text(encoding="utf-8") == "SECRET\n"   # target untouched
+
+
+def test_v125_settings_write_oserror_warns_not_crashes(tmp_path, monkeypatch):
+    """kimi: an IO failure writing settings.json fails SOFT (WARN), never crashes."""
+    home = tmp_path / "home"; home.mkdir()
+    def boom(path, data):
+        raise OSError("disk full")
+    monkeypatch.setattr(wiz, "_atomic_write_json", boom)
+    lines = wiz._install_claude_settings_json(home, force=False)
+    assert any(l.startswith("WARN:") and "could not be written" in l for l in lines), lines
+
+
+def test_v125_settings_write_failure_returns_rc6(tmp_path, monkeypatch):
+    """kimi: settings.json activation failure surfaces as an incomplete install (rc 6)."""
+    home = tmp_path / "home"; home.mkdir()
+    monkeypatch.setenv("CLAUDE_HOME", str(home))
+    real = wiz._atomic_write_json
+    def selective(path, data):
+        if str(path).endswith("settings.json"):
+            raise OSError("boom")
+        return real(path, data)
+    monkeypatch.setattr(wiz, "_atomic_write_json", selective)
+    rc = wiz.main(["--install-claude-code"])
+    assert rc == 6

@@ -648,3 +648,46 @@ def test_v124_governance_symlink_escape_denied(tmp_path):
     ev = {"tool_name": "Write", "tool_input": {"file_path": "src/evil.py"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
     assert cp.returncode == 2, cp.stderr
+
+
+# --- v1.25 gate hardening (v1.24 convergence re-review 2026-05-23) ----------- #
+
+@pytest.mark.parametrize("command,allowed", [
+    ("git branch", True),
+    ("git branch -a", True),
+    ("git branch -v", True),
+    ("git branch --merged", True),
+    ("git branch -d feature", False),       # delete
+    ("git branch -D feature", False),
+    ("git branch -m old new", False),       # rename
+    ("git branch newbranch", False),        # create (bare name)
+])
+def test_v125_git_branch_write_variants_denied(tmp_path, command, allowed):
+    """kimi: `git branch` write forms (delete/rename/create) are not read-only."""
+    ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == (0 if allowed else 2), (command, cp.stderr)
+
+
+@pytest.mark.parametrize("command,allowed", [
+    ("(rm -rf x)", False),                  # subshell -> writer
+    ("ls; (rm x)", False),                  # subshell after separator
+    ("grep '(foo)' file", True),            # parens in a QUOTED arg -> fine
+    ("grep -E '(a|b)' file", True),
+])
+def test_v125_subshell_parens(tmp_path, command, allowed):
+    """gemini: a subshell command token is denied; quoted parens in args are not."""
+    ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == (0 if allowed else 2), (command, cp.stderr)
+
+
+def test_v125_governance_dir_symlink_to_inrepo_denied(tmp_path):
+    """codex BLOCKING: a .consensus SYMLINK (even to an in-repo dir) must NOT grant
+    the governance bootstrap allow -> writing through it is gated, not bypassed."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / ".consensus").symlink_to(tmp_path / "src")  # .consensus -> src/
+    ev = {"tool_name": "Write",
+          "tool_input": {"file_path": ".consensus/design-approved"}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr

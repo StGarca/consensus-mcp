@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.25.0 - 2026-05-23
+
+**Convergence re-review fixes (codex + gemini + kimi).** The full re-review of the
+v1.24 fixes found 5 residuals — mostly in the v1.24 fixes themselves (symlink handling
+was the soft spot). All fixed + tested (suite 1383 passed / 7 skipped).
+
+### Fixed — gate
+- **Governance-dir symlink bypass (BLOCKING).** `_is_governance_path` now rejects a
+  *symlinked* `.consensus`/`consensus-state` (even one pointing at an in-repo dir like
+  `src/`), which previously let code paths be treated as governance.
+- **`git branch` write variants** (`-d`/`-D`/`-m`/`-M`/bare new-name) removed from the
+  read-only allowlist — only listing flags are permitted.
+- **Subshell command tokens** (`(rm x)`) rejected; quoted parens in args (`grep '(x)'`)
+  are unaffected.
+
+### Fixed — install workflow
+- **TOCTOU in symlink replacement (BLOCKING).** Both installers now write via atomic
+  `os.replace`, which replaces a destination symlink (the link, not its target) in one
+  step — closing the `is_symlink()→unlink()→write` race.
+- **settings.json write IO failure** now fails soft (WARN → incomplete-install rc 6)
+  instead of crashing the installer.
+
 ## 1.24.0 - 2026-05-23
 
 **Full init-workflow review fixes (codex + gemini + kimi).** A full-panel review of

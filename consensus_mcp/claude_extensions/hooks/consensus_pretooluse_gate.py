@@ -139,6 +139,11 @@ def _segment_is_read_only(segment: str) -> bool:
     if not tokens:
         return False
     head = tokens[0]
+    # v1.25 (gemini): reject a segment whose COMMAND token opens/closes a subshell
+    # — `(rm x)`, `cmd)` etc. Parens inside a QUOTED arg (`grep '(x)' f`) stay in a
+    # LATER token, so head is clean — no false positive on legitimate regex args.
+    if "(" in head or ")" in head:
+        return False
     if head in _READ_ONLY_COMMANDS:
         return True
     if head == "git":
@@ -153,6 +158,18 @@ def _segment_is_read_only(segment: str) -> bool:
             # prefix matches that do NOT catch benign flags like `--color`.
             if t == "-c" or t.startswith("--output") or t.startswith("--exec-path"):
                 return False
+        # v1.25 (kimi): `git branch` with write args (-d/-D/-m/-M/-c/-C, or a bare
+        # NEW branch name) DELETES/RENAMES/CREATES branches — not read-only. Restrict
+        # `git branch` to the listing form: only read-only flags after the subcommand.
+        if tokens[1] == "branch":
+            _RO_BRANCH = {
+                "-a", "--all", "-v", "-vv", "--verbose", "-r", "--remotes",
+                "--list", "--merged", "--no-merged", "--contains", "--no-contains",
+                "--color", "--no-color",
+            }
+            for t in tokens[2:]:
+                if t not in _RO_BRANCH:
+                    return False
         return True
     # v1.24 (codex finding): `python -m pytest` is NO LONGER allowed — pytest runs
     # arbitrary test/conftest/plugin code, so it is not read-only. python is denied.
@@ -229,11 +246,15 @@ def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
         p = file_path if file_path.is_absolute() else (repo_root / file_path)
         p = p.resolve()
         for gov in (".consensus", "consensus-state"):
-            base = (repo_root / gov).resolve()
-            # v1.24 (kimi BLOCKING): reject symlink escape — `base` must be a real
-            # subdir STRICTLY inside repo_root. If `.consensus` symlinks to `/` or the
-            # repo root, the resolved base would wrongly be an ancestor of every path,
-            # turning the bootstrap allow into a universal write bypass.
+            gov_dir = repo_root / gov
+            # v1.25 (codex BLOCKING): the governance dir must be a REAL, non-symlink
+            # directory. A symlinked `.consensus` (even one pointing at an IN-repo code
+            # dir like `src/`) would let code paths be treated as governance -> write
+            # bypass. Reject any symlink; only a genuine dir grants the bootstrap allow.
+            if gov_dir.is_symlink():
+                continue
+            base = gov_dir.resolve()
+            # v1.24 (kimi BLOCKING): `base` must also be STRICTLY inside repo_root.
             if base == rr or rr not in base.parents:
                 continue
             if p == base or base in p.parents:
