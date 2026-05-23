@@ -36,17 +36,23 @@ SESSIONSTART = _HOOKS_DIR / "consensus_sessionstart.py"
 
 
 def _run_hook(script: Path, event: dict, *, repo_root: Path,
-              runtime: str = "present") -> subprocess.CompletedProcess:
+              runtime: str = "present", opted_in: bool = True) -> subprocess.CompletedProcess:
     """Invoke a hook script with `event` on stdin. `runtime` in
-    {"present","absent"} forces the runtime probe."""
+    {"present","absent"} forces the runtime probe. `opted_in` (default True) forces
+    the PreToolUse gate's per-repo opt-in so enforcement is exercised even though
+    the tmp repo has no real `.consensus/` dir (v1.23 opt-in: the gate fails OPEN
+    in a repo that never enabled consensus)."""
     env = dict(os.environ)
     env["CONSENSUS_MCP_REPO_ROOT"] = str(repo_root)
     env.pop("CONSENSUS_MCP_FORCE_RUNTIME_ABSENT", None)
     env.pop("CONSENSUS_MCP_FORCE_RUNTIME_PRESENT", None)
+    env.pop("CONSENSUS_MCP_FORCE_OPTED_IN", None)
     if runtime == "present":
         env["CONSENSUS_MCP_FORCE_RUNTIME_PRESENT"] = "1"
     elif runtime == "absent":
         env["CONSENSUS_MCP_FORCE_RUNTIME_ABSENT"] = "1"
+    if opted_in:
+        env["CONSENSUS_MCP_FORCE_OPTED_IN"] = "1"
     return subprocess.run(
         [sys.executable, str(script)],
         input=json.dumps(event),
@@ -551,4 +557,51 @@ def test_integration_runtime_present_no_marker_pretooluse_denies(tmp_path):
     edit_ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"},
                "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, edit_ev, repo_root=tmp_path, runtime="present")
+    assert cp.returncode == 2, cp.stderr
+
+
+# --- v1.23 enforcement-design fixes (codex install-workflow review 2026-05-23) --- #
+
+def test_v123_opt_in_fail_open_without_dot_consensus(tmp_path):
+    """Finding 1: a repo with NO .consensus/ (never opted in) fails OPEN — the gate
+    must not brick development it was never meant to govern."""
+    ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_v123_enforces_when_dot_consensus_present(tmp_path):
+    """Finding 1 (real opt-in detection): a .consensus/ dir present -> the gate
+    enforces (deny without a marker), with NO force-flag."""
+    (tmp_path / ".consensus").mkdir()
+    ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_v123_governance_writes_allowed_for_bootstrap(tmp_path):
+    """Finding 2: writing the marker itself (and anything under .consensus/ /
+    consensus-state/) is allowed even with no prior approval — otherwise the gate
+    cannot mint its own marker (circular lock)."""
+    for rel in (".consensus/design-approved", "consensus-state/active/x/goal_packet.yaml"):
+        ev = {"tool_name": "Write", "tool_input": {"file_path": rel}, "cwd": str(tmp_path)}
+        cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+        assert cp.returncode == 0, f"{rel}: {cp.stderr}"
+
+
+def test_v123_grep_with_pipe_regex_allowed(tmp_path):
+    """Finding 3: a read-only grep whose regex contains | alternation is allowed
+    (the | is inside quotes, not a pipeline separator)."""
+    ev = {"tool_name": "Bash",
+          "tool_input": {"command": "grep -E 'PreToolUse|Stop|SessionStart' settings.json"},
+          "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_v123_real_pipeline_still_denied(tmp_path):
+    """Regression: a genuine pipeline with a non-allowlisted segment is still denied
+    (the splitter fix must not over-allow)."""
+    ev = {"tool_name": "Bash", "tool_input": {"command": "cat x | rm -rf y"}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
     assert cp.returncode == 2, cp.stderr

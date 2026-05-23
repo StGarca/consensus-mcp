@@ -163,6 +163,14 @@ _CLAUDE_EXTENSION_FILES = (
     ("hooks/consensus_stop_gate.py", "hooks/consensus_stop_gate.py"),
 )
 
+# v1.23 (finding 5): HARDCODED floor for the vendored consensus-* skill pack. The
+# --install-claude-code path warns when fewer than this many vendored SKILL.md
+# sources are actually present/installable — surfacing a STALE or partial package
+# (e.g. an old pipx entrypoint, or a packaging gap) instead of silently deploying
+# an old/incomplete asset set. (A self-COMPUTED count couldn't catch this, since a
+# stale package would also under-count its own expectation.)
+_EXPECTED_VENDORED_SKILLS = 10
+
 
 def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
     """Copy the shipped skill + command files into the user's CLAUDE_HOME.
@@ -1473,13 +1481,42 @@ def cmd_init(args) -> int:
 
     if getattr(args, "install_claude_code", False):
         claude_home = _resolve_claude_home()
-        for line in _install_claude_extensions(claude_home, force=args.force):
+        # Finding 5 (freshness self-check): warn before deploying a STALE or partial
+        # package instead of silently shipping an old/incomplete asset set.
+        src_root = _claude_extensions_source_root()
+        present_vendored = sum(
+            1 for rel, _ in _CLAUDE_EXTENSION_FILES
+            if rel.startswith("skills/consensus-") and rel.endswith("/SKILL.md")
+            and (src_root / rel).exists()
+        )
+        if present_vendored < _EXPECTED_VENDORED_SKILLS:
+            print(
+                f"WARNING: this consensus-mcp install ships only {present_vendored} of "
+                f"the expected {_EXPECTED_VENDORED_SKILLS} vendored skills — it looks "
+                f"STALE or partial. Upgrade the package (e.g. "
+                f"`pipx install --force consensus-mcp`) before installing, or you will "
+                f"deploy an old/incomplete skill set.", file=sys.stderr)
+        ext_lines = list(_install_claude_extensions(claude_home, force=args.force))
+        for line in ext_lines:
             print(line)
         # v1.21 (B5): copying the skill/command files does NOT activate the
         # enforcement hooks — Claude Code reads hooks only from settings.json.
         # Merge them in (idempotent, preserves unrelated user hooks).
         for line in _install_claude_settings_json(claude_home, force=args.force):
             print(line)
+        # Finding 4 (stale-skill SKIP): a divergent managed file was KEPT (not
+        # updated). Surface it LOUDLY + return a distinct nonzero so an incomplete
+        # upgrade is detectable; silent staleness is the failure mode here.
+        skipped = [ln for ln in ext_lines if ln.startswith("SKIP:")]
+        if skipped:
+            print(
+                f"\nWARNING: {len(skipped)} managed file(s) were SKIPPED because the "
+                f"installed copy diverges from this version — they are now STALE. "
+                f"Re-run with --force to update them (this overwrites local edits):",
+                file=sys.stderr)
+            for ln in skipped:
+                print(f"  - {ln[len('SKIP: '):]}", file=sys.stderr)
+            return 5
         return 0
 
     # gemini pass-3 rev-001: --dry-run no longer forces non-interactive. Users

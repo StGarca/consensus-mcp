@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.23.0 - 2026-05-23
+
+**Enforcement + install-workflow fixes (codex install-workflow review).** A codex
+review of `consensus init --install-claude-code` found 5 real issues (2 blocking) —
+all now fixed, each with tests.
+
+### Fixed
+- **Enforcement is now opt-in per repo (BLOCKING).** The PreToolUse design gate
+  only enforces when the repo has a `.consensus/` directory; a repo that never
+  enabled consensus (incl. consensus-mcp's own) **fails open**, instead of the prior
+  global default-deny that bricked development everywhere. `CONSENSUS_MCP_FORCE_OPTED_IN`
+  forces enforcement for tests.
+- **Gate can bootstrap its own marker (BLOCKING).** Writes under `.consensus/`
+  (incl. the `design-approved` marker) and `consensus-state/` are always permitted,
+  breaking the circular lock where minting the marker required edits the gate blocked.
+  Safe because the marker is re-validated against the live seal on use.
+- **Quote-aware Bash segment splitter.** A read-only command whose argument contains
+  `|`/`;`/`&&` inside quotes (e.g. `grep -E 'a|b'`) is no longer mis-parsed as a
+  pipeline and wrongly denied. Genuine pipelines with non-allowlisted segments are
+  still denied.
+- **Stale-skill SKIP surfaced.** `--install-claude-code` now warns loudly and returns
+  a distinct nonzero (5) when a divergent managed skill/hook is skipped on upgrade
+  (was a silent rc=0); user-edited content is still preserved (use `--force` to update).
+- **Package freshness self-check.** `--install-claude-code` warns when the package
+  ships fewer than the expected vendored-skill floor (a stale/partial pipx install),
+  instead of silently deploying an old asset set.
+
 ## 1.22.0 - 2026-05-23
 
 **Completed the vendored-skills (the v1.21 vendoring shipped with dangling

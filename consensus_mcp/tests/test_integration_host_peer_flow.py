@@ -85,10 +85,14 @@ def _run_hook(script: Path, event: dict, *, repo_root: Path,
     env["CONSENSUS_MCP_REPO_ROOT"] = str(repo_root)
     env.pop("CONSENSUS_MCP_FORCE_RUNTIME_ABSENT", None)
     env.pop("CONSENSUS_MCP_FORCE_RUNTIME_PRESENT", None)
+    env.pop("CONSENSUS_MCP_FORCE_OPTED_IN", None)
     if runtime == "present":
         env["CONSENSUS_MCP_FORCE_RUNTIME_PRESENT"] = "1"
     elif runtime == "absent":
         env["CONSENSUS_MCP_FORCE_RUNTIME_ABSENT"] = "1"
+    # v1.23 opt-in: force per-repo enforcement so the tmp repo (no .consensus/) still
+    # exercises the gate instead of failing open.
+    env["CONSENSUS_MCP_FORCE_OPTED_IN"] = "1"
     return subprocess.run(
         [sys.executable, str(script)],
         input=json.dumps(event),
