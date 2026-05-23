@@ -6,10 +6,20 @@ pattern): reads the PreToolUse event JSON on stdin; blocks a tool call by
 exiting 2 with a reason on stderr, allows by exiting 0.
 
 Contract enforced (see `consensus_mcp/_design_approval.py`):
-  Implementation tools (Edit/Write/MultiEdit/NotebookEdit) and file-modifying
-  Bash commands are DENIED until a VALIDATED `.consensus/design-approved` marker
-  covers the scope being touched. A `cross_family_sealed=False` marker is
-  advisory only -> still denied (no single-Claude self-approval).
+  Implementation tools (Edit/Write/MultiEdit/NotebookEdit) are DENIED until a
+  VALIDATED `.consensus/design-approved` marker covers the scope being touched
+  (`verify_design_approval` re-validates the marker pointer against the live T6
+  seal — a hand-written marker cannot self-approve).
+
+  Bash is DEFAULT-DENY (decision B2): the old leaky blocklist (`_classify_bash`)
+  is GONE. Bash is allowed ONLY if (a) the command is on a conservative
+  READ-ONLY ALLOWLIST (matched on the leading command token; pipelines/`&&`
+  require EVERY segment allowlisted), OR (b) a tight-scope sealed marker is in
+  force (`marker_is_sealed`). An unknown command is DENIED (fail-safe — the
+  inverse of the unfixable blocklist).
+
+  THREAT MODEL: this enforces a COOPERATING agent's discipline, not a malicious
+  shell. It is not a sandbox.
 
 Graceful degradation (converged-plan invariant): if the consensus runtime is
 absent (`shutil.which("consensus-init") is None`) the gate FAILS OPEN (exit 0)
@@ -45,21 +55,24 @@ if str(_PKG_ROOT) not in sys.path:
 # Tools whose every invocation modifies a file at `tool_input.file_path`.
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
-# Conservative file-modifying Bash classifier. Keep this LIST conservative
-# (the converged plan: "keep regex conservative, log false positives"). Any
-# match means the command is treated as scope-modifying and requires a marker.
-_FILE_MODIFYING_BASH = (
-    re.compile(r"\bsed\b[^\n|;]*\s-i\b"),          # sed -i (in-place)
-    re.compile(r"\btee\b"),                          # tee (writes a file)
-    re.compile(r">>?"),                              # > or >> redirection
-    re.compile(r"\bmv\b"),
-    re.compile(r"\bcp\b"),
-    re.compile(r"\brm\b"),
-    re.compile(r"\bgit\b\s+(commit|tag|push)\b"),    # git commit/tag/push
-    re.compile(r"\b(release|deploy|publish)\b"),      # release/deploy/publish
-    re.compile(r"\btruncate\b"),
-    re.compile(r"\bdd\b"),
-)
+# Shell operators that split a command line into segments we evaluate
+# independently (a pipeline / sequence is allowed only if EVERY segment is
+# allowlisted). Conservative on purpose — anything we can't cleanly split or
+# recognise is denied.
+_BASH_SEGMENT_SPLIT = re.compile(r"\|\||&&|;|\||\n")
+
+# Conservative READ-ONLY ALLOWLIST (decision B2 + claude's usability fold-in).
+# A single command segment is allowed iff its LEADING token (or a recognised
+# `git <subcommand>` / `python -m pytest`) is on this list. Default-deny: an
+# unknown leading token is DENIED (fail-safe).
+_READ_ONLY_COMMANDS = frozenset({
+    "ls", "cat", "head", "tail", "wc", "grep", "rg", "find",
+    "echo", "pwd", "which", "pytest",
+})
+# git subcommands that are read-only.
+_READ_ONLY_GIT_SUBCOMMANDS = frozenset({
+    "status", "diff", "log", "show", "branch", "rev-parse",
+})
 
 
 def _runtime_present() -> bool:
@@ -73,29 +86,77 @@ def _runtime_present() -> bool:
 
 
 def _repo_root(event: dict) -> Path:
+    # Test/operator override always wins.
     override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
     if override:
         return Path(override)
+    # Decision H2: resolve the repo root via `git rev-parse --show-toplevel`
+    # (anchored at the event cwd), not the raw event cwd, so the marker lookup is
+    # stable regardless of which subdirectory the tool was invoked from.
     cwd = event.get("cwd")
+    try:
+        import subprocess
+        top = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd or None, capture_output=True, text=True, timeout=10,
+        )
+        if top.returncode == 0 and top.stdout.strip():
+            return Path(top.stdout.strip())
+    except Exception:
+        pass
     if cwd:
-        return Path(cwd)
+        return Path(cwd)  # fallback to event cwd
     # Last resort: the package's own repo root.
     from consensus_mcp._self_drive import _resolve_repo_root
     return _resolve_repo_root()
 
 
-def _classify_bash(command: str) -> bool:
-    """True iff the Bash command is conservatively classified as file-modifying
-    (and therefore requires a sealed design marker)."""
-    if not command:
+def _segment_is_read_only(segment: str) -> bool:
+    """True iff a single command segment's leading token is on the read-only
+    allowlist. Recognises `git <read-only-subcommand>` and `python[3] -m pytest`.
+    Anything else (incl. redirections, unknown tokens) -> False (default-deny)."""
+    seg = segment.strip()
+    if not seg:
         return False
-    return any(rx.search(command) for rx in _FILE_MODIFYING_BASH)
+    # Any redirection in a segment makes it a writer -> not read-only.
+    if ">" in seg or "<" in seg:
+        return False
+    try:
+        import shlex
+        tokens = shlex.split(seg)
+    except ValueError:
+        return False
+    if not tokens:
+        return False
+    head = tokens[0]
+    if head in _READ_ONLY_COMMANDS:
+        return True
+    if head == "git":
+        return len(tokens) >= 2 and tokens[1] in _READ_ONLY_GIT_SUBCOMMANDS
+    if head in ("python", "python3"):
+        # Allow only `python -m pytest …` (a test runner), nothing else.
+        return len(tokens) >= 3 and tokens[1] == "-m" and tokens[2] == "pytest"
+    return False
+
+
+def _bash_is_read_only(command: str) -> bool:
+    """DEFAULT-DENY allowlist check for a whole command line. A pipeline /
+    sequence (split on | || && ; newline) is read-only iff EVERY non-empty
+    segment is read-only. Empty / unknown -> False (denied)."""
+    if not command or not command.strip():
+        return False
+    segments = [s for s in _BASH_SEGMENT_SPLIT.split(command) if s.strip()]
+    if not segments:
+        return False
+    return all(_segment_is_read_only(s) for s in segments)
 
 
 def _deny(reason: str) -> int:
     print(f"[consensus-design-gate] BLOCKED: {reason}\n"
-          f"Seal a Workflow A converged plan covering this scope, then mint "
-          f"`.consensus/design-approved` (cross_family_sealed=true).",
+          f"Seal a Workflow A converged plan (>=2 non-claude reviewers) covering "
+          f"this scope, then mint `.consensus/design-approved` pointing at that "
+          f"sealed iteration. (The gate re-validates the pointer against the live "
+          f"seal — a hand-written marker cannot self-approve.)",
           file=sys.stderr)
     return 2
 
@@ -133,16 +194,17 @@ def main(argv=None) -> int:
 
     if tool == "Bash":
         command = tool_input.get("command") or ""
-        if not _classify_bash(command):
-            return 0  # read-only command (ls, cat, grep, git status/diff) -> allow
-        # File-modifying Bash requires a sealed marker. The target scope cannot
-        # be pinned to a single path, so we require only that a cross-family-
-        # sealed plan is in force (marker_is_sealed), not a per-path scope match.
+        # DEFAULT-DENY (decision B2). Allow ONLY if the command is read-only
+        # (every segment on the conservative allowlist) OR a tight-scope sealed
+        # marker is in force. An unknown command is denied (fail-safe).
+        if _bash_is_read_only(command):
+            return 0  # read-only allowlist (ls, cat, grep, git status, pytest, …)
         res = da.marker_is_sealed(repo_root)
         if res.ok:
-            return 0
-        return _deny(f"file-modifying Bash command requires a sealed design "
-                     f"marker: {res.reason}")
+            return 0  # a tight-scope sealed plan authorises this Bash command
+        return _deny(f"Bash command DENIED by default (not on the read-only "
+                     f"allowlist and no tight-scope sealed marker in force): "
+                     f"{res.reason}")
 
     return 0  # other tools (Read, Grep, Glob, Task, ...) -> allow.
 

@@ -195,6 +195,271 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
     return statuses
 
 
+# --- v1.21 (converged-plan B5): settings.json hook ACTIVATION merge ---
+#
+# Background (the bug this fixes): the installer copied a `hooks.json` manifest
+# into ~/.claude, but Claude Code does NOT read a bare hooks.json there — hooks
+# are activated only via the `hooks` key of ~/.claude/settings.json. So copying
+# hooks.json was inert and enforcement never fired.
+#
+# Verified settings.json hooks schema (read from a live ~/.claude/settings.json
+# AND superpowers v5.1.0 hooks/hooks.json before writing):
+#
+#   {
+#     "hooks": {
+#       "<Event>": [                       # list of GROUPS
+#         {
+#           "matcher": "Edit|Write|...",  # OPTIONAL (absent => matches all)
+#           "hooks": [
+#             {"type": "command",
+#              "command": "<absolute hook command>",
+#              "async": false}
+#           ]
+#         }
+#       ]
+#     }
+#   }
+#
+# Events we register: SessionStart, UserPromptSubmit, PreToolUse, Stop.
+# Commands point at the installed hook scripts under <claude_home>/hooks/ via
+# ABSOLUTE paths (no ${CLAUDE_PLUGIN_ROOT}; that placeholder is only resolved
+# for plugin-bundled hooks, not user settings.json entries).
+#
+# Each consensus-owned hook entry carries a stable marker key so re-running is
+# idempotent (we delete-then-reinsert our own entries) and uninstall removes
+# ONLY our entries while preserving every unrelated user hook.
+
+# Marker key stamped on every consensus-owned hook command dict. Claude Code
+# ignores unknown keys, so this is a safe, machine-detectable tag.
+CONSENSUS_HOOK_MARKER = "_consensus_mcp_managed"
+
+# (event_name, matcher, hook_script_filename). matcher=None => omit the key
+# (matches all events of that type, matching the live settings.json shape where
+# the SessionStart group had no matcher).
+_CONSENSUS_HOOK_SPECS = (
+    ("SessionStart", "startup|clear|compact", "consensus_sessionstart.py"),
+    ("UserPromptSubmit", None, "consensus_sessionstart.py"),
+    ("PreToolUse", "Edit|Write|MultiEdit|NotebookEdit|Bash", "consensus_pretooluse_gate.py"),
+    ("Stop", None, "consensus_stop_gate.py"),
+)
+
+
+def _resolve_settings_json_path(claude_home: Path) -> Path:
+    return claude_home / "settings.json"
+
+
+def _installed_hook_script_path(claude_home: Path, script: str) -> Path:
+    """Absolute path to a hook script.
+
+    Prefer the copy installed under <claude_home>/hooks/ (written by the install
+    path); fall back to the in-package source hooks dir when the installed copy
+    is absent (e.g. dev installs that did not copy the scripts).
+    """
+    installed = claude_home / "hooks" / script
+    if installed.exists():
+        return installed
+    return _claude_extensions_source_root() / "hooks" / script
+
+
+def _build_consensus_hook_command(script_path: Path) -> str:
+    """Hook command string that runs the script with the active interpreter.
+
+    Uses sys.executable so the hook runs under the same Python the wizard ran
+    under (which has consensus_mcp importable); quotes the path for spaces.
+    """
+    return f'"{sys.executable}" "{script_path}"'
+
+
+def _build_consensus_hook_groups(claude_home: Path) -> dict[str, list[dict]]:
+    """Construct the per-event consensus hook GROUPS (settings.json shape).
+
+    Each group's inner command dict carries CONSENSUS_HOOK_MARKER=True so it can
+    be cleanly identified for idempotent re-merge + uninstall.
+    """
+    groups: dict[str, list[dict]] = {}
+    for event, matcher, script in _CONSENSUS_HOOK_SPECS:
+        script_path = _installed_hook_script_path(claude_home, script)
+        cmd_entry: dict = {
+            "type": "command",
+            "command": _build_consensus_hook_command(script_path),
+            "async": False,
+            CONSENSUS_HOOK_MARKER: True,
+        }
+        group: dict = {}
+        if matcher is not None:
+            group["matcher"] = matcher
+        group["hooks"] = [cmd_entry]
+        groups.setdefault(event, []).append(group)
+    return groups
+
+
+def _hook_entry_is_consensus(entry: dict) -> bool:
+    return isinstance(entry, dict) and entry.get(CONSENSUS_HOOK_MARKER) is True
+
+
+def _group_is_consensus(group: dict) -> bool:
+    """True if a group contains ONLY consensus-owned hook command entries.
+
+    A group is consensus-owned iff every inner hook carries the marker. (Groups
+    we author always contain exactly one marked entry; a user could in principle
+    have hand-merged, so we only treat all-marked groups as ours to avoid
+    dropping a user hook that shares a group.)
+    """
+    hooks = group.get("hooks") if isinstance(group, dict) else None
+    if not isinstance(hooks, list) or not hooks:
+        return False
+    return all(_hook_entry_is_consensus(h) for h in hooks)
+
+
+def _strip_consensus_hooks(hooks_map: dict) -> dict:
+    """Return a copy of an event->groups map with all consensus entries removed.
+
+    - Drops whole groups that are entirely consensus-owned.
+    - From mixed groups (user + consensus hand-merged), drops only the marked
+      inner entries, preserving the user's.
+    - Removes an event key entirely if it ends up with no groups.
+    Unrelated events / groups / hooks are preserved verbatim.
+    """
+    cleaned: dict = {}
+    for event, groups in hooks_map.items():
+        if not isinstance(groups, list):
+            cleaned[event] = groups
+            continue
+        new_groups: list = []
+        for group in groups:
+            if not isinstance(group, dict):
+                new_groups.append(group)
+                continue
+            if _group_is_consensus(group):
+                continue  # drop our whole group
+            hooks = group.get("hooks")
+            if isinstance(hooks, list) and any(_hook_entry_is_consensus(h) for h in hooks):
+                kept = [h for h in hooks if not _hook_entry_is_consensus(h)]
+                if kept:
+                    preserved = dict(group)
+                    preserved["hooks"] = kept
+                    new_groups.append(preserved)
+                # else: every inner hook was ours -> drop the group entirely
+                continue
+            new_groups.append(group)
+        if new_groups:
+            cleaned[event] = new_groups
+    return cleaned
+
+
+def _load_existing_settings_json(path: Path) -> tuple[dict, str | None]:
+    """Load settings.json into a dict.
+
+    Returns (data, error). Missing file => ({}, None). Parse/IO failure =>
+    ({}, "<msg>") — the caller fails soft and does not clobber the file.
+    """
+    if not path.exists():
+        return {}, None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {}, f"read error: {exc}"
+    if not text.strip():
+        return {}, None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return {}, f"parse error: {exc}"
+    if not isinstance(parsed, dict):
+        return {}, "root is not a JSON object"
+    return parsed, None
+
+
+def _merge_consensus_hooks_into_settings(
+    settings: dict, claude_home: Path
+) -> dict:
+    """Merge consensus hook groups into a settings dict (idempotent).
+
+    Strategy: remove any previously-installed consensus entries first (so a
+    re-run produces NO duplicates), then append fresh consensus groups under
+    each event. ALL unrelated hooks/settings are preserved.
+    """
+    result = dict(settings)
+    existing_hooks = result.get("hooks")
+    if not isinstance(existing_hooks, dict):
+        existing_hooks = {}
+    # Drop our own prior entries for true idempotency.
+    merged_hooks = _strip_consensus_hooks(existing_hooks)
+    # Append fresh consensus groups.
+    for event, groups in _build_consensus_hook_groups(claude_home).items():
+        merged_hooks.setdefault(event, [])
+        if not isinstance(merged_hooks[event], list):
+            # Foreign non-list value under this event — preserve it by nesting
+            # it is not safe; instead leave the user's value and skip ours.
+            continue
+        merged_hooks[event].extend(groups)
+    result["hooks"] = merged_hooks
+    return result
+
+
+def _install_claude_settings_json(claude_home: Path, force: bool = False) -> list[str]:
+    """Activate the consensus hooks by merging them into <claude_home>/settings.json.
+
+    MERGE-SAFE + IDEMPOTENT: preserves all unrelated user hooks/settings, and a
+    re-run produces no duplicate consensus entries (we strip our prior entries
+    before re-adding). `force` is accepted for signature symmetry with the other
+    installers; the merge is non-destructive so it always proceeds.
+
+    Fails soft: an unparseable existing settings.json is left untouched and a
+    WARN status line is returned (enforcement install is skipped, never crashes
+    the wider install).
+
+    Returns human-readable status lines (printed by the caller).
+    """
+    path = _resolve_settings_json_path(claude_home)
+    existing, error = _load_existing_settings_json(path)
+    if error is not None:
+        return [
+            f"WARN: {path} could not be parsed ({error}); "
+            f"skipping hook activation. Fix the file and re-run, or merge the "
+            f"consensus hooks manually."
+        ]
+
+    merged = _merge_consensus_hooks_into_settings(existing, claude_home)
+    if merged == existing:
+        return [f"settings.json hooks already current: {path}"]
+
+    _atomic_write_json(path, merged)
+    events = ", ".join(sorted({e for e, _, _ in _CONSENSUS_HOOK_SPECS}))
+    return [f"activated consensus hooks in {path} (events: {events})"]
+
+
+def _uninstall_claude_settings_json(claude_home: Path) -> list[str]:
+    """Remove ONLY consensus-tagged hook entries from <claude_home>/settings.json.
+
+    Preserves all unrelated user hooks/settings. No-op (with a status line) when
+    the file is absent or contains no consensus entries.
+    """
+    path = _resolve_settings_json_path(claude_home)
+    existing, error = _load_existing_settings_json(path)
+    if error is not None:
+        return [f"WARN: {path} could not be parsed ({error}); leaving untouched"]
+    if not existing:
+        return [f"settings.json absent or empty; nothing to uninstall: {path}"]
+
+    hooks_map = existing.get("hooks")
+    if not isinstance(hooks_map, dict):
+        return [f"no consensus hooks present in {path}"]
+
+    cleaned_hooks = _strip_consensus_hooks(hooks_map)
+    new_settings = dict(existing)
+    if cleaned_hooks:
+        new_settings["hooks"] = cleaned_hooks
+    else:
+        new_settings.pop("hooks", None)
+
+    if new_settings == existing:
+        return [f"no consensus hooks present in {path}"]
+
+    _atomic_write_json(path, new_settings)
+    return [f"removed consensus hooks from {path}"]
+
+
 # --- iter-0031: .mcp.json bootstrap helpers per iter-0030 converged plan ---
 
 
@@ -1022,9 +1287,20 @@ def cmd_init(args) -> int:
     # .consensus/config.yaml / .mcp.json. Short-circuit here, run the install,
     # and exit. Users who want BOTH the global pack install AND a per-project
     # bootstrap should run the two commands separately.
+    if getattr(args, "uninstall_claude_code", False):
+        claude_home = _resolve_claude_home()
+        for line in _uninstall_claude_settings_json(claude_home):
+            print(line)
+        return 0
+
     if getattr(args, "install_claude_code", False):
         claude_home = _resolve_claude_home()
         for line in _install_claude_extensions(claude_home, force=args.force):
+            print(line)
+        # v1.21 (B5): copying the skill/command files does NOT activate the
+        # enforcement hooks — Claude Code reads hooks only from settings.json.
+        # Merge them in (idempotent, preserves unrelated user hooks).
+        for line in _install_claude_settings_json(claude_home, force=args.force):
             print(line)
         return 0
 
@@ -1218,6 +1494,12 @@ def main(argv: list[str] | None = None) -> int:
                               "$CLAUDE_HOME or ~/.claude so Claude Code can "
                               "trigger consensus-init from chat. Idempotent; "
                               "use --force to overwrite user-edited content."))
+    parser.add_argument("--uninstall-claude-code", action="store_true",
+                        help=("remove the consensus-tagged hook entries from "
+                              "$CLAUDE_HOME/settings.json (deactivates "
+                              "enforcement). Preserves all unrelated user "
+                              "hooks/settings. Does not remove skill/command "
+                              "files."))
     parser.add_argument("--from-claude-code", action="store_true",
                         help=("the caller is a Claude Code skill / slash "
                               "command; print contextual restart guidance "

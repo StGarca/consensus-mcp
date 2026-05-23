@@ -24,7 +24,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
+from pathlib import Path
 
 _PRECEDENCE_TEXT = (
     "consensus-mcp is active. Consensus has PRECEDENCE at every decision gate; "
@@ -63,6 +65,46 @@ def _runtime_present() -> bool:
     return shutil.which("consensus-init") is not None
 
 
+def _git_toplevel(start: Path) -> Path | None:
+    """Resolve the git working-tree root containing `start` via git rev-parse.
+
+    Returns None if git is unavailable / `start` is not inside a worktree.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(start), capture_output=True, text=True, timeout=5,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    top = (out.stdout or "").strip()
+    return Path(top).resolve() if top else None
+
+
+def _repo_root(event: dict) -> Path:
+    """Resolve the repo root for this session.
+
+    H2 fix: resolve via `git rev-parse --show-toplevel` (from the override or
+    the event cwd) so a session opened from a SUBDIRECTORY still resolves to the
+    repo root. Fall back to the event cwd, then the runtime resolver.
+    """
+    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+    if override:
+        top = _git_toplevel(Path(override))
+        return top if top is not None else Path(override)
+    cwd = event.get("cwd")
+    if cwd:
+        top = _git_toplevel(Path(cwd))
+        return top if top is not None else Path(cwd)
+    try:
+        from consensus_mcp._self_drive import _resolve_repo_root
+        return _resolve_repo_root()
+    except Exception:
+        return Path.cwd()
+
+
 def _event_name(event: dict) -> str:
     return (
         event.get("hook_event_name")
@@ -79,6 +121,11 @@ def main(argv=None) -> int:
 
     name = _event_name(event)
     present = _runtime_present()
+    # H2: resolve the repo root via git rev-parse so a session/prompt opened
+    # from a subdirectory still anchors to the repo root. Computed here so the
+    # precedence injection is repo-correct; failures fall back gracefully and
+    # never block the (fail-open) hook.
+    repo_root = _repo_root(event)
 
     if name == "UserPromptSubmit":
         # Lightweight nudge. No-op when runtime absent.
@@ -94,8 +141,13 @@ def main(argv=None) -> int:
         return 0
 
     # SessionStart (startup|clear|compact) and any other event: emit precedence
-    # context (present) or the benign absence notice.
-    text = _PRECEDENCE_TEXT if present else _ABSENT_TEXT
+    # context (present) or the benign absence notice. When present, append the
+    # git-resolved repo root so the injected context is anchored correctly even
+    # when the session was opened from a subdirectory (H2).
+    if present:
+        text = f"{_PRECEDENCE_TEXT}\nRepo root (consensus scope): {repo_root}"
+    else:
+        text = _ABSENT_TEXT
     out = {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
