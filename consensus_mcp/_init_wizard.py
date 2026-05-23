@@ -592,7 +592,12 @@ def _uninstall_claude_settings_json(claude_home: Path) -> list[str]:
     if new_settings == existing:
         return [f"no consensus hooks present in {path}"]
 
-    _atomic_write_json(path, new_settings)
+    # v1.26 (kimi): fail soft on an IO error (parity with the install path) rather
+    # than crashing the uninstall.
+    try:
+        _atomic_write_json(path, new_settings)
+    except OSError as exc:
+        return [f"WARN: {path} could not be written ({exc}); hooks left in place."]
     return [f"removed consensus hooks from {path}"]
 
 
@@ -687,18 +692,43 @@ def _load_existing_mcp_json(path: Path) -> tuple[dict | None, str | None]:
         return None, f"read error: {exc}"
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
-    """Write text atomically via tmp file + os.replace (fix 5b / fix 11).
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Atomically write `data` to `path` via a SECURE, unpredictable temp file.
 
-    Mirrors _atomic_write_json's durability contract for non-JSON files
-    (instruction files). os.replace is an atomic rename, so a concurrent reader
-    never observes a half-written file and concurrent writers are last-writer-wins
-    rather than corrupting. Full file locking is overkill; atomic replace suffices.
+    v1.26 (codex+gemini+kimi BLOCKING — the single ROOT fix for the tmp-symlink
+    class across ALL writers): the temp file is created with O_CREAT|O_EXCL|O_WRONLY
+    and an UNPREDICTABLE name, so a pre-planted symlink (or file) at the temp path
+    cannot redirect the write — O_EXCL fails on any existing path, and the random
+    name defeats prediction. os.replace then atomically swaps it into place,
+    replacing a destination symlink (the link itself, never its target). The tmp is
+    cleaned up on any error. This is the ONLY low-level writer; text/json/config/
+    gitignore all route through it.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    while True:
+        tmp = path.with_name(f".{path.name}.{os.urandom(8).hex()}.tmp")
+        try:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            break
+        except FileExistsError:
+            continue
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Atomic UTF-8 text write via the hardened _atomic_write_bytes primitive."""
+    _atomic_write_bytes(path, text.encode("utf-8"))
 
 
 def _path_is_within(repo_root: Path, target: Path) -> bool:
@@ -740,10 +770,7 @@ def _atomic_write_json(path: Path, data: dict) -> None:
     sufficient. Reused by .mcp.json AND settings.json writers.
     """
     text = json.dumps(data, indent=2, sort_keys=False) + "\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
+    _atomic_write_bytes(path, text.encode("utf-8"))
 
 
 def _write_mcp_json(
@@ -1467,13 +1494,11 @@ def write_config(config: dict, path: Path) -> None:
     cross-process locking is overkill; atomic replace suffices. (Same contract as
     _atomic_write_json / _atomic_write_text.)
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(
-        yaml.safe_dump(config, sort_keys=False, default_flow_style=False),
-        encoding="utf-8",
+    # v1.26 (kimi): route through the hardened atomic writer (secure tmp + O_EXCL)
+    # instead of an inlined predictable-tmp pattern that could follow a symlink.
+    _atomic_write_text(
+        path, yaml.safe_dump(config, sort_keys=False, default_flow_style=False)
     )
-    tmp.replace(path)
 
 
 def _config_diff(old: dict, new: dict) -> str:
@@ -1558,7 +1583,8 @@ def update_gitignore(repo_root: Path) -> bool:
 
     if new_content == existing:
         return False
-    gi.write_text(new_content, encoding="utf-8")
+    # v1.26 (kimi): atomic + symlink-safe write (was a bare gi.write_text()).
+    _atomic_write_text(gi, new_content)
     return True
 
 

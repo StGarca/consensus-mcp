@@ -42,6 +42,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 from pathlib import Path
 
@@ -149,27 +150,35 @@ def _segment_is_read_only(segment: str) -> bool:
     if head == "git":
         if len(tokens) < 2 or tokens[1] not in _READ_ONLY_GIT_SUBCOMMANDS:
             return False
-        # git config/pager/exec-path/output injection can EXECUTE arbitrary
-        # commands (e.g. `git -c core.pager='!sh -c …' log`) or WRITE a file
-        # (`git diff --output=f`). Reject those even on a read-only subcommand.
+        # Reject exec / file-write injection on ANY read-only subcommand: `-c`
+        # (config -> pager/alias exec), `--output`/`--exec-path` (write / exec path),
+        # and v1.26 (codex BLOCKING) `--ext-diff`/`--textconv` (run a repo-configured
+        # external command). Match the flag BASE so `--output=f`, `--ext-diff=…` etc.
+        # are all caught.
         for t in tokens[1:]:
-            # Exact `-c` = config injection (pager exec); `--output`/`--exec-path`
-            # (incl. `=value` forms) write a file / set the exec path. Use exact +
-            # prefix matches that do NOT catch benign flags like `--color`.
-            if t == "-c" or t.startswith("--output") or t.startswith("--exec-path"):
+            base_flag = t.split("=", 1)[0]
+            if base_flag in ("-c", "--output", "--exec-path", "--ext-diff", "--textconv"):
                 return False
-        # v1.25 (kimi): `git branch` with write args (-d/-D/-m/-M/-c/-C, or a bare
-        # NEW branch name) DELETES/RENAMES/CREATES branches — not read-only. Restrict
-        # `git branch` to the listing form: only read-only flags after the subcommand.
+        # `git branch` MUTATES when a write flag is present (-d/-D/-m/-M/-c/-C/-u/…)
+        # OR a bare positional appears (a NEW branch name = create). Allow read-only
+        # forms — including a positional that is the VALUE of a filter flag such as
+        # `--contains <sha>` / `--merged <branch>` (v1.26 kimi: do not over-deny those).
         if tokens[1] == "branch":
-            _RO_BRANCH = {
-                "-a", "--all", "-v", "-vv", "--verbose", "-r", "--remotes",
-                "--list", "--merged", "--no-merged", "--contains", "--no-contains",
-                "--color", "--no-color",
+            _WRITE_BRANCH = {
+                "-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy",
+                "--edit-description", "--set-upstream-to", "-u", "--unset-upstream",
+                "-f", "--force", "--create-reflog",
             }
-            for t in tokens[2:]:
-                if t not in _RO_BRANCH:
+            _FILTER_FLAGS = {"--contains", "--no-contains", "--merged",
+                             "--no-merged", "--points-at"}
+            args = tokens[2:]
+            for t in args:
+                if t.split("=", 1)[0] in _WRITE_BRANCH:
                     return False
+            positionals = [t for t in args if not t.startswith("-")]
+            has_filter = any(t.split("=", 1)[0] in _FILTER_FLAGS for t in args)
+            if positionals and not has_filter:
+                return False  # bare positional == branch create
         return True
     # v1.24 (codex finding): `python -m pytest` is NO LONGER allowed — pytest runs
     # arbitrary test/conftest/plugin code, so it is not read-only. python is denied.
@@ -247,16 +256,23 @@ def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
         p = p.resolve()
         for gov in (".consensus", "consensus-state"):
             gov_dir = repo_root / gov
-            # v1.25 (codex BLOCKING): the governance dir must be a REAL, non-symlink
-            # directory. A symlinked `.consensus` (even one pointing at an IN-repo code
-            # dir like `src/`) would let code paths be treated as governance -> write
-            # bypass. Reject any symlink; only a genuine dir grants the bootstrap allow.
-            if gov_dir.is_symlink():
+            # v1.26 (kimi): a SINGLE lstat (no is_symlink()+resolve() double-stat
+            # TOCTOU). The governance dir must be a REAL directory, never a symlink
+            # (a symlinked `.consensus` — even to an in-repo dir like `src/` — would
+            # let code paths be treated as governance). `base` is then the LITERAL
+            # `rr/gov` (rr already resolved, gov has no traversal) — strictly inside
+            # repo_root by construction, with no symlink followed at the gov component.
+            try:
+                st = os.lstat(gov_dir)
+            except FileNotFoundError:
+                st = None  # absent -> no symlink to follow; bootstrap write is fine
+            except OSError:
                 continue
-            base = gov_dir.resolve()
-            # v1.24 (kimi BLOCKING): `base` must also be STRICTLY inside repo_root.
-            if base == rr or rr not in base.parents:
+            # If it EXISTS, it must be a real directory, never a symlink (a symlinked
+            # .consensus — even to an in-repo dir — would smuggle code paths through).
+            if st is not None and (stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode)):
                 continue
+            base = rr / gov
             if p == base or base in p.parents:
                 return True
     except Exception:

@@ -38,17 +38,16 @@ def test_install_extensions_io_error_warns_and_continues(tmp_path, monkeypatch):
     home = tmp_path / "claude_home"
     home.mkdir()
 
-    real_write = Path.write_text
+    real = wiz._atomic_write_bytes
     boom_target = home / "skills" / "consensus" / "SKILL.md"
 
-    def flaky_write_text(self, data, *a, **k):
-        # v1.25: writes now go through _atomic_write_text (a `<dst>.tmp` sibling),
-        # so match the target by prefix to catch the atomic tmp write too.
-        if str(self).startswith(str(boom_target)):
+    def flaky(path, data):
+        # v1.26: writes route through the hardened _atomic_write_bytes primitive.
+        if path == boom_target:
             raise OSError("simulated ENOSPC")
-        return real_write(self, data, *a, **k)
+        return real(path, data)
 
-    monkeypatch.setattr(Path, "write_text", flaky_write_text)
+    monkeypatch.setattr(wiz, "_atomic_write_bytes", flaky)
     statuses = wiz._install_claude_extensions(home, force=False)
 
     # The bad file is WARNed, not raised...
@@ -61,16 +60,16 @@ def test_install_project_agents_io_error_warns_and_continues(tmp_path, monkeypat
     repo = tmp_path / "repo"
     repo.mkdir()
 
-    real_write = Path.write_text
+    real = wiz._atomic_write_bytes
     first_agent = repo / ".claude" / "agents" / wiz._PROJECT_AGENT_FILES[0]
 
-    def flaky_write_text(self, data, *a, **k):
-        # v1.25: atomic write -> match the `<dst>.tmp` sibling by prefix too.
-        if str(self).startswith(str(first_agent)):
+    def flaky(path, data):
+        # v1.26: writes route through the hardened _atomic_write_bytes primitive.
+        if path == first_agent:
             raise OSError("simulated EACCES")
-        return real_write(self, data, *a, **k)
+        return real(path, data)
 
-    monkeypatch.setattr(Path, "write_text", flaky_write_text)
+    monkeypatch.setattr(wiz, "_atomic_write_bytes", flaky)
     statuses = wiz._install_project_agents(repo, force=False)
 
     assert any(s.startswith("WARN:") and "failed:" in s for s in statuses), statuses
@@ -421,3 +420,25 @@ def test_v125_settings_write_failure_returns_rc6(tmp_path, monkeypatch):
     monkeypatch.setattr(wiz, "_atomic_write_json", selective)
     rc = wiz.main(["--install-claude-code"])
     assert rc == 6
+
+
+# --- v1.26 hardened atomic write primitive ---------------------------------- #
+
+def test_v126_atomic_write_replaces_dst_symlink_not_target(tmp_path):
+    outside = tmp_path / "outside.txt"; outside.write_text("SECRET", encoding="utf-8")
+    dst = tmp_path / "dst.txt"; dst.symlink_to(outside)
+    wiz._atomic_write_bytes(dst, b"NEW")
+    assert not dst.is_symlink()                      # link replaced with a real file
+    assert dst.read_text(encoding="utf-8") == "NEW"
+    assert outside.read_text(encoding="utf-8") == "SECRET"   # target untouched
+
+
+def test_v126_atomic_write_ignores_preplanted_predictable_tmp(tmp_path):
+    # An attacker pre-plants the OLD predictable `<dst>.tmp` as a symlink to a decoy;
+    # the random-name + O_EXCL primitive must not follow it.
+    dst = tmp_path / "f.txt"
+    decoy = tmp_path / "decoy.txt"; decoy.write_text("EVIL", encoding="utf-8")
+    (tmp_path / "f.txt.tmp").symlink_to(decoy)
+    wiz._atomic_write_bytes(dst, b"GOOD")
+    assert dst.read_text(encoding="utf-8") == "GOOD"
+    assert decoy.read_text(encoding="utf-8") == "EVIL"       # decoy untouched
