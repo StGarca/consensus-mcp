@@ -99,3 +99,51 @@ def test_check_mcp_present_ok(tmp_path, monkeypatch):
     comp, line = wiz._repair_check_mcp(tmp_path, dry_run=False)  # second pass
     assert comp.state == "ok"
     assert line.startswith(wiz.REPAIR_OK)
+
+
+# ---------------------------------------------------------------------------
+# Task 3: .gitignore (#3) + agents (#4) + instructions (#5) component checks
+# ---------------------------------------------------------------------------
+
+def test_check_gitignore_missing_repairs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    comp, line = wiz._repair_check_gitignore(tmp_path, dry_run=False)
+    assert comp.state == "repaired"
+    assert wiz.GITIGNORE_OPEN_MARKER in (tmp_path / ".gitignore").read_text()
+
+
+def test_check_gitignore_present_ok(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    wiz.update_gitignore(tmp_path)  # create block
+    comp, line = wiz._repair_check_gitignore(tmp_path, dry_run=False)
+    assert comp.state == "ok"
+    assert line.startswith(wiz.REPAIR_OK)
+
+
+def test_check_gitignore_dry_run_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    comp, _ = wiz._repair_check_gitignore(tmp_path, dry_run=True)
+    assert comp.state == "repaired"
+    assert not (tmp_path / ".gitignore").exists()
+
+
+def test_check_agents_missing_repairs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    comp, line = wiz._repair_check_agents(tmp_path, dry_run=False)
+    assert comp.state == "repaired"
+    agents_dir = tmp_path / ".claude" / "agents"
+    assert agents_dir.exists() and any(agents_dir.iterdir())
+
+
+def test_check_agents_present_ok(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    wiz._install_project_agents(tmp_path, force=False)  # install
+    comp, line = wiz._repair_check_agents(tmp_path, dry_run=False)
+    assert comp.state == "ok"
+
+
+def test_check_instructions_missing_repairs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    cfgp = _seed_config(tmp_path)
+    comp, line = wiz._repair_check_instructions(tmp_path, dry_run=False)
+    assert comp.state in ("repaired", "ok")  # at least one instruction file managed

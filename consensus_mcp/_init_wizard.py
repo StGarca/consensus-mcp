@@ -1701,6 +1701,79 @@ def _repair_check_mcp(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponen
     return (RepairComponent(".mcp.json", "ok"), f"{REPAIR_OK} .mcp.json")
 
 
+def _repair_check_gitignore(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
+    """#3 .gitignore managed block — re-add when absent."""
+    gi = repo_root / ".gitignore"
+    text = gi.read_text(encoding="utf-8") if gi.exists() else ""
+    if GITIGNORE_OPEN_MARKER in text:
+        return (RepairComponent(".gitignore", "ok"), f"{REPAIR_OK} .gitignore managed block")
+    if not dry_run:
+        update_gitignore(repo_root)
+    return (RepairComponent(".gitignore", "repaired"), f"{REPAIR_FIXED} .gitignore managed block")
+
+
+def _repair_check_agents(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
+    """#4 .claude/agents/ — re-copy missing subagent files (installer SKIPs diverged)."""
+    agents_dir = repo_root / ".claude" / "agents"
+    missing = [f for f in _PROJECT_AGENT_FILES if not (agents_dir / f).exists()]
+    if not missing:
+        return (RepairComponent(".claude/agents", "ok"), f"{REPAIR_OK} .claude/agents")
+    if not dry_run:
+        _install_project_agents(repo_root, force=False)
+    return (RepairComponent(".claude/agents", "repaired"),
+            f"{REPAIR_FIXED} .claude/agents ({', '.join(missing)})")
+
+
+def _enabled_contributors_and_profiles(loaded: dict) -> tuple[list[str], dict]:
+    """Extract (enabled, merged_profiles) from a loaded config dict.
+
+    Mirrors the derivation in cmd_init before it calls _provision_instruction_files.
+    """
+    existing_profiles = (loaded.get("contributors") or {}).get("profiles")
+    merged_profiles = _load_merged_profiles(existing_profiles)
+    enabled = (loaded.get("contributors") or {}).get("enabled") or []
+    return enabled, merged_profiles
+
+
+def _instruction_files_missing_block(
+    enabled: list[str], profiles: dict, repo_root: Path
+) -> list[Path]:
+    """Return instruction-file Paths that are absent or lack the managed-block marker."""
+    targets: list[str] = []
+    for name in enabled:
+        profile = profiles.get(name)
+        if profile is None:
+            continue
+        filename = (profile.get("instructions") or {}).get("filename")
+        if filename and filename not in targets:
+            targets.append(filename)
+    missing: list[Path] = []
+    for filename in targets:
+        path = repo_root / filename
+        if not path.exists():
+            missing.append(path)
+        else:
+            text = path.read_text(encoding="utf-8")
+            if INSTRUCTION_BEGIN_MARKER not in text:
+                missing.append(path)
+    return missing
+
+
+def _repair_check_instructions(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
+    """#5 per-AI instruction managed blocks — re-seed when absent. Reads enabled
+    contributors from the existing config."""
+    config_path = repo_root / ".consensus" / "config.yaml"
+    loaded = cfg.load(config_path)
+    enabled, profiles = _enabled_contributors_and_profiles(loaded)
+    needs = _instruction_files_missing_block(enabled, profiles, repo_root)
+    if not needs:
+        return (RepairComponent("instructions", "ok"), f"{REPAIR_OK} instruction files")
+    if not dry_run:
+        _provision_instruction_files(enabled, profiles, repo_root)
+    return (RepairComponent("instructions", "repaired"),
+            f"{REPAIR_FIXED} instruction files ({', '.join(str(p) for p in needs)})")
+
+
 def _prompt_existing_config_action(config_path: Path) -> str:
     """Interactive menu shown when config already exists (TTY callers only).
 
