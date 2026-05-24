@@ -45,6 +45,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from consensus_mcp._paths import state_root as _state_root
+from consensus_mcp import _outcome_ledger
+from consensus_mcp import _contributor_weights as _cw
 
 # The schema version this rollup understands. Lines carrying any other value
 # are forward/backward-incompatible and are skipped with a warning.
@@ -74,6 +76,40 @@ def _ledger_path(state_root: Optional[Path] = None) -> Path:
     """
     root = Path(state_root) if state_root is not None else _state_root()
     return root / "state" / "results-v1.jsonl"
+
+
+def _outcome_ledger_path(state_root: Optional[Path] = None) -> Path:
+    """Resolve ``<state_root>/state/outcome-ledger.jsonl`` — the external, append-only,
+    AI-adjudicator-rejecting ledger that the contributor SCORECARD reads."""
+    root = Path(state_root) if state_root is not None else _state_root()
+    return root / "state" / "outcome-ledger.jsonl"
+
+
+def render_contributor_scorecard(state_root: Optional[Path] = None) -> str:
+    """Render the per-contributor performance SCORECARD (decision-support for declaring an
+    AI lean) from the external outcome ledger. DESCRIPTIVE only — it measures how much good
+    work each contributor produced; it sets no weight/lean (the operator declares the lean).
+    Below 5 outcomes a contributor shows 'insufficient data' (no misleading rate). Returns
+    an empty string when no outcome ledger exists yet."""
+    outcomes = _outcome_ledger.read_outcomes(_outcome_ledger_path(state_root))
+    if not outcomes:
+        return ""
+    card = _cw.build_scorecard(outcomes)
+    lines: List[str] = ["", "-" * 60, "CONTRIBUTOR PERFORMANCE (decision-support; declare the lean from this)", "-" * 60]
+    # rank by useful_rate (None/insufficient last), then by useful count
+    def _rank(item):
+        _c, v = item
+        rate = v.get("useful_rate")
+        enough = v["total"] >= 5
+        return (-(rate if (rate is not None and enough) else -1.0), -v["useful"])
+    for contributor, v in sorted(card.items(), key=_rank):
+        if v["total"] >= 5 and v.get("useful_rate") is not None:
+            rate = f"{v['useful_rate']:.0%}"
+        else:
+            rate = "insufficient data"
+        lines.append(f"  {contributor:<18} useful {v['useful']}/{v['total']}   rate {rate}")
+    lines.append("  (descriptive track-record only — score never judges an individual finding)")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +350,10 @@ def render_table(scorecard: Dict[str, Any]) -> str:
             f"note: skipped {skipped} record(s) with an unsupported "
             "schema version (see warnings above)."
         )
+
+    contributor_card = render_contributor_scorecard()
+    if contributor_card:
+        lines.append(contributor_card)
 
     return "\n".join(lines)
 
