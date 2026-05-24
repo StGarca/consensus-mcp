@@ -1799,13 +1799,14 @@ def cmd_init(args) -> int:
             print(f"Leaving existing configuration unchanged: {config_path}")
             return 0
         if action == "reconfigure":
+            # Reconfigure re-prompts interactively (keeping the existing config
+            # as defaults) and shows a diff — do NOT force non-interactive.
             args.reconfigure = True
         else:  # "force"
+            # The menu WAS the interaction; overwrite with auto-detected
+            # defaults rather than re-prompting every wizard dimension.
             args.force = True
-        # The TTY menu was the interactive gate; the build step now runs
-        # non-interactively (accept-defaults) so we don't re-prompt the user
-        # for every wizard dimension after they've already made their choice.
-        args.accept_defaults = True
+            args.accept_defaults = True
 
     interactive = not (args.non_interactive or args.accept_defaults)
     if interactive and not _stdin_is_interactive():
