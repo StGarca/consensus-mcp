@@ -28,7 +28,10 @@ class KimiAdapter(ContributorAdapter):
     name = "kimi"
 
     def dispatch(self, packet: DispatchPacket) -> SealedArtifact:
-        reviewer_id = packet.reviewer_id or f"kimi-{packet.iteration_dir.name}-{packet.phase}-1"
+        # Bug A fix (v1.30.2): round-key reviewer_id (see codex.py) so converge round 2
+        # doesn't collide with round 1's T6 seal. propose/review -> round defaults to 1.
+        _round = (packet.adapter_options or {}).get("round_number", 1)
+        reviewer_id = packet.reviewer_id or f"kimi-{packet.iteration_dir.name}-{packet.phase}-{_round}"
         pass_id = packet.pass_id or f"{reviewer_id}-pass1"
         from consensus_mcp.contributors._phase_mode import phase_to_mode
         mode = phase_to_mode(packet.phase)

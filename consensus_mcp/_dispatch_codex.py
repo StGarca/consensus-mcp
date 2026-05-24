@@ -1100,6 +1100,7 @@ def main(argv: list[str] | None = None) -> int:
         # review_target_hash is pre-initialized to None outside the try block
         # (v1.10.5) so dispatch_failed events can include it.
         review_packet_data: dict | None = None
+        review_target_text: str | None = None  # Bug B (v1.30.2): embed content, not just path
         if review_target_normalized is not None:
             review_target_text = review_target_normalized.read_text(encoding="utf-8")
             review_target_hash = _sha256_str(review_target_text)
@@ -1125,6 +1126,7 @@ def main(argv: list[str] | None = None) -> int:
             review_target_path=str(review_target_normalized) if review_target_normalized else None,
             review_target_hash=review_target_hash,
             review_packet=review_packet_data,
+            review_target_content=review_target_text,
         )
         schema_text = schema_path.read_text(encoding="utf-8")
 
