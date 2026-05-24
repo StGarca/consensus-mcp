@@ -147,6 +147,10 @@ _KIMI_STRIP_PATTERNS = (
 # matters when git is unavailable). Keeps the copy fast + small.
 _TEMP_WORKDIR_IGNORE_DIRS = (
     ".git",
+    # consensus-state holds the (potentially large) iteration scratch + sealed
+    # archive; kimi reviews CODE, not state, so excluding it keeps each disposable
+    # work-dir small. A leaked copy of consensus-state is what filled /tmp (v1.30.1).
+    "consensus-state",
     "node_modules",
     "__pycache__",
     ".venv",
@@ -158,6 +162,35 @@ _TEMP_WORKDIR_IGNORE_DIRS = (
     "build",
     ".ruff_cache",
 )
+
+# Disposable kimi work-dirs are removed in a finally block — but a watchdog SIGKILL
+# (or a crash) skips finally and leaks the dir. To bound accumulation regardless,
+# every dispatch sweeps stale leftovers older than this on startup (env-overridable).
+_WORKDIR_STALE_SECONDS = float(os.environ.get("CONSENSUS_MCP_KIMI_WORKDIR_STALE_SECONDS", "3600"))
+
+
+def _sweep_stale_workdirs(max_age_seconds: float = _WORKDIR_STALE_SECONDS) -> int:
+    """Best-effort removal of leaked ``kimi-workdir-*`` temp dirs older than
+    ``max_age_seconds`` (defends against SIGKILL-skipped finally cleanup so leaks
+    can't accumulate and fill /tmp). Never raises. Returns the count removed."""
+    import tempfile
+    import time
+
+    removed = 0
+    tmp = Path(tempfile.gettempdir())
+    now = time.time()
+    try:
+        candidates = list(tmp.glob("kimi-workdir-*"))
+    except OSError:
+        return 0
+    for d in candidates:
+        try:
+            if now - d.stat().st_mtime >= max_age_seconds:
+                shutil.rmtree(str(d), ignore_errors=True)
+                removed += 1
+        except OSError:
+            continue
+    return removed
 
 
 def _strip_kimi_output_chrome(text: str) -> str:
@@ -262,6 +295,7 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
     """
     import tempfile
 
+    _sweep_stale_workdirs()  # clear any leaked dirs from SIGKILL-ed prior dispatches
     tmp_root = Path(tempfile.mkdtemp(prefix="kimi-workdir-"))
     dest = tmp_root / "repo"
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.30.1 - 2026-05-24
+
+**Hot-patch: three fresh-install / robustness fixes.**
+
+### Fixed
+- **Subagent launch crash (the headline):** `review.read_post_seal` expressed
+  "exactly one of `pass_id` | `path`" as a **top-level `oneOf` in its
+  `input_schema`** — which the Anthropic tool API rejects, so any subagent granted
+  that tool died on launch (0 tokens). Flattened to optional properties; the
+  "exactly one" rule was already enforced in `handle()`
+  (`must_provide_exactly_one_mode`). Added a **data-driven guard test** asserting
+  no tool's `input_schema` uses a top-level `oneOf/anyOf/allOf` — closing the class.
+- **kimi work-dir disk leak:** a watchdog-killed kimi dispatch skips its `finally`
+  cleanup, leaking `/tmp/kimi-workdir-*`; one such copy of `consensus-state` filled
+  `/tmp` and broke all Bash. Now `consensus-state` is excluded from the disposable
+  copy, and every dispatch sweeps stale `kimi-workdir-*` (>1h, env-overridable via
+  `CONSENSUS_MCP_KIMI_WORKDIR_STALE_SECONDS`) on startup — robust against SIGKILL.
+- **Gate crash-safety:** the global PreToolUse gate now **fails OPEN on any
+  unexpected exception** (`_main_fail_open`). Because it's a global hook, an
+  internal crash could block Edit/Bash in *every* project; it must never be able
+  to. Deliberate DENY (exit 2) is preserved.
+
 ## 1.30.0 - 2026-05-24
 
 **Cross-AI weighting, cost-tiers, operator-declared rigor, and a contributor

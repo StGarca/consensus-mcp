@@ -109,32 +109,29 @@ SCHEMA = {
         "and verified=False (expected normal; not a corruption indicator)."
     ),
     "input_schema": {
+        # Provide EXACTLY ONE of pass_id | path. This is enforced in handle()
+        # (error: must_provide_exactly_one_mode), NOT via a top-level oneOf — the
+        # Anthropic tool input_schema rejects a top-level oneOf/anyOf/allOf, which
+        # kills any subagent granted this tool on launch (v1.30.1 fix).
         "type": "object",
-        "oneOf": [
-            {
-                "properties": {
-                    "pass_id": {
-                        "type": "string",
-                        "description": "Pass identifier matching an 'id' entry in index.yaml.",
-                    },
-                },
-                "required": ["pass_id"],
-                "additionalProperties": False,
+        "properties": {
+            "pass_id": {
+                "type": "string",
+                "description": (
+                    "Pass identifier matching an 'id' entry in index.yaml. "
+                    "Provide EXACTLY ONE of pass_id or path."
+                ),
             },
-            {
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": (
-                            "Relative (from repo root) or absolute path to a sealed packet. "
-                            "Must resolve to a file under consensus-state/archive/review-passes/."
-                        ),
-                    },
-                },
-                "required": ["path"],
-                "additionalProperties": False,
+            "path": {
+                "type": "string",
+                "description": (
+                    "Relative (from repo root) or absolute path to a sealed packet. "
+                    "Must resolve to a file under consensus-state/archive/review-passes/. "
+                    "Provide EXACTLY ONE of pass_id or path."
+                ),
             },
-        ],
+        },
+        "additionalProperties": False,
     },
     "output_schema": {
         "type": "object",
