@@ -17,7 +17,7 @@ from __future__ import annotations
 _INTERACTION_PATH_MARKERS = (
     "claude_extensions/hooks/", "_dispatch", "pretooluse", "stop_gate",
     "workflow_engine", "gate", "_design_approval", "_delivery_readiness",
-    "settings.json", ".mcp.json",
+    "settings.json", ".mcp.json", ".consensus/",  # .consensus config IS governance machinery (codex-rev-001)
 )
 
 

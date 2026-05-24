@@ -32,6 +32,14 @@ def test_declared_surface_on_hook_change_is_clean():
     assert w == []
 
 
+def test_reflexive_none_on_consensus_config_change_warns():
+    """codex-rev-001: .consensus config IS governance machinery."""
+    w = validate_interaction_surface(
+        {"interaction_surface": "none"},
+        changed_paths=["myproject/.consensus/config.yaml"])
+    assert len(w) == 1 and "reflexive" in w[0].lower()
+
+
 def test_genuine_none_on_doc_change_is_clean():
     w = validate_interaction_surface(
         {"interaction_surface": "none"}, changed_paths=["docs/readme.md", "CHANGELOG.md"])
