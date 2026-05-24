@@ -134,3 +134,17 @@ def test_non_umbrella_fresh_init_unaffected(tmp_path, capsys, monkeypatch):
     assert rc == 0
     assert wiz.WORKSPACE_UMBRELLA_TOKEN not in capsys.readouterr().out
     assert (tmp_path / ".consensus" / "config.yaml").exists()
+
+
+def _ext_dir():
+    return Path(wiz.__file__).parent / "claude_extensions"
+
+
+def test_umbrella_token_documented_in_skill_and_command():
+    skill = (_ext_dir() / "skills" / "consensus" / "SKILL.md").read_text(encoding="utf-8")
+    command = (_ext_dir() / "commands" / "consensus-init.md").read_text(encoding="utf-8")
+    assert wiz.WORKSPACE_UMBRELLA_TOKEN in skill
+    assert wiz.WORKSPACE_UMBRELLA_TOKEN in command
+    assert "--here" in skill and "--here" in command
+    # exit 8 documented in the skill, distinct from already-configured (exit 4)
+    assert "exit code 8" in skill.lower() or "exits with code 8" in skill.lower()

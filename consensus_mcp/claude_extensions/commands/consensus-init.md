@@ -22,6 +22,16 @@ overwrite), then re-invoke `consensus-init --from-claude-code --repair`,
 nothing). The `--repair` flag re-creates missing pieces and reports diverged
 ones non-destructively.
 
+**Workspace umbrella:** if the binary exits with code 8 and the first stdout
+line is exactly `STATUS: looks-like-workspace-umbrella`, the current directory
+is a workspace folder containing git sub-projects — bootstrapping it directly
+would blanket every sub-project. Do not surface the raw error. Instead, consume
+the token line and present options via `AskUserQuestion`: one entry per child
+project named in stderr (capped at ~10) to initialize that project by re-running
+`consensus-init --from-claude-code` from inside it, plus **Initialize here
+anyway** (re-run with `--here`) and **Cancel**. Act on the choice one-shot;
+the resolved flag or changed directory suppresses the token so no loop occurs.
+
 Do not reimplement any of `consensus-init`'s logic. The binary handles
 `.mcp.json` writing, `.consensus/config.yaml` creation, `.gitignore`
 managed block, and Claude-Code-specific restart messaging.
