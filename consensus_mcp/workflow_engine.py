@@ -702,3 +702,53 @@ class WorkflowEngine:
             encoding="utf-8",
         )
         return out
+
+    # ---- Path A (host-driven) plan convergence (v1.30.6) ----
+
+    def evaluate_plan_convergence(
+        self,
+        review_artifacts: list[SealedArtifact],
+        outcome: IterationOutcome,
+        eligible_voters: list[str] | None = None,
+    ) -> ConvergenceOutcome:
+        """Path A convergence evaluation: did contributors approve the ONE synthesized plan?
+
+        Vote-counting is identical to the engine's convergence rule — the only difference
+        from Path B is WHAT was reviewed (the host-authored plan, not a proposal bundle).
+        Thin public wrapper over _evaluate_convergence so the host orchestrator has a named,
+        intention-revealing entry point."""
+        return self._evaluate_convergence(review_artifacts, outcome, eligible_voters)
+
+    def seal_plan_iteration(
+        self,
+        iteration_dir: Path,
+        plan_path: Path,
+        conv: ConvergenceOutcome,
+        round_number: int,
+    ) -> Path | None:
+        """On convergence, seal the HOST-AUTHORED plan as the iteration's converged artifact.
+
+        Unlike _seal_converged_plan (which writes an engine SUMMARY), Path A's plan is
+        authored by the host and must NOT be overwritten. We only write iteration-outcome.yaml
+        with a sealed closing_state so mint_design_approval can point at this iteration (the
+        cross-family review YAMLs already live here from the review dispatch). Returns the plan
+        path on convergence, else None (the host must revise the plan and re-dispatch)."""
+        from consensus_mcp._delivery_readiness import SEALED_CLOSING_STATES
+        if not conv.converged:
+            return None
+        closing_state = "quorum_close_passed"
+        assert closing_state in SEALED_CLOSING_STATES  # guard against a future rename
+        (iteration_dir / "iteration-outcome.yaml").write_text(
+            yaml.safe_dump({
+                "iteration_id": iteration_dir.name,
+                "workflow_mode": self.config["workflow"]["mode"],
+                "closing_state": closing_state,
+                "converged_at_round": round_number,
+                "convergence_rule": conv.rule,
+                "approve_votes": conv.approve_votes,
+                "final_artifact_path": str(plan_path),
+                "convergence_path": "A-orchestrator-synthesis",
+            }, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        return plan_path
