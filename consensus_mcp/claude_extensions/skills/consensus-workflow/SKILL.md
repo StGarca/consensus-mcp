@@ -29,6 +29,29 @@ themselves design surface — go through Workflow A.
 Listing 2+ design choices in a single response = Workflow A
 candidate. Stop and route to a consult.
 
+## Tier routing — cost-proportional rigor (operative)
+
+**Match rigor to risk; don't apply the heavy path uniformly.** At consult
+launch, classify the change and surface the cost BEFORE dispatching:
+
+1. `consensus_mcp/_tier_router.classify(intent_class, files_touched,
+   touches_governance_surface, security_or_irreversible)` → a tier
+   (`quick` / `standard` / `deep`) + its preset (workflow A/B, panel size,
+   path A/B).
+2. `_tier_router.estimate_cost(tier, median_dispatch_seconds=<from telemetry>)`
+   → n_dispatches + est wall-clock + token band. **Show this estimate to the
+   operator (AskUserQuestion) before any dispatch.**
+3. **Gate-consistency HARD RULE:** a change touching governance machinery
+   (`.consensus` config / hooks / gates / dispatchers / the engine) or that is
+   security/irreversible is auto-upgraded to `deep` and LOCKED —
+   `is_downgrade_allowed` refuses a downgrade. Tiers set rigor ABOVE the floor,
+   never whether the cross-family gate applies.
+
+Default tier is `standard`. `quick` = the R1/R2 lightweight lane; `deep` = the
+4-AI/multi-round lane. The full decision table (R0–R3, presets, the advisory
+weighting + the interaction-surface/integration-smoke guard) lives in
+`docs/consensus/routing-decision-table.md`.
+
 ## Workflow A / B / C in one line each
 
 **As of v1.14.4: letter aliases (A/B/C) replace numeric (3/4) as
