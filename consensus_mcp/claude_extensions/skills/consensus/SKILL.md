@@ -79,13 +79,32 @@ is the ONE case where you do **not** surface the output verbatim:
 
 The resolving flag stops the token from re-firing, so there is no menu loop.
 
+## If it looks like a workspace folder (not a project)
+
+If `consensus-init` exits with **code 8** AND the first line of its stdout is
+exactly `STATUS: looks-like-workspace-umbrella`, the current directory is a
+*workspace folder containing git projects*, not a project — bootstrapping it
+would blanket every sub-project. Do NOT surface the raw error. Instead:
+
+1. Consume (do not display) the token line; the stderr guidance names the child
+   projects found.
+2. Present these options via `AskUserQuestion`:
+   - One option per child project found (enumerate them from the stderr list,
+     **capped at ~10**) — "Initialize `<that project>`" -> re-run
+     `consensus-init --from-claude-code` from inside that project directory.
+   - **Initialize here anyway** -> re-run `consensus-init --from-claude-code --here`.
+   - **Cancel** -> stop; nothing was written.
+3. Act on the choice one-shot (the project dir / `--here` suppresses the token, so
+   no loop).
+
 ## What NOT to do
 
 - Don't reimplement any of `consensus-init`'s logic. It writes
   `.consensus/config.yaml`, `.mcp.json`, and a `.gitignore` managed
   block — let the binary handle all of that. (The ONE exception is the
   already-configured carve-out above: exit code 4 + the
-  `STATUS: already-configured` token triggers the AskUserQuestion menu.)
+  `STATUS: already-configured` token triggers the AskUserQuestion menu,
+  and the workspace-umbrella carve-out (exit code 8 + the `STATUS: looks-like-workspace-umbrella` token).)
 - Don't paraphrase the binary's output. Operators rely on the exact
   next-step text from the CLI.
 - Don't run if the user is asking a conceptual question
