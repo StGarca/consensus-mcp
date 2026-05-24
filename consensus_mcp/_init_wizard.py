@@ -1857,17 +1857,19 @@ def _verify_repair_install(repo_root: Path, *, dry_run: bool,
 def _prompt_existing_config_action(config_path: Path) -> str:
     """Interactive menu shown when config already exists (TTY callers only).
 
-    Returns "leave" | "reconfigure" | "force". Empty input and EOF/Ctrl-D both
-    default to "leave" (the safe no-op). Ctrl-C propagates as KeyboardInterrupt
-    (caller maps it to exit 1), matching the rest of the wizard.
+    Returns "leave" | "repair" | "reconfigure" | "force". Empty input and
+    EOF/Ctrl-D both default to "leave" (the safe no-op). Ctrl-C propagates as
+    KeyboardInterrupt (caller maps it to exit 1), matching the rest of the
+    wizard.
     """
     print(f"consensus-mcp is already configured here: {config_path}")
     print("  [1] Leave as-is — no changes            (default)")
-    print("  [2] Reconfigure — re-prompt, keep current settings as defaults, show diff")
-    print("  [3] Force overwrite — discard local config edits, write fresh")
+    print("  [2] Verify / repair — re-create missing pieces, report diverged")
+    print("  [3] Reconfigure — re-prompt, keep current settings as defaults, show diff")
+    print("  [4] Force overwrite — discard local config edits, write fresh")
     while True:
         try:
-            raw = input("Choose [1/2/3, default 1]: ").strip()
+            raw = input("Choose [1/2/3/4, default 1]: ").strip()
         except EOFError:
             # Deliberate divergence from the other prompts (which map EOF ->
             # KeyboardInterrupt -> exit 1): this menu has a safe no-op default,
@@ -1876,10 +1878,12 @@ def _prompt_existing_config_action(config_path: Path) -> str:
         if raw in ("", "1"):
             return "leave"
         if raw == "2":
-            return "reconfigure"
+            return "repair"
         if raw == "3":
+            return "reconfigure"
+        if raw == "4":
             return "force"
-        print("Please enter 1, 2, or 3.", file=sys.stderr)
+        print("Please enter 1, 2, 3, or 4.", file=sys.stderr)
 
 
 def cmd_init(args) -> int:
@@ -2037,6 +2041,12 @@ def cmd_init(args) -> int:
         if action == "leave":
             print(f"Leaving existing configuration unchanged: {config_path}")
             return 0
+        if action == "repair":
+            lines, code = _verify_repair_install(
+                repo_root, dry_run=args.dry_run, claude_home=_resolve_claude_home())
+            for line in lines:
+                print(line)
+            return code
         if action == "reconfigure":
             # Reconfigure re-prompts interactively (keeping the existing config
             # as defaults) and shows a diff — do NOT force non-interactive.
