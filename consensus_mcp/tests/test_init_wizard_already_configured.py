@@ -149,3 +149,18 @@ def test_tty_menu_reconfigure_stays_interactive(tmp_path, monkeypatch):
     rc = wiz.main([])
     assert rc == 0
     assert calls["n"] > 0  # would be 0 if reconfigure were forced non-interactive
+
+
+def test_force_beats_reconfigure(tmp_path, capsys, monkeypatch):
+    """Both flags together: --force wins (overwrite, no reconfigure diff)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    cfg_path = tmp_path / ".consensus" / "config.yaml"
+    cfg_path.parent.mkdir()
+    cfg_path.write_text("schema_version: 1\n# user edit\n", encoding="utf-8")
+    rc = wiz.main(["--force", "--reconfigure", "--non-interactive",
+                   "--accept-defaults", "--contributors", "claude,codex,gemini"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "# user edit" not in cfg_path.read_text(encoding="utf-8")  # overwritten
+    assert "reconfigure diff" not in out  # reconfigure path suppressed

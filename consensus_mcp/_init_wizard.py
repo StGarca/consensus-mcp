@@ -1767,6 +1767,10 @@ def cmd_init(args) -> int:
     # codex pass-4 rev-002: check existing-config guard BEFORE we build / prompt
     # so exit 4 wins over exit 1 (user abort during interactive) and exit 3
     # (invalid construction).
+    # --force supersedes --reconfigure: a full overwrite has nothing to diff.
+    if args.force and args.reconfigure:
+        args.reconfigure = False
+
     # v1.29.0 (init-already-installed-ux consult): the existing-config guard is
     # install-AWARE. It still runs BEFORE we build/prompt so its disposition
     # wins over exit 1 (user abort) and exit 3 (invalid build). TTY -> menu;
