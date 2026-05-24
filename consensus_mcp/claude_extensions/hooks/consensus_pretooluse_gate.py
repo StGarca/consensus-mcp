@@ -303,6 +303,78 @@ def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
     return False
 
 
+def _is_protected_install_path(file_path: Path, repo_root: Path) -> bool:
+    """True iff the target is part of the consensus ENFORCEMENT surface an in-session agent
+    could write to in order to DISABLE the gate globally:
+      - ``~/.claude/settings.json``         (registers the hooks)
+      - ``~/.claude/hooks/consensus_*.py``  (the hook scripts themselves)
+
+    MINIMAL set per consult iteration-gate-scope-design-2026-05-24 (codex+gemini+kimi):
+    the pipx venv is EXCLUDED (tampering it yields an import/exec failure, which the gate
+    already treats as fail-OPEN and is `pipx reinstall`-recoverable — not a silent
+    self-disable) and skills are instructions, not enforcement. EXPAND this set only if a
+    new ENFORCEMENT file is ever added.
+
+    Resolves the TARGET (and the protected refs) so an in-repo symlink pointing into the set
+    is caught (symlink-escape). Fail-SAFE to False on error — the caller runs under the
+    global fail-OPEN wrapper, and the gate must never brick editing on a resolution error."""
+    try:
+        claude = Path.home() / ".claude"
+        raw = file_path if file_path.is_absolute() else (repo_root / file_path)
+        p = raw.resolve()
+        settings = claude / "settings.json"
+        hooks_dir_raw = claude / "hooks"
+        # --- pathname checks: canonical-path writes (incl. a target that does not exist
+        #     yet) and symlink escapes (resolve() follows symlinks) ---
+        try:
+            if p == settings.resolve():
+                return True
+        except OSError:
+            pass
+        try:
+            hooks_dir = hooks_dir_raw.resolve()
+        except OSError:
+            hooks_dir = hooks_dir_raw
+        if p.parent == hooks_dir and p.name.startswith("consensus_") and p.suffix == ".py":
+            return True
+        # --- IDENTITY (st_dev/st_ino) check (codex-rev-001 / gemini-rev-001, v1.30.4):
+        #     a HARDLINK alias to an existing protected file resolves to its OWN path, not
+        #     the protected pathname, so the pathname guard above misses it. Compare inodes
+        #     for EXISTING targets. (A non-existent target has no inode to alias -> the
+        #     pathname check already covers canonical-path creation.) ---
+        try:
+            tstat = os.stat(p)
+        except OSError:
+            return False
+        protected = [settings]
+        try:
+            protected += sorted(hooks_dir_raw.glob("consensus_*.py"))
+        except OSError:
+            pass
+        for prot in protected:
+            try:
+                ps = os.stat(prot)
+            except OSError:
+                continue
+            if tstat.st_ino == ps.st_ino and tstat.st_dev == ps.st_dev:
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _resolves_inside_repo(file_path: Path, repo_root: Path) -> bool:
+    """True iff the target resolves to repo_root or a path under it. False on an out-of-repo
+    target OR any resolution error — both lead the EDIT_TOOLS branch to ALLOW (out-of-repo
+    writes are not the gate's concern; erroring -> fail-OPEN, per the gate's prime directive)."""
+    try:
+        rr = repo_root.resolve()
+        p = (file_path if file_path.is_absolute() else (repo_root / file_path)).resolve()
+        return p == rr or rr in p.parents
+    except Exception:
+        return False
+
+
 def main(argv=None) -> int:
     try:
         event = json.load(sys.stdin)
@@ -327,6 +399,22 @@ def main(argv=None) -> int:
 
     repo_root = _repo_root(event)
 
+    # PROTECTED-INSTALL tamper guard (ALWAYS-ON — fires BEFORE the opt-in check).
+    # consult iteration-gate-scope-design-2026-05-24 (codex+gemini+kimi): this hook is
+    # GLOBAL, so an agent in ANY project — even one that never opted in — could write the
+    # enforcement surface (~/.claude/settings.json or ~/.claude/hooks/consensus_*.py) and
+    # disable the gate for every project. That self-disable threat is opt-in-INDEPENDENT,
+    # so it must be checked before the opt-in early-return. (The "never govern a
+    # non-opted-in project" promise is about DESIGN-APPROVAL gating, not self-integrity.)
+    if tool in EDIT_TOOLS:
+        _fp = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        if _fp and _is_protected_install_path(Path(_fp), repo_root):
+            print("[consensus-design-gate] BLOCKED: writing the consensus enforcement "
+                  "surface (~/.claude/settings.json or ~/.claude/hooks/consensus_*.py) is "
+                  "refused — it would disable the design gate globally. (To legitimately "
+                  "update the install, run `consensus-init` or reinstall.)", file=sys.stderr)
+            return 2
+
     # Finding 1 (opt-in): enforce ONLY in repos that opted into consensus (a
     # `.consensus/` dir present). A repo that never enabled consensus — including
     # the consensus-mcp repo itself, and any unrelated project — fails OPEN so the
@@ -340,6 +428,13 @@ def main(argv=None) -> int:
         file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         if not file_path:
             return 0  # nothing to gate
+        # 3-class scope (consult iteration-gate-scope-design-2026-05-24): an out-of-repo
+        # target is NOT a repo modification and is NOT the gate's concern -> ALLOW. The
+        # enforcement surface was already protected above; everything else outside the repo
+        # (the agent's ~/.claude memory dir, /tmp scratch, ...) is free. (Resolution errors
+        # also land here -> fail-OPEN, per the gate's prime directive.)
+        if not _resolves_inside_repo(Path(file_path), repo_root):
+            return 0
         # Finding 2 (bootstrap): governance-state writes (.consensus/ incl. the
         # marker, and consensus-state/) are always permitted — otherwise the gate
         # cannot mint its own approval marker (a circular lock). The marker is

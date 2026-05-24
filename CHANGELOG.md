@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.30.4 - 2026-05-24
+
+**Fix the design gate's over-broad scope** — it denied legitimate out-of-repo writes (converged
+3-AI consult `iteration-gate-scope-design-2026-05-24`: gemini+kimi adopted the 3-class model,
+codex abstained on verification-first with a no-over-reach caution; codex+gemini Workflow B
+reviewed).
+
+The GLOBAL PreToolUse design gate denied **all** out-of-repo `Edit`/`Write` in an opted-in
+project — including the agent's own persistent **memory dir** under `~/.claude/...` — because it
+reused the sealing-confinement check (`_confine_to_repo`, "out-of-repo edits are not
+consensus-sealable") for a *scope* decision.
+
+### Fixed
+- **3-class path scoping** in the gate: `PROTECTED-install → in-repo (design-approval) →
+  out-of-repo (allow)`. An out-of-repo target (agent memory, `/tmp` scratch) is not a repo
+  modification and is no longer the gate's concern → allowed. `_design_approval.py`'s
+  sealing semantics are left untouched (gate-only change).
+- **Always-on tamper guard:** writes to the consensus *enforcement surface* —
+  `~/.claude/settings.json` and `~/.claude/hooks/consensus_*.py` — are denied regardless of
+  opt-in (the check runs **before** the opt-in early-return), since the hook is global and that
+  is the self-disable vector. Minimal set by design: the pipx venv is excluded (tampering it
+  fails *open* and is reinstall-recoverable, not a silent disable) and skills are instructions,
+  not enforcement. Symlink-escape is resolved via `Path.resolve()`; the fail-OPEN invariant is
+  preserved (any resolution error → allow).
+
 ## 1.30.3 - 2026-05-24
 
 **Harden kimi isolation for no-`.git` / large consuming repos** (the v1.30.2 design
