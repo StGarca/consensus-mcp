@@ -366,5 +366,19 @@ def main(argv=None) -> int:
     return 0  # other tools (Read, Grep, Glob, Task, ...) -> allow.
 
 
+def _main_fail_open() -> int:
+    """Run main(), but FAIL OPEN (exit 0) on ANY unexpected exception. A PreToolUse
+    hook that crashes would otherwise block the tool — and since this gate is a GLOBAL
+    hook, a crash bricks Bash/Edit in EVERY project at once. A hook bug must never be
+    able to do that; the delivery/Stop gate is the fail-closed backstop for finished
+    work. (A deliberate DENY returns/raises exit 2 and is preserved.)"""
+    try:
+        return main()
+    except SystemExit:
+        raise
+    except BaseException:
+        return 0
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_main_fail_open())
