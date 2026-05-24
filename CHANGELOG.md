@@ -2,7 +2,19 @@
 
 ## 1.29.3 - unreleased
 
-_Unreleased._
+**`consensus init` guards against bootstrapping a workspace folder.** Running
+init in a *non-repo directory that contains git projects* (a workspace umbrella)
+used to silently bootstrap the umbrella — blanketing every sub-project via the
+hierarchical `CLAUDE.md`. It now detects that and steers you to a real project.
+
+### Added
+- Workspace-umbrella guard: when the resolved root is not a git repo but has ≥1
+  immediate child git repo, `consensus init` refuses by default. In a terminal it
+  asks for confirmation; under Claude Code / CI it exits **8** with a stable
+  `STATUS: looks-like-workspace-umbrella` token (the `consensus` skill turns it
+  into a pick-a-project menu). Pass **`--here`** to initialize the current
+  directory anyway. The guard is skipped when a config already exists and for
+  `--reconfigure`/`--repair`/`--check` (so re-running to clean up still works).
 
 ## 1.29.2 - 2026-05-23
 
