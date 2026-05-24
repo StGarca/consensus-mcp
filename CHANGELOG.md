@@ -1,8 +1,20 @@
 # Changelog
 
-## 1.29.4 - unreleased
+## 1.29.4 - 2026-05-23
 
-_Unreleased._
+**Fix: the PreToolUse gate no longer blocks consensus's own tooling.** In a
+consensus-governed project, the gate denied `consensus init` / `--check` /
+`--repair` / `--reconfigure` (and the dispatchers) because they weren't on the
+read-only allowlist — chicken-and-egg for bootstrap, and it defeated `--repair`
+(remediation) and `--check` (read-only).
+
+### Fixed
+- `consensus_pretooluse_gate.py` now exempts consensus's own console scripts
+  (`consensus`, `consensus-init`, `consensus-mcp`, `consensus-results`, and the
+  `consensus-mcp-dispatch-*` reviewers) via an explicit `_CONSENSUS_TOOLING`
+  allowlist. Leading-token only; the existing redirection / subshell /
+  command-substitution rejection + per-segment split still deny a chained writer
+  riding on an allowed token (e.g. `consensus-init && rm x`).
 
 ## 1.29.3 - 2026-05-23
 
