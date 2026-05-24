@@ -18,6 +18,7 @@ from consensus_mcp.contributors.base import DispatchPacket
 from consensus_mcp.contributors.claude import ClaudeAdapter
 from consensus_mcp.contributors.codex import CodexAdapter
 from consensus_mcp.contributors.gemini import GeminiAdapter
+from consensus_mcp.contributors.kimi import KimiAdapter
 from consensus_mcp.contributors.host_peer_adapter import HostPeerAdapter
 from consensus_mcp.contributors.profile_adapter import ProfileAdapter
 from consensus_mcp.workflow_engine import WorkflowEngine, WorkflowError
@@ -35,6 +36,7 @@ _BUILTIN_ADAPTERS: dict[str, type[ContributorAdapter]] = {
     "claude": ClaudeAdapter,
     "codex": CodexAdapter,
     "gemini": GeminiAdapter,
+    "kimi": KimiAdapter,
 }
 
 # OPEN contributor registry (2026-05-22, "2-or-20-or-200 AIs" acceptance). The
