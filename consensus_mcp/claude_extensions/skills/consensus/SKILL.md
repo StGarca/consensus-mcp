@@ -66,12 +66,14 @@ is the ONE case where you do **not** surface the output verbatim:
 
 1. Consume (do not display) the `STATUS: already-configured` line. The stderr
    guidance after it is human-readable; you may show it.
-2. Present these three options to the user via `AskUserQuestion`:
+2. Present these options to the user via `AskUserQuestion`:
    - **Leave as-is** — already set up; do nothing.
+   - **Verify / repair** — re-create any missing pieces, report diverged ones (non-destructive).
    - **Reconfigure** — update settings, keeping current values as defaults.
    - **Force overwrite** — discard local config edits and write fresh.
 3. Act on the choice **one-shot** (do NOT loop):
    - Leave → stop; tell the user nothing changed.
+   - Verify / repair → run `consensus-init --from-claude-code --repair` once; relay its `OK:`/`REPAIRED:`/`SKIP:`/`REPORT-GLOBAL:` summary lines.
    - Reconfigure → run `consensus-init --from-claude-code --reconfigure` once.
    - Force overwrite → run `consensus-init --from-claude-code --force` once.
 

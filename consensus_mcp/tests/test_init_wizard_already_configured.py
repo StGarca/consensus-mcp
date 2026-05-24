@@ -240,3 +240,10 @@ def test_contract_token_present_in_skill_and_command():
     assert "exit code 4" in skill.lower() or "exits with code 4" in skill.lower()
     # consensus-init.md is what Claude Code reads when dispatched — test it symmetrically.
     assert "exit code 4" in command.lower() or "exits with code 4" in command.lower()
+
+
+def test_repair_option_documented_in_skill_and_command():
+    skill = (_ext_dir() / "skills" / "consensus" / "SKILL.md").read_text(encoding="utf-8")
+    command = (_ext_dir() / "commands" / "consensus-init.md").read_text(encoding="utf-8")
+    assert "--repair" in skill and "Verify / repair" in skill
+    assert "--repair" in command
