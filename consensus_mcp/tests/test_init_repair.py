@@ -146,4 +146,25 @@ def test_check_instructions_missing_repairs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     cfgp = _seed_config(tmp_path)
     comp, line = wiz._repair_check_instructions(tmp_path, dry_run=False)
-    assert comp.state in ("repaired", "ok")  # at least one instruction file managed
+    assert comp.state == "repaired"
+
+
+def test_check_agents_diverged_reports_skip(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    wiz._install_project_agents(tmp_path, force=False)  # install clean
+    # corrupt one agent file so it diverges from shipped
+    agents_dir = tmp_path / ".claude" / "agents"
+    target = agents_dir / wiz._PROJECT_AGENT_FILES[0]
+    target.write_text(target.read_text(encoding="utf-8") + "\n# local edit\n", encoding="utf-8")
+    comp, line = wiz._repair_check_agents(tmp_path, dry_run=False)
+    assert comp.state == "skipped_diverged"
+    assert line.startswith(wiz.REPAIR_SKIP)
+    # diverged file left intact (not clobbered)
+    assert "# local edit" in target.read_text(encoding="utf-8")
+
+
+def test_check_agents_missing_dry_run_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    comp, _ = wiz._repair_check_agents(tmp_path, dry_run=True)
+    assert comp.state == "repaired"
+    assert not (tmp_path / ".claude" / "agents").exists() or not any((tmp_path / ".claude" / "agents").iterdir())
