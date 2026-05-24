@@ -75,6 +75,31 @@ def test_same_family_under_cap_untouched():
     assert capped == raw  # aggregate 0.8 <= 1.0 -> no scaling
 
 
+@pytest.mark.parametrize("name, expected", [
+    ("codex-proposal.yaml", "codex"),
+    ("/tmp/x/gemini-review.yaml", "gemini"),
+    ("claude-orchestrator-proposal.yaml", "claude-orchestrator"),
+    ("host_peer-proposal.yaml", "host_peer"),
+    ("kimi-review-kimi-wcc-2-pass1.yaml", "kimi"),
+])
+def test_contributor_from_artifact_name(name, expected):
+    assert cw.contributor_from_artifact_name(name) == expected
+
+
+def test_order_proposal_paths_reorders_by_weight_stable_permutation():
+    paths = ["weak-proposal.yaml", "strong-proposal.yaml", "mid-proposal.yaml"]
+    weights = {"strong": 1.0, "mid": 0.6, "weak": 0.25}
+    ordered = cw.order_proposal_paths(paths, weights)
+    assert ordered == ["strong-proposal.yaml", "mid-proposal.yaml", "weak-proposal.yaml"]
+    assert sorted(ordered) == sorted(paths)  # permutation: nothing dropped/added
+
+
+def test_order_proposal_paths_no_weights_is_identity():
+    paths = ["a-proposal.yaml", "b-proposal.yaml"]
+    assert cw.order_proposal_paths(paths, None) == paths
+    assert cw.order_proposal_paths(paths, {}) == paths
+
+
 def test_module_exposes_no_weight_write_api():
     """no-self-grade (static form): no public callable writes/sets a contributor's
     weight or usefulness credit from caller input. A Plan-2 learner may only add a
