@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.29.5
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.30.0
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -154,7 +154,7 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.29.5 — stable.** 1,400+ regression tests, green on
+**Current: v1.30.0 — stable.** 1,600+ regression tests, green on
 CI across Linux + Windows and Python 3.11+. Self-hosted:
 every release is built through consensus-mcp's own cross-AI
 review.
