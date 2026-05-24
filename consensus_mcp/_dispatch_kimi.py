@@ -302,6 +302,16 @@ def _strip_symlinks(root: Path) -> None:
         pass
 
 
+class _WorkdirTooLargeToIsolate(RuntimeError):
+    """Raised by _make_disposable_workdir when the disposable COPY can't fit (ENOSPC).
+
+    The caller DEGRADES to running kimi against the real repo with NO copy (v1.30.3 D4),
+    relying on the before/after integrity snapshot as the mutation control. Safe ONLY
+    because that snapshot is REAL — `git status`, or the content-hash manifest for a
+    no-`.git` repo — so any mutation kimi makes is DETECTED and the output REJECTED. (If
+    even the snapshot can't be built, the dispatch fails loud at status_before instead.)"""
+
+
 def _make_disposable_workdir(repo_root: Path) -> Path:
     """Create a disposable temp COPY of the repo to use as kimi's --work-dir.
 
@@ -372,9 +382,13 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
                          or "No space left on device" in str(exc)
                          or "[Errno 28]" in str(exc))
             if is_enospc:
-                raise OSError(
+                # v1.30.3 D4: signal the caller to DEGRADE to no-copy (run against the real
+                # repo, with the before/after integrity snapshot as the control) instead of
+                # failing the whole dispatch. The clean copy isn't possible; the snapshot is.
+                raise _WorkdirTooLargeToIsolate(
                     f"kimi disposable work-dir copy ran out of space copying {repo_root} "
-                    f"(no .git -> full copytree). Exclude heavy dirs via "
+                    f"(no .git -> full copytree). Degrading to no-copy (integrity snapshot is "
+                    f"the control). To restore physical isolation, exclude heavy dirs via "
                     f"CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS=dir1,dir2 and/or point "
                     f"CONSENSUS_MCP_KIMI_WORKDIR_ROOT at a roomier disk than tmpfs."
                 ) from exc
@@ -402,6 +416,67 @@ def _cleanup_disposable_workdir(workdir: Path | None) -> None:
         pass
 
 
+class _SnapshotIndexError(RuntimeError):
+    """Raised when the git-independent integrity snapshot can't index the tree within its
+    budget — fail-LOUD (v1.30.3 D3) so we NEVER run with a vacuous (zero) mutation control."""
+
+
+_SNAPSHOT_MAX_FILES = int(os.environ.get("CONSENSUS_MCP_KIMI_SNAPSHOT_MAX_FILES", "50000"))
+_SNAPSHOT_MAX_BYTES = int(os.environ.get("CONSENSUS_MCP_KIMI_SNAPSHOT_MAX_BYTES", str(2 * 1024 ** 3)))  # 2 GiB
+
+
+def _filesystem_manifest_snapshot(repo_root: Path) -> dict[str, str]:
+    """Git-independent content-hash snapshot of the working tree (v1.30.3 D2).
+
+    The mutation control for a NO-`.git` repo, where `git status` is unavailable (the old
+    code returned {} — vacuous, NO control). Walks the tree honoring the SAME ignore set as
+    the disposable-copy fallback (_TEMP_WORKDIR_IGNORE_DIRS + CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS
+    + top-level .gitignore), hashing file contents + symlink targets. Bounded by a files/bytes
+    budget; raises _SnapshotIndexError (fail-LOUD, D3) if exceeded so the dispatcher reports a
+    clear error rather than proceeding with no control."""
+    ignore = (set(_TEMP_WORKDIR_IGNORE_DIRS) | _extra_ignore_dirs()
+              | _gitignored_top_level_dirs(repo_root))
+    snap: dict[str, str] = {}
+    nfiles = 0
+    nbytes = 0
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = [d for d in dirnames if d not in ignore]  # prune ignored dirs in place
+        for fn in filenames:
+            full = Path(dirpath) / fn
+            try:
+                rel = str(full.relative_to(repo_root)).replace("\\", "/")
+            except ValueError:
+                continue
+            try:
+                is_link = full.is_symlink()
+                if not is_link and not full.is_file():
+                    continue  # special files (fifo/socket/device) -> skip, don't count
+                # Budget check is SHARED by symlinks and regular files (codex-rev-001):
+                # a symlink-only/heavy tree must trip _SNAPSHOT_MAX_FILES too, else the
+                # fail-LOUD invariant (D3) has a hole. Bytes accrue for regular files only
+                # (a symlink's own size is negligible; we hash its target string).
+                nfiles += 1
+                if not is_link:
+                    nbytes += full.stat().st_size
+                if nfiles > _SNAPSHOT_MAX_FILES or nbytes > _SNAPSHOT_MAX_BYTES:
+                    raise _SnapshotIndexError(
+                        f"integrity snapshot exceeded its budget walking {repo_root} "
+                        f"(> {_SNAPSHOT_MAX_FILES} files or > {_SNAPSHOT_MAX_BYTES} bytes). "
+                        f"Exclude heavy dirs via the repo's .gitignore or "
+                        f"CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS so a mutation control can be "
+                        f"established (or raise CONSENSUS_MCP_KIMI_SNAPSHOT_MAX_BYTES)."
+                    )
+                if is_link:
+                    snap[rel] = "link:" + hashlib.sha256(
+                        os.readlink(full).encode("utf-8", "surrogateescape")).hexdigest()
+                else:
+                    snap[rel] = hashlib.sha256(full.read_bytes()).hexdigest()
+            except OSError:
+                # unreadable -> stable marker; its appearance/disappearance still registers
+                snap[rel] = "err:unreadable"
+    return snap
+
+
 def _repo_status_snapshot(repo_root: Path) -> dict[str, str]:
     """Return {path: content-signature} for every dirty/untracked path in the REAL repo.
 
@@ -412,7 +487,12 @@ def _repo_status_snapshot(repo_root: Path) -> dict[str, str]:
     if kimi rewrites that already-dirty file's content, so a line-set diff MISSES it;
     a content hash does not.
 
-    Fail-SAFE on inability to check: git missing / not a work-tree / command error ->
+    git missing / not a work-tree (no `.git`) -> fall back to the git-INDEPENDENT
+    content-hash manifest (_filesystem_manifest_snapshot, v1.30.3) so a REAL control
+    exists even with no git (the old behavior returned {} = vacuous, NO control). That
+    fallback fails LOUD (_SnapshotIndexError) if the tree exceeds its budget.
+
+    Fail-SAFE on a git COMMAND error (work-tree present but `git status` errors) ->
     return {} (empty before+after => empty diff => do not block; the temp-workdir
     isolation is the primary control, this is a backstop).
 
@@ -423,7 +503,11 @@ def _repo_status_snapshot(repo_root: Path) -> dict[str, str]:
     """
     git_bin = shutil.which("git")
     if git_bin is None or not (repo_root / ".git").exists():
-        return {}
+        # no git / no work-tree -> git status is unavailable. Use the git-INDEPENDENT
+        # content-hash manifest so a REAL mutation control still exists (v1.30.3 D2/D3).
+        # This may raise _SnapshotIndexError (fail-LOUD) if the tree exceeds the snapshot
+        # budget; the dispatch flow turns that into a clear, actionable failure.
+        return _filesystem_manifest_snapshot(repo_root)
     try:
         result = subprocess.run(
             [git_bin, "status", "--porcelain"],
@@ -1435,8 +1519,25 @@ def main(argv: list[str] | None = None) -> int:
                 # snapshot below remains the backstop.
                 effective_workdir = repo_root
             else:
-                kimi_workdir = _make_disposable_workdir(repo_root)
-                effective_workdir = kimi_workdir
+                try:
+                    kimi_workdir = _make_disposable_workdir(repo_root)
+                    effective_workdir = kimi_workdir
+                except _WorkdirTooLargeToIsolate as degrade_exc:
+                    # D4 size-aware degrade: the disposable copy won't fit (ENOSPC). Run
+                    # against the REAL repo with NO copy — safe because status_before above
+                    # is a REAL control (git status / content-hash manifest), so the
+                    # post-dispatch diff below DETECTS and REJECTS any mutation kimi makes.
+                    # (If the snapshot itself couldn't be built we'd have failed loud above.)
+                    kimi_workdir = None
+                    effective_workdir = repo_root
+                    _log_dispatch(log_path, {
+                        "event": "dispatch_workdir_degraded_no_copy",
+                        "iteration_id": iteration_id,
+                        "reviewer_id": reviewer_id,
+                        "pass_id": pass_id,
+                        "reason": str(degrade_exc),
+                        "adapter": "kimi",
+                    })
             _log_dispatch(log_path, {
                 "event": "dispatch_workdir_prepared",
                 "iteration_id": iteration_id,
@@ -1535,7 +1636,11 @@ def main(argv: list[str] | None = None) -> int:
             packet, iter_dir,
             sealed_filename=_sealed_mirror_filename(reviewer_id, pass_id),
         )
-    except (KimiInvocationError, KimiOutputParseError, KimiIntegrityError) as exc:
+    except (KimiInvocationError, KimiOutputParseError, KimiIntegrityError,
+            _SnapshotIndexError) as exc:
+        # _SnapshotIndexError (v1.30.3 D3): the git-independent integrity snapshot exceeded
+        # its budget, so NO mutation control can be established -> fail LOUD (never run with
+        # zero control). str(exc) carries the actionable .gitignore / env-var guidance.
         _log_dispatch(log_path, _failed_event(type(exc).__name__, str(exc)))
         print(json.dumps({"ok": False, "error": str(exc), "error_type": type(exc).__name__}))
         return 1

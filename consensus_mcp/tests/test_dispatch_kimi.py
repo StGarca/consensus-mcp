@@ -868,6 +868,108 @@ def test_main_integrity_check_rejects_when_real_repo_dirty(monkeypatch, capsys):
                    ignore_errors=True)
 
 
+def test_main_degrades_to_no_copy_on_enospc_and_seals(monkeypatch, capsys):
+    """v1.30.3 D4: when the disposable copy can't fit (ENOSPC -> _WorkdirTooLargeToIsolate),
+    the dispatch DEGRADES to running kimi against the REAL repo (no copy) and still seals.
+    The before/after integrity snapshot (reported CLEAN here) is the mutation control."""
+    repo_root = ROOT
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
+
+    iter_name = "iteration-kimi-degrade-0001"
+    iter_dir = repo_root / "consensus-state" / "archive" / "scratch-kimi-degrade" / iter_name
+    iter_dir.mkdir(parents=True, exist_ok=True)
+    rel_iter_dir = iter_dir.relative_to(repo_root)
+
+    goal_packet = iter_dir / "goal_packet.yaml"
+    _write_goal_packet(goal_packet)
+    rel_goal = goal_packet.relative_to(repo_root)
+    final_text = json.dumps(_minimal_valid())
+
+    captured_workdirs: list = []
+
+    def fake_invoke_with_retry(**kwargs):
+        captured_workdirs.append(kwargs.get("repo_root"))
+        return final_text, _dispatch_kimi._parse_kimi_output(final_text)
+
+    def _enospc(_root):
+        raise _dispatch_kimi._WorkdirTooLargeToIsolate(
+            "kimi disposable work-dir copy ran out of space")
+
+    monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir", _enospc)
+    cleanup_calls: list = []
+    monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir",
+                        lambda wd: cleanup_calls.append(wd))
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: {})  # clean
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
+    monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
+
+    import uuid as _uuid
+    pass_id = f"kimi-degrade-{_uuid.uuid4().hex[:8]}"
+    rc = _dispatch_kimi.main([
+        "--goal-packet", str(rel_goal),
+        "--iteration-dir", str(rel_iter_dir),
+        "--pass-id", pass_id,
+    ])
+    captured = capsys.readouterr()
+    assert rc == 0, f"main returned {rc}; stdout={captured.out}"
+    # DEGRADE: kimi ran against the REAL repo (no disposable copy); cleanup got None.
+    assert captured_workdirs == [repo_root]
+    assert cleanup_calls == [None]
+    out_lines = [l for l in captured.out.splitlines() if l.strip().startswith("{")]
+    assert json.loads(out_lines[-1])["ok"] is True
+
+    import shutil as _shutil
+    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-degrade",
+                   ignore_errors=True)
+
+
+def test_main_degrade_no_copy_still_rejects_real_repo_mutation(monkeypatch, capsys):
+    """v1.30.3 D4 safety: even in the degraded no-copy path, the before/after snapshot
+    control still fires — a mutation to the real repo is DETECTED and the output REJECTED
+    (this is WHY degrading to no-copy is safe: detect + reject, never zero control)."""
+    repo_root = ROOT
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
+
+    iter_name = "iteration-kimi-degrade-reject-0001"
+    iter_dir = (repo_root / "consensus-state" / "archive"
+                / "scratch-kimi-degrade-reject" / iter_name)
+    iter_dir.mkdir(parents=True, exist_ok=True)
+    rel_iter_dir = iter_dir.relative_to(repo_root)
+
+    goal_packet = iter_dir / "goal_packet.yaml"
+    _write_goal_packet(goal_packet)
+    rel_goal = goal_packet.relative_to(repo_root)
+    final_text = json.dumps(_minimal_valid())
+
+    def _enospc(_root):
+        raise _dispatch_kimi._WorkdirTooLargeToIsolate("ran out of space")
+
+    monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir", _enospc)
+    monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir", lambda _wd: None)
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry",
+                        lambda **kw: (final_text, _dispatch_kimi._parse_kimi_output(final_text)))
+    monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
+    # before CLEAN, after has a NEW entry (kimi mutated the real repo in the no-copy run).
+    _snaps = iter([{}, {"consensus_mcp/some_real_file.py": "mutated-hash"}])
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: next(_snaps))
+
+    rc = _dispatch_kimi.main([
+        "--goal-packet", str(rel_goal),
+        "--iteration-dir", str(rel_iter_dir),
+    ])
+    captured = capsys.readouterr()
+    assert rc == 1, f"expected rejection rc=1; got {rc}; stdout={captured.out}"
+    out_lines = [l for l in captured.out.splitlines() if l.strip().startswith("{")]
+    result = json.loads(out_lines[-1])
+    assert result["ok"] is False
+    assert result["error_type"] == "KimiIntegrityError"
+    assert not any(p.name.startswith("kimi-review") for p in iter_dir.iterdir())
+
+    import shutil as _shutil
+    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-degrade-reject",
+                   ignore_errors=True)
+
+
 # ---------- _strip_kimi_output_chrome (kimi.yaml strip_patterns) ----------
 
 def test_strip_removes_resume_session_trailer():
@@ -1049,11 +1151,16 @@ def test_repo_status_snapshot_empty_when_clean(monkeypatch, tmp_path):
     assert _dispatch_kimi._repo_status_snapshot(tmp_path) == {}
 
 
-def test_repo_status_snapshot_failsafe_empty_when_no_git(monkeypatch, tmp_path):
-    # No git binary / not a git tree -> cannot check -> EMPTY dict (before+after both
-    # empty -> empty diff -> do not block; backstop only).
+def test_repo_status_snapshot_no_git_uses_content_manifest(monkeypatch, tmp_path):
+    # v1.30.3 D2: no git binary / not a git tree -> the git-INDEPENDENT content-hash
+    # manifest (a REAL control), NOT the old vacuous {} (which was zero control). An empty
+    # tree still yields {}; a tree WITH files yields {path: content-hash}.
     monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _name: None)
-    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == {}
+    assert _dispatch_kimi._repo_status_snapshot(tmp_path) == {}  # empty tree -> empty manifest
+    (tmp_path / "a.py").write_text("alpha", encoding="utf-8")
+    snap = _dispatch_kimi._repo_status_snapshot(tmp_path)
+    import hashlib as _h
+    assert snap == {"a.py": _h.sha256(b"alpha").hexdigest()}
 
 
 def test_integrity_diff_ignores_preexisting_dirt():

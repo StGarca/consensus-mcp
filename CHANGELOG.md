@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.30.3 - 2026-05-24
+
+**Harden kimi isolation for no-`.git` / large consuming repos** (the v1.30.2 design
+follow-through; converged 4-AI consult, codex Workflow B reviewed). v1.30.2 was never
+*unsafe* — it copies or fails loud, never zero-control — but a no-`.git` repo whose heavy
+dirs can't be excluded had two gaps this closes.
+
+### Fixed / Hardened
+- **Git-independent mutation control (no more vacuous control on a no-`.git` repo).** With
+  no `.git`, `git status` is unavailable, so the kimi post-dispatch integrity snapshot used
+  to return `{}` — a VACUOUS control (the before/after diff is always empty, so a real-repo
+  mutation would never be caught). v1.30.3 adds a git-independent **content-hash manifest**
+  (`_filesystem_manifest_snapshot`): it walks the working tree honoring the same ignore set
+  as the disposable copy (`_TEMP_WORKDIR_IGNORE_DIRS` + `CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS`
+  + the repo's top-level `.gitignore`) and hashes file contents + symlink targets. A real
+  control now exists with or without git.
+- **Fail-LOUD instead of silent zero-control.** If the tree exceeds the snapshot budget
+  (`CONSENSUS_MCP_KIMI_SNAPSHOT_MAX_FILES`, default 50000; `…_MAX_BYTES`, default 2 GiB), the
+  dispatch fails with a clear `_SnapshotIndexError` (`ok:false`) telling the operator to
+  exclude heavy dirs — it never proceeds with no mutation control (the dissenter's invariant
+  from the consult).
+- **Size-aware degrade.** If the disposable copy can't fit (ENOSPC), the dispatch no longer
+  aborts — it DEGRADES to running against the real repo with no copy (`_WorkdirTooLargeToIsolate`),
+  relying on the now-real before/after snapshot to DETECT and REJECT any mutation. Safe
+  precisely because that snapshot is a genuine control; if even the snapshot can't be built,
+  it fails loud first.
+- **Multi-round-seal regression test (the external-project dogfood).** Locks the v1.30.2
+  Bug A fix end-to-end at the seal boundary: round-keyed reviewer_ids → distinct pass_ids →
+  every convergence round seals, with a non-vacuous negative control proving the original
+  `index_collision` symptom returns if round-keying ever regresses.
+
 ## 1.30.2 - 2026-05-24
 
 **Hot-patch: three bugs that blocked a Workflow A consult from a consuming project**
