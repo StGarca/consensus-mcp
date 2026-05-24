@@ -184,3 +184,5 @@ def test_contract_token_present_in_skill_and_command():
     assert token in command, "consensus-init.md must reference the exact token"
     # exit code 4 is the paired half of the contract — keep it documented too.
     assert "exit code 4" in skill.lower() or "exits with code 4" in skill.lower()
+    # consensus-init.md is what Claude Code reads when dispatched — test it symmetrically.
+    assert "exit code 4" in command.lower() or "exits with code 4" in command.lower()
