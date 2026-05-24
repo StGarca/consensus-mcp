@@ -148,3 +148,5 @@ def test_umbrella_token_documented_in_skill_and_command():
     assert "--here" in skill and "--here" in command
     # exit 8 documented in the skill, distinct from already-configured (exit 4)
     assert "exit code 8" in skill.lower() or "exits with code 8" in skill.lower()
+    # command doc is what Claude Code reads when dispatched — assert it symmetrically
+    assert "exit code 8" in command.lower() or "exits with code 8" in command.lower()
