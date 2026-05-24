@@ -29,6 +29,39 @@ themselves design surface — go through Workflow A.
 Listing 2+ design choices in a single response = Workflow A
 candidate. Stop and route to a consult.
 
+## Tier routing — cost-proportional rigor (operative)
+
+**Match rigor to risk; don't apply the heavy path uniformly. The rigor tier is
+OPERATOR-DECLARED — never inferred** (heuristics are the shared-prior trap; the
+engine's `_goal_risk_class` already refuses to infer risk). At consult launch:
+
+1. **Operator DECLARES the tier** (`quick` / `standard` / `deep`) in the
+   goal_packet. `consensus_mcp/_tier_router.effective_tier(declared_tier,
+   touches_governance_surface=, security_or_irreversible=)` is the AUTHORITATIVE
+   router → tier + preset (workflow A/B, panel size, path A/B). A missing/invalid
+   declaration RAISES — escalate, never default silently.
+2. **Optional, NON-BINDING suggestion:** `_tier_router.suggest_tier(...)` returns
+   an advisory object (`advisory: True`, `suggested_tier`, reason) to help the
+   operator decide. The engine NEVER routes on it. A picker surfacing it must NOT
+   pre-fill / pre-select / default-on-timeout to it — the operator declares
+   explicitly; log declared-vs-suggested so rubber-stamp rate is auditable.
+3. `_tier_router.estimate_cost(tier, median_dispatch_seconds=<from telemetry>)`
+   → n_dispatches + est wall-clock + token band. **Show this estimate before any
+   dispatch.**
+4. **Sole automatic move — the MONOTONE governance safety floor:** a change
+   touching governance machinery (`.consensus` config / hooks / gates /
+   dispatchers / the engine) or that is security/irreversible is auto-UPGRADED to
+   `deep` and LOCKED (`effective_tier` applies it; `is_downgrade_allowed` refuses a
+   downgrade). It can only RAISE rigor, never select/lower it — a safeguard, not an
+   inference. This is the ONE permitted automatic move.
+
+**AI lean is operator-declared too** — informed by a performance SCORECARD (the
+learner/ledger/telemetry as decision-support, NOT an auto-applied weight); applied
+ONLY to synthesis-narrative tie-breaks, never gates/weights/dispatch-set.
+
+The full decision table (R0–R3, presets, advisory weighting, interaction-surface /
+integration-smoke guard) lives in `docs/consensus/routing-decision-table.md`.
+
 ## Workflow A / B / C in one line each
 
 **As of v1.14.4: letter aliases (A/B/C) replace numeric (3/4) as

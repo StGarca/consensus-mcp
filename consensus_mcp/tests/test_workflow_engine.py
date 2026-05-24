@@ -53,6 +53,39 @@ def _make_iter_dir(tmp_path: Path) -> tuple[Path, Path, Path]:
     return iter_dir, goal, target
 
 
+# ---------- advisory weights: engine-level weights-off equivalence ----------
+
+
+def test_convergence_packet_advisory_weights_reorder_but_set_is_identical(tmp_path):
+    """S3 decisive experiment (next-step converged plan): contributor_weights in
+    _build_convergence_packet change the proposal READING-ORDER but never the SET of
+    proposals — so the gate/convergence (which operate on the set, never on weights)
+    are byte-identical regardless. Proves weights-off equivalence at the engine level."""
+    config = _three_contributor_config()
+    adapters = {n: FakeAlwaysApprove() for n in ["claude", "codex", "gemini"]}
+    engine = WorkflowEngine(config, adapters, tmp_path)
+    iter_dir = tmp_path / "iter-w"
+    iter_dir.mkdir()
+    paths = []
+    for c in ["gemini", "codex", "claude"]:  # deliberately not weight-order
+        p = iter_dir / f"{c}-proposal.yaml"
+        p.write_text(f"contributor: {c}\n", encoding="utf-8")
+        paths.append(str(p))
+
+    pkt_off = engine._build_convergence_packet(iter_dir, paths, 1)  # no weights = identity
+    pkt_on = engine._build_convergence_packet(
+        iter_dir, paths, 2,
+        contributor_weights={"codex": 1.0, "claude": 0.6, "gemini": 0.25},
+    )
+    files_off = yaml.safe_load(pkt_off.read_text(encoding="utf-8"))["defect_target"]["files"]
+    files_on = yaml.safe_load(pkt_on.read_text(encoding="utf-8"))["defect_target"]["files"]
+
+    assert sorted(files_off) == sorted(files_on)        # same SET (weights-off equivalence)
+    assert files_off != files_on                        # weights DID reorder (advisory effect real)
+    assert files_on[0].endswith("codex-proposal.yaml")  # highest weight read first
+    assert files_off[0].endswith("gemini-proposal.yaml")  # default = original order
+
+
 # ---------- construction ----------
 
 def test_engine_construction_requires_all_enabled_adapters(tmp_path):
