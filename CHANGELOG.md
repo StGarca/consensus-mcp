@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.29.3 - unreleased
+## 1.29.3 - 2026-05-23
 
 **`consensus init` guards against bootstrapping a workspace folder.** Running
 init in a *non-repo directory that contains git projects* (a workspace umbrella)
