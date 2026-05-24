@@ -58,11 +58,32 @@ installs `~/.claude/skills/consensus-workflow/SKILL.md` — that
 skill is the load-bearing reference and triggers automatically
 on workflow-execution intent.
 
+## If the project is already configured
+
+If `consensus-init` exits with **code 4** AND the first line of its stdout is
+exactly `STATUS: already-configured`, the project is already bootstrapped. This
+is the ONE case where you do **not** surface the output verbatim:
+
+1. Consume (do not display) the `STATUS: already-configured` line. The stderr
+   guidance after it is human-readable; you may show it.
+2. Present these three options to the user via `AskUserQuestion`:
+   - **Leave as-is** — already set up; do nothing.
+   - **Reconfigure** — update settings, keeping current values as defaults.
+   - **Force overwrite** — discard local config edits and write fresh.
+3. Act on the choice **one-shot** (do NOT loop):
+   - Leave → stop; tell the user nothing changed.
+   - Reconfigure → run `consensus-init --from-claude-code --reconfigure` once.
+   - Force overwrite → run `consensus-init --from-claude-code --force` once.
+
+The resolving flag stops the token from re-firing, so there is no menu loop.
+
 ## What NOT to do
 
 - Don't reimplement any of `consensus-init`'s logic. It writes
   `.consensus/config.yaml`, `.mcp.json`, and a `.gitignore` managed
-  block — let the binary handle all of that.
+  block — let the binary handle all of that. (The ONE exception is the
+  already-configured carve-out above: exit code 4 + the
+  `STATUS: already-configured` token triggers the AskUserQuestion menu.)
 - Don't paraphrase the binary's output. Operators rely on the exact
   next-step text from the CLI.
 - Don't run if the user is asking a conceptual question
