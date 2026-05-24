@@ -15,8 +15,11 @@ def test_release_currency_steps_documented():
     t = _skill_text().lower()
     assert "pipx install --force" in t
     assert "--install-claude-code --force" in t
-    # version-asserting smoke (not just 'binary runs')
-    assert "version" in t and "smoke" in t
+    # version-asserting smoke (not just 'binary runs'). Pin the version-assert
+    # phrase specifically — "smoke" alone also appears in pre-existing text, so
+    # asserting it would not catch removal of the version-assert step.
+    assert "smoke" in t
+    assert "version ==" in t
 
 
 def test_dual_path_and_host_peer_documented():
