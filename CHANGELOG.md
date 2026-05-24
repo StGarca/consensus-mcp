@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.29.1 - unreleased
+## 1.29.1 - 2026-05-23
 
 **`consensus init --repair` — verify & repair a partially-broken install.**
 Re-running init on a project whose `.mcp.json`, `.gitignore` block,
