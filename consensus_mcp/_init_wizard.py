@@ -1800,6 +1800,60 @@ def _repair_check_instructions(repo_root: Path, *, dry_run: bool) -> tuple[Repai
             f"{REPAIR_FIXED} instruction files ({', '.join(str(p) for p in needs)})")
 
 
+def _repair_check_enforcement(claude_home: Path) -> tuple[RepairComponent, str]:
+    """#6 global enforcement — READ-ONLY. Healthy iff settings.json carries the
+    consensus hooks for every expected event AND every referenced hook script
+    exists on disk. Never writes ~/.claude (that's --install-claude-code)."""
+    settings_path = _resolve_settings_json_path(claude_home)
+    settings, _ = _load_existing_settings_json(settings_path)
+    expected = _build_consensus_hook_groups(claude_home)
+    hooks = (settings or {}).get("hooks", {})
+    for event in expected:
+        if not hooks.get(event):
+            return (RepairComponent("enforcement", "report_global"),
+                    f"{REPAIR_GLOBAL} enforcement: settings.json missing consensus "
+                    f"{event} hook — run `consensus-init --install-claude-code`")
+    # Check that every unique hook script referenced in _CONSENSUS_HOOK_SPECS
+    # is actually installed under claude_home/hooks/.  We use script-name lookup
+    # (via _installed_hook_script_path) rather than string-sniffing the command
+    # string, which avoids any quoting/platform sensitivity.
+    seen: set[str] = set()
+    for _event, _matcher, script in _CONSENSUS_HOOK_SPECS:
+        if script in seen:
+            continue
+        seen.add(script)
+        installed = claude_home / "hooks" / script
+        if not installed.exists():
+            return (RepairComponent("enforcement", "report_global"),
+                    f"{REPAIR_GLOBAL} enforcement: hook script missing ({installed}) "
+                    f"— run `consensus-init --install-claude-code`")
+    return (RepairComponent("enforcement", "ok"), f"{REPAIR_OK} enforcement")
+
+
+def _verify_repair_install(repo_root: Path, *, dry_run: bool,
+                           claude_home: Path) -> tuple[list[str], int]:
+    """Comprehensive verify + non-destructive repair. Returns (summary_lines, exit_code)."""
+    config_path = repo_root / ".consensus" / "config.yaml"
+    comps: list[RepairComponent] = []
+    lines: list[str] = []
+
+    c1, l1 = _repair_check_config(config_path)
+    comps.append(c1); lines.append(l1)
+    if c1.state in ("missing_config", "invalid_config"):
+        # #2-#5 cannot be derived without a valid config; report #6 then stop.
+        c6, l6 = _repair_check_enforcement(claude_home)
+        comps.append(c6); lines.append(l6)
+        return lines, _repair_exit_code(comps)
+
+    for check in (_repair_check_mcp, _repair_check_gitignore,
+                  _repair_check_agents, _repair_check_instructions):
+        c, l = check(repo_root, dry_run=dry_run)
+        comps.append(c); lines.append(l)
+    c6, l6 = _repair_check_enforcement(claude_home)
+    comps.append(c6); lines.append(l6)
+    return lines, _repair_exit_code(comps)
+
+
 def _prompt_existing_config_action(config_path: Path) -> str:
     """Interactive menu shown when config already exists (TTY callers only).
 

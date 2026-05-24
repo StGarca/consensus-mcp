@@ -168,3 +168,43 @@ def test_check_agents_missing_dry_run_writes_nothing(tmp_path, monkeypatch):
     comp, _ = wiz._repair_check_agents(tmp_path, dry_run=True)
     assert comp.state == "repaired"
     assert not (tmp_path / ".claude" / "agents").exists() or not any((tmp_path / ".claude" / "agents").iterdir())
+
+
+# ---------------------------------------------------------------------------
+# Task 4: enforcement (#6) detection + _verify_repair_install engine
+# ---------------------------------------------------------------------------
+
+def test_check_enforcement_dead_reports_global(tmp_path):
+    # empty claude_home → no settings.json hooks → dead
+    comp, line = wiz._repair_check_enforcement(tmp_path / "fake_claude_home")
+    assert comp.state == "report_global"
+    assert line.startswith(wiz.REPAIR_GLOBAL)
+    assert "install-claude-code" in line
+
+
+def test_engine_happy_path_repairs_and_exits_0(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _seed_config(tmp_path)
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), f"{wiz.REPAIR_OK} enforcement"))
+    lines, code = wiz._verify_repair_install(tmp_path, dry_run=False, claude_home=tmp_path / "ch")
+    assert code == 0
+    assert any(l.startswith(wiz.REPAIR_FIXED) for l in lines)  # repaired #2-#5
+
+
+def test_engine_missing_config_short_circuits_2(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # no config
+    lines, code = wiz._verify_repair_install(tmp_path, dry_run=False, claude_home=tmp_path / "ch")
+    assert code == 2
+    assert any("config.yaml missing" in l for l in lines)
+
+
+def test_engine_idempotent_second_run_all_ok(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _seed_config(tmp_path)
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), f"{wiz.REPAIR_OK} enforcement"))
+    wiz._verify_repair_install(tmp_path, dry_run=False, claude_home=tmp_path / "ch")  # first
+    lines, code = wiz._verify_repair_install(tmp_path, dry_run=False, claude_home=tmp_path / "ch")  # second
+    assert code == 0
+    assert all(not l.startswith(wiz.REPAIR_FIXED) for l in lines)  # nothing re-written
