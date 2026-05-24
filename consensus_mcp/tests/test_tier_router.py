@@ -64,3 +64,22 @@ def test_unknown_target_tier_raises():
                     touches_governance_surface=False)
     with pytest.raises(ValueError):
         tr.is_downgrade_allowed(r, "ultra")
+
+
+def test_cost_estimate_scales_with_tier():
+    q = tr.estimate_cost(tr.QUICK, median_dispatch_seconds=60)
+    s = tr.estimate_cost(tr.STANDARD, median_dispatch_seconds=60)
+    d = tr.estimate_cost(tr.DEEP, median_dispatch_seconds=60)
+    assert q["n_dispatches"] == 1 and q["token_band"] == "low"
+    assert s["n_dispatches"] == 3 and s["token_band"] == "medium"
+    # DEEP: panel 4 x 2 rounds = 8 dispatches; wall-clock = 60 x 2 rounds
+    assert d["n_dispatches"] == 8 and d["est_wall_clock_s"] == 120.0 and d["token_band"] == "high"
+    # round-1 tiers: wall-clock = one median (peers parallel)
+    assert s["est_wall_clock_s"] == 60.0
+
+
+def test_cost_estimate_rejects_bad_inputs():
+    with pytest.raises(ValueError):
+        tr.estimate_cost("ultra", median_dispatch_seconds=60)
+    with pytest.raises(ValueError):
+        tr.estimate_cost(tr.QUICK, median_dispatch_seconds=-1)
