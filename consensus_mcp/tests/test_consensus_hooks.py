@@ -755,3 +755,129 @@ def test_v127_git_branch_list_pattern(tmp_path, command, allowed):
     ev = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=True)
     assert cp.returncode == (0 if allowed else 2), (command, cp.stderr)
+
+
+# --------------------------------------------------------------------------- #
+# v1.30.4 — gate scope (consult iteration-gate-scope-design-2026-05-24):
+# protected-install tamper guard (always-on) + 3-class out-of-repo ALLOW.
+# --------------------------------------------------------------------------- #
+
+def _gate_scope_env(tmp_path, monkeypatch):
+    """Fake ~/.claude (enforcement surface) + a SIBLING repo so in-repo, out-of-repo, and
+    protected paths are all distinct. HOME is read by Path.home() in the subprocess (via
+    _run_hook's dict(os.environ)). Returns (repo_root, claude_dir)."""
+    fake_home = tmp_path / "home"
+    claude = fake_home / ".claude"
+    (claude / "hooks").mkdir(parents=True)
+    (claude / "settings.json").write_text("{}", encoding="utf-8")
+    (claude / "hooks" / "consensus_pretooluse_gate.py").write_text("# hook\n", encoding="utf-8")
+    (claude / "projects" / "proj" / "memory").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(fake_home))
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    return repo_root, claude
+
+
+def _edit_ev(file_path, repo_root):
+    return {"tool_name": "Write", "tool_input": {"file_path": str(file_path)},
+            "cwd": str(repo_root)}
+
+
+def test_gatescope_settings_json_denied_opted_in(tmp_path, monkeypatch):
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    cp = _run_hook(PRETOOLUSE, _edit_ev(claude / "settings.json", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_settings_json_denied_NON_opted_in(tmp_path, monkeypatch):
+    # ALWAYS-ON: the tamper guard fires BEFORE the opt-in early-return (the threat is global).
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    cp = _run_hook(PRETOOLUSE, _edit_ev(claude / "settings.json", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=False)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_consensus_hook_denied(tmp_path, monkeypatch):
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    cp = _run_hook(PRETOOLUSE,
+                   _edit_ev(claude / "hooks" / "consensus_pretooluse_gate.py", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=False)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_symlink_escape_to_settings_denied(tmp_path, monkeypatch):
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    link = repo_root / "innocent.json"
+    try:
+        link.symlink_to(claude / "settings.json")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    cp = _run_hook(PRETOOLUSE, _edit_ev(link, repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr  # resolved through the symlink -> protected
+
+
+def test_gatescope_hardlink_alias_to_settings_denied(tmp_path, monkeypatch):
+    # codex-rev-001 / gemini-rev-001 (v1.30.4): a HARDLINK to a protected file resolves to
+    # its OWN path, so a pathname-only guard misses it -> the inode-identity check must catch
+    # it. (Reachable in a non-opted-in project where Bash `ln` isn't denied.)
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    alias = repo_root / "alias.json"
+    try:
+        os.link(claude / "settings.json", alias)  # hardlink: same inode, different path
+    except (OSError, NotImplementedError, AttributeError):
+        pytest.skip("hardlinks unsupported on this platform")
+    cp = _run_hook(PRETOOLUSE, _edit_ev(alias, repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_memory_dir_allowed_opted_in(tmp_path, monkeypatch):
+    # THE reported bug: the agent's memory dir (out-of-repo, not protected) must be writable.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    mem = claude / "projects" / "proj" / "memory" / "note.md"
+    cp = _run_hook(PRETOOLUSE, _edit_ev(mem, repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_gatescope_other_claude_file_allowed(tmp_path, monkeypatch):
+    # MINIMAL protected set: a non-enforcement ~/.claude file is NOT protected -> allowed.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    cp = _run_hook(PRETOOLUSE, _edit_ev(claude / "todos" / "scratch.json", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_gatescope_tmp_scratch_allowed_opted_in(tmp_path, monkeypatch):
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    cp = _run_hook(PRETOOLUSE, _edit_ev(tmp_path / "elsewhere" / "scratch.txt", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_gatescope_in_repo_no_approval_still_denied(tmp_path, monkeypatch):
+    # NO REGRESSION: an in-repo write without a sealed marker is still denied.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    cp = _run_hook(PRETOOLUSE, _edit_ev(repo_root / "src" / "x.py", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_in_repo_non_opted_in_allowed(tmp_path, monkeypatch):
+    # NO REGRESSION: a non-opted-in repo fails OPEN for ordinary in-repo writes.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    cp = _run_hook(PRETOOLUSE, _edit_ev(repo_root / "src" / "x.py", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_gatescope_bash_redirect_to_settings_still_denied(tmp_path, monkeypatch):
+    # NO REGRESSION: default-deny Bash still blocks a redirect to the enforcement surface.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    ev = {"tool_name": "Bash",
+          "tool_input": {"command": f"echo x > {claude / 'settings.json'}"},
+          "cwd": str(repo_root)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
