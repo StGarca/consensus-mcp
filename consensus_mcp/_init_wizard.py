@@ -1608,6 +1608,39 @@ def update_gitignore(repo_root: Path) -> bool:
 # (a contract regression test enforces this).
 ALREADY_CONFIGURED_TOKEN = "STATUS: already-configured"
 
+# v1.29.x (umbrella-guard consult): stdout-line-1 contract token for "this looks
+# like a workspace folder, not a project". DISTINCT from ALREADY_CONFIGURED_TOKEN.
+# The consensus skill keys on it (+ exit 8) to present an AskUserQuestion.
+WORKSPACE_UMBRELLA_TOKEN = "STATUS: looks-like-workspace-umbrella"
+
+
+def _looks_like_workspace_umbrella(root: Path) -> list[Path]:
+    """Return `root`'s immediate child directories that are git repos (contain a
+    `.git` DIRECTORY), IFF `root` itself is NOT a git repo. Empty list = not an
+    umbrella.
+
+    A `.git` *file* (submodule / linked-worktree gitlink) does NOT count — so a
+    project that vendors submodules is never misflagged. Per-entry errors
+    (PermissionError/OSError) are swallowed; symlinked children are not followed.
+    """
+    if (root / ".git").exists():
+        # root is itself a repo (dir) or a linked worktree (file) -> a project.
+        return []
+    try:
+        entries = sorted(root.iterdir())
+    except (PermissionError, OSError):
+        return []
+    children: list[Path] = []
+    for child in entries:
+        try:
+            if child.is_symlink() or not child.is_dir():
+                continue
+            if (child / ".git").is_dir():
+                children.append(child)
+        except (PermissionError, OSError):
+            continue
+    return children
+
 
 def _stdin_is_interactive() -> bool:
     """True only when stdin is a real interactive TTY.
