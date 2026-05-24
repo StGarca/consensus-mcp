@@ -19,8 +19,9 @@ def test_token_constant_value():
 @pytest.mark.parametrize("raw,expected", [
     ("1", "leave"),
     ("", "leave"),
-    ("2", "reconfigure"),
-    ("3", "force"),
+    ("2", "repair"),
+    ("3", "reconfigure"),
+    ("4", "force"),
 ])
 def test_prompt_existing_config_action_choices(tmp_path, monkeypatch, raw, expected):
     monkeypatch.setattr(builtins, "input", _stub_input([raw]))
@@ -35,7 +36,7 @@ def test_prompt_existing_config_action_eof_defaults_to_leave(tmp_path, monkeypat
 
 
 def test_prompt_existing_config_action_reprompts_on_invalid(tmp_path, monkeypatch):
-    monkeypatch.setattr(builtins, "input", _stub_input(["x", "9", "3"]))
+    monkeypatch.setattr(builtins, "input", _stub_input(["x", "9", "4"]))
     assert wiz._prompt_existing_config_action(tmp_path / "c.yaml") == "force"
 
 
@@ -204,6 +205,19 @@ def test_repair_dry_run_writes_nothing(tmp_path, capsys, monkeypatch):
     _write_existing_config(tmp_path)
     rc = wiz.main(["--repair", "--dry-run"])
     assert not (tmp_path / ".mcp.json").exists()  # previewed, not written
+
+
+def test_tty_menu_repair_runs_repair(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(wiz, "_prompt_existing_config_action", lambda _p: "repair")
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), f"{wiz.REPAIR_OK} enforcement"))
+    _write_existing_config(tmp_path)
+    rc = wiz.main([])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert any(l.startswith(("OK:", "REPAIRED:")) for l in out.splitlines())
 
 
 from pathlib import Path
