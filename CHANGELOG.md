@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.29.0 - unreleased
+## 1.29.0 - 2026-05-23
 
 **Graceful re-init when consensus is already configured.** Re-running
 `consensus init` on a bootstrapped project no longer hard-errors with a raw
