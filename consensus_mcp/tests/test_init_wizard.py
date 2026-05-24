@@ -431,6 +431,7 @@ def test_existing_config_guard_precedes_interactive_prompt(tmp_path, capsys, mon
     def _explode(prompt=""):
         raise AssertionError(f"prompt invoked but guard should have returned first: {prompt!r}")
     monkeypatch.setattr(builtins, "input", _explode)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
     rc = wiz.main([])
     assert rc == 4
     out = capsys.readouterr().out
