@@ -132,3 +132,20 @@ def test_tty_menu_ctrl_c_returns_1(tmp_path, capsys, monkeypatch):
     rc = wiz.main([])
     assert rc == 1
     assert "aborted by user" in capsys.readouterr().err
+
+
+def test_tty_menu_reconfigure_stays_interactive(tmp_path, monkeypatch):
+    """Menu 'reconfigure' must re-prompt (interactive), not silently accept
+    defaults — guards against the accept_defaults regression."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(wiz, "_prompt_existing_config_action", lambda _p: "reconfigure")
+    _write_existing_config(tmp_path)
+    calls = {"n": 0}
+    def _counting_input(prompt=""):
+        calls["n"] += 1
+        return ""  # accept the default for every re-prompt
+    monkeypatch.setattr(builtins, "input", _counting_input)
+    rc = wiz.main([])
+    assert rc == 0
+    assert calls["n"] > 0  # would be 0 if reconfigure were forced non-interactive
