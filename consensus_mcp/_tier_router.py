@@ -53,6 +53,34 @@ def _result(tier: str, *, locked: bool, reason: str) -> dict:
     return {"tier": tier, **_PRESET[tier], "locked": locked, "reason": reason}
 
 
+# Expected convergence rounds per tier (round-1-only unless DEEP goes multi-round).
+_EXPECTED_ROUNDS = {QUICK: 1, STANDARD: 1, DEEP: 2}
+_TOKEN_BAND = {QUICK: "low", STANDARD: "medium", DEEP: "high"}
+
+
+def estimate_cost(tier: str, *, median_dispatch_seconds: float) -> dict:
+    """Pre-commit cost estimate for a tier, surfaced BEFORE any dispatch (converged
+    Q3 "show the estimate first"). Uses the observed median dispatch wall-clock (from
+    telemetry) — a BAND, not a false-precision token promise.
+
+    n_dispatches = panel_size x expected_rounds; est_wall_clock_s = median x
+    expected_rounds (round-1 peers run in parallel, so wall-clock scales with ROUNDS,
+    not panel size)."""
+    if tier not in _PRESET:
+        raise ValueError(f"unknown tier {tier!r}")
+    if median_dispatch_seconds < 0:
+        raise ValueError("median_dispatch_seconds must be non-negative")
+    rounds = _EXPECTED_ROUNDS[tier]
+    panel = _PRESET[tier]["panel_size"]
+    return {
+        "tier": tier,
+        "n_dispatches": panel * rounds,
+        "expected_rounds": rounds,
+        "est_wall_clock_s": round(median_dispatch_seconds * rounds, 1),
+        "token_band": _TOKEN_BAND[tier],
+    }
+
+
 def is_downgrade_allowed(classified: dict, target_tier: str) -> bool:
     """Whether the operator may move ``classified`` to ``target_tier``. Upgrades are
     always allowed; a downgrade is REFUSED when the classification is locked (the
