@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.30.6 - 2026-05-24
+
+**Synthesis-aware propose-converge.** A plan-deliverable consult could not converge in the
+autonomous engine: it bundles the proposals + every prior round's review artifacts and votes
+on the pile, never merging to ONE plan — so contributors, asked "is the single converged plan
+satisfied?", correctly answer no forever. (Panel-found, r6.)
+
+### Fixed / Added
+- `_run_workflow_4` now FAILS LOUD when the goal_packet declares
+  `convergence.requires_synthesis: true` — instead of silently never-converging — pointing at
+  the host-driven Path A flow. The max-rounds error also hints at this for the undeclared case.
+- New Path A helpers `WorkflowEngine.evaluate_plan_convergence` (delegates to the convergence
+  rule — synthesis is the same vote, on the plan instead of a bundle) and `seal_plan_iteration`
+  (seals the host-authored plan as the converged artifact via `iteration-outcome.yaml`, never
+  overwriting it) — so a host can converge contributors on ONE synthesized plan and mint
+  design-approval from it.
+- Operator-declared (never inferred) `convergence.requires_synthesis` goal_packet field +
+  `docs/workflows/path-a-plan-convergence.md`.
+
 ## 1.30.5 - 2026-05-24
 
 **Unblock multi-round consults + add an operator escape hatch.** Two targeted fixes
