@@ -2,7 +2,23 @@
 
 ## 1.29.1 - unreleased
 
-_Unreleased._
+**`consensus init --repair` — verify & repair a partially-broken install.**
+Re-running init on a project whose `.mcp.json`, `.gitignore` block,
+`.claude/agents/` files, or instruction blocks went missing can now restore
+them non-destructively, instead of only leave/reconfigure/force.
+
+### Added
+- `consensus init --repair` (and the `consensus-init --repair` binary): a
+  deterministic verify of all install components that **re-creates missing**
+  project pieces and **reports diverged** ones (`pass --force`), never clobbering
+  local edits. Emits version-stable summary lines (`OK:`/`REPAIRED:`/`SKIP:`/
+  `REPORT-GLOBAL:`); composes with `--dry-run` (preview, no writes); idempotent.
+- Exit codes: `0` healthy-or-repaired, `2` config missing, `3` config invalid,
+  `7` repair incomplete (diverged left for `--force`, or global enforcement
+  detected dead). Global enforcement (`~/.claude` hooks) is **reported** (run
+  `consensus-init --install-claude-code`), not written from a per-project repair.
+- The existing-config menu (TTY + the `consensus` skill) gains a **Verify /
+  repair** option; `--repair` is exempt from the already-configured gate.
 
 ## 1.29.0 - 2026-05-23
 
