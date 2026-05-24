@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.2 - unreleased
+
+_Unreleased._
+
 ## 1.29.1 - 2026-05-23
 
 **`consensus init --repair` — verify & repair a partially-broken install.**
