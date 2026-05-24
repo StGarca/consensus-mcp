@@ -1641,6 +1641,9 @@ def _prompt_existing_config_action(config_path: Path) -> str:
         try:
             raw = input("Choose [1/2/3, default 1]: ").strip()
         except EOFError:
+            # Deliberate divergence from the other prompts (which map EOF ->
+            # KeyboardInterrupt -> exit 1): this menu has a safe no-op default,
+            # so an unattended/EOF caller should accept the default, not abort.
             return "leave"
         if raw in ("", "1"):
             return "leave"
@@ -1648,7 +1651,7 @@ def _prompt_existing_config_action(config_path: Path) -> str:
             return "reconfigure"
         if raw == "3":
             return "force"
-        print("Please enter 1, 2, or 3.")
+        print("Please enter 1, 2, or 3.", file=sys.stderr)
 
 
 def cmd_init(args) -> int:
