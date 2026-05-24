@@ -71,13 +71,13 @@ one cycle with `DeprecationWarning`.**
 
 One repeatable pipeline. Each superpowers stage maps to a consensus role:
 
-1. `superpowers:brainstorming` → intent + design exploration.
+1. `consensus:brainstorming` → intent + design exploration.
 2. **Consensus consult = the design approval gate** (consensus is the approver):
    author goal_packet + review-packet; run the panel; converge (weighted-synthesis).
-3. `superpowers:writing-plans` → TDD implementation plan from the converged design.
-4. `superpowers:subagent-driven-development` → implement task-by-task (implementer
+3. `consensus:writing-plans` → TDD implementation plan from the converged design.
+4. `consensus:subagent-driven-development` → implement task-by-task (implementer
    + spec-compliance review + code-quality review per task).
-5. `superpowers:finishing-a-development-branch` → release cut (see "Release cadence").
+5. `consensus:finishing-a-development-branch` → release cut (see "Release cadence").
 
 ### Dual-path consult selection
 - **Path B — `consensus.run_iteration`** (the built engine dispatches
@@ -95,7 +95,7 @@ One repeatable pipeline. Each superpowers stage maps to a consensus role:
 
 ### host_peer dispatch procedure (repeatable, not improvised)
 1. Dispatch a **blind** Claude subagent (fresh context, NO peer artifacts) as the
-   host_peer reviewer, using `dispatch_templates/host_peer_review_template.md`.
+   host_peer reviewer, using `host_peer_review_template.md` (located in the package's `dispatch_templates/` directory).
 2. Capture its output as `host_peer_review_yaml` with this schema:
    ```yaml
    findings: []            # list
