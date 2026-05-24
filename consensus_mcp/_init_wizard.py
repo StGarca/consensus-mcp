@@ -1713,15 +1713,41 @@ def _repair_check_gitignore(repo_root: Path, *, dry_run: bool) -> tuple[RepairCo
 
 
 def _repair_check_agents(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#4 .claude/agents/ — re-copy missing subagent files (installer SKIPs diverged)."""
+    """#4 .claude/agents/ — re-copy missing subagent files; report diverged (installer SKIPs them)."""
     agents_dir = repo_root / ".claude" / "agents"
-    missing = [f for f in _PROJECT_AGENT_FILES if not (agents_dir / f).exists()]
-    if not missing:
-        return (RepairComponent(".claude/agents", "ok"), f"{REPAIR_OK} .claude/agents")
-    if not dry_run:
-        _install_project_agents(repo_root, force=False)
-    return (RepairComponent(".claude/agents", "repaired"),
-            f"{REPAIR_FIXED} .claude/agents ({', '.join(missing)})")
+    source_root = _agents_source_root()
+
+    missing: list[str] = []
+    diverged: list[str] = []
+    for fname in _PROJECT_AGENT_FILES:
+        dst = agents_dir / fname
+        if not dst.exists():
+            missing.append(fname)
+        else:
+            src = source_root / fname
+            try:
+                if src.read_text(encoding="utf-8") != dst.read_text(encoding="utf-8"):
+                    diverged.append(fname)
+            except OSError:
+                # If we can't read source or dest, treat as diverged (safe default).
+                diverged.append(fname)
+
+    if missing:
+        # Install writes the missing ones; already-diverged ones are left alone by installer.
+        if not dry_run:
+            _install_project_agents(repo_root, force=False)
+        note = f" ({', '.join(missing)})"
+        if diverged:
+            note += f"; diverged (pass --force): {', '.join(diverged)}"
+        return (RepairComponent(".claude/agents", "repaired"),
+                f"{REPAIR_FIXED} .claude/agents{note}")
+
+    if diverged:
+        return (RepairComponent(".claude/agents", "skipped_diverged"),
+                f"{REPAIR_SKIP} .claude/agents — diverged from shipped: "
+                f"{', '.join(diverged)}; pass --force to overwrite")
+
+    return (RepairComponent(".claude/agents", "ok"), f"{REPAIR_OK} .claude/agents")
 
 
 def _enabled_contributors_and_profiles(loaded: dict) -> tuple[list[str], dict]:
