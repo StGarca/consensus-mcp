@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.4 - unreleased
+
+_Unreleased._
+
 ## 1.29.3 - 2026-05-23
 
 **`consensus init` guards against bootstrapping a workspace folder.** Running
