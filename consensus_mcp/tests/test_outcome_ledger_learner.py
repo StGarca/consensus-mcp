@@ -127,3 +127,45 @@ def test_recent_failures_discount_more_than_stale_ones():
     w_stale = cw.learned_weight_for(stale, "codex", "security",
                                     current_iteration=100, current_model_version="codex-1.0")
     assert w_recent < w_stale  # decay: age ~80 (4 half-lives) softens the stale failures
+
+
+# ---- codex Workflow B review fixes (2026-05-24) ----
+
+@pytest.mark.parametrize("adjudicator", ["panel", "assistant", "gpt", "chatgpt",
+                                         "an assistant model"])
+def test_ledger_rejects_more_ai_aliases(tmp_path, adjudicator):
+    """codex-rev-002: panel/assistant/gpt/chatgpt are also AI/panel identities."""
+    with pytest.raises(ValueError, match="no-self-grade"):
+        ledger.append_outcome(tmp_path / "o.jsonl", _rec(adjudicator=adjudicator))
+
+
+def test_read_quarantines_ai_authored_and_malformed_rows(tmp_path):
+    """codex-rev-001: the no-self-grade firewall holds at the READ boundary too. A
+    tampered/legacy AI-authored row or malformed JSON already in the file is skipped
+    (quarantined), never fed to the learner."""
+    import json as _json
+    p = tmp_path / "o.jsonl"
+    ledger.append_outcome(p, _rec(finding_id="good"))            # legit, via the writer
+    with p.open("a", encoding="utf-8") as fh:                    # tamper past the writer
+        fh.write(_json.dumps(_rec(finding_id="evil", adjudicator="codex")) + "\n")
+        fh.write("{not valid json\n")
+        bad = _rec(finding_id="notier"); del bad["tier"]
+        fh.write(_json.dumps(bad) + "\n")
+    got = ledger.read_outcomes(p)
+    assert [r["finding_id"] for r in got] == ["good"]
+
+
+def test_learner_ignores_quarantined_ai_authored_row(tmp_path):
+    """End-to-end: an injected AI-authored GOLD failure does NOT discount the learner
+    (it is quarantined on read), so the cell stays at the neutral cold-start weight."""
+    import json as _json
+    p = tmp_path / "o.jsonl"
+    with p.open("w", encoding="utf-8") as fh:
+        for i in range(6):
+            fh.write(_json.dumps(_rec(finding_id=f"evil{i}", adjudicator="codex",
+                                      useful=False)) + "\n")
+    outs = ledger.read_outcomes(p)
+    assert outs == []  # all quarantined
+    w = cw.learned_weight_for(outs, "codex", "security",
+                              current_iteration=10, current_model_version="codex-1.0")
+    assert w == pytest.approx(1.0)  # neutral — the injected discount was firewalled out

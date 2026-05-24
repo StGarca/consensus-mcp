@@ -21,7 +21,7 @@ _VALID_TIERS = {GOLD, SECONDARY}
 # Panel/AI families + generic agent words. Credit must come from operator/CI/test.
 _FORBIDDEN_ADJUDICATOR_TOKENS = (
     "claude", "orchestrator", "host_peer", "host-peer", "codex", "gemini",
-    "kimi", "agent", "ai", "llm", "model",
+    "kimi", "agent", "ai", "llm", "model", "panel", "assistant", "gpt", "chatgpt",
 )
 _REQUIRED_FIELDS = (
     "finding_id", "contributor", "domain", "tier", "useful",
@@ -64,13 +64,25 @@ def append_outcome(ledger_path: str | Path, record: dict) -> None:
 
 
 def read_outcomes(ledger_path: str | Path) -> list[dict]:
-    """Read all outcome records (empty list if the ledger does not exist)."""
+    """Read all VALID outcome records (empty list if the ledger does not exist).
+
+    The no-self-grade firewall must hold at the TRUST BOUNDARY the learner consumes,
+    not only at write time (codex-rev-001): a tampered or legacy row — e.g. one with
+    an AI adjudicator or a malformed shape that bypassed/predates append_outcome — is
+    SKIPPED here, so it can never reach the learner. Invalid rows are quarantined
+    (skipped), not fatal, so one bad row can't deny-service the whole ledger."""
     path = Path(ledger_path)
     if not path.exists():
         return []
     out: list[dict] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if line:
-            out.append(json.loads(line))
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+            _validate_record(record)  # re-validate at the read boundary
+        except (json.JSONDecodeError, ValueError, TypeError):
+            continue  # quarantine: never feed an unvalidated/AI-authored row to the learner
+        out.append(record)
     return out
