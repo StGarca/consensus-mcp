@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.29.2 - unreleased
+## 1.29.2 - 2026-05-23
 
 **4-AI consensus runs in-engine + the iteration pipeline is codified.**
 
