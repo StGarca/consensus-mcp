@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.30.0 - 2026-05-24
+
+**Cross-AI weighting, cost-tiers, operator-declared rigor, and a contributor
+scorecard — built through ~7 cross-AI consults, shipped user-centric and
+defaults-unchanged.** Designed so the human decides any bias: the system measures,
+the operator declares.
+
+### Added (live / user-visible)
+- **Contributor scorecard** in `consensus results` — a per-contributor track record
+  (useful N/total + rate, ranked) read from an external, append-only outcome ledger.
+  DESCRIPTIVE decision-support for declaring an AI "lean"; `<5` outcomes show
+  "insufficient data"; **the score never judges an individual finding**.
+- **Operator-declared rigor tiers** (quick/standard/deep) codified as an operative
+  step in the `consensus-workflow` skill + `docs/consensus/routing-decision-table.md`:
+  the tier is operator-DECLARED (never inferred — "heuristics are the shared-prior
+  trap"); `_tier_router.suggest_tier` is a non-binding suggestion; the sole automatic
+  move is the MONOTONE governance/security safety floor (DEEP+locked, can only raise).
+- Per-iteration **telemetry** (cost-per-blocking-finding by tier) and an
+  **interaction_surface** declaration check (flags a reflexive "none" on a
+  governance-touching change).
+
+### Added (present, DEFAULT-OFF / dormant — opt-in, defaults byte-identical)
+- The advisory **contributor-weight** engine (discount-only, hard floor, same-family
+  cap, no-self-grade firewall at write AND read), the **Beta learner** (repurposed as
+  the scorecard's measure), the **outcome ledger**, and the external-CLI
+  **retry/fallback** policy ship as tested libraries. They do not change behavior by
+  default.
+- The **lean-application** (using a declared lean to reorder synthesis reading-order of
+  NON-blocking findings) ships present-but-OFF, **prove-or-delete**: per a unanimous
+  4-AI consult it is enabled only if it beats the equal-weight baseline on recorded
+  history; until then it is dormant. **Blocks are weight-blind** — a critical/blocking
+  finding from the lowest-leaned contributor blocks exactly as hard (weights-off
+  equivalence), and weights NEVER touch the cross-family gate.
+
+### Invariants (locked by tests)
+- **merit → score, never score → merit** (no doom loop); **weights-off equivalence**
+  (delete the weights and gate verdicts are byte-identical); **no-self-grade** (no AI
+  writes usefulness credit — only operator disposition / objective test outcomes).
+
 ## 1.29.5 - 2026-05-24
 
 **Regression guard: consensus-mcp's own tooling can't be re-broken by the gate.**
