@@ -164,3 +164,23 @@ def test_force_beats_reconfigure(tmp_path, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "# user edit" not in cfg_path.read_text(encoding="utf-8")  # overwritten
     assert "reconfigure diff" not in out  # reconfigure path suppressed
+
+
+from pathlib import Path
+
+
+def _ext_dir():
+    return Path(wiz.__file__).parent / "claude_extensions"
+
+
+def test_contract_token_present_in_skill_and_command():
+    """The skill/command matchers MUST stay in sync with the binary token.
+    If the token string changes, these docs must change too — this test fails
+    on drift, which is the whole point of the binary<->skill contract."""
+    token = wiz.ALREADY_CONFIGURED_TOKEN
+    skill = (_ext_dir() / "skills" / "consensus" / "SKILL.md").read_text(encoding="utf-8")
+    command = (_ext_dir() / "commands" / "consensus-init.md").read_text(encoding="utf-8")
+    assert token in skill, "SKILL.md must reference the exact already-configured token"
+    assert token in command, "consensus-init.md must reference the exact token"
+    # exit code 4 is the paired half of the contract — keep it documented too.
+    assert "exit code 4" in skill.lower() or "exits with code 4" in skill.lower()
