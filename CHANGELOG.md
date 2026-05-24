@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.1 - unreleased
+
+_Unreleased._
+
 ## 1.29.0 - 2026-05-23
 
 **Graceful re-init when consensus is already configured.** Re-running
