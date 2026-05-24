@@ -73,16 +73,25 @@ def test_bug_b_embeds_review_target_content():
     assert "REVIEW TARGET CONTENT" in out
 
 
-def test_bug_b_no_double_embed_when_touched_files_contents_present():
-    rp = {"defect_target": {"touched_files_contents": {"a.py": "CODE BODY"}}}
+def test_bug_b_v1305_embeds_target_even_with_touched_files():
+    # v1.30.5 convergence-deadlock fix (supersedes the old "no double-embed" assertion).
+    # When the review-target (the convergence packet) AND touched_files_contents (the round's
+    # CONSTITUENT files) are BOTH present, the target content must STILL be embedded. The old
+    # `and not touched_contents` guard SUPPRESSED it, so the reviewer — pointed at the
+    # convergence-packet path, which is NOT in the touched set — got "canonical target not
+    # provided" and every multi-round consult deadlocked. Both blocks are present (DISTINCT
+    # content: the target is the packet, the touched files are its constituents) — correct,
+    # not a redundant double-embed of the same bytes.
+    rp = {"defect_target": {"touched_files_contents": {"a.py": "CONSTITUENT CODE BODY"}}}
     out = _build_prompt(
         {"goal": {}},
         "{touched_files_contents_block}",
         review_packet=rp,
-        review_target_content="WHOLE REVIEW PACKET YAML",
+        review_target_content="THE CONVERGENCE PACKET BODY",
     )
-    assert "CODE BODY" in out                  # code-review path already embeds bodies
-    assert "WHOLE REVIEW PACKET YAML" not in out  # so no redundant second block
+    assert "CONSTITUENT CODE BODY" in out        # touched-files block (prior-round files)
+    assert "THE CONVERGENCE PACKET BODY" in out  # review-target block — NOW embedded (the fix)
+    assert "REVIEW TARGET CONTENT" in out
 
 
 # ---- Bug C: kimi workdir copy is bounded (env-extendable + .gitignore-aware) ----

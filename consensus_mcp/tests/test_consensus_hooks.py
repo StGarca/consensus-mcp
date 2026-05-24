@@ -818,6 +818,31 @@ def test_gatescope_symlink_escape_to_settings_denied(tmp_path, monkeypatch):
     assert cp.returncode == 2, cp.stderr  # resolved through the symlink -> protected
 
 
+def test_gate_disable_escape_hatch_allows_otherwise_denied(tmp_path, monkeypatch):
+    # v1.30.5 operator escape hatch: CONSENSUS_MCP_GATE_DISABLE=1 fully disables the gate so
+    # the human trust-root is NEVER deadlocked ("can't mint a seal" must not mean "can't work").
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("CONSENSUS_MCP_GATE_DISABLE", "1")
+    # would normally be DENIED (in-repo, opted-in, no sealed marker) -> now allowed:
+    cp = _run_hook(PRETOOLUSE, _edit_ev(repo_root / "src" / "x.py", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+    # FULL override: even the protected enforcement surface is allowed (the operator
+    # deliberately lifted the gate; an in-session agent can't set this in the launch env).
+    cp2 = _run_hook(PRETOOLUSE, _edit_ev(claude / "settings.json", repo_root),
+                    repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp2.returncode == 0, cp2.stderr
+
+
+def test_gate_disable_unset_still_enforces(tmp_path, monkeypatch):
+    # no regression: without the escape hatch, the same in-repo no-marker write is denied.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    monkeypatch.delenv("CONSENSUS_MCP_GATE_DISABLE", raising=False)
+    cp = _run_hook(PRETOOLUSE, _edit_ev(repo_root / "src" / "x.py", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
 def test_gatescope_hardlink_alias_to_settings_denied(tmp_path, monkeypatch):
     # codex-rev-001 / gemini-rev-001 (v1.30.4): a HARDLINK to a protected file resolves to
     # its OWN path, so a pathname-only guard misses it -> the inode-identity check must catch

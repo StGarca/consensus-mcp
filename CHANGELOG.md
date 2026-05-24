@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.30.5 - 2026-05-24
+
+**Unblock multi-round consults + add an operator escape hatch.** Two targeted fixes
+(test + suite; no consult — these are mechanical, not design decisions).
+
+### Fixed
+- **Multi-round consults deadlocked at the convergence packet.** `_build_prompt` embedded the
+  review-target content only `if review_target_content and not touched_contents` — but a
+  convergence dispatch carries the round's CONSTITUENT files in `touched_files_contents`, so
+  the guard SUPPRESSED the target embed exactly when it was needed. The reviewer, pointed at
+  `convergence-packet-round-N.yaml` (which is not in the touched set), got "canonical target
+  not provided" and the consult could never converge past round 1. The review-target content
+  is now ALWAYS embedded (additive to the touched-files block; distinct content). Completes
+  the v1.30.2 Bug B fix.
+
+### Added
+- **Operator gate escape hatch — `CONSENSUS_MCP_GATE_DISABLE=1`.** Set in the launch
+  environment, it fully disables the PreToolUse design gate for the session (fail open). A
+  safety gate must never be able to deadlock its own operator — the human is the trust root,
+  so "can't mint a seal" must never mean "can't work." Read from the process env (set by the
+  operator before launch), so an in-session agent cannot self-enable it.
+
 ## 1.30.4 - 2026-05-24
 
 **Fix the design gate's over-broad scope** — it denied legitimate out-of-repo writes (converged
