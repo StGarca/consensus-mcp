@@ -110,8 +110,9 @@ def test_build_adapters_kimi_is_builtin_kimiadapter():
     from consensus_mcp import _engine_factory
     from consensus_mcp.contributors.kimi import KimiAdapter
     # Use codex+gemini+kimi to avoid needing a claude_artifact_callback.
-    # Bypass cfg.validate() — the validator's known-contributor set doesn't
-    # include kimi yet; the factory is what we're testing here.
+    # We exercise build_adapters directly (the factory is the unit under test);
+    # kimi is a known contributor (config.KNOWN_CONTRIBUTORS) so cfg.validate()
+    # would accept it too, but validation is covered elsewhere.
     config = deepcopy(cfg.default_config())
     config["contributors"]["enabled"] = ["codex", "gemini", "kimi"]
     adapters = _engine_factory.build_adapters(config)
