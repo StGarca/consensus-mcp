@@ -117,8 +117,10 @@ def test_bug_c_copytree_excludes_heavy_dir_in_no_git_repo(tmp_path, monkeypatch)
 
 
 def test_bug_c_enospc_aggregated_shutil_error_gives_clear_message(tmp_path, monkeypatch):
-    """codex-rev-001: copytree's aggregated shutil.Error (errno=None) must also map to
-    the clear ENOSPC guidance, with the partial copy cleaned up."""
+    """codex-rev-001: copytree's aggregated shutil.Error (errno=None) must also map to the
+    clear ENOSPC path, with the partial copy cleaned up. v1.30.3 D4: ENOSPC now raises
+    _WorkdirTooLargeToIsolate (the caller DEGRADES to no-copy) rather than a bare OSError;
+    the actionable 'ran out of space' guidance is preserved in the message."""
     import shutil
     repo = tmp_path / "repo"; repo.mkdir()
     (repo / "f.txt").write_text("x", encoding="utf-8")
@@ -129,6 +131,6 @@ def test_bug_c_enospc_aggregated_shutil_error_gives_clear_message(tmp_path, monk
         raise shutil.Error([("a", "b", "[Errno 28] No space left on device")])
 
     monkeypatch.setattr(shutil, "copytree", _boom)
-    with pytest.raises(OSError, match="ran out of space"):
+    with pytest.raises(dk._WorkdirTooLargeToIsolate, match="ran out of space"):
         dk._make_disposable_workdir(repo)  # no .git -> copytree -> shutil.Error
     assert not list(tmproot.glob("kimi-workdir-*"))  # partial copy cleaned, nothing leaked
