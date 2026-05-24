@@ -220,6 +220,41 @@ def test_pretooluse_read_only_allowlist_bash_allows(tmp_path, command):
 
 
 @pytest.mark.parametrize("command", [
+    "consensus-init --from-claude-code",
+    "consensus-init --repair",
+    "consensus-init --check",
+    "consensus init --reconfigure",
+    "consensus init --check",
+    "consensus-mcp-dispatch-codex --goal-packet gp.yaml --iteration-dir d",
+    "consensus-results",
+])
+def test_pretooluse_consensus_own_tooling_allowed(tmp_path, command):
+    """consensus's OWN bootstrap/maintenance/review tooling is exempt from the
+    gate: you cannot require a sealed design to bootstrap/repair/validate the
+    consensus setup itself (--check is read-only; --repair is remediation; the
+    dispatchers ARE the consult). Segment-split + redirect/subshell rejection
+    still apply, so a chained writer is denied (see the next test)."""
+    ev = {"tool_name": "Bash", "tool_input": {"command": command},
+          "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present")
+    assert cp.returncode == 0, (command, cp.stderr)
+
+
+@pytest.mark.parametrize("command", [
+    "consensus-init --repair && rm -rf x",   # chained writer -> deny whole cmd
+    "consensus-init $(rm x)",                  # command substitution -> deny
+    "consensus-init --repair > /etc/passwd",   # redirection -> deny
+])
+def test_pretooluse_consensus_tooling_does_not_open_exec_hole(tmp_path, command):
+    """Allowing consensus tooling must NOT admit a chained writer / substitution /
+    redirection riding on the allowed leading token — those still fail-safe."""
+    ev = {"tool_name": "Bash", "tool_input": {"command": command},
+          "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present")
+    assert cp.returncode == 2, (command, cp.stderr)
+
+
+@pytest.mark.parametrize("command", [
     # Pipeline mixing an allowlisted reader with a NON-allowlisted writer -> deny.
     "cat src/x.py | tee out.txt",
     "grep foo src && rm x",
