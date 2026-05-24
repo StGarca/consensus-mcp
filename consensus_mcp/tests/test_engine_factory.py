@@ -102,3 +102,17 @@ def test_build_adapters_reads_per_contributor_from_adapters_key():
     assert adapters["codex"].adapter_config.get("model") == "test-model-x", (
         f"adapter_config not populated from contributors.adapters: "
         f"{adapters['codex'].adapter_config}")
+
+
+def test_build_adapters_kimi_is_builtin_kimiadapter():
+    """Default panel enables kimi with no profile; it must build a KimiAdapter
+    (the hardened built-in), NOT a ProfileAdapter and NOT a build failure."""
+    from consensus_mcp import _engine_factory
+    from consensus_mcp.contributors.kimi import KimiAdapter
+    # Use codex+gemini+kimi to avoid needing a claude_artifact_callback.
+    # Bypass cfg.validate() — the validator's known-contributor set doesn't
+    # include kimi yet; the factory is what we're testing here.
+    config = deepcopy(cfg.default_config())
+    config["contributors"]["enabled"] = ["codex", "gemini", "kimi"]
+    adapters = _engine_factory.build_adapters(config)
+    assert isinstance(adapters["kimi"], KimiAdapter)
