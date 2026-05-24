@@ -385,15 +385,20 @@ def _build_prompt(
     out = template_text
     for placeholder, value in substitutions.items():
         out = out.replace(placeholder, value)
-    # Bug B fix (v1.30.2): embed the review-target's CONTENT, not just its path+hash.
-    # A read-only reviewer sandbox (codex) cannot open the convergence packet under
-    # consensus-state/, so naming the path is not enough. The (unsandboxed) dispatcher
-    # already read this text to compute review_target_hash; we inline it here. Only the
-    # touched_files_contents code-review path embedded content before iter-0021.
-    if review_target_content and not touched_contents:
-        # ...and not touched_contents: the code-review path already embeds the bodies
-        # via {touched_files_contents_block}; this covers the OTHER paths (convergence
-        # packet, raw diff/patch) whose content was otherwise only named, not embedded.
+    # Bug B fix (v1.30.2, COMPLETED v1.30.5): embed the review-target's CONTENT, not just
+    # its path+hash. A read-only reviewer sandbox (codex) cannot open the convergence packet
+    # under consensus-state/, so naming the path is not enough. The (unsandboxed) dispatcher
+    # already read this text to compute review_target_hash; we inline it here.
+    #
+    # v1.30.5: ALWAYS embed when we have the content — the old `and not touched_contents`
+    # guard had a deadlock hole. In a CONVERGENCE dispatch the touched_files_contents are the
+    # round's CONSTITUENT files (the prior round's review artifacts), NOT the review-target
+    # (the convergence-packet YAML), so the guard SUPPRESSED the target embed exactly when
+    # touched_files was present; the reviewer, pointed at convergence-packet-round-N.yaml
+    # (which is not in the touched set), got "canonical target not provided" and every
+    # multi-round consult deadlocked. The target block is ADDITIVE to the touched-files block
+    # (distinct content) — embedding both is correct, not a double-embed.
+    if review_target_content:
         out += (
             "\n\n## REVIEW TARGET CONTENT (embedded — the reviewer sandbox cannot read "
             "files under consensus-state/)\n\n```\n"

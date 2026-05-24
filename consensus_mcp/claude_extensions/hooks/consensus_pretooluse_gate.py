@@ -29,6 +29,13 @@ stdin event shape (subset used):
   {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": "..."}
   {"tool_name": "Bash", "tool_input": {"command": "sed -i ..."}, "cwd": "..."}
 
+Operator override (env):
+  CONSENSUS_MCP_GATE_DISABLE=1           -> OPERATOR escape hatch: fully disable the
+                                            design gate for this session (fail open).
+                                            The human trust-root can never be deadlocked
+                                            by the gate. Set in the launch env, not by an
+                                            in-session agent.
+
 Test/runtime overrides (env):
   CONSENSUS_MCP_FORCE_RUNTIME_ABSENT=1  -> force fail-open (simulate no runtime)
   CONSENSUS_MCP_FORCE_RUNTIME_PRESENT=1 -> force runtime present (simulate
@@ -382,6 +389,16 @@ def main(argv=None) -> int:
         # Unreadable payload: FAIL OPEN. The design gate must never brick a
         # session on a malformed/foreign event (UX-parity invariant); the
         # delivery gate is the fail-closed backstop for finished artifacts.
+        return 0
+
+    # OPERATOR ESCAPE HATCH (v1.30.5): the human trust-root can deliberately disable the
+    # gate for a session via CONSENSUS_MCP_GATE_DISABLE=1 in the environment. A safety gate
+    # must NEVER be able to deadlock its own operator ("can't mint a seal" must never mean
+    # "can't work"). This is read from the Claude Code PROCESS env, set by the operator
+    # before launch — an in-session agent cannot self-enable it (a Bash `export` mutates only
+    # a subshell, not the hook's inherited env). Full override: bypasses every check below,
+    # including the protected-install guard, because the operator has chosen to lift the gate.
+    if os.environ.get("CONSENSUS_MCP_GATE_DISABLE"):
         return 0
 
     if not _runtime_present():
