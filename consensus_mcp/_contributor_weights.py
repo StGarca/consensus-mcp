@@ -165,3 +165,42 @@ def order_proposal_paths(paths, contributor_weights: dict[str, float] | None):
         return (-contributor_weights.get(c, neutral), i)
 
     return [p for _, p in sorted(enumerate(paths), key=key)]
+
+
+# --- user-centric: scorecard (decision-support) + operator-declared lean ---
+# Per the SWOT converged design (2026-05-24): the system MEASURES (scorecard) and the
+# OPERATOR declares the lean from it. The machine never auto-applies a learned weight as
+# the bias — build_scorecard informs; the operator's declared lean is what's applied.
+
+
+def build_scorecard(outcomes: list[dict]) -> dict:
+    """Per-contributor performance SCORECARD from the external outcome ledger — pure
+    DECISION-SUPPORT for the operator's declared lean. It MEASURES (useful-finding counts
+    + rate per contributor); it does NOT set any weight or lean. The operator reviews this
+    and declares the lean (e.g. 'lean d,b,c,a'); the machine never decides the bias."""
+    cards: dict[str, dict] = {}
+    for o in outcomes:
+        c = o.get("contributor")
+        if not c:
+            continue
+        card = cards.setdefault(c, {"total": 0, "useful": 0})
+        card["total"] += 1
+        if o.get("useful"):
+            card["useful"] += 1
+    for card in cards.values():
+        card["useful_rate"] = (card["useful"] / card["total"]) if card["total"] else None
+    return cards
+
+
+def lean_to_weights(declared_lean: list[str]) -> dict[str, float]:
+    """Convert an OPERATOR-DECLARED lean (an ordered ranking, highest-priority FIRST) into
+    advisory ordering weights for ``order_proposal_paths``. The user's declaration is
+    authoritative; this only maps the ranking to descending weights in [FLOOR, CAP].
+    Contributors absent from the lean fall back to the neutral default in
+    ``order_proposal_paths``. Empty lean -> no weights (identity ordering)."""
+    n = len(declared_lean)
+    if n == 0:
+        return {}
+    if n == 1:
+        return {declared_lean[0]: CAP}
+    return {c: CAP - (CAP - FLOOR) * (i / (n - 1)) for i, c in enumerate(declared_lean)}

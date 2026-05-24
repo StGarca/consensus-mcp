@@ -113,3 +113,39 @@ def test_module_exposes_no_weight_write_api():
     assert offending == [], (
         f"weight/credit write API present (no-self-grade violation): {offending}"
     )
+
+
+# ---- user-centric: scorecard (decision-support) + operator-declared lean ----
+
+def test_build_scorecard_counts_per_contributor():
+    outcomes = [
+        {"contributor": "codex", "useful": True},
+        {"contributor": "codex", "useful": False},
+        {"contributor": "gemini", "useful": True},
+    ]
+    card = cw.build_scorecard(outcomes)
+    assert card["codex"] == {"total": 2, "useful": 1, "useful_rate": pytest.approx(0.5)}
+    assert card["gemini"]["useful_rate"] == pytest.approx(1.0)
+
+
+def test_build_scorecard_empty():
+    assert cw.build_scorecard([]) == {}
+
+
+def test_lean_to_weights_descending_user_order():
+    w = cw.lean_to_weights(["d", "b", "c", "a"])
+    assert w["d"] == pytest.approx(cw.CAP)    # first = highest
+    assert w["a"] == pytest.approx(cw.FLOOR)  # last = floor
+    assert w["d"] > w["b"] > w["c"] > w["a"]  # strictly descending in declared order
+
+
+def test_lean_to_weights_single_and_empty():
+    assert cw.lean_to_weights(["solo"]) == {"solo": cw.CAP}
+    assert cw.lean_to_weights([]) == {}
+
+
+def test_declared_lean_drives_ordering_not_a_learned_weight():
+    # the operator's declared lean (NOT a machine-learned weight) sets the reading order
+    paths = ["a-proposal.yaml", "c-proposal.yaml", "d-proposal.yaml", "b-proposal.yaml"]
+    ordered = cw.order_proposal_paths(paths, cw.lean_to_weights(["d", "b", "c", "a"]))
+    assert [p.split("-")[0] for p in ordered] == ["d", "b", "c", "a"]
