@@ -23,6 +23,7 @@ risking data loss.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import difflib
 import json
 import os
@@ -1624,6 +1625,43 @@ def _stdin_is_interactive() -> bool:
         return bool(stream.isatty())
     except (ValueError, OSError):
         return False
+
+
+# v1.29.1 (verify/repair consult): version-STABLE summary prefixes. The consensus
+# skill parses these to relay repair results — treat as a contract (a regression
+# test pins them), like ALREADY_CONFIGURED_TOKEN.
+REPAIR_OK = "OK:"            # present and healthy
+REPAIR_FIXED = "REPAIRED:"   # was missing, recreated
+REPAIR_SKIP = "SKIP:"        # exists but diverged from shipped; left intact
+REPAIR_GLOBAL = "REPORT-GLOBAL:"  # global enforcement issue, not repaired here
+
+
+@dataclasses.dataclass
+class RepairComponent:
+    """One health component's outcome. state is one of:
+    'ok' | 'repaired' | 'skipped_diverged' | 'missing_config' |
+    'invalid_config' | 'report_global'."""
+    name: str
+    state: str
+    detail: str = ""
+
+
+def _repair_exit_code(components: list["RepairComponent"]) -> int:
+    """Aggregate component states into the repair exit code.
+
+    0 = healthy or fully repaired; 2 = config missing; 3 = config invalid;
+    7 = repair incomplete (diverged left for --force, or global enforcement
+    dead). Config prerequisite (2/3) outranks 7 (you can't repair #2-#5 without
+    a valid config). 'ok' and 'repaired' do not raise the code.
+    """
+    states = {c.state for c in components}
+    if "missing_config" in states:
+        return 2
+    if "invalid_config" in states:
+        return 3
+    if "skipped_diverged" in states or "report_global" in states:
+        return 7
+    return 0
 
 
 def _prompt_existing_config_action(config_path: Path) -> str:
