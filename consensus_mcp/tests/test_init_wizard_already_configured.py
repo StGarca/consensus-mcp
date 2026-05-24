@@ -166,6 +166,46 @@ def test_force_beats_reconfigure(tmp_path, capsys, monkeypatch):
     assert "reconfigure diff" not in out  # reconfigure path suppressed
 
 
+def test_repair_flag_runs_engine_and_exits_0(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), f"{wiz.REPAIR_OK} enforcement"))
+    _write_existing_config(tmp_path)
+    rc = wiz.main(["--repair"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert any(line.startswith(("OK:", "REPAIRED:")) for line in out.splitlines())
+
+
+def test_repair_does_not_emit_already_configured_token(tmp_path, capsys, monkeypatch):
+    """Gate carve-out: --repair must NOT trip the v1.29.0 existing-config gate."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), f"{wiz.REPAIR_OK} enforcement"))
+    _write_existing_config(tmp_path)
+    rc = wiz.main(["--repair"])
+    out = capsys.readouterr().out
+    assert wiz.ALREADY_CONFIGURED_TOKEN not in out
+    assert rc != 4
+
+
+def test_repair_missing_config_exits_2(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # no config
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), f"{wiz.REPAIR_OK} enforcement"))
+    rc = wiz.main(["--repair"])
+    assert rc == 2
+
+
+def test_repair_dry_run_writes_nothing(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), f"{wiz.REPAIR_OK} enforcement"))
+    _write_existing_config(tmp_path)
+    rc = wiz.main(["--repair", "--dry-run"])
+    assert not (tmp_path / ".mcp.json").exists()  # previewed, not written
+
+
 from pathlib import Path
 
 

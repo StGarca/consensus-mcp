@@ -1999,6 +1999,13 @@ def cmd_init(args) -> int:
     if args.force and args.reconfigure:
         args.reconfigure = False
 
+    if getattr(args, "repair", False):
+        lines, code = _verify_repair_install(
+            repo_root, dry_run=args.dry_run, claude_home=_resolve_claude_home())
+        for line in lines:
+            print(line)
+        return code
+
     # v1.29.0 (init-already-installed-ux consult): the existing-config guard is
     # install-AWARE. It still runs BEFORE we build/prompt so its disposition
     # wins over exit 1 (user abort) and exit 3 (invalid build). TTY -> menu;
@@ -2007,7 +2014,7 @@ def cmd_init(args) -> int:
     # + exit 4, which the consensus skill keys on. The token is emitted ONLY
     # here (never when --reconfigure/--force is set), so the skill's one-shot
     # re-invoke cannot loop.
-    if config_path.exists() and not (args.reconfigure or args.force):
+    if config_path.exists() and not (args.reconfigure or args.force or args.repair):
         non_interactive_run = (
             args.non_interactive or args.accept_defaults
             or not _stdin_is_interactive()
@@ -2293,6 +2300,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--accept-defaults", action="store_true", help="non-interactive with defaults")
     parser.add_argument("--reconfigure", action="store_true", help="re-prompt with existing as defaults; show diff")
     parser.add_argument("--force", action="store_true", help="overwrite without prompt")
+    parser.add_argument("--repair", action="store_true",
+                        help="verify the install and non-destructively repair "
+                             "missing pieces (report diverged); does not re-prompt")
     parser.add_argument("--no-update-gitignore", action="store_true", help="skip .gitignore marker write")
     parser.add_argument("--no-instructions", action="store_true",
                         help=("skip seeding per-AI instruction files "
