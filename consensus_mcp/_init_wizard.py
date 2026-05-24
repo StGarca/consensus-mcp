@@ -1599,6 +1599,15 @@ def update_gitignore(repo_root: Path) -> bool:
     return True
 
 
+# v1.29.0 (init-already-installed-ux consult): the binary<->skill contract for
+# "this project is already bootstrapped". Emitted as the FIRST line of stdout
+# (no variable data) so the consensus skill can anchor on it without parsing
+# prose. Paired with exit code 4. Keep this string in sync with the matcher in
+# claude_extensions/skills/consensus/SKILL.md and commands/consensus-init.md
+# (a contract regression test enforces this).
+ALREADY_CONFIGURED_TOKEN = "STATUS: already-configured"
+
+
 def _stdin_is_interactive() -> bool:
     """True only when stdin is a real interactive TTY.
 
@@ -1615,6 +1624,31 @@ def _stdin_is_interactive() -> bool:
         return bool(stream.isatty())
     except (ValueError, OSError):
         return False
+
+
+def _prompt_existing_config_action(config_path: Path) -> str:
+    """Interactive menu shown when config already exists (TTY callers only).
+
+    Returns "leave" | "reconfigure" | "force". Empty input and EOF/Ctrl-D both
+    default to "leave" (the safe no-op). Ctrl-C propagates as KeyboardInterrupt
+    (caller maps it to exit 1), matching the rest of the wizard.
+    """
+    print(f"consensus-mcp is already configured here: {config_path}")
+    print("  [1] Leave as-is — no changes            (default)")
+    print("  [2] Reconfigure — re-prompt, keep current settings as defaults, show diff")
+    print("  [3] Force overwrite — discard local config edits, write fresh")
+    while True:
+        try:
+            raw = input("Choose [1/2/3, default 1]: ").strip()
+        except EOFError:
+            return "leave"
+        if raw in ("", "1"):
+            return "leave"
+        if raw == "2":
+            return "reconfigure"
+        if raw == "3":
+            return "force"
+        print("Please enter 1, 2, or 3.")
 
 
 def cmd_init(args) -> int:
