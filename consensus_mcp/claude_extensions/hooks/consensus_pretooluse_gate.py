@@ -81,6 +81,19 @@ _READ_ONLY_COMMANDS = frozenset({
 _READ_ONLY_GIT_SUBCOMMANDS = frozenset({
     "status", "diff", "log", "show", "branch", "rev-parse",
 })
+# consensus's OWN console scripts (pyproject [project.scripts]) — EXEMPT from the
+# gate. You cannot require a sealed design to bootstrap/repair/validate/run the
+# consensus setup itself: it's chicken-and-egg, `--repair` is the remediation
+# command, `--check` is read-only, and the dispatchers ARE the consult. An
+# EXPLICIT set (not a `consensus-` prefix) so an unknown `consensus-`-named
+# binary on PATH is NOT trusted. Leading-token only; the redirection / subshell /
+# command-substitution rejection + the per-segment split (caller) still apply, so
+# a chained writer riding on an allowed token is denied.
+_CONSENSUS_TOOLING = frozenset({
+    "consensus", "consensus-init", "consensus-mcp", "consensus-results",
+    "consensus-mcp-dispatch-codex", "consensus-mcp-dispatch-gemini",
+    "consensus-mcp-dispatch-kimi",
+})
 
 
 def _runtime_present() -> bool:
@@ -146,6 +159,14 @@ def _segment_is_read_only(segment: str) -> bool:
     if "(" in head or ")" in head:
         return False
     if head in _READ_ONLY_COMMANDS:
+        return True
+    # consensus's own tooling is allowed pre-approval (not read-only, but exempt —
+    # you can't gate the tooling that bootstraps/repairs the gate). The redirect /
+    # subshell / command-substitution rejection above already ran, so a writer
+    # chained onto an allowed token (`consensus-init && rm x`, `consensus-init
+    # $(rm x)`) is still denied (the rm rides a separate segment / the `$(`/`>`
+    # markers fail the check).
+    if head in _CONSENSUS_TOOLING:
         return True
     if head == "git":
         if len(tokens) < 2 or tokens[1] not in _READ_ONLY_GIT_SUBCOMMANDS:
