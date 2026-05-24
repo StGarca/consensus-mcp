@@ -560,6 +560,19 @@ class WorkflowEngine:
             rc = gp["goal"].get("risk_class") or gp["goal"].get("defect_class")
         return rc if isinstance(rc, str) else None
 
+    def _requires_synthesis(self, goal_packet_path: Path) -> bool:
+        """Operator-DECLARED: does convergence require ONE merged artifact (a plan)?
+        No inference (heuristics are the shared-prior trap). True only for an explicit
+        boolean `convergence.requires_synthesis: true`."""
+        try:
+            gp = yaml.safe_load(Path(goal_packet_path).read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            return False
+        if not isinstance(gp, dict):
+            return False
+        conv = gp.get("convergence")
+        return isinstance(conv, dict) and conv.get("requires_synthesis") is True
+
     def _seal_converged_plan(
         self,
         iteration_dir: Path,
