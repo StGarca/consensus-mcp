@@ -83,3 +83,73 @@ def test_path_b_unchanged_without_flag(tmp_path):
     outcome = eng.run_iteration(iter_dir, g, target)
     assert outcome.error is None
     assert outcome.convergence is not None and outcome.convergence.converged
+
+
+# ---------- Task 3: Path A evaluate + seal helpers ----------
+
+def _outcome(iter_id="i", config_dir: Path | None = None) -> IterationOutcome:
+    return IterationOutcome(
+        iteration_id=iter_id, workflow_mode=cfg.WORKFLOW_PROPOSE_CONVERGE,
+        effective_config_path=(config_dir or Path("/tmp")) / "ec.yaml",
+    )
+
+
+def _review_artifact(contributor: str, *, satisfied: bool, blocking=None) -> SealedArtifact:
+    return SealedArtifact(
+        contributor=contributor, phase="converge",
+        pass_id=f"{contributor}-pass1", sealed_path=Path(f"/tmp/{contributor}-review.yaml"),
+        archive_sealed_path=None, packet_sha256="",
+        parsed={"goal_satisfied": satisfied, "blocking_objections": blocking or []},
+    )
+
+
+def _outcome_with(arts) -> IterationOutcome:
+    outcome = _outcome()
+    for a in arts:
+        outcome.contributor_artifacts.setdefault(a.contributor, []).append(a)
+    return outcome
+
+
+def test_evaluate_plan_convergence_clean_converges(tmp_path):
+    eng = _engine(tmp_path)
+    arts = [_review_artifact(c, satisfied=True) for c in ["claude", "codex", "gemini"]]
+    conv = eng.evaluate_plan_convergence(arts, _outcome_with(arts))
+    assert isinstance(conv, ConvergenceOutcome) and conv.converged
+
+
+def test_evaluate_plan_convergence_block_does_not_converge(tmp_path):
+    eng = _engine(tmp_path)
+    arts = [_review_artifact("claude", satisfied=True),
+            _review_artifact("codex", satisfied=False, blocking=["codex-b1"]),
+            _review_artifact("gemini", satisfied=False, blocking=["gemini-b1"])]
+    conv = eng.evaluate_plan_convergence(arts, _outcome_with(arts))
+    assert not conv.converged
+
+
+def test_seal_plan_iteration_seals_THE_PLAN_not_a_bundle(tmp_path):
+    eng = _engine(tmp_path)
+    iter_dir = tmp_path / "iter-plan"; iter_dir.mkdir()
+    plan = iter_dir / "converged-plan.yaml"
+    plan.write_text("decision:\n  do: ship the thing\nfeasibility: {a: ok}\n", encoding="utf-8")
+    plan_before = plan.read_text(encoding="utf-8")
+    arts = [_review_artifact(c, satisfied=True) for c in ["claude", "codex", "gemini"]]
+    conv = eng.evaluate_plan_convergence(arts, _outcome_with(arts))
+
+    sealed = eng.seal_plan_iteration(iter_dir, plan, conv, round_number=1)
+    assert sealed == plan                                   # the PLAN is the sealed artifact
+    assert plan.read_text(encoding="utf-8") == plan_before  # NOT overwritten with a summary
+    oc = yaml.safe_load((iter_dir / "iteration-outcome.yaml").read_text(encoding="utf-8"))
+    from consensus_mcp._delivery_readiness import SEALED_CLOSING_STATES
+    assert oc["closing_state"] in SEALED_CLOSING_STATES     # mintable sealed iteration
+
+
+def test_seal_plan_iteration_none_when_not_converged(tmp_path):
+    eng = _engine(tmp_path)
+    iter_dir = tmp_path / "iter-plan2"; iter_dir.mkdir()
+    plan = iter_dir / "converged-plan.yaml"; plan.write_text("decision: {}\n", encoding="utf-8")
+    arts = [_review_artifact("claude", satisfied=False, blocking=["b1"]),
+            _review_artifact("codex", satisfied=False, blocking=["b2"]),
+            _review_artifact("gemini", satisfied=True)]
+    conv = eng.evaluate_plan_convergence(arts, _outcome_with(arts))
+    assert eng.seal_plan_iteration(iter_dir, plan, conv, round_number=1) is None
+    assert not (iter_dir / "iteration-outcome.yaml").exists()
