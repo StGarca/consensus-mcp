@@ -15,6 +15,7 @@ Exit codes per converged plan Section A:
   2  config missing (--check only) or new iteration in repo without config
   3  invalid config / illegal combination
   4  config exists without --reconfigure or --force
+  8  looks like a workspace umbrella (refused; pass --here to override)
 
 `.gitignore` updates use bracketed markers per converged design F9c. Malformed
 markers (open without close) are detected and preserved untouched rather than
@@ -2043,6 +2044,46 @@ def cmd_init(args) -> int:
             print(line)
         return code
 
+    # v1.29.x (umbrella-guard consult): don't silently bootstrap a workspace
+    # umbrella (a non-repo dir containing git repos). Fresh-init only — skip when
+    # a config already exists (-> already-configured path, so re-running to clean
+    # up an umbrella still works) and for --reconfigure (a maintenance op).
+    # --check/--repair already returned above. --here is the deliberate override.
+    if (not getattr(args, "here", False)
+            and not args.reconfigure
+            and not config_path.exists()):
+        umbrella_children = _looks_like_workspace_umbrella(repo_root)
+        if umbrella_children:
+            listed = ", ".join(c.name for c in umbrella_children[:10])
+            more = ("" if len(umbrella_children) <= 10
+                    else f" (+{len(umbrella_children) - 10} more)")
+            guidance = (
+                f"{repo_root} looks like a workspace folder containing git "
+                f"projects ({listed}{more}), not a project itself. Re-run "
+                f"`consensus init` inside the project you want, or pass --here to "
+                f"initialize this directory anyway."
+            )
+            non_interactive = (args.non_interactive or args.accept_defaults
+                               or not _stdin_is_interactive())
+            if non_interactive:
+                print(WORKSPACE_UMBRELLA_TOKEN)  # stdout line 1, exact, no variable data
+                print(guidance, file=sys.stderr)
+                return 8
+            try:
+                ans = input(
+                    f"{repo_root} looks like a workspace folder containing git "
+                    f"projects ({listed}{more}), not a project. Initialize here "
+                    f"anyway? [y/N]: "
+                ).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\naborted by user", file=sys.stderr)
+                return 1
+            if ans not in ("y", "yes"):
+                print("aborted: not initializing a workspace umbrella "
+                      "(pass --here to override).", file=sys.stderr)
+                return 8
+            # confirmed -> fall through to normal init
+
     # v1.29.0 (init-already-installed-ux consult): the existing-config guard is
     # install-AWARE. It still runs BEFORE we build/prompt so its disposition
     # wins over exit 1 (user abort) and exit 3 (invalid build). TTY -> menu;
@@ -2343,6 +2384,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--accept-defaults", action="store_true", help="non-interactive with defaults")
     parser.add_argument("--reconfigure", action="store_true", help="re-prompt with existing as defaults; show diff")
     parser.add_argument("--force", action="store_true", help="overwrite without prompt")
+    parser.add_argument("--here", action="store_true",
+                        help="initialize the current directory even if it looks "
+                             "like a workspace folder containing other git projects")
     parser.add_argument("--repair", action="store_true",
                         help="verify the install and non-destructively repair "
                              "missing pieces (report diverged); does not re-prompt")
