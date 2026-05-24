@@ -1767,13 +1767,45 @@ def cmd_init(args) -> int:
     # codex pass-4 rev-002: check existing-config guard BEFORE we build / prompt
     # so exit 4 wins over exit 1 (user abort during interactive) and exit 3
     # (invalid construction).
+    # v1.29.0 (init-already-installed-ux consult): the existing-config guard is
+    # install-AWARE. It still runs BEFORE we build/prompt so its disposition
+    # wins over exit 1 (user abort) and exit 3 (invalid build). TTY -> menu;
+    # non-TTY (Claude Code / CI / pipe / explicit non-interactive) -> the stable
+    # machine-detectable contract (token on stdout line 1 + guidance on stderr)
+    # + exit 4, which the consensus skill keys on. The token is emitted ONLY
+    # here (never when --reconfigure/--force is set), so the skill's one-shot
+    # re-invoke cannot loop.
     if config_path.exists() and not (args.reconfigure or args.force):
-        print(
-            f"error: {config_path} already exists. Use --reconfigure to update "
-            f"or --force to overwrite.",
-            file=sys.stderr,
+        non_interactive_run = (
+            args.non_interactive or args.accept_defaults
+            or not _stdin_is_interactive()
         )
-        return 4
+        if non_interactive_run:
+            print(ALREADY_CONFIGURED_TOKEN)  # stdout, first line, exact, no variable data
+            print(
+                f"consensus-mcp is already configured at {config_path}. "
+                f"Re-run with --reconfigure to update (keeps current settings as "
+                f"defaults) or --force to overwrite — or run "
+                f"`consensus init --reconfigure` in an interactive terminal.",
+                file=sys.stderr,
+            )
+            return 4
+        try:
+            action = _prompt_existing_config_action(config_path)
+        except KeyboardInterrupt:
+            print("\naborted by user", file=sys.stderr)
+            return 1
+        if action == "leave":
+            print(f"Leaving existing configuration unchanged: {config_path}")
+            return 0
+        if action == "reconfigure":
+            args.reconfigure = True
+        else:  # "force"
+            args.force = True
+        # The TTY menu was the interactive gate; the build step now runs
+        # non-interactively (accept-defaults) so we don't re-prompt the user
+        # for every wizard dimension after they've already made their choice.
+        args.accept_defaults = True
 
     interactive = not (args.non_interactive or args.accept_defaults)
     if interactive and not _stdin_is_interactive():

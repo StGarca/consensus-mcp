@@ -141,8 +141,9 @@ def test_non_interactive_refuses_existing_without_reconfigure(tmp_path, capsys, 
         "--contributors", "claude,codex,gemini",
     ])
     assert rc == 4
-    err = capsys.readouterr().err
-    assert "already exists" in err
+    captured = capsys.readouterr()
+    assert captured.out.splitlines()[0] == wiz.ALREADY_CONFIGURED_TOKEN
+    assert "already configured" in captured.err.lower()
 
 
 def test_non_interactive_writes_to_config_override(tmp_path, monkeypatch):
@@ -170,8 +171,10 @@ def test_existing_config_guard_uses_config_override(tmp_path, capsys, monkeypatc
         "--config", str(alt),
     ])
     assert rc == 4
-    err = capsys.readouterr().err
-    assert "already exists" in err
+    captured = capsys.readouterr()
+    assert captured.out.splitlines()[0] == wiz.ALREADY_CONFIGURED_TOKEN
+    assert "already configured" in captured.err.lower()
+    assert str(alt) in captured.err
 
 
 # ---------- reconfigure ----------
@@ -430,6 +433,8 @@ def test_existing_config_guard_precedes_interactive_prompt(tmp_path, capsys, mon
     monkeypatch.setattr(builtins, "input", _explode)
     rc = wiz.main([])
     assert rc == 4
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == wiz.ALREADY_CONFIGURED_TOKEN
 
 
 def test_reconfigure_diff_is_well_formed(tmp_path, capsys, monkeypatch):
