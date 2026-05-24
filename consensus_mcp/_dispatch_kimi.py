@@ -362,10 +362,16 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
 
         try:
             shutil.copytree(str(repo_root), str(dest), ignore=_ignore, symlinks=True)
-        except OSError as exc:
+        except (OSError, shutil.Error) as exc:
             shutil.rmtree(tmp_root, ignore_errors=True)  # never leak a partial copy
             import errno
-            if exc.errno == errno.ENOSPC:
+            # codex-rev-001: copytree may raise OSError(errno=ENOSPC) OR a
+            # shutil.Error aggregating per-file (src,dst,why) tuples whose .errno is
+            # None — detect ENOSPC in EITHER form so the clear guidance always fires.
+            is_enospc = (getattr(exc, "errno", None) == errno.ENOSPC
+                         or "No space left on device" in str(exc)
+                         or "[Errno 28]" in str(exc))
+            if is_enospc:
                 raise OSError(
                     f"kimi disposable work-dir copy ran out of space copying {repo_root} "
                     f"(no .git -> full copytree). Exclude heavy dirs via "
