@@ -1664,6 +1664,43 @@ def _repair_exit_code(components: list["RepairComponent"]) -> int:
     return 0
 
 
+def _repair_check_config(config_path: Path) -> tuple[RepairComponent, str]:
+    """#1 config.yaml — NOT repairable (can't synthesize panel choices)."""
+    if not config_path.exists():
+        return (RepairComponent("config.yaml", "missing_config"),
+                f"{REPAIR_SKIP} config.yaml missing — run `consensus init` "
+                f"(cannot synthesize your panel choices)")
+    try:
+        cfg.load(config_path)
+    except cfg.ConfigValidationError as exc:
+        return (RepairComponent("config.yaml", "invalid_config"),
+                f"{REPAIR_SKIP} config.yaml invalid ({exc}) — run "
+                f"`consensus init --reconfigure`")
+    return (RepairComponent("config.yaml", "ok"), f"{REPAIR_OK} config.yaml")
+
+
+def _repair_check_mcp(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
+    """#2 .mcp.json — repair when the consensus-mcp entry is missing; report when
+    present-but-diverged; ok when present-and-matching."""
+    mcp_path = _resolve_mcp_json_path(repo_root)
+    existing, _ = _load_existing_mcp_json(mcp_path)
+    command, mcp_args, _ = _resolve_mcp_command(None)
+    state_root = repo_root / "consensus-state"
+    expected = _build_consensus_mcp_entry(command, mcp_args, state_root, repo_root)
+    servers = (existing or {}).get("mcpServers", {})
+    have = servers.get("consensus-mcp")
+    if have is None:
+        if not dry_run:
+            _write_mcp_json(repo_root, state_root, repo_root, command, mcp_args)
+        return (RepairComponent(".mcp.json", "repaired"),
+                f"{REPAIR_FIXED} .mcp.json (consensus-mcp server entry)")
+    if not _json_semantically_equal(have, expected):
+        return (RepairComponent(".mcp.json", "skipped_diverged"),
+                f"{REPAIR_SKIP} .mcp.json consensus-mcp entry diverges from "
+                f"shipped; pass --force to overwrite")
+    return (RepairComponent(".mcp.json", "ok"), f"{REPAIR_OK} .mcp.json")
+
+
 def _prompt_existing_config_action(config_path: Path) -> str:
     """Interactive menu shown when config already exists (TTY callers only).
 
