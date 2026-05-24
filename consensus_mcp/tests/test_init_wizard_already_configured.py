@@ -45,3 +45,90 @@ def test_prompt_existing_config_action_ctrl_c_propagates(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "input", _kbi)
     with pytest.raises(KeyboardInterrupt):
         wiz._prompt_existing_config_action(tmp_path / "c.yaml")
+
+
+import yaml
+import consensus_mcp.config as cfg
+
+
+def _write_existing_config(tmp_path):
+    d = tmp_path / ".consensus"
+    d.mkdir()
+    (d / "config.yaml").write_text(yaml.safe_dump(cfg.default_config()), encoding="utf-8")
+    return d / "config.yaml"
+
+
+def test_non_tty_existing_config_emits_token_and_exit_4(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _write_existing_config(tmp_path)
+    rc = wiz.main([])
+    assert rc == 4
+    captured = capsys.readouterr()
+    assert captured.out.splitlines()[0] == wiz.ALREADY_CONFIGURED_TOKEN
+    assert "already configured" in captured.err.lower()
+
+
+def test_dry_run_existing_non_tty_emits_token(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _write_existing_config(tmp_path)
+    rc = wiz.main(["--dry-run"])
+    assert rc == 4
+    assert capsys.readouterr().out.splitlines()[0] == wiz.ALREADY_CONFIGURED_TOKEN
+
+
+def test_token_absent_when_reconfigure_flag(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _write_existing_config(tmp_path)
+    rc = wiz.main(["--reconfigure", "--non-interactive", "--accept-defaults",
+                   "--contributors", "claude,codex,gemini"])
+    assert rc == 0
+    assert wiz.ALREADY_CONFIGURED_TOKEN not in capsys.readouterr().out
+
+
+def test_token_absent_when_force_flag(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _write_existing_config(tmp_path)
+    rc = wiz.main(["--force", "--non-interactive", "--accept-defaults",
+                   "--contributors", "claude,codex,gemini"])
+    assert rc == 0
+    assert wiz.ALREADY_CONFIGURED_TOKEN not in capsys.readouterr().out
+
+
+def test_tty_menu_leave_returns_0_without_writing(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(wiz, "_prompt_existing_config_action", lambda _p: "leave")
+    cfg_path = _write_existing_config(tmp_path)
+    original = cfg_path.read_text(encoding="utf-8")
+    rc = wiz.main([])
+    assert rc == 0
+    assert cfg_path.read_text(encoding="utf-8") == original  # untouched
+    assert wiz.ALREADY_CONFIGURED_TOKEN not in capsys.readouterr().out
+
+
+def test_tty_menu_force_overwrites(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(wiz, "_prompt_existing_config_action", lambda _p: "force")
+    cfg_path = tmp_path / ".consensus" / "config.yaml"
+    cfg_path.parent.mkdir()
+    cfg_path.write_text("schema_version: 1\n# user edit\n", encoding="utf-8")
+    rc = wiz.main(["--contributors", "claude,codex,gemini"])
+    assert rc == 0
+    assert "# user edit" not in cfg_path.read_text(encoding="utf-8")  # overwritten
+
+
+def test_tty_menu_ctrl_c_returns_1(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    def _kbi(_p):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(wiz, "_prompt_existing_config_action", _kbi)
+    _write_existing_config(tmp_path)
+    rc = wiz.main([])
+    assert rc == 1
+    assert "aborted by user" in capsys.readouterr().err
