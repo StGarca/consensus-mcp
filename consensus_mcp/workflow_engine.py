@@ -363,10 +363,18 @@ class WorkflowEngine:
         iteration_dir: Path,
         proposal_paths: list[str],
         round_number: int,
+        contributor_weights: dict[str, float] | None = None,
     ) -> Path:
-        """Bundle blind proposals into a convergence review-packet."""
+        """Bundle blind proposals into a convergence review-packet.
+
+        contributor_weights (optional, ADVISORY): reorders proposals for synthesis
+        reading-ORDER only — a stable permutation that never drops a proposal and is
+        NEVER seen by _evaluate_convergence (pass/fail). Convergence is therefore
+        byte-identical regardless of weights (weights-off equivalence). Default None
+        = identity order (no behavior change)."""
+        from consensus_mcp import _contributor_weights as _cw
         touched: dict[str, str] = {}
-        for p in proposal_paths:
+        for p in _cw.order_proposal_paths(proposal_paths, contributor_weights):
             p_path = Path(p)
             if p_path.exists():
                 # store as repo-relative posix path

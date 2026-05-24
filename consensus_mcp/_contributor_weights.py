@@ -131,3 +131,37 @@ def learned_weight_for(outcomes: list[dict], contributor: str, domain: str, *,
                                current_iteration=current_iteration,
                                current_model_version=current_model_version)
     )
+
+
+# --- engine wiring: advisory reading-order for whole proposal files ---
+
+def contributor_from_artifact_name(name: str) -> str:
+    """Extract the contributor key from a proposal/review artifact filename, e.g.
+    'codex-proposal.yaml' -> 'codex', 'claude-orchestrator-review.yaml' ->
+    'claude-orchestrator'."""
+    stem = str(name).replace("\\", "/").rsplit("/", 1)[-1]
+    if stem.endswith(".yaml"):
+        stem = stem[:-5]
+    for suffix in ("-proposal", "-review"):
+        if stem.endswith(suffix):
+            return stem[:-len(suffix)]
+    return stem.split("-")[0]
+
+
+def order_proposal_paths(paths, contributor_weights: dict[str, float] | None):
+    """Advisory reading-ORDER for whole proposal files by contributor weight.
+
+    A STABLE permutation (never drops/adds a path); unknown contributors default to
+    the neutral seed weight. With no weights it is the identity. This is the ONLY
+    way weights touch the engine — the convergence evaluation never receives weights,
+    so pass/fail is byte-identical regardless (weights-off equivalence)."""
+    if not contributor_weights:
+        return list(paths)
+    neutral = weight_from_mean(seed_posterior_mean())
+
+    def key(item):
+        i, p = item
+        c = contributor_from_artifact_name(p)
+        return (-contributor_weights.get(c, neutral), i)
+
+    return [p for _, p in sorted(enumerate(paths), key=key)]
