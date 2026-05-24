@@ -208,3 +208,15 @@ def test_engine_idempotent_second_run_all_ok(tmp_path, monkeypatch):
     lines, code = wiz._verify_repair_install(tmp_path, dry_run=False, claude_home=tmp_path / "ch")  # second
     assert code == 0
     assert all(not l.startswith(wiz.REPAIR_FIXED) for l in lines)  # nothing re-written
+
+
+def test_check_enforcement_healthy_after_install_is_ok(tmp_path):
+    """The 'ok' branch must hold against a REAL installed claude_home — guards
+    detector/installer drift (a mismatch would make every --repair exit 7)."""
+    claude_home = tmp_path / "claude_home"
+    claude_home.mkdir()
+    wiz._install_claude_extensions(claude_home, force=True)   # copies hook scripts
+    wiz._install_claude_settings_json(claude_home, force=True)  # activates hooks in settings.json
+    comp, line = wiz._repair_check_enforcement(claude_home)
+    assert comp.state == "ok", f"expected healthy enforcement, got: {line}"
+    assert line.startswith(wiz.REPAIR_OK)
