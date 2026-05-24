@@ -15,10 +15,12 @@ reloads.
 
 **Already configured:** if the binary exits with code 4 and the first stdout
 line is exactly `STATUS: already-configured`, the project is already set up. Do
-not surface the raw error — consume that token line and present three options
-via `AskUserQuestion` (leave as-is / reconfigure / force overwrite), then
-re-invoke `consensus-init --from-claude-code --reconfigure` or `--force` once
-(one-shot; "leave" does nothing).
+not surface the raw error — consume that token line and present four options
+via `AskUserQuestion` (leave as-is / verify/repair / reconfigure / force
+overwrite), then re-invoke `consensus-init --from-claude-code --repair`,
+`--reconfigure`, or `--force` once as appropriate (one-shot; "leave" does
+nothing). The `--repair` flag re-creates missing pieces and reports diverged
+ones non-destructively.
 
 Do not reimplement any of `consensus-init`'s logic. The binary handles
 `.mcp.json` writing, `.consensus/config.yaml` creation, `.gitignore`
