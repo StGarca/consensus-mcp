@@ -45,3 +45,9 @@ authorization:
   authorized_by: operator
   authorized_at_utc: "2026-05-09T00:00:00Z"
   scope_signature: "<sha256 over (goal + allowed_files + acceptance_gates)>"
+# v1.30.6: declare when the deliverable is ONE synthesized artifact (a plan), so the
+# autonomous engine (Path B / run_iteration) fails loud and the consult converges via the
+# host-driven Path A flow (docs/workflows/path-a-plan-convergence.md). Operator-declared;
+# never inferred.
+convergence:
+  requires_synthesis: false   # set true for plan-deliverable propose-converge consults
