@@ -57,3 +57,29 @@ def test_requires_synthesis_false_on_nonbool_or_unreadable(tmp_path):
     g = _goal(tmp_path, "convergence:\n  requires_synthesis: maybe\n")
     assert eng._requires_synthesis(g) is False
     assert eng._requires_synthesis(tmp_path / "nope.yaml") is False
+
+
+# ---------- Task 2: Path B fail-loud guard ----------
+
+def test_path_b_fails_loud_on_requires_synthesis(tmp_path):
+    eng = _engine(tmp_path)
+    iter_dir = tmp_path / "iter-synth"; iter_dir.mkdir()
+    g = _goal(iter_dir, "convergence:\n  requires_synthesis: true\n")
+    target = iter_dir / "problem.yaml"; target.write_text("schema_version: 1\n", encoding="utf-8")
+    outcome = eng.run_iteration(iter_dir, g, target)
+    assert outcome.error is not None
+    assert "requires_synthesis" in outcome.error
+    assert "Path A" in outcome.error
+    # it must NOT have entered the bundle-vote loop: no convergence-packet written
+    assert not list(iter_dir.glob("convergence-packet-round-*.yaml"))
+
+
+def test_path_b_unchanged_without_flag(tmp_path):
+    # No flag -> normal propose-converge runs (FakeAlwaysApprove -> converges).
+    eng = _engine(tmp_path, approve=True)
+    iter_dir = tmp_path / "iter-normal"; iter_dir.mkdir()
+    g = _goal(iter_dir, "goal:\n  summary: agree on approach\n")
+    target = iter_dir / "problem.yaml"; target.write_text("schema_version: 1\n", encoding="utf-8")
+    outcome = eng.run_iteration(iter_dir, g, target)
+    assert outcome.error is None
+    assert outcome.convergence is not None and outcome.convergence.converged

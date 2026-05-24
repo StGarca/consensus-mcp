@@ -243,6 +243,18 @@ class WorkflowEngine:
           3. Evaluate convergence rule; if passed → seal final converged_plan;
              else loop to step 2 up to max_convergence_rounds.
         """
+        # v1.30.6: a plan/synthesis-deliverable consult cannot converge in the autonomous
+        # engine — there is no host in the loop to merge proposals into ONE plan and revise
+        # it. Fail LOUD here rather than bundle-vote forever. Plan consults use Path A.
+        if self._requires_synthesis(goal_packet_path):
+            raise WorkflowError(
+                "this consult declares convergence.requires_synthesis: the deliverable is a "
+                "single synthesized plan, which the autonomous engine (Path B / run_iteration) "
+                "cannot author — there is no host in the loop. Converge it via Path A: author "
+                "converged-plan.yaml, dispatch contributors to review THAT plan "
+                "(--review-target converged-plan.yaml), then evaluate_plan_convergence + "
+                "seal_plan_iteration. See docs/workflows/path-a-plan-convergence.md."
+            )
         enabled = self.config["contributors"]["enabled"]
         max_rounds = self.config["workflow"]["max_convergence_rounds"]
 
@@ -309,7 +321,10 @@ class WorkflowEngine:
         # max rounds reached without convergence; outcome records final state.
         outcome.convergence = self._evaluate_convergence(last_convergence_artifacts, outcome)
         outcome.error = (
-            f"workflow #4: convergence not reached after {max_rounds} rounds"
+            f"workflow #4: convergence not reached after {max_rounds} rounds. "
+            "If the deliverable is a single synthesized artifact (e.g. a plan), the "
+            "bundle-vote cannot converge — declare convergence.requires_synthesis and use "
+            "the Path A flow (docs/workflows/path-a-plan-convergence.md)."
         )
 
     def _run_advisory(
