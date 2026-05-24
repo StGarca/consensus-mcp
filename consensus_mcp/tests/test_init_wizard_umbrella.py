@@ -50,3 +50,87 @@ def test_symlinked_child_not_followed(tmp_path):
     children = wiz._looks_like_workspace_umbrella(tmp_path)
     # only the real dir counts; the symlink is skipped
     assert [c.name for c in children] == ["real"]
+
+
+import builtins
+import consensus_mcp.config as cfg
+import yaml
+
+
+def _seed_umbrella(tmp_path):
+    """tmp_path becomes a workspace umbrella with 2 child git repos."""
+    _make_repo(tmp_path / "alpha")
+    _make_repo(tmp_path / "beta")
+    return tmp_path
+
+
+def test_nontty_umbrella_emits_token_exit_8_no_write(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _seed_umbrella(tmp_path)
+    rc = wiz.main([])
+    assert rc == 8
+    captured = capsys.readouterr()
+    assert captured.out.splitlines()[0] == wiz.WORKSPACE_UMBRELLA_TOKEN
+    assert "alpha" in captured.err and "beta" in captured.err
+    assert not (tmp_path / ".consensus").exists()  # nothing written
+
+
+def test_here_flag_bypasses_guard(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _seed_umbrella(tmp_path)
+    rc = wiz.main(["--here", "--non-interactive", "--accept-defaults",
+                   "--contributors", "claude,codex,gemini"])
+    assert rc == 0
+    assert wiz.WORKSPACE_UMBRELLA_TOKEN not in capsys.readouterr().out
+    assert (tmp_path / ".consensus" / "config.yaml").exists()
+
+
+def test_tty_umbrella_confirm_no_aborts_8(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(builtins, "input", lambda *_a, **_k: "n")
+    _seed_umbrella(tmp_path)
+    rc = wiz.main([])
+    assert rc == 8
+    assert not (tmp_path / ".consensus").exists()
+
+
+def test_tty_umbrella_confirm_yes_proceeds(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    # "y" to the umbrella confirm, then defaults for the rest of the wizard
+    answers = iter(["y"] + [""] * 12)
+    monkeypatch.setattr(builtins, "input", lambda *_a, **_k: next(answers))
+    _seed_umbrella(tmp_path)
+    rc = wiz.main([])
+    assert rc == 0
+    assert (tmp_path / ".consensus" / "config.yaml").exists()
+
+
+def test_guard_skipped_when_config_exists(tmp_path, capsys, monkeypatch):
+    """An already-bootstrapped umbrella routes to the v1.29.0 already-configured
+    path (so you can re-run to clean it up) — NOT the umbrella token."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _seed_umbrella(tmp_path)
+    (tmp_path / ".consensus").mkdir()
+    (tmp_path / ".consensus" / "config.yaml").write_text(
+        yaml.safe_dump(cfg.default_config()), encoding="utf-8")
+    rc = wiz.main([])
+    out = capsys.readouterr().out
+    assert wiz.WORKSPACE_UMBRELLA_TOKEN not in out
+    assert out.splitlines()[0] == wiz.ALREADY_CONFIGURED_TOKEN  # already-configured wins
+    assert rc == 4
+
+
+def test_non_umbrella_fresh_init_unaffected(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    # no child repos -> not an umbrella -> normal non-TTY fresh init
+    rc = wiz.main(["--non-interactive", "--accept-defaults",
+                   "--contributors", "claude,codex,gemini"])
+    assert rc == 0
+    assert wiz.WORKSPACE_UMBRELLA_TOKEN not in capsys.readouterr().out
+    assert (tmp_path / ".consensus" / "config.yaml").exists()
