@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.29.0 - unreleased
+
+**Graceful re-init when consensus is already configured.** Re-running
+`consensus init` on a bootstrapped project no longer hard-errors with a raw
+"Exit code 4". In a real terminal you get an interactive menu (`[1]` leave /
+`[2]` reconfigure / `[3]` force); under Claude Code the `consensus` skill
+presents the same three choices.
+
+### Added
+- The `_init_wizard` existing-config guard is now install-aware. TTY → an
+  interactive leave/reconfigure/force menu. Non-TTY (`--from-claude-code`, CI,
+  a pipe, or `--non-interactive`/`--accept-defaults`) → exit 4 plus a stable
+  `STATUS: already-configured` token on the first line of stdout and
+  human-readable guidance on stderr. The `consensus` skill and `consensus-init`
+  command detect that contract and present an `AskUserQuestion` menu, then
+  re-invoke once with `--reconfigure` or `--force`.
+- `--force` now supersedes `--reconfigure` when both are passed (overwrite has
+  nothing to diff).
+
+### Known gap / follow-up
+- "Leave as-is" is a pure no-op: it does NOT verify or repair a partially
+  broken install (e.g. a missing `.mcp.json` or a dead enforcement hook). A
+  future release will add an explicit "verify/repair" option. (4-AI consult
+  Q3c — `iteration-init-already-installed-ux-2026-05-23`.)
+
 ## 1.28.1 - 2026-05-23
 
 **Non-interactive init no longer crashes under Claude Code / CI / pipes.** Running
