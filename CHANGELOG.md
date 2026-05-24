@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.29.5 - 2026-05-24
+
+**Regression guard: consensus-mcp's own tooling can't be re-broken by the gate.**
+A governed-project integration smoke locks the class of bug fixed in v1.29.4 (the
+PreToolUse gate blocking `consensus init`/`--repair`).
+
+### Added
+- `tests/test_governed_self_tooling_smoke.py` — activates the gate via REAL
+  governed-project detection (an on-disk `.consensus/`, not the test opt-in
+  shortcut) and asserts the project's own console scripts pass the gate while
+  ordinary writes stay blocked. The own-binary allow-list check is **data-driven
+  from `pyproject [project.scripts]`**, so a newly-added console script that isn't
+  exempted in the gate's `_CONSENSUS_TOOLING` fails the test — closing the bug
+  *class*, not just the one binary. Verified non-vacuous against the pre-v1.29.4
+  hook (own tooling blocked without the exemption).
+
 ## 1.29.4 - 2026-05-23
 
 **Fix: the PreToolUse gate no longer blocks consensus's own tooling.** In a
