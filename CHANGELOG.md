@@ -2,7 +2,26 @@
 
 ## 1.29.2 - unreleased
 
-_Unreleased._
+**4-AI consensus runs in-engine + the iteration pipeline is codified.**
+
+### Added
+- `KimiAdapter` (`contributors/kimi.py`), registered as a built-in, so
+  `consensus.run_iteration` dispatches all four AIs (claude/codex/gemini/kimi)
+  out of the box — kimi keeps its hardened `_dispatch_kimi` behavior instead of
+  the generic `ProfileAdapter` path. (`ProfileAdapter` remains for user-defined
+  `cli_reviewer`s; a config profile named `kimi` is now superseded by the
+  built-in, same as claude/codex/gemini.)
+- `consensus-workflow` skill now codifies the end-to-end **iteration pipeline**
+  (superpowers ↔ consensus), the **dual-path** consult-selection rule (Path B
+  `run_iteration` for execution; Path A orchestrator-driven for high-design-surface),
+  the **host_peer dispatch procedure**, the `.consensus` gate caveat, and the
+  **release install-currency** steps (`pipx install --force` + `--install-claude-code
+  --force` + version-asserting smoke). Mirrored in `docs/workflows/iteration-pipeline.md`.
+
+### Known follow-up
+- Per-round host re-convergence in Path B (the claude/host_peer callbacks echo one
+  YAML across convergence rounds) needs a `run_iteration` pause/resume API; until
+  then use Path A for design-surface convergence.
 
 ## 1.29.1 - 2026-05-23
 
