@@ -150,3 +150,56 @@ def test_umbrella_token_documented_in_skill_and_command():
     assert "exit code 8" in skill.lower() or "exits with code 8" in skill.lower()
     # command doc is what Claude Code reads when dispatched — assert it symmetrically
     assert "exit code 8" in command.lower() or "exits with code 8" in command.lower()
+
+
+def test_tty_umbrella_eof_aborts_1(tmp_path, capsys, monkeypatch):
+    """EOF/Ctrl-D at the umbrella confirm -> 'aborted by user' exit 1 (distinct
+    from the decline path, which is exit 8)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    def _eof(*_a, **_k):
+        raise EOFError
+    monkeypatch.setattr(builtins, "input", _eof)
+    _seed_umbrella(tmp_path)
+    rc = wiz.main([])
+    assert rc == 1
+    assert "aborted by user" in capsys.readouterr().err
+    assert not (tmp_path / ".consensus").exists()
+
+
+def test_reconfigure_skips_umbrella_guard(tmp_path, capsys, monkeypatch):
+    """--reconfigure bypasses the umbrella guard (maintenance op). With no config
+    yet + reconfigure, it must NOT emit the umbrella token."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _seed_umbrella(tmp_path)
+    rc = wiz.main(["--reconfigure", "--non-interactive", "--accept-defaults",
+                   "--contributors", "claude,codex,gemini"])
+    assert wiz.WORKSPACE_UMBRELLA_TOKEN not in capsys.readouterr().out
+    # reconfigure proceeded (did not refuse with exit 8)
+    assert rc != 8
+
+
+def test_config_path_override_does_not_bypass_guard(tmp_path, capsys, monkeypatch):
+    """--config redirects the write target but does NOT bypass the umbrella guard
+    (the guard keys on the detected root). Only --here bypasses."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    _seed_umbrella(tmp_path)
+    alt = tmp_path / "elsewhere.yaml"
+    rc = wiz.main(["--config", str(alt)])
+    assert rc == 8
+    assert capsys.readouterr().out.splitlines()[0] == wiz.WORKSPACE_UMBRELLA_TOKEN
+    assert not alt.exists()
+
+
+def test_umbrella_child_list_capped_at_10(tmp_path, capsys, monkeypatch):
+    """>10 child repos: guidance lists at most 10 names + a '(+N more)' suffix."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
+    for i in range(13):
+        _make_repo(tmp_path / f"repo{i:02d}")
+    rc = wiz.main([])
+    assert rc == 8
+    err = capsys.readouterr().err
+    assert "more" in err  # the "(+N more)" overflow suffix
