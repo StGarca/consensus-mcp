@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.30.2 - 2026-05-24
+
+**Hot-patch: three bugs that blocked a Workflow A consult from a consuming project**
+(found by the external-project emotion-engine consult; codex Workflow B reviewed).
+
+### Fixed
+- **Bug A — multi-round consults couldn't seal.** Convergence `reviewer_id` was
+  hardcoded `-1`, ignoring the threaded `round_number` — so a round-2 re-seal hit the
+  immutable T6 `index_collision`. The `codex` / `gemini` / `kimi` adapters now key the
+  `reviewer_id` off `adapter_options.round_number` (propose/review still default to 1 —
+  no behavior change). Any consult that needs a round 2 (a round-1 block) can now complete.
+- **Bug B — sandboxed reviewers couldn't read the convergence packet.** `_build_prompt`
+  embedded only the review-target's path + hash; a read-only reviewer (codex) can't open
+  files under `consensus-state/`. It now embeds the review-target **content** (the
+  dispatcher already read it for the hash), via a new `review_target_content` block — only
+  when the code-review `touched_files_contents` path didn't already embed it (no double-embed).
+- **Bug C — kimi filled tmpfs in a no-`.git` / large repo.** The disposable-workdir
+  copytree fallback (used when there's no `.git` to `git clone`) tried to copy giant
+  derived dirs into the 16G tmpfs. Now: proposal-mode dispatches **skip the copy
+  entirely** (read-only; the integrity snapshot is the backstop); the copytree ignore is
+  extended by `CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS` + the repo's top-level `.gitignore`
+  dirs; the work-dir root is overridable off-tmpfs via `CONSENSUS_MCP_KIMI_WORKDIR_ROOT`;
+  and an out-of-space copy (OSError ENOSPC **or** aggregated `shutil.Error`) now fails with
+  a clear, actionable message and cleans up the partial copy instead of a raw ENOSPC.
+
 ## 1.30.1 - 2026-05-24
 
 **Hot-patch: three fresh-install / robustness fixes.**
