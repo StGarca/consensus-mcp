@@ -80,3 +80,54 @@ def apply_same_family_cap(weights_by_contributor: dict[str, float],
             for c in contributors:
                 out[c] = out.get(c, 0.0) * scale
     return out
+
+
+# --- Plan 2: the learner (reads the external outcome ledger; ADVISORY only) ---
+# Per the converged spec (2026-05-24): credit comes ONLY from external outcomes
+# (see _outcome_ledger; no AI writes credit). GOLD (objective test/falsification)
+# outranks SECONDARY (audited operator disposition). Decay half-life 20, hard
+# model-version reset, min-sample 5 with linear dampening toward the neutral seed.
+
+SIGNAL_STRENGTH = {"gold": 1.0, "secondary": 0.5}
+DECAY_HALFLIFE = 20.0
+MIN_SAMPLE = 5.0
+
+
+def learned_posterior_mean(outcomes: list[dict], contributor: str, domain: str, *,
+                           current_iteration: int, current_model_version: str) -> float:
+    """Beta posterior mean for a (contributor, domain) cell from EXTERNAL outcome
+    records. Decay (half-life 20) down-weights stale outcomes; GOLD outweighs
+    SECONDARY; only the current model_version counts (hard reset on a version bump);
+    below MIN_SAMPLE effective observations the mean is linearly dampened toward the
+    neutral seed (cold-start = neutral, never amplified noise)."""
+    alpha, beta = SEED_ALPHA, SEED_BETA
+    eff_n = 0.0
+    for o in outcomes:
+        if o.get("contributor") != contributor or o.get("domain") != domain:
+            continue
+        if o.get("model_version") != current_model_version:
+            continue  # a weight earned by vN must not bind vN+1
+        age = max(0, current_iteration - int(o.get("iteration_index", current_iteration)))
+        strength = SIGNAL_STRENGTH.get(o.get("tier"), 0.0) * (0.5 ** (age / DECAY_HALFLIFE))
+        if strength <= 0:
+            continue
+        eff_n += strength
+        if o.get("useful"):
+            alpha += strength
+        else:
+            beta += strength
+    learned = alpha / (alpha + beta)
+    if eff_n >= MIN_SAMPLE:
+        return learned
+    frac = eff_n / MIN_SAMPLE
+    return (1.0 - frac) * NEUTRAL_MEAN + frac * learned
+
+
+def learned_weight_for(outcomes: list[dict], contributor: str, domain: str, *,
+                       current_iteration: int, current_model_version: str) -> float:
+    """Advisory weight from the learned posterior mean (discount-only, [FLOOR, CAP])."""
+    return weight_from_mean(
+        learned_posterior_mean(outcomes, contributor, domain,
+                               current_iteration=current_iteration,
+                               current_model_version=current_model_version)
+    )
