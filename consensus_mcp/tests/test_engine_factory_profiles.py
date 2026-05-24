@@ -4,7 +4,7 @@ Per the converged plan (iteration-v1180-contributor-design-2026-05-22)
 decision.engine_factory, `build_adapters` resolves each enabled contributor in
 this order:
   (a) _REGISTERED_ADAPTERS
-  (b) _BUILTIN_ADAPTERS (claude/codex/gemini → existing classes)
+  (b) _BUILTIN_ADAPTERS (claude/codex/gemini/kimi → existing classes)
   (c) merged profiles (load_builtin_profiles + config contributors.profiles via
       merge_profiles); kind:cli_reviewer → ProfileAdapter(profile); kind:host is
       reserved (claude) and must NOT be turned into a subprocess adapter.
@@ -32,6 +32,7 @@ from consensus_mcp import config as cfg  # noqa: E402
 from consensus_mcp.contributors.claude import ClaudeAdapter  # noqa: E402
 from consensus_mcp.contributors.codex import CodexAdapter  # noqa: E402
 from consensus_mcp.contributors.gemini import GeminiAdapter  # noqa: E402
+from consensus_mcp.contributors.kimi import KimiAdapter  # noqa: E402
 from consensus_mcp.contributors.profile_adapter import ProfileAdapter  # noqa: E402
 
 
@@ -63,27 +64,28 @@ def test_r8_builtin_trio_unchanged():
 
 
 # --------------------------------------------------------------------------- #
-# kimi: built-in cli_reviewer profile → ProfileAdapter (no new Python class)
+# kimi: now a built-in adapter class (KimiAdapter), not a profile fallback
 # --------------------------------------------------------------------------- #
 
-def test_kimi_builtin_profile_resolves_to_profile_adapter():
+def test_kimi_builtin_resolves_to_kimiadapter():
+    """kimi is now a built-in (_BUILTIN_ADAPTERS), so it resolves to KimiAdapter,
+    NOT ProfileAdapter.  This replaced the old test that expected ProfileAdapter
+    when kimi had no Python class (pre-v1.29.2)."""
     config = _base_config(["claude", "kimi"])
     adapters = factory.build_adapters(config, claude_artifact_callback=_claude_cb)
     assert set(adapters.keys()) == {"claude", "kimi"}
     assert isinstance(adapters["claude"], ClaudeAdapter)
-    assert isinstance(adapters["kimi"], ProfileAdapter)
+    assert isinstance(adapters["kimi"], KimiAdapter)
     assert adapters["kimi"].name == "kimi"
-    # provenance/model surfaced from the profile, not a default.
-    assert adapters["kimi"].profile["model"].startswith("kimi-code")
 
 
 def test_kimi_alongside_builtins():
-    """kimi + the full built-in trio: trio keeps classes, kimi is ProfileAdapter."""
+    """kimi + the full built-in trio: trio keeps classes, kimi is KimiAdapter."""
     config = _base_config(["claude", "codex", "gemini", "kimi"])
     adapters = factory.build_adapters(config, claude_artifact_callback=_claude_cb)
     assert isinstance(adapters["codex"], CodexAdapter)
     assert isinstance(adapters["gemini"], GeminiAdapter)
-    assert isinstance(adapters["kimi"], ProfileAdapter)
+    assert isinstance(adapters["kimi"], KimiAdapter)
 
 
 # --------------------------------------------------------------------------- #
@@ -119,16 +121,19 @@ def test_config_profile_adds_new_contributor():
     assert adapters["acme"].profile["model"] == "acme-model"
 
 
-def test_config_profile_overrides_builtin_kimi():
-    """A config profile with the same name overrides the built-in (whole-profile
-    replacement, per merge_profiles semantics)."""
+def test_config_profile_cannot_override_builtin_kimi():
+    """kimi is now in _BUILTIN_ADAPTERS, so it resolves to KimiAdapter (step b)
+    BEFORE profile lookup (step c).  A config profile named 'kimi' is silently
+    ignored — same behaviour as claude.  To swap the impl a host must call
+    register_contributor('kimi', CustomAdapter) which shadows the built-in."""
     config = _base_config(["claude", "kimi"])
     override = _custom_cli_profile("kimi")
     override["model"] = "kimi-overridden-model"
     config["contributors"]["profiles"] = {"kimi": override}
     adapters = factory.build_adapters(config, claude_artifact_callback=_claude_cb)
-    assert isinstance(adapters["kimi"], ProfileAdapter)
-    assert adapters["kimi"].profile["model"] == "kimi-overridden-model"
+    # Built-in wins — KimiAdapter, NOT ProfileAdapter.
+    assert isinstance(adapters["kimi"], KimiAdapter)
+    assert not isinstance(adapters["kimi"], ProfileAdapter)
 
 
 # --------------------------------------------------------------------------- #
