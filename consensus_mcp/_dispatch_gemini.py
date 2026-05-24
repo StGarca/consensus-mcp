@@ -993,6 +993,7 @@ def main(argv: list[str] | None = None) -> int:
         template_text = _load_template(template_path)
 
         review_packet_data: dict | None = None
+        review_target_text: str | None = None  # Bug B (v1.30.2): embed content, not just path
         if review_target_normalized is not None:
             review_target_text = review_target_normalized.read_text(encoding="utf-8")
             review_target_hash = _sha256_str(review_target_text)
@@ -1012,6 +1013,7 @@ def main(argv: list[str] | None = None) -> int:
             review_target_path=str(review_target_normalized) if review_target_normalized else None,
             review_target_hash=review_target_hash,
             review_packet=review_packet_data,
+            review_target_content=review_target_text,
         )
         prompt_sha = _sha256_str(prompt)
         goal_packet_sha = _sha256_str(goal_packet_text)

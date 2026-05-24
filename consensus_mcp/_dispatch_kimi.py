@@ -193,6 +193,33 @@ def _sweep_stale_workdirs(max_age_seconds: float = _WORKDIR_STALE_SECONDS) -> in
     return removed
 
 
+def _extra_ignore_dirs() -> set[str]:
+    """Project-declared extra dir names to skip when copying the disposable work-dir
+    (CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS, comma-separated) — lets a heavy consuming repo
+    keep the copy small without a code change (Bug C #2)."""
+    raw = os.environ.get("CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS", "")
+    return {d.strip() for d in raw.split(",") if d.strip()}
+
+
+def _gitignored_top_level_dirs(repo_root: Path) -> set[str]:
+    """Top-level dir names listed in the repo's .gitignore (best-effort simple matcher).
+    Restores parity with the git-clone path's tracked-only copy when there is no .git to
+    clone (Bug C #1, light). Never raises."""
+    out: set[str] = set()
+    try:
+        lines = (repo_root / ".gitignore").read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return out
+    for ln in lines:
+        s = ln.strip()
+        if not s or s.startswith("#") or s.startswith("!"):
+            continue
+        s = s.rstrip("/")
+        if s and "/" not in s and "*" not in s and "?" not in s:  # simple top-level name only
+            out.add(s)
+    return out
+
+
 def _strip_kimi_output_chrome(text: str) -> str:
     """Strip kimi.yaml output chrome (the resume-session trailer) from `text`.
 
@@ -296,7 +323,12 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
     import tempfile
 
     _sweep_stale_workdirs()  # clear any leaked dirs from SIGKILL-ed prior dispatches
-    tmp_root = Path(tempfile.mkdtemp(prefix="kimi-workdir-"))
+    # Bug C #4 (v1.30.2): allow an off-tmpfs root (tmpfs /tmp is small); a project can
+    # point CONSENSUS_MCP_KIMI_WORKDIR_ROOT at a roomier disk location.
+    _root = os.environ.get("CONSENSUS_MCP_KIMI_WORKDIR_ROOT") or None
+    if _root:
+        Path(_root).mkdir(parents=True, exist_ok=True)
+    tmp_root = Path(tempfile.mkdtemp(prefix="kimi-workdir-", dir=_root))
     dest = tmp_root / "repo"
 
     git_bin = shutil.which("git")
@@ -315,14 +347,32 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
             cloned = False
 
     if not cloned:
-        # Fallback: copytree, skipping .git + heavy/derived dirs.
+        # Fallback (no .git, or clone failed): copytree, skipping .git + heavy/derived
+        # dirs. The ignore set is EXTENDED by CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS and by
+        # the repo's top-level .gitignore'd dirs, so a large NO-GIT repo doesn't try to
+        # copy 100s of GB into a 16G tmpfs (Bug C: the regression was lost-.git -> copytree).
         if dest.exists():
             shutil.rmtree(dest, ignore_errors=True)
+        _ignore_names = (set(_TEMP_WORKDIR_IGNORE_DIRS)
+                         | _extra_ignore_dirs()
+                         | _gitignored_top_level_dirs(repo_root))
 
         def _ignore(_dir, names):
-            return [n for n in names if n in _TEMP_WORKDIR_IGNORE_DIRS]
+            return [n for n in names if n in _ignore_names]
 
-        shutil.copytree(str(repo_root), str(dest), ignore=_ignore, symlinks=True)
+        try:
+            shutil.copytree(str(repo_root), str(dest), ignore=_ignore, symlinks=True)
+        except OSError as exc:
+            shutil.rmtree(tmp_root, ignore_errors=True)  # never leak a partial copy
+            import errno
+            if exc.errno == errno.ENOSPC:
+                raise OSError(
+                    f"kimi disposable work-dir copy ran out of space copying {repo_root} "
+                    f"(no .git -> full copytree). Exclude heavy dirs via "
+                    f"CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS=dir1,dir2 and/or point "
+                    f"CONSENSUS_MCP_KIMI_WORKDIR_ROOT at a roomier disk than tmpfs."
+                ) from exc
+            raise
 
     # SYMLINK SCRUB: a tracked/copied symlink in the copy can point back into the
     # real repo or outside it, letting a write "inside" the temp work-dir escape.
@@ -1331,6 +1381,7 @@ def main(argv: list[str] | None = None) -> int:
         template_text = _load_template(template_path)
 
         review_packet_data: dict | None = None
+        review_target_text: str | None = None  # Bug B (v1.30.2): embed content, not just path
         if review_target_normalized is not None:
             review_target_text = review_target_normalized.read_text(encoding="utf-8")
             review_target_hash = _sha256_str(review_target_text)
@@ -1350,6 +1401,7 @@ def main(argv: list[str] | None = None) -> int:
             review_target_path=str(review_target_normalized) if review_target_normalized else None,
             review_target_hash=review_target_hash,
             review_packet=review_packet_data,
+            review_target_content=review_target_text,
         )
         prompt_sha = _sha256_str(prompt)
         goal_packet_sha = _sha256_str(goal_packet_text)
@@ -1369,20 +1421,30 @@ def main(argv: list[str] | None = None) -> int:
         # physically cannot touch the real tree. Cleaned up in finally.
         kimi_workdir: Path | None = None
         try:
-            kimi_workdir = _make_disposable_workdir(repo_root)
+            if ns.mode == "proposal":
+                # Bug C fix (v1.30.2): a proposal-mode (design-consult) dispatch only
+                # READS the goal_packet — there is no mutation to isolate. Copying a
+                # large / no-`.git` repo into tmpfs is exactly what caused ENOSPC, so run
+                # against the real repo (read-only intent); the before/after integrity
+                # snapshot below remains the backstop.
+                effective_workdir = repo_root
+            else:
+                kimi_workdir = _make_disposable_workdir(repo_root)
+                effective_workdir = kimi_workdir
             _log_dispatch(log_path, {
                 "event": "dispatch_workdir_prepared",
                 "iteration_id": iteration_id,
                 "reviewer_id": reviewer_id,
                 "pass_id": pass_id,
-                "workdir": str(kimi_workdir),
+                "workdir": str(effective_workdir),
+                "disposable_copy": kimi_workdir is not None,
                 "adapter": "kimi",
             })
             raw_output, extracted = _invoke_kimi_with_retry(
                 prompt=prompt,
                 kimi_bin=ns.kimi_bin,
                 timeout_seconds=ns.timeout_seconds,
-                repo_root=kimi_workdir,
+                repo_root=effective_workdir,
                 log_path=log_path,
                 anchors={
                     "iteration_id": iteration_id,

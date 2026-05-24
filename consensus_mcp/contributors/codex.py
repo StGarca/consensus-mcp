@@ -34,7 +34,11 @@ class CodexAdapter(ContributorAdapter):
 
     def dispatch(self, packet: DispatchPacket) -> SealedArtifact:
         # Build argv mirroring reviewer.dispatch_codex MCP wrapper.
-        reviewer_id = packet.reviewer_id or f"codex-{packet.iteration_dir.name}-{packet.phase}-1"
+        # Bug A fix (v1.30.2): round-key the reviewer_id so a converge ROUND 2 does
+        # not collide with round 1's immutable T6 seal (index_collision). round_number
+        # is threaded via adapter_options (base.py); propose/review pass none -> 1.
+        _round = (packet.adapter_options or {}).get("round_number", 1)
+        reviewer_id = packet.reviewer_id or f"codex-{packet.iteration_dir.name}-{packet.phase}-{_round}"
         pass_id = packet.pass_id or f"{reviewer_id}-pass1"
         # iter-0044 per iter-0043 converged plan: forward packet.phase as
         # --mode to the dispatcher. Previously omitted, causing every
