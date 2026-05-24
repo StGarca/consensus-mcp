@@ -67,6 +67,57 @@ one cycle with `DeprecationWarning`.**
 > `autonomous-execute` requires exactly 3.)
 - **Advisory** — dispatches happen but no vote is load-bearing. Rare.
 
+## End-to-end iteration pipeline (superpowers ↔ consensus)
+
+One repeatable pipeline. Each superpowers stage maps to a consensus role:
+
+1. `superpowers:brainstorming` → intent + design exploration.
+2. **Consensus consult = the design approval gate** (consensus is the approver):
+   author goal_packet + review-packet; run the panel; converge (weighted-synthesis).
+3. `superpowers:writing-plans` → TDD implementation plan from the converged design.
+4. `superpowers:subagent-driven-development` → implement task-by-task (implementer
+   + spec-compliance review + code-quality review per task).
+5. `superpowers:finishing-a-development-branch` → release cut (see "Release cadence").
+
+### Dual-path consult selection
+- **Path B — `consensus.run_iteration`** (the built engine dispatches
+  codex/gemini/kimi via adapters + claude/host_peer via callbacks, runs
+  blind-first-reveal, seals): use for **post-review / execution / clear-design /
+  hot-patches**. claude + host_peer are supplied as `claude_proposal_yaml` /
+  `host_peer_review_yaml` (static across rounds — acceptable here).
+- **Path A — orchestrator-driven** (dispatch shell binaries + host-supplied blind
+  subagents + manual weighted-synthesis): use for **propose-converge with real
+  design surface**, where claude/host_peer must genuinely re-converge across
+  rounds. KEPT as the documented advanced path; its sole justification is genuine
+  multi-round host convergence. (Known follow-up: per-round host re-convergence in
+  Path B needs a `run_iteration` pause/resume API — not yet built.)
+- **host_peer is first-class in BOTH paths.**
+
+### host_peer dispatch procedure (repeatable, not improvised)
+1. Dispatch a **blind** Claude subagent (fresh context, NO peer artifacts) as the
+   host_peer reviewer, using `dispatch_templates/host_peer_review_template.md`.
+2. Capture its output as `host_peer_review_yaml` with this schema:
+   ```yaml
+   findings: []            # list
+   goal_satisfied: true    # bool
+   blocking_objections: [] # list
+   ```
+3. Path B: pass it as `consensus.run_iteration(..., host_peer_review_yaml=<yaml>)`.
+   Path A: seal it via the host_peer path. One-shot; never loop.
+
+### `.consensus` gate caveat
+The PreToolUse enforcement gate (seal `.consensus/design-approved`, mint a
+delivery token) is **project-scoped**: it only fires where a `.consensus/config.yaml`
+exists. In a repo without one (e.g. consensus-mcp itself dogfooding via shell
+binaries), those seal/mint steps are **aspirational** — follow the discipline by
+convention, or activate the gate via `consensus init` to make it enforced.
+
+### Concurrency warning (4-AI engine runs)
+Do NOT mutate the repo (edits, or concurrent subagent writes) while a
+`run_iteration` engine run is dispatching kimi — kimi's integrity check shells
+`git status` and false-positives on concurrent changes, spuriously rejecting the
+review.
+
 ## Maximize parallelism — always
 
 **Default to parallel; serial is the choice that needs justification.**
@@ -546,6 +597,15 @@ and no tag.
    NOT an ancestor, STOP — that means history diverged and a
    force-update would rewrite public `main` (escalate, do not
    force).
+- **Make the release LIVE locally (install-currency — REQUIRED):**
+  1. `pipx install --force git+https://github.com/StGarca/consensus-mcp.git@vX.Y.Z`
+     (the global install is a non-editable COPY pinned to a tag; `pipx upgrade`
+     will NOT move a tag pin).
+  2. `consensus-init --install-claude-code --force` (refresh `~/.claude`
+     skills/commands to the new version).
+  3. **Smoke the INSTALLED binary AND assert its version == `vX.Y.Z`** — the
+     stale-pipx failure is a binary that *runs* but reports the OLD version, so a
+     "binary runs" check is insufficient.
 9. Branch the next release from the v<X.Y.Z> tip: `v<X.Y.Z+1>`
    for hot-patches, OR `v<X.(Y+1).0>` for the next minor. Bump
    `pyproject.toml` on the new branch to the new dev version
