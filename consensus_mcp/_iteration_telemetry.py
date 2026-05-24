@@ -17,6 +17,21 @@ _NUMERIC = ("panel_size", "n_dispatches", "wall_clock_s", "retries",
             "smokes_run", "blocking_findings")
 
 
+def _nonneg_number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+
+
+def _record_is_valid(record: dict) -> bool:
+    """A stored row is valid iff required fields are present and every numeric field
+    that IS present is a non-negative number. Used at the READ boundary so a
+    hand-edited/corrupt row never reaches the rollup (codex-rev-002)."""
+    if not isinstance(record, dict):
+        return False
+    if any(not record.get(f) for f in _REQUIRED):
+        return False
+    return all(_nonneg_number(record[k]) for k in _NUMERIC if k in record)
+
+
 def record_iteration(telemetry_path: str | Path, record: dict) -> None:
     """Append one per-iteration telemetry record (append-only JSONL).
 
@@ -28,7 +43,7 @@ def record_iteration(telemetry_path: str | Path, record: dict) -> None:
     out = {"iteration_id": record["iteration_id"], "tier": record["tier"]}
     for k in _NUMERIC:
         v = record.get(k, 0)
-        if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+        if not _nonneg_number(v):
             raise ValueError(f"telemetry field {k!r} must be a non-negative number, got {v!r}")
         out[k] = v
     path = Path(telemetry_path)
@@ -48,9 +63,11 @@ def read_iterations(telemetry_path: str | Path) -> list[dict]:
         if not line:
             continue
         try:
-            out.append(json.loads(line))
+            record = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if _record_is_valid(record):  # skip hand-edited/corrupt rows (codex-rev-002)
+            out.append(record)
     return out
 
 
