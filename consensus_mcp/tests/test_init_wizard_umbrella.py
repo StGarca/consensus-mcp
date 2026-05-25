@@ -100,6 +100,12 @@ def test_tty_umbrella_confirm_no_aborts_8(tmp_path, capsys, monkeypatch):
 def test_tty_umbrella_confirm_yes_proceeds(tmp_path, capsys, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
+    # Stub the environment to a dev box where every reviewer CLI is installed, so the
+    # contributor multi-select's ">=2 required" default is satisfied on EMPTY input.
+    # Without this the test depends on ambient PATH: on a clean runner (CI) only the
+    # claude host is detected, the menu re-prompts forever for a 2nd reviewer, and the
+    # fixed input iterator below is exhausted -> StopIteration. (CI failure, all platforms.)
+    monkeypatch.setattr(wiz, "_profile_installed", lambda *_a, **_k: True)
     # "y" to the umbrella confirm, then defaults for the rest of the wizard
     answers = iter(["y"] + [""] * 12)
     monkeypatch.setattr(builtins, "input", lambda *_a, **_k: next(answers))
