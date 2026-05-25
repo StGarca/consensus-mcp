@@ -764,8 +764,9 @@ def test_v127_git_branch_list_pattern(tmp_path, command, allowed):
 
 def _gate_scope_env(tmp_path, monkeypatch):
     """Fake ~/.claude (enforcement surface) + a SIBLING repo so in-repo, out-of-repo, and
-    protected paths are all distinct. HOME is read by Path.home() in the subprocess (via
-    _run_hook's dict(os.environ)). Returns (repo_root, claude_dir)."""
+    protected paths are all distinct. Path.home() in the subprocess reads $HOME (POSIX) or
+    %USERPROFILE% (Windows) — both set below, threaded through _run_hook's dict(os.environ).
+    Returns (repo_root, claude_dir)."""
     fake_home = tmp_path / "home"
     claude = fake_home / ".claude"
     (claude / "hooks").mkdir(parents=True)
@@ -773,6 +774,11 @@ def _gate_scope_env(tmp_path, monkeypatch):
     (claude / "hooks" / "consensus_pretooluse_gate.py").write_text("# hook\n", encoding="utf-8")
     (claude / "projects" / "proj" / "memory").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(fake_home))
+    # The hook computes the protected surface from Path.home(). On POSIX that reads $HOME,
+    # but on Windows it reads %USERPROFILE% (ntpath.expanduser ignores $HOME) — so without
+    # this the Windows hook resolves the REAL profile, the fixture's settings.json looks
+    # unprotected, and the DENY assertions fail (ALLOW 0 != DENY 2). Set both for portability.
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     return repo_root, claude
