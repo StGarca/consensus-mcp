@@ -1,5 +1,86 @@
 # Changelog
 
+## 1.31.0 - 2026-05-26
+
+**Grok joins the panel — 5-AI cross-family consults by default in deep tier.**
+Add `grok` (xAI Grok CLI) as the 5th first-class contributor alongside
+`claude` (host), `codex`, `gemini`, and `kimi`. UX is identical to the
+existing four contributors — same `consensus-mcp-dispatch-grok` shell
+binary, same `--mode {review,proposal}`, same sealed verdict YAML shape,
+same `>=2 non-claude reviewer families` gate (grok counts as a distinct
+family automatically).
+
+Converged 3-AI consult (`iteration-v131-grok-design-2026-05-26`,
+deep-tier, anchored): unanimous gemini-twin adoption across three
+different differentials (anchor=UX-parity history; codex=verification-
+first verification of every spec claim against artifacts; gemini=
+strategy comparison + parse-with-retry precedent).
+
+### Added
+- **`consensus_mcp/_dispatch_grok.py`**: gemini-twin dispatcher with
+  grok-specific deltas — `--prompt-file` per-pass dispatch (codex D3
+  refinement; avoids the shell-quoting class that prompted v1.30.7),
+  auth pre-flight via `~/.grok/auth.json` existence-check raising
+  `GrokAuthRequiredError`, and the root-cause-independent safeguard
+  flag set: `--no-memory --no-plan --no-subagents --disable-web-search
+  --max-turns 1 --permission-mode dontAsk` (logged in
+  `dispatch_provenance.disabled_tools` per codex D8). Output: plain
+  text, YAML parsed from response (no schema enforcement — same parity
+  as gemini/kimi). Finding ID pattern `^grok-rev-\d+$`.
+- **`consensus_mcp/contributors/grok.py`**: GrokAdapter wraps the
+  dispatcher in the same DispatchPacket round-trip shape as
+  GeminiAdapter.
+- **`consensus_mcp/contributor_profiles/grok.yaml`**: metadata-only
+  profile (B-routing — real dispatch goes through GrokAdapter, same as
+  gemini). Wizard list, detect/install hints, OAuth (`grok login`).
+- **Templates**: `grok_review_template.md`, `grok_proposal_template.md`,
+  `grok_proposal_schema.json` — mirror the gemini equivalents.
+- **`consensus-mcp-dispatch-grok`**: console script registered in
+  `pyproject.toml`.
+- **Test surface (44 new tests)**: `test_dispatch_grok.py` (auth
+  pre-flight, CLI flag shape, parser, smoke env gate, per-pass prompt
+  filename), `test_grok_adapter.py` (phase→mode forwarding, error
+  mapping, model override precedence), `test_dispatch_grok_smoke.py`
+  (env-gated end-to-end smoke, opt-in via
+  `CONSENSUS_MCP_RUN_REAL_GROK_SMOKE=1`).
+
+### Changed
+- **`consensus_mcp/_engine_factory.py`**: `grok` added to
+  `_BUILTIN_ADAPTERS` (alongside claude/codex/gemini/kimi).
+- **`consensus_mcp/config.py`**: `KNOWN_CONTRIBUTORS` closed enum
+  extended with `"grok"`. Default panel auto-derives from built-in
+  profiles, so `default_config().contributors.enabled` now includes
+  grok — every deep-tier consult dispatches 5-AI by default.
+- **Tests**: `test_config.py` and `test_contributor_profiles.py`
+  updated to assert the new built-in set including grok.
+
+### Operator notes
+- **Auth**: run `grok login` to authenticate (OAuth, token cached at
+  `~/.grok/auth.json`). The dispatcher emits a clean `GrokAuthRequiredError`
+  with a `grok login` hint if the auth file is absent.
+- **Default-panel cost**: every deep-tier consult is now ~25% larger in
+  wall-clock + tokens (5 dispatches instead of 4). Per-project disable:
+  ```yaml
+  # .consensus/config.yaml
+  contributors:
+    enabled: [claude, codex, gemini, kimi]   # omit grok
+  ```
+- **Quick + standard tiers unchanged**: quick stays 2-AI (claude +
+  codex), standard stays 4-AI. Only deep tier grows.
+- **Model pinning**: by default the dispatcher does NOT pass `--model`,
+  letting grok roll forward without dispatcher releases. Pin via
+  `.consensus/config.yaml: contributors.adapters.grok.model: "<id>"` if
+  you want determinism.
+
+### Known limitation (R3, decisive_experiment_before_next_iteration)
+Auth pre-flight is existence-check only — an expired token in
+`~/.grok/auth.json` will not be caught before invoking the CLI; the
+underlying grok error surfaces at runtime. Refuting observation for a
+v1.31.x probe-adding follow-up: the env-gated smoke test on a machine
+with a valid (existence-wise) but expired auth file exits with a
+recognizable expired-token diagnostic that a `grok inspect`-style probe
+would have caught pre-invocation.
+
 ## 1.30.7 - 2026-05-26
 
 **Fix Windows hook commands — Claude Code runs hooks via Git Bash, not cmd.exe.**

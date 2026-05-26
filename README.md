@@ -4,8 +4,8 @@
 trusting one AI to grade its own homework, consensus-mcp puts a small
 panel of *different* AIs — the ones you choose — on every change, has them
 review it independently, and only lets the change through when they
-agree. Built-in support for Claude, Codex, Gemini, and Kimi, and you
-can add any other AI just by writing a short config profile (no code).
+agree. Built-in support for Claude, Codex, Gemini, Grok, and Kimi, and
+you can add any other AI just by writing a short config profile (no code).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
@@ -29,7 +29,7 @@ consensus-mcp turns that into an automatic step in your workflow.
 ## What it does
 
 You decide who's on the panel. At setup you pick from the AIs you have
-installed — Claude, Codex, Gemini, Kimi, or any other you've defined —
+installed — Claude, Codex, Gemini, Grok, Kimi, or any other you've defined —
 and they each review every change. When you ask the panel to write,
 fix, or review code, consensus-mcp:
 
@@ -54,8 +54,8 @@ agree."
 
 **Add an AI without touching code.** Each reviewer is described by a
 small config *profile* — how to detect it, run it, and read its answer.
-Built-in profiles ship for Claude, Codex, Gemini, and Kimi; to add a
-new AI you just drop in another profile. No code change, no new
+Built-in profiles ship for Claude, Codex, Gemini, Grok, and Kimi; to
+add a new AI you just drop in another profile. No code change, no new
 release.
 
 ## Quick start
@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.30.7
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.31.0
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -154,7 +154,7 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.30.7 — stable.** 1,700+ regression tests, green on
+**Current: v1.31.0 — stable.** 1,780+ regression tests, green on
 CI across Linux + Windows and Python 3.11+. Self-hosted:
 every release is built through consensus-mcp's own cross-AI
 review.

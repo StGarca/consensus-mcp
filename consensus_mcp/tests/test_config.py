@@ -173,7 +173,7 @@ def test_default_patch_authoring_claude_only():
 
 def test_default_contributors_include_all_four():
     # dynamic default now includes kimi (decision 7: derived from built-in independents)
-    assert cfg.default_config()["contributors"]["enabled"] == ["claude", "codex", "gemini", "kimi"]
+    assert cfg.default_config()["contributors"]["enabled"] == ["claude", "codex", "gemini", "grok", "kimi"]
 
 
 # ---------- normalize / aliases ----------
@@ -515,7 +515,7 @@ def test_load_sparse_yaml_fills_defaults(tmp_path):
     loaded = cfg.load(p)
     # Should have all default keys populated.
     assert loaded["convergence"]["rule"] == cfg.CONVERGE_STRICT_MAJ
-    assert loaded["contributors"]["enabled"] == ["claude", "codex", "gemini", "kimi"]
+    assert loaded["contributors"]["enabled"] == ["claude", "codex", "gemini", "grok", "kimi"]
 
 
 def test_load_invalid_raises(tmp_path):
@@ -697,4 +697,4 @@ def test_default_config_enabled_is_dynamic_independents_in_order():
     assert "claude-swe-reviewer" not in enabled       # host_peer excluded
     assert "kimi" in enabled                           # dynamic includes kimi
     assert enabled == sorted(enabled)                  # stable ordering pinned
-    assert enabled == ["claude", "codex", "gemini", "kimi"]
+    assert enabled == ["claude", "codex", "gemini", "grok", "kimi"]

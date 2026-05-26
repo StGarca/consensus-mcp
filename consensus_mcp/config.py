@@ -144,7 +144,7 @@ VALID_TIMEOUT_POLICY = {TIMEOUT_NO_VOTE, TIMEOUT_BLOCKING, TIMEOUT_SHRINK}
 # built to catch. (Found by independent QA, not self-review.) Note: enabling
 # kimi still requires a KimiAdapter in the engine (tracked separately); this
 # allow-list entry just stops kimi being a second-class identity.
-KNOWN_CONTRIBUTORS = ("claude", "codex", "gemini", "kimi")
+KNOWN_CONTRIBUTORS = ("claude", "codex", "gemini", "grok", "kimi")
 CLAUDE = "claude"
 
 
