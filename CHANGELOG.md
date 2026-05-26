@@ -1,5 +1,98 @@
 # Changelog
 
+## 1.32.1 - 2026-05-26
+
+**Per-INVOCATION gate activation.** Fixes the gate over-fire problem the
+operator hit on the HouseInfo / epaper_esp project: a stale
+design-approved marker from a docs consult blocked an unrelated
+firmware `.cpp` edit weeks later. The bare `.consensus/` directory is
+NO LONGER an activation predicate — the gate is **DORMANT by default**
+and **ACTIVATES only when an AI explicitly invokes a consensus tool**.
+
+Converged 5-AI consult `iteration-v133-gate-scope-shift-2026-05-26`
+(deep-tier, anchored, 5/5 unanimous on every sub-decision). Five
+genuinely different differentials (maintainer / hook-integration /
+operator-UX / safety-engineer / friction-as-safety-failure) — not
+shared-prior. Grok's second real-world consult dispatch (after the
+v1.32.0 hot-patch) returned cleanly without retry. Codex+grok's
+verification-first priors independently confirmed Q1 (no trust-root
+weakening) — the load-bearing safety evidence.
+
+### Changed
+- **`consensus_pretooluse_gate.py` activation predicate** (the
+  load-bearing change): replaced
+  `opted_in = (repo_root / ".consensus").is_dir()` with
+  `opted_in = session_active(repo_root)`. The new probe checks for
+  a `.consensus/session-active` marker file pointing at a real
+  unsealed iteration, OR legacy opt-in (env var / marker file).
+- **`consensus-mcp-seal-iteration mint`** now writes the
+  session-active marker as a side effect (D3 — primary
+  activation trigger).
+
+### Added
+- **`consensus_mcp/_session_state.py`** — thin module for the
+  dormant↔active toggle. NOT a trust artifact (no SHA, no
+  signature); trust-root validation continues to live in
+  `_design_approval`. Pure file ops + minimal validation
+  (iteration_id must resolve to a real iteration dir).
+- **`consensus-mcp-seal-iteration close`** subcommand — the
+  explicit deactivation path. Verifies delivery tokens exist for
+  every in-scope file, then removes both `.consensus/session-active`
+  AND `.consensus/design-approved`. `--abandon` flag skips the
+  delivery-token check for crash recovery (zero attack surface; the
+  markers aren't trust artifacts).
+- **Legacy opt-in** for operators who want the v1.31.x behavior:
+  - `touch .consensus/legacy-always-on` (persistent marker), OR
+  - `export CONSENSUS_MCP_LEGACY_ALWAYS_ON=1` (per-session env var).
+- **One-time migration warning** on stderr when a legacy
+  `.consensus/` project loads under the new dormant default —
+  idempotent via `.consensus/.migration-warned` flag file.
+- **14 new tests** in `test_session_state.py` + 4 new tests in
+  `test_consensus_hooks.py` covering the v1.32.1 contract
+  (dormant by default, activation via session marker, both legacy
+  opt-in paths, stale-marker R4 mitigation).
+
+### Trust-root invariants — unchanged
+- PROTECTED-install paths (`~/.claude/settings.json`,
+  `~/.claude/hooks/consensus_*.py`) remain ALWAYS-ENFORCED before
+  any activation check. The enforcement floor stays unconditional.
+- Cross-family count (≥2 non-claude reviewer artifacts) — unchanged.
+- Canonical-hash check on the design-approved marker — unchanged.
+- `verify_design_approval` re-validates the live seal on every
+  check — unchanged.
+
+### Why the safety property holds (Q1 synthesis)
+The previously gated "all in-repo edits in any opted-in project"
+surface was **over-broad** — it never matched the gate's own
+docstring threat model ("cooperating agent's discipline, not a
+malicious shell"). The shift removes the over-broad surface;
+trust-root for IN-SCOPE consensus work is unchanged. Damage bound
+in dormant mode (codex's framing): "an agent can edit project
+files without design approval, but cannot silently disable the
+global enforcement surface."
+
+### Falsification clause
+The synthesis is **provisional**. Decisive 6-step on-device
+experiment (consult plan):
+  1. Cold edit firmware `.cpp` → succeed.
+  2. Invoke consensus on docs → gate ACTIVATES.
+  3. Edit out-of-scope file during active consult → BLOCKED with
+     scope_glob message.
+  4. `consensus-mcp-seal-iteration close` → gate DEACTIVATES.
+  5. Edit firmware again → ALLOWED.
+  6. Try to write `~/.claude/settings.json` from the project →
+     BLOCKED (protected-install floor).
+All 6 match → proven. Any one off → refuted (deferred resolver
+rewrite moves forward).
+
+### Known limitations
+- An agent that never invokes a consensus tool is now ungated for
+  in-repo edits (the intended new default per operator framing).
+  Delivery-token gate at completion-claim time remains the backstop
+  for artifacts that ARE consensus work.
+- Operators relying on per-project lockdown must explicitly opt in
+  via legacy-always-on.
+
 ## 1.32.0 - 2026-05-26
 
 **First-consult UX overhaul + grok hot-patch.** First real-world end-user

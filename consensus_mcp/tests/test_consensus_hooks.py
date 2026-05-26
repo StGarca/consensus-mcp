@@ -603,10 +603,64 @@ def test_v123_opt_in_fail_open_without_dot_consensus(tmp_path):
     assert cp.returncode == 0, cp.stderr
 
 
-def test_v123_enforces_when_dot_consensus_present(tmp_path):
-    """Finding 1 (real opt-in detection): a .consensus/ dir present -> the gate
-    enforces (deny without a marker), with NO force-flag."""
+def test_v1321_dormant_when_only_dot_consensus_present(tmp_path):
+    """v1.32.1 (consult iteration-v133-gate-scope-shift-2026-05-26):
+    a bare `.consensus/` dir is NO LONGER an activation predicate.
+    Under per-invocation activation, the gate stays DORMANT until
+    an active session marker (or legacy opt-in) is in force. This
+    reverses the v1.23 Finding-1 invariant — see CHANGELOG v1.32.1.
+    """
     (tmp_path / ".consensus").mkdir()
+    ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
+    # Gate dormant → allow. Stderr may contain the one-time migration warning.
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_v1321_enforces_when_session_marker_active(tmp_path):
+    """v1.32.1: the NEW activation predicate. A valid session-state
+    marker pointing at a real unsealed iteration activates the gate.
+    Without a sealed design-approved marker, in-repo Edit is denied
+    (same as the pre-v1.32.1 contract for active sessions)."""
+    import yaml
+    iter_id = "iter-v1321-test"
+    (tmp_path / "consensus-state" / "active" / iter_id).mkdir(parents=True)
+    (tmp_path / ".consensus").mkdir(exist_ok=True)
+    (tmp_path / ".consensus" / "session-active").write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "iteration_id": iter_id,
+            "scope_glob": "src/**",
+            "activated_by": "test",
+            "activated_at_utc": "2026-05-26T20:00:00Z",
+            "activation_source": "test_fixture",
+        }),
+        encoding="utf-8",
+    )
+    ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
+    # No design-approved marker → still denied. The session marker
+    # only flips the gate to ACTIVE; the verify_design_approval check
+    # is what blocks unauthorized writes.
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_v1321_legacy_always_on_env_restores_per_project_gating(tmp_path, monkeypatch):
+    """v1.32.1 backward compat: CONSENSUS_MCP_LEGACY_ALWAYS_ON=1
+    restores the v1.31.x behavior (bare `.consensus/` activates the
+    gate). Operator escape hatch for security-sensitive repos."""
+    (tmp_path / ".consensus").mkdir()
+    ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
+    monkeypatch.setenv("CONSENSUS_MCP_LEGACY_ALWAYS_ON", "1")
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_v1321_legacy_always_on_marker_file_restores_per_project_gating(tmp_path):
+    """v1.32.1 backward compat: a `.consensus/legacy-always-on` file
+    is the persistent equivalent of the env var."""
+    (tmp_path / ".consensus").mkdir()
+    (tmp_path / ".consensus" / "legacy-always-on").write_text("", encoding="utf-8")
     ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
     assert cp.returncode == 2, cp.stderr
