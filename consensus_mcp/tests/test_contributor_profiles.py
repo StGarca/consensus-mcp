@@ -22,7 +22,7 @@ from consensus_mcp import _contributor_profiles as cp
 
 
 # v1.20.0: claude-swe-reviewer (kind=host_peer) joins the built-in set.
-BUILTIN_NAMES = {"claude", "codex", "gemini", "kimi", "claude-swe-reviewer"}
+BUILTIN_NAMES = {"claude", "codex", "gemini", "grok", "kimi", "claude-swe-reviewer"}
 
 
 # ---------- load_builtin_profiles ----------

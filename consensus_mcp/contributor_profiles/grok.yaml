@@ -1,0 +1,64 @@
+# Built-in contributor profile: grok (xAI Grok CLI).
+#
+# METADATA-ONLY in v1.31.0: grok is dispatched by the EXISTING GrokAdapter via
+# B-routing (gemini-twin pattern). This profile supplies the wizard list,
+# detect+guide install/auth, and the model/provenance label; it is NOT
+# consumed by ProfileAdapter. Full metadata is authored for the wizard +
+# forward-compat.
+#
+# Converged consult iteration-v131-grok-design-2026-05-26:
+#   - --prompt-file per-pass (NOT inline -p / --single) per D3
+#   - --no-memory --no-plan --no-subagents --disable-web-search
+#     --max-turns 1 --permission-mode dontAsk — root-cause-independent
+#     safeguard set (D8 + independent_safeguard)
+#   - No --sandbox day-one (YAGNI; reactive add if field issue surfaces)
+#   - Auth pre-flight: ~/.grok/auth.json existence-check only
+#
+# install/auth strings VERIFIED 2026-05-26 (do NOT invent):
+#   Binary install: grok ships as a single Rust binary; the canonical install
+#   channel is grok's own self-update mechanism (`grok update`). For first
+#   install on a clean machine, see https://docs.x.ai/grok-cli for the
+#   per-OS download instructions.
+#   Auth: run `grok login` → OAuth in browser → token cached in
+#   ~/.grok/auth.json (mode 600).
+name: grok
+kind: cli_reviewer
+model: ""  # empty → let grok CLI default; operator can override via config
+detect:
+  command: grok
+invoke:
+  # METADATA-ONLY: grok is dispatched by GrokAdapter, not ProfileAdapter.
+  # transport=flag with prompt_flag=--prompt-file reflects the converged-plan
+  # D3 invocation contract (grok --prompt-file <path>).
+  transport: flag
+  base_args:
+    - "--output-format"
+    - "plain"
+    - "--no-memory"
+    - "--no-plan"
+    - "--no-subagents"
+    - "--disable-web-search"
+    - "--max-turns"
+    - "1"
+    - "--permission-mode"
+    - "dontAsk"
+  prompt_flag: "--prompt-file"
+  workdir_flag: "--cwd"
+  model_flag: "--model"
+env: {}
+output:
+  strip_patterns: []
+  schema_enforced: false   # grok does not enforce the review JSON natively
+sealed_filename: grok-review.yaml
+id_prefix: grok-rev
+install:
+  windows: "See https://docs.x.ai/grok-cli for the Windows installer."
+  linux: "See https://docs.x.ai/grok-cli for the Linux binary."
+  darwin: "See https://docs.x.ai/grok-cli for the macOS binary."
+auth:
+  command: "grok login"
+  env_vars: []
+  note: "OAuth on first run (browser); token cached at ~/.grok/auth.json"
+instructions:
+  filename: GROK.md
+timeout_seconds: 1800

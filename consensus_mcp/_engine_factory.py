@@ -18,6 +18,7 @@ from consensus_mcp.contributors.base import DispatchPacket
 from consensus_mcp.contributors.claude import ClaudeAdapter
 from consensus_mcp.contributors.codex import CodexAdapter
 from consensus_mcp.contributors.gemini import GeminiAdapter
+from consensus_mcp.contributors.grok import GrokAdapter
 from consensus_mcp.contributors.kimi import KimiAdapter
 from consensus_mcp.contributors.host_peer_adapter import HostPeerAdapter
 from consensus_mcp.contributors.profile_adapter import ProfileAdapter
@@ -36,6 +37,7 @@ _BUILTIN_ADAPTERS: dict[str, type[ContributorAdapter]] = {
     "claude": ClaudeAdapter,
     "codex": CodexAdapter,
     "gemini": GeminiAdapter,
+    "grok": GrokAdapter,
     "kimi": KimiAdapter,
 }
 
