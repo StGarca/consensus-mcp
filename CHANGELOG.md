@@ -1,5 +1,92 @@
 # Changelog
 
+## 1.30.7 - 2026-05-26
+
+**Fix Windows hook commands — Claude Code runs hooks via Git Bash, not cmd.exe.**
+A v1.30.6 user installing on Windows hit `/usr/bin/bash: line 1:
+C:Usersproject-contributorpipxvenvsconsensus-mcpScriptspython.exe: command not found` on
+every Stop hook fire. Diagnosis: the v1.26 `os.name == "nt"` branch in
+`_build_consensus_hook_command` emitted `subprocess.list2cmdline` output
+(`C:\Users\...\python.exe ...`), which is valid for cmd/PowerShell but
+collapses to nothing in bash because each unquoted `\X` is consumed as a
+shell escape (`\U`→`U`, `\s`→`s`, `\p`→`p`, …). Claude Code's hook executor
+on Windows is Git Bash (`/usr/bin/bash`, MSYS), not cmd — the v1.26 branch
+pinned to **Windows CI's shell** (PowerShell), not Claude Code's **runtime
+hook shell**.
+
+Converged 3-AI consult (`iteration-v1307-quoting-design-2026-05-26`,
+deep-tier, anchored): unanimous adoption of strategy (A) — always
+`shlex.join`. Three different differentials (anchor reasoned from the
+literal error; gemini from strategy comparison; codex from channel
+verification with provisional-until-proven framing) — not shared-prior
+unanimity.
+
+### Fixed
+- **`consensus_mcp/_init_wizard.py::_build_consensus_hook_command`**: drop
+  the `os.name == "nt"` branch + the `subprocess.list2cmdline` call.
+  Always return `shlex.join([sys.executable, str(script_path)])`. POSIX
+  single-quoting preserves backslashes literally in bash, so a Windows
+  path `C:\Users\…\python.exe` survives bash unquoting unchanged and is
+  accepted by Windows Python via MSYS's exec layer. One code path, no
+  platform-detect branching, no shell-version assumption.
+- **`consensus_mcp/tests/test_hook_activation.py`**: switch the embedded-
+  command parse from naive `c.rsplit(None, 1)[-1].strip('"\\\'')` to
+  `shlex.split(c)[-1]`. The naive parse would garble any script path
+  containing a space (e.g. `'C:\Program Files\…'`), which the new
+  cross-platform shlex.join contract permits.
+
+### Added
+- **Cross-OS regression net** in `tests/test_install_workflow_v124.py`:
+  parametrized `test_hook_command_roundtrips_cross_os_shapes` exercises
+  paths with (a) Windows backslashes (the literal failing shape from the
+  user report), (b) spaces, (c) embedded single quote, (d) non-ASCII
+  segment, (e) UNC shape (literal-preservation only — exec acceptance
+  under MSYS would need a Windows smoke test, deferred per R2). Each
+  case asserts `shlex.split(cmd) == [sys.executable, path]`.
+
+### Changed
+- **Removed `@pytest.mark.skipif(os.name == "nt", …)`** on
+  `test_hook_command_quote_safe`. shlex.split round-trip is shell-
+  agnostic under the new single-strategy contract; the test now exercises
+  every CI platform.
+
+### Documented (immediate-user repair)
+If you installed v1.30.6 on Windows and your Stop hook prints
+`command not found`, run the following in Git Bash on the Windows PC to
+repair `~/.claude/settings.json` in place (no upgrade needed for the
+repair — but upgrade to v1.30.7 to make future installs clean):
+
+```bash
+python <<'PY'
+import json, re, shlex
+from pathlib import Path
+p = Path.home() / ".claude" / "settings.json"
+p.with_suffix(".json.bak").write_bytes(p.read_bytes())
+s = json.loads(p.read_text(encoding="utf-8"))
+pat = re.compile(r'^(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))\s*$')
+fixed = 0
+for groups in s.get("hooks", {}).values():
+    for g in groups:
+        for h in g.get("hooks", []):
+            if h.get("_consensus_mcp_managed") and h.get("type") == "command":
+                m = pat.match(h.get("command", ""))
+                if m:
+                    py = m.group(1) or m.group(2); sc = m.group(3) or m.group(4)
+                    h["command"] = shlex.join([py, sc]); fixed += 1
+p.write_text(json.dumps(s, indent=2) + "\n", encoding="utf-8")
+print(f"Repaired {fixed} consensus hook commands.")
+PY
+```
+
+### Known limitation
+The diagnosis assumes Claude Code on Windows invokes hooks via Git Bash.
+This is empirically proven for the reporting user's install but is not
+falsifiable from repository artifacts alone. If a Claude Code Windows
+configuration exists that uses `cmd.exe` / PowerShell for hook execution,
+single-quoted backslashed paths would not run there. Refuting observation
+for v1.30.8: a Windows trace showing the same settings.json command
+string handed to `cmd.exe` / `powershell.exe` rather than `/usr/bin/bash`.
+
 ## 1.30.6 - 2026-05-24
 
 **Synthesis-aware propose-converge.** A plan-deliverable consult could not converge in the

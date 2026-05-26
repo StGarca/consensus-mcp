@@ -17,6 +17,7 @@ AND superpowers v5.1.0 hooks/hooks.json before writing):
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 from consensus_mcp import _init_wizard as wiz
@@ -80,12 +81,12 @@ def test_merge_writes_consensus_hook_entries(tmp_path):
     assert any("consensus_stop_gate.py" in c for c in cmds)
     for c in cmds:
         # The hook script path embedded in the command is absolute.
-        # command shape: "<python>" "<abs script path>"
+        # command shape (v1.30.7): shlex.join([<python>, <abs script path>]).
+        # Parse with shlex.split — the cross-platform single-strategy contract
+        # admits any-character paths (incl. spaces in 'C:\Program Files\…'),
+        # which a naive rsplit-on-whitespace would garble.
         assert ".py" in c
-        # last whitespace-token is the script path; strip surrounding quotes —
-        # POSIX shlex.join uses ', Windows list2cmdline uses " (and neither quotes
-        # a space-free path). Parse robustly across both quoting conventions.
-        script_part = c.rsplit(None, 1)[-1].strip('"\'')
+        script_part = shlex.split(c)[-1]
         assert Path(script_part).is_absolute(), c
 
 
