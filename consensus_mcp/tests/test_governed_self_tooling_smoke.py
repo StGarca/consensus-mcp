@@ -48,12 +48,20 @@ def _own_console_scripts() -> list[str]:
 
 
 def _governed_project(tmp_path: Path) -> Path:
-    """A real governed project: a `.consensus/` dir on disk is what the gate keys
-    off (`(repo_root / '.consensus').is_dir()`), so enforcement is REAL here, not
-    forced via env."""
+    """A real governed project under v1.32.1 (consult
+    iteration-v133-gate-scope-shift-2026-05-26). Pre-v1.32.1 the
+    bare `.consensus/` dir activated the gate; the per-invocation
+    shift requires a session-active marker OR a legacy-always-on
+    opt-in. We use the legacy-always-on file here so existing
+    smoke tests (which assert the gate enforces in a governed
+    project) keep their semantics intact — they're testing the
+    chained-writer rejection, not the activation model."""
     consensus = tmp_path / ".consensus"
     consensus.mkdir()
     (consensus / "config.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    # v1.32.1: explicit always-on opt-in (matches the smoke's intent
+    # of "gate enforcement is REALLY active in this project").
+    (consensus / "legacy-always-on").write_text("", encoding="utf-8")
     return tmp_path
 
 

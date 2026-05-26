@@ -283,12 +283,13 @@ def test_verify_returns_not_ok_for_out_of_scope_path(tmp_path, monkeypatch):
 
 # ----- main argv shape --------------------------------------------------
 
-def test_main_help_lists_all_4_subcommands(capsys):
+def test_main_help_lists_all_5_subcommands(capsys):
+    """v1.32.1: `close` added per the gate-scope-shift consult."""
     with pytest.raises(SystemExit):
         si.main(["--help"])
     out = capsys.readouterr().out
-    for cmd in ("prepare", "lint", "mint", "verify"):
-        assert cmd in out
+    for cmd in ("prepare", "lint", "mint", "verify", "close"):
+        assert cmd in out, f"subcommand {cmd!r} missing from --help"
 
 
 def test_main_mint_requires_scope_glob_or_writing_plans_flag(tmp_path, monkeypatch, capsys):

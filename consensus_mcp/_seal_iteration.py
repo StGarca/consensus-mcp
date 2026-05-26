@@ -62,6 +62,11 @@ from consensus_mcp._delivery_readiness import (
     SEALED_CLOSING_STATES,
 )
 from consensus_mcp._dispatch_base import _resolve_repo_root
+from consensus_mcp._session_state import (
+    write_session_marker,
+    clear_session_marker,
+    read_session_marker,
+)
 
 
 # Default scope_glob when the operator passes --writing-plans-followup
@@ -286,6 +291,41 @@ def _mint(
             "error": str(exc),
         }
 
+    # v1.32.1 (consult iteration-v133-gate-scope-shift-2026-05-26):
+    # mint ALSO writes the session-active marker (D3 — primary
+    # activation trigger). The gate's session_active() probe then
+    # treats this iteration as the active scope.
+    try:
+        session_path = write_session_marker(
+            repo_root,
+            iteration_id=iter_dir.name,
+            scope_glob=scope_glob,
+            activated_by=f"consensus-mcp-seal-iteration-mint",
+            activation_source="console_script",
+        )
+        session_path_rel = str(session_path.relative_to(repo_root))
+    except Exception as exc:
+        # The marker is non-trust-bearing; failure to write it is a
+        # WARN-level event, not a mint failure. The design-approved
+        # marker is already written; verify_design_approval still
+        # works. Return the warning in the result.
+        session_path_rel = None
+        return {
+            "ok": True,
+            "marker_path": str((repo_root / MARKER_RELPATH).relative_to(repo_root)),
+            "design_consensus_ref": iter_dir.name,
+            "scope_glob": scope_glob,
+            "converged_plan_sha256": sha,
+            "marker": marker,
+            "session_marker_path": None,
+            "session_marker_warning": (
+                f"design-approved marker written, but session-active marker "
+                f"failed: {type(exc).__name__}: {exc}. The gate may stay "
+                f"dormant for this iteration; set "
+                f"CONSENSUS_MCP_FORCE_OPTED_IN=1 to force activation."
+            ),
+        }
+
     return {
         "ok": True,
         "marker_path": str((repo_root / MARKER_RELPATH).relative_to(repo_root)),
@@ -293,6 +333,148 @@ def _mint(
         "scope_glob": scope_glob,
         "converged_plan_sha256": sha,
         "marker": marker,
+        "session_marker_path": session_path_rel,
+    }
+
+
+# ----- close (v1.32.1) -----
+
+def _close(
+    iter_dir: Path,
+    abandon: bool = False,
+) -> dict:
+    """v1.32.1 deactivation. Removes the session-active marker (and
+    optionally the design-approved marker) so the gate returns to
+    DORMANT for unrelated work.
+
+    Default mode: VERIFY delivery tokens exist for every file
+    matching the active scope_glob; refuse on any missing. On
+    success, remove both `.consensus/session-active` AND
+    `.consensus/design-approved`.
+
+    --abandon mode: skip the delivery-token check; remove both
+    markers unconditionally. For recovery from crashed/abandoned
+    consults. Adds zero attack surface — the trust-root model
+    doesn't depend on these markers' presence.
+    """
+    repo_root = _resolve_repo_root()
+    design_marker = repo_root / MARKER_RELPATH
+    session_marker = repo_root / "_session_state_MARKER_RELPATH_placeholder"  # set below
+    from consensus_mcp._session_state import MARKER_RELPATH as SESSION_RELPATH
+    session_marker = repo_root / SESSION_RELPATH
+
+    if abandon:
+        cleared_session = clear_session_marker(repo_root)
+        cleared_design = design_marker.exists()
+        if cleared_design:
+            try:
+                design_marker.unlink()
+            except OSError as exc:
+                return {
+                    "ok": False,
+                    "error_type": "unlink_failed",
+                    "error": f"failed to unlink {design_marker}: {exc}",
+                }
+        return {
+            "ok": True,
+            "mode": "abandon",
+            "session_marker_cleared": cleared_session,
+            "design_marker_cleared": cleared_design,
+            "note": "abandoned iteration; trust-root invariants unaffected.",
+        }
+
+    # Standard close path: require delivery tokens for every
+    # in-scope file. Without a design-approved marker we can't read
+    # the scope_glob; refuse cleanly.
+    if not design_marker.exists():
+        return {
+            "ok": False,
+            "error_type": "no_design_marker",
+            "error": (
+                f"no {MARKER_RELPATH} present — nothing to close. Use "
+                f"`--abandon` to force-clear any session marker without "
+                f"the delivery-token check."
+            ),
+        }
+    try:
+        marker_data = yaml.safe_load(design_marker.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        return {
+            "ok": False,
+            "error_type": "design_marker_unparseable",
+            "error": str(exc),
+        }
+    scope_glob = marker_data.get("scope_glob")
+    if not isinstance(scope_glob, str) or not scope_glob.strip():
+        return {
+            "ok": False,
+            "error_type": "design_marker_missing_scope",
+            "error": f"{design_marker.name} has no scope_glob",
+        }
+
+    # Enumerate in-scope files via fnmatch against the working
+    # tree. We don't traverse out-of-repo; fnmatch is path-aware.
+    import fnmatch
+    in_scope: list[Path] = []
+    for p in repo_root.rglob("*"):
+        if not p.is_file():
+            continue
+        # Skip governance dirs (.consensus/, consensus-state/) so we
+        # don't count session markers + iteration artifacts.
+        try:
+            rel = p.relative_to(repo_root)
+        except ValueError:
+            continue
+        rel_str = str(rel).replace("\\", "/")
+        if rel_str.startswith(".consensus/") or rel_str.startswith("consensus-state/"):
+            continue
+        if rel_str.startswith(".delivery-readiness/"):
+            continue
+        if fnmatch.fnmatch(rel_str, scope_glob):
+            in_scope.append(p)
+
+    # Verify delivery tokens exist for each (the delivery-readiness
+    # module hashes the artifact path to compute the token filename).
+    from consensus_mcp._delivery_readiness import _token_path
+    missing: list[str] = []
+    for f in in_scope:
+        token = _token_path(f, repo_root)
+        if not token.exists():
+            missing.append(str(f.relative_to(repo_root)))
+
+    if missing:
+        return {
+            "ok": False,
+            "error_type": "missing_delivery_tokens",
+            "error": (
+                f"{len(missing)} in-scope file(s) lack delivery tokens; "
+                f"mint them via `consensus_mcp._delivery_readiness."
+                f"mint_delivery_token` before close, OR use `--abandon` "
+                f"to force-clear (recovery path)."
+            ),
+            "missing": missing[:20],  # cap output
+            "missing_count": len(missing),
+        }
+
+    # All clear — remove both markers.
+    cleared_session = clear_session_marker(repo_root)
+    try:
+        design_marker.unlink()
+        cleared_design = True
+    except OSError as exc:
+        return {
+            "ok": False,
+            "error_type": "unlink_failed",
+            "error": f"failed to unlink {design_marker}: {exc}",
+        }
+
+    return {
+        "ok": True,
+        "mode": "delivered",
+        "session_marker_cleared": cleared_session,
+        "design_marker_cleared": cleared_design,
+        "in_scope_files_verified": len(in_scope),
+        "scope_glob": scope_glob,
     }
 
 
@@ -359,6 +541,25 @@ def main(argv: list[str] | None = None) -> int:
     pm.add_argument("--converged-plan", default="converged-plan.yaml")
     pm.add_argument("--repo-root-id", default=None)
 
+    pc = sub.add_parser(
+        "close",
+        help=(
+            "v1.32.1 deactivation. Verify delivery tokens for every "
+            "in-scope file then remove the session-active + design-"
+            "approved markers, returning the gate to dormant."
+        ),
+    )
+    pc.add_argument("--iteration-dir", required=True)
+    pc.add_argument(
+        "--abandon", action="store_true",
+        help=(
+            "Skip the delivery-token check; force-clear both markers. "
+            "For recovery from abandoned/crashed iterations. Trust-root "
+            "invariants are unaffected (markers are session caches, not "
+            "trust artifacts)."
+        ),
+    )
+
     pv = sub.add_parser(
         "verify",
         help="Run verify_design_approval against a path.",
@@ -373,7 +574,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"ok": False, "error_type": type(exc).__name__, "error": str(exc)}))
         return 4
 
-    if ns.cmd in ("prepare", "lint", "mint"):
+    if ns.cmd in ("prepare", "lint", "mint", "close"):
         iter_dir_raw = Path(ns.iteration_dir)
         iter_dir = iter_dir_raw if iter_dir_raw.is_absolute() else (repo_root / iter_dir_raw)
         iter_dir = iter_dir.resolve()
@@ -415,6 +616,11 @@ def main(argv: list[str] | None = None) -> int:
             converged_plan_filename=ns.converged_plan,
             repo_root_id=ns.repo_root_id,
         )
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("ok") else 2
+
+    if ns.cmd == "close":
+        result = _close(iter_dir, abandon=ns.abandon)
         print(json.dumps(result, indent=2))
         return 0 if result.get("ok") else 2
 

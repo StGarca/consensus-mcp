@@ -438,7 +438,27 @@ def main(argv=None) -> int:
     # the consensus-mcp repo itself, and any unrelated project — fails OPEN so the
     # gate never bricks development it was never meant to govern.
     # CONSENSUS_MCP_FORCE_OPTED_IN forces enforcement deterministically for tests.
-    opted_in = (repo_root / ".consensus").is_dir()
+    # v1.32.1 (consult iteration-v133-gate-scope-shift-2026-05-26, 5/5
+    # unanimous): activation is PER-INVOCATION. The gate is DORMANT
+    # unless either:
+    #   (a) a session-state marker is in force (an AI invoked a
+    #       consensus tool — see consensus_mcp._session_state), OR
+    #   (b) the operator explicitly opted into legacy per-project mode
+    #       via CONSENSUS_MCP_LEGACY_ALWAYS_ON=1 or .consensus/
+    #       legacy-always-on (legacy_mode_active inside session_active).
+    # The old `(repo_root / ".consensus").is_dir()` predicate is gone:
+    # it conflated "project has ever used consensus" with "every edit
+    # is consensus work", causing the over-fire the operator hit
+    # (stale `docs/consensus/**` marker blocking firmware .cpp edits).
+    #
+    # PROTECTED-install paths are checked BEFORE this branch — that
+    # enforcement floor stays unconditional regardless of activation.
+    from consensus_mcp._session_state import session_active, emit_migration_warning_once
+    try:
+        emit_migration_warning_once(repo_root)
+    except Exception:
+        pass  # warning emission must NEVER block the gate
+    opted_in = session_active(repo_root)
     if not (opted_in or os.environ.get("CONSENSUS_MCP_FORCE_OPTED_IN")):
         return 0
 

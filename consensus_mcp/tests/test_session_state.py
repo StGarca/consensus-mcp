@@ -1,0 +1,184 @@
+"""Tests for consensus_mcp._session_state.
+
+Covers the v1.32.1 per-invocation activation contract (consult
+iteration-v133-gate-scope-shift-2026-05-26): the session-active
+marker is the dormant↔active toggle for the gate.
+
+Trust-root regression gates: the marker is NOT a trust artifact;
+forging it must NOT bypass `verify_design_approval`'s seal checks.
+That's tested in test_seal_iteration.py + test_consensus_hooks.py
+under the new model; here we just verify the marker's own contract.
+"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from consensus_mcp import _session_state as ss  # noqa: E402
+
+
+def _repo(tmp_path):
+    r = tmp_path / "repo"
+    (r / "consensus-state" / "active" / "iter-test").mkdir(parents=True)
+    return r
+
+
+# ----- write_session_marker ----------------------------------------
+
+def test_write_session_marker_creates_yaml_with_required_fields(tmp_path):
+    repo = _repo(tmp_path)
+    path = ss.write_session_marker(
+        repo,
+        iteration_id="iter-test",
+        scope_glob="docs/consensus/**",
+        activated_by="test-fixture",
+        activation_source="test_fixture",
+    )
+    assert path.exists()
+    data = yaml.safe_load(path.read_text())
+    assert data["schema_version"] == 1
+    assert data["iteration_id"] == "iter-test"
+    assert data["scope_glob"] == "docs/consensus/**"
+    assert data["activated_by"] == "test-fixture"
+    assert data["activation_source"] == "test_fixture"
+    assert "activated_at_utc" in data
+
+
+def test_write_session_marker_refuses_unsafe_iteration_id(tmp_path):
+    repo = _repo(tmp_path)
+    for bad in ("", "../escape", "iter/with/slashes", "iter\\with\\backslashes", "iter..traversal"):
+        with pytest.raises(ValueError):
+            ss.write_session_marker(repo, iteration_id=bad, scope_glob="*",
+                                    activated_by="t", activation_source="test_fixture")
+
+
+def test_write_session_marker_refuses_invalid_source(tmp_path):
+    repo = _repo(tmp_path)
+    with pytest.raises(ValueError):
+        ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
+                                activated_by="t", activation_source="forged_source")
+
+
+# ----- read_session_marker ----------------------------------------
+
+def test_read_returns_none_when_marker_absent(tmp_path):
+    repo = _repo(tmp_path)
+    assert ss.read_session_marker(repo) is None
+
+
+def test_read_returns_none_on_unparseable_yaml(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / ".consensus").mkdir(parents=True, exist_ok=True)
+    (repo / ".consensus" / "session-active").write_text("key: value: bad colon", encoding="utf-8")
+    # Not an error — dormant mode (gate stays off; operator notices).
+    assert ss.read_session_marker(repo) is None
+
+
+def test_read_returns_none_when_iteration_id_missing(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / ".consensus").mkdir(parents=True, exist_ok=True)
+    (repo / ".consensus" / "session-active").write_text(
+        "schema_version: 1\nscope_glob: '*'\n", encoding="utf-8",
+    )
+    assert ss.read_session_marker(repo) is None
+
+
+# ----- session_active ----------------------------------------------
+
+def test_session_active_false_when_no_marker(tmp_path):
+    repo = _repo(tmp_path)
+    assert ss.session_active(repo) is False
+
+
+def test_session_active_true_when_marker_points_at_real_iteration(tmp_path):
+    repo = _repo(tmp_path)
+    ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
+                            activated_by="t", activation_source="test_fixture")
+    assert ss.session_active(repo) is True
+
+
+def test_session_active_false_when_iteration_does_not_exist(tmp_path):
+    """A stale session marker pointing at a non-existent iteration
+    is treated as DORMANT (R4 mitigation — the operator's
+    crash-recovery story)."""
+    repo = _repo(tmp_path)
+    ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
+                            activated_by="t", activation_source="test_fixture")
+    # Remove the iteration dir → marker now points at nothing.
+    import shutil
+    shutil.rmtree(repo / "consensus-state" / "active" / "iter-test")
+    assert ss.session_active(repo) is False
+
+
+def test_session_active_true_when_legacy_env_var_set(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    # No session marker.
+    assert ss.session_active(repo) is False
+    monkeypatch.setenv("CONSENSUS_MCP_LEGACY_ALWAYS_ON", "1")
+    assert ss.session_active(repo) is True
+
+
+def test_session_active_true_when_legacy_marker_file_present(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / ".consensus").mkdir(parents=True, exist_ok=True)
+    (repo / ".consensus" / "legacy-always-on").write_text("", encoding="utf-8")
+    assert ss.session_active(repo) is True
+
+
+# ----- clear_session_marker ----------------------------------------
+
+def test_clear_session_marker_returns_true_when_present(tmp_path):
+    repo = _repo(tmp_path)
+    ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
+                            activated_by="t", activation_source="test_fixture")
+    assert ss.clear_session_marker(repo) is True
+    assert ss.session_active(repo) is False
+
+
+def test_clear_session_marker_returns_false_when_absent(tmp_path):
+    repo = _repo(tmp_path)
+    assert ss.clear_session_marker(repo) is False
+
+
+# ----- migration warning -------------------------------------------
+
+def test_migration_warning_fires_once_then_suppresses(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    (repo / ".consensus").mkdir(parents=True, exist_ok=True)
+    # No session-active marker, no legacy-always-on → migration applies.
+    assert ss.emit_migration_warning_once(repo) is True
+    captured = capsys.readouterr()
+    assert "PER-INVOCATION" in captured.err
+    assert "legacy-always-on" in captured.err
+
+    # Second call: suppressed.
+    assert ss.emit_migration_warning_once(repo) is False
+
+
+def test_migration_warning_skipped_when_legacy_opt_in(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    (repo / ".consensus").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("CONSENSUS_MCP_LEGACY_ALWAYS_ON", "1")
+    assert ss.emit_migration_warning_once(repo) is False
+
+
+def test_migration_warning_skipped_when_no_consensus_dir(tmp_path):
+    repo = _repo(tmp_path)
+    # No .consensus dir at all → no migration to perform.
+    assert ss.emit_migration_warning_once(repo) is False
+
+
+def test_migration_warning_skipped_when_session_active(tmp_path):
+    repo = _repo(tmp_path)
+    ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
+                            activated_by="t", activation_source="test_fixture")
+    # Session already active under new model → no migration warning needed.
+    assert ss.emit_migration_warning_once(repo) is False
