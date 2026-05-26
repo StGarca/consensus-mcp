@@ -158,9 +158,25 @@ def _resolve_repo_root() -> Path:
     tried_msg = "; ".join(f"{name}={path}" for name, path in candidates_tried)
     raise RepoRootResolutionError(
         f"Cannot resolve consensus-mcp repo root. None of the candidates contain "
-        f"all required markers {_REPO_ROOT_MARKERS}. Set CONSENSUS_MCP_REPO_ROOT "
-        f"to the repo root directory (e.g., the directory containing 'consensus-state/' "
-        f"and 'scripts/'). Candidates tried: {tried_msg}"
+        f"all required markers {_REPO_ROOT_MARKERS}. Candidates tried: {tried_msg}\n"
+        f"\n"
+        f"-- BOOTSTRAP A CONSUMER PROJECT (v1.32.0 — Section 3.1 friction fix) --\n"
+        f"If you installed consensus-mcp via pipx and want to use it ON another\n"
+        f"project (not the consensus-mcp repo itself), run these 4 commands at\n"
+        f"the project root to create the required containment markers, then\n"
+        f"re-run the dispatch:\n"
+        f"\n"
+        f"    mkdir -p consensus_mcp/validators consensus-state\n"
+        f"    printf '%s\\n' '/consensus_mcp/' '/consensus-state/' '/.consensus/' >> .gitignore\n"
+        f"    export CONSENSUS_MCP_REPO_ROOT=\"$PWD\"\n"
+        f"    # then re-run the dispatch from this directory\n"
+        f"\n"
+        f"Or use `consensus-init` to bootstrap a fully managed install:\n"
+        f"    pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.32.0\n"
+        f"    consensus-init  # interactive setup\n"
+        f"\n"
+        f"See docs/consensus/operations/first-consult-quickstart.md (packaged with\n"
+        f"the install) for the full Path A workflow."
     )
 
 
@@ -234,7 +250,17 @@ def _normalize_relative_to_repo(path_str: str | None, repo_root: Path) -> Path |
         raise OutsideRepoPathError(
             f"path {path_str!r} resolves to {resolved} which is outside repo_root "
             f"{repo_root_resolved}. consensus-mcp dispatch only reads files inside "
-            f"the repo. Move the file into the repo or pass a path relative to it."
+            f"the repo. Move the file into the repo or pass a path relative to it.\n"
+            f"\n"
+            f"-- DEBUG TIP (v1.32.0) --\n"
+            f"If you bootstrapped containment markers under a subdirectory (e.g.\n"
+            f"`.consensus/runtime/`), repo_root resolves to that subdir and the\n"
+            f"iteration files under `.consensus/iterations/<iter>` become\n"
+            f"OUT-OF-REPO siblings (Section 3.2 friction). Put the markers at\n"
+            f"the PROJECT ROOT instead:\n"
+            f"\n"
+            f"    mkdir -p consensus_mcp/validators consensus-state\n"
+            f"    export CONSENSUS_MCP_REPO_ROOT=\"$PWD\""
         )
     return resolved
 

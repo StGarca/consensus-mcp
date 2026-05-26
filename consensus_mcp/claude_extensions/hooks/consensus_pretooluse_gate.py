@@ -99,7 +99,8 @@ _READ_ONLY_GIT_SUBCOMMANDS = frozenset({
 _CONSENSUS_TOOLING = frozenset({
     "consensus", "consensus-init", "consensus-mcp", "consensus-results",
     "consensus-mcp-dispatch-codex", "consensus-mcp-dispatch-gemini",
-    "consensus-mcp-dispatch-kimi",
+    "consensus-mcp-dispatch-grok", "consensus-mcp-dispatch-kimi",
+    "consensus-mcp-seal-iteration",
 })
 
 

@@ -32,6 +32,10 @@ invoke:
   # D3 invocation contract (grok --prompt-file <path>).
   transport: flag
   base_args:
+    # v1.31.1: `--max-turns 1` → `--max-turns 10`. Grok's headless default
+    # is 1 but it counts MCP-tool-discovery messages as phantom turns; 10
+    # gives headroom + the substantive single-turn semantics are enforced
+    # by --prompt-file + --no-subagents + --no-plan.
     - "--output-format"
     - "plain"
     - "--no-memory"
@@ -39,7 +43,7 @@ invoke:
     - "--no-subagents"
     - "--disable-web-search"
     - "--max-turns"
-    - "1"
+    - "100"
     - "--permission-mode"
     - "dontAsk"
   prompt_flag: "--prompt-file"
