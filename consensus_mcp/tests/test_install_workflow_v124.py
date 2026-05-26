@@ -140,13 +140,12 @@ def test_json_semantically_equal_helper():
 # Fix 4: the hook command is valid shell even when the path has a double quote.
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.skipif(os.name == "nt",
-                    reason="a '\"' in a path is POSIX-only; Windows quoting (list2cmdline) "
-                           "is the canonical Windows convention and isn't shlex-splittable")
 def test_hook_command_quote_safe(monkeypatch):
+    """v1.30.7: cross-platform under the single-strategy shlex.join contract
+    (consult iteration-v1307-quoting-design-2026-05-26). No Windows skip — the
+    skipif was tied to the dropped list2cmdline branch."""
     weird = Path('/tmp/we"ird path/hook.py')
     cmd = wiz._build_consensus_hook_command(weird)
-    # POSIX: shlex must round-trip the command back to [sys.executable, str(weird)].
     import shlex
     parts = shlex.split(cmd)
     assert parts == [sys.executable, str(weird)], (cmd, parts)
@@ -155,9 +154,56 @@ def test_hook_command_quote_safe(monkeypatch):
 def test_hook_command_plain_path_unchanged():
     plain = Path("/usr/share/hooks/hook.py")
     cmd = wiz._build_consensus_hook_command(plain)
-    # Platform-aware quoting (shlex.join on POSIX, list2cmdline on Windows). A
-    # space-free path is bare on both, so both tokens appear verbatim in the command.
+    # Always POSIX shlex.join now (v1.30.7). A space-free path is bare; both
+    # tokens appear verbatim in the command.
     assert sys.executable in cmd and str(plain) in cmd, cmd
+
+
+# --------------------------------------------------------------------------- #
+# v1.30.7: cross-OS regression tests for the bash-on-Windows quoting bug.
+# Consult iteration-v1307-quoting-design-2026-05-26 (D4): exercise paths with
+# backslashes, spaces, embedded quote, non-ASCII, and UNC shape. Each case
+# asserts shlex.split(command) round-trips to [sys.executable, str(path)].
+# Tests construct PurePosixPath so the path content is identical on every OS
+# (the bug is about command-string quoting, not about Path semantics).
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("path_str,case_id", [
+    # The literal failing shape from the v1.30.6 user report.
+    (r"C:\Users\stgarcia\pipx\venvs\consensus-mcp\Scripts\hook.py", "windows-backslash"),
+    # Spaces — Windows "Program Files" and the user's home with spaces.
+    (r"C:\Program Files\python\hook.py", "windows-spaces"),
+    # POSIX path with embedded single quote.
+    ("/tmp/o'brien/hook.py", "embedded-single-quote"),
+    # Non-ASCII path segment (OneDrive-style).
+    (r"C:\Users\stéphane\OneDrive\hook.py", "non-ascii"),
+    # UNC shape — literal preservation only; we do NOT claim exec acceptance
+    # under MSYS (that requires a Windows Git Bash smoke test, deferred per R2).
+    (r"\\fileserver\share\python\hook.py", "unc-literal-preservation"),
+])
+def test_hook_command_roundtrips_cross_os_shapes(path_str, case_id, monkeypatch):
+    """The literal-preservation regression net (v1.30.7 D4).
+
+    For every path shape, the command emitted by `_build_consensus_hook_command`
+    must survive `shlex.split` and yield exactly `[sys.executable, path_str]`.
+    Backslashes inside single quotes are bash-literal — if any case collapses,
+    the v1.30.6 bug is re-introduced. UNC is literal-preservation only.
+    """
+    import shlex
+    # Use a thin Path-like wrapper that returns path_str verbatim, so the test
+    # runs identically on Linux + Windows (Path() construction would mutate the
+    # backslashes on Linux). We exercise the command-string layer only.
+    class _StrPath:
+        def __init__(self, s: str) -> None:
+            self._s = s
+        def __str__(self) -> str:
+            return self._s
+    cmd = wiz._build_consensus_hook_command(_StrPath(path_str))
+    parts = shlex.split(cmd)
+    assert parts == [sys.executable, path_str], (case_id, cmd, parts)
+    # And explicitly: the literal failing shape's backslashes must SURVIVE.
+    if case_id == "windows-backslash":
+        assert "\\" in parts[-1] and "Users" in parts[-1] and "Scripts" in parts[-1], parts
 
 
 # --------------------------------------------------------------------------- #

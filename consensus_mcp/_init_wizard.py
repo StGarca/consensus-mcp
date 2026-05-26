@@ -393,17 +393,20 @@ def _build_consensus_hook_command(script_path: Path) -> str:
     Uses sys.executable so the hook runs under the same Python the wizard ran
     under (which has consensus_mcp importable).
 
-    Quoting is PLATFORM-AWARE (v1.26 CI fix): shlex.join is POSIX quoting — it
-    single-quotes any backslash-bearing path, which Windows cmd/PowerShell cannot
-    run (`'C:\\...python.exe'`). So on Windows use subprocess.list2cmdline (the
-    Windows quoting convention: double-quote only args that need it). This keeps the
-    v1.24 goal (a path with a space/quote produces a VALID command) correct on BOTH
-    platforms.
+    POSIX-quoted via shlex.join on every platform (v1.30.7, converged consult
+    iteration-v1307-quoting-design-2026-05-26). Claude Code's hook executor on
+    Windows is Git Bash (`/usr/bin/bash`, MSYS), evidenced by the v1.30.6 field
+    error: `/usr/bin/bash: line 1: <backslash-eaten Windows path>: command not
+    found`. shlex.join single-quotes any path with shell-unsafe characters
+    (incl. backslash); bash treats characters inside single quotes literally,
+    so a Windows path `C:\\Users\\…\\python.exe` survives bash unquoting and is
+    accepted by Windows Python via MSYS's exec layer.
+
+    The pre-v1.30.7 `os.name == "nt"` → `subprocess.list2cmdline` branch was
+    pinned to Windows CI's PowerShell, not Claude Code's runtime hook shell —
+    a CI-vs-runtime shell mismatch that this commit reverses.
     """
     parts = [sys.executable, str(script_path)]
-    if os.name == "nt":
-        import subprocess
-        return subprocess.list2cmdline(parts)
     return shlex.join(parts)
 
 
