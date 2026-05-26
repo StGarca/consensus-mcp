@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-version = "1.31.0"
+version = "1.32.0"
 description = "Cross-AI consensus code review: a panel of different AI models you choose (Claude, Codex, Gemini, Kimi, or add your own) review each change independently, and it ships only when they agree. An MCP server for AI coding tools."
 authors = [{name = "stgarca"}]
 requires-python = ">=3.11"
@@ -21,6 +21,8 @@ consensus-mcp-dispatch-codex = "consensus_mcp._dispatch_codex:main"
 consensus-mcp-dispatch-gemini = "consensus_mcp._dispatch_gemini:main"
 consensus-mcp-dispatch-grok = "consensus_mcp._dispatch_grok:main"
 consensus-mcp-dispatch-kimi = "consensus_mcp._dispatch_kimi:main"
+# v1.32.0: Path A close-and-seal CLI (consult iteration-debrief-2026-05-26).
+consensus-mcp-seal-iteration = "consensus_mcp._seal_iteration:main"
 consensus-init = "consensus_mcp._init_wizard:main"
 # v1.19.0: read-only project scorecard rollup over results-v1.jsonl.
 consensus-results = "consensus_mcp._results_rollup:main"
@@ -47,6 +49,8 @@ consensus_mcp = [
   "contributor_profiles/*.yaml",
   "contributor_instructions/*.md",
   "docs/*.md",
+  # v1.32.0: packaged first-consult quickstart (consult iteration-debrief-2026-05-26).
+  "docs/operations/*.md",
   "spec_template.md",
   # v1.15.1: converged-plan convention machine-enforcement contract.
   "schemas/*.json",

@@ -72,10 +72,15 @@ def test_build_grok_cmd_contains_full_disabled_tool_set(tmp_path):
     assert "--no-plan" in cmd
     assert "--no-subagents" in cmd
     assert "--disable-web-search" in cmd
-    assert "--max-turns" in cmd
-    assert cmd[cmd.index("--max-turns") + 1] == "1"
     assert "--permission-mode" in cmd
     assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
+    # v1.31.1: `--max-turns 10` (not 1). Grok counts MCP-tool-discovery
+    # messages against the limit; the headless default is 1 which aborts
+    # before any model response. 10 gives headroom; substantive single-turn
+    # semantics are enforced by --prompt-file + --no-subagents + --no-plan.
+    # See the iteration-debrief-2026-05-26 R3-refuting observation.
+    assert "--max-turns" in cmd
+    assert cmd[cmd.index("--max-turns") + 1] == "100"
 
 
 def test_build_grok_cmd_passes_cwd(tmp_path):
@@ -326,12 +331,19 @@ def test_main_smoke_refuses_without_env_var(monkeypatch, tmp_path):
 def test_grok_disabled_tools_list_is_stable():
     """Codex D8: the disabled-tools list is logged in provenance + is a
     root-cause-independent safeguard. Lock the exact set so a future bump
-    is visible in tests."""
+    is visible in tests.
+
+    v1.31.1: `--max-turns 1` → `--max-turns 10` (grok counted MCP-tool-
+    discovery messages against the limit + aborted before responding;
+    headless default was 1). Headroom for tool-registration phantom turns;
+    substantive single-turn semantics still enforced by --prompt-file +
+    --no-subagents + --no-plan.
+    """
     assert _dispatch_grok._GROK_DISABLED_TOOLS == (
         "--no-memory",
         "--no-plan",
         "--no-subagents",
         "--disable-web-search",
-        "--max-turns", "1",
+        "--max-turns", "100",
         "--permission-mode", "dontAsk",
     )

@@ -1,5 +1,100 @@
 # Changelog
 
+## 1.32.0 - 2026-05-26
+
+**First-consult UX overhaul + grok hot-patch.** First real-world end-user
+debrief on an untouched project showed ~25 of 90 min spent on
+infrastructure friction (read source to learn YAML schemas / hash
+algorithms / required directory layouts). Five contributors (claude,
+codex, gemini, **grok's first real-world run**, kimi) converged on a
+consolidated CLI + actionable error messages + a packaged quickstart.
+
+Converged 5-AI consult (`iteration-debrief-2026-05-26`, deep-tier,
+open-contest): unanimous on the seal-iteration CLI as P1; unanimous on
+actionable error messages as P2; 4/5 on the quickstart doc as P3. Five
+genuinely different differentials (maintainer / trust-root ergonomics /
+end-user UX / safety-engineer / first-time consumer) — grok crystallized
+the key safety framing: "the real threat to the safety property is not a
+forged marker — it's measurable onboarding friction that drives operators
+to `CONSENSUS_MCP_GATE_DISABLE` after one bad first experience."
+
+### Added
+- **`consensus-mcp-seal-iteration`** console script (`prepare` / `lint` /
+  `mint` / `verify` subcommands). THIN 1:1 wrapper around the existing
+  library functions — no new trust-root semantics. Eliminates Sections
+  3.5–3.8 of the debrief in one tool:
+  - `prepare`: canonicalizes per-family review YAML names (Section 3.6)
+    + scaffolds a non-authoritative `iteration-outcome.yaml` skeleton.
+  - `lint`: parses every YAML in the iteration dir with file:line
+    pointers (catches embedded `:` BEFORE the verifier — Section 3.7).
+  - `mint`: computes canonical hash via the package's own
+    `compute_artifact_hash` (Section 3.8) + writes the marker via
+    `mint_design_approval`. Refuses overbroad scope_glob,
+    non-sealed closing_state, missing converged plan, or YAML parse
+    errors. Default `--writing-plans-followup` flag sets
+    `scope_glob='docs/consensus/**'` (Section 3.9).
+  - `verify`: round-trips through `verify_design_approval`.
+- **First-consult quickstart** at
+  `consensus_mcp/docs/operations/first-consult-quickstart.md`, packaged
+  in the wheel. Verbatim render of the debrief's Section 7 14-point
+  checklist as copy-paste commands.
+- **18 new tests** in `tests/test_seal_iteration.py` covering all four
+  subcommands + trust-root regression gates (CLI cannot coerce a marker
+  past a <2-non-claude iteration or against a non-sealed closing_state).
+
+### Fixed
+- **Grok dispatcher `--max-turns 1` → `100`** (rolled in from in-flight
+  v1.31.1 hot-patch). The R3 refuting observation from v1.31.0's
+  converged plan: grok's `--max-turns N` is a MESSAGE budget, not a
+  conversational-turn count. A 30KB+ debrief prompt + multiple
+  consensus-mcp MCP tools registered (which grok rejects due to dot-
+  bearing names) consumed 5–12+ messages before any model response.
+  Raising to 100 gives ample headroom; substantive single-turn
+  semantics remain enforced by `--prompt-file` + `--no-subagents` +
+  `--no-plan`.
+- **Gate allowlist** now includes `consensus-mcp-dispatch-grok` and
+  `consensus-mcp-seal-iteration`. Closes a gap from v1.31.0 where
+  `dispatch-grok` was blocked by its own gate in a governed project.
+- **`RepoRootResolutionError`** now emits the exact 4-line bootstrap
+  stanza (mkdir + .gitignore + export CONSENSUS_MCP_REPO_ROOT) +
+  pointer to the packaged quickstart. Eliminates Section 3.1 "read
+  the source to learn the marker requirement" friction.
+- **`OutsideRepoPathError`** now emits a debug tip naming the most
+  common cause (markers placed under a subdir instead of project
+  root). Eliminates Section 3.2.
+
+### Documented
+- The seal-iteration CLI replaces hand-rolled iteration-close ceremony.
+- The quickstart references `dispatch-log.jsonl` as the FIRST place to
+  look on dispatch problems (debrief gap claude-001 surfaced in the
+  consult).
+- The default `scope_glob` for the brainstorming → writing-plans
+  pipeline is now documented as `docs/consensus/**` (Section 3.9).
+
+### Known limitations
+- **Grok's MCP tool-name regex** `^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$` rejects
+  all consensus-mcp MCP tools (which contain `.`). Non-fatal but
+  produces noisy ERROR logs on every grok dispatch. Renaming the tools
+  would break codex/gemini/kimi backward compat — deferred to a
+  separate consult.
+- **Editable install vs site-packages**: the `consensus-mcp-dispatch-*`
+  binaries' `sys.path[0]` is the binary's directory, NOT cwd. Local
+  edits to dispatcher modules don't take effect until
+  `pipx install --force`. Documented as a dev-loop note; tracked in
+  the next iteration's scope.
+- **Path A vs Path B** framing remains operator-disputed (kimi
+  rejected the "steer to Path B" framing claude+codex preferred).
+  Path A stays first-class; the seal-iteration CLI is the on-ramp.
+
+### Falsification clause
+The v1.32.0 synthesis is **provisional until proven**. Decisive
+experiment: run a SECOND first-consult on a different untouched
+project after v1.32.0 ships. Target: infrastructure-friction wall-
+clock < 5 min (down from ~25 min in this debrief), zero source-file
+reads in the seal/marker phase. Neither metric improves materially
+→ the synthesis is refuted and the deferred resolver-rewrite +
+broader gate-allowlist work moves forward.
+
 ## 1.31.0 - 2026-05-26
 
 **Grok joins the panel — 5-AI cross-family consults by default in deep tier.**

@@ -94,12 +94,27 @@ _DEFAULT_GROK_MODEL: str | None = None
 # Independence + containment flag set passed on every invocation.
 # Logged in dispatch_provenance.disabled_tools as a root-cause-independent
 # safeguard (codex D8 / independent_safeguard in the converged plan).
+#
+# v1.31.1 hot-patch: `--max-turns 1` → `--max-turns 100`. Grok's headless
+# default is 1 turn, but it counts EVERY MESSAGE (prompt chunks, MCP
+# tool-discovery rejections, tool-call attempts) against the limit — NOT
+# conversational turns. A 30KB+ prompt-file eats 12+ "messages" before
+# producing model output. The actual single-turn semantics in headless
+# mode are enforced by `--prompt-file <path>` (one-shot input) plus
+# `--no-subagents --no-plan` (no recursive expansion); --max-turns is
+# really a message budget, so 100 is "ample headroom" not "100 turns".
+# Surfaced by the first real-world dispatch on
+# iteration-debrief-2026-05-26 (R3 refuting observation from v1.31.0's
+# converged plan): a 4330-line debrief prompt with default 1 turn
+# aborted with `max_turns exceeded: limit is 1, but got 5 messages`;
+# raising to 10 still hit `limit is 10, but got 12 messages`; 100
+# completes cleanly.
 _GROK_DISABLED_TOOLS = (
     "--no-memory",
     "--no-plan",
     "--no-subagents",
     "--disable-web-search",
-    "--max-turns", "1",
+    "--max-turns", "100",
     "--permission-mode", "dontAsk",
 )
 
