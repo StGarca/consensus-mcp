@@ -166,6 +166,15 @@ reviewer_dispatch_codex.register(registry)
 from consensus_mcp.tools import reviewer_dispatch_gemini  # noqa: E402
 reviewer_dispatch_gemini.register(registry)
 
+# v1.33.0 wrapper-symmetry: kimi and grok join the MCP-surfaced reviewers.
+# Closes the active-tools UI asymmetry where codex/gemini were visible to
+# the operator while kimi/grok dispatches via shell-binaries were not.
+from consensus_mcp.tools import reviewer_dispatch_kimi  # noqa: E402
+reviewer_dispatch_kimi.register(registry)
+
+from consensus_mcp.tools import reviewer_dispatch_grok  # noqa: E402
+reviewer_dispatch_grok.register(registry)
+
 from consensus_mcp.tools import loop_run_goal  # noqa: E402
 loop_run_goal.register(registry)
 

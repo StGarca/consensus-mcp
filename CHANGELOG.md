@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.33.0 - 2026-05-27
+
+**MCP-wrapper symmetry for kimi and grok.** Closes the active-tools UI
+visibility asymmetry where codex and gemini dispatches appeared in
+Claude Code's running-tools strip while kimi and grok dispatches did
+not — because kimi/grok only had shell-binary entry points
+(`consensus-mcp-dispatch-kimi/grok`), no MCP tool wrappers. v1.33.0
+adds `reviewer.dispatch_kimi` and `reviewer.dispatch_grok` MCP tools
+mirroring the existing `reviewer.dispatch_codex` and
+`reviewer.dispatch_gemini` patterns.
+
+Driven by operator observation 2026-05-27: "How come I could see codex
+and gemini running in the background but I can't see kimi or grok?"
+The MCP-surface gap was a pre-existing packaging defect (proof package
+per codex Section 4.2: shell binaries present in `bin/`, no matching
+MCP wrappers in `consensus_mcp/tools/`, ToolSearch returned "No
+matching deferred tools found" for `mcp__consensus-mcp__reviewer_dispatch_kimi/grok`).
+
+Workflow B post-review by codex (`codex-wrapper-symmetry-review-1`):
+goal_satisfied=true, zero findings, zero blocking objections.
+
+Sibling work tracked but NOT in this release: `_dispatch_grok.py` has
+a separate stall regression (hangs when invoked with `--cwd <project_subdir>`
++ dispatcher-only flags `--prompt-file/--no-plan/--no-subagents/--permission-mode dontAsk`,
+diagnosed in `iteration-grok-stall-diagnosis-2026-05-27/codex-review.yaml`).
+The grok wrapper's docstring notes the limitation. Follow-up iteration
+will patch the dispatcher to use codex's prescribed working
+invocation shape (`-p` inline + `--cwd /tmp` + `--max-turns 200`).
+
+Files added:
+- `consensus_mcp/tools/reviewer_dispatch_kimi.py` (mirrors codex pattern;
+  1800s default timeout per memory rule
+  `feedback_kimi_strong_contributor_dont_discard`)
+- `consensus_mcp/tools/reviewer_dispatch_grok.py` (mirrors codex; adds
+  `model` parameter mirroring gemini)
+
+Files modified:
+- `consensus_mcp/server.py` (registers both new wrappers, preserving
+  registration order around the existing codex/gemini wrappers)
+
+No changes to `_dispatch_kimi.py`, `_dispatch_grok.py`, or any other
+helper. Wrappers are thin pass-throughs to existing tested helpers.
+
 ## 1.32.1 - 2026-05-26
 
 **Per-INVOCATION gate activation.** Fixes the gate over-fire problem the
