@@ -1,0 +1,68 @@
+# Tool-Defect Proof Artifact Schema
+#
+# This schema defines the required shape for proof artifacts at
+# ./tmp/tool-defect-proof-<sha256(target_file_path)>.yaml.
+#
+# Per codex-meta-author-3 sealed proposal (2026-05-27, iteration
+# iteration-claude-screwup-prevention-meta-2026-05-27): the artifact uses a
+# constrained "simple YAML" shape — top-level "key: value" pairs only, no
+# nesting, no lists. The hook validator
+# (.claude/hooks/tool-defect-gate.py) parses this with stdlib-only
+# (no PyYAML dependency) to keep the gate self-contained and unambiguous.
+
+schema_version: 1
+
+required_fields:
+  - target_file_path
+  - target_sha256
+  - command
+  - input
+  - observed_output
+  - expected_output
+  - reproduction_command
+  - independent_observer_id
+  - created_at_utc
+
+field_descriptions:
+  target_file_path: |
+    Absolute filesystem path of the protected target file. Must match the
+    file path passed to the edit/write tool that triggered the gate.
+  target_sha256: |
+    SHA-256 of the target file's CONTENTS at time of diagnosis. 64-char
+    lowercase hex. Pinned to a specific version of the suspected-defective
+    file.
+  command: |
+    The exact command that exhibited the defect. Single line; no shell
+    interpolation placeholders.
+  input: |
+    The exact input fed to the command (file path, stdin content, or
+    parameter values). Single line summary acceptable for large inputs.
+  observed_output: |
+    Single-line summary of what was observed (exit code + stderr highlight
+    OR stdout key fragment).
+  expected_output: |
+    Single-line summary of what would have been expected from documented
+    behavior. Must be derivable from a docstring, README, or test.
+  reproduction_command: |
+    A copy-pasteable command that reproduces the defect INDEPENDENTLY of
+    Claude's session — i.e., does not depend on orchestrator state.
+  independent_observer_id: |
+    Identifier of the entity that produced this artifact. MUST NOT be the
+    orchestrator Claude. The Tooling Defect Diagnoser subagent ID is the
+    canonical value (format: tooling-defect-diagnoser-<utc-iso8601>).
+  created_at_utc: |
+    UTC ISO-8601 timestamp of artifact creation.
+
+constraints:
+  - field "target_sha256" must match regex ^[0-9a-f]{64}$
+  - field "target_file_path" must be an absolute path (starts with /)
+  - no nesting; YAML is flat key:value only
+  - no list values; all values are scalar strings
+  - artifact filename must match ./tmp/tool-defect-proof-<sha256(target_file_path)>.yaml
+    where the sha256 is computed over the absolute target_file_path STRING (not the file's contents)
+
+cross_references:
+  validator: .claude/hooks/tool-defect-gate.py
+  subagent: .claude/agents/tooling-defect-diagnoser.md
+  bypass_doc: docs/consensus/tool-defect-bypass.md
+  origin_iteration: iteration-claude-screwup-prevention-meta-2026-05-27

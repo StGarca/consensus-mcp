@@ -52,3 +52,17 @@ consensus-state/archive/review-passes/*.yaml
 # Delivery artifacts (git bundles are built on demand, not source)
 *.bundle
 
+# Operator-controlled gate-stack local state (per-project pointers; not source).
+# These are minted/touched by the hook stack and the consensus-mcp runtime;
+# they reference absolute paths on the operator's machine and per-iteration
+# scope refs that are not portable across clones.
+.consensus/design-approved
+.consensus/.migration-warned
+.delivery-readiness/
+
+# Operator debriefs land at the repo root as part of the consult-prep flow;
+# they describe sessions in consuming projects and don't belong in this repo's
+# source history. Real release notes live in CHANGELOG.md.
+/debrief-*.md
+/debrief-*.txt
+

@@ -6,14 +6,17 @@ grok-specific code: CLI invocation shape, binary resolution, output JSON
 parsing with validator-retry on schemaless parse fail.
 
 Key differences from `_dispatch_gemini.py` (by converged decision):
-  - Prompt is written to a PER-PASS file inside the iteration dir and
-    passed to grok via `--prompt-file <path>` (codex D3 refinement). No
-    stdin piping — eliminates the gemini deadlock-avoidance dance.
+  - Prompt is passed inline via `-p <content>` (iter-0045 operator
+    decision; aligns with dispatch-canon-validator.GROK_FORBIDDEN_FLAGS).
+    A per-pass copy is still written to iter_dir for audit/provenance
+    (prompt_sha256), but grok itself reads the inline argument.
   - Auth pre-flight: probe for ~/.grok/auth.json. Missing → raise
     `GrokAuthRequiredError` BEFORE invoking the CLI (codex acceptance gate G4).
-  - Independence flags: `--no-memory --no-plan --no-subagents
-    --disable-web-search --max-turns 1 --permission-mode dontAsk` — the
-    root-cause-independent safeguard set logged in dispatch_provenance.
+  - Independence flags: `--no-memory --disable-web-search` + `--cwd /tmp`
+    — the minimal verified-working safeguard set. Prior shape
+    (`--prompt-file` + `--no-plan` + `--no-subagents` + `--max-turns` +
+    `--permission-mode` + project-subdir `--cwd`) caused indefinite
+    stalls on real packets.
   - No sandbox / no integrity check — by converged decision (YAGNI; kimi's
     hardening earned complexity from a real field bug, grok has no such
     history). The disable-flag set IS the day-one safeguard.
@@ -91,31 +94,22 @@ _BLOCKING_SEVERITIES = {"blocking", "critical"}
 # dispatcher releases). `None` here means "do not pass --model".
 _DEFAULT_GROK_MODEL: str | None = None
 
-# Independence + containment flag set passed on every invocation.
-# Logged in dispatch_provenance.disabled_tools as a root-cause-independent
-# safeguard (codex D8 / independent_safeguard in the converged plan).
-#
-# v1.31.1 hot-patch: `--max-turns 1` → `--max-turns 100`. Grok's headless
-# default is 1 turn, but it counts EVERY MESSAGE (prompt chunks, MCP
-# tool-discovery rejections, tool-call attempts) against the limit — NOT
-# conversational turns. A 30KB+ prompt-file eats 12+ "messages" before
-# producing model output. The actual single-turn semantics in headless
-# mode are enforced by `--prompt-file <path>` (one-shot input) plus
-# `--no-subagents --no-plan` (no recursive expansion); --max-turns is
-# really a message budget, so 100 is "ample headroom" not "100 turns".
-# Surfaced by the first real-world dispatch on
-# iteration-debrief-2026-05-26 (R3 refuting observation from v1.31.0's
-# converged plan): a 4330-line debrief prompt with default 1 turn
-# aborted with `max_turns exceeded: limit is 1, but got 5 messages`;
-# raising to 10 still hit `limit is 10, but got 12 messages`; 100
-# completes cleanly.
+# Independence flag set passed on every invocation. Codified to the
+# operator-verified 2026-05-27 working shape (iter-0045 panel: codex
+# high finding + kimi finding; operator decision: adopt inline -p +
+# minimal flags). The prior v1.31.1 hot-patch flag set (--prompt-file +
+# --no-plan + --no-subagents + --max-turns N + --permission-mode +
+# project-subdir --cwd) caused indefinite stalls on real packets —
+# grok counts every prompt chunk + MCP rejection + tool-call attempt
+# against the message budget and never reaches model output. The
+# minimal shape (inline -p + --no-memory + --disable-web-search +
+# --cwd /tmp) returns answers on real workloads. This flag set
+# satisfies dispatch-canon-validator.GROK_FORBIDDEN_FLAGS (the
+# validator forbids --prompt-file, --max-turns, --no-plan,
+# --no-subagents, --permission-mode for direct grok invocations).
 _GROK_DISABLED_TOOLS = (
     "--no-memory",
-    "--no-plan",
-    "--no-subagents",
     "--disable-web-search",
-    "--max-turns", "100",
-    "--permission-mode", "dontAsk",
 )
 
 
@@ -203,22 +197,29 @@ def _write_per_pass_prompt(prompt: str, iter_dir: Path, pass_id: str) -> Path:
 
 def _build_grok_cmd(
     grok_bin: str,
-    prompt_path: Path,
-    iter_dir: Path,
+    prompt: str,
     model: str | None,
 ) -> list[str]:
     """Construct the grok CLI command list for a dispatch.
 
-    Per converged plan D3: --prompt-file (per-pass), --output-format plain,
-    the full disable-flag set, --cwd <iter_dir>, optional --model.
+    Operator-codified iter-0045 working shape: inline `-p <prompt>` +
+    `--no-memory` + `--disable-web-search` + `--cwd /tmp`. The `/tmp`
+    cwd prevents grok from scanning the project dir (the multi-message-
+    budget hang source); the operator-confirmed assumption is that /tmp
+    exists and is writable (standard on Linux; not guaranteed in highly
+    restricted containers — surface as ARG_MAX/exec error if missing).
+
+    Note: inline `-p` carries a Linux MAX_ARG_STRLEN limit of 128KB per
+    argument. If a packet ever exceeds that, the CLI will fail loudly
+    with E2BIG; the caller should chunk or summarize the prompt.
     """
     cmd = [
         _resolve_grok_bin(grok_bin),
-        "--prompt-file", str(prompt_path),
+        "-p", prompt,
         "--output-format", "plain",
     ]
     cmd.extend(_GROK_DISABLED_TOOLS)
-    cmd.extend(["--cwd", str(iter_dir)])
+    cmd.extend(["--cwd", "/tmp"])
     if model:
         cmd.extend(["--model", model])
     return cmd
@@ -246,8 +247,8 @@ def _invoke_grok(
     we wrote (caller reads it for sha256 provenance).
 
     Pattern mirrors _invoke_gemini's stream-and-watchdog loop but simpler:
-    grok reads from --prompt-file (no stdin piping), so no stdin-writer
-    thread + no codex-rev-001 deadlock dance.
+    grok reads the prompt inline via `-p` (no stdin piping), so no
+    stdin-writer thread + no codex-rev-001 deadlock dance.
     """
     if time_fn is None:
         time_fn = time.time
@@ -259,8 +260,11 @@ def _invoke_grok(
     # an artifact if we're going to error out immediately).
     _check_grok_auth()
 
+    # Per-pass prompt file is written to iter_dir for audit/provenance
+    # (prompt_sha256 in dispatch_log + dispatch_provenance), but grok
+    # itself receives the prompt inline via `-p` (iter-0045 shape).
     prompt_path = _write_per_pass_prompt(prompt, iter_dir, pass_id)
-    cmd = _build_grok_cmd(grok_bin, prompt_path, iter_dir, model)
+    cmd = _build_grok_cmd(grok_bin, prompt, model)
 
     if sys.platform == "win32":
         popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
