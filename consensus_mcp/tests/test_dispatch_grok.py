@@ -2,7 +2,7 @@
 
 Focused on grok-specific behavior:
   - _check_grok_auth (auth pre-flight raises when ~/.grok/auth.json absent)
-  - _build_grok_cmd (CLI flag shape: --prompt-file, disabled tools, --cwd, --model)
+  - _build_grok_cmd (CLI flag shape: inline -p, disabled tools, --cwd /tmp, --model)
   - _write_per_pass_prompt (per-pass filename embeds pass_id; content sha256)
   - _extract_json_from_text (free-form → JSON substring)
   - _parse_grok_output (validates JSON shape; grok-rev-N ID pattern; patch_proposal MUST be null)
@@ -50,68 +50,55 @@ def test_check_grok_auth_passes_when_auth_file_present(monkeypatch, tmp_path):
 
 # ---------- _build_grok_cmd ----------
 
-def test_build_grok_cmd_uses_prompt_file_not_inline(tmp_path):
-    """G5: per-pass prompt file (NOT inline --single)."""
-    prompt_file = tmp_path / "grok-prompt-x.txt"
-    iter_dir = tmp_path
-    cmd = _dispatch_grok._build_grok_cmd("grok", prompt_file, iter_dir, model=None)
-    assert "--prompt-file" in cmd
-    assert str(prompt_file) in cmd
-    assert "--single" not in cmd  # we never use --single in real dispatch
+def test_build_grok_cmd_uses_inline_p_not_prompt_file():
+    """iter-0045 shape: inline -p (NOT --prompt-file)."""
+    cmd = _dispatch_grok._build_grok_cmd("grok", "hello prompt", model=None)
+    assert "-p" in cmd
+    assert "hello prompt" in cmd
+    assert cmd[cmd.index("-p") + 1] == "hello prompt"
+    assert "--prompt-file" not in cmd
+    assert "--single" not in cmd
     assert "--prompt-json" not in cmd
 
 
-def test_build_grok_cmd_contains_full_disabled_tool_set(tmp_path):
-    """G5+G6: every disable-flag in the dispatch_provenance.disabled_tools set
-    must be on the actual CLI command."""
-    cmd = _dispatch_grok._build_grok_cmd(
-        "grok", tmp_path / "p.txt", tmp_path, model=None,
-    )
-    # The root-cause-independent safeguard set.
+def test_build_grok_cmd_contains_minimal_disabled_tool_set():
+    """iter-0045 minimal shape: only --no-memory + --disable-web-search.
+    The dropped flags (--no-plan, --no-subagents, --max-turns,
+    --permission-mode) are what caused the prior stall behavior; they are
+    forbidden by dispatch-canon-validator.GROK_FORBIDDEN_FLAGS."""
+    cmd = _dispatch_grok._build_grok_cmd("grok", "p", model=None)
     assert "--no-memory" in cmd
-    assert "--no-plan" in cmd
-    assert "--no-subagents" in cmd
     assert "--disable-web-search" in cmd
-    assert "--permission-mode" in cmd
-    assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
-    # v1.31.1: `--max-turns 10` (not 1). Grok counts MCP-tool-discovery
-    # messages against the limit; the headless default is 1 which aborts
-    # before any model response. 10 gives headroom; substantive single-turn
-    # semantics are enforced by --prompt-file + --no-subagents + --no-plan.
-    # See the iteration-debrief-2026-05-26 R3-refuting observation.
-    assert "--max-turns" in cmd
-    assert cmd[cmd.index("--max-turns") + 1] == "100"
+    # Stall-causing flags MUST NOT be present (canon-aligned).
+    assert "--no-plan" not in cmd
+    assert "--no-subagents" not in cmd
+    assert "--max-turns" not in cmd
+    assert "--permission-mode" not in cmd
+    assert "--prompt-file" not in cmd
 
 
-def test_build_grok_cmd_passes_cwd(tmp_path):
-    cmd = _dispatch_grok._build_grok_cmd(
-        "grok", tmp_path / "p.txt", tmp_path, model=None,
-    )
+def test_build_grok_cmd_passes_cwd_tmp():
+    """iter-0045: --cwd is hard-coded /tmp (prevents project-dir scan hang)."""
+    cmd = _dispatch_grok._build_grok_cmd("grok", "p", model=None)
     assert "--cwd" in cmd
-    assert cmd[cmd.index("--cwd") + 1] == str(tmp_path)
+    assert cmd[cmd.index("--cwd") + 1] == "/tmp"
 
 
-def test_build_grok_cmd_includes_model_when_set(tmp_path):
-    cmd = _dispatch_grok._build_grok_cmd(
-        "grok", tmp_path / "p.txt", tmp_path, model="grok-4-fast",
-    )
+def test_build_grok_cmd_includes_model_when_set():
+    cmd = _dispatch_grok._build_grok_cmd("grok", "p", model="grok-4-fast")
     assert "--model" in cmd
     assert cmd[cmd.index("--model") + 1] == "grok-4-fast"
 
 
-def test_build_grok_cmd_omits_model_when_none(tmp_path):
+def test_build_grok_cmd_omits_model_when_none():
     """Per converged plan D3: --model is optional; let grok roll forward without
     dispatcher releases when operator doesn't pin a model."""
-    cmd = _dispatch_grok._build_grok_cmd(
-        "grok", tmp_path / "p.txt", tmp_path, model=None,
-    )
+    cmd = _dispatch_grok._build_grok_cmd("grok", "p", model=None)
     assert "--model" not in cmd
 
 
-def test_build_grok_cmd_output_format_plain(tmp_path):
-    cmd = _dispatch_grok._build_grok_cmd(
-        "grok", tmp_path / "p.txt", tmp_path, model=None,
-    )
+def test_build_grok_cmd_output_format_plain():
+    cmd = _dispatch_grok._build_grok_cmd("grok", "p", model=None)
     assert "--output-format" in cmd
     assert cmd[cmd.index("--output-format") + 1] == "plain"
 
@@ -333,17 +320,15 @@ def test_grok_disabled_tools_list_is_stable():
     root-cause-independent safeguard. Lock the exact set so a future bump
     is visible in tests.
 
-    v1.31.1: `--max-turns 1` → `--max-turns 10` (grok counted MCP-tool-
-    discovery messages against the limit + aborted before responding;
-    headless default was 1). Headroom for tool-registration phantom turns;
-    substantive single-turn semantics still enforced by --prompt-file +
-    --no-subagents + --no-plan.
+    iter-0045 (panel: codex high finding + kimi finding; operator
+    decision): the dispatch-canon-validator forbids --prompt-file,
+    --no-plan, --no-subagents, --max-turns, and --permission-mode for
+    direct grok invocations — those flags caused the stall behavior.
+    The dispatcher now ships the minimal verified-working shape:
+    inline -p (in _build_grok_cmd) + --no-memory + --disable-web-search
+    + --cwd /tmp.
     """
     assert _dispatch_grok._GROK_DISABLED_TOOLS == (
         "--no-memory",
-        "--no-plan",
-        "--no-subagents",
         "--disable-web-search",
-        "--max-turns", "100",
-        "--permission-mode", "dontAsk",
     )
