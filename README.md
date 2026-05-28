@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.33.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.33.1
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -154,11 +154,13 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.33.0 — stable.** MCP-wrapper symmetry: kimi and
-grok join codex and gemini as MCP-surfaced reviewers (visible
-in Claude Code's active-tools strip). 1,820+ regression tests,
-green on CI across Linux + Windows and Python 3.11+. Self-hosted:
-every release is built through consensus-mcp's own cross-AI review.
+**Current: v1.33.1 — stable.** Grok dispatcher reconciliation: the
+docs and the env-gated live smoke now match grok's minimal invocation
+shape, and the earlier dispatch stall is resolved. All five reviewers —
+Claude, Codex, Gemini, Grok, and Kimi — are MCP-surfaced (visible in
+Claude Code's active-tools strip). 1,820+ regression tests, green on CI
+across Linux + Windows and Python 3.11+. Self-hosted: every release is
+built through consensus-mcp's own cross-AI review.
 
 - What changed in each release → [`CHANGELOG.md`](CHANGELOG.md)
 - Known-issue releases + which version to upgrade to →
