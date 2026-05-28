@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.33.2 - 2026-05-28
+
+**Delivery-token path key normalized — fixes false `missing_delivery_tokens` at
+close.** A field user (consensus-mcp running on another project) hit a sealed
+iteration that refused to close with `missing_delivery_tokens` even though valid
+delivery tokens existed on disk, and had to use the sanctioned `--abandon`
+recovery path. Root cause: `_delivery_readiness._token_path` hashed the *raw,
+un-normalized* path string to derive the token filename, so the same file
+addressed two ways collided to two different token files — mint/verify received a
+repo-relative path while close (`_seal_iteration`) enumerates absolute
+`repo_root.rglob('*')` paths. Different string → different `sha256` → token
+"not found".
+
+Fixed at one root primitive: a new `_canonical_artifact_key` collapses any path
+form (repo-relative or absolute) to a stable repo-relative, forward-slashed key,
+used by the token-filename hash AND by mint's stored `artifact_path` and verify's
+equality check (the same raw-string mismatch existed in that comparison — fixed
+in the same pass so the cousin bug can't resurface).
+
+Files modified:
+- `consensus_mcp/_delivery_readiness.py`: added `_canonical_artifact_key`;
+  `_token_path` now hashes the canonical key; `mint_delivery_token` stores the
+  canonical key in `artifact_path`; `verify_delivery_token` compares canonical
+  forms.
+- `consensus_mcp/tests/test_delivery_readiness.py`: 3 TDD regression tests —
+  canonical key across path forms, token found via absolute path after a
+  relative mint (the close-path repro), and verify-ok across mint-relative /
+  verify-absolute.
+
+Test surface: delivery-readiness 10/10; full suite 1768 passed, 8 skipped.
+
 ## 1.33.1 - 2026-05-28
 
 **Grok docs + live smoke reconciled to the landed minimal invocation shape.**

@@ -33,6 +33,7 @@ import dataclasses
 import datetime as _dt
 import hashlib
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -107,9 +108,38 @@ def resolve_consensus_ref(ref: str, repo_root: Path) -> ConsensusRefStatus:
                               f"closing_state {state!r} not in {sorted(SEALED_CLOSING_STATES)}")
 
 
+def _canonical_artifact_key(artifact_path: Path, repo_root: Path) -> str:
+    """Stable repo-relative, forward-slashed key for an artifact, identical
+    whether the caller passes a repo-relative path (as mint/verify get from the
+    gate) or an absolute path (as `repo_root.rglob('*')` yields at close).
+
+    Before this normalization the token filename was `sha256(str(path))`, so the
+    same file addressed two ways hashed to two different token files -> false
+    `missing_delivery_tokens` at close even with a valid token on disk
+    (field bug, 2026-05-28). Canonicalizing at this one root primitive fixes the
+    hash key for mint, verify, AND close together.
+
+    An out-of-repo absolute target (or any resolution error) falls back to the
+    resolved/forward-slashed absolute form — still stable across path forms."""
+    p = Path(artifact_path)
+    try:
+        if p.is_absolute():
+            rel = p.resolve().relative_to(Path(repo_root).resolve())
+        else:
+            # Treated as already repo-relative (the gate's contract); normalize
+            # lexical noise like "./" / ".." segments.
+            rel = Path(os.path.normpath(str(p)))
+        return str(rel).replace("\\", "/")
+    except ValueError:
+        # Absolute target outside repo_root — no repo-relative form exists.
+        return str(p.resolve()).replace("\\", "/")
+    except Exception:
+        return str(p).replace("\\", "/")
+
+
 def _token_path(artifact_path: Path, repo_root: Path) -> Path:
-    rel = Path(artifact_path)
-    safe = hashlib.sha256(str(rel).encode()).hexdigest()[:16]
+    key = _canonical_artifact_key(artifact_path, repo_root)
+    safe = hashlib.sha256(key.encode()).hexdigest()[:16]
     d = repo_root / ".delivery-readiness"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{safe}.token.json"
@@ -168,7 +198,7 @@ def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
         "token_id": uuid.uuid4().hex,
         "created_at_utc": _utcnow(),
         "issuer": ISSUER,
-        "artifact_path": str(artifact_path),
+        "artifact_path": _canonical_artifact_key(artifact_path, repo_root),
         "artifact_hash": compute_artifact_hash(artifact_path),
         "hash_algorithm": HASH_ALGORITHM,
         "design_consensus_ref": design_consensus_ref,
@@ -196,7 +226,7 @@ def verify_delivery_token(artifact_path: Path, repo_root: Path | None = None) ->
         if not tp.exists():
             return {"ok": False, "reason": "no delivery-readiness token (artifact not consensus-vetted)"}
         token = json.loads(tp.read_text(encoding="utf-8"))
-        if token.get("artifact_path") != str(artifact_path):
+        if token.get("artifact_path") != _canonical_artifact_key(artifact_path, repo_root):
             return {"ok": False, "reason": "token artifact_path mismatch"}
         current = compute_artifact_hash(artifact_path)
         if token.get("artifact_hash") != current:
