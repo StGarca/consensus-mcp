@@ -10,19 +10,13 @@ Wraps the proven _dispatch_grok helper behind an MCP tool surface.
 Helper remains the source of truth; wrapper translates MCP-tool kwargs
 into argv, calls main() in-process, captures stdout, returns parsed JSON.
 
-NOTE on the grok dispatch-stall (2026-05-27): when invoked via the shell
-binary `consensus-mcp-dispatch-grok` from inside a project subdir with
-.mcp.json in scope, grok hangs indefinitely (4 open sockets, ~18s CPU
-over 13min wall). Diagnosed by codex (codex-grok-fix-1, iteration
-iteration-grok-stall-diagnosis-2026-05-27) as triggered by
-`--cwd <iteration_dir>` combined with dispatcher-only flags
-(`--prompt-file`, `--no-plan`, `--no-subagents`,
-`--permission-mode dontAsk`). The codex-prescribed working invocation
-shape: inline `-p` prompt + `--cwd /tmp` + `--max-turns 200` + minimal
-flags. The PERMANENT FIX belongs in `_dispatch_grok.py` itself (separate
-task; not addressed by this wrapper, which only mirrors the existing
-helper). Until the dispatcher fix lands, callers should be aware that
-this wrapper MAY exhibit the stall on protected project paths.
+An earlier dispatch-stall (a `--cwd <iteration_dir>` plus dispatcher-only
+flag combination that could hang grok indefinitely) is resolved in
+`_dispatch_grok.py`: the helper now uses the minimal verified invocation
+shape — inline `-p` prompt, `--cwd /tmp`, and only `--no-memory
+--disable-web-search` (no `--max-turns`, `--prompt-file`, `--no-plan`,
+`--no-subagents`, or `--permission-mode`). This wrapper inherits that
+shape unchanged.
 """
 from __future__ import annotations
 
