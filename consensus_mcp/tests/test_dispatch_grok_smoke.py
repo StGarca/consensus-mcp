@@ -82,7 +82,12 @@ def test_grok_smoke_seals_verdict(tmp_path):
 
     env = dict(os.environ)
     env["CONSENSUS_MCP_REPO_ROOT"] = str(tmp_path)
-    (tmp_path / ".git").mkdir()  # repo marker so _resolve_repo_root passes
+    # _resolve_repo_root validates an explicit CONSENSUS_MCP_REPO_ROOT against
+    # the consensus marker dirs (_REPO_ROOT_MARKERS), NOT `.git`. Create all
+    # three so the synthetic tmp repo root passes marker validation; dispatch
+    # logs + archive seal land here, keeping the smoke hermetic.
+    for marker in ("consensus-state/state", "consensus_mcp/validators"):
+        (tmp_path / marker).mkdir(parents=True, exist_ok=True)
 
     result = subprocess.run(
         [
@@ -119,5 +124,8 @@ def test_grok_smoke_seals_verdict(tmp_path):
     assert prov.get("prompt_sha256"), prov
     assert prov.get("adapter") == "grok"
     assert isinstance(prov.get("disabled_tools"), list), prov
-    assert "--no-subagents" in prov["disabled_tools"]
-    assert "--disable-web-search" in prov["disabled_tools"]
+    # v1.32.0 iter-0045 working shape: independence flags are --no-memory +
+    # --disable-web-search (inline -p + --cwd /tmp). The older --no-subagents
+    # flag was dropped when the dispatcher moved off the --prompt-file shape.
+    assert "--no-memory" in prov["disabled_tools"], prov
+    assert "--disable-web-search" in prov["disabled_tools"], prov
