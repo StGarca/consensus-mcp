@@ -78,3 +78,43 @@ def test_verify_fails_without_token(tmp_path):
     art = _artifact(tmp_path)
     res = dr.verify_delivery_token(art, repo_root=tmp_path)
     assert res["ok"] is False and "no delivery-readiness token" in res["reason"], res
+
+
+# --- path-normalization regression (field bug 2026-05-28) ----------------
+# `_token_path` keyed on the raw, un-normalized path STRING, so the same file
+# referenced two ways (mint/verify got a repo-RELATIVE path; close enumerates
+# ABSOLUTE rglob paths) hashed to two different token filenames -> false
+# `missing_delivery_tokens` at close even though a valid token existed. The fix
+# canonicalizes to the repo-relative form at one root primitive.
+
+def test_token_path_canonical_across_path_forms(tmp_path):
+    """The token filename for a file must be identical whether the artifact is
+    addressed by its repo-relative path or its absolute path."""
+    _artifact(tmp_path, "art.txt")
+    rel = Path("art.txt")
+    abs_ = tmp_path / "art.txt"
+    assert dr._token_path(rel, tmp_path) == dr._token_path(abs_, tmp_path)
+
+
+def test_token_found_via_absolute_after_mint_relative(tmp_path, monkeypatch):
+    """Mirrors the close path: mint with the repo-relative form, then look the
+    token up by the absolute form (as `repo_root.rglob('*')` yields)."""
+    _sealed_iter(tmp_path, "iteration-x")
+    _artifact(tmp_path, "art.txt")
+    monkeypatch.chdir(tmp_path)
+    dr.mint_delivery_token(Path("art.txt"), design_consensus_ref="iteration-x",
+                           vetted_by=["codex", "gemini"], repo_root=tmp_path)
+    abs_art = tmp_path / "art.txt"
+    assert dr._token_path(abs_art, tmp_path).exists()
+
+
+def test_verify_ok_when_minted_relative_verified_absolute(tmp_path, monkeypatch):
+    """The cousin bug: `verify` also compared the stored `artifact_path` against
+    the raw string form. Mint-relative then verify-absolute must still pass."""
+    _sealed_iter(tmp_path, "iteration-x")
+    _artifact(tmp_path, "art.txt")
+    monkeypatch.chdir(tmp_path)
+    dr.mint_delivery_token(Path("art.txt"), design_consensus_ref="iteration-x",
+                           vetted_by=["codex", "gemini"], repo_root=tmp_path)
+    res = dr.verify_delivery_token(tmp_path / "art.txt", repo_root=tmp_path)
+    assert res["ok"] is True, res
