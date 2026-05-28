@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-version = "1.33.2"
+# version is derived from consensus_mcp.__version__ (single source of truth) —
+# see [project].dynamic + [tool.setuptools.dynamic] below.
+dynamic = ["version"]
 description = "Cross-AI consensus code review: a panel of different AI models you choose (Claude, Codex, Gemini, Kimi, or add your own) review each change independently, and it ships only when they agree. An MCP server for AI coding tools."
 authors = [{name = "stgarca"}]
 requires-python = ">=3.11"
@@ -29,6 +31,9 @@ consensus-results = "consensus_mcp._results_rollup:main"
 # iter-0040 bonus per iter-0039 converged plan Q6: alias so `consensus init`
 # (with a SPACE) also works at the shell, matching the natural mental model.
 consensus = "consensus_mcp._init_wizard:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "consensus_mcp.__version__"}
 
 [tool.setuptools]
 packages = [
