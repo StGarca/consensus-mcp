@@ -11,9 +11,9 @@ cryptographically and compared with the other reviewers' findings.
 
 The current contents of the files in scope are embedded below. Read these
 AS IF they are the actual repository state. **Do NOT attempt to read files
-from disk** — you have only read-only access via grok's `--no-subagents
---disable-web-search --max-turns 1 --permission-mode dontAsk` flag set,
-and your filesystem reads may be unreliable. Use ONLY the embedded contents
+from disk** — grok runs here with the minimal `--no-memory
+--disable-web-search` flag set and a scratch working directory, so your
+filesystem reads may be unreliable. Use ONLY the embedded contents
 below as your authoritative source.
 
 If a file you need is not embedded here, note it as a finding (severity

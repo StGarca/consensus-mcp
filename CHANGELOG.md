@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.33.1 - 2026-05-28
+
+**Grok docs + live smoke reconciled to the landed minimal invocation shape.**
+The dispatcher already runs grok with its minimal verified shape — inline `-p`
+prompt, `--cwd /tmp`, and only `--no-memory --disable-web-search` (no
+`--max-turns`, `--prompt-file`, `--no-plan`, `--no-subagents`, or
+`--permission-mode`) — which resolves the earlier dispatch stall. The
+surrounding documentation and the env-gated live smoke had not caught up to
+that shape; this release fixes the drift. No dispatcher behavior change.
+
+Files modified:
+- `consensus_mcp/tests/test_dispatch_grok_smoke.py`: the env-gated live
+  end-to-end smoke (`CONSENSUS_MCP_RUN_REAL_GROK_SMOKE=1`) failed against a
+  correct dispatcher because it built an invalid synthetic repo root (created
+  a `.git` directory, which the resolver never checks) and asserted a retired
+  flag (`--no-subagents`). Fixed to create the repo-marker directories the
+  resolver actually validates and to assert the live `--no-memory
+  --disable-web-search` flags. Verified end-to-end: dispatcher rc=0, sealed
+  `grok-review.yaml` with full provenance.
+- `consensus_mcp/dispatch_templates/grok_review_template.md`: the reviewer
+  prompt described grok's sandbox with the retired flag set; updated to the
+  current `--no-memory --disable-web-search` shape.
+- `consensus_mcp/tools/reviewer_dispatch_grok.py`: docstring no longer warns of
+  an unfixed stall — it notes the minimal shape is in place.
+
+Test surface: 37 grok unit tests + 1 env-gated live smoke = 38 passing.
+
 ## 1.33.0 - 2026-05-27
 
 **MCP-wrapper symmetry for kimi and grok.** Closes the active-tools UI
