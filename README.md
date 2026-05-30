@@ -145,7 +145,7 @@ Yes — and the record is auditable, not a number you have to trust. Every
 review is sealed to disk with a content hash
 ([`consensus-state/archive/review-passes/`](consensus-state/archive/review-passes)).
 
-In 76 review iterations on its own code, the panel found **230 issues — 60 of
+In 129 review iterations on its own code, the panel found **482 issues — 149 of
 them blocking or critical** — each addressed before the change merged (fixed, or
 dismissed with the evidence that disproved it). The same setup is in active use
 on other real, separate codebases; because those use different log formats, their
