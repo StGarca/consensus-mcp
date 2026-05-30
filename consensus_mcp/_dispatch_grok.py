@@ -12,11 +12,15 @@ Key differences from `_dispatch_gemini.py` (by converged decision):
     (prompt_sha256), but grok itself reads the inline argument.
   - Auth pre-flight: probe for ~/.grok/auth.json. Missing → raise
     `GrokAuthRequiredError` BEFORE invoking the CLI (codex acceptance gate G4).
-  - Independence flags: `--no-memory --disable-web-search` + `--cwd /tmp`
-    — the minimal verified-working safeguard set. Prior shape
-    (`--prompt-file` + `--no-plan` + `--no-subagents` + `--max-turns` +
-    `--permission-mode` + project-subdir `--cwd`) caused indefinite
-    stalls on real packets.
+  - Output: `--output-format streaming-json` so the silence watchdog sees
+    token-by-token liveness (DEFECT 1 fix; `_assemble_grok_stream` rebuilds
+    the answer from the `text` events).
+  - Independence flags: `--no-memory --disable-web-search` + a fresh empty
+    per-pass `--cwd` temp dir (DEFECT 2 fix — grok's recursive watcher
+    scans the --cwd dir; an empty dir avoids the /tmp systemd-private
+    PermissionDenied noise). Prior shape (`--prompt-file` + `--no-plan` +
+    `--no-subagents` + `--max-turns` + `--permission-mode` + project-subdir
+    `--cwd`) caused indefinite stalls on real packets.
   - No sandbox / no integrity check — by converged decision (YAGNI; kimi's
     hardening earned complexity from a real field bug, grok has no such
     history). The disable-flag set IS the day-one safeguard.
@@ -58,6 +62,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -99,14 +104,20 @@ _DEFAULT_GROK_MODEL: str | None = None
 # high finding + kimi finding; operator decision: adopt inline -p +
 # minimal flags). The prior v1.31.1 hot-patch flag set (--prompt-file +
 # --no-plan + --no-subagents + --max-turns N + --permission-mode +
-# project-subdir --cwd) caused indefinite stalls on real packets —
-# grok counts every prompt chunk + MCP rejection + tool-call attempt
-# against the message budget and never reaches model output. The
-# minimal shape (inline -p + --no-memory + --disable-web-search +
-# --cwd /tmp) returns answers on real workloads. This flag set
-# satisfies dispatch-canon-validator.GROK_FORBIDDEN_FLAGS (the
-# validator forbids --prompt-file, --max-turns, --no-plan,
-# --no-subagents, --permission-mode for direct grok invocations).
+# project-subdir --cwd) was removed because that COMBINATION produced
+# indefinite stalls. NOTE: the earlier "grok counts every prompt chunk /
+# MCP rejection / tool-call attempt against a message budget and never
+# reaches model output" rationale was a Claude-side MISDIAGNOSIS — grok
+# has no MCP servers configured (`grok mcp list` -> none), handles its
+# 512K context fine, and the real stall was DEFECT 1: plain output + the
+# silence watchdog. Plain buffers ALL stdout until the answer is ready,
+# so the watchdog killed grok for being silent while grok was silent by
+# design. The fix is --output-format streaming-json (see _build_grok_cmd
+# + _assemble_grok_stream and docs/grok-dispatch-streaming-watchdog-fix.md)
+# so the watchdog sees token-by-token liveness. The minimal flag shape
+# still satisfies dispatch-canon-validator.GROK_FORBIDDEN_FLAGS (the
+# validator forbids --prompt-file, --max-turns, --no-plan, --no-subagents,
+# --permission-mode for direct grok invocations).
 _GROK_DISABLED_TOOLS = (
     "--no-memory",
     "--disable-web-search",
@@ -119,6 +130,14 @@ class GrokAuthRequiredError(RuntimeError):
 
 class GrokInvocationError(RuntimeError):
     """Raised when the grok CLI exits non-zero, times out, or is not found."""
+
+
+class GrokStreamCancelledError(GrokInvocationError):
+    """grok self-cancelled (stopReason == 'Cancelled') before emitting any
+    text event — the agentic self-cancel on open-ended prompts. A subclass
+    of GrokInvocationError so the parse-retry wrapper treats it as an
+    invocation failure, NOT a JSON parse failure (no wasted parse-retry).
+    See docs/grok-dispatch-streaming-watchdog-fix.md."""
 
 
 class GrokOutputParseError(ValueError):
@@ -199,15 +218,32 @@ def _build_grok_cmd(
     grok_bin: str,
     prompt: str,
     model: str | None,
+    run_cwd: str = "/tmp",
 ) -> list[str]:
     """Construct the grok CLI command list for a dispatch.
 
-    Operator-codified iter-0045 working shape: inline `-p <prompt>` +
-    `--no-memory` + `--disable-web-search` + `--cwd /tmp`. The `/tmp`
-    cwd prevents grok from scanning the project dir (the multi-message-
-    budget hang source); the operator-confirmed assumption is that /tmp
-    exists and is writable (standard on Linux; not guaranteed in highly
-    restricted containers — surface as ARG_MAX/exec error if missing).
+    Shape: inline `-p <prompt>` + `--output-format streaming-json` +
+    `--no-memory` + `--disable-web-search` + `--cwd <run_cwd>`.
+
+    `--output-format streaming-json` (DEFECT 1 fix): plain output buffers
+    all stdout until the answer is ready, so the silence watchdog in
+    `_invoke_grok` killed grok for being silent while grok was silent by
+    design. Streaming emits `{"type":"thought"|"text"|"end",...}` event
+    lines continuously, keeping the watchdog fed and surfacing progress in
+    the dispatch log. `_assemble_grok_stream` reassembles the answer from
+    the `text` events.
+
+    `run_cwd` (DEFECT 2 fix): grok runs a recursive filesystem watcher on
+    the directory named by its `--cwd` FLAG (confirmed by grok 2026-05-30:
+    the watcher keys off the flag, not the OS process cwd). With `--cwd
+    /tmp` that watcher hits PermissionDenied on `/tmp/systemd-private-*`
+    (non-fatal noise). The dispatcher therefore passes a fresh, empty
+    per-pass temp dir as `run_cwd` so the watcher scans nothing
+    unreadable. The `/tmp` default is the canon fallback. (This is the
+    dispatcher's INTERNAL subprocess argv; it is never inspected by
+    dispatch-canon-validator, which only checks grok invocations issued
+    directly via the Bash tool — so a per-pass temp `--cwd` keeps Gate G3
+    green without touching the validator.)
 
     Note: inline `-p` carries a Linux MAX_ARG_STRLEN limit of 128KB per
     argument. If a packet ever exceeds that, the CLI will fail loudly
@@ -216,10 +252,10 @@ def _build_grok_cmd(
     cmd = [
         _resolve_grok_bin(grok_bin),
         "-p", prompt,
-        "--output-format", "plain",
+        "--output-format", "streaming-json",
     ]
     cmd.extend(_GROK_DISABLED_TOOLS)
-    cmd.extend(["--cwd", "/tmp"])
+    cmd.extend(["--cwd", run_cwd])
     if model:
         cmd.extend(["--model", model])
     return cmd
@@ -240,20 +276,82 @@ def _invoke_grok(
     poll_interval: float = 0.5,
     time_fn=None,
     popen_factory=None,
+    _sleep=None,
 ) -> tuple[str, Path]:
-    """Shell out to grok CLI via Popen + reader threads.
+    """Shell out to grok CLI; assemble the streaming answer.
 
-    Returns (raw_stdout, prompt_path). The prompt_path is the per-pass file
-    we wrote (caller reads it for sha256 provenance).
+    Returns (assembled_answer, prompt_path). The answer is reassembled by
+    `_assemble_grok_stream` from grok's `--output-format streaming-json`
+    events (DEFECT 1 fix); `output_sha256` therefore keeps its plain-mode
+    meaning ("the answer grok produced"). The prompt_path is the per-pass
+    file we wrote (caller reads it for sha256 provenance).
 
-    Pattern mirrors _invoke_gemini's stream-and-watchdog loop but simpler:
+    Thin wrapper that owns the per-pass run-cwd lifecycle: grok runs from a
+    fresh empty temp dir (DEFECT 2 fix — see `_build_grok_cmd`) that is
+    ALWAYS removed afterwards, including every watchdog/abort raise path.
+    """
+    grok_run_cwd = tempfile.mkdtemp(prefix="grok-run-")
+    try:
+        return _invoke_grok_in_cwd(
+            grok_run_cwd,
+            prompt=prompt,
+            grok_bin=grok_bin,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            iter_dir=iter_dir,
+            pass_id=pass_id,
+            repo_root=repo_root,
+            log_path=log_path,
+            anchors=anchors,
+            heartbeat_interval=heartbeat_interval,
+            stall_silence_seconds=stall_silence_seconds,
+            poll_interval=poll_interval,
+            time_fn=time_fn,
+            popen_factory=popen_factory,
+            _sleep=_sleep,
+        )
+    finally:
+        shutil.rmtree(grok_run_cwd, ignore_errors=True)
+
+
+def _invoke_grok_in_cwd(
+    grok_run_cwd: str,
+    *,
+    prompt: str,
+    grok_bin: str,
+    model: str | None,
+    timeout_seconds: int,
+    iter_dir: Path,
+    pass_id: str,
+    repo_root: Path,
+    log_path=None,
+    anchors=None,
+    heartbeat_interval: float = 30.0,
+    stall_silence_seconds: float = 180.0,
+    poll_interval: float = 0.5,
+    time_fn=None,
+    popen_factory=None,
+    _sleep=None,
+) -> tuple[str, Path]:
+    """Run grok from `grok_run_cwd`; return (assembled_answer, prompt_path).
+
+    Stream-and-watchdog loop: the silence watchdog advances on every stdout
+    line via `stdout_reader`; `--output-format streaming-json` emits
+    thought/text event lines continuously so the watchdog stays fed (the
+    DEFECT 1 fix — plain output buffered all stdout, starving the watchdog).
     grok reads the prompt inline via `-p` (no stdin piping), so no
     stdin-writer thread + no codex-rev-001 deadlock dance.
+
+    `_sleep` is a private test seam (defaults to `time.sleep`; the
+    deterministic-clock harness injects it so the watchdog tests do not
+    flake — mirrors `_invoke_codex`'s blessed `_sleep` seam).
     """
     if time_fn is None:
         time_fn = time.time
     if popen_factory is None:
         popen_factory = subprocess.Popen
+    if _sleep is None:
+        _sleep = time.sleep
     can_log = log_path is not None and anchors is not None
 
     # Pre-flight auth check BEFORE writing the prompt file (no point creating
@@ -264,7 +362,7 @@ def _invoke_grok(
     # (prompt_sha256 in dispatch_log + dispatch_provenance), but grok
     # itself receives the prompt inline via `-p` (iter-0045 shape).
     prompt_path = _write_per_pass_prompt(prompt, iter_dir, pass_id)
-    cmd = _build_grok_cmd(grok_bin, prompt, model)
+    cmd = _build_grok_cmd(grok_bin, prompt, model, run_cwd=grok_run_cwd)
 
     if sys.platform == "win32":
         popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -276,7 +374,7 @@ def _invoke_grok(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
-            cwd=str(repo_root),
+            cwd=grok_run_cwd,
             **popen_kwargs,
         )
     except FileNotFoundError:
@@ -412,7 +510,7 @@ def _invoke_grok(
                 f"grok exceeded {timeout_seconds}s wall timeout + {stall_silence_seconds}s grace"
             )
 
-        time.sleep(poll_interval)
+        _sleep(poll_interval)
 
     t_stdout.join(timeout=5)
     t_stderr.join(timeout=5)
@@ -439,7 +537,9 @@ def _invoke_grok(
             f"grok exit={proc.returncode}; stderr_tail={stderr_tail!r}{stdout_hint}"
         )
 
-    return stdout_bytes.decode("utf-8", errors="replace"), prompt_path
+    return _assemble_grok_stream(
+        stdout_bytes.decode("utf-8", errors="replace")
+    ), prompt_path
 
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
@@ -469,6 +569,70 @@ def _extract_json_from_text(text: str) -> str:
     if first_brace != -1 and last_brace > first_brace:
         return text[first_brace:last_brace + 1]
     return text
+
+
+def _assemble_grok_stream(raw: str) -> str:
+    """Assemble the final answer from grok ``--output-format streaming-json``.
+
+    grok streams one JSON event per line (field name verified live
+    2026-05-30)::
+
+        {"type":"thought","data":...}   # reasoning — ignored
+        {"type":"text","data":...}      # answer chunk — concatenated
+        {"type":"end","stopReason":...} # terminal; EndTurn | Cancelled
+
+    Returns the concatenation of the ``data`` of every ``text`` event (the
+    answer), feeding the existing JSON extraction/validation unchanged.
+
+    Defensive (spec Risks §): unparseable lines, non-dict events, and
+    events without a ``type`` are skipped — never fatal. A ``text`` event
+    missing ``data`` falls back to a ``text`` key before being ignored.
+
+    Raises ``GrokStreamCancelledError`` when the stream ends with
+    ``stopReason == "Cancelled"`` having produced ZERO text (the agentic
+    self-cancel) — surfaced as an invocation failure, not a silent empty
+    answer.
+
+    Backward-compat: if NO line is a streaming event carrying a ``type``
+    key (e.g. an already-plain blob), the raw string is returned unchanged
+    so the downstream extractor still runs.
+    """
+    text_parts: list[str] = []
+    saw_event = False
+    saw_text = False
+    stop_reason: str | None = None
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            evt = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(evt, dict) or "type" not in evt:
+            continue
+        saw_event = True
+        etype = evt.get("type")
+        if etype == "text":
+            payload = evt.get("data")
+            if payload is None:
+                payload = evt.get("text")
+            if isinstance(payload, str):
+                text_parts.append(payload)
+                saw_text = True
+        elif etype == "end":
+            stop_reason = evt.get("stopReason") or evt.get("stop_reason")
+            break
+    if not saw_event:
+        return raw
+    if stop_reason == "Cancelled" and not saw_text:
+        raise GrokStreamCancelledError(
+            "grok self-cancelled (stopReason=Cancelled) with zero text "
+            "events — no answer produced (agentic self-cancel; see "
+            "docs/grok-dispatch-streaming-watchdog-fix.md). Re-dispatch "
+            "with a shorter, single-focus prompt."
+        )
+    return "".join(text_parts)
 
 
 def _parse_grok_output(text: str, goal_packet: dict | None = None) -> dict:
