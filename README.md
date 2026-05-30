@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.33.1
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.33.3
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -154,13 +154,16 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.33.1 — stable.** Grok dispatcher reconciliation: the
-docs and the env-gated live smoke now match grok's minimal invocation
-shape, and the earlier dispatch stall is resolved. All five reviewers —
-Claude, Codex, Gemini, Grok, and Kimi — are MCP-surfaced (visible in
-Claude Code's active-tools strip). 1,820+ regression tests, green on CI
-across Linux + Windows and Python 3.11+. Self-hosted: every release is
-built through consensus-mcp's own cross-AI review.
+**Current: v1.33.3 — stable.** Grok dispatcher streaming fix: the
+dispatcher now invokes grok with `--output-format streaming-json` so its
+silence watchdog sees token-by-token liveness (the earlier `plain`-output
+buffering made the watchdog kill grok for being silent while grok was
+silent by design), and runs grok from a fresh empty per-pass temp `--cwd`
+to drop the `/tmp` watcher noise. All five reviewers — Claude, Codex,
+Gemini, Grok, and Kimi — are MCP-surfaced (visible in Claude Code's
+active-tools strip). 1,800+ regression tests, green on CI across Linux +
+Windows and Python 3.11+. Self-hosted: every release is built through
+consensus-mcp's own cross-AI review.
 
 - What changed in each release → [`CHANGELOG.md`](CHANGELOG.md)
 - Known-issue releases + which version to upgrade to →

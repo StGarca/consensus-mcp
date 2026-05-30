@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.33.3 - 2026-05-30
+
+**Grok dispatcher streams its output so the silence watchdog stays fed.** The
+grok dispatcher set `--output-format plain`, which buffers all stdout until the
+answer is ready, while `_invoke_grok` runs a silence watchdog that kills grok
+when no stdout line arrives within `stall_silence_seconds`. On any non-trivial
+prompt grok thinks longer than that window, emits zero lines (plain is silent by
+design), and the watchdog killed it for being silent while grok was silent by
+design (`grok stuck: no output`). Trivial smoke prompts answered in time, masking
+the bug.
+
+Fix (three defects, dispatcher-only — `dispatch-canon-validator` untouched):
+- **DEFECT 1 (primary):** `--output-format streaming-json`. grok emits
+  `{"type":"thought"|"text"|"end",...}` event lines continuously, so the existing
+  `stdout_reader` advances `last_streamed_ts` per line and the watchdog stays
+  fed. A new `_assemble_grok_stream()` reassembles the answer from the `text`
+  events (field `data`, verified live), ignores `thought`, stops at `end`, and
+  raises `GrokStreamCancelledError` (a `GrokInvocationError` subclass) on a
+  cancel-before-text self-cancel so it surfaces cleanly instead of as a
+  misleading silence timeout. `output_sha256` keeps its plain-mode meaning (the
+  assembled answer). The parser is defensive (skips malformed/typeless lines,
+  `data`->`text` fallback, plain-blob passthrough).
+- **DEFECT 2:** grok runs from a fresh empty per-pass temp `--cwd` (removed in a
+  `finally` on every path) instead of `/tmp`, so grok's recursive watcher — which
+  keys off the `--cwd` flag (confirmed by grok) — scans nothing unreadable and
+  stops logging the `/tmp/systemd-private-*` `PermissionDenied` noise. The
+  dispatcher's internal `--cwd` is never seen by `dispatch-canon-validator` (it
+  only guards grok invocations issued directly via the Bash tool), so this keeps
+  the validator green with zero changes.
+- **DEFECT 3:** corrected the misleading "message budget" code comment (a prior
+  Claude-side misdiagnosis) to the real cause.
+
+Files modified:
+- `consensus_mcp/_dispatch_grok.py`: `--output-format streaming-json`; per-pass
+  temp `--cwd` lifecycle (`_invoke_grok` wrapper + `_invoke_grok_in_cwd`);
+  `_assemble_grok_stream` + `GrokStreamCancelledError`; a private `_sleep=` test
+  seam (defaults to `time.sleep`; mirrors `_invoke_codex`'s deterministic-clock
+  seam) so the watchdog-regression test is deterministic, not flaky; comment +
+  docstring corrections.
+- `consensus_mcp/tests/test_dispatch_grok.py`: streaming-parser unit tests +
+  `--output-format`/`run_cwd` flag tests.
+- `consensus_mcp/tests/test_dispatch_grok_streaming.py` (new): deterministic
+  streaming/watchdog integration tests, including the silence-regression pair
+  (streaming keeps the watchdog fed across a window that silence kills).
+- `docs/grok-dispatch-streaming-watchdog-fix.md`: the patch spec + a resolution
+  note recording the landed decisions.
+
+Test surface: grok suite 40/40; full suite 1793 passed, 8 skipped; validator
+self-test 13/13 (untouched); real-grok dispatcher smoke ~17s. The full Workflow
+A/B consensus review was skipped by explicit operator authorization; the design
+was settled via a 1-AI grok consult (grok had final say) plus self-review.
+
 ## 1.33.2 - 2026-05-28
 
 **Delivery-token path key normalized — fixes false `missing_delivery_tokens` at
