@@ -77,11 +77,25 @@ def test_build_grok_cmd_contains_minimal_disabled_tool_set():
     assert "--prompt-file" not in cmd
 
 
-def test_build_grok_cmd_passes_cwd_tmp():
-    """iter-0045: --cwd is hard-coded /tmp (prevents project-dir scan hang)."""
+def test_build_grok_cmd_cwd_defaults_to_tmp():
+    """Default run_cwd is /tmp (canon fallback). The dispatcher overrides
+    this per-pass with a fresh empty temp dir (DEFECT 2 fix: grok's
+    recursive watcher scans the --cwd dir, so an empty dir avoids the
+    /tmp systemd-private PermissionDenied noise — confirmed by grok)."""
     cmd = _dispatch_grok._build_grok_cmd("grok", "p", model=None)
     assert "--cwd" in cmd
     assert cmd[cmd.index("--cwd") + 1] == "/tmp"
+
+
+def test_build_grok_cmd_uses_given_run_cwd():
+    """When the dispatcher passes a fresh per-pass temp dir, it becomes the
+    --cwd value (Option A — grok ruled that its recursive watcher keys off
+    the --cwd FLAG, not the OS process cwd, so an empty --cwd dir is what
+    eliminates the systemd-private watcher noise)."""
+    cmd = _dispatch_grok._build_grok_cmd(
+        "grok", "p", model=None, run_cwd="/tmp/grok-run-abc123",
+    )
+    assert cmd[cmd.index("--cwd") + 1] == "/tmp/grok-run-abc123"
 
 
 def test_build_grok_cmd_includes_model_when_set():
@@ -97,10 +111,15 @@ def test_build_grok_cmd_omits_model_when_none():
     assert "--model" not in cmd
 
 
-def test_build_grok_cmd_output_format_plain():
+def test_build_grok_cmd_output_format_streaming_json():
+    """Streaming-json (NOT plain) is required: plain buffers all stdout until
+    the answer is ready, so the silence watchdog killed grok for being silent
+    while grok was silent by design (DEFECT 1). Streaming emits thought/text
+    event lines continuously, keeping the watchdog fed. See
+    docs/grok-dispatch-streaming-watchdog-fix.md."""
     cmd = _dispatch_grok._build_grok_cmd("grok", "p", model=None)
     assert "--output-format" in cmd
-    assert cmd[cmd.index("--output-format") + 1] == "plain"
+    assert cmd[cmd.index("--output-format") + 1] == "streaming-json"
 
 
 # ---------- _write_per_pass_prompt ----------
@@ -332,3 +351,102 @@ def test_grok_disabled_tools_list_is_stable():
         "--no-memory",
         "--disable-web-search",
     )
+
+
+# ---------- _assemble_grok_stream (streaming-json parser) ----------
+#
+# Ground-truth event shape (captured live from
+# `grok -p ... --output-format streaming-json` 2026-05-30): each event is a
+# JSON object on its own line, e.g. {"type":"thought","data":"..."},
+# {"type":"text","data":"..."}, terminating with
+# {"type":"end","stopReason":"EndTurn"|"Cancelled",...}. The answer is the
+# concatenation of the `data` of every `text` event.
+
+def _stream(*events):
+    """Join streaming-json events (dicts) into a newline-delimited stream."""
+    return "\n".join(json.dumps(e) for e in events)
+
+
+def test_assemble_stream_concatenates_text_events_and_ignores_thoughts():
+    raw = _stream(
+        {"type": "thought", "data": "let me reason about this"},
+        {"type": "text", "data": '{"goal_satisfied":'},
+        {"type": "text", "data": ' true, "findings": []}'},
+        {"type": "thought", "data": "ok done"},
+        {"type": "end", "stopReason": "EndTurn"},
+    )
+    out = _dispatch_grok._assemble_grok_stream(raw)
+    assert out == '{"goal_satisfied": true, "findings": []}'
+    # The assembled answer must itself be valid JSON for downstream parse.
+    assert json.loads(out)["goal_satisfied"] is True
+
+
+def test_assemble_stream_cancel_before_text_raises_invocation_error():
+    """grok thinks then self-cancels with zero text events (the agentic
+    self-cancel). This must surface as an INVOCATION failure, not a silent
+    empty answer and not a JSON parse error (so the retry wrapper does not
+    waste a parse-retry on it)."""
+    raw = _stream(
+        {"type": "thought", "data": "thinking 1"},
+        {"type": "thought", "data": "thinking 2"},
+        {"type": "end", "stopReason": "Cancelled"},
+    )
+    with pytest.raises(_dispatch_grok.GrokStreamCancelledError):
+        _dispatch_grok._assemble_grok_stream(raw)
+    assert issubclass(
+        _dispatch_grok.GrokStreamCancelledError,
+        _dispatch_grok.GrokInvocationError,
+    )
+
+
+def test_assemble_stream_cancel_after_text_returns_text():
+    """A Cancelled stopReason AFTER some text was emitted is NOT the error
+    case — only cancel-BEFORE-any-text raises. We keep what grok produced."""
+    raw = _stream(
+        {"type": "text", "data": "partial answer"},
+        {"type": "end", "stopReason": "Cancelled"},
+    )
+    assert _dispatch_grok._assemble_grok_stream(raw) == "partial answer"
+
+
+def test_assemble_stream_skips_malformed_and_typeless_lines():
+    """Defensive parse (spec Risks §): non-JSON lines, JSON without a
+    `type`, and truncated lines are skipped, never fatal."""
+    raw = "\n".join([
+        "not json at all",
+        json.dumps({"no_type": 1}),
+        '{"type":"text","data":"par',  # truncated → unparseable
+        "",                              # blank line
+        json.dumps({"type": "text", "data": "ok"}),
+        json.dumps({"type": "end", "stopReason": "EndTurn"}),
+    ])
+    assert _dispatch_grok._assemble_grok_stream(raw) == "ok"
+
+
+def test_assemble_stream_field_fallback_to_text_key():
+    """Defensive field fallback: if a text event lacks `data`, fall back to
+    a `text` key before giving up (the live field is `data`, but the parser
+    must not hard-fail if grok's event shape shifts)."""
+    raw = _stream(
+        {"type": "text", "text": "fallback-field"},
+        {"type": "end", "stopReason": "EndTurn"},
+    )
+    assert _dispatch_grok._assemble_grok_stream(raw) == "fallback-field"
+
+
+def test_assemble_stream_legacy_plain_passthrough():
+    """Backward-compat / G4: input with NO streaming events at all (e.g. a
+    bare JSON blob from a hypothetical plain run) passes through unchanged
+    so the downstream JSON extractor still runs."""
+    raw = '{"goal_satisfied": true, "findings": []}'
+    assert _dispatch_grok._assemble_grok_stream(raw) == raw
+
+
+def test_assemble_stream_stops_at_end_event():
+    """Text events after the terminal `end` event are ignored."""
+    raw = _stream(
+        {"type": "text", "data": "kept"},
+        {"type": "end", "stopReason": "EndTurn"},
+        {"type": "text", "data": "ignored-after-end"},
+    )
+    assert _dispatch_grok._assemble_grok_stream(raw) == "kept"
