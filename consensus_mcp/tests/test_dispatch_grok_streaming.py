@@ -325,11 +325,20 @@ def _drive_streaming(clock, th, log_path, *, step: float, until, max_steps: int 
     while th.is_alive() and not until() and steps < max_steps:
         prev = len(_events(log_path, "dispatch_streamed_line"))
         clock.advance(step)
+        # Block until production has actually PROCESSED a new streamed line
+        # (so last_streamed_ts is provably fresh before the next advance) OR
+        # the run reached its terminal state. NOTE: do NOT also return on
+        # `clock._sleepers > 0` — the runner parks in `_sleep` every poll
+        # iteration, so that would let the driver advance the virtual clock
+        # again before the reader thread refreshes last_streamed_ts. Under
+        # reader-thread lag (loaded CI) the clock then outruns the last line
+        # and the silence watchdog false-fires. This mirrors the codex
+        # _drive_streaming, whose per-step wait keys ONLY on processed-line
+        # progress / death / until(), with _CEILING as the sole wedge net.
         if not clock.wait_for(
             lambda prev=prev: (not th.is_alive())
             or until()
             or len(_events(log_path, "dispatch_streamed_line")) > prev
-            or clock._sleepers > 0
         ):
             clock.release_all()
             th.join(timeout=5)
