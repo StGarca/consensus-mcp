@@ -42,6 +42,7 @@ from consensus_mcp._design_approval import (
     _count_non_claude_reviewers,
     _marker_path,
     _MIN_NON_CLAUDE_REVIEWERS,
+    _review_family,
     _revalidate_seal,
     mint_design_approval,
 )
@@ -78,9 +79,11 @@ def _resolve_iter_dir(iteration: str, repo_root: Path) -> Path:
 
 
 def _sealed_reviewer_families(iter_dir: Path) -> list[str]:
+    """Non-claude families from sealed reviews, matching the same `<fam>-review
+    [-N].yaml` forms `_count_non_claude_reviewers` does (round-keyed names too)."""
     fams: set[str] = set()
-    for art in iter_dir.glob("*-review.yaml"):
-        fam = art.name[: -len("-review.yaml")].strip().lower()
+    for art in iter_dir.glob("*-review*.yaml"):
+        fam = _review_family(art.name)
         if fam and "claude" not in fam:
             fams.add(fam)
     return sorted(fams)

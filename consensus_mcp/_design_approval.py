@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import dataclasses
 import fnmatch
+import re
 from pathlib import Path
 
 import yaml
@@ -139,15 +140,33 @@ def _load_marker(repo_root: Path) -> tuple[dict | None, Result | None]:
     return data, None
 
 
+# Matches a sealed review artifact filename, capturing the reviewer family.
+# Accepts both the bare `<fam>-review.yaml` AND the round/pass-keyed
+# `<fam>-review-<N>.yaml` form an adapter writes when reviewers seal under
+# distinct pass_ids (the parallel-dispatch H3 seal-collision fix). `<fam>` is
+# non-greedy so `kimi-review-4.yaml` -> 'kimi', not 'kimi-review-4'.
+_REVIEW_FILE_RE = re.compile(r"^(?P<fam>.+?)-review(?:-\d+)?\.yaml$")
+
+
+def _review_family(filename: str) -> str | None:
+    """Reviewer family from a sealed-review filename, or None if not a review
+    artifact. Handles `<fam>-review.yaml` and `<fam>-review-<N>.yaml`."""
+    m = _REVIEW_FILE_RE.match(filename)
+    if not m:
+        return None
+    return m.group("fam").strip().lower() or None
+
+
 def _count_non_claude_reviewers(iter_dir: Path) -> int:
     """Count DISTINCT non-claude reviewer families in a sealed iteration by its
-    `<family>-review.yaml` artifacts (codex-review.yaml, gemini-review.yaml,
-    kimi-review.yaml, ...). Mirrors the >=2-non-claude reviewer rule in
+    `<family>-review[-N].yaml` artifacts (codex-review.yaml, gemini-review.yaml,
+    kimi-review-4.yaml, ...). Round/pass-keyed names count once per family.
+    Mirrors the >=2-non-claude reviewer rule in
     `_delivery_readiness.mint_delivery_token`."""
     families: set[str] = set()
     try:
-        for art in iter_dir.glob("*-review.yaml"):
-            fam = art.name[: -len("-review.yaml")].strip().lower()
+        for art in iter_dir.glob("*-review*.yaml"):
+            fam = _review_family(art.name)
             if fam and "claude" not in fam:
                 families.add(fam)
     except OSError:
