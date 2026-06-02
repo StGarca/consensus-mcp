@@ -1,6 +1,9 @@
 # Local plugin state (context-mode KV store)
 data/
 
+# CodeGraph semantic index (local, per-machine; rebuilt via `codegraph init -i`)
+.codegraph/
+
 # Python
 __pycache__/
 *.py[cod]

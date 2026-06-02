@@ -189,6 +189,34 @@ def session_active(repo_root: Path) -> bool:
         return False
 
 
+def gate_should_enforce(repo_root: Path) -> bool:
+    """Single activation predicate shared by ALL consensus hooks.
+
+    The v1.32.1 consult (iteration-v133-gate-scope-shift, 5/5 unanimous) made
+    the gate DORMANT-by-default — armed only when a consensus consult is in
+    flight — but that model was wired into ONLY the PreToolUse edit/Bash gate.
+    The Stop gate and the SessionStart/UserPromptSubmit injector kept firing in
+    EVERY repo (gated solely on `consensus-init` being on PATH), nagging
+    everyday work that had nothing to do with consensus. This predicate is the
+    one source of truth all three hooks now consult so they cannot drift again
+    ("gate-consistency hard rule").
+
+    Returns True iff a hook should ENFORCE/inject. Precedence:
+      - CONSENSUS_MCP_GATE_DISABLE set -> False (operator escape hatch; the
+        human trust-root can never be deadlocked by any hook, ever).
+      - CONSENSUS_MCP_FORCE_OPTED_IN set -> True (test / automation override).
+      - else -> session_active(repo_root) (legacy opt-in OR a live session
+        marker pointing at a real unsealed iteration).
+
+    Fail-safe to False (= dormant) on any error, via session_active.
+    """
+    if os.environ.get("CONSENSUS_MCP_GATE_DISABLE"):
+        return False
+    if os.environ.get("CONSENSUS_MCP_FORCE_OPTED_IN"):
+        return True
+    return session_active(repo_root)
+
+
 def emit_migration_warning_once(repo_root: Path) -> bool:
     """Emit a one-time stderr warning when a legacy `.consensus/`
     project is loaded under the new dormant-by-default model.

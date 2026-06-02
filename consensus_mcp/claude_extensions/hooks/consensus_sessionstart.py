@@ -28,6 +28,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Ensure the consensus_mcp package that ships ALONGSIDE this hook is importable
+# regardless of the cwd Claude Code invokes us from (parity with
+# consensus_pretooluse_gate.py / consensus_stop_gate.py — this file previously
+# lacked the insert, so its new gate_should_enforce import would silently fall
+# back to a stale site-packages copy). Repo root is three parents up.
+_PKG_ROOT = Path(__file__).resolve().parents[3]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
 _PRECEDENCE_TEXT = (
     "consensus-mcp is active. Consensus has PRECEDENCE at every decision gate; "
     "defer to it instead of barreling ahead:\n"
@@ -63,6 +72,19 @@ def _runtime_present() -> bool:
     if os.environ.get("CONSENSUS_MCP_FORCE_RUNTIME_PRESENT"):
         return True
     return shutil.which("consensus-init") is not None
+
+
+def _should_enforce(repo_root: Path) -> bool:
+    """Dormant-by-default parity (v1.33 gate-consistency fix): the injector now
+    shares the PreToolUse gate's activation predicate. Returns True only when a
+    consensus consult is in flight (or the operator forced opt-in). On any
+    import/probe error -> False (dormant = SILENT), the least-obnoxious
+    direction: never impose consensus precedence framing on everyday work."""
+    try:
+        from consensus_mcp._session_state import gate_should_enforce
+        return gate_should_enforce(repo_root)
+    except Exception:
+        return False
 
 
 def _git_toplevel(start: Path) -> Path | None:
@@ -128,8 +150,12 @@ def main(argv=None) -> int:
     repo_root = _repo_root(event)
 
     if name == "UserPromptSubmit":
-        # Lightweight nudge. No-op when runtime absent.
+        # Lightweight nudge. No-op when runtime absent OR when the gate is
+        # dormant (no consult in flight) — everyday prompts in any repo are not
+        # nudged about consensus precedence.
         if not present:
+            return 0
+        if not _should_enforce(repo_root):
             return 0
         out = {
             "hookSpecificOutput": {
@@ -140,14 +166,19 @@ def main(argv=None) -> int:
         print(json.dumps(out))
         return 0
 
-    # SessionStart (startup|clear|compact) and any other event: emit precedence
-    # context (present) or the benign absence notice. When present, append the
-    # git-resolved repo root so the injected context is anchored correctly even
-    # when the session was opened from a subdirectory (H2).
-    if present:
-        text = f"{_PRECEDENCE_TEXT}\nRepo root (consensus scope): {repo_root}"
-    else:
+    # SessionStart (startup|clear|compact) and any other event:
+    #   - runtime ABSENT  -> benign "not detected" notice (absence stays visible).
+    #   - runtime present but DORMANT (no consult in flight) -> SILENT (v1.33
+    #     gate-consistency fix): do not stamp consensus PRECEDENCE framing into a
+    #     session doing ordinary, non-consensus work.
+    #   - runtime present AND active -> full precedence context, anchored to the
+    #     git-resolved repo root (H2: correct even when opened from a subdir).
+    if not present:
         text = _ABSENT_TEXT
+    elif not _should_enforce(repo_root):
+        return 0
+    else:
+        text = f"{_PRECEDENCE_TEXT}\nRepo root (consensus scope): {repo_root}"
     out = {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",

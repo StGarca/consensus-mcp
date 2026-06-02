@@ -182,3 +182,58 @@ def test_migration_warning_skipped_when_session_active(tmp_path):
                             activated_by="t", activation_source="test_fixture")
     # Session already active under new model → no migration warning needed.
     assert ss.emit_migration_warning_once(repo) is False
+
+
+# ----- gate_should_enforce (shared hook activation predicate) -------
+# v1.33 gate-consistency fix: the ONE predicate the PreToolUse gate, Stop gate,
+# and SessionStart injector all consult, so they cannot drift back to firing in
+# non-consensus everyday work.
+
+def _clean_gate_env(monkeypatch):
+    for var in ("CONSENSUS_MCP_GATE_DISABLE", "CONSENSUS_MCP_FORCE_OPTED_IN",
+                ss.LEGACY_ENV_VAR):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_gate_should_enforce_dormant_by_default(tmp_path, monkeypatch):
+    _clean_gate_env(monkeypatch)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # No marker, no legacy opt-in, no env override -> DORMANT (the everyday case).
+    assert ss.gate_should_enforce(repo) is False
+
+
+def test_gate_should_enforce_active_with_live_session_marker(tmp_path, monkeypatch):
+    _clean_gate_env(monkeypatch)
+    repo = _repo(tmp_path)  # creates consensus-state/active/iter-test
+    ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
+                            activated_by="t", activation_source="test_fixture")
+    assert ss.gate_should_enforce(repo) is True
+
+
+def test_gate_should_enforce_force_opted_in(tmp_path, monkeypatch):
+    _clean_gate_env(monkeypatch)
+    monkeypatch.setenv("CONSENSUS_MCP_FORCE_OPTED_IN", "1")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    assert ss.gate_should_enforce(repo) is True
+
+
+def test_gate_should_enforce_gate_disable_overrides_everything(tmp_path, monkeypatch):
+    _clean_gate_env(monkeypatch)
+    # GATE_DISABLE is the operator escape hatch — it wins over BOTH a live marker
+    # and FORCE_OPTED_IN (the human trust-root can never be deadlocked).
+    monkeypatch.setenv("CONSENSUS_MCP_GATE_DISABLE", "1")
+    monkeypatch.setenv("CONSENSUS_MCP_FORCE_OPTED_IN", "1")
+    repo = _repo(tmp_path)
+    ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
+                            activated_by="t", activation_source="test_fixture")
+    assert ss.gate_should_enforce(repo) is False
+
+
+def test_gate_should_enforce_legacy_marker_activates(tmp_path, monkeypatch):
+    _clean_gate_env(monkeypatch)
+    repo = tmp_path / "repo"
+    (repo / ".consensus").mkdir(parents=True)
+    (repo / ".consensus" / "legacy-always-on").write_text("", encoding="utf-8")
+    assert ss.gate_should_enforce(repo) is True
