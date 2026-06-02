@@ -29,7 +29,7 @@ assumptions_challenged:
   - id: a-001
     assumption: "Fixture packet is canonical and well-formed."
     challenge_result: cleared
-    evidence: "Packet contains all 10 §7 required_packet_fields."
+    evidence: "Packet contains all 10 section 7 required_packet_fields."
 
 no_objection_rationale:
   required_when_no_blockers: true

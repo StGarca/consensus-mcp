@@ -1,7 +1,7 @@
 # Path A: converging on a synthesized plan
 
 A propose-converge consult whose deliverable is ONE merged plan cannot converge in the
-autonomous engine (Path B / `run_iteration`) — there is no host in the loop to author/revise
+autonomous engine (Path B / `run_iteration`) - there is no host in the loop to author/revise
 the plan, so the engine would only bundle proposals and vote on the pile. Declare it and use
 Path A:
 
@@ -15,8 +15,8 @@ Path A:
    (the v1.30.5 review_target_content embed makes the plan visible to the sandbox).
 4. Load the sealed review artifacts and call
    `engine.evaluate_plan_convergence(review_artifacts, outcome)`.
-5. If `conv.converged`: `engine.seal_plan_iteration(iter, plan_path, conv, round_number)` →
+5. If `conv.converged`: `engine.seal_plan_iteration(iter, plan_path, conv, round_number)` ->
    writes `iteration-outcome.yaml` (sealed closing_state). With the plan + >=2 cross-family
    review YAMLs present, `mint_design_approval` can now point at this iteration.
 6. If not converged: REVISE `converged-plan.yaml` (fold in the round's findings) and
-   re-dispatch — the next round's review target is the REVISED plan.
+   re-dispatch - the next round's review target is the REVISED plan.

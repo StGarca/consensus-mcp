@@ -1,17 +1,17 @@
-"""loop.verify_codex_patch MCP tool — Task #25 (iter-0015).
+"""loop.verify_codex_patch MCP tool - Task #25 (iter-0015).
 
 Per codex 2026-05-10 v4 directive (memory/project_codex_fix_author_directive.md):
 claude verifies codex-emitted patches per CLAUDE.md. The verifier subagent
 receives reproducibility-bounded inputs (NOT codex's reasoning trail), and
 emits a structured verdict {approved | corrected_resubmit}.
 
-This MCP tool does NOT itself dispatch a subagent — that's the orchestrator's
+This MCP tool does NOT itself dispatch a subagent - that's the orchestrator's
 job. The tool BUILDS the verifier-input bundle (mode=build_inputs) and
 RECORDS the eventual verdict back into the iteration_dir
 (mode=record_verdict).
 
 Independence property (preserved): the build_inputs bundle includes the
-codex finding TEXT (the WHAT — summary + recommendation + citation +
+codex finding TEXT (the WHAT - summary + recommendation + citation +
 risk + severity) but EXCLUDES codex's `goal_satisfied_rationale` and any
 prior reviewer reasoning. The verifier subagent re-derives the verdict
 from the patch + touched files + CLAUDE.md, not from codex's narrative.
@@ -124,7 +124,7 @@ def _find_finding_by_id(review: dict, finding_id: str) -> dict | None:
 
 
 def _build_codex_finding_text(finding: dict) -> str:
-    """Render the finding as a plain-text block — the WHAT, not the WHY.
+    """Render the finding as a plain-text block - the WHAT, not the WHY.
 
     Excludes any reasoning fields (goal_satisfied_rationale lives at the
     review root, not on a finding, but we deliberately do not pull from
@@ -179,7 +179,7 @@ def _compute_review_scope_hash(bundle: dict) -> str:
 
 
 def _bundle_sha_for_files(repo_root: Path, files_touched: list[str]) -> str:
-    """Mirror of _closure_invariant.bundle_sha — used for post_sha_hint.
+    """Mirror of _closure_invariant.bundle_sha - used for post_sha_hint.
 
     Imported lazily to avoid a hard dep on _closure_invariant from this
     tool (consistent with the loop_run_goal lazy-import pattern).

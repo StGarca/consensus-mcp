@@ -49,7 +49,7 @@ PY = "python"
 
 def test_smoke_passes_when_count_grows_above_floor(monkeypatch):
     """gate_smoke: a green run reporting MORE tests than the old literal
-    (e.g. 72/72) must PASS — adding tests must never break the gate."""
+    (e.g. 72/72) must PASS - adding tests must never break the gate."""
     monkeypatch.setattr(rgc.subprocess, "run", _fake_run_factory(0, "72/72 tests passed\n"))
     ok, detail = rgc.gate_smoke(REPO, PY)
     assert ok is True, f"expected PASS for green 72/72, got FAIL: {detail}"

@@ -34,7 +34,7 @@ MEMORY_FILE_PATTERN = re.compile(
 CLAUDE_MD_PATTERN = re.compile(r"(?:^|/)CLAUDE\.md$")
 
 # Anchor INTENT_DIR to __file__ (matches universal-action-gate.py). Layout:
-# <repo>/.claude/hooks/X.py → <repo>/tmp. Survives mid-session cwd changes.
+# <repo>/.claude/hooks/X.py -> <repo>/tmp. Survives mid-session cwd changes.
 INTENT_DIR = Path(__file__).resolve().parent.parent.parent / "tmp"
 INTENT_GLOB = "action-intent-*.yaml"
 
@@ -94,7 +94,7 @@ def find_matching_intent(
     """Look for an intent record that matches this Write.
 
     Matching: tool_name + target prefix (first 120 chars). NO freshness check
-    (removed 2026-05-27 per operator directive — intent records do not expire).
+    (removed 2026-05-27 per operator directive - intent records do not expire).
     When multiple match, picks the most-recent by file mtime.
     """
     if not INTENT_DIR.exists():
@@ -307,7 +307,7 @@ def self_test() -> int:
     (fake_memory_root / "MEMORY.md").write_text(
         "# Memory index\n\n## Feedback\n"
         "- [Learnings become consensus-mcp code](feedback_learnings_become_consensus_mcp_code.md)"
-        " — every session learning must ship as PERMANENT consensus-mcp code\n",
+        " - every session learning must ship as PERMANENT consensus-mcp code\n",
         encoding="utf-8",
     )
     # The target memory file path mirrors the production ~/.claude/projects/.../memory/...
@@ -325,7 +325,7 @@ def self_test() -> int:
     (real_memory_dir / "MEMORY.md").write_text(
         "# Memory index\n\n## Feedback\n"
         "- [Learnings become consensus-mcp code](feedback_learnings_become_consensus_mcp_code.md)"
-        " — every session learning must ship as PERMANENT consensus-mcp code\n",
+        " - every session learning must ship as PERMANENT consensus-mcp code\n",
         encoding="utf-8",
     )
 

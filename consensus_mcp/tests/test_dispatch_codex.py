@@ -19,7 +19,7 @@ import yaml
 # PATH; on CI runners with none they failed `CodexInvocationError:
 # codex binary not found` (windows legs, exit 1) or reached a
 # process-group kill that SIGTERM'd the runner (ubuntu legs, exit 143).
-# This stayed hidden because CI was dormant v1.13.0→v1.15.3 (main-only
+# This stayed hidden because CI was dormant v1.13.0->v1.15.3 (main-only
 # trigger) until v1.15.4 re-enabled it. Honest interim: skip when no
 # real codex (these are de-facto integration tests as written). Named
 # follow-up (v1.15.x): rewrite them to mock the Popen path via the
@@ -1551,7 +1551,7 @@ def test_schema_file_declares_patch_proposal_property():
     # Per iter-0019: required-but-nullable.
     assert "patch_proposal" in finding_schema.get("required", []), \
         "patch_proposal must be in finding.required (OpenAI strict-output)"
-    # Binding fields per spec — expected_tests now required (iter-0019).
+    # Binding fields per spec - expected_tests now required (iter-0019).
     pp_required = set(pp_schema["required"])
     for f in ("patch_id", "applies_to_findings", "base_sha", "unified_diff", "files_touched", "expected_tests"):
         assert f in pp_required, f"patch_proposal.required missing {f!r}; got {sorted(pp_required)}"
@@ -1652,13 +1652,13 @@ def test_patch_proposal_diff_body_paths_must_be_in_files_touched():
 def test_patch_proposal_diff_body_paths_must_be_in_allowed_files():
     """F4: a body path that IS in files_touched but NOT in allowed_files is rejected.
 
-    Caller declared files_touched=[forbidden.py] AND diff body matches — that
+    Caller declared files_touched=[forbidden.py] AND diff body matches - that
     earlier files_touched scope check already catches this. This test exercises
     the case where the body parser is consulted on a clean-looking files_touched
     list with allowed_files mismatch.
 
     Use a smoke goal_packet that only allows _dispatch_codex.py. Patch's
-    files_touched declares the diff-body-targeted forbidden_files entry too —
+    files_touched declares the diff-body-targeted forbidden_files entry too -
     so the EARLIER files_touched scope check fires first. Verify the error
     message names the right scope: this is the regression check that the new
     body-path check does NOT short-circuit the existing files_touched check.
@@ -1684,7 +1684,7 @@ def test_patch_proposal_diff_body_apply_patch_format_rejected():
     (codex-cli's proprietary apply_patch format) is REJECTED with a clear
     error naming the expected unified-diff format. iter-0027 codex emitted
     this exact shape, and the iter-0026 F2 hunk-anchored applier rejected
-    it — but only at apply time. This moves the rejection to validate time.
+    it - but only at apply time. This moves the rejection to validate time.
     """
     apply_patch_format = (
         "*** Begin Patch\n"
@@ -1853,7 +1853,7 @@ def test_resolve_repo_root_env_empty_string_treated_as_unset(monkeypatch, tmp_pa
 
     `os.environ.get(...)` returns the empty string for `MY_VAR=` shells set;
     the helper's existing check `if override:` treats falsy as unset. F5
-    preserves that — empty string means "operator didn't supply it."
+    preserves that - empty string means "operator didn't supply it."
     """
     _scaffold_repo_markers(tmp_path)
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", "")
@@ -1868,7 +1868,7 @@ def test_resolve_repo_root_env_empty_string_treated_as_unset(monkeypatch, tmp_pa
 
 def test_template_does_not_claim_expected_tests_is_only_optional():
     """F2: template line ~204 used to read 'expected_tests is the only
-    optional field' — wrong because the schema requires it. The text must
+    optional field' - wrong because the schema requires it. The text must
     be corrected to reflect schema reality.
     """
     template_path = (
@@ -1909,7 +1909,7 @@ def test_template_explicitly_rejects_apply_patch_format():
 #   1. Outside-repo absolute paths must be refused (not silently read).
 #   2. _failed_event must include review_target_path (path is known pre-try,
 #      so even a pre-codex failure carries it).
-#   3. _failed_event includes review_target_hash too — None if file never read,
+#   3. _failed_event includes review_target_hash too - None if file never read,
 #      populated after read. This test exercises the "path known, hash known"
 #      shape so the audit consumer can rely on both fields appearing in
 #      dispatch_done.
@@ -2247,10 +2247,10 @@ def test_terminate_process_tree_uses_signal_on_posix(monkeypatch):
     assert calls[0][0] == "killpg", f"expected killpg first; got {calls[0]}"
     # `signal` lives in _dispatch_base (where _terminate_process_tree
     # is defined); _dispatch_codex only re-imports the function, not the
-    # `signal` module. Compare against the stdlib enum directly —
+    # `signal` module. Compare against the stdlib enum directly -
     # module-agnostic and the same object either way. (Pre-iter-0037
     # this asserted `_dispatch_codex.signal.SIGTERM`; the refactor moved
     # the impl, leaving a latent AttributeError that only fired on POSIX
-    # CI — this test is Windows-skipped — masked while CI was dormant.)
+    # CI - this test is Windows-skipped - masked while CI was dormant.)
     assert calls[0][2] == signal.SIGTERM
 

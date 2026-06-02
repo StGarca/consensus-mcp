@@ -28,7 +28,7 @@ from pathlib import Path
 
 # Anchor INTENT_DIR to __file__ so it is the same path regardless of the
 # cwd Claude Code launches the hook with. Layout: <repo>/.claude/hooks/X.py
-# → <repo>/tmp. Matches the prior Path("./tmp") semantics when the hook is
+# -> <repo>/tmp. Matches the prior Path("./tmp") semantics when the hook is
 # invoked from the project root, and survives mid-session `cd` into a
 # subdirectory (would otherwise resolve to a different ./tmp/).
 INTENT_DIR = Path(__file__).resolve().parent.parent.parent / "tmp"
@@ -49,7 +49,7 @@ CONTENTLESS_TOOLS: set[str] = {"ExitPlanMode"}
 # intent-<utc-iso8601>-<sha256(tool_name+target_first_64_chars):8-char-prefix>.
 # This regex is permissive on the middle segment (lets selftest fixtures use
 # `intent-selftest-aaaaaaaa`) but strict on the prefix and the 8-char hex
-# suffix — malformed IDs that lose the suffix or prefix are blocked.
+# suffix - malformed IDs that lose the suffix or prefix are blocked.
 ACTION_ID_RE = re.compile(r"^intent-.+-[0-9a-f]{8}$")
 
 GOLDEN_RULE_FIELDS = (
@@ -292,7 +292,7 @@ def log_audit_entry(
 def is_bootstrap_intent_write(tool_name: str, target: str) -> bool:
     """Bootstrap exemption: writes to the gate's own intent-record directory
     are allowed without a pre-existing intent record (otherwise the gate
-    cannot be bootstrapped — every intent-record write would require a
+    cannot be bootstrapped - every intent-record write would require a
     pre-existing intent record, infinite recursion).
 
     Per Instance 8 + 9 lessons: this exemption is NARROW and EXPLICIT.

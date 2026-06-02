@@ -1,4 +1,4 @@
-"""v1.30.6 — synthesis-aware propose-converge (Path B guard + Path A helper)."""
+"""v1.30.6 - synthesis-aware propose-converge (Path B guard + Path A helper)."""
 from __future__ import annotations
 
 from copy import deepcopy

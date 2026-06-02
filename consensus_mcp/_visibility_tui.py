@@ -2,7 +2,7 @@
 
 Tier 0+1 of the 2026-05-10 visibility-TUI design doc. Read-only tail of
 the existing JSONL event streams with stall detection. NO MCP tool surface
-added, NO new event generation, NO operator control channel — those are
+added, NO new event generation, NO operator control channel - those are
 deliberately out of scope (see design doc).
 
 Usage
@@ -287,12 +287,12 @@ def _render(dispatch_events: list[dict], audit_events: list[dict], warn_after: f
         else:
             marker = _color(f"{kind:7}", _DIM)
         rt_hash = ev.get("review_target_hash")
-        hash_disp = f"  target_hash={rt_hash[:12]}…" if rt_hash else ""
+        hash_disp = f"  target_hash={rt_hash[:12]}..." if rt_hash else ""
         lines.append(f"  {marker}  {ts}  {iter_id} / {pass_id}{hash_disp}")
     lines.append("")
 
     # MCP server boot history (from audit-log). NOTE: the MCP server in this
-    # project is NOT a long-running daemon — it boots on demand and exits
+    # project is NOT a long-running daemon - it boots on demand and exits
     # when the caller releases stdio. "mcp_server_stopped" means "the last
     # boot finished", not "the server is currently down." Suppress entirely
     # if the last event is >24h old to avoid implying a current outage.
@@ -302,7 +302,7 @@ def _render(dispatch_events: list[dict], audit_events: list[dict], warn_after: f
         last_ts = _parse_ts(last_server.get("timestamp_utc"))
         age_hours = (now - last_ts).total_seconds() / 3600 if last_ts else 999
         if age_hours < 24:
-            lines.append(_color("MCP SERVER (boot history — not a daemon):", _BOLD))
+            lines.append(_color("MCP SERVER (boot history - not a daemon):", _BOLD))
             lines.append(
                 f"  last_boot_event={last_server.get('event','?')}  "
                 f"at={last_server.get('timestamp_utc','?')}  "

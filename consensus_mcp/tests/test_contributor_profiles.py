@@ -1,10 +1,10 @@
-"""Unit tests for consensus_mcp._contributor_profiles — the v1.18.0 contributor
+"""Unit tests for consensus_mcp._contributor_profiles - the v1.18.0 contributor
 profile data foundation (loader / merger / validator).
 
 Per converged-plan.yaml (iteration-v1180-contributor-design-2026-05-22):
 B-ROUTING + UNIVERSAL PROFILES. This module supplies the wizard list, detect
 status, install/auth guidance, model/provenance labels, and forward-compat
-schema. It does NOT dispatch — _engine_factory + ProfileAdapter own that.
+schema. It does NOT dispatch - _engine_factory + ProfileAdapter own that.
 
 This test file pins:
   * load_builtin_profiles() returns the 4 built-in AIs (claude/codex/gemini/kimi)
@@ -85,7 +85,7 @@ def test_codex_schema_enforced_true():
 
 
 def test_instruction_filename_map():
-    """claude→CLAUDE.md, codex→AGENTS.md, gemini→GEMINI.md, kimi→AGENTS.md."""
+    """claude->CLAUDE.md, codex->AGENTS.md, gemini->GEMINI.md, kimi->AGENTS.md."""
     profiles = cp.load_builtin_profiles()
     assert profiles["claude"]["instructions"]["filename"] == "CLAUDE.md"
     assert profiles["codex"]["instructions"]["filename"] == "AGENTS.md"

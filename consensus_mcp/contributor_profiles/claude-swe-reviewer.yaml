@@ -8,7 +8,7 @@
 # different-family signer that closes a mutation. It augments cross-family
 # review; it never replaces it.
 #
-# Like kind=host it has NO CLI to detect, NO install command, and NO auth step —
+# Like kind=host it has NO CLI to detect, NO install command, and NO auth step -
 # detect / invoke / install / auth are intentionally absent. The adapter
 # (HostPeerAdapter) stamps the canonical role/weight/gate_eligible/attestation
 # provenance regardless of the advisory fields below.

@@ -1,4 +1,4 @@
-"""consensus.get_iteration_outcome MCP tool — read-only inspector for an
+"""consensus.get_iteration_outcome MCP tool - read-only inspector for an
 iteration's outcome.
 
 Per iter-0021 converged plan (Section A): returns the parsed converged-plan
@@ -25,7 +25,7 @@ def _resolve_repo_root(override: str | None) -> Path:
 
 def _resolve_path(p: str | Path, repo_root: Path) -> Path:
     """Resolve `p` against `repo_root` when relative. Mirrors consensus_run_iteration
-    (codex pass-2 rev-001 — fixes the inconsistency where this tool advertised
+    (codex pass-2 rev-001 - fixes the inconsistency where this tool advertised
     repo-relative paths in its schema but resolved against process cwd)."""
     p = Path(p)
     if not p.is_absolute():
@@ -160,14 +160,14 @@ def handle(iteration_dir: str, repo_root: str | None = None) -> dict:
                     if "goal_satisfied" in parsed:
                         entry["goal_satisfied"] = parsed["goal_satisfied"]
             except yaml.YAMLError:
-                # Malformed artifact — still report its existence.
+                # Malformed artifact - still report its existence.
                 entry["parse_error"] = True
             contributor_artifacts.append(entry)
 
         # v1.15.1: surface the converged-plan convention enforcement
         # status. A reader must never be able to see a pass marker
         # WITHOUT the gate-scope disclaimer next to it (the recursive
-        # trap defense — a green gate is not evidence of correctness).
+        # trap defense - a green gate is not evidence of correctness).
         enforcement = None
         convention_gate_scope = None
         convention_violations = None
@@ -175,7 +175,7 @@ def handle(iteration_dir: str, repo_root: str | None = None) -> dict:
             gate = converged_plan.get("convention_gate")
             gate = gate if isinstance(gate, dict) else {}
             # codex-rev-001: a v1.15.1 seal ALWAYS stamps convention_gate.
-            # Absence of convention_gate ⇒ a true pre-v1.15.1 legacy plan
+            # Absence of convention_gate => a true pre-v1.15.1 legacy plan
             # (iter-0043 .. v1.15.0): NOT silently valid, NOT rejected.
             if gate.get("enforcement"):
                 enforcement = gate["enforcement"]
@@ -196,7 +196,7 @@ def handle(iteration_dir: str, repo_root: str | None = None) -> dict:
             "error": None,
             "error_type": None,
         }
-    except Exception as exc:  # noqa: BLE001 — boundary translation
+    except Exception as exc:  # noqa: BLE001 - boundary translation
         return {
             "ok": False,
             "error": str(exc),

@@ -2,7 +2,7 @@
 
 Origin: iteration-orchestrator-framing-bias-2026-05-22 (4/4). The orchestrator
 authors the goal_packet, so the orchestrator's framing/anchoring bias rides
-through consensus uncaught — the 3 AI contributors reason WITHIN the frame and
+through consensus uncaught - the 3 AI contributors reason WITHIN the frame and
 their agreement echoes the orchestrator's prior. Across that session the
 orchestrator repeatedly anchored one peer ("gemini" named many times; codex /
 claude / kimi zero) and it was caught every time by the human, never by the AIs.
@@ -10,20 +10,20 @@ claude / kimi zero) and it was caught every time by the human, never by the AIs.
 This linter is the DILIGENCE-INDEPENDENT safeguard: it flags lopsided references
 to the configured contributor set (or any term group) MECHANICALLY, at packet-
 author time, with NO reliance on anyone noticing. It does not depend on the
-orchestrator's honesty — which is the compromised thing.
+orchestrator's honesty - which is the compromised thing.
 
-KEY: the contributor set is passed in (from config), never hardcoded — anchoring
+KEY: the contributor set is passed in (from config), never hardcoded - anchoring
 on a fixed {claude,codex,gemini} list would be the very bias this guards against.
 
-LIMITATIONS (be honest — this is a FIRST-LINE mechanical flag, not exhaustive;
+LIMITATIONS (be honest - this is a FIRST-LINE mechanical flag, not exhaustive;
 the schema frame_audit + the independent QA verifier + the human catch the rest):
   - Catches literal name-spam with exclusion (peer X named >> peers Y,Z named 0).
     It does NOT catch PARAPHRASE/PRONOUN anchoring ("gemini" once, then "it / the
-    reviewer / the dispatcher" repeatedly) — no alias map.
+    reviewer / the dispatcher" repeatedly) - no alias map.
   - Single-top-term skew only: a TWO-peer in-group dominating an excluded
-    out-group (X×3 Y×3, Z,W×0) is not flagged. Coverage/top-2 skew is a follow-up.
+    out-group (Xx3 Yx3, Z,Wx0) is not flagged. Coverage/top-2 skew is a follow-up.
   - Thresholds (min_total, skew_fraction) are heuristics; tune from observed data.
-A clean lint is NOT proof of no bias — it is the absence of the one pattern this
+A clean lint is NOT proof of no bias - it is the absence of the one pattern this
 checks. (QA, 2026-05-22.)
 """
 from __future__ import annotations

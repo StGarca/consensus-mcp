@@ -66,10 +66,10 @@ def _all_none_args(**overrides):
 def test_select_contributors_interactive_min2_reprompt(monkeypatch, capsys):
     """A selection of <2 must re-prompt until >=2 are chosen."""
     profiles = wiz._load_merged_profiles(None)
-    # which → nothing installed, so nothing pre-checked (claude host always avail).
+    # which -> nothing installed, so nothing pre-checked (claude host always avail).
     monkeypatch.setattr(wiz.shutil, "which", lambda name: None)
-    # First answer picks a single number (claude only via its index) → re-prompt;
-    # second answer picks two indices → accepted.
+    # First answer picks a single number (claude only via its index) -> re-prompt;
+    # second answer picks two indices -> accepted.
     # Use _independent_ordered_names since that's what the multiselect displays.
     names = wiz._independent_ordered_names(profiles)
     one = str(names.index("claude") + 1)
@@ -95,7 +95,7 @@ def test_select_contributors_interactive_min2_ok_first_try(monkeypatch):
 def test_select_contributors_interactive_empty_accepts_prechecked(monkeypatch):
     """Empty input accepts the pre-checked (installed) default set when >=2."""
     profiles = wiz._load_merged_profiles(None)
-    # codex + gemini installed → pre-checked; claude host always available too.
+    # codex + gemini installed -> pre-checked; claude host always available too.
     installed = {"codex", "gemini"}
     monkeypatch.setattr(
         wiz.shutil, "which",
@@ -125,7 +125,7 @@ def test_select_contributors_status_line_shows_installed_and_missing(monkeypatch
 # ------------------------------------------------------------
 # regression lock: codex-rev-001 (v1.18.0 Workflow B)
 # The numbered multi-select MUST be wired into interactive_overrides'
-# contributor dimension for the FRESH path — not just unit-tested in
+# contributor dimension for the FRESH path - not just unit-tested in
 # isolation. Drives interactive_overrides directly with deterministic
 # install detection + a numeric multi-select answer.
 # ------------------------------------------------------------
@@ -138,7 +138,7 @@ def test_interactive_overrides_fresh_wires_numbered_multiselect(tmp_path, monkey
     the numeric selection (not raw text) drives the enabled list.
     """
     base = cfg.default_config()
-    args = _all_none_args()  # contributors flag is None → interactive branch
+    args = _all_none_args()  # contributors flag is None -> interactive branch
 
     # Deterministic install detection regardless of host PATH.
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
@@ -215,7 +215,7 @@ def test_detect_guide_present_cli_prints_nothing(monkeypatch, capsys):
 
 
 def test_detect_guide_host_claude_prints_nothing(monkeypatch, capsys):
-    """claude is kind=host — no CLI, never guided, never executed."""
+    """claude is kind=host - no CLI, never guided, never executed."""
     profiles = wiz._load_merged_profiles(None)
     monkeypatch.setattr(wiz.sys, "platform", "win32")
     monkeypatch.setattr(wiz.shutil, "which", lambda name: None)
@@ -228,7 +228,7 @@ def test_detect_guide_host_claude_prints_nothing(monkeypatch, capsys):
 # 4. instruction-file provisioning
 # ============================================================
 
-_SENTINEL_BEGIN = "<!-- consensus-mcp:begin (managed — do not edit inside) -->"
+_SENTINEL_BEGIN = "<!-- consensus-mcp:begin (managed - do not edit inside) -->"
 _SENTINEL_END = "<!-- consensus-mcp:end -->"
 
 
@@ -237,7 +237,7 @@ def test_provision_creates_per_ai_files_with_dedupe(tmp_path):
     wiz._provision_instruction_files(
         ["claude", "codex", "gemini", "kimi"], profiles, tmp_path,
     )
-    # filename map: claude→CLAUDE.md, codex/kimi→AGENTS.md, gemini→GEMINI.md
+    # filename map: claude->CLAUDE.md, codex/kimi->AGENTS.md, gemini->GEMINI.md
     assert (tmp_path / "CLAUDE.md").exists()
     assert (tmp_path / "AGENTS.md").exists()
     assert (tmp_path / "GEMINI.md").exists()
@@ -426,7 +426,7 @@ def test_followup_multiple_host_peers_mini_select(monkeypatch):
 
 
 def test_followup_multiple_host_peers_default_none_never_first(monkeypatch):
-    # empty / non-numeric input must default to NONE even with default_yes=True —
+    # empty / non-numeric input must default to NONE even with default_yes=True -
     # the mini-select must never silently append the first candidate.
     monkeypatch.setattr("builtins.input", lambda *_: "")
     assert wiz._prompt_host_peer_followup(["claude", "codex"], _TWO_PEERS, default_yes=True) is None
@@ -438,7 +438,7 @@ def test_followup_multiple_host_peers_out_of_range_none(monkeypatch):
 
 
 # ============================================================
-# Task 8: _reconfigure_contributors — preserves legacy host_peer
+# Task 8: _reconfigure_contributors - preserves legacy host_peer
 # ============================================================
 
 def test_reconfigure_preserves_existing_host_peer(monkeypatch):

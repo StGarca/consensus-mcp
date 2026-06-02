@@ -1,7 +1,7 @@
 """Follow-up completeness gate (consensus-mcp 1.16.1).
 
 Mechanically BINDS the EXISTING CLAUDE.md "Complete fulfillment" rule (do the
-whole job) + Karpathy #4 "Goal-Driven Execution". This is NOT a new rule — the
+whole job) + Karpathy #4 "Goal-Driven Execution". This is NOT a new rule - the
 rule already existed and still got skipped (an agent merged a version bump to
 main but did not cut the GitHub release). Passive rules do not bind in the
 moment; this is the same mechanical-enforcement pattern as the v1.16.0

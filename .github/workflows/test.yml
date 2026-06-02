@@ -4,14 +4,14 @@ on:
   push:
     # main is the latest-released state; v* are the active release/dev
     # branches where all development lands (pre-v1.15.4 the trigger was
-    # main-only, so CI was dormant from v1.13.0→v1.15.3 while every
-    # release happened on a v* branch — fixed in v1.15.4).
+    # main-only, so CI was dormant from v1.13.0->v1.15.3 while every
+    # release happened on a v* branch - fixed in v1.15.4).
     branches: [main, 'v*']
   pull_request:
     branches: [main, 'v*']
 
 # Least-privilege GITHUB_TOKEN (CodeQL actions/missing-workflow-permissions):
-# this workflow only checks out the repo and runs tests — it never writes via
+# this workflow only checks out the repo and runs tests - it never writes via
 # the token (no releases/comments/pushes/uploads), so read-only contents is
 # the minimal sufficient scope.
 permissions:
@@ -26,7 +26,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         # Must match pyproject `requires-python`. v1.18.0 raised the floor to
-        # >=3.11, so `pip install -e .` (and its deps) refuses py3.10 — testing
+        # >=3.11, so `pip install -e .` (and its deps) refuses py3.10 - testing
         # 3.10 here only fails at install. Keep this list == the supported range.
         python: ["3.11", "3.12"]
     env:

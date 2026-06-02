@@ -110,7 +110,7 @@ SCHEMA = {
     ),
     "input_schema": {
         # Provide EXACTLY ONE of pass_id | path. This is enforced in handle()
-        # (error: must_provide_exactly_one_mode), NOT via a top-level oneOf — the
+        # (error: must_provide_exactly_one_mode), NOT via a top-level oneOf - the
         # Anthropic tool input_schema rejects a top-level oneOf/anyOf/allOf, which
         # kills any subagent granted this tool on launch (v1.30.1 fix).
         "type": "object",

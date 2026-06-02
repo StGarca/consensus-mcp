@@ -1,4 +1,4 @@
-"""Security-cluster regression tests — consensus review 2026-05-22.
+"""Security-cluster regression tests - consensus review 2026-05-22.
 
 Closes CR-1..CR-5, H-2, M-6 from CODE_REVIEW_2026-05-22.md, validated by the
 codex+gemini consensus audit (iteration-codereview-audit-2026-05-22):
@@ -42,7 +42,7 @@ def _reload_apply():
 
 
 # --------------------------------------------------------------------------
-# _paths.resolve_contained — shared containment helper (basis for CR-1/3/5, H-2)
+# _paths.resolve_contained - shared containment helper (basis for CR-1/3/5, H-2)
 # --------------------------------------------------------------------------
 
 def test_resolve_contained_inside_returns_resolved(tmp_path):
@@ -64,7 +64,7 @@ def test_resolve_contained_dotdot_traversal_raises(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# CR-1 — apply_codex_patch refuses a path-traversal files_touched (no outside write)
+# CR-1 - apply_codex_patch refuses a path-traversal files_touched (no outside write)
 # --------------------------------------------------------------------------
 
 def test_apply_codex_patch_refuses_traversal_write(tmp_path, monkeypatch):
@@ -90,7 +90,7 @@ def test_apply_codex_patch_refuses_traversal_write(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# CR-2 — apply_codex_patch refuses a files_touched not in goal_packet.allowed_files
+# CR-2 - apply_codex_patch refuses a files_touched not in goal_packet.allowed_files
 # --------------------------------------------------------------------------
 
 def test_apply_codex_patch_refuses_out_of_scope_file(tmp_path, monkeypatch):
@@ -118,7 +118,7 @@ def test_apply_codex_patch_refuses_out_of_scope_file(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# CR-5 — apply_codex_patch refuses a non-canonical iteration_dir (auth bypass)
+# CR-5 - apply_codex_patch refuses a non-canonical iteration_dir (auth bypass)
 # --------------------------------------------------------------------------
 
 def test_apply_codex_patch_refuses_noncanonical_iteration_dir(tmp_path, monkeypatch):
@@ -126,7 +126,7 @@ def test_apply_codex_patch_refuses_noncanonical_iteration_dir(tmp_path, monkeypa
     monkeypatch.setenv("CONSENSUS_MCP_CODEX_PATCH_APPLY", "1")
     acp = _reload_apply()
     # A crafted dir OUTSIDE consensus-state/active/ carrying a self-authorizing
-    # goal_packet — the exact attack codex-rev-003 describes.
+    # goal_packet - the exact attack codex-rev-003 describes.
     rogue = tmp_path / "rogue-iter"
     rogue.mkdir(parents=True, exist_ok=True)
     (rogue / "independence-audit.yaml").write_text(
@@ -147,7 +147,7 @@ def test_apply_codex_patch_refuses_noncanonical_iteration_dir(tmp_path, monkeypa
 
 
 # --------------------------------------------------------------------------
-# CR-3 — build_review_packet does not read a traversal target_file into the packet
+# CR-3 - build_review_packet does not read a traversal target_file into the packet
 # --------------------------------------------------------------------------
 
 def test_build_review_packet_skips_traversal_target_file(tmp_path, monkeypatch):
@@ -173,7 +173,7 @@ def test_build_review_packet_skips_traversal_target_file(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# CR-4 — scope_check fails CLOSED when allowed_files is empty (was allow-all)
+# CR-4 - scope_check fails CLOSED when allowed_files is empty (was allow-all)
 # --------------------------------------------------------------------------
 
 def _write_consensus(tmp_path: Path, allowed_files) -> Path:
@@ -200,7 +200,7 @@ def test_scope_check_fails_closed_without_valid_allowed_files(tmp_path, allowed_
 
 
 # --------------------------------------------------------------------------
-# H-2 — patch_stage_and_dry_run refuses a path-traversal file_rel
+# H-2 - patch_stage_and_dry_run refuses a path-traversal file_rel
 # --------------------------------------------------------------------------
 
 def test_patch_stage_refuses_traversal_file(tmp_path, monkeypatch):
@@ -227,7 +227,7 @@ def test_patch_stage_refuses_traversal_file(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# M-6 — gate_decision blocks on "critical" severity findings
+# M-6 - gate_decision blocks on "critical" severity findings
 # --------------------------------------------------------------------------
 
 def test_gate_decision_blocks_on_critical():
@@ -240,7 +240,7 @@ def test_gate_decision_blocks_on_critical():
 
 
 # --------------------------------------------------------------------------
-# Invariant guard (secfix audit, codex-rev-001 DISMISSED) — _apply_unified_diff
+# Invariant guard (secfix audit, codex-rev-001 DISMISSED) - _apply_unified_diff
 # keys new_contents strictly by files_touched (apply_codex_patch.py:539-547:
 # `for rel in files_touched: out[rel] = ...`), so a unified_diff `+++ b/<path>`
 # header outside files_touched is built into file_segments but never consumed.

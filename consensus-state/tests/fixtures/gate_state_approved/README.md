@@ -4,10 +4,10 @@ Drives `consensus_gate.py --self-test` toward terminal state `approved`.
 
 ## Files
 
-- `consensus.yaml` — passes all five `production_ready_if` conditions
-- `verification.yaml` — `passed: true` and `scope_check.passed: true`
-- `approval.yaml` — operator approval YAML with embedded hashes
-- `_build_gate_fixtures.py` — helper that regenerates `approval.yaml` with
+- `consensus.yaml` - passes all five `production_ready_if` conditions
+- `verification.yaml` - `passed: true` and `scope_check.passed: true`
+- `approval.yaml` - operator approval YAML with embedded hashes
+- `_build_gate_fixtures.py` - helper that regenerates `approval.yaml` with
   the canonical sha256 of the current `consensus.yaml` + `verification.yaml`
 
 ## Important: hashes are LOAD-BEARING
@@ -23,7 +23,7 @@ To regenerate after editing:
 python_env\python.exe agent-loop\tests\fixtures\gate_state_approved\_build_gate_fixtures.py
 ```
 
-That's by design — the gate's whole job is detecting drift between the
+That's by design - the gate's whole job is detecting drift between the
 approved state and the current state.
 
 ## Test data, not real approvals
@@ -34,7 +34,7 @@ Real operator approvals live OUTSIDE the repo at:
 C:/Users/<you>/agent-loop-approvals/operator-production-approval.yaml
 ```
 
-per §17 protected-store rule. These fixture files are test data, not
+per section 17 protected-store rule. These fixture files are test data, not
 live approvals; do not copy them into the protected store.
 
 ## Target sha256

@@ -1,4 +1,4 @@
-"""Unit tests for iter-0022 — helper stamps patch_proposal.base_sha from review-packet.
+"""Unit tests for iter-0022 - helper stamps patch_proposal.base_sha from review-packet.
 
 Per iter-0021 empirical finding: codex's read-only sandbox cannot reliably
 compute or propagate base_sha; iter-0021 confirmed codex emits a hallucinated

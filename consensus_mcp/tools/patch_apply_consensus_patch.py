@@ -23,7 +23,7 @@ Failure modes:
     operator-recoverable; auto-recording would lie about completion).
 
 CONCURRENCY (v1.0 limitation): This tool is single-writer. Concurrent invocations
-on the same iteration_id with overlapping relpaths will race — both calls may pass
+on the same iteration_id with overlapping relpaths will race - both calls may pass
 the dry-run gate independently and the per-file os.replace order is non-deterministic.
 The audit log is also a non-locked read-modify-write. **Do not invoke concurrently
 for the same iteration_id.** Phase 1.x will add per-iteration filelock.
@@ -289,7 +289,7 @@ def handle(
     except Exception as exc:
         # Mid-loop IO failure (disk full, permission denied, antivirus lock, etc.).
         # Prior writes already on disk; audit is NOT recorded (partial state must be
-        # reconciled manually — auto-recording would lie about completion).
+        # reconciled manually - auto-recording would lie about completion).
         exception_str = type(exc).__name__ + ": " + str(exc)
         return {
             "error": "partial_apply_failed",

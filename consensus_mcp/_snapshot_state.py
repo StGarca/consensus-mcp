@@ -6,7 +6,7 @@ git clean / fresh clones / accidental rm. Each snapshot is one tagged commit
 on the orphan branch containing the full consensus-state tree at that moment.
 
 Architecture:
-- Orphan branch (no shared history with main) — git storage dedupes blobs
+- Orphan branch (no shared history with main) - git storage dedupes blobs
   across snapshots so the on-disk cost is bounded by actual delta size.
 - Each snapshot uses a `git worktree` so the main working tree is never
   touched during snapshot/restore.
@@ -53,7 +53,7 @@ LABEL_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 # Iteration directory names look like `iteration-NNNN-slug` or
 # `iteration-audit-YYYY-MM-DD-slug`. The pattern below allows alphanumerics,
 # dots (for date components), hyphens, and underscores, but rejects path
-# separators and ".." traversal — preventing codex-rev-001 round-3 (critical).
+# separators and ".." traversal - preventing codex-rev-001 round-3 (critical).
 ITERATION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SNAPSHOTTED_PATHS = ("consensus-state",)  # Top-level dirs included in each snapshot.
 
@@ -81,7 +81,7 @@ def _run_git(args: list[str], cwd: Path | None = None, check: bool = True) -> su
 
 
 def _iso_utc_now() -> str:
-    """Return UTC timestamp as YYYY-MM-DDTHHMMSSZ (no colons — git-tag safe)."""
+    """Return UTC timestamp as YYYY-MM-DDTHHMMSSZ (no colons - git-tag safe)."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
 
 
@@ -105,7 +105,7 @@ def _build_tag(label: str | None = None) -> str:
 
     NOTE: this returns a candidate; uniqueness is enforced by
     _next_unique_tag() before commit so same-second snapshots don't collide
-    (codex-rev-001 in iter-0013 round 2 — same-second tag collision risk).
+    (codex-rev-001 in iter-0013 round 2 - same-second tag collision risk).
     """
     iso = _iso_utc_now()
     label = _sanitize_label(label)
@@ -214,7 +214,7 @@ def _snapshot_via_worktree(
             _run_git(["add", "-f", "-A"], cwd=worktree)
             status = _run_git(["status", "--porcelain"], cwd=worktree).stdout.strip()
             if not status:
-                # No content change since last snapshot — empty commit so the
+                # No content change since last snapshot - empty commit so the
                 # tag is still timestamped at this moment.
                 _run_git(
                     ["commit", "--allow-empty", "-m",
@@ -409,7 +409,7 @@ def _restore_from_tag(
             # false safety signal).
             if not paths_to_restore and iteration:
                 raise SnapshotError(
-                    f"iteration {iteration!r} not found in snapshot {tag!r} — "
+                    f"iteration {iteration!r} not found in snapshot {tag!r} - "
                     f"nothing to restore. Check `list` for snapshots that "
                     f"include this iteration."
                 )
@@ -460,7 +460,7 @@ def _restore_from_tag(
 
 def _detect_dirty_paths(repo_root: Path, target_tag: str | None = None) -> list[str]:
     """Return paths under SNAPSHOTTED_PATHS that are not faithfully captured
-    by ANY snapshot — either modified-not-snapshotted OR deleted-not-snapshotted.
+    by ANY snapshot - either modified-not-snapshotted OR deleted-not-snapshotted.
 
     Per codex-rev-002 round-3 fix: also detect DELETIONS (paths in the latest
     snapshot or `target_tag` that no longer exist on disk). The prior version
@@ -590,7 +590,7 @@ def cmd_snapshot(args: argparse.Namespace, repo_root: Path) -> int:
 def cmd_list(args: argparse.Namespace, repo_root: Path) -> int:
     """List snapshot tags, newest first."""
     if not _orphan_branch_exists(repo_root):
-        print("no snapshots yet — create one with: python -m consensus_mcp._snapshot_state snapshot")
+        print("no snapshots yet - create one with: python -m consensus_mcp._snapshot_state snapshot")
         return 0
     tags = _list_snapshot_tags(repo_root)
     if args.limit is not None:
@@ -621,7 +621,7 @@ def cmd_restore(args: argparse.Namespace, repo_root: Path) -> int:
       - --iteration <id>: limit restore to that iteration's subtree
     """
     if not _orphan_branch_exists(repo_root):
-        print(f"error: branch {SNAPSHOT_BRANCH!r} does not exist — no snapshots to restore", file=sys.stderr)
+        print(f"error: branch {SNAPSHOT_BRANCH!r} does not exist - no snapshots to restore", file=sys.stderr)
         return 1
 
     # codex-rev-001 round-3: fail-fast on unsafe --iteration BEFORE any
@@ -633,7 +633,7 @@ def cmd_restore(args: argparse.Namespace, repo_root: Path) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
-    # codex-rev-001 round-6 fix: tag validation must run BEFORE dry-run too —
+    # codex-rev-001 round-6 fix: tag validation must run BEFORE dry-run too -
     # prior version only validated tag in the real-restore branch, so dry-run
     # could accept a branch or commit ref that real restore would reject.
     # Asymmetric validation defeated the dry-run safety goal.
@@ -717,9 +717,9 @@ def cmd_diff(args: argparse.Namespace, repo_root: Path) -> int:
       - Return non-zero when differences are detected.
 
     Exit codes:
-      0 — current matches snapshot (no diff)
-      1 — differences detected (output printed)
-      2 — tag not found / branch missing
+      0 - current matches snapshot (no diff)
+      1 - differences detected (output printed)
+      2 - tag not found / branch missing
     """
     if not _orphan_branch_exists(repo_root):
         print(f"error: branch {SNAPSHOT_BRANCH!r} does not exist", file=sys.stderr)

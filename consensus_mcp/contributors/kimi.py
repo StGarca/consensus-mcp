@@ -1,4 +1,4 @@
-"""Kimi contributor adapter — wraps consensus_mcp._dispatch_kimi.
+"""Kimi contributor adapter - wraps consensus_mcp._dispatch_kimi.
 
 Mirror of contributors/codex.py: normalizes _dispatch_kimi's packet->argv
 translation + result extraction into the ContributorAdapter interface, so kimi
@@ -23,7 +23,7 @@ from consensus_mcp.contributors.base import (
 
 
 class KimiAdapter(ContributorAdapter):
-    """Kimi contributor — subprocess via _dispatch_kimi.main."""
+    """Kimi contributor - subprocess via _dispatch_kimi.main."""
 
     name = "kimi"
 

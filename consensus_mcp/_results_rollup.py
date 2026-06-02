@@ -1,4 +1,4 @@
-"""consensus results — read-only project scorecard rollup.
+"""consensus results - read-only project scorecard rollup.
 
 Reads the project ledger ``consensus-state/state/results-v1.jsonl`` (one JSON
 object per line, each conforming to ``schemas/results-v1.schema.json``) and
@@ -9,12 +9,12 @@ aggregates it into a PROJECT SCORECARD:
   * fixes_applied
   * iteration count
   * convergence rate (converged / total)
-  * date span (first → last record_updated_utc)
+  * date span (first -> last record_updated_utc)
 
 Forward-compat / trust rules (docs/design-consults/v1.19.0-result-logging.md):
 
   * Records whose ``consensus_results_schema_version`` != 1 are SKIPPED with a
-    warning to stderr — never silently dropped, never miscounted.
+    warning to stderr - never silently dropped, never miscounted.
   * Backfilled records (``backfilled is True`` or ``confidence ==
     "best-effort"``) are SEGREGATED into a separate section. They are
     best-effort reconstructions and must NEVER contaminate the authoritative
@@ -27,7 +27,7 @@ human-readable table (``render_table``) and a machine-readable dict
 Ledger path resolution mirrors the rest of the codebase (see
 ``consensus_mcp._paths.state_root``):
 
-  CONSENSUS_MCP_STATE_ROOT  →  CONSENSUS_MCP_REPO_ROOT/consensus-state  →
+  CONSENSUS_MCP_STATE_ROOT  ->  CONSENSUS_MCP_REPO_ROOT/consensus-state  ->
   <cwd>/consensus-state
 
 then ``/state/results-v1.jsonl``.
@@ -55,7 +55,7 @@ SUPPORTED_SCHEMA_VERSION = 1
 # Severity ordering for stable, human-meaningful table output.
 _SEVERITY_ORDER = ["critical", "blocking", "high", "medium", "low"]
 
-# Disposition → scorecard key.
+# Disposition -> scorecard key.
 _DISPOSITION_KEYS = {
     "validated_fixed": "validated",
     "dismissed_refuted": "dismissed_refuted",
@@ -72,14 +72,14 @@ def _ledger_path(state_root: Optional[Path] = None) -> Path:
     """Resolve ``<state_root>/state/results-v1.jsonl``.
 
     When ``state_root`` is not supplied, fall back to the shared lazy resolver
-    (CONSENSUS_MCP_STATE_ROOT → CONSENSUS_MCP_REPO_ROOT/consensus-state → cwd).
+    (CONSENSUS_MCP_STATE_ROOT -> CONSENSUS_MCP_REPO_ROOT/consensus-state -> cwd).
     """
     root = Path(state_root) if state_root is not None else _state_root()
     return root / "state" / "results-v1.jsonl"
 
 
 def _outcome_ledger_path(state_root: Optional[Path] = None) -> Path:
-    """Resolve ``<state_root>/state/outcome-ledger.jsonl`` — the external, append-only,
+    """Resolve ``<state_root>/state/outcome-ledger.jsonl`` - the external, append-only,
     AI-adjudicator-rejecting ledger that the contributor SCORECARD reads."""
     root = Path(state_root) if state_root is not None else _state_root()
     return root / "state" / "outcome-ledger.jsonl"
@@ -87,7 +87,7 @@ def _outcome_ledger_path(state_root: Optional[Path] = None) -> Path:
 
 def render_contributor_scorecard(state_root: Optional[Path] = None) -> str:
     """Render the per-contributor performance SCORECARD (decision-support for declaring an
-    AI lean) from the external outcome ledger. DESCRIPTIVE only — it measures how much good
+    AI lean) from the external outcome ledger. DESCRIPTIVE only - it measures how much good
     work each contributor produced; it sets no weight/lean (the operator declares the lean).
     Below 5 outcomes a contributor shows 'insufficient data' (no misleading rate). Returns
     an empty string when no outcome ledger exists yet."""
@@ -108,7 +108,7 @@ def render_contributor_scorecard(state_root: Optional[Path] = None) -> str:
         else:
             rate = "insufficient data"
         lines.append(f"  {contributor:<18} useful {v['useful']}/{v['total']}   rate {rate}")
-    lines.append("  (descriptive track-record only — score never judges an individual finding)")
+    lines.append("  (descriptive track-record only - score never judges an individual finding)")
     return "\n".join(lines)
 
 
@@ -365,8 +365,8 @@ def render_table(scorecard: Dict[str, Any]) -> str:
 def main(argv: Optional[List[str]] = None) -> int:
     """``consensus results`` / ``consensus-results`` console-script entry point.
 
-    ``results``         → print the human-readable table.
-    ``results --json``  → print the machine-readable JSON dict.
+    ``results``         -> print the human-readable table.
+    ``results --json``  -> print the machine-readable JSON dict.
 
     A leading ``results`` token is stripped so that the ``consensus results``
     invocation form (which forwards the literal subcommand) routes here, mirroring

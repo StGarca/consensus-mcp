@@ -613,7 +613,7 @@ def main(argv: list[str] | None = None) -> int:
 #
 # Reused utilities: _glob_match, _matches_any, _normalize_path.
 
-# Halt set defaults (iter-workflow-abc-introduce convergence — wide-by-
+# Halt set defaults (iter-workflow-abc-introduce convergence - wide-by-
 # default; operator opts OUT per-run via autonomy_contract.skip_halt_on).
 DEFAULT_HALT_ON = (
     "blocking_objection",
@@ -692,11 +692,11 @@ def check_autonomy_scope(proposed_files: list[str], contract: dict) -> dict:
           reason: human-readable explanation
           violations: list of file paths that violated boundaries (if any)
 
-    "approved" — every file is within allowed_file_patterns AND none are in
+    "approved" - every file is within allowed_file_patterns AND none are in
         forbidden_file_patterns. Auto-approve.
-    "parked" — at least one file is OUTSIDE allowed_file_patterns but NONE are
+    "parked" - at least one file is OUTSIDE allowed_file_patterns but NONE are
         forbidden. Park for operator review when they return.
-    "halt" — at least one file is in forbidden_file_patterns. Hard stop;
+    "halt" - at least one file is in forbidden_file_patterns. Hard stop;
         operator must review before any further autonomous action.
     """
     errors = validate_autonomy_contract(contract)

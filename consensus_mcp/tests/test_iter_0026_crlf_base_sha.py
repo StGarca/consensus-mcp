@@ -12,7 +12,7 @@ Defect (surfaced in iter-0025 operational_caveat ``iter_0024_F2_helper_crlf_mism
     landed codex patch (iter-0023, iter-0025 caveat).
 
 Fix: helper accepts an optional ``repo_root`` and prefers ``bundle_sha(repo_root,
-files_touched)`` (disk bytes — same code path as apply.codex_patch) when supplied.
+files_touched)`` (disk bytes - same code path as apply.codex_patch) when supplied.
 Falls back to the text-encoding path when repo_root is None (backward compat
 with unit-level tests that don't set up on-disk files).
 
@@ -75,7 +75,7 @@ def test_helper_stamped_base_sha_matches_disk_bundle_sha_with_crlf(tmp_path):
     """Write a file with CRLF line endings to disk. The review-packet's
     touched_files_contents (text) has LF-only (Python text-mode read normalises).
     With repo_root supplied, the helper-stamped base_sha must equal the disk-
-    bytes bundle_sha — which is what apply.codex_patch computes at drift-check time.
+    bytes bundle_sha - which is what apply.codex_patch computes at drift-check time.
     """
     rel = "scripts/crlf_file.py"
     # Write raw CRLF bytes (simulates a Windows-checkout file).
@@ -178,7 +178,7 @@ def test_helper_no_repo_root_falls_back_to_text_encoding(tmp_path):
 
 def test_helper_with_repo_root_but_file_missing_returns_disk_empty_hash(tmp_path):
     """If the disk file is missing but repo_root is supplied, bundle_sha treats
-    missing files as empty (b"") — that's the canonical apply.codex_patch
+    missing files as empty (b"") - that's the canonical apply.codex_patch
     contract. Helper must follow suit so the stamp matches apply-time hash.
 
     This is the "add-file" case: file not yet on disk; codex's patch will

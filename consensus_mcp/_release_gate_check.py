@@ -49,7 +49,7 @@ import yaml
 #
 # These two parsers cover the two distinct output formats. They are deliberately
 # separate so the smoke `X/Y tests passed` regex never silently matches pytest's
-# `N passed` output (and vice-versa) — one parser must not "pass" text it can't
+# `N passed` output (and vice-versa) - one parser must not "pass" text it can't
 # actually parse.
 _PYTEST_FAILURE_WORDS = ("failed", "error")
 # pytest summary line: "<N> passed[, ...] in <t>s"
@@ -496,7 +496,7 @@ def gate_pytest_dispatch_codex(repo_root: Path, python: str) -> tuple[bool, str]
         result = subprocess.run(
             [
                 python, "-m", "pytest",
-                # H-6: was repo_root/"scripts"/... — that directory does not
+                # H-6: was repo_root/"scripts"/... - that directory does not
                 # exist in the extracted standalone repo, so the gate never ran
                 # the suite. The real path is consensus_mcp/tests/.
                 str(repo_root / "consensus_mcp" / "tests" / "test_dispatch_codex.py"),

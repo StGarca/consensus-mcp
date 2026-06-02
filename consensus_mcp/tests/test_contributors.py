@@ -1,4 +1,4 @@
-"""Unit tests for consensus_mcp.contributors.* — adapter layer.
+"""Unit tests for consensus_mcp.contributors.* - adapter layer.
 
 Per iter-0016b: test the abstract interface + fake adapters + ClaudeAdapter's
 callback contract + codex/gemini adapter argv translation (without spawning

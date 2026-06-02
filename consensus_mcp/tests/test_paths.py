@@ -40,7 +40,7 @@ def test_repo_root_wheel_layout_fallback(tmp_path, monkeypatch):
     """A4 (gemini-rev-001 from iter-0024 + codex-rev-001 from iter-0025):
     Installed-wheel layout where this module lives under site-packages/.
     Walked-up `__file__.parent.parent` IS a real directory containing the
-    `consensus_mcp` package — but lacks repo markers (pyproject.toml, .git).
+    `consensus_mcp` package - but lacks repo markers (pyproject.toml, .git).
     The resolver must NOT mistake site-packages for the repo root; it must
     fall back to cwd."""
     fake_module_path = tmp_path / "site-packages" / "consensus_mcp" / "_paths.py"
@@ -115,7 +115,7 @@ def test_project_root_honors_project_root_env(tmp_path, monkeypatch):
 
 
 def test_project_root_independent_from_state_root(tmp_path, monkeypatch):
-    """A3: PROJECT_ROOT and STATE_ROOT are orthogonal — operator can set
+    """A3: PROJECT_ROOT and STATE_ROOT are orthogonal - operator can set
     one without affecting the other."""
     proj = tmp_path / "proj"
     proj.mkdir()
@@ -144,7 +144,7 @@ def test_spec_path_falls_back_to_packaged_template(tmp_path, monkeypatch):
     # The walked-up fallback only fires if the dev-checkout spec exists; in
     # the actual test repo it does (docs/architecture/orchestration-spec.md
     # exists). So this test asserts that EITHER walked-up OR packaged
-    # template is returned — both are valid fallbacks.
+    # template is returned - both are valid fallbacks.
     result = _paths.spec_path()
     # Must point at a real file.
     assert result.exists() or result.name == "spec_template.md"

@@ -1,4 +1,4 @@
-"""v1.30.3 — git-independent kimi isolation control + size-aware degrade.
+"""v1.30.3 - git-independent kimi isolation control + size-aware degrade.
 
 The v1.30.2 disposable-copy isolation has two gaps in a CONSUMING repo with no `.git`
 and heavy/derived dirs (the ebook2audiobook dogfood):
@@ -7,9 +7,9 @@ and heavy/derived dirs (the ebook2audiobook dogfood):
     control (the post-dispatch diff is always empty -> never blocks). v1.30.3 adds a
     git-INDEPENDENT content-hash manifest (`_filesystem_manifest_snapshot`) so a REAL
     control exists, and FAILS LOUD (_SnapshotIndexError) if the tree is too big to index
-    within budget — never silently runs with zero control (the dissenter's invariant).
+    within budget - never silently runs with zero control (the dissenter's invariant).
   - D4: if the disposable copy can't fit (ENOSPC), v1.30.2 failed the whole dispatch.
-    v1.30.3 DEGRADES to no-copy (run against the real repo) — safe ONLY because the
+    v1.30.3 DEGRADES to no-copy (run against the real repo) - safe ONLY because the
     before/after snapshot above is now a real control that DETECTS + REJECTS any mutation.
 
 This file covers the pure-unit surface (manifest + budget + degrade exception). The two
@@ -83,7 +83,7 @@ def test_manifest_detects_add_remove_and_content_change(tmp_path, monkeypatch):
 
 def test_manifest_honors_gitignore_temp_and_env_ignore_dirs(tmp_path, monkeypatch):
     # A heavy/derived top-level dir is excluded if it is in _TEMP_WORKDIR_IGNORE_DIRS,
-    # the repo's top-level .gitignore, OR CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS — the SAME
+    # the repo's top-level .gitignore, OR CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS - the SAME
     # ignore set the disposable copy uses, so the control and the copy agree.
     builtin_ignored = next(iter(dk._TEMP_WORKDIR_IGNORE_DIRS))  # e.g. ".git"
     (tmp_path / builtin_ignored).mkdir()
@@ -123,7 +123,7 @@ def test_manifest_fails_loud_when_byte_budget_exceeded(tmp_path, monkeypatch):
 
 
 def test_manifest_fails_loud_when_symlink_count_exceeds_budget(tmp_path, monkeypatch):
-    # codex-rev-001: symlinks must count toward the FILE budget too — a symlink-only/heavy
+    # codex-rev-001: symlinks must count toward the FILE budget too - a symlink-only/heavy
     # no-.git tree must trip _SNAPSHOT_MAX_FILES, else D3's fail-LOUD invariant has a hole.
     monkeypatch.delenv("CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS", raising=False)
     monkeypatch.setattr(dk, "_SNAPSHOT_MAX_FILES", 1)
@@ -171,6 +171,6 @@ def test_make_disposable_workdir_enospc_errno_raises_degrade(tmp_path, monkeypat
 
 def test_degrade_exception_is_not_oserror(tmp_path):
     # _WorkdirTooLargeToIsolate must NOT subclass OSError, so a stray `except OSError`
-    # can't silently swallow the degrade signal — only the explicit callsite handles it.
+    # can't silently swallow the degrade signal - only the explicit callsite handles it.
     assert not issubclass(dk._WorkdirTooLargeToIsolate, OSError)
     assert issubclass(dk._WorkdirTooLargeToIsolate, RuntimeError)

@@ -1,4 +1,4 @@
-"""Unit tests for tools/reviewer_dispatch_codex.py — the v1.1.x MCP wrapper.
+"""Unit tests for tools/reviewer_dispatch_codex.py - the v1.1.x MCP wrapper.
 
 The wrapper is THIN: it translates MCP-tool kwargs into argv for
 _dispatch_codex.main, calls main in-process, captures stdout, and returns
@@ -338,7 +338,7 @@ def test_handle_wraps_helper_import_error_as_error_dict(monkeypatch):
 
 
 def test_handle_wraps_helper_value_error_as_error_dict(monkeypatch):
-    """Generic exception type — helper raises ValueError, wrapper captures."""
+    """Generic exception type - helper raises ValueError, wrapper captures."""
     def value_main(argv):
         raise ValueError("bad arg")
 

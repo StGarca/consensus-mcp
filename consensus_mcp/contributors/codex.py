@@ -1,11 +1,11 @@
-"""Codex contributor adapter — wraps consensus_mcp._dispatch_codex.
+"""Codex contributor adapter - wraps consensus_mcp._dispatch_codex.
 
 Per iter-0015 converged-plan Section C: codex's existing dispatch helper is
-the underlying CLI invoker; this adapter normalizes its packet → argv
+the underlying CLI invoker; this adapter normalizes its packet -> argv
 translation and result extraction into the ContributorAdapter interface.
 
 Phase semantics for v1: all three phases (propose, review, converge) reuse
-the SAME prompt template (codex_review_template.md) — phase intent is
+the SAME prompt template (codex_review_template.md) - phase intent is
 conveyed via the goal_packet's `desired_end_state` text that the workflow
 engine writes appropriately per phase. This was empirically validated in
 iter-0015's design consult (same template, different goal yielded design
@@ -28,7 +28,7 @@ from consensus_mcp.contributors.base import (
 
 
 class CodexAdapter(ContributorAdapter):
-    """Codex contributor — subprocess via _dispatch_codex.main."""
+    """Codex contributor - subprocess via _dispatch_codex.main."""
 
     name = "codex"
 

@@ -1,7 +1,7 @@
 """Unit tests for consensus_mcp._dispatch_gemini.
 
 Focused on gemini-specific behavior:
-  - _extract_json_from_text (free-form output → JSON substring)
+  - _extract_json_from_text (free-form output -> JSON substring)
   - _parse_gemini_output (validates JSON shape; gemini-rev-N IDs; patch_proposal MUST be null)
   - _invoke_gemini_with_retry (validator-retry on first-pass parse fail)
   - _resolve_gemini_bin (Windows-aware lookup)
@@ -28,10 +28,10 @@ from consensus_mcp import _dispatch_gemini  # noqa: E402
 from consensus_mcp.tools import reviewer_dispatch_gemini  # noqa: E402
 
 
-# ---------- _gemini_subprocess_env (v1.15.2: gemini CLI ≥0.43 trust) ----------
+# ---------- _gemini_subprocess_env (v1.15.2: gemini CLI >=0.43 trust) ----------
 # gemini 0.43.0-preview.0+ refuses headless runs in an "untrusted" dir,
 # emitting the trust error to stderr with EMPTY stdout. --skip-trust
-# (already passed) is NOT load-bearing on this version — empirically
+# (already passed) is NOT load-bearing on this version - empirically
 # verified 2026-05-15: with --skip-trust only, gemini bypassed trust but
 # went autonomous + 429; with GEMINI_CLI_TRUST_WORKSPACE=true it produced
 # clean deterministic output (and 2 clean v1.15.1 audit approvals).

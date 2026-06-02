@@ -1,4 +1,4 @@
-"""Unit tests for consensus_mcp.config — .consensus/config.yaml schema/validator.
+"""Unit tests for consensus_mcp.config - .consensus/config.yaml schema/validator.
 
 Per iter-0016a goal: pin the schema constants, default behavior, alias
 resolution, and every validation rule from converged-plan.yaml Section B.
@@ -21,7 +21,7 @@ def test_default_config_validates():
 
 
 def test_default_workflow_is_propose_converge():
-    """Per converged-plan: default mode is propose-converge when ≥2 contributors."""
+    """Per converged-plan: default mode is propose-converge when >=2 contributors."""
     assert cfg.default_config()["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
 
 
@@ -71,19 +71,19 @@ def test_validate_propose_converge_rejects_per_finding():
 # ---------- iter-workflow-abc-introduce: Workflow A/B/C aliases ----------
 
 def test_alias_A_resolves_to_propose_converge():
-    """Letter alias A → propose-converge (Workflow A)."""
+    """Letter alias A -> propose-converge (Workflow A)."""
     assert cfg.WORKFLOW_ALIASES["A"] == cfg.WORKFLOW_PROPOSE_CONVERGE
     assert cfg.WORKFLOW_ALIASES["a"] == cfg.WORKFLOW_PROPOSE_CONVERGE
 
 
 def test_alias_B_resolves_to_post_review():
-    """Letter alias B → post-review (Workflow B)."""
+    """Letter alias B -> post-review (Workflow B)."""
     assert cfg.WORKFLOW_ALIASES["B"] == cfg.WORKFLOW_POST_REVIEW
     assert cfg.WORKFLOW_ALIASES["b"] == cfg.WORKFLOW_POST_REVIEW
 
 
 def test_alias_C_resolves_to_autonomous_execute():
-    """Letter alias C → autonomous-execute (Workflow C)."""
+    """Letter alias C -> autonomous-execute (Workflow C)."""
     assert cfg.WORKFLOW_ALIASES["C"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
     assert cfg.WORKFLOW_ALIASES["c"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
 
@@ -138,7 +138,7 @@ def test_normalize_letter_alias_no_deprecation_warning():
 
 def test_validate_autonomous_execute_requires_3_contributors():
     """Workflow C requires exactly 3 independent contributors (autonomous safety floor).
-    v1.20.1: message updated to say 'independent' — host_peer no longer counts."""
+    v1.20.1: message updated to say 'independent' - host_peer no longer counts."""
     config = cfg.default_config()
     config["project"]["name"] = "test"
     config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
@@ -152,7 +152,7 @@ def test_validate_autonomous_execute_accepts_3_contributors():
     config = cfg.default_config()
     config["project"]["name"] = "test"
     config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
-    # Pin to exactly 3 independents — the autonomous-execute rule requires N==3.
+    # Pin to exactly 3 independents - the autonomous-execute rule requires N==3.
     # (default_config() now returns 4 via dynamic profile lookup; override here
     # so this test targets the validation rule, not the default count.)
     config["contributors"]["enabled"] = ["claude", "codex", "gemini"]
@@ -281,19 +281,19 @@ def test_validate_rejects_duplicate_contributors():
 
 
 def test_validate_accepts_arbitrary_contributor_name_open_set():
-    """OPEN contributor set (2026-05-22): validation is STRUCTURAL — it does NOT
+    """OPEN contributor set (2026-05-22): validation is STRUCTURAL - it does NOT
     reject names outside a closed enum (that closed enum was the "2-or-20-or-200
     AIs" blocker). Constructibility is enforced at BUILD time by engine_factory."""
     c = cfg.default_config()
     c["contributors"]["enabled"] = ["claude", "aider"]
     c["contributors"]["adapters"] = {"claude": {}, "aider": {}}
-    cfg.validate(c)  # must NOT raise — 'aider' is a structurally-valid name
+    cfg.validate(c)  # must NOT raise - 'aider' is a structurally-valid name
 
 
 def test_engine_factory_gates_unregistered_contributor():
     """Constructibility lives in engine_factory (the only layer that knows the
     open adapter registry), fail-closed with a register hint; registering ANY
-    name then builds — the min-2 / max-N, any-AI promise."""
+    name then builds - the min-2 / max-N, any-AI promise."""
     from consensus_mcp import _engine_factory as ef
     c = cfg.default_config()
     c["contributors"]["enabled"] = ["claude", "aider"]
@@ -322,7 +322,7 @@ def test_validate_rejects_whitespace_only_contributor_name():
 
 
 def test_validate_allows_no_claude():
-    """v1.18.0: claude is OPTIONAL (open-contributor model — any AI / min-2). A
+    """v1.18.0: claude is OPTIONAL (open-contributor model - any AI / min-2). A
     panel with no claude validates; the host still orchestrates the loop."""
     c = cfg.default_config()
     c["contributors"]["enabled"] = ["codex", "gemini"]
@@ -330,7 +330,7 @@ def test_validate_allows_no_claude():
 
 
 def test_validate_allows_missing_adapter():
-    """v1.18.0: a contributors.adapters entry is OPTIONAL — constructibility is
+    """v1.18.0: a contributors.adapters entry is OPTIONAL - constructibility is
     the engine_factory's fail-closed job (config.validate is structural only). A
     built-in contributor with no adapters entry validates."""
     c = cfg.default_config()
@@ -544,8 +544,8 @@ def _base_config(enabled):
 
 
 def test_host_peer_does_not_satisfy_floor():
-    """A host_peer (same-model supplemental) must NOT count toward the ≥2
-    independent floor; only claude + claude-swe-reviewer → 1 independent → rejected."""
+    """A host_peer (same-model supplemental) must NOT count toward the >=2
+    independent floor; only claude + claude-swe-reviewer -> 1 independent -> rejected."""
     with pytest.raises(cfg.ConfigValidationError, match="2 independent|at least 2"):
         cfg.validate(_base_config(["claude", "claude-swe-reviewer"]))
 
@@ -569,7 +569,7 @@ def test_unknown_open_contributor_counts_independent():
 # ---------- effective_config_sha256 ----------
 
 def test_sha256_deterministic():
-    """Same config → same sha."""
+    """Same config -> same sha."""
     c1 = cfg.default_config()
     c2 = cfg.default_config()
     assert cfg.effective_config_sha256(c1) == cfg.effective_config_sha256(c2)

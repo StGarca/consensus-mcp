@@ -1,9 +1,9 @@
 """Unit tests for consensus_mcp.contributors.grok.GrokAdapter.
 
-Mirrors test_kimi_adapter.py — focused on the adapter's job:
-  - phase → --mode forwarding (propose / review / converge)
-  - non-JSON stdout → DispatchError
-  - non-zero rc → DispatchError
+Mirrors test_kimi_adapter.py - focused on the adapter's job:
+  - phase -> --mode forwarding (propose / review / converge)
+  - non-JSON stdout -> DispatchError
+  - non-zero rc -> DispatchError
   - sealed artifact round-trip
 """
 from __future__ import annotations
@@ -68,8 +68,8 @@ def test_grok_adapter_review_forwards_mode_review(monkeypatch, tmp_path):
 
 
 def test_grok_adapter_converge_forwards_mode_review(monkeypatch, tmp_path):
-    """CONVERGE → 'review' (grok-valid). Guards the iter-0044 bug class:
-    an invalid mode like 'converge' would SystemExit → DispatchError."""
+    """CONVERGE -> 'review' (grok-valid). Guards the iter-0044 bug class:
+    an invalid mode like 'converge' would SystemExit -> DispatchError."""
     cap = []
     monkeypatch.setattr("consensus_mcp._dispatch_grok.main", _fake_main(cap, tmp_path))
     from consensus_mcp.contributors.grok import GrokAdapter

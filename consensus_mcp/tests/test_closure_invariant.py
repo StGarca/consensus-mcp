@@ -219,7 +219,7 @@ def test_last_mutation_from_audit_handles_legacy_events():
     """Pre-#28 apply_step_landed events without structured fields don't crash."""
     legacy = _make_legacy_apply_step_event(_now_iso())
     lm = _closure_invariant.last_mutation_from_audit([legacy])
-    # Returns SOMETHING (best-effort) — invariant check downstream will fail
+    # Returns SOMETHING (best-effort) - invariant check downstream will fail
     # when the missing required fields are accessed, but the helper itself
     # doesn't crash.
     assert lm is not None
@@ -227,7 +227,7 @@ def test_last_mutation_from_audit_handles_legacy_events():
 
 
 # ---------------------------------------------------------------------------
-# iter-0024 F1: merge-direction fix — nested structured form wins over
+# iter-0024 F1: merge-direction fix - nested structured form wins over
 # top-level legacy fields when both are present on the same event.
 # ---------------------------------------------------------------------------
 
@@ -295,7 +295,7 @@ def test_last_mutation_top_level_only_event_unchanged():
 
 
 def test_last_mutation_nested_only_event_hoisted_cleanly():
-    """F1: pure-nested form (no top-level actor/post_sha) — nested is hoisted."""
+    """F1: pure-nested form (no top-level actor/post_sha) - nested is hoisted."""
     event = {
         "event": "apply_step_landed",
         "timestamp_utc": _now_iso(),
@@ -323,7 +323,7 @@ def test_last_mutation_nested_only_event_hoisted_cleanly():
 
 
 def test_last_mutation_both_present_identical_idempotent():
-    """F1: top-level and nested both present with identical values — either
+    """F1: top-level and nested both present with identical values - either
     wins (merge is idempotent on agreed values)."""
     actor_dict = {
         "id": "codex-iter0024-1",
@@ -357,7 +357,7 @@ def test_last_mutation_sorted_by_timestamp_not_list_order():
     """Out-of-order list with two events: timestamp ordering wins."""
     newer_ts = _now_iso(0)
     older_ts = _now_iso(-3600)
-    # Put the OLDER event last in the list — pre-F3-003 logic returned this.
+    # Put the OLDER event last in the list - pre-F3-003 logic returned this.
     newer = _make_apply_step_event(
         actor_id="codex-newer",
         model_family="codex",
@@ -389,7 +389,7 @@ def test_last_mutation_sorted_by_timestamp_not_list_order():
 
 
 def test_last_mutation_no_timestamps_falls_back_to_list_order():
-    """All events lacking timestamps — stable sort preserves list order."""
+    """All events lacking timestamps - stable sort preserves list order."""
     e1 = {"event": "apply_step_landed", "post_sha": "FIRST"}
     e2 = {"event": "apply_step_landed", "post_sha": "SECOND"}
     e3 = {"event": "apply_step_landed", "post_sha": "THIRD"}
@@ -398,7 +398,7 @@ def test_last_mutation_no_timestamps_falls_back_to_list_order():
 
 
 # ---------------------------------------------------------------------------
-# iter-0024 F3-006: test gaps — hash_match None==None, legacy string actor.
+# iter-0024 F3-006: test gaps - hash_match None==None, legacy string actor.
 # ---------------------------------------------------------------------------
 
 
@@ -443,7 +443,7 @@ def test_legacy_string_actor_on_last_mutation_fails_cross_family():
 
 
 # ---------------------------------------------------------------------------
-# 9 acceptance tests — helper-level invariant check
+# 9 acceptance tests - helper-level invariant check
 # (driven through check_closure_invariant directly; no filesystem dependency)
 # ---------------------------------------------------------------------------
 
@@ -481,7 +481,7 @@ def _make_verdict(*, actor_id, model_family, target_hash, ts_offset=0):
 
 
 def test_codex_patch_then_codex_close_blocked():
-    """#1 Same-actor close — invariant fires cross_family (same id, same family)."""
+    """#1 Same-actor close - invariant fires cross_family (same id, same family)."""
     lm = _make_lm(actor_id="codex-iter0017-1", model_family="codex", post_sha="POST", ts_offset=-100)
     v = _make_verdict(actor_id="codex-iter0017-1", model_family="codex",
                       target_hash="POST", ts_offset=0)
@@ -563,7 +563,7 @@ def test_no_mutation_yet_close_not_gated():
 # v1.20.0 host_peer LOAD-BEARING REGRESSION:
 # the cross-family closure invariant must NOT be weakened. A same-family blind
 # SWE-reviewer (host_peer) carries gate_eligible=false in its closing verdict
-# and can NEVER be the different-family signer that closes a mutation —
+# and can NEVER be the different-family signer that closes a mutation -
 # regardless of whether its family matches the mutator's. A genuinely
 # different, gate-eligible family is still required.
 # ---------------------------------------------------------------------------
@@ -587,7 +587,7 @@ def _make_host_peer_verdict(*, actor_id, model_family, target_hash, ts_offset=0)
 
 
 def test_claude_mutator_claude_host_peer_cannot_close():
-    """host_peer is SAME family as the mutator (claude+claude) — must NOT close.
+    """host_peer is SAME family as the mutator (claude+claude) - must NOT close.
 
     This already fails on the existing cross_family check (same family); the
     gate_eligible=false tag is belt-and-suspenders. Pins that [host + host_peer]
@@ -605,7 +605,7 @@ def test_claude_mutator_claude_host_peer_cannot_close():
 
 def test_codex_mutator_claude_host_peer_cannot_close_despite_different_family():
     """THE load-bearing case: a claude host_peer reviewing a CODEX-authored
-    change is cross-family-DIFFERENT, hash-matched, and fresh — yet because it
+    change is cross-family-DIFFERENT, hash-matched, and fresh - yet because it
     is gate_eligible=false it STILL must NOT satisfy cross-family signoff.
 
     Without the gate_eligible exclusion this would WRONGLY pass (different
@@ -656,7 +656,7 @@ def test_closure_certificate_authored_on_pass(tmp_path, monkeypatch):
     """#9 When invariant passes and iteration_closed is recorded, closure-certificate.yaml is authored.
 
     Drive through the audit_append_event T6 layer. iter-0036: redirect state
-    root via env var (NOT monkeypatch.setattr on the tool module — pytest
+    root via env var (NOT monkeypatch.setattr on the tool module - pytest
     teardown leaks __getattr__-synthesized values into __dict__ and poisons
     subsequent tests). Also stub _detect_working_tree_changes so T7's
     unaudited-mutation check is deterministic.

@@ -51,7 +51,7 @@ def test_read_missing_is_empty(tmp_path):
 
 
 def test_read_skips_corrupt_rows_and_rollup_survives(tmp_path):
-    """codex-rev-002: validate at the READ boundary — a hand-edited row with a bad
+    """codex-rev-002: validate at the READ boundary - a hand-edited row with a bad
     numeric (or missing required field) is skipped, so summarize_by_tier never crashes
     or reports nonsense."""
     import json as _json

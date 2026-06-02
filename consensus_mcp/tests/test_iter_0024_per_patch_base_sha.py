@@ -1,10 +1,10 @@
-"""Unit tests for iter-0024 F2 — per-patch base_sha helper-stamp.
+"""Unit tests for iter-0024 F2 - per-patch base_sha helper-stamp.
 
 Per iter-0023 operational_caveat per_patch_base_sha_reanchor_required:
 the iter-0022 helper stamped every patch_proposal.base_sha with the
 multi-file defect_target.base_sha. When defect_target spans more files
 than any single patch (the typical Flavor B subsystem review shape),
-the stamp is structurally mismatched — apply.codex_patch's drift check
+the stamp is structurally mismatched - apply.codex_patch's drift check
 computes bundle_sha against the patch's OWN files_touched and refuses
 base_sha_drift.
 
@@ -98,7 +98,7 @@ def test_per_patch_base_sha_uses_patch_subset_not_full_defect_target():
 
     # Full-set base_sha (the iter-0022-stamped value).
     full_base_sha = _canonical_bundle_sha([(file_a, content_a), (file_b, content_b), (file_c, content_c)])
-    # Patch subset (A+B) base_sha — what F2 should stamp.
+    # Patch subset (A+B) base_sha - what F2 should stamp.
     subset_base_sha = _canonical_bundle_sha([(file_a, content_a), (file_b, content_b)])
     assert full_base_sha != subset_base_sha, "test fixture must distinguish subset from full"
 
@@ -172,7 +172,7 @@ def test_per_patch_base_sha_multiple_patches_each_anchored_to_own_subset():
 
 
 # ---------------------------------------------------------------------------
-# Backward compat: no touched_files_contents → fall back to defect_target.base_sha
+# Backward compat: no touched_files_contents -> fall back to defect_target.base_sha
 # ---------------------------------------------------------------------------
 
 

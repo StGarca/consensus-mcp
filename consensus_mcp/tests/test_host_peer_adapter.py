@@ -8,7 +8,7 @@ The host_peer contributor is a SAME-FAMILY blind SWE-reviewer:
   * Its sealed artifact provenance MUST carry: family == host family,
     role == swe_reviewer, weight == supplementary, gate_eligible == False, and
     an independence_attestation{method, fresh_context, no_peer_review_visible_at_dispatch}.
-  * It is EXCLUDED from the cross-family closure invariant — see
+  * It is EXCLUDED from the cross-family closure invariant - see
     test_closure_invariant.py for the load-bearing regression.
 
 Conventions mirror test_engine_factory.py / test_results_log.py: redirect the
@@ -179,7 +179,7 @@ def test_host_peer_callback_receives_only_packet_no_peer_artifacts(tmp_path):
                side_effect=_fake_t6_factory(tmp_path)):
         adapter.dispatch(packet)
 
-    # The single argument is the packet itself — nothing else.
+    # The single argument is the packet itself - nothing else.
     assert seen["arg"] is packet
     assert isinstance(seen["arg"], DispatchPacket)
 

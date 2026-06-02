@@ -1,4 +1,4 @@
-"""Unit tests for tools/apply_codex_patch.py — Task #26 (iter-0016).
+"""Unit tests for tools/apply_codex_patch.py - Task #26 (iter-0016).
 
 Per codex 2026-05-10 v4 directive (memory/project_codex_fix_author_directive.md):
 Staged-apply of verified codex patches with operator authorization.

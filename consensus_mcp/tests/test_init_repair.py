@@ -4,7 +4,7 @@ import consensus_mcp.config as cfg
 
 
 def test_summary_prefixes_are_stable():
-    # The skill parses these — they are a contract.
+    # The skill parses these - they are a contract.
     assert wiz.REPAIR_OK == "OK:"
     assert wiz.REPAIR_FIXED == "REPAIRED:"
     assert wiz.REPAIR_SKIP == "SKIP:"
@@ -42,7 +42,7 @@ def test_exit_code_global_dead_is_7():
 
 
 def test_exit_code_config_outranks_diverged():
-    # config missing/invalid is the prerequisite failure → wins over 7.
+    # config missing/invalid is the prerequisite failure -> wins over 7.
     comps = [wiz.RepairComponent("config", "missing_config"),
              wiz.RepairComponent(".gitignore", "skipped_diverged")]
     assert wiz._repair_exit_code(comps) == 2
@@ -175,7 +175,7 @@ def test_check_agents_missing_dry_run_writes_nothing(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_check_enforcement_dead_reports_global(tmp_path):
-    # empty claude_home → no settings.json hooks → dead
+    # empty claude_home -> no settings.json hooks -> dead
     comp, line = wiz._repair_check_enforcement(tmp_path / "fake_claude_home")
     assert comp.state == "report_global"
     assert line.startswith(wiz.REPAIR_GLOBAL)
@@ -211,7 +211,7 @@ def test_engine_idempotent_second_run_all_ok(tmp_path, monkeypatch):
 
 
 def test_check_enforcement_healthy_after_install_is_ok(tmp_path):
-    """The 'ok' branch must hold against a REAL installed claude_home — guards
+    """The 'ok' branch must hold against a REAL installed claude_home - guards
     detector/installer drift (a mismatch would make every --repair exit 7)."""
     claude_home = tmp_path / "claude_home"
     claude_home.mkdir()

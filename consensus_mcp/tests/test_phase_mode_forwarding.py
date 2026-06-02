@@ -36,7 +36,7 @@ def test_phase_review_maps_to_review():
 
 def test_phase_converge_maps_to_review():
     """Interim mapping per iter-0043 weighted-synthesis convergence:
-    PHASE_CONVERGE → review until empirical evidence justifies a
+    PHASE_CONVERGE -> review until empirical evidence justifies a
     dedicated converge mode (iter-0045 candidate)."""
     assert phase_to_mode(PHASE_CONVERGE) == "review"
 

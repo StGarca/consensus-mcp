@@ -56,7 +56,7 @@ from typing import Dict, List, Tuple
 
 # ## N. ...  (top-level numbered heading; N is one or more digits)
 _HEADING_RE = re.compile(r"^##\s+(\d+)\.\s")
-# ``` or ~~~ at start of line (any info string after) — fence open/close marker.
+# ``` or ~~~ at start of line (any info string after) - fence open/close marker.
 # We accept both backtick and tilde fences per CommonMark, but spec md uses ```.
 _FENCE_RE = re.compile(r"^(```|~~~)")
 
@@ -160,7 +160,7 @@ def parse(text: str) -> SectionMap:
 
     while i < n:
         line = lines[i]
-        # Fence tracking — only toggle in body context, not inside frontmatter
+        # Fence tracking - only toggle in body context, not inside frontmatter
         # (frontmatter has been consumed already).
         if not in_fence:
             m_fence = _FENCE_RE.match(line)

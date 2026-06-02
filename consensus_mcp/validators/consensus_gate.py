@@ -1,6 +1,6 @@
 """consensus_gate.py - Phase 0 production-readiness gate (P0-V6).
 
-Per spec section 17 (production-readiness state machine), §0 anti-injection
+Per spec section 17 (production-readiness state machine), section 0 anti-injection
 rule, codex-rev-011 (three-way hash bind resolution).
 
 Evaluates the production_state machine for an iteration by reading:
@@ -12,7 +12,7 @@ Evaluates the production_state machine for an iteration by reading:
 The gate is authoritative; it does NOT trust consensus.yaml's claim of
 production_state. It computes the state from raw inputs.
 
-State machine (§17):
+State machine (section 17):
   not_ready
     -> technical gates not clear
   ready_pending_operator_approval
@@ -138,7 +138,7 @@ def _build_provenance(consensus_path: Path, verification_path: Path,
 def evaluate_gate(consensus_path: Path, verification_path: Path,
                   approval_path: Path | None,
                   current_target_sha256: str | None) -> dict:
-    """Evaluate the §17 production-readiness state machine.
+    """Evaluate the section 17 production-readiness state machine.
 
     Returns the structured report dict (see module docstring / output schema).
     """

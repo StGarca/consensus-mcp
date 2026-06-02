@@ -1,4 +1,4 @@
-"""Phase 4 v1.1 — auto-codex-dispatch helper (codex adapter).
+"""Phase 4 v1.1 - auto-codex-dispatch helper (codex adapter).
 
 Replaces the operator paste-buffer flow for codex reviews. Reads a goal_packet
 for context, substitutes a markdown prompt template, shells out to `codex` CLI,
@@ -120,7 +120,7 @@ _VALID_SEVERITIES = {"low", "medium", "high", "blocking", "critical"}
 _FINDING_ID_PATTERN = re.compile(r"^codex-rev-\d+$")
 _REQUIRED_FINDING_FIELDS = ("id", "severity", "summary", "citation", "risk", "recommendation")
 # Per Task #24 (iter-0014): patch_proposal is the optional finding key.
-# iter-0018 Finding 4: patch_not_proposed_reason is added — used in strict mode
+# iter-0018 Finding 4: patch_not_proposed_reason is added - used in strict mode
 # to record why a patch wasn't authored. Mutually exclusive with patch_proposal
 # (a finding can't both have a patch and a reason for not having one).
 # Anti-self-verification: verified / self_verified / correct / approved / confirmed
@@ -209,7 +209,7 @@ def _resolve_codex_bin(codex_bin: str) -> str:
                         raise CodexInvocationError(
                             f"codex binary {codex_bin!r} is a Windows App Execution "
                             f"Alias stub (0-byte file in WindowsApps). subprocess cannot "
-                            f"exec App Aliases — install the real codex CLI binary or "
+                            f"exec App Aliases - install the real codex CLI binary or "
                             f"adjust PATH so a non-stub variant is preferred."
                         )
             except OSError:
@@ -248,7 +248,7 @@ def _resolve_codex_bin(codex_bin: str) -> str:
                     raise CodexInvocationError(
                         f"codex binary resolved to {resolved!r} which is a Windows "
                         f"App Execution Alias stub (0-byte file in WindowsApps). "
-                        f"subprocess cannot exec App Aliases — install the real "
+                        f"subprocess cannot exec App Aliases - install the real "
                         f"codex CLI binary or adjust PATH so a non-stub variant is "
                         f"preferred."
                     )
@@ -300,12 +300,12 @@ def _invoke_codex(
 
     Per iter-0036 lesson + iter-0037 codex pre-review (codex-iter0037-1):
       - Replace blocking subprocess.run with Popen + 2 reader threads (stdout
-        + stderr; both drained to prevent pipe-buffer deadlock — codex-rev-001).
+        + stderr; both drained to prevent pipe-buffer deadlock - codex-rev-001).
       - Emit dispatch_streamed_line per stdout line (truncated to 200 chars)
         and dispatch_heartbeat every heartbeat_interval seconds.
       - Auto-abort on heartbeat-silence (no stdout for stall_silence_seconds);
         wall-time is a soft ceiling that raises but does NOT terminate
-        preemptively (codex-rev-002 — operator preference).
+        preemptively (codex-rev-002 - operator preference).
       - Silence check fires on EVERY poll, not just heartbeat tick
         (codex-rev-003) so the 90s threshold actually bounds the recovery time.
       - stdout_buf / stderr_buf / streaming counters protected by state_lock
@@ -325,12 +325,12 @@ def _invoke_codex(
     if popen_factory is None:
         popen_factory = subprocess.Popen
     # Private, keyword-only sleep seam (v1.15.9 converged plan
-    # q1_sync_mechanism). Defaults to `time.sleep` → ZERO change to
+    # q1_sync_mechanism). Defaults to `time.sleep` -> ZERO change to
     # production behavior. The streaming test harness injects a
     # SyncClock-backed blocker so the poll loop has a deterministic
     # happens-before with the test driver instead of racing real
     # wall-clock on loaded CI runners. Chosen over monkeypatching
-    # global `time.sleep` (no global-state leak — see the
+    # global `time.sleep` (no global-state leak - see the
     # monkeypatch-pollution lesson).
     if _sleep is None:
         _sleep = time.sleep
@@ -380,7 +380,7 @@ def _invoke_codex(
             raise CodexInvocationError(f"codex binary not found: {codex_bin}") from None
 
         # Write prompt + close stdin. Binary mode preserves UTF-8 bytes verbatim
-        # (per v1.10.3 Windows hardening — text-mode \n→\r\n translation corrupts
+        # (per v1.10.3 Windows hardening - text-mode \n->\r\n translation corrupts
         # multibyte sequences).
         try:
             proc.stdin.write(prompt.encode("utf-8"))
@@ -443,7 +443,7 @@ def _invoke_codex(
         t_stdout = threading.Thread(target=stdout_reader, daemon=True, name="codex-stdout-reader")
         t_stderr = threading.Thread(target=stderr_reader, daemon=True, name="codex-stderr-reader")
         t_stdout.start()
-        # _drain_stderr defaults True (zero behaviour change — the
+        # _drain_stderr defaults True (zero behaviour change - the
         # stderr reader always runs in production). It is a private,
         # keyword-only TEST seam (v1.15.9 `_sleep=` precedent): the
         # backpressure mutant gate sets it False to NOT drain stderr,
@@ -526,7 +526,7 @@ def _invoke_codex(
 
             # 4) Wall-time soft ceiling (codex-rev-002 fix: no preemptive
             # terminate per operator preference; heartbeat-silence is the only
-            # auto-killer. But we cannot wait forever — raise after wall_time
+            # auto-killer. But we cannot wait forever - raise after wall_time
             # + grace if codex is somehow streaming-but-runaway).
             if now - start_ts >= timeout_seconds + stall_silence_seconds:
                 # Hard ceiling reached. Tree-terminate to avoid zombie + raise.
@@ -602,7 +602,7 @@ def _parse_codex_output(
       - top-level keys are EXACTLY {findings, goal_satisfied, blocking_objections}
         (+ optional goal_satisfied_rationale); unknown keys rejected
       - findings is a list; each finding has ALL 6 required fields (id, severity,
-        summary, citation, risk, recommendation) — citation/risk/recommendation are
+        summary, citation, risk, recommendation) - citation/risk/recommendation are
         REQUIRED per F3 to prevent weak/non-actionable reviews
       - each finding has NO extra keys (additionalProperties:false enforcement);
         only optional NEW key allowed is patch_proposal (Task #24 / iter-0014).
@@ -613,7 +613,7 @@ def _parse_codex_output(
       - all string fields (id, severity, summary, citation, risk, recommendation,
         goal_satisfied_rationale) are actual strings (per F2)
       - goal_satisfied is bool
-      - blocking_objections is a list of STRINGS (per F2 — list-items typed)
+      - blocking_objections is a list of STRINGS (per F2 - list-items typed)
       - blocking_objections invariant (per F3): set(blocking_objections) ==
         set(f.id for f in findings if f.severity in {"blocking", "critical"})
       - if a finding has patch_proposal: its keys/types/content-binding are
@@ -744,7 +744,7 @@ def _parse_codex_output(
             )
         # iter-0018 Finding 4: patch_not_proposed_reason field validation.
         # When present, must be a non-empty string. Mutually exclusive with
-        # patch_proposal — a finding can't have both.
+        # patch_proposal - a finding can't have both.
         reason = finding.get("patch_not_proposed_reason")
         if reason is not None:
             if not isinstance(reason, str):
@@ -1108,7 +1108,7 @@ def main(argv: list[str] | None = None) -> int:
             # (the new convention), parse it so {touched_files_contents_block}
             # can be substituted in _build_prompt. If parsing fails (e.g., the
             # operator passed a raw .diff or .patch file), silently fall back
-            # to the legacy behavior — the prompt still renders, just without
+            # to the legacy behavior - the prompt still renders, just without
             # embedded file contents.
             if review_target_normalized.suffix.lower() in (".yaml", ".yml"):
                 try:

@@ -1,4 +1,4 @@
-"""Gemini contributor adapter — wraps consensus_mcp._dispatch_gemini.
+"""Gemini contributor adapter - wraps consensus_mcp._dispatch_gemini.
 
 Mirrors CodexAdapter. Phase semantics same as codex: all phases reuse the
 existing gemini_review_template.md; phase intent conveyed via goal_packet.
@@ -19,7 +19,7 @@ from consensus_mcp.contributors.base import (
 
 
 class GeminiAdapter(ContributorAdapter):
-    """Gemini contributor — subprocess via _dispatch_gemini.main."""
+    """Gemini contributor - subprocess via _dispatch_gemini.main."""
 
     name = "gemini"
 

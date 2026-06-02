@@ -1,10 +1,10 @@
 # First-consult quickstart (untouched project, Path A)
 
-If you're an AI agent running consensus-mcp for the first time on a project that has never been touched by it — follow this checklist in order. Each step has a copy-paste command. The intent is: zero source-reading required to reach a sealed iteration.
+If you're an AI agent running consensus-mcp for the first time on a project that has never been touched by it - follow this checklist in order. Each step has a copy-paste command. The intent is: zero source-reading required to reach a sealed iteration.
 
 This page is verbatim derived from the operator's `iter-0001-houseinfo-design` debrief (`debrief-2026-05-26-iter-0001-first-consult.md` Section 7), packaged with the install so the next-session agent never needs to discover it.
 
-If you're using **`consensus-mcp-seal-iteration`** (v1.32.0+), several of these steps collapse into one command — see Section 7 below. For the manual path, follow 1–6 in order.
+If you're using **`consensus-mcp-seal-iteration`** (v1.32.0+), several of these steps collapse into one command - see Section 7 below. For the manual path, follow 1-6 in order.
 
 ---
 
@@ -20,9 +20,9 @@ If any peer CLI is missing AND your tier requires it: install the missing CLI(s)
 
 ## 2. Choose bootstrap vs. convention
 
-**If the project already has `.consensus/config.yaml`** — bootstrap mode. Skip to step 3.
+**If the project already has `.consensus/config.yaml`** - bootstrap mode. Skip to step 3.
 
-**If it doesn't** — convention mode. Create the containment markers at the project root:
+**If it doesn't** - convention mode. Create the containment markers at the project root:
 
 ```bash
 mkdir -p consensus_mcp/validators consensus-state
@@ -56,7 +56,7 @@ python -m consensus_mcp._author_review_packet \
 
 The helper embeds the file contents inline in `touched_files_contents` so peer reviewers (who run in sandboxes that can't reliably read repo files) reason from a snapshot.
 
-## 5. Dispatch peers in parallel — PER-REVIEWER pass-ids
+## 5. Dispatch peers in parallel - PER-REVIEWER pass-ids
 
 ```bash
 ITER=<iter-id>
@@ -82,25 +82,25 @@ consensus-mcp-dispatch-kimi    --goal-packet $DIR/goal_packet.yaml --iteration-d
 wait
 ```
 
-Each `--reviewer-id` is unique per family — this prevents the T6 seal-index collision when multiple peers dispatch with a shared `pass-id` (debrief Section 3.3).
+Each `--reviewer-id` is unique per family - this prevents the T6 seal-index collision when multiple peers dispatch with a shared `pass-id` (debrief Section 3.3).
 
 **Codex cold-start tip:** `export CONSENSUS_MCP_STALL_SILENCE_SECONDS=300` if codex hangs at startup.
 
-**Grok behavior (v1.32.0+):** the dispatcher passes `--max-turns 100` because grok counts MCP-tool-discovery messages as turn-budget. If grok's own MCP config has tools with `.` in their names, you'll see noisy ERROR logs about "invalid tool name" — non-fatal.
+**Grok behavior (v1.32.0+):** the dispatcher passes `--max-turns 100` because grok counts MCP-tool-discovery messages as turn-budget. If grok's own MCP config has tools with `.` in their names, you'll see noisy ERROR logs about "invalid tool name" - non-fatal.
 
 ## 6. Author your own (claude's) proposal in PARALLEL
 
-While the peer dispatches run in the background, author `$DIR/claude-proposal.yaml` from your own reading of the goal_packet + review-packet. **Do NOT read the peer outputs first** — that violates blind-first-reveal. Claude's proposal goes into the panel as the orchestrator's contribution.
+While the peer dispatches run in the background, author `$DIR/claude-proposal.yaml` from your own reading of the goal_packet + review-packet. **Do NOT read the peer outputs first** - that violates blind-first-reveal. Claude's proposal goes into the panel as the orchestrator's contribution.
 
 ## 7. Close + seal (v1.32.0 consolidated CLI)
 
-This is the step where pre-v1.32.0 agents hit 4–5 friction cases in a row (Sections 3.5, 3.6, 3.7, 3.8 of the debrief). The new `consensus-mcp-seal-iteration` CLI eliminates them:
+This is the step where pre-v1.32.0 agents hit 4-5 friction cases in a row (Sections 3.5, 3.6, 3.7, 3.8 of the debrief). The new `consensus-mcp-seal-iteration` CLI eliminates them:
 
 ```bash
 # 7a. canonicalize per-family review YAML names + scaffold iteration-outcome.yaml
 consensus-mcp-seal-iteration prepare --iteration-dir $DIR
 
-# 7b. EDIT iteration-outcome.yaml — set closing_state to one of the sealed states:
+# 7b. EDIT iteration-outcome.yaml - set closing_state to one of the sealed states:
 #     quorum_close_passed | implementation_ready_apply_landed
 $EDITOR $DIR/iteration-outcome.yaml
 
@@ -108,7 +108,7 @@ $EDITOR $DIR/iteration-outcome.yaml
 consensus-mcp-seal-iteration lint --iteration-dir $DIR
 
 # 7d. mint the design-approved marker (computes canonical hash + writes pointer)
-#     For brainstorming → writing-plans pipeline, use --writing-plans-followup
+#     For brainstorming -> writing-plans pipeline, use --writing-plans-followup
 #     to get scope_glob='docs/consensus/**' (eliminates Section 3.9 re-mint).
 consensus-mcp-seal-iteration mint \
   --iteration-dir $DIR \
@@ -119,11 +119,11 @@ consensus-mcp-seal-iteration mint \
 consensus-mcp-seal-iteration verify --target-path docs/consensus/plans/<your-plan>.md
 ```
 
-Pre-v1.32.0 (manual): see the debrief's Section 7 steps 6–11 for the hand-rolled equivalent.
+Pre-v1.32.0 (manual): see the debrief's Section 7 steps 6-11 for the hand-rolled equivalent.
 
 ## 8. Yaml hygiene rule
 
-Every value containing `:` MUST be quoted. The `lint` subcommand (7c) catches this — but you can also pre-flight:
+Every value containing `:` MUST be quoted. The `lint` subcommand (7c) catches this - but you can also pre-flight:
 
 ```bash
 python -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" $DIR/*.yaml
@@ -172,6 +172,6 @@ for f in ['<file1>', '<file2>']:
 
 ## Falsification
 
-If you reach the end of this quickstart and STILL hit friction the debrief catalogued, that's the **R3 refuting observation** for v1.32.0's converged plan — file an updated debrief and the next iteration will name a more aggressive fix (likely the deferred resolver rewrite).
+If you reach the end of this quickstart and STILL hit friction the debrief catalogued, that's the **R3 refuting observation** for v1.32.0's converged plan - file an updated debrief and the next iteration will name a more aggressive fix (likely the deferred resolver rewrite).
 
-The target: completing a fresh Workflow A propose-converge consult on a new project in **20–30 minutes**, not 90.
+The target: completing a fresh Workflow A propose-converge consult on a new project in **20-30 minutes**, not 90.

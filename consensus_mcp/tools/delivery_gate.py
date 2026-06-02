@@ -1,11 +1,11 @@
-"""delivery.* MCP tools — fail-closed delivery-readiness gate (1.16.0).
+"""delivery.* MCP tools - fail-closed delivery-readiness gate (1.16.0).
 
 Exposes the anti-self-judge delivery gate (consensus_mcp._delivery_readiness)
 on the MCP tool surface, the portable enforcement path (works across any
 harness). Two tools:
   - delivery.request : verify an artifact is consensus-vetted before delivery.
   - delivery.mint    : mint a readiness token (refuses unless a SEALED consensus
-                       iteration vetted the design — self-judging is impossible).
+                       iteration vetted the design - self-judging is impossible).
 
 See docs/delivery-gate.md.
 """
@@ -34,7 +34,7 @@ MINT_SCHEMA = {
     "description": (
         "Mint a delivery-readiness token. REFUSES unless design_consensus_ref "
         "resolves to a SEALED/closed consensus iteration and >=2 non-claude "
-        "reviewers vetted it — an agent cannot self-judge readiness."
+        "reviewers vetted it - an agent cannot self-judge readiness."
     ),
     "input_schema": {
         "type": "object",

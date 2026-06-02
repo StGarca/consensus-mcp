@@ -5,7 +5,7 @@ repo's snapshot branch. Verifies the end-to-end paths that the unit tests
 in test_snapshot_state.py couldn't exercise: real git worktree lifecycle,
 restore copy semantics, deletion-dirty detection, dry-run plan accuracy.
 
-Gated by CONSENSUS_MCP_SNAPSHOT_INTEGRATION=1 env var? NO — these run in CI.
+Gated by CONSENSUS_MCP_SNAPSHOT_INTEGRATION=1 env var? NO - these run in CI.
 They're fast (~5s each) because the repos are tiny.
 """
 from __future__ import annotations
@@ -92,7 +92,7 @@ def test_list_shows_newest_first(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     # Both tags appear; the time-based ordering should yield beta before alpha
     # because beta was created second (same-second collision auto-suffixes "-1"
-    # but the tag with "-1" sorts AFTER plain — either order is acceptable as
+    # but the tag with "-1" sorts AFTER plain - either order is acceptable as
     # long as both are present).
     assert "alpha" in out
     assert "beta" in out

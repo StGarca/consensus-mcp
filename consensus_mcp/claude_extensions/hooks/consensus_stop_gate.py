@@ -11,7 +11,7 @@ Behaviour:
   - else: `git diff --name-only HEAD`; for each modified NON-TEST SOURCE file
     call `_delivery_readiness.verify_delivery_token`; if any lacks a valid token,
     print a directive naming the file(s):
-      "STOP — verification not satisfied for <file>: invoke consensus-verify /
+      "STOP - verification not satisfied for <file>: invoke consensus-verify /
        mint a delivery token"
 
 Test/runtime overrides (env): same as the PreToolUse gate
@@ -112,7 +112,7 @@ def _git_names(args: list[str], repo_root: Path) -> list[str]:
 def _modified_files(repo_root: Path) -> list[str]:
     """Files that need verification before completion.
 
-    L1 fix: it is not enough to check only the working-tree diff vs HEAD — a
+    L1 fix: it is not enough to check only the working-tree diff vs HEAD - a
     Claude step that COMMITS its change leaves `git diff --name-only HEAD` empty
     yet the committed source is still unverified. So we combine:
       - working-tree changes:  git diff --name-only HEAD
@@ -149,7 +149,7 @@ def main(argv=None) -> int:
     # Dormant-by-default parity (v1.33 gate-consistency fix): the Stop gate now
     # shares the PreToolUse gate's activation predicate (consensus_mcp.
     # _session_state.gate_should_enforce). When NO consensus consult is in flight
-    # the completion check is a NO-OP — everyday work in any repo is never nagged
+    # the completion check is a NO-OP - everyday work in any repo is never nagged
     # for a delivery token it never needed. Probe failure fails OPEN (dormant): a
     # SOFT directive must never block completion on a probe error.
     try:
@@ -172,11 +172,11 @@ def main(argv=None) -> int:
         if not artifact.exists():
             continue
         # L2: a bug/exception in verify_delivery_token must not crash the hook.
-        # Fail soft — log to stderr and treat the file as unverified (the safe,
+        # Fail soft - log to stderr and treat the file as unverified (the safe,
         # gate-asserting direction for a SOFT directive that only injects text).
         try:
             res = dr.verify_delivery_token(artifact, repo_root=repo_root)
-        except Exception as exc:  # noqa: BLE001 — deliberate fail-soft
+        except Exception as exc:  # noqa: BLE001 - deliberate fail-soft
             print(
                 f"consensus_stop_gate: verify_delivery_token raised for {rel}: "
                 f"{exc!r}; treating as unverified",
@@ -190,7 +190,7 @@ def main(argv=None) -> int:
     if unverified:
         files = ", ".join(unverified)
         directive = (
-            f"STOP — verification not satisfied for {files}: "
+            f"STOP - verification not satisfied for {files}: "
             f"invoke consensus-verify / mint a delivery token before claiming "
             f"completion. Each modified source file must carry a valid "
             f"delivery-readiness token (consensus-vetted, hash-current, sealed)."

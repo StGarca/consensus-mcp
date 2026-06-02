@@ -10,7 +10,7 @@
 # (revised iter-0045 panel: operator-decision shape):
 #   - inline -p (NOT --prompt-file); per-pass copy written to iter_dir
 #     for audit/provenance only
-#   - --no-memory --disable-web-search --cwd /tmp — minimal verified-
+#   - --no-memory --disable-web-search --cwd /tmp - minimal verified-
 #     working flag set. The dropped flags (--no-plan, --no-subagents,
 #     --max-turns, --permission-mode) caused indefinite stalls on real
 #     packets and are forbidden by dispatch-canon-validator.
@@ -22,11 +22,11 @@
 #   channel is grok's own self-update mechanism (`grok update`). For first
 #   install on a clean machine, see https://docs.x.ai/grok-cli for the
 #   per-OS download instructions.
-#   Auth: run `grok login` → OAuth in browser → token cached in
+#   Auth: run `grok login` -> OAuth in browser -> token cached in
 #   ~/.grok/auth.json (mode 600).
 name: grok
 kind: cli_reviewer
-model: ""  # empty → let grok CLI default; operator can override via config
+model: ""  # empty -> let grok CLI default; operator can override via config
 detect:
   command: grok
 invoke:

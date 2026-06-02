@@ -28,7 +28,7 @@ import yaml
 
 def _resolve_repo_root() -> Path:
     """Resolve repo root via CONSENSUS_MCP_REPO_ROOT env override (installed-wheel
-    case where __file__ lands inside python_env/Lib/site-packages) → fallback to
+    case where __file__ lands inside python_env/Lib/site-packages) -> fallback to
     in-tree __file__ walk (source-tree case).
     """
     import os
@@ -50,17 +50,17 @@ from consensus_mcp._closure_invariant import (  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# Review file parsing — maps on-disk yaml to closing_verdict shape.
+# Review file parsing - maps on-disk yaml to closing_verdict shape.
 # ---------------------------------------------------------------------------
 
 def _load_review_yaml(path: Path) -> Optional[dict]:
     """Parse a claude-review.yaml or codex-review.yaml into closing_verdict shape.
 
     On-disk fields:
-      reviewer_id       → actor.id
-      sealed_at_utc     → created_at_utc
-      packet_sha256     → review_target_hash
-      actor.model_family (when structured actor present) → actor.model_family
+      reviewer_id       -> actor.id
+      sealed_at_utc     -> created_at_utc
+      packet_sha256     -> review_target_hash
+      actor.model_family (when structured actor present) -> actor.model_family
       otherwise: derive from reviewer_id prefix or filename (claude-* / codex-*)
 
     Returns None if file missing or unreadable.

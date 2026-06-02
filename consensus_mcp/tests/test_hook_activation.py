@@ -1,7 +1,7 @@
-"""v1.21 (converged-plan B5) — tests for settings.json hook ACTIVATION.
+"""v1.21 (converged-plan B5) - tests for settings.json hook ACTIVATION.
 
 The old installer copied a bare hooks.json into ~/.claude, which Claude Code
-does NOT read — so enforcement never fired. The fix merges consensus hook
+does NOT read - so enforcement never fired. The fix merges consensus hook
 entries into <claude_home>/settings.json (the config Claude Code actually reads)
 in a merge-safe, idempotent way, with an uninstall path that removes ONLY
 consensus-tagged entries.
@@ -82,8 +82,8 @@ def test_merge_writes_consensus_hook_entries(tmp_path):
     for c in cmds:
         # The hook script path embedded in the command is absolute.
         # command shape (v1.30.7): shlex.join([<python>, <abs script path>]).
-        # Parse with shlex.split — the cross-platform single-strategy contract
-        # admits any-character paths (incl. spaces in 'C:\Program Files\…'),
+        # Parse with shlex.split - the cross-platform single-strategy contract
+        # admits any-character paths (incl. spaces in 'C:\Program Files\...'),
         # which a naive rsplit-on-whitespace would garble.
         assert ".py" in c
         script_part = shlex.split(c)[-1]

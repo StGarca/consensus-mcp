@@ -5,7 +5,7 @@ consensus_mcp/validators/consensus_gate.py with strict prefix-OR-exact target
 match per consensus.production_scope.scope_match_mode.
 
 Closes claude-rev-050 (production-scope tightening) per spec section 17 +
-§13 consensus.production_scope schema (added v1.9.2 as Phase 2 G4 prereq).
+section 13 consensus.production_scope schema (added v1.9.2 as Phase 2 G4 prereq).
 
 Design spec ref: docs/architecture/phase-1-completion.md
 lines 322-341 (gate.evaluate_production_with_scope_match block).
@@ -41,7 +41,7 @@ strict default; loosening to prefix is opt-in only).
 State-machine evaluation order (per spec section 17)
 ----------------------------------------------------
 1. Parse all three YAML files; refuse on missing/invalid.
-2. Extract consensus.production_scope (refuse if absent: spec §13 v1.9.2 added it).
+2. Extract consensus.production_scope (refuse if absent: spec section 13 v1.9.2 added it).
 3. Extract approval.production_scope (refuse if absent).
 4. Compare types: refuse if mismatch (different scope kinds cannot match).
 5. Compute scope-match per scope_match_mode (refuse on invalid mode).
@@ -59,7 +59,7 @@ Documented limitations
   `consensus.unresolved_disagreements == []`, `consensus.implementation_scope`
   presence, and `verification.passed && verification.scope_check.passed` to
   derive technical-readiness, mirroring consensus_mcp/validators/consensus_gate.py.
-  The §17 production_ready_if list ("codex_production_clearance,
+  The section 17 production_ready_if list ("codex_production_clearance,
   claude_production_clearance, verification_passed, production_scope_verified,
   unresolved_consensus_disagreements_empty") is reified the same way.
 - observational_mode bypass is NOT implemented in this tool. If
@@ -282,7 +282,7 @@ def handle(
     if err is not None:
         return err
 
-    # ---- Step 2: extract consensus.production_scope (spec §13 v1.9.2) ----
+    # ---- Step 2: extract consensus.production_scope (spec section 13 v1.9.2) ----
     cons_scope = consensus.get("production_scope")
     if not isinstance(cons_scope, dict):
         return {

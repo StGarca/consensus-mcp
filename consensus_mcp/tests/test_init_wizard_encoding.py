@@ -2,14 +2,14 @@
 
 Reported from a fresh install on a Windows machine:
 
-  1. ENCODING — the Windows console defaulted to cp1252. The first status line
-     the wizard prints contains a Unicode glyph ('✓ installed' / '✗ missing',
-     and the Next-steps '->' arrows). On a cp1252 stream `print("✓ ...")` raises
+  1. ENCODING - the Windows console defaulted to cp1252. The first status line
+     the wizard prints contains a Unicode glyph ('[ok] installed' / '[x] missing',
+     and the Next-steps '->' arrows). On a cp1252 stream `print("[ok] ...")` raises
      UnicodeEncodeError and the whole wizard aborts. The operator worked around
-     it by exporting PYTHONUTF8=1 — a bug we should fix at the source so
+     it by exporting PYTHONUTF8=1 - a bug we should fix at the source so
      `consensus-init` works out of the box on any console code page.
 
-  2. INTERACTIVITY — the run "went interactive asking for reviewer selection"
+  2. INTERACTIVITY - the run "went interactive asking for reviewer selection"
      even though it was launched from a Claude Code skill (an agent shell, no
      human to answer). `_stdin_is_interactive()` gated only on `isatty()`, but a
      Windows ConPTY-backed subprocess can report isatty()=True while still being
@@ -33,22 +33,22 @@ from consensus_mcp import _init_wizard as wiz
 
 
 # ============================================================
-# 1. ENCODING — _force_utf8_streams()
+# 1. ENCODING - _force_utf8_streams()
 # ============================================================
 
 def test_force_utf8_makes_cp1252_stream_accept_glyphs(monkeypatch):
-    """The exact crash: a cp1252-backed text stream rejects '✓' until the wizard
+    """The exact crash: a cp1252-backed text stream rejects '[ok]' until the wizard
     reconfigures it to UTF-8. After _force_utf8_streams() the write succeeds."""
     cp1252_stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", newline="")
     # Precondition: cp1252 genuinely cannot encode the glyph.
     with pytest.raises(UnicodeEncodeError):
-        cp1252_stdout.write("✓ installed")
+        cp1252_stdout.write(chr(0x2713) + " installed")
 
     monkeypatch.setattr(wiz.sys, "stdout", cp1252_stdout)
     wiz._force_utf8_streams()
 
-    # Now the same write must succeed (stream is UTF-8) — no crash.
-    wiz.sys.stdout.write("✓ installed")
+    # Now the same write must succeed (stream is UTF-8) - no crash.
+    wiz.sys.stdout.write(chr(0x2713) + " installed")
     wiz.sys.stdout.flush()
     assert wiz.sys.stdout.encoding.lower() == "utf-8"
 
@@ -80,7 +80,7 @@ def test_force_utf8_swallows_reconfigure_errors(monkeypatch):
 
 
 # ============================================================
-# 2. INTERACTIVITY — env markers force non-interactive
+# 2. INTERACTIVITY - env markers force non-interactive
 # ============================================================
 
 class _FakeStdin:
@@ -91,7 +91,7 @@ class _FakeStdin:
 @pytest.mark.parametrize("marker", ["CLAUDECODE", "AI_AGENT", "CI"])
 def test_agent_or_ci_marker_forces_non_interactive_even_on_tty(monkeypatch, marker):
     """Under an agent/CI marker, isatty()=True must NOT be treated as
-    interactive — no human can answer the reviewer-selection prompt."""
+    interactive - no human can answer the reviewer-selection prompt."""
     for var in ("CLAUDECODE", "AI_AGENT", "CI"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv(marker, "1")

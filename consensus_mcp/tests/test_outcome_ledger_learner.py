@@ -1,7 +1,7 @@
 """Tests for the external-outcome ledger + the Plan-2 learner.
 
 Covers the converged weighted-consensus spec (2026-05-24): the no-self-grade
-ledger firewall (D5b — only external adjudicators may write credit), and the Beta
+ledger firewall (D5b - only external adjudicators may write credit), and the Beta
 learner (D1 GOLD>SECONDARY, D2 cold-start, D4 decay/min-sample/model-version-reset,
 discount-only weights). Learner is pure-function + advisory; not wired into the
 live engine here (that is the operator-reviewed final step).
@@ -168,4 +168,4 @@ def test_learner_ignores_quarantined_ai_authored_row(tmp_path):
     assert outs == []  # all quarantined
     w = cw.learned_weight_for(outs, "codex", "security",
                               current_iteration=10, current_model_version="codex-1.0")
-    assert w == pytest.approx(1.0)  # neutral — the injected discount was firewalled out
+    assert w == pytest.approx(1.0)  # neutral - the injected discount was firewalled out

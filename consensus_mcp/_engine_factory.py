@@ -29,7 +29,7 @@ class EngineFactoryError(RuntimeError):
     """Raised when a config requests a contributor we can't construct."""
 
 
-# Registry of built-in contributor keys → adapter constructors.
+# Registry of built-in contributor keys -> adapter constructors.
 # Each adapter takes `adapter_config: dict | None` at construction time and
 # receives per-dispatch context (repo_root, iteration_dir, paths) via the
 # DispatchPacket passed to dispatch().
@@ -42,7 +42,7 @@ _BUILTIN_ADAPTERS: dict[str, type[ContributorAdapter]] = {
 }
 
 # OPEN contributor registry (2026-05-22, "2-or-20-or-200 AIs" acceptance). The
-# built-ins above are NOT a closed set — ANY number of contributors with ANY
+# built-ins above are NOT a closed set - ANY number of contributors with ANY
 # names can be registered with ZERO code changes, so a clean install supports
 # min-2 / max-N / any-combination. A registered name shadows a same-named
 # built-in (host swaps an impl).
@@ -52,7 +52,7 @@ _REGISTERED_ADAPTERS: dict[str, type[ContributorAdapter]] = {}
 def register_contributor(name: str, adapter_cls: type[ContributorAdapter]) -> None:
     """Register a contributor adapter under `name` (any name). The no-classes,
     open-set extension point: adding the Nth AI is this one call, identical for
-    the 2nd or the 200th — no special-casing, no enum edit."""
+    the 2nd or the 200th - no special-casing, no enum edit."""
     if not name or not isinstance(name, str):
         raise EngineFactoryError(f"contributor name must be a non-empty string; got {name!r}")
     if not (isinstance(adapter_cls, type) and issubclass(adapter_cls, ContributorAdapter)):
@@ -71,7 +71,7 @@ def known_contributor_keys() -> list[str]:
 
     This is the set `build_adapters()` can actually instantiate; it powers the
     fail-closed error message there and is a public API for a host to query what
-    it can run. NOTE: it is NOT the anchoring linter's name set — the linter
+    it can run. NOTE: it is NOT the anchoring linter's name set - the linter
     sources contributor NAMES from the project config (or `KNOWN_CONTRIBUTORS`
     as a static fallback), because in a CLI/author context no adapters are
     registered yet, so this set would understate the real contributor list."""
@@ -103,7 +103,7 @@ def build_adapters(
     `host_peer_review_callback` (v1.20.0): a DEDICATED fresh-context host review
     callback, SEPARATE from `claude_artifact_callback`. Required to build a
     `kind: host_peer` contributor (the same-family blind SWE-reviewer). If it is
-    not provided, any enabled host_peer profile is gracefully NOT built — every
+    not provided, any enabled host_peer profile is gracefully NOT built - every
     existing (non-host_peer) flow is unaffected.
     """
     enabled = config.get("contributors", {}).get("enabled", [])
@@ -111,7 +111,7 @@ def build_adapters(
         raise EngineFactoryError("config.contributors.enabled is empty")
 
     # 1.17 review (codex-002): read per-contributor config from `contributors.
-    # adapters` — the key default_config() + validate() actually use. The old
+    # adapters` - the key default_config() + validate() actually use. The old
     # `contributors.config` key was never populated, so adapter_config (e.g.
     # model overrides) was silently always empty. Fall back to the legacy
     # `.config` key for any pre-existing config that used it.
@@ -122,8 +122,8 @@ def build_adapters(
 
     # v1.18.0 B-routing (converged-plan decision.engine_factory): resolution
     # order per enabled key is (a) _REGISTERED_ADAPTERS, (b) _BUILTIN_ADAPTERS
-    # (claude/codex/gemini → existing classes), (c) merged profiles. Only step
-    # (c) needs the profile map, so it is loaded LAZILY (and at most once) — a
+    # (claude/codex/gemini -> existing classes), (c) merged profiles. Only step
+    # (c) needs the profile map, so it is loaded LAZILY (and at most once) - a
     # config with only built-in classes (the R8 case) never touches profile IO.
     _merged_profiles_cache: dict | None = None
 
@@ -154,7 +154,7 @@ def build_adapters(
                 adapters[key] = ctor(adapter_config=adapter_config)
             continue
 
-        # (c): no class for this key — fall back to the merged profiles.
+        # (c): no class for this key - fall back to the merged profiles.
         profile = _merged_profiles().get(key)
         if profile is not None:
             kind = profile.get("kind")
@@ -162,7 +162,7 @@ def build_adapters(
                 # kind:host is reserved for the in-process orchestrator (claude),
                 # which always resolves via _BUILTIN_ADAPTERS above. A host
                 # profile under any other name must NOT be spun up as a
-                # subprocess — fail closed.
+                # subprocess - fail closed.
                 raise EngineFactoryError(
                     f"contributor {key!r} has profile kind={profiles.KIND_HOST!r} "
                     f"but no built-in host adapter. kind:host is reserved for the "

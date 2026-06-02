@@ -10,7 +10,7 @@ mapping Superpowers gates -> consensus:
   - verification-before-completion -> sealed gate + delivery token
   - Edit/Write blocked until `.consensus/design-approved` (cross-family sealed)
   - completion blocked until delivery tokens exist
-If the runtime is ABSENT, emit a benign "not detected — plain workflow" notice,
+If the runtime is ABSENT, emit a benign "not detected - plain workflow" notice,
 so the absence is visible (not silently unguarded) and the workflow degrades.
 
 UserPromptSubmit: a lightweight nudge (same precedence summary, shorter). The
@@ -30,7 +30,7 @@ from pathlib import Path
 
 # Ensure the consensus_mcp package that ships ALONGSIDE this hook is importable
 # regardless of the cwd Claude Code invokes us from (parity with
-# consensus_pretooluse_gate.py / consensus_stop_gate.py — this file previously
+# consensus_pretooluse_gate.py / consensus_stop_gate.py - this file previously
 # lacked the insert, so its new gate_should_enforce import would silently fall
 # back to a stale site-packages copy). Repo root is three parents up.
 _PKG_ROOT = Path(__file__).resolve().parents[3]
@@ -54,7 +54,7 @@ _PRECEDENCE_TEXT = (
 )
 
 _ABSENT_TEXT = (
-    "consensus-mcp not detected — running the plain workflow (single-Claude). "
+    "consensus-mcp not detected - running the plain workflow (single-Claude). "
     "Consensus gates are NOT enforced this session; install consensus-mcp "
     "(consensus-init) to enable cross-family design approval + delivery gating."
 )
@@ -151,7 +151,7 @@ def main(argv=None) -> int:
 
     if name == "UserPromptSubmit":
         # Lightweight nudge. No-op when runtime absent OR when the gate is
-        # dormant (no consult in flight) — everyday prompts in any repo are not
+        # dormant (no consult in flight) - everyday prompts in any repo are not
         # nudged about consensus precedence.
         if not present:
             return 0

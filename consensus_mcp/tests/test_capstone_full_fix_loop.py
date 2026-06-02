@@ -1,4 +1,4 @@
-"""Capstone end-to-end integration test for the full codex-fix-loop — Task #27 (iter-0017).
+"""Capstone end-to-end integration test for the full codex-fix-loop - Task #27 (iter-0017).
 
 Per codex 2026-05-10 v4 directive (memory/project_codex_fix_author_directive.md):
 This test walks through the COMPLETE codex-fix-loop in a single happy-path run,
@@ -11,7 +11,7 @@ Plus a forbidden-transition test that proves apply.codex_patch refuses on
 verdict=corrected_resubmit and that audit.append_event refuses iteration_closed
 when the closure invariant fails.
 
-This is the capstone — when this test lands and passes, the entire
+This is the capstone - when this test lands and passes, the entire
 codex-fix-loop is mechanically proven end-to-end via integration test.
 """
 from __future__ import annotations
@@ -69,7 +69,7 @@ def repo_root_env(tmp_path, monkeypatch):
 def stub_clean_dry_run(monkeypatch):
     """Stub patch.stage_and_dry_run to return APPROVED with no findings.
 
-    Matches the stubbing pattern from test_apply_codex_patch.py — the staged
+    Matches the stubbing pattern from test_apply_codex_patch.py - the staged
     dry-run gate has its own tests; this capstone focuses on the end-to-end
     fix-loop wiring, not validator gating.
     """
@@ -94,8 +94,8 @@ def stub_clean_working_tree(repo_root_env, monkeypatch):
     tmp_path, so the real _detect_working_tree_changes now (correctly) raises
     GitUnavailableError and pre-empts the closure-invariant gate these tests
     actually exercise. Stubbing to [] supplies the legitimate "git ran, no
-    changes" signal — matching the Finding-3/Finding-5 idiom in
-    test_iter_0018_cross_ai_invariant.py — so the mutation gate passes and the
+    changes" signal - matching the Finding-3/Finding-5 idiom in
+    test_iter_0018_cross_ai_invariant.py - so the mutation gate passes and the
     closure-invariant path is reached. Depends on repo_root_env so it patches
     the post-reload module object.
     """
@@ -484,7 +484,7 @@ def test_capstone_corrected_resubmit_refuses_apply_and_close(
       2. audit.append_event(iteration_closed) refuses with
          closure_cross_verification_failed when the closure invariant fails
          (here: claude is the closer but no cross-actor closer-verdict was
-         authored after the apply — so T6's no-fresh-review branch fires).
+         authored after the apply - so T6's no-fresh-review branch fires).
     """
     monkeypatch.setenv("CONSENSUS_MCP_CODEX_PATCH_APPLY", "1")
     iter_dir = _make_iter_dir(repo_root_env, "iteration-0017-capstone-forbid")

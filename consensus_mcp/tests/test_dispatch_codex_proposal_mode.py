@@ -134,7 +134,7 @@ def test_proposal_schema_validates_structural_abstention():
     schema = json.loads((TEMPLATES_DIR / "codex_proposal_schema.json").read_text(encoding="utf-8"))
     abstention = {
         "selected_target": None,
-        "rationale_vs_alternatives": "Cannot engage — insufficient context.",
+        "rationale_vs_alternatives": "Cannot engage - insufficient context.",
         "deliverable_scope": None,
         "risks": [],
         "estimated_complexity": "small",
@@ -145,7 +145,7 @@ def test_proposal_schema_validates_structural_abstention():
 
 def test_proposal_schema_rejects_review_shaped_output():
     """A review-shaped payload (findings, goal_satisfied, blocking_objections)
-    must fail proposal validation — that's the whole point of the split."""
+    must fail proposal validation - that's the whole point of the split."""
     import jsonschema
     schema = json.loads((TEMPLATES_DIR / "codex_proposal_schema.json").read_text(encoding="utf-8"))
     review_shaped = {
@@ -385,7 +385,7 @@ def test_codex_proposal_parser_honors_schema_override(tmp_path):
 
 def test_codex_proposal_parser_invariant_rejects_empty_rationale_via_loose_schema(tmp_path):
     """codex pass-4 rev-002: even a loose override schema cannot let an empty
-    rationale through — parser-level invariant enforces non-empty rationale."""
+    rationale through - parser-level invariant enforces non-empty rationale."""
     from consensus_mcp._dispatch_codex import _parse_codex_proposal_output, CodexOutputParseError
     loose_schema = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

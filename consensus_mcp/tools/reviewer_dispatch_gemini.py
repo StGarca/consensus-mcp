@@ -1,4 +1,4 @@
-"""reviewer.dispatch_gemini MCP tool. v1.14.0 — thin wrapper over _dispatch_gemini.
+"""reviewer.dispatch_gemini MCP tool. v1.14.0 - thin wrapper over _dispatch_gemini.
 
 Mirrors reviewer_dispatch_codex.py: translates MCP tool kwargs into argv,
 calls _dispatch_gemini.main() in-process, captures stdout, returns parsed
@@ -77,8 +77,8 @@ SCHEMA = {
                 "enum": ["propose", "review", "converge", None],
                 "description": (
                     "iter-0044: dispatch phase, mapped internally to --mode "
-                    "via consensus_mcp.contributors._phase_mode. 'propose' → "
-                    "--mode proposal; 'review' / 'converge' → --mode review. "
+                    "via consensus_mcp.contributors._phase_mode. 'propose' -> "
+                    "--mode proposal; 'review' / 'converge' -> --mode review. "
                     "Hides dispatcher template/schema split from MCP callers; "
                     "matches engine adapter abstraction. If both phase and "
                     "mode are set, mode wins."

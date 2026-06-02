@@ -1,4 +1,4 @@
-"""`consensus init` wizard — fourth and final sub-component of iter-0016.
+"""`consensus init` wizard - fourth and final sub-component of iter-0016.
 
 Creates `.consensus/config.yaml` per the iter-0015 converged design. Supports:
   - Interactive prompts (default; one question per configurability dimension)
@@ -64,7 +64,7 @@ GITIGNORE_MANAGED_PATHS = (
 def _detect_repo_root(start: Path | None = None) -> Path:
     """Resolve project root for the iteration.
 
-    v1.24 (fix 10): this is the wizard's single, reusable repo-root detector —
+    v1.24 (fix 10): this is the wizard's single, reusable repo-root detector -
     `cmd_init` calls it instead of inlining its own walk, so a future shared
     util is a trivial lift. NOTE: the PreToolUse gate currently has its OWN copy
     of root detection in
@@ -84,7 +84,7 @@ def _detect_repo_root(start: Path | None = None) -> Path:
     """
     cwd = (start or Path.cwd()).resolve()
 
-    # 1. git rev-parse — most authoritative when git is on PATH.
+    # 1. git rev-parse - most authoritative when git is on PATH.
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -99,7 +99,7 @@ def _detect_repo_root(start: Path | None = None) -> Path:
             if top:
                 return Path(top).resolve()
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        # git not available / not in a worktree / timeout — fall through.
+        # git not available / not in a worktree / timeout - fall through.
         pass
 
     # 2. Walk up looking for strong markers.
@@ -158,7 +158,7 @@ _CLAUDE_EXTENSION_FILES = (
     ("skills/consensus-writing-plans/SKILL.md", "skills/consensus-writing-plans/SKILL.md"),
     ("skills/consensus-executing-plans/SKILL.md", "skills/consensus-executing-plans/SKILL.md"),
     ("skills/consensus-subagent-driven-development/SKILL.md", "skills/consensus-subagent-driven-development/SKILL.md"),
-    # v1.22: companion prompt files the skill references — the 3-family review
+    # v1.22: companion prompt files the skill references - the 3-family review
     # (2026-05-23) found these dangling. Vendored from upstream, MIT-attributed.
     ("skills/consensus-subagent-driven-development/implementer-prompt.md", "skills/consensus-subagent-driven-development/implementer-prompt.md"),
     ("skills/consensus-subagent-driven-development/spec-reviewer-prompt.md", "skills/consensus-subagent-driven-development/spec-reviewer-prompt.md"),
@@ -182,7 +182,7 @@ _CLAUDE_EXTENSION_FILES = (
 
 # v1.23 (finding 5): HARDCODED floor for the vendored consensus-* skill pack. The
 # --install-claude-code path warns when fewer than this many vendored SKILL.md
-# sources are actually present/installable — surfacing a STALE or partial package
+# sources are actually present/installable - surfacing a STALE or partial package
 # (e.g. an old pipx entrypoint, or a packaging gap) instead of silently deploying
 # an old/incomplete asset set. (A self-COMPUTED count couldn't catch this, since a
 # stale package would also under-count its own expectation.)
@@ -197,7 +197,7 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
       - If the destination file diverges from the source AND force=False,
         skip with a warning printed to stderr (user-edited content preserved).
       - If force=True, overwrite divergent destinations.
-      - Missing destination → write fresh.
+      - Missing destination -> write fresh.
 
     Returns a list of human-readable status lines (also printed by the caller).
     """
@@ -215,7 +215,7 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
             continue
 
         # v1.24 (fix 1): wrap every per-file read/write in try/except OSError and
-        # CONTINUE rather than crash mid-install — a single bad file (permission
+        # CONTINUE rather than crash mid-install - a single bad file (permission
         # denied, ENOSPC, ...) must not abort the rest of the install.
         try:
             src_text = src.read_text(encoding="utf-8")
@@ -233,7 +233,7 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
 
             # v1.25 (gemini BLOCKING / kimi): write ATOMICALLY. os.replace replaces a
             # destination symlink (the link itself, never its target) in ONE atomic
-            # step — closing the TOCTOU window the prior is_symlink()->unlink()->write
+            # step - closing the TOCTOU window the prior is_symlink()->unlink()->write
             # left open, and never exposing a partial file to a concurrent reader.
             _atomic_write_text(dst, src_text)
             statuses.append(f"wrote: {dst}")
@@ -251,11 +251,11 @@ def _install_claude_extensions(claude_home: Path, force: bool) -> list[str]:
 # repo and drive the per-project consensus config:
 #
 #   - consensus-orchestrator.md       (Agent + consensus MCP tools + Read/Bash/Grep/Glob)
-#   - consensus-host-peer-reviewer.md (read-only: Read/Grep/Glob/Bash — NO Agent)
+#   - consensus-host-peer-reviewer.md (read-only: Read/Grep/Glob/Bash - NO Agent)
 #
 # Mechanics mirror _install_claude_extensions: byte-identical => unchanged;
 # divergent => SKIP unless force; missing => write. Honored by --dry-run and
-# opt-out via --no-agents. PROJECT-ONLY — not part of the global
+# opt-out via --no-agents. PROJECT-ONLY - not part of the global
 # --install-claude-code path.
 
 _PROJECT_AGENT_FILES = (
@@ -310,7 +310,7 @@ def _install_project_agents(repo_root: Path, force: bool) -> list[str]:
                     continue
                 # force=True: fall through to write.
 
-            # v1.25 (gemini BLOCKING / kimi, parity): atomic write — os.replace
+            # v1.25 (gemini BLOCKING / kimi, parity): atomic write - os.replace
             # replaces a dst symlink without following it, no TOCTOU window.
             _atomic_write_text(dst, src_text)
             statuses.append(f"wrote: {dst}")
@@ -324,7 +324,7 @@ def _install_project_agents(repo_root: Path, force: bool) -> list[str]:
 # --- v1.21 (converged-plan B5): settings.json hook ACTIVATION merge ---
 #
 # Background (the bug this fixes): the installer copied a `hooks.json` manifest
-# into ~/.claude, but Claude Code does NOT read a bare hooks.json there — hooks
+# into ~/.claude, but Claude Code does NOT read a bare hooks.json there - hooks
 # are activated only via the `hooks` key of ~/.claude/settings.json. So copying
 # hooks.json was inert and enforcement never fired.
 #
@@ -399,11 +399,11 @@ def _build_consensus_hook_command(script_path: Path) -> str:
     error: `/usr/bin/bash: line 1: <backslash-eaten Windows path>: command not
     found`. shlex.join single-quotes any path with shell-unsafe characters
     (incl. backslash); bash treats characters inside single quotes literally,
-    so a Windows path `C:\\Users\\…\\python.exe` survives bash unquoting and is
+    so a Windows path `C:\\Users\\...\\python.exe` survives bash unquoting and is
     accepted by Windows Python via MSYS's exec layer.
 
-    The pre-v1.30.7 `os.name == "nt"` → `subprocess.list2cmdline` branch was
-    pinned to Windows CI's PowerShell, not Claude Code's runtime hook shell —
+    The pre-v1.30.7 `os.name == "nt"` -> `subprocess.list2cmdline` branch was
+    pinned to Windows CI's PowerShell, not Claude Code's runtime hook shell -
     a CI-vs-runtime shell mismatch that this commit reverses.
     """
     parts = [sys.executable, str(script_path)]
@@ -491,7 +491,7 @@ def _load_existing_settings_json(path: Path) -> tuple[dict, str | None]:
     """Load settings.json into a dict.
 
     Returns (data, error). Missing file => ({}, None). Parse/IO failure =>
-    ({}, "<msg>") — the caller fails soft and does not clobber the file.
+    ({}, "<msg>") - the caller fails soft and does not clobber the file.
     """
     if not path.exists():
         return {}, None
@@ -529,7 +529,7 @@ def _merge_consensus_hooks_into_settings(
     for event, groups in _build_consensus_hook_groups(claude_home).items():
         merged_hooks.setdefault(event, [])
         if not isinstance(merged_hooks[event], list):
-            # Foreign non-list value under this event — preserve it by nesting
+            # Foreign non-list value under this event - preserve it by nesting
             # it is not safe; instead leave the user's value and skip ours.
             continue
         merged_hooks[event].extend(groups)
@@ -564,7 +564,7 @@ def _install_claude_settings_json(claude_home: Path, force: bool = False) -> lis
     if merged == existing:
         return [f"settings.json hooks already current: {path}"]
 
-    # v1.25 (kimi): an IO failure writing settings.json must NOT crash the install —
+    # v1.25 (kimi): an IO failure writing settings.json must NOT crash the install -
     # fail soft with a WARN so the handler surfaces an incomplete install (rc 6),
     # mirroring the extension/agent installers.
     try:
@@ -621,7 +621,7 @@ def _resolve_mcp_command(
 
     Precedence (per iter-0030 converged plan Q4):
       1. Explicit `--mcp-command` override (string; split on whitespace).
-      2. `shutil.which("consensus-mcp")` → use bare name "consensus-mcp"
+      2. `shutil.which("consensus-mcp")` -> use bare name "consensus-mcp"
          for PATH-portability so committed `.mcp.json` works on other
          machines that have consensus-mcp installed.
       3. Fallback: `sys.executable -m consensus_mcp.server` (dev install
@@ -705,10 +705,10 @@ def _load_existing_mcp_json(path: Path) -> tuple[dict | None, str | None]:
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     """Atomically write `data` to `path` via a SECURE, unpredictable temp file.
 
-    v1.26 (codex+gemini+kimi BLOCKING — the single ROOT fix for the tmp-symlink
+    v1.26 (codex+gemini+kimi BLOCKING - the single ROOT fix for the tmp-symlink
     class across ALL writers): the temp file is created with O_CREAT|O_EXCL|O_WRONLY
     and an UNPREDICTABLE name, so a pre-planted symlink (or file) at the temp path
-    cannot redirect the write — O_EXCL fails on any existing path, and the random
+    cannot redirect the write - O_EXCL fails on any existing path, and the random
     name defeats prediction. os.replace then atomically swaps it into place,
     replacing a destination symlink (the link itself, never its target). The tmp is
     cleaned up on any error. This is the ONLY low-level writer; text/json/config/
@@ -744,7 +744,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
 def _path_is_within(repo_root: Path, target: Path) -> bool:
     """True if `target` resolves to repo_root itself or a path strictly inside it.
 
-    v1.24 (fix 5a): guards instruction-file provisioning against path traversal —
+    v1.24 (fix 5a): guards instruction-file provisioning against path traversal -
     a profile-supplied filename like '../../etc/evil' must not let us write
     outside the repo. Both sides are fully resolved before comparison.
     """
@@ -773,7 +773,7 @@ def _json_semantically_equal(a, b) -> bool:
 def _atomic_write_json(path: Path, data: dict) -> None:
     """Pretty-print JSON, write atomically via tmp+rename.
 
-    v1.24 (fix 11): the tmp-file + os.replace pattern makes config writes atomic —
+    v1.24 (fix 11): the tmp-file + os.replace pattern makes config writes atomic -
     a concurrent writer races to last-writer-wins rather than corrupting a
     half-written file (os.replace is an atomic rename on POSIX and Windows).
     Full cross-process file locking is overkill here; atomic replace is
@@ -795,13 +795,13 @@ def _write_mcp_json(
     """Read existing `.mcp.json`, merge or write consensus-mcp entry,
     write back. Returns (status, path) where status is one of:
 
-      - "wrote"             — fresh file created
-      - "merged"            — added consensus-mcp into existing config,
+      - "wrote"             - fresh file created
+      - "merged"            - added consensus-mcp into existing config,
                               other servers preserved
-      - "already-current"   — entry exists and matches; no write
-      - "blocked-conflict"  — entry exists but differs; not overwritten
+      - "already-current"   - entry exists and matches; no write
+      - "blocked-conflict"  - entry exists but differs; not overwritten
                               (use force=True to replace just this entry)
-      - "parse-error:<msg>" — existing file failed to parse; not modified
+      - "parse-error:<msg>" - existing file failed to parse; not modified
 
     Per iter-0030 converged plan: merge mode is default; conflict mode is
     skip+warn unless force=True; malformed JSON is skip+warn unconditionally.
@@ -854,7 +854,7 @@ def _resolve_config_path(args, repo_root: Path) -> Path:
 
 def _detect_available_contributors(repo_root: Path) -> list[str]:
     """Installed INDEPENDENT contributors, derived dynamically from the merged
-    profile set (no hardcoded AI list — decision 7). host is always available;
+    profile set (no hardcoded AI list - decision 7). host is always available;
     cli_reviewers iff their detect.command resolves on PATH; host_peer excluded
     (it is offered via the conditional follow-up, never auto-enabled)."""
     profiles = _load_merged_profiles(None)
@@ -872,8 +872,8 @@ def _detect_available_contributors(repo_root: Path) -> list[str]:
 
 # Managed-block sentinels for per-AI instruction files. The em-dash matches the
 # converged plan verbatim; the block between these markers is owned by
-# consensus-mcp and refreshed in place — everything outside is the user's.
-INSTRUCTION_BEGIN_MARKER = "<!-- consensus-mcp:begin (managed — do not edit inside) -->"
+# consensus-mcp and refreshed in place - everything outside is the user's.
+INSTRUCTION_BEGIN_MARKER = "<!-- consensus-mcp:begin (managed - do not edit inside) -->"
 INSTRUCTION_END_MARKER = "<!-- consensus-mcp:end -->"
 
 # A static reminder appended to each detect+guide block: the wizard NEVER shells
@@ -896,9 +896,9 @@ def _load_merged_profiles(config_profiles: dict | None) -> dict:
 def _profile_installed(profile: dict) -> bool:
     """True if the contributor is usable on this host.
 
-    host (claude) is the running environment — always available. host_peer
+    host (claude) is the running environment - always available. host_peer
     (v1.20.0: a same-family blind SWE-reviewer run via the host callback) is
-    likewise always usable on the host — it has no CLI to detect. cli_reviewers
+    likewise always usable on the host - it has no CLI to detect. cli_reviewers
     are available iff their detect.command resolves on PATH.
     """
     if profile.get("kind") in (profiles_mod.KIND_HOST, profiles_mod.KIND_HOST_PEER):
@@ -911,7 +911,7 @@ def _profile_installed(profile: dict) -> bool:
 
 def _independent_ordered_names(profiles: dict) -> list[str]:
     """Display/selection order over INDEPENDENT profiles only (host first, then
-    sorted). host_peer is excluded — it is offered via the conditional follow-up."""
+    sorted). host_peer is excluded - it is offered via the conditional follow-up."""
     indep = {
         n: p for n, p in profiles.items()
         if isinstance(p, dict) and p.get("kind") != profiles_mod.KIND_HOST_PEER
@@ -926,9 +926,9 @@ def _select_contributors_interactive(
 ) -> list[str]:
     """Numbered multi-select over independent profiles only (no TUI dep).
 
-    host_peer profiles are excluded from this list — they are offered via a
-    conditional follow-up prompt (separate task). Shows '✓ installed' /
-    '✗ missing' per entry, pre-checks installed ones as the default (accepted
+    host_peer profiles are excluded from this list - they are offered via a
+    conditional follow-up prompt (separate task). Shows '[ok] installed' /
+    '[x] missing' per entry, pre-checks installed ones as the default (accepted
     on empty input), and re-prompts until >=2 are picked.
 
     preselected: if supplied, those names (filtered to the display list) are
@@ -945,7 +945,7 @@ def _select_contributors_interactive(
 
     print("Select the AI reviewers to use (>=2 required):")
     for idx, name in enumerate(names, start=1):
-        status = "✓ installed" if installed[name] else "✗ missing"
+        status = "[ok] installed" if installed[name] else "[x] missing"
         mark = "x" if name in prechecked else " "
         print(f"  [{mark}] {idx}. {name} ({status})")
     default_hint = ",".join(str(names.index(n) + 1) for n in prechecked) or "none"
@@ -984,7 +984,7 @@ def _print_panel_summary(enabled: list[str], profiles: dict) -> None:
     if peers:
         total = f"{len(indep)}.5"
         print(
-            f"Panel: {total} reviewers — {len(indep)} independent "
+            f"Panel: {total} reviewers - {len(indep)} independent "
             f"({', '.join(indep)}) + 0.5 supplemental same-model ({', '.join(peers)})."
         )
     else:
@@ -997,7 +997,7 @@ def _warn_degenerate_panel(enabled: list[str], profiles: dict) -> None:
     Consensus needs >=2 independent (non-host_peer) reviewers for cross-family
     cross-review; a single-reviewer config is degraded. The interactive path
     re-prompts for >=2, so this guard is only wired into the non-interactive
-    bootstrap. Warn-only — never fails the init.
+    bootstrap. Warn-only - never fails the init.
     """
     independent = [
         n for n in enabled
@@ -1057,7 +1057,7 @@ def _print_status_summary(
         if mcp_resolves:
             print(f"  MCP server: '{mcp_command}' resolves on PATH.")
         else:
-            print(f"  MCP server: WARNING — '{mcp_command}' does NOT resolve on "
+            print(f"  MCP server: WARNING - '{mcp_command}' does NOT resolve on "
                   f"PATH; the registered consensus-mcp server may not start.")
     if from_claude_code:
         print("  -> Restart Claude Code in this project (or run `/mcp` to reload "
@@ -1083,10 +1083,10 @@ def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes
 
     print("\nYou're using claude as the host. Add a same-model claude review agent?")
     print(
-        "This is a SUPPLEMENTAL review (shown as +0.5 in the init summary only — NOT a\n"
+        "This is a SUPPLEMENTAL review (shown as +0.5 in the init summary only - NOT a\n"
         "fully independent reviewer; it shares the host model's blind spots). It gets no\n"
         "vote at the consensus gate and can't close consensus (claude already votes as\n"
-        "host) — but every good idea it raises is still applied on merit. A useful extra\n"
+        "host) - but every good idea it raises is still applied on merit. A useful extra\n"
         "pass if you have the tokens to spare."
     )
     if len(candidates) == 1:
@@ -1149,7 +1149,7 @@ def _detect_and_guide(selection: list[str], profiles: dict) -> None:
         if not command or shutil.which(command) is not None:
             continue
 
-        print(f"{name}: not found on PATH — to enable it:")
+        print(f"{name}: not found on PATH - to enable it:")
         install = profile.get("install") or {}
         cmd = install.get(os_key)
         if cmd is None and os_key == "darwin":
@@ -1157,7 +1157,7 @@ def _detect_and_guide(selection: list[str], profiles: dict) -> None:
         if cmd:
             print(f"  install: {cmd}")
         else:
-            print(f"  install: unavailable for {os_key} — see {name} vendor docs")
+            print(f"  install: unavailable for {os_key} - see {name} vendor docs")
 
         auth = profile.get("auth") or {}
         if auth.get("command"):
@@ -1208,7 +1208,7 @@ def _provision_instruction_files(
     """Seed/refresh per-AI instruction files for the selected contributors.
 
     Targets profile.instructions.filename, deduped by filename (codex+kimi both
-    → AGENTS.md → written once). Non-destructive: a managed block is inserted or
+    -> AGENTS.md -> written once). Non-destructive: a managed block is inserted or
     refreshed between sentinels, leaving any user content intact. Idempotent.
 
     Returns the list of written file paths (deduped).
@@ -1321,7 +1321,7 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
     contributors are auto-suggested from PATH. When False, current base values
     are the prompt defaults (preserving existing config).
 
-    Raises KeyboardInterrupt on Ctrl+C / EOF — caller maps to exit code 1.
+    Raises KeyboardInterrupt on Ctrl+C / EOF - caller maps to exit code 1.
     """
     set_flags = _which_flags_set(args)
 
@@ -1329,8 +1329,8 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
     if "contributors" not in set_flags:
         if fresh:
             # FRESH path uses the v1.18.0 numbered multi-select over merged
-            # profiles (✓ installed / ✗ missing, min-2 re-prompt, claude
-            # optional) — wired here per codex-rev-001 (the helper existed but
+            # profiles ([ok] installed / [x] missing, min-2 re-prompt, claude
+            # optional) - wired here per codex-rev-001 (the helper existed but
             # was never reached by the wizard flow).
             profiles = _load_merged_profiles(
                 (base.get("contributors") or {}).get("profiles")
@@ -1505,7 +1505,7 @@ def build_config_from_flags(args, repo_root: Path, interactive: bool = False) ->
 def write_config(config: dict, path: Path) -> None:
     """Atomically write config YAML to path.
 
-    v1.24 (fix 11): confirmed atomic — tmp.replace() is an atomic rename, so a
+    v1.24 (fix 11): confirmed atomic - tmp.replace() is an atomic rename, so a
     concurrent writer is last-writer-wins rather than corrupting config.yaml. Full
     cross-process locking is overkill; atomic replace suffices. (Same contract as
     _atomic_write_json / _atomic_write_text.)
@@ -1533,7 +1533,7 @@ def update_gitignore(repo_root: Path) -> bool:
     Idempotent: complete marker pairs are stripped, then a single fresh managed
     block is appended. If the file contains an OPEN marker without a CLOSE
     marker (or vice versa), the file is treated as foreign and left untouched
-    — a fresh block is appended but no existing lines are deleted
+    - a fresh block is appended but no existing lines are deleted
     (codex-rev-005).
     """
     gi = repo_root / ".gitignore"
@@ -1623,7 +1623,7 @@ def _looks_like_workspace_umbrella(root: Path) -> list[Path]:
     `.git` DIRECTORY), IFF `root` itself is NOT a git repo. Empty list = not an
     umbrella.
 
-    A `.git` *file* (submodule / linked-worktree gitlink) does NOT count — so a
+    A `.git` *file* (submodule / linked-worktree gitlink) does NOT count - so a
     project that vendors submodules is never misflagged. Per-entry errors
     (PermissionError/OSError) are swallowed; symlinked children are not followed.
     """
@@ -1687,7 +1687,7 @@ def _stdin_is_interactive() -> bool:
 
 
 # v1.29.1 (verify/repair consult): version-STABLE summary prefixes. The consensus
-# skill parses these to relay repair results — treat as a contract (a regression
+# skill parses these to relay repair results - treat as a contract (a regression
 # test pins them), like ALREADY_CONFIGURED_TOKEN.
 REPAIR_OK = "OK:"            # present and healthy
 REPAIR_FIXED = "REPAIRED:"   # was missing, recreated
@@ -1724,22 +1724,22 @@ def _repair_exit_code(components: list["RepairComponent"]) -> int:
 
 
 def _repair_check_config(config_path: Path) -> tuple[RepairComponent, str]:
-    """#1 config.yaml — NOT repairable (can't synthesize panel choices)."""
+    """#1 config.yaml - NOT repairable (can't synthesize panel choices)."""
     if not config_path.exists():
         return (RepairComponent("config.yaml", "missing_config"),
-                f"{REPAIR_SKIP} config.yaml missing — run `consensus init` "
+                f"{REPAIR_SKIP} config.yaml missing - run `consensus init` "
                 f"(cannot synthesize your panel choices)")
     try:
         cfg.load(config_path)
     except cfg.ConfigValidationError as exc:
         return (RepairComponent("config.yaml", "invalid_config"),
-                f"{REPAIR_SKIP} config.yaml invalid ({exc}) — run "
+                f"{REPAIR_SKIP} config.yaml invalid ({exc}) - run "
                 f"`consensus init --reconfigure`")
     return (RepairComponent("config.yaml", "ok"), f"{REPAIR_OK} config.yaml")
 
 
 def _repair_check_mcp(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#2 .mcp.json — repair when the consensus-mcp entry is missing; report when
+    """#2 .mcp.json - repair when the consensus-mcp entry is missing; report when
     present-but-diverged; ok when present-and-matching."""
     mcp_path = _resolve_mcp_json_path(repo_root)
     existing, _ = _load_existing_mcp_json(mcp_path)
@@ -1761,7 +1761,7 @@ def _repair_check_mcp(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponen
 
 
 def _repair_check_gitignore(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#3 .gitignore managed block — re-add when absent."""
+    """#3 .gitignore managed block - re-add when absent."""
     gi = repo_root / ".gitignore"
     text = gi.read_text(encoding="utf-8") if gi.exists() else ""
     if GITIGNORE_OPEN_MARKER in text:
@@ -1772,7 +1772,7 @@ def _repair_check_gitignore(repo_root: Path, *, dry_run: bool) -> tuple[RepairCo
 
 
 def _repair_check_agents(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#4 .claude/agents/ — re-copy missing subagent files; report diverged (installer SKIPs them)."""
+    """#4 .claude/agents/ - re-copy missing subagent files; report diverged (installer SKIPs them)."""
     agents_dir = repo_root / ".claude" / "agents"
     source_root = _agents_source_root()
 
@@ -1803,7 +1803,7 @@ def _repair_check_agents(repo_root: Path, *, dry_run: bool) -> tuple[RepairCompo
 
     if diverged:
         return (RepairComponent(".claude/agents", "skipped_diverged"),
-                f"{REPAIR_SKIP} .claude/agents — diverged from shipped: "
+                f"{REPAIR_SKIP} .claude/agents - diverged from shipped: "
                 f"{', '.join(diverged)}; pass --force to overwrite")
 
     return (RepairComponent(".claude/agents", "ok"), f"{REPAIR_OK} .claude/agents")
@@ -1845,7 +1845,7 @@ def _instruction_files_missing_block(
 
 
 def _repair_check_instructions(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#5 per-AI instruction managed blocks — re-seed when absent. Reads enabled
+    """#5 per-AI instruction managed blocks - re-seed when absent. Reads enabled
     contributors from the existing config."""
     config_path = repo_root / ".consensus" / "config.yaml"
     loaded = cfg.load(config_path)
@@ -1860,7 +1860,7 @@ def _repair_check_instructions(repo_root: Path, *, dry_run: bool) -> tuple[Repai
 
 
 def _repair_check_enforcement(claude_home: Path) -> tuple[RepairComponent, str]:
-    """#6 global enforcement — READ-ONLY. Healthy iff settings.json carries the
+    """#6 global enforcement - READ-ONLY. Healthy iff settings.json carries the
     consensus hooks for every expected event AND every referenced hook script
     exists on disk. Never writes ~/.claude (that's --install-claude-code)."""
     settings_path = _resolve_settings_json_path(claude_home)
@@ -1871,7 +1871,7 @@ def _repair_check_enforcement(claude_home: Path) -> tuple[RepairComponent, str]:
         if not hooks.get(event):
             return (RepairComponent("enforcement", "report_global"),
                     f"{REPAIR_GLOBAL} enforcement: settings.json missing consensus "
-                    f"{event} hook — run `consensus-init --install-claude-code`")
+                    f"{event} hook - run `consensus-init --install-claude-code`")
     # Check that every unique hook script referenced in _CONSENSUS_HOOK_SPECS
     # is actually installed under claude_home/hooks/.  We use script-name lookup
     # (via _installed_hook_script_path) rather than string-sniffing the command
@@ -1885,7 +1885,7 @@ def _repair_check_enforcement(claude_home: Path) -> tuple[RepairComponent, str]:
         if not installed.exists():
             return (RepairComponent("enforcement", "report_global"),
                     f"{REPAIR_GLOBAL} enforcement: hook script missing ({installed}) "
-                    f"— run `consensus-init --install-claude-code`")
+                    f"- run `consensus-init --install-claude-code`")
     return (RepairComponent("enforcement", "ok"), f"{REPAIR_OK} enforcement")
 
 
@@ -1922,10 +1922,10 @@ def _prompt_existing_config_action(config_path: Path) -> str:
     wizard.
     """
     print(f"consensus-mcp is already configured here: {config_path}")
-    print("  [1] Leave as-is — no changes            (default)")
-    print("  [2] Verify / repair — re-create missing pieces, report diverged")
-    print("  [3] Reconfigure — re-prompt, keep current settings as defaults, show diff")
-    print("  [4] Force overwrite — discard local config edits, write fresh")
+    print("  [1] Leave as-is - no changes            (default)")
+    print("  [2] Verify / repair - re-create missing pieces, report diverged")
+    print("  [3] Reconfigure - re-prompt, keep current settings as defaults, show diff")
+    print("  [4] Force overwrite - discard local config edits, write fresh")
     while True:
         try:
             raw = input("Choose [1/2/3/4, default 1]: ").strip()
@@ -2003,7 +2003,7 @@ def cmd_init(args) -> int:
         if present_vendored < _EXPECTED_VENDORED_SKILLS:
             print(
                 f"WARNING: this consensus-mcp install ships only {present_vendored} of "
-                f"the expected {_EXPECTED_VENDORED_SKILLS} vendored skills — it looks "
+                f"the expected {_EXPECTED_VENDORED_SKILLS} vendored skills - it looks "
                 f"STALE or partial. Upgrade the package (e.g. "
                 f"`pipx install --force consensus-mcp`) before installing, or you will "
                 f"deploy an old/incomplete skill set.", file=sys.stderr)
@@ -2019,14 +2019,14 @@ def cmd_init(args) -> int:
         for line in ext_lines:
             print(line)
         # v1.21 (B5): copying the skill/command files does NOT activate the
-        # enforcement hooks — Claude Code reads hooks only from settings.json.
+        # enforcement hooks - Claude Code reads hooks only from settings.json.
         # Merge them in (idempotent, preserves unrelated user hooks).
         settings_lines = list(_install_claude_settings_json(claude_home, force=args.force))
         for line in settings_lines:
             print(line)
         # fix 7: if hooks could NOT be activated (e.g. a malformed existing
         # settings.json that _install_claude_settings_json refused to clobber),
-        # the install is INCOMPLETE — enforcement is OFF. Return a distinct
+        # the install is INCOMPLETE - enforcement is OFF. Return a distinct
         # nonzero (6) instead of a misleading 0. The function signals failure via
         # a WARN: status line (it never raises; it fails soft to avoid clobbering).
         settings_failed = any(ln.startswith("WARN:") for ln in settings_lines)
@@ -2037,7 +2037,7 @@ def cmd_init(args) -> int:
         if skipped:
             print(
                 f"\nWARNING: {len(skipped)} managed file(s) were SKIPPED because the "
-                f"installed copy diverges from this version — they are now STALE. "
+                f"installed copy diverges from this version - they are now STALE. "
                 f"Re-run with --force to update them (this overwrites local edits):",
                 file=sys.stderr)
             for ln in skipped:
@@ -2045,7 +2045,7 @@ def cmd_init(args) -> int:
         if settings_failed:
             print(
                 "\nERROR: consensus hooks were NOT activated (settings.json could "
-                "not be updated) — enforcement is OFF. Fix the reported settings.json "
+                "not be updated) - enforcement is OFF. Fix the reported settings.json "
                 "problem and re-run.", file=sys.stderr)
             return 6  # activation failure outranks a managed-file SKIP (see above)
         if skipped:
@@ -2070,7 +2070,7 @@ def cmd_init(args) -> int:
         return code
 
     # v1.29.x (umbrella-guard consult): don't silently bootstrap a workspace
-    # umbrella (a non-repo dir containing git repos). Fresh-init only — skip when
+    # umbrella (a non-repo dir containing git repos). Fresh-init only - skip when
     # a config already exists (-> already-configured path, so re-running to clean
     # up an umbrella still works) and for --reconfigure (a maintenance op).
     # --check/--repair already returned above. --here is the deliberate override.
@@ -2127,7 +2127,7 @@ def cmd_init(args) -> int:
             print(
                 f"consensus-mcp is already configured at {config_path}. "
                 f"Re-run with --reconfigure to update (keeps current settings as "
-                f"defaults) or --force to overwrite — or run "
+                f"defaults) or --force to overwrite - or run "
                 f"`consensus init --reconfigure` in an interactive terminal.",
                 file=sys.stderr,
             )
@@ -2148,7 +2148,7 @@ def cmd_init(args) -> int:
             return code
         if action == "reconfigure":
             # Reconfigure re-prompts interactively (keeping the existing config
-            # as defaults) and shows a diff — do NOT force non-interactive.
+            # as defaults) and shows a diff - do NOT force non-interactive.
             args.reconfigure = True
         else:  # "force"
             # The menu WAS the interaction; overwrite with auto-detected
@@ -2328,7 +2328,7 @@ def cmd_init(args) -> int:
     # config write.
     #
     # v1.24 (fix 9): a divergent agent is SKIPPED (kept), but the per-project init
-    # used to report plain success — masking a stale agent. Collect SKIP lines and
+    # used to report plain success - masking a stale agent. Collect SKIP lines and
     # mark the init INCOMPLETE (rc 7) unless --force, mirroring the global
     # managed-file SKIP -> rc 5 behavior. (rc 7 is per-project-agent-specific so it
     # does not collide with the global path's 5/6.)
@@ -2368,11 +2368,11 @@ def cmd_init(args) -> int:
     # v1.24 (fix 9): surface any divergent (SKIPPED) subagent loudly and mark the
     # per-project init INCOMPLETE (rc 7) unless --force. The config + .mcp.json
     # were still written (so the bootstrap is usable), but a stale agent is a
-    # detectable, non-silent partial — mirrors the global managed-file SKIP path.
+    # detectable, non-silent partial - mirrors the global managed-file SKIP path.
     if agent_skipped and not args.force:
         print(
             f"\nWARNING: {len(agent_skipped)} subagent file(s) were SKIPPED because "
-            f"the on-disk copy diverges from this version — they are now STALE. "
+            f"the on-disk copy diverges from this version - they are now STALE. "
             f"Re-run with --force to update them (this overwrites local edits):",
             file=sys.stderr,
         )
@@ -2385,7 +2385,7 @@ def cmd_init(args) -> int:
 
 def _force_utf8_streams() -> None:
     """Make stdout/stderr tolerate non-ASCII glyphs regardless of the console
-    code page. The wizard prints status glyphs ('✓'/'✗') and '->' arrows; on a
+    code page. The wizard prints status glyphs ('[ok]'/'[x]') and '->' arrows; on a
     Windows console defaulting to cp1252 the first such print() raises
     UnicodeEncodeError and aborts the whole run (the v1.33.4 Windows report).
     Reconfiguring to UTF-8 with errors='replace' removes the dependency on the
@@ -2406,7 +2406,7 @@ def _force_utf8_streams() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     # Windows-portability (v1.33.4): make output encoding-safe before any print()
-    # so a cp1252 console can't crash the wizard on the first '✓' status line.
+    # so a cp1252 console can't crash the wizard on the first '[ok]' status line.
     _force_utf8_streams()
     # iter-0040 (per iter-0039 converged plan Q6 bonus): the package also ships
     # a `consensus` console-script alias. When invoked as `consensus init ...`,

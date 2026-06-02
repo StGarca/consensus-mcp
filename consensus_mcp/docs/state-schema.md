@@ -224,6 +224,6 @@ collisions across the session.
 RESOLVED 2026-05-09 (v1.10.2 F5): the prior known-issue wording was incorrect.
 Lex-sort actually puts `1.10.1` BEFORE `1.9.3rc0` (`'1' < '9'` at position 2 of
 the version string), so `sorted(dist.glob(...))[-1]` would mis-pick `1.9.3rc0`
-as the "latest" wheel — exactly the wrong outcome. v1.10.2's `gate_install`
+as the "latest" wheel - exactly the wrong outcome. v1.10.2's `gate_install`
 pre-cleans `dist/` before each build so the post-build wheel is the only one
 present, sidestepping the lex-sort bug entirely.

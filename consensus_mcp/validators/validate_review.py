@@ -2,7 +2,7 @@
 
 Per spec section 9 (review schema), section 13 (corroboration ownership rule),
 and section 23 phase_0_deliverables. Audits a reviewer-emitted YAML artifact
-(codex-review.yaml or claude-review.yaml) against the §9 schema and §13
+(codex-review.yaml or claude-review.yaml) against the section 9 schema and section 13
 corroboration rules.
 
 Detects:
@@ -14,7 +14,7 @@ Detects:
   - blocking_objection missing required_change
   - clarifying_question owner=operator without non-empty blocks
   - corroborated_by appearing anywhere in reviewer artifact (synthesizer-only
-    per codex-rev-009 / §13)
+    per codex-rev-009 / section 13)
 
 Output: structured report (YAML by default, JSON via --json) suitable for
 downstream tooling.
@@ -164,7 +164,7 @@ def validate_review(review_path: Path) -> dict:
             "claim": f"agent={agent!r} not in {sorted(VALID_AGENTS)}",
         })
 
-    # ---- Enum: stance (warning per §4: future stances may be added) ----
+    # ---- Enum: stance (warning per section 4: future stances may be added) ----
     stance = review.get("stance")
     if stance is not None and stance not in VALID_STANCES:
         findings.append({
@@ -319,7 +319,7 @@ def validate_review(review_path: Path) -> dict:
                         "claim": f"clarifying_question {qid} owner=operator but blocks is empty/missing",
                     })
 
-    # ---- corroborated_by anywhere in artifact (§13) ----
+    # ---- corroborated_by anywhere in artifact (section 13) ----
     for hit_path in _contains_corroborated_by(review):
         findings.append({
             "id": "CORROBORATED_BY_FORBIDDEN",

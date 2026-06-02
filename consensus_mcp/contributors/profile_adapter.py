@@ -3,12 +3,12 @@
 Per the converged plan (iteration-v1180-contributor-design-2026-05-22):
 **B-ROUTING + UNIVERSAL PROFILES.** claude/codex/gemini keep their existing
 adapter classes; ``ProfileAdapter`` is the ONE generic adapter that dispatches
-any ``kind: cli_reviewer`` contributor described purely by a profile dict — kimi
+any ``kind: cli_reviewer`` contributor described purely by a profile dict - kimi
 today, plus any user-added AI with ZERO new Python classes.
 
 ProfileAdapter is the live replacement (in spirit) for the parent project's kimi
 monkeypatch wrapper. That wrapper monkeypatched ``_dispatch_gemini._invoke_gemini``
-and ``_seal_via_t6`` and — critically — left the gemini provenance defaults in
+and ``_seal_via_t6`` and - critically - left the gemini provenance defaults in
 place, so a kimi review sealed with ``model='gemini-2.5-pro'``. ProfileAdapter
 fixes this by building ``dispatch_provenance`` EXPLICITLY from the resolved
 profile (model/contributor/bin/attestation_method), never copying another
@@ -21,11 +21,11 @@ The dispatch pipeline mirrors ``_dispatch_gemini.main`` but is parameterized by
 the profile. It reuses the shared ``_dispatch_base`` machinery for everything
 that is NOT CLI-shape-specific:
 
-  * ``_load_goal_packet`` / ``_load_template`` — read goal_packet + prompt template
-  * ``_build_prompt`` — substitute placeholders (same template the gemini adapter uses)
-  * ``_sha256_str`` — provenance hashes
-  * ``_build_sealed_packet`` — wrap findings in the T6 outer structure
-  * ``_seal_via_t6`` — write the sealed YAML through review.write_and_seal (NOT reimplemented)
+  * ``_load_goal_packet`` / ``_load_template`` - read goal_packet + prompt template
+  * ``_build_prompt`` - substitute placeholders (same template the gemini adapter uses)
+  * ``_sha256_str`` - provenance hashes
+  * ``_build_sealed_packet`` - wrap findings in the T6 outer structure
+  * ``_seal_via_t6`` - write the sealed YAML through review.write_and_seal (NOT reimplemented)
 
 The ONLY profile-specific steps are:
   * the CLI invocation (``_invoke``: transport, base_args, prompt_flag,
@@ -82,7 +82,7 @@ class ProfileAdapter(ContributorAdapter):
 
     Construct with a single ``profile`` dict (a merged built-in/override entry
     from ``_contributor_profiles``). The profile MUST validate and be
-    ``kind: cli_reviewer``; a ``kind: host`` profile (claude) is rejected — the
+    ``kind: cli_reviewer``; a ``kind: host`` profile (claude) is rejected - the
     host is never a subprocess.
     """
 
@@ -131,8 +131,8 @@ class ProfileAdapter(ContributorAdapter):
     def _build_cmd(self, prompt: str, repo_root: Path) -> tuple[list[str], bool]:
         """Build the argv from the profile. Returns (cmd, stdin_prompt).
 
-        transport=stdin → prompt delivered via stdin; NO prompt_flag in argv.
-        transport=flag  → prompt delivered as the value following prompt_flag.
+        transport=stdin -> prompt delivered via stdin; NO prompt_flag in argv.
+        transport=flag  -> prompt delivered as the value following prompt_flag.
 
         base_args, workdir_flag (+ repo_root value), and model_flag (+ model
         value) are wired in per the profile. model_flag is only added when the
@@ -276,7 +276,7 @@ class ProfileAdapter(ContributorAdapter):
         # The CLI's working directory = the PROJECT ROOT (where it loads project
         # context like AGENTS.md / CLAUDE.md). Iteration dirs live at
         # <repo>/consensus-state/active/<iter>, so the repo root is the parent of
-        # the `consensus-state` ancestor — NOT iter_dir.parent (which would be
+        # the `consensus-state` ancestor - NOT iter_dir.parent (which would be
         # consensus-state/active). codex-rev-002 (v1.18.0 impl audit). Fall back
         # to iter_dir.parent for iteration dirs not nested under consensus-state.
         repo_root = iter_dir.parent
@@ -342,7 +342,7 @@ class ProfileAdapter(ContributorAdapter):
                 f"{self.name} dispatch failed ({type(exc).__name__}): {exc}"
             ) from exc
 
-        # PROVENANCE — built EXPLICITLY from the profile. Never copy another
+        # PROVENANCE - built EXPLICITLY from the profile. Never copy another
         # adapter's defaults (converged-plan decision.provenance). This is the
         # regression fix for the kimi wrapper's gemini-2.5-pro mislabel.
         provenance = {

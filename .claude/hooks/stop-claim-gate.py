@@ -1,6 +1,6 @@
 """Stop-Claim Gate.
 
-Per codex external review 2026-05-27 (codex-rev-001 r6) — operator agreed
+Per codex external review 2026-05-27 (codex-rev-001 r6) - operator agreed
 2026-05-27: natural-language defect claims must be mechanically gated, not
 just forwarded to consensus. PreToolUse hooks fire on tool calls; this Stop
 hook fires when Claude's assistant response is about to ship. It scans the

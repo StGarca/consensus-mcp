@@ -1,4 +1,4 @@
-"""consensus.run_iteration MCP tool — drives an iteration end-to-end per
+"""consensus.run_iteration MCP tool - drives an iteration end-to-end per
 `.consensus/config.yaml`.
 
 Per iter-0021 converged plan (Section A): wraps WorkflowEngine.run_iteration
@@ -160,7 +160,7 @@ def _resolve_config_path(
 def _load_config(config_path: Path, repo_root: Path) -> dict:
     """Load config. Falls back to legacy synthesis if no .consensus/config.yaml.
 
-    Legacy synthesis returns schema_version=0 as a sentinel — validate() rejects
+    Legacy synthesis returns schema_version=0 as a sentinel - validate() rejects
     that on purpose, so the legacy path skips validation per converged-plan
     Section D.
     """
@@ -228,7 +228,7 @@ def _build_host_peer_callback(host_peer_review_yaml: str | None):
     the engine factory gracefully omits any enabled host_peer profile (it is
     SUPPLEMENTARY, not load-bearing).
 
-    NOTE: nothing in this YAML can make a host_peer gate-eligible — the
+    NOTE: nothing in this YAML can make a host_peer gate-eligible - the
     HostPeerAdapter stamps the canonical gate_eligible=false / weight=
     supplementary provenance AFTER spreading the callback output, so any
     `gate_eligible: true` / `weight: independent` claim here is overwritten.
@@ -289,7 +289,7 @@ def _enabled_host_peers(loaded_config: dict) -> list[str]:
             profiles.load_builtin_profiles(),
             contributors.get("profiles") or {},
         )
-    except Exception:  # noqa: BLE001 — profile IO failure must not break the run
+    except Exception:  # noqa: BLE001 - profile IO failure must not break the run
         return []
     return [
         name for name in enabled
@@ -402,7 +402,7 @@ def handle(
             "error": f"invalid config: {exc}",
             "error_type": "ConfigValidationError",
         }
-    except Exception as exc:  # noqa: BLE001 — boundary translation
+    except Exception as exc:  # noqa: BLE001 - boundary translation
         return {
             "ok": False,
             "error": str(exc),

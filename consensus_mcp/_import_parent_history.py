@@ -1,4 +1,4 @@
-"""One-time import: parent project's iteration history → this repo's archive.
+"""One-time import: parent project's iteration history -> this repo's archive.
 
 Per iter-0012 verdict (F1a + F3a): mirror parent's `agent-loop/active/` and
 `agent-loop/archive/review-passes/` into
@@ -41,7 +41,7 @@ from consensus_mcp._dispatch_base import (
 )
 
 
-# No default parent path — this is a one-time, machine-specific maintenance
+# No default parent path - this is a one-time, machine-specific maintenance
 # tool; a hardcoded personal absolute path does not belong in a public package.
 # Callers MUST pass --parent explicitly (see main()).
 DEFAULT_PARENT = None
@@ -138,8 +138,8 @@ def _render_readme(parent_agent_loop: Path, imported_at_utc: str, extraction_com
         f"(`{parent_agent_loop}`).\n\n"
         "**Provenance**: see `source-manifest.yaml` for per-entry sha256_tree + content hashes.\n\n"
         "## Layout\n\n"
-        "- `active-iterations/iteration-NNNN/` — mirrors parent's `agent-loop/active/iteration-NNNN/`\n"
-        "- `archive-review-passes/*.yaml` — mirrors parent's `agent-loop/archive/review-passes/`\n\n"
+        "- `active-iterations/iteration-NNNN/` - mirrors parent's `agent-loop/active/iteration-NNNN/`\n"
+        "- `archive-review-passes/*.yaml` - mirrors parent's `agent-loop/archive/review-passes/`\n\n"
         "**This subtree is gitignored** (per the project-wide `.gitignore` for "
         "`consensus-state/archive/review-passes/*.yaml`). Durability is provided by "
         "the orphan branch `consensus-state-snapshots` (see "
@@ -199,7 +199,7 @@ def import_history(
 
     # iter-0014 codex-rev-001/002 fix: byte-for-byte idempotency. If --force
     # AND both the source AND target trees match what we'd produce, skip the
-    # rewrite. We verify BOTH sides — checking only source hashes (as the
+    # rewrite. We verify BOTH sides - checking only source hashes (as the
     # initial fix did) misses the case where the target was modified or
     # corrupted, leaving stale content despite a success report.
     existing_manifest_path = target_root / "source-manifest.yaml"
@@ -245,7 +245,7 @@ def import_history(
             # The prior version only checked KNOWN files matched; it missed
             # the case of UNEXPECTED files (stray content under target_root).
             # If anything is in the target that we wouldn't write, force a
-            # full rewrite — byte-for-byte idempotency means "target tree
+            # full rewrite - byte-for-byte idempotency means "target tree
             # IS what we'd produce", not just "target tree CONTAINS what we'd
             # produce".
             expected_inventory = {
@@ -257,7 +257,7 @@ def import_history(
             for f in target_root.rglob("*"):
                 if f.is_dir():
                     # Special-case the two top-level subdirs as "inventory
-                    # roots" — we measure files OR top-level directory hashes
+                    # roots" - we measure files OR top-level directory hashes
                     # to match source_hashes' shape.
                     rel = str(f.relative_to(target_root.parent))
                     if rel in expected_inventory:
@@ -324,7 +324,7 @@ def import_history(
                 and provenance_files_intact
             ):
                 # Source AND target (inventory, hashes, AND provenance bytes)
-                # all match — true idempotent no-op. Preserve original
+                # all match - true idempotent no-op. Preserve original
                 # imported_at_utc by returning the existing manifest unchanged.
                 return existing or {}
         except (yaml.YAMLError, OSError, KeyError):
@@ -340,7 +340,7 @@ def import_history(
     target_archive.mkdir(parents=True, exist_ok=True)
 
     # Copy files only (manifest entries already pre-computed from source via
-    # _build_manifest_structure — single source of truth so idempotency
+    # _build_manifest_structure - single source of truth so idempotency
     # check can compare against canonical expected output).
     for child in sorted(parent_active.iterdir()):
         if not child.is_dir():

@@ -1,4 +1,4 @@
-"""Grok contributor adapter — wraps consensus_mcp._dispatch_grok.
+"""Grok contributor adapter - wraps consensus_mcp._dispatch_grok.
 
 Gemini-twin (converged consult iteration-v131-grok-design-2026-05-26).
 Phase semantics same as gemini/codex: all phases reuse the existing
@@ -21,7 +21,7 @@ from consensus_mcp.contributors.base import (
 
 
 class GrokAdapter(ContributorAdapter):
-    """Grok contributor — subprocess via _dispatch_grok.main."""
+    """Grok contributor - subprocess via _dispatch_grok.main."""
 
     name = "grok"
 
@@ -31,8 +31,8 @@ class GrokAdapter(ContributorAdapter):
         _round = (packet.adapter_options or {}).get("round_number", 1)
         reviewer_id = packet.reviewer_id or f"grok-{packet.iteration_dir.name}-{packet.phase}-{_round}"
         pass_id = packet.pass_id or f"{reviewer_id}-pass1"
-        # iter-0044 pattern: forward packet.phase as --mode (propose → proposal,
-        # review/converge → review).
+        # iter-0044 pattern: forward packet.phase as --mode (propose -> proposal,
+        # review/converge -> review).
         from consensus_mcp.contributors._phase_mode import phase_to_mode
         mode = phase_to_mode(packet.phase)
         argv = [

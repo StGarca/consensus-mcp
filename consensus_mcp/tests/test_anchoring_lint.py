@@ -1,12 +1,12 @@
 """Tests for the mechanical anchoring/term-skew linter.
 
-Decisive test: the linter flags the orchestrator's real failure mode — anchoring
-one contributor (named repeatedly) while others are never mentioned — WITHOUT
+Decisive test: the linter flags the orchestrator's real failure mode - anchoring
+one contributor (named repeatedly) while others are never mentioned - WITHOUT
 relying on anyone noticing.
 """
 from consensus_mcp import _anchoring_lint as al
 
-# Contributor set is passed in (NOT hardcoded) — anchoring on a fixed list would
+# Contributor set is passed in (NOT hardcoded) - anchoring on a fixed list would
 # be the very bias under guard.
 CONTRIBUTORS = {"contributors": ["claude", "codex", "gemini", "kimi"]}
 
@@ -36,7 +36,7 @@ def test_below_min_total_no_flag():
 
 
 def test_contributor_set_is_configurable():
-    # A NON-default set (proves no hardcoding — works for any AI combination).
+    # A NON-default set (proves no hardcoding - works for any AI combination).
     custom = {"contributors": ["alpha", "beta", "gamma"]}
     # alpha dominates; beta/gamma genuinely absent (don't name them, or they count).
     text = "alpha alpha alpha alpha alpha drives the whole design; nothing else."
@@ -75,7 +75,7 @@ def test_real_fallback_contributor_set_includes_kimi():
 def test_kimi_anchoring_caught_via_real_fallback(tmp_path):
     from consensus_mcp import _author_review_packet as arp
     gp = tmp_path / "goal_packet.yaml"
-    # kimi-anchored, others excluded — must be caught WITHOUT hardcoding the set.
+    # kimi-anchored, others excluded - must be caught WITHOUT hardcoding the set.
     gp.write_text(
         "goal:\n  summary: route everything to kimi; the kimi adapter, kimi seal, "
         "kimi path, kimi timeout, kimi kimi kimi.\n", encoding="utf-8")
@@ -100,6 +100,6 @@ def test_anchoring_audit_fails_LOUD_not_open(tmp_path, monkeypatch):
     rp = arp.author_review_packet(iter_dir, ["f.txt"], tmp_path)
     out = yaml.safe_load(rp.read_text(encoding="utf-8"))
     assert "anchoring_audit_error" in out, (
-        "audit crash was swallowed silently (fail-open) — must surface an error")
+        "audit crash was swallowed silently (fail-open) - must surface an error")
     assert "boom" in out["anchoring_audit_error"]
     assert "anchoring_audit" not in out  # not a false 'clean' result

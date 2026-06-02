@@ -2,7 +2,7 @@
 
 Every asset the installer copies (`_CLAUDE_EXTENSION_FILES`) and every enforcement
 hook script (`_CONSENSUS_HOOK_SPECS`) MUST be matched by a `[tool.setuptools.package-data]`
-glob in pyproject.toml — otherwise a wheel/pip install ships them missing, and
+glob in pyproject.toml - otherwise a wheel/pip install ships them missing, and
 `consensus-init --install-claude-code` silently skips skills and activates
 settings.json hooks pointing at non-existent scripts (enforcement dead). This test
 fails closed if a new vendored skill / hook is added without a covering glob.
@@ -55,6 +55,6 @@ def test_every_enforcement_hook_script_is_packaged():
         full = (_EXT_ROOT / "hooks" / script).resolve()
         assert full.exists(), f"hook script missing on disk: hooks/{script}"
         assert str(full) in packaged, (
-            f"package-data does NOT cover enforcement hook script hooks/{script} — "
+            f"package-data does NOT cover enforcement hook script hooks/{script} - "
             f"settings.json activation would point at a non-existent file in a wheel"
         )

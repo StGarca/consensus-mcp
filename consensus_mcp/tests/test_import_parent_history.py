@@ -136,7 +136,7 @@ def test_idempotent_skip_preserves_imported_at_utc_when_clean(tmp_path, monkeypa
     monkeypatch.setattr(iph, "_iso_utc_now", lambda: "2099-12-31T23:59:59Z")
     m2 = iph.import_history(parent_al, target, force=True)
     assert m2["source"]["imported_at_utc"] == original_ts, (
-        f"skip path didn't fire — got {m2['source']['imported_at_utc']!r}, "
+        f"skip path didn't fire - got {m2['source']['imported_at_utc']!r}, "
         f"expected {original_ts!r} (the stubbed clock would only show through "
         f"if the rewrite path ran)"
     )
@@ -153,7 +153,7 @@ def test_idempotent_skip_rewrites_when_target_corrupted(tmp_path):
     (target / "active-iterations" / "iteration-0000" / "goal_packet.yaml").write_text(
         "CORRUPTED\n", encoding="utf-8"
     )
-    # Re-import with --force — should detect target drift and rebuild.
+    # Re-import with --force - should detect target drift and rebuild.
     iph.import_history(parent_al, target, force=True)
     restored = (target / "active-iterations" / "iteration-0000" / "goal_packet.yaml").read_text(encoding="utf-8")
     assert "CORRUPTED" not in restored

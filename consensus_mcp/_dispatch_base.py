@@ -1,9 +1,9 @@
-"""Phase 4 v1.14 — shared dispatch infrastructure.
+"""Phase 4 v1.14 - shared dispatch infrastructure.
 
 Generic helpers reused by every reviewer adapter (codex today; gemini and
 any future adapter from iter-0011+). Extracted from _dispatch_codex.py per
 iter-0009 verdict Q1: F1b (extract _dispatch_base.py). NO behavior change
-versus the pre-extraction codex path — every helper here was copied verbatim
+versus the pre-extraction codex path - every helper here was copied verbatim
 from the original _dispatch_codex.py file.
 
 Adapters import what they need:
@@ -42,16 +42,16 @@ from pathlib import Path
 # the threads of one dispatcher process. The streaming _invoke_codex
 # emits dispatch events from the main thread AND the stdout/stderr
 # reader threads concurrently; an abrupt wall-time-ceiling teardown
-# could interleave a bare append → a torn JSONL line (windows-py3.10
+# could interleave a bare append -> a torn JSONL line (windows-py3.10
 # CI surfaced exactly that). The first corrected attempt reused the
 # audit log's `_locked_append` (msvcrt.locking LK_LOCK / fcntl.flock)
-# — but that is a BLOCKING CROSS-PROCESS lock; contended across the
+# - but that is a BLOCKING CROSS-PROCESS lock; contended across the
 # *same* process's threads on Windows it stalled the runner thread
 # (windows-py3.12 regression: "runner did not finish"). The actual
 # concurrency here is intra-process, so a plain in-process lock is
 # the correct, hazard-free primitive. (Cross-process serialization
 # of a shared dispatch-log under parallel dispatchers is a separate,
-# unobserved concern — deliberately NOT solved with a blocking OS
+# unobserved concern - deliberately NOT solved with a blocking OS
 # lock here; see CHANGELOG v1.15.7.)
 _DISPATCH_LOG_LOCK = threading.Lock()
 
@@ -102,7 +102,7 @@ def _resolve_repo_root() -> Path:
     """Resolve the repo root, fail-closed if no valid candidate is found.
 
     Per v1.10.4 F1 hardening: the prior fallback to
-    Path(__file__).resolve().parent.parent was unsafe — when the helper
+    Path(__file__).resolve().parent.parent was unsafe - when the helper
     runs as an installed module from python_env/Lib/site-packages, that fallback
     landed at python_env/Lib (NOT the repo root), causing codex --cd, T6 archive
     writes, and dispatch-log writes to all target the wrong tree.
@@ -128,7 +128,7 @@ def _resolve_repo_root() -> Path:
             return candidate
         # iter-0028 F5 (codex-rev-004): operator-supplied env var is
         # authoritative. If set but the path fails marker validation, do NOT
-        # silently fall through to cwd / __file__ candidates — the operator's
+        # silently fall through to cwd / __file__ candidates - the operator's
         # intent was an explicit override, and silent re-resolution invites
         # the very confusion the env var was meant to eliminate. Raise with
         # a clear message naming the env var. Empty-string env (treated as
@@ -137,7 +137,7 @@ def _resolve_repo_root() -> Path:
             f"CONSENSUS_MCP_REPO_ROOT={override!r} was set but the path "
             f"{candidate} does not contain all required repo markers "
             f"{_REPO_ROOT_MARKERS}. Not falling through to cwd / __file__ "
-            f"discovery — operator-supplied env var is authoritative. "
+            f"discovery - operator-supplied env var is authoritative. "
             f"Either fix the path (it must contain {_REPO_ROOT_MARKERS} as "
             f"subdirectories) or unset CONSENSUS_MCP_REPO_ROOT to use "
             f"automatic discovery."
@@ -160,7 +160,7 @@ def _resolve_repo_root() -> Path:
         f"Cannot resolve consensus-mcp repo root. None of the candidates contain "
         f"all required markers {_REPO_ROOT_MARKERS}. Candidates tried: {tried_msg}\n"
         f"\n"
-        f"-- BOOTSTRAP A CONSUMER PROJECT (v1.32.0 — Section 3.1 friction fix) --\n"
+        f"-- BOOTSTRAP A CONSUMER PROJECT (v1.32.0 - Section 3.1 friction fix) --\n"
         f"If you installed consensus-mcp via pipx and want to use it ON another\n"
         f"project (not the consensus-mcp repo itself), run these 4 commands at\n"
         f"the project root to create the required containment markers, then\n"
@@ -214,14 +214,14 @@ def _normalize_relative_to_repo(path_str: str | None, repo_root: Path) -> Path |
     Per v1.10.4 F5 hardening: operator may supply relative paths to --goal-packet,
     --review-target, --prompt-template, --schema. The codex subprocess runs with
     --cd repo_root, so relative paths must be interpreted in the repo_root frame
-    too — NOT against the process cwd (which may differ if a future MCP wrapper
+    too - NOT against the process cwd (which may differ if a future MCP wrapper
     or service caller invokes us from elsewhere).
 
     Per v1.10.5 containment hardening: after resolution the path MUST be inside
     repo_root. Absolute paths previously passed through unchanged via p.resolve(),
     which let any caller supply (or have an MCP tool wrapper pass through) an
     out-of-tree absolute path and have its contents pulled into the codex prompt.
-    That's a real boundary leak — review-target/goal-packet/schema/template are
+    That's a real boundary leak - review-target/goal-packet/schema/template are
     all read with read_text(). Containment fails closed with a clear diagnostic.
 
     None passes through as None.
@@ -388,7 +388,7 @@ def _build_prompt(
             tfc = defect_target.get("touched_files_contents")
             if isinstance(tfc, dict):
                 # Coerce values to strings; reject non-string entries silently
-                # rather than raising — the helper writer is the type guard.
+                # rather than raising - the helper writer is the type guard.
                 touched_contents = {
                     k: v for k, v in tfc.items()
                     if isinstance(k, str) and isinstance(v, str)
@@ -416,17 +416,17 @@ def _build_prompt(
     # under consensus-state/, so naming the path is not enough. The (unsandboxed) dispatcher
     # already read this text to compute review_target_hash; we inline it here.
     #
-    # v1.30.5: ALWAYS embed when we have the content — the old `and not touched_contents`
+    # v1.30.5: ALWAYS embed when we have the content - the old `and not touched_contents`
     # guard had a deadlock hole. In a CONVERGENCE dispatch the touched_files_contents are the
     # round's CONSTITUENT files (the prior round's review artifacts), NOT the review-target
     # (the convergence-packet YAML), so the guard SUPPRESSED the target embed exactly when
     # touched_files was present; the reviewer, pointed at convergence-packet-round-N.yaml
     # (which is not in the touched set), got "canonical target not provided" and every
     # multi-round consult deadlocked. The target block is ADDITIVE to the touched-files block
-    # (distinct content) — embedding both is correct, not a double-embed.
+    # (distinct content) - embedding both is correct, not a double-embed.
     if review_target_content:
         out += (
-            "\n\n## REVIEW TARGET CONTENT (embedded — the reviewer sandbox cannot read "
+            "\n\n## REVIEW TARGET CONTENT (embedded - the reviewer sandbox cannot read "
             "files under consensus-state/)\n\n```\n"
             + review_target_content
             + "\n```\n"
@@ -556,7 +556,7 @@ def _compute_per_patch_base_sha(
             # to None so caller falls back to defect_target.base_sha.
             return None
 
-    # Legacy text-encoding fallback (no repo_root supplied — typically a
+    # Legacy text-encoding fallback (no repo_root supplied - typically a
     # unit-level test that doesn't materialise files on disk).
     contents = defect_target.get("touched_files_contents")
     if not isinstance(contents, dict):
@@ -611,7 +611,7 @@ def _build_sealed_packet(
 
     Per F5 (codex review 2026-05-09): an optional `provenance` dict is embedded
     as the `dispatch_provenance` key. T6 SHA-hashes the whole packet, so
-    provenance becomes part of the seal — the sealed YAML is independently
+    provenance becomes part of the seal - the sealed YAML is independently
     verifiable without consulting dispatch-log.jsonl. Pass None (or omit) to
     skip the provenance block (e.g., in the unit test for _build_sealed_packet
     itself which doesn't run the full pipeline).
@@ -706,7 +706,7 @@ def _seal_via_t6(
     iter-0010 adapter-agnostic: sealed_filename defaults to "codex-review.yaml"
     preserving pre-extraction behavior. Future adapters pass e.g. "gemini-review.yaml".
 
-    Returns a dict with sealed_path (== iteration_dir/<sealed_filename> — the
+    Returns a dict with sealed_path (== iteration_dir/<sealed_filename> - the
     iteration-local copy), packet_sha256, archive_sealed_path (T6's path),
     index_updated, audit_event_id.
     """
@@ -909,7 +909,7 @@ def _validate_patch_proposal(
                 f"unknown finding id {ref!r}; known ids: {sorted(all_finding_ids)}"
             )
 
-    # Goal-packet scope checks (skip when goal_packet is None — backward compat
+    # Goal-packet scope checks (skip when goal_packet is None - backward compat
     # for unit-level test invocation; the main pipeline always supplies it).
     if goal_packet is not None:
         # Reuse the same matcher used by the supervisor stop rules so the
@@ -986,7 +986,7 @@ def _log_dispatch(log_path: Path, event: dict) -> None:
     line = json.dumps(event_with_ts) + "\n"
     # v1.15.7 (A, corrected): serialize concurrent emitters (main +
     # stdout/stderr reader threads) of THIS process with an in-process
-    # lock so a line is never torn/interleaved — including during an
+    # lock so a line is never torn/interleaved - including during an
     # abrupt teardown. A plain locked text append (no blocking OS
     # syscall) is the correct, deadlock-free primitive for intra-process
     # thread concurrency. See `_DISPATCH_LOG_LOCK` rationale above.

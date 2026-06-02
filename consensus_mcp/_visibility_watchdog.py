@@ -25,7 +25,7 @@ by appending a synthetic dispatch_stalled.
 EXTERNAL-PROCESS FALLBACK POLICY:
 Any codex re-dispatch following a stalled in-process subagent dispatch
 MUST use the external codex-cli pattern via `python -m
-consensus_mcp._dispatch_codex …`. In-process Claude subagent re-dispatch
+consensus_mcp._dispatch_codex ...`. In-process Claude subagent re-dispatch
 is the failure mode iter-0031 documented; see
 `memory/feedback_external_process_fallback.md`.
 
@@ -53,7 +53,7 @@ from datetime import datetime, timedelta, timezone
 # watchdog integrity primitive. Its OS file lock (msvcrt.locking /
 # fcntl.flock) serializes CROSS-process writers, but the observed
 # loss (windows-py3.10 CI: 46/50 lines from a 50-thread, ONE-process
-# fan-out) was INTRA-process thread contention — for which an OS file
+# fan-out) was INTRA-process thread contention - for which an OS file
 # lock is the wrong primitive (same lesson as v1.15.7
 # `_dispatch_base._log_dispatch`). A process-wide lock serializes all
 # in-process callers deterministically; the OS lock then only matters
@@ -112,7 +112,7 @@ def _default_repo_root() -> Path:
         candidates_tried.append(("CONSENSUS_MCP_REPO_ROOT", candidate))
         if _has_repo_markers(candidate):
             return candidate
-        # Operator-supplied env var is authoritative — don't silently fall
+        # Operator-supplied env var is authoritative - don't silently fall
         # through. Mirrors _dispatch_codex behaviour.
         raise RepoRootResolutionError(
             f"CONSENSUS_MCP_REPO_ROOT={override!r} was set but the path "
@@ -216,7 +216,7 @@ def _locked_append(path: Path, payload: str) -> None:
         Windows / ``fcntl.flock`` on POSIX) still serializes distinct
         processes.
       - **Fail-LOUD (independent safeguard):** if the OS lock cannot
-        be acquired we DO NOT silently write unlocked — that would
+        be acquired we DO NOT silently write unlocked - that would
         let the sealed-provenance/audit log be silently incomplete
         (the F1 defect: ``except OSError: pass`` + unlocked write).
         We raise so integrity loss is observable, never silent. This
@@ -254,7 +254,7 @@ def _locked_append(path: Path, payload: str) -> None:
                 # Windows byte-range lock. msvcrt.locking locks N bytes
                 # from the CURRENT file position; in "ab" mode that
                 # position is this process's EOF, which DIFFERS per
-                # process as the file grows — so locking it gave NO
+                # process as the file grows - so locking it gave NO
                 # cross-process exclusion (v1.15.8 codex-rev-001, a
                 # real residual integrity hole the Workflow B audit
                 # caught). Seek to a FIXED shared byte (offset 0) so
@@ -272,7 +272,7 @@ def _locked_append(path: Path, payload: str) -> None:
                 except OSError as exc:
                     # Fail LOUD: never a silent unlocked write to an
                     # integrity log. (Was: `except OSError: pass` +
-                    # unlocked write — the F1 audit-loss defect.)
+                    # unlocked write - the F1 audit-loss defect.)
                     raise OSError(
                         f"_locked_append: could not acquire OS lock on "
                         f"{path} ({exc!r}); refusing a silent unlocked "

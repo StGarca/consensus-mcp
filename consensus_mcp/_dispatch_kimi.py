@@ -12,7 +12,7 @@ prompt building, process-tree termination, sealing, dispatch-log writing) and
 imports gemini's `_extract_json_from_text` (kimi, like gemini, lacks a native
 output-schema enforcer, so its review JSON may be wrapped in free text).
 
-FIX TRACK 2 (B4/H1/H3/L3 — converged-plan 2026-05-22): the kimi reviewer is
+FIX TRACK 2 (B4/H1/H3/L3 - converged-plan 2026-05-22): the kimi reviewer is
 now READ-ONLY + portable. The CLI transport changed from the print/-p form to
 the verified kimi.yaml profile (stdin transport, --quiet --thinking,
 prompt_flag null):
@@ -163,7 +163,7 @@ _TEMP_WORKDIR_IGNORE_DIRS = (
     ".ruff_cache",
 )
 
-# Disposable kimi work-dirs are removed in a finally block — but a watchdog SIGKILL
+# Disposable kimi work-dirs are removed in a finally block - but a watchdog SIGKILL
 # (or a crash) skips finally and leaks the dir. To bound accumulation regardless,
 # every dispatch sweeps stale leftovers older than this on startup (env-overridable).
 _WORKDIR_STALE_SECONDS = float(os.environ.get("CONSENSUS_MCP_KIMI_WORKDIR_STALE_SECONDS", "3600"))
@@ -195,7 +195,7 @@ def _sweep_stale_workdirs(max_age_seconds: float = _WORKDIR_STALE_SECONDS) -> in
 
 def _extra_ignore_dirs() -> set[str]:
     """Project-declared extra dir names to skip when copying the disposable work-dir
-    (CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS, comma-separated) — lets a heavy consuming repo
+    (CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS, comma-separated) - lets a heavy consuming repo
     keep the copy small without a code change (Bug C #2)."""
     raw = os.environ.get("CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS", "")
     return {d.strip() for d in raw.split(",") if d.strip()}
@@ -307,8 +307,8 @@ class _WorkdirTooLargeToIsolate(RuntimeError):
 
     The caller DEGRADES to running kimi against the real repo with NO copy (v1.30.3 D4),
     relying on the before/after integrity snapshot as the mutation control. Safe ONLY
-    because that snapshot is REAL — `git status`, or the content-hash manifest for a
-    no-`.git` repo — so any mutation kimi makes is DETECTED and the output REJECTED. (If
+    because that snapshot is REAL - `git status`, or the content-hash manifest for a
+    no-`.git` repo - so any mutation kimi makes is DETECTED and the output REJECTED. (If
     even the snapshot can't be built, the dispatch fails loud at status_before instead.)"""
 
 
@@ -318,7 +318,7 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
     Converged-plan B4: kimi must run against a throwaway copy so it physically
     cannot touch the real repo. Strategy ladder:
 
-      1. `git clone --local --shared <repo_root> <tmp>` — fast + hardlinked
+      1. `git clone --local --shared <repo_root> <tmp>` - fast + hardlinked
          (objects shared via the source repo's object store; the working tree
          is a fresh checkout). Preferred when the repo is a git work-tree and
          the git binary is available.
@@ -377,7 +377,7 @@ def _make_disposable_workdir(repo_root: Path) -> Path:
             import errno
             # codex-rev-001: copytree may raise OSError(errno=ENOSPC) OR a
             # shutil.Error aggregating per-file (src,dst,why) tuples whose .errno is
-            # None — detect ENOSPC in EITHER form so the clear guidance always fires.
+            # None - detect ENOSPC in EITHER form so the clear guidance always fires.
             is_enospc = (getattr(exc, "errno", None) == errno.ENOSPC
                          or "No space left on device" in str(exc)
                          or "[Errno 28]" in str(exc))
@@ -418,7 +418,7 @@ def _cleanup_disposable_workdir(workdir: Path | None) -> None:
 
 class _SnapshotIndexError(RuntimeError):
     """Raised when the git-independent integrity snapshot can't index the tree within its
-    budget — fail-LOUD (v1.30.3 D3) so we NEVER run with a vacuous (zero) mutation control."""
+    budget - fail-LOUD (v1.30.3 D3) so we NEVER run with a vacuous (zero) mutation control."""
 
 
 _SNAPSHOT_MAX_FILES = int(os.environ.get("CONSENSUS_MCP_KIMI_SNAPSHOT_MAX_FILES", "50000"))
@@ -429,7 +429,7 @@ def _filesystem_manifest_snapshot(repo_root: Path) -> dict[str, str]:
     """Git-independent content-hash snapshot of the working tree (v1.30.3 D2).
 
     The mutation control for a NO-`.git` repo, where `git status` is unavailable (the old
-    code returned {} — vacuous, NO control). Walks the tree honoring the SAME ignore set as
+    code returned {} - vacuous, NO control). Walks the tree honoring the SAME ignore set as
     the disposable-copy fallback (_TEMP_WORKDIR_IGNORE_DIRS + CONSENSUS_MCP_KIMI_EXTRA_IGNORE_DIRS
     + top-level .gitignore), hashing file contents + symlink targets. Bounded by a files/bytes
     budget; raises _SnapshotIndexError (fail-LOUD, D3) if exceeded so the dispatcher reports a
@@ -482,7 +482,7 @@ def _repo_status_snapshot(repo_root: Path) -> dict[str, str]:
 
     Used to BRACKET a kimi dispatch (snapshot before + after): a path whose signature
     APPEARS, DISAPPEARS, or CHANGES between the two snapshots is a mutation kimi
-    introduced. Hashing CONTENT (not just `git status` lines) is load-bearing —
+    introduced. Hashing CONTENT (not just `git status` lines) is load-bearing -
     re-audit codex-rev-001: a status line like `M file` is identical before+after even
     if kimi rewrites that already-dirty file's content, so a line-set diff MISSES it;
     a content hash does not.
@@ -597,7 +597,7 @@ def _resolve_kimi_bin(kimi_bin: str) -> str:
                         raise KimiInvocationError(
                             f"kimi binary {kimi_bin!r} is a Windows App Execution "
                             f"Alias stub (0-byte file in WindowsApps). subprocess cannot "
-                            f"exec App Aliases — install the real kimi CLI binary or "
+                            f"exec App Aliases - install the real kimi CLI binary or "
                             f"adjust PATH so a non-stub variant is preferred."
                         )
             except OSError:
@@ -629,7 +629,7 @@ def _resolve_kimi_bin(kimi_bin: str) -> str:
                     raise KimiInvocationError(
                         f"kimi binary resolved to {resolved!r} which is a Windows "
                         f"App Execution Alias stub (0-byte file in WindowsApps). "
-                        f"subprocess cannot exec App Aliases — install the real "
+                        f"subprocess cannot exec App Aliases - install the real "
                         f"kimi CLI binary or adjust PATH so a non-stub variant is "
                         f"preferred."
                     )
@@ -743,11 +743,11 @@ def _invoke_kimi(
       - Auto-abort on heartbeat-silence
       - log_path + anchors optional (None disables streaming events for tests)
 
-    kimi CLI shape (verified kimi.yaml profile — stdin transport):
+    kimi CLI shape (verified kimi.yaml profile - stdin transport):
       kimi --quiet --thinking --work-dir <WORKDIR>      # prompt written to STDIN
 
     The FULL PROMPT is written to the subprocess STDIN (prompt_flag is null in
-    the profile — there is no -p). `--quiet` does NOT auto-enable --afk (the
+    the profile - there is no -p). `--quiet` does NOT auto-enable --afk (the
     tool auto-approval --print enabled), so the reviewer is READ-ONLY (B4); the
     stdin transport also removes the single-arg size limit (H3). `repo_root`
     here is the --work-dir, which the caller sets to a DISPOSABLE TEMP COPY of
@@ -763,7 +763,7 @@ def _invoke_kimi(
 
     stall_silence defaults to 240s (cold start); honors
     CONSENSUS_MCP_STALL_SILENCE_SECONDS. L3: the pre-first-byte watchdog is
-    relaxed (cold-start headroom) — see the silence block below.
+    relaxed (cold-start headroom) - see the silence block below.
     """
     if time_fn is None:
         time_fn = time.time
@@ -1102,7 +1102,7 @@ def _parse_kimi_output(text: str) -> dict:
         pp = finding.get("patch_proposal")
         if pp is not None:
             raise KimiOutputParseError(
-                f"findings[{i}].patch_proposal must be null — kimi is review-only"
+                f"findings[{i}].patch_proposal must be null - kimi is review-only"
             )
         reason = finding.get("patch_not_proposed_reason")
         if reason is not None and not isinstance(reason, str):
@@ -1148,7 +1148,7 @@ def _parse_kimi_proposal_output(text: str, schema_path: Path | None = None) -> d
 
     `text` is the peeled assistant `content` string. Validates against
     `schema_path` (operator --schema override) when provided, else against the
-    shared proposal schema (gemini_proposal_schema.json — proposal shape is
+    shared proposal schema (gemini_proposal_schema.json - proposal shape is
     adapter-agnostic: it uses selected_target / rationale_vs_alternatives, not
     rev-IDs, so the gemini schema is reused per the task's reuse mandate).
 
@@ -1229,7 +1229,7 @@ def _invoke_kimi_with_retry(
     proposal_schema_path: Path | None = None,
 ) -> tuple[str, dict]:
     """Run kimi once; retry once on a parse failure OR a retryable invocation
-    failure (exit 75 — 429/5xx/timeout, mirroring gemini's 429 path).
+    failure (exit 75 - 429/5xx/timeout, mirroring gemini's 429 path).
 
     A non-retryable invocation failure (exit 1: auth/quota/config) propagates
     immediately without a retry.
@@ -1284,10 +1284,10 @@ def _invoke_kimi_with_retry(
             })
         retry_prompt = (
             prompt
-            + "\n\n# Retry — your previous response failed JSON validation\n\n"
+            + "\n\n# Retry - your previous response failed JSON validation\n\n"
             + f"Parse error: {first_err}\n\n"
             + "Re-emit ONLY valid JSON conforming to the schema in the prompt above. "
-            + "No prose, no markdown fences, no commentary — JSON only, starting with `{` "
+            + "No prose, no markdown fences, no commentary - JSON only, starting with `{` "
             + "and ending with `}`."
         )
         return _one_call(retry_prompt)
@@ -1508,7 +1508,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # Snapshot the REAL repo's git status BEFORE dispatch. The post-dispatch
         # integrity check compares against this so only changes kimi INTRODUCES
-        # count — the real repo is routinely already dirty (in-flight work), so a
+        # count - the real repo is routinely already dirty (in-flight work), so a
         # plain "dirty after" test false-positives (re-audit codex-rev-002).
         status_before = _repo_status_snapshot(repo_root)
 
@@ -1519,7 +1519,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if ns.mode == "proposal":
                 # Bug C fix (v1.30.2): a proposal-mode (design-consult) dispatch only
-                # READS the goal_packet — there is no mutation to isolate. Copying a
+                # READS the goal_packet - there is no mutation to isolate. Copying a
                 # large / no-`.git` repo into tmpfs is exactly what caused ENOSPC, so run
                 # against the real repo (read-only intent); the before/after integrity
                 # snapshot below remains the backstop.
@@ -1530,7 +1530,7 @@ def main(argv: list[str] | None = None) -> int:
                     effective_workdir = kimi_workdir
                 except _WorkdirTooLargeToIsolate as degrade_exc:
                     # D4 size-aware degrade: the disposable copy won't fit (ENOSPC). Run
-                    # against the REAL repo with NO copy — safe because status_before above
+                    # against the REAL repo with NO copy - safe because status_before above
                     # is a REAL control (git status / content-hash manifest), so the
                     # post-dispatch diff below DETECTS and REJECTS any mutation kimi makes.
                     # (If the snapshot itself couldn't be built we'd have failed loud above.)
@@ -1576,12 +1576,12 @@ def main(argv: list[str] | None = None) -> int:
         # POST-DISPATCH INTEGRITY CHECK (B4, independent safeguard): compare the
         # REAL repo's git status to the pre-dispatch snapshot. Only NEW entries
         # (after - before) indicate kimi mutated the real workspace despite the
-        # temp-copy isolation — REJECT + log. Pre-existing dirt is ignored so a
+        # temp-copy isolation - REJECT + log. Pre-existing dirt is ignored so a
         # normally-dirty repo does not false-positive (re-audit codex-rev-002).
         status_after = _repo_status_snapshot(repo_root)
         # A path is a kimi mutation if its content-signature appeared, disappeared, or
         # CHANGED vs the before snapshot (catches new files, deletes, AND rewrites of
-        # already-dirty files — re-audit codex-rev-001).
+        # already-dirty files - re-audit codex-rev-001).
         changed = sorted(
             p for p in set(status_before) | set(status_after)
             if status_before.get(p) != status_after.get(p)

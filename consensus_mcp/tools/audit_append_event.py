@@ -14,7 +14,7 @@ iter-0018 hardening (codex 2026-05-10 v5):
 
 Event-specific required fields are first-class kwargs and input_schema
 properties (sealed_inputs, staging_dir, validator, effect, closing_state).
-Pass them as top-level arguments — not via extra_fields.
+Pass them as top-level arguments - not via extra_fields.
 extra_fields is a catch-all for unspecified extensions only.
 
 CONCURRENCY (v1.0 limitation): the implementation is **read-modify-write**,
@@ -44,7 +44,7 @@ from consensus_mcp._paths import project_root, active_dir
 # tool): migrated from module-level REPO_ROOT/ACTIVE_DIR captures to lazy
 # `_paths` resolvers. Tests redirect paths via `monkeypatch.setenv`
 # (CONSENSUS_MCP_REPO_ROOT / CONSENSUS_MCP_STATE_ROOT), NOT
-# `monkeypatch.setattr` on this module — the latter is unsafe because
+# `monkeypatch.setattr` on this module - the latter is unsafe because
 # pytest's monkeypatch saves __getattr__-synthesized values into __dict__
 # at teardown, permanently shadowing the lazy resolver for subsequent
 # tests. iter_0018 already uses the setenv pattern; closure_invariant
@@ -68,7 +68,7 @@ class GitUnavailableError(RuntimeError):
     """Raised when NO git command could be executed (git binary missing,
     timeout, or OS error on every sub-command).
 
-    iter-0018 H-5: consensus-mcp is inherently git-based — the closure
+    iter-0018 H-5: consensus-mcp is inherently git-based - the closure
     invariant uses SHAs and snapshots use git. There is no "git is optional /
     not a git repo" design. When git is wholly unavailable the
     mutation-completeness gate cannot be verified, so the gate must FAIL CLOSED
@@ -143,7 +143,7 @@ SCHEMA = {
             "governance_milestone_closed": {"type": ["string", "null"]},
             "next_constraint": {"type": ["string", "null"]},
             "staged_files": {"type": ["array", "null"]},
-            # v1.19.0 result-logging — ADDITIVE optional fields.
+            # v1.19.0 result-logging - ADDITIVE optional fields.
             # apply_step_landed may carry which findings a fix addressed.
             "finding_ids": {
                 "type": ["array", "null"],
@@ -202,7 +202,7 @@ def _now_utc() -> str:
 def _canonical_sha256(path: Path) -> str:
     """Return SHA-256 of the YAML file in canonical (sorted-keys safe_dump) form.
 
-    NOTE: this is the canonical_yaml_sha256 per spec section 7 — it hashes the
+    NOTE: this is the canonical_yaml_sha256 per spec section 7 - it hashes the
     re-serialized form, NOT raw file bytes. External consumers must re-canonicalize
     (yaml.safe_dump(yaml.safe_load(raw), sort_keys=True)) before comparing hashes.
     """
@@ -220,7 +220,7 @@ def handle(
     artifact=None,
     sha256=None,
     independence_attestation=None,
-    # Event-specific required fields — pass as top-level args, not via extra_fields.
+    # Event-specific required fields - pass as top-level args, not via extra_fields.
     sealed_inputs=None,       # required for: sealed_inputs_recorded
     staging_dir=None,         # required for: staged_changes
     validator=None,           # required for: canonical_006_dry_run_executed
@@ -239,7 +239,7 @@ def handle(
     governance_milestone_closed=None,
     next_constraint=None,
     staged_files=None,
-    # v1.19.0 result-logging — ADDITIVE optional fields (backward-compatible).
+    # v1.19.0 result-logging - ADDITIVE optional fields (backward-compatible).
     finding_ids=None,          # optional on: apply_step_landed
     files_touched=None,        # optional on: apply_step_landed
     fix_summary=None,          # optional on: apply_step_landed
@@ -341,7 +341,7 @@ def handle(
         # has paths that are NOT in any apply_step_landed event's files_touched
         # set, refuse. Conservative-fail-closed for manual edits.
         # iter-0018 H-5: if git is wholly unavailable the gate cannot be
-        # verified — FAIL CLOSED rather than allow-empty (fail-open). Scoped to
+        # verified - FAIL CLOSED rather than allow-empty (fail-open). Scoped to
         # only this call so it does not swallow the separate closure-invariant
         # try/except below.
         try:
@@ -502,8 +502,8 @@ def _detect_working_tree_changes(repo_root: Path) -> list[str]:
     A single sub-command that fails (non-zero exit, or raises
     FileNotFoundError/TimeoutExpired/OSError) is tolerated via `continue` so
     that one odd sub-command does not nuke the whole check while the other
-    still succeeds. BUT if NO sub-command succeeds at all — git is wholly
-    unavailable — this raises `GitUnavailableError` instead of returning [].
+    still succeeds. BUT if NO sub-command succeeds at all - git is wholly
+    unavailable - this raises `GitUnavailableError` instead of returning [].
     iter-0018 H-5: consensus-mcp is inherently git-based, so an unverifiable
     mutation-completeness gate must FAIL CLOSED at the caller, never silently
     pass on an empty set (fail-open).
@@ -616,7 +616,7 @@ def _evaluate_closure_invariant(audit_log: list, iteration_dir: Path) -> dict | 
     if not candidates:
         # No fresh closing verdict yet; nothing to gate on. Refuse to author
         # iteration_closed when the audit shows mutation but no fresh review
-        # has been authored — this prevents a silent close on stale or
+        # has been authored - this prevents a silent close on stale or
         # missing review data.
         return {
             "ok": False,

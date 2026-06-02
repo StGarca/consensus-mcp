@@ -4,11 +4,11 @@ Per the converged plan (iteration-v1180-contributor-design-2026-05-22)
 decision.engine_factory, `build_adapters` resolves each enabled contributor in
 this order:
   (a) _REGISTERED_ADAPTERS
-  (b) _BUILTIN_ADAPTERS (claude/codex/gemini/kimi → existing classes)
+  (b) _BUILTIN_ADAPTERS (claude/codex/gemini/kimi -> existing classes)
   (c) merged profiles (load_builtin_profiles + config contributors.profiles via
-      merge_profiles); kind:cli_reviewer → ProfileAdapter(profile); kind:host is
+      merge_profiles); kind:cli_reviewer -> ProfileAdapter(profile); kind:host is
       reserved (claude) and must NOT be turned into a subprocess adapter.
-  Unknown name → EngineFactoryError.
+  Unknown name -> EngineFactoryError.
 
 R8 REGRESSION GATE: enabled=[claude,codex,gemini] must build the SAME adapter
 classes as v1.17.5 (the existing test_engine_factory.py asserts this; this file
@@ -58,7 +58,7 @@ def test_r8_builtin_trio_unchanged():
     assert isinstance(adapters["claude"], ClaudeAdapter)
     assert isinstance(adapters["codex"], CodexAdapter)
     assert isinstance(adapters["gemini"], GeminiAdapter)
-    # Specifically NOT ProfileAdapter — built-in classes win over their profiles.
+    # Specifically NOT ProfileAdapter - built-in classes win over their profiles.
     assert not isinstance(adapters["codex"], ProfileAdapter)
     assert not isinstance(adapters["gemini"], ProfileAdapter)
 
@@ -124,14 +124,14 @@ def test_config_profile_adds_new_contributor():
 def test_config_profile_cannot_override_builtin_kimi():
     """kimi is now in _BUILTIN_ADAPTERS, so it resolves to KimiAdapter (step b)
     BEFORE profile lookup (step c).  A config profile named 'kimi' is silently
-    ignored — same behaviour as claude.  To swap the impl a host must call
+    ignored - same behaviour as claude.  To swap the impl a host must call
     register_contributor('kimi', CustomAdapter) which shadows the built-in."""
     config = _base_config(["claude", "kimi"])
     override = _custom_cli_profile("kimi")
     override["model"] = "kimi-overridden-model"
     config["contributors"]["profiles"] = {"kimi": override}
     adapters = factory.build_adapters(config, claude_artifact_callback=_claude_cb)
-    # Built-in wins — KimiAdapter, NOT ProfileAdapter.
+    # Built-in wins - KimiAdapter, NOT ProfileAdapter.
     assert isinstance(adapters["kimi"], KimiAdapter)
     assert not isinstance(adapters["kimi"], ProfileAdapter)
 

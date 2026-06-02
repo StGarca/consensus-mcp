@@ -79,7 +79,7 @@ def _packet(iteration_id, reviewer_id, pass_id, findings=None):
 
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
-    # _paths re-reads env on every call (lazy resolvers) — see memory
+    # _paths re-reads env on every call (lazy resolvers) - see memory
     # feedback_monkeypatch_getattr_pollution: use setenv, not setattr.
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
     return tmp_path
@@ -186,7 +186,7 @@ def test_exact_reseal_is_idempotent_success(repo):
 
 def test_idempotent_reseal_is_timestamp_independent(repo):
     """codex-sealfix-audit-4 HIGH finding: a re-dispatch builds a fresh
-    packet (no sealed_at_utc) → Step 3 stamps a NEW timestamp → its
+    packet (no sealed_at_utc) -> Step 3 stamps a NEW timestamp -> its
     packet_sha256 differs from the original. Idempotency must STILL be
     detected (content identity), not misclassified as index_collision.
     Simulate the timestamp/hash divergence by rewriting the on-disk

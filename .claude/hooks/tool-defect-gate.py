@@ -31,7 +31,7 @@ PROTECTED_GLOBS = [
 
 # Anchor PROOF_DIR to __file__ so it is the same path regardless of the
 # cwd Claude Code launches the hook with (matches the universal-action-gate
-# pattern). Layout: <repo>/.claude/hooks/X.py → <repo>/tmp.
+# pattern). Layout: <repo>/.claude/hooks/X.py -> <repo>/tmp.
 PROOF_DIR = Path(__file__).resolve().parent.parent.parent / "tmp"
 PROOF_FILENAME_FMT = "tool-defect-proof-{hash}.yaml"
 

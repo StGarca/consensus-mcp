@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consensus-mcp"
-# version is derived from consensus_mcp.__version__ (single source of truth) —
+# version is derived from consensus_mcp.__version__ (single source of truth) -
 # see [project].dynamic + [tool.setuptools.dynamic] below.
 dynamic = ["version"]
 description = "Cross-AI consensus code review: a panel of different AI models you choose (Claude, Codex, Gemini, Kimi, or add your own) review each change independently, and it ships only when they agree. An MCP server for AI coding tools."
@@ -67,11 +67,11 @@ consensus_mcp = [
   # + the 10 vendored superpowers-derived consensus-* skills), the MIT attribution,
   # the provenance ledger, and the enforcement hook scripts. The wildcards prevent
   # the packaging gap where new vendored skills/hooks shipped in source but were
-  # absent from the wheel — so `--install-claude-code` silently skipped skills and
+  # absent from the wheel - so `--install-claude-code` silently skipped skills and
   # activated settings.json hooks pointing at non-existent scripts. Enforced by
   # tests/test_package_data_completeness.py.
   # *.md (not just SKILL.md) so vendored COMPANION files (prompt templates,
-  # testing-anti-patterns) ship too — the 3-family review (2026-05-23) found the
+  # testing-anti-patterns) ship too - the 3-family review (2026-05-23) found the
   # SKILL.md-only glob left companion references dangling in the wheel.
   "claude_extensions/skills/*/*.md",
   "claude_extensions/NOTICE",

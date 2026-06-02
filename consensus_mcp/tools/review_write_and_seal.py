@@ -37,7 +37,7 @@ from consensus_mcp._paths import project_root, archive_dir, index_path, active_d
 # tool): migrated from cached REPO_ROOT/ARCHIVE_DIR/INDEX_PATH module-level
 # constants to lazy `_paths` resolvers. Tests redirect paths via
 # `monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", ...)` /
-# `CONSENSUS_MCP_REPO_ROOT`, NOT `monkeypatch.setattr` on this module —
+# `CONSENSUS_MCP_REPO_ROOT`, NOT `monkeypatch.setattr` on this module -
 # the latter is unsafe against __getattr__-only attributes (pytest captures
 # the lazy-synthesized value at setattr time and restores it into __dict__
 # at teardown, permanently shadowing the resolver for subsequent tests).
@@ -73,7 +73,7 @@ def _canonical_yaml_sha256(obj) -> str:
 # builds a fresh packet with no sealed_at_utc; Step 3 then stamps a
 # NEW timestamp, so the recomputed packet_sha256 differs from the
 # originally-sealed one even though the substantive content is
-# identical — which used to be misclassified as `index_collision`,
+# identical - which used to be misclassified as `index_collision`,
 # defeating the whole idempotency feature for the primary
 # (dispatch-retry) use case. Idempotency is therefore judged on
 # CONTENT IDENTITY: the canonical hash of the packet with the volatile
@@ -246,7 +246,7 @@ def handle(
         audit_event_id='skipped_idempotent_reseal', idempotent=True,
         and sealed_path is the EXISTING recorded archive path (which
         may use the pre-iteration-seal-archive-collision-fix 3-token
-        scheme — the index is the resolution source of truth).
+        scheme - the index is the resolution source of truth).
       Failure: {error: <code>, ...}
 
     Failure codes:
@@ -262,7 +262,7 @@ def handle(
       idempotent_target_unreadable: recorded archive file exists but
         cannot be parsed (iteration-seal-archive-collision-fix)
       idempotent_target_integrity_mismatch: index sha matches the new
-        packet but the on-disk archive hashes differently — the sealed
+        packet but the on-disk archive hashes differently - the sealed
         file may be tampered (iteration-seal-archive-collision-fix)
     """
     # --- Step 1: validate YAML serializability ---
@@ -309,7 +309,7 @@ def handle(
     # index `id`, AND is recorded in the sealed body, a divergence
     # between the embedded pass_id and the parameter would make the
     # sealed artifact's self-described identity disagree with its
-    # filename + index entry — a provenance inconsistency. The packet
+    # filename + index entry - a provenance inconsistency. The packet
     # may legitimately carry only `pass_label` (no `pass_id`); only
     # enforce when an explicit packet.pass_id is present.
     if "pass_id" in packet and packet.get("pass_id") != pass_id:
@@ -422,14 +422,14 @@ def handle(
                 }
             # _content_identity_sha256 handles a non-mapping on_disk
             # (tampered archive that still parses as valid YAML) via a
-            # sentinel that cannot equal a real packet's identity —
+            # sentinel that cannot equal a real packet's identity -
             # so this neither crashes (codex-sealfix-audit-4 medium
             # finding) nor falsely reports idempotent success.
             on_disk_identity = _content_identity_sha256(on_disk)
             if on_disk_identity != incoming_identity:
                 # Same pass_id, substantively different content. If the
                 # on-disk archive is a non-mapping it is corrupt/tampered
-                # rather than a legitimate prior pass — report that
+                # rather than a legitimate prior pass - report that
                 # distinctly so an operator can tell a re-use conflict
                 # from a damaged archive.
                 if not isinstance(on_disk, dict):
@@ -438,7 +438,7 @@ def handle(
                         "detail": (
                             f"pass_id={pass_id!r}: the recorded archive "
                             f"{existing_rel!r} is not a YAML mapping "
-                            f"({type(on_disk).__name__}) — the sealed file "
+                            f"({type(on_disk).__name__}) - the sealed file "
                             f"may be tampered or truncated."
                         ),
                     }
@@ -447,11 +447,11 @@ def handle(
                     "detail": (
                         f"pass_id={pass_id!r} already sealed with substantively "
                         f"different content (content-identity "
-                        f"{on_disk_identity[:12]}… vs incoming "
-                        f"{incoming_identity[:12]}…) at {existing_rel!r}"
+                        f"{on_disk_identity[:12]}... vs incoming "
+                        f"{incoming_identity[:12]}...) at {existing_rel!r}"
                     ),
                 }
-            # Content-identical → idempotent re-seal. Return SUCCESS
+            # Content-identical -> idempotent re-seal. Return SUCCESS
             # describing the ACTUAL archived artifact. codex-sealfix-
             # audit-5 medium finding: do NOT trust the index entry's
             # packet_sha256 verbatim (it can be absent or stale relative
@@ -489,7 +489,7 @@ def handle(
         return {
             "error": "packet_path_collision",
             "detail": (
-                f"{sealed_path} exists but no matching pass_id in the index — "
+                f"{sealed_path} exists but no matching pass_id in the index - "
                 f"likely a hand-placed file or a sanitized-pass_id name clash."
             ),
         }

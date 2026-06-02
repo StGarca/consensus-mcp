@@ -2,7 +2,7 @@
 
 Covers the v1.32.1 per-invocation activation contract (consult
 iteration-v133-gate-scope-shift-2026-05-26): the session-active
-marker is the dormant↔active toggle for the gate.
+marker is the dormant<->active toggle for the gate.
 
 Trust-root regression gates: the marker is NOT a trust artifact;
 forging it must NOT bypass `verify_design_approval`'s seal checks.
@@ -78,7 +78,7 @@ def test_read_returns_none_on_unparseable_yaml(tmp_path):
     repo = _repo(tmp_path)
     (repo / ".consensus").mkdir(parents=True, exist_ok=True)
     (repo / ".consensus" / "session-active").write_text("key: value: bad colon", encoding="utf-8")
-    # Not an error — dormant mode (gate stays off; operator notices).
+    # Not an error - dormant mode (gate stays off; operator notices).
     assert ss.read_session_marker(repo) is None
 
 
@@ -107,12 +107,12 @@ def test_session_active_true_when_marker_points_at_real_iteration(tmp_path):
 
 def test_session_active_false_when_iteration_does_not_exist(tmp_path):
     """A stale session marker pointing at a non-existent iteration
-    is treated as DORMANT (R4 mitigation — the operator's
+    is treated as DORMANT (R4 mitigation - the operator's
     crash-recovery story)."""
     repo = _repo(tmp_path)
     ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
                             activated_by="t", activation_source="test_fixture")
-    # Remove the iteration dir → marker now points at nothing.
+    # Remove the iteration dir -> marker now points at nothing.
     import shutil
     shutil.rmtree(repo / "consensus-state" / "active" / "iter-test")
     assert ss.session_active(repo) is False
@@ -153,7 +153,7 @@ def test_clear_session_marker_returns_false_when_absent(tmp_path):
 def test_migration_warning_fires_once_then_suppresses(tmp_path, capsys):
     repo = _repo(tmp_path)
     (repo / ".consensus").mkdir(parents=True, exist_ok=True)
-    # No session-active marker, no legacy-always-on → migration applies.
+    # No session-active marker, no legacy-always-on -> migration applies.
     assert ss.emit_migration_warning_once(repo) is True
     captured = capsys.readouterr()
     assert "PER-INVOCATION" in captured.err
@@ -172,7 +172,7 @@ def test_migration_warning_skipped_when_legacy_opt_in(tmp_path, monkeypatch):
 
 def test_migration_warning_skipped_when_no_consensus_dir(tmp_path):
     repo = _repo(tmp_path)
-    # No .consensus dir at all → no migration to perform.
+    # No .consensus dir at all -> no migration to perform.
     assert ss.emit_migration_warning_once(repo) is False
 
 
@@ -180,7 +180,7 @@ def test_migration_warning_skipped_when_session_active(tmp_path):
     repo = _repo(tmp_path)
     ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
                             activated_by="t", activation_source="test_fixture")
-    # Session already active under new model → no migration warning needed.
+    # Session already active under new model -> no migration warning needed.
     assert ss.emit_migration_warning_once(repo) is False
 
 
@@ -221,7 +221,7 @@ def test_gate_should_enforce_force_opted_in(tmp_path, monkeypatch):
 
 def test_gate_should_enforce_gate_disable_overrides_everything(tmp_path, monkeypatch):
     _clean_gate_env(monkeypatch)
-    # GATE_DISABLE is the operator escape hatch — it wins over BOTH a live marker
+    # GATE_DISABLE is the operator escape hatch - it wins over BOTH a live marker
     # and FORCE_OPTED_IN (the human trust-root can never be deadlocked).
     monkeypatch.setenv("CONSENSUS_MCP_GATE_DISABLE", "1")
     monkeypatch.setenv("CONSENSUS_MCP_FORCE_OPTED_IN", "1")

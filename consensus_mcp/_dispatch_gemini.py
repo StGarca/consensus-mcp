@@ -1,4 +1,4 @@
-"""Phase 4 v1.14.0 — auto-gemini-dispatch helper (gemini adapter).
+"""Phase 4 v1.14.0 - auto-gemini-dispatch helper (gemini adapter).
 
 Sibling of _dispatch_codex.py. Reuses generic dispatch infrastructure from
 _dispatch_base.py (extracted in iter-0010); supplies gemini-specific code:
@@ -34,7 +34,7 @@ USAGE
 
 Review-mode output schema: embedded in
 dispatch_templates/gemini_review_template.md (under "Schema reference"),
-authoritative — review mode has no separate --schema flag.
+authoritative - review mode has no separate --schema flag.
 
 Proposal-mode output schema: dispatch_templates/gemini_proposal_schema.json
 by default; --schema overrides. The helper validates parsed output against
@@ -112,11 +112,11 @@ def _gemini_subprocess_env() -> dict:
 
     v1.15.2 load-bearing fix (advisory 2026-05-15): gemini CLI
     `0.43.0-preview.0`+ refuses headless/automated runs in an
-    "untrusted" directory — it writes the trust error to stderr and
+    "untrusted" directory - it writes the trust error to stderr and
     produces EMPTY stdout, which the dispatcher then fails as
     `GeminiOutputParseError`. The `--skip-trust` flag (still passed,
     defense-in-depth) is NOT load-bearing on this version: empirically
-    verified 2026-05-15 — with `--skip-trust` only, gemini bypassed
+    verified 2026-05-15 - with `--skip-trust` only, gemini bypassed
     trust but went autonomous and 429'd; with
     `GEMINI_CLI_TRUST_WORKSPACE=true` it produced clean deterministic
     output (and the two clean v1.15.1 Workflow B audit approvals).
@@ -162,7 +162,7 @@ def _resolve_gemini_bin(gemini_bin: str) -> str:
                         raise GeminiInvocationError(
                             f"gemini binary {gemini_bin!r} is a Windows App Execution "
                             f"Alias stub (0-byte file in WindowsApps). subprocess cannot "
-                            f"exec App Aliases — install the real gemini CLI binary or "
+                            f"exec App Aliases - install the real gemini CLI binary or "
                             f"adjust PATH so a non-stub variant is preferred."
                         )
             except OSError:
@@ -194,7 +194,7 @@ def _resolve_gemini_bin(gemini_bin: str) -> str:
                     raise GeminiInvocationError(
                         f"gemini binary resolved to {resolved!r} which is a Windows "
                         f"App Execution Alias stub (0-byte file in WindowsApps). "
-                        f"subprocess cannot exec App Aliases — install the real "
+                        f"subprocess cannot exec App Aliases - install the real "
                         f"gemini CLI binary or adjust PATH so a non-stub variant is "
                         f"preferred."
                     )
@@ -250,9 +250,9 @@ def _invoke_gemini(
       gemini -p "<short directive>" -m <model> --approval-mode plan --skip-trust
     The actual prompt body is piped via stdin (gemini appends -p text after
     stdin). -p is required to trigger headless mode. --approval-mode plan is
-    gemini's read-only mode (no file writes, no shell exec) — the parallel
+    gemini's read-only mode (no file writes, no shell exec) - the parallel
     to codex's --sandbox read-only. --skip-trust is passed defense-in-depth
-    but is NOT load-bearing on gemini CLI ≥0.43.0-preview.0; the
+    but is NOT load-bearing on gemini CLI >=0.43.0-preview.0; the
     workspace-trust gate is suppressed via GEMINI_CLI_TRUST_WORKSPACE=true
     injected into the subprocess env (see _gemini_subprocess_env / advisory
     2026-05-15). Without it gemini emits the trust error to stderr with
@@ -400,7 +400,7 @@ def _invoke_gemini(
             # process a long prompt without emitting anything for an extended
             # period (50KB+ prompts can take 200s+ before first token). Use
             # the operator-visible timeout_seconds budget as the threshold
-            # here, not stall_silence_seconds — otherwise the watchdog aborts
+            # here, not stall_silence_seconds - otherwise the watchdog aborts
             # a valid in-progress review.
             silence_age = now - start_ts
             silence_trigger_threshold = float(timeout_seconds)
@@ -487,11 +487,11 @@ def _extract_json_from_text(text: str) -> str:
     when explicitly told to emit JSON only. This helper applies a small
     ladder of recoveries:
 
-      1. Whole-string trim — if the trimmed text starts with `{` and ends
+      1. Whole-string trim - if the trimmed text starts with `{` and ends
          with `}`, return as-is.
-      2. Fenced-code-block extraction — first ```json ... ``` (or bare
+      2. Fenced-code-block extraction - first ```json ... ``` (or bare
          ``` ... ```) containing a `{...}` block.
-      3. Greedy outermost-brace match — first `{` to last `}`. Fragile
+      3. Greedy outermost-brace match - first `{` to last `}`. Fragile
          (won't handle nested unbalanced braces), but a final fallback.
 
     Returns the candidate JSON string. Does NOT validate that it parses;
@@ -630,7 +630,7 @@ def _parse_gemini_output(
         pp = finding.get("patch_proposal")
         if pp is not None:
             raise GeminiOutputParseError(
-                f"findings[{i}].patch_proposal must be null in v1.14.0 — gemini is "
+                f"findings[{i}].patch_proposal must be null in v1.14.0 - gemini is "
                 f"review-only (patch authoring deferred to iter-0013)"
             )
         reason = finding.get("patch_not_proposed_reason")
@@ -659,7 +659,7 @@ def _parse_gemini_output(
         raise GeminiOutputParseError("; ".join(msg_parts))
 
     # codex-rev-002 round-1 fix: goal_satisfied=true with non-empty
-    # blocking_objections is incoherent — reject so a malformed gemini
+    # blocking_objections is incoherent - reject so a malformed gemini
     # response can't be sealed as a successful review.
     if parsed["goal_satisfied"] is True and actual_blocking:
         raise GeminiOutputParseError(
@@ -765,7 +765,7 @@ def _invoke_gemini_with_retry(
     mode: str = "review",
     proposal_schema_path: Path | None = None,
 ) -> tuple[str, dict]:
-    """Per iter-0009 verdict Q2: F2b — validator-retry on schemaless parse fail.
+    """Per iter-0009 verdict Q2: F2b - validator-retry on schemaless parse fail.
 
     Runs gemini once. If output parses cleanly, return (raw_output, parsed).
     If parse fails, re-prompt gemini ONCE with the parse error appended,
@@ -799,10 +799,10 @@ def _invoke_gemini_with_retry(
             })
         retry_prompt = (
             prompt
-            + "\n\n# Retry — your previous response failed JSON validation\n\n"
+            + "\n\n# Retry - your previous response failed JSON validation\n\n"
             + f"Parse error: {first_err}\n\n"
             + "Re-emit ONLY valid JSON conforming to the schema in the prompt above. "
-            + "No prose, no markdown fences, no commentary — JSON only, starting with `{` "
+            + "No prose, no markdown fences, no commentary - JSON only, starting with `{` "
             + "and ending with `}`."
         )
         raw_retry = _invoke_gemini(

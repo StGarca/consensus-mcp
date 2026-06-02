@@ -2,8 +2,8 @@
 
 This is the "useful-finding" signal source for the weighted-consensus learner
 (converged spec 2026-05-24, D1/D2/D5). Records are written ONLY from EXTERNAL
-adjudication — an objective machine outcome (a test/smoke red->green, a
-falsification result) or an audited operator disposition — NEVER by an AI agent
+adjudication - an objective machine outcome (a test/smoke red->green, a
+falsification result) or an audited operator disposition - NEVER by an AI agent
 grading itself or a peer. The writer enforces no-self-grade (D5b) by REJECTING any
 record whose adjudicator is a panel/AI agent. Format is append-only JSONL; AI code
 may READ the ledger but can never originate credit.
@@ -67,8 +67,8 @@ def read_outcomes(ledger_path: str | Path) -> list[dict]:
     """Read all VALID outcome records (empty list if the ledger does not exist).
 
     The no-self-grade firewall must hold at the TRUST BOUNDARY the learner consumes,
-    not only at write time (codex-rev-001): a tampered or legacy row — e.g. one with
-    an AI adjudicator or a malformed shape that bypassed/predates append_outcome — is
+    not only at write time (codex-rev-001): a tampered or legacy row - e.g. one with
+    an AI adjudicator or a malformed shape that bypassed/predates append_outcome - is
     SKIPPED here, so it can never reach the learner. Invalid rows are quarantined
     (skipped), not fatal, so one bad row can't deny-service the whole ledger."""
     path = Path(ledger_path)

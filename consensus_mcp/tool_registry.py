@@ -29,7 +29,7 @@ class ToolRegistry:
         by the MCP spec. Internally-registered SCHEMA dicts use snake_case
         (input_schema, output_schema) for readability; this method translates
         to camelCase at the wire boundary. output_schema is consensus-mcp
-        internal and intentionally dropped — MCP tools/list does not surface it.
+        internal and intentionally dropped - MCP tools/list does not surface it.
         """
         result: list[dict] = []
         for name, (schema, _) in self._tools.items():

@@ -1,8 +1,8 @@
-"""consensus-mcp-seal-iteration — Path A iteration close-and-seal CLI.
+"""consensus-mcp-seal-iteration - Path A iteration close-and-seal CLI.
 
 Converged consult iteration-debrief-2026-05-26 (5-AI open-contest, deep
 tier, unanimous P1): a SINGLE consolidated console script with four
-subcommands. THIN 1:1 wrapper around existing library functions — NO
+subcommands. THIN 1:1 wrapper around existing library functions - NO
 new logic, NO new trust-root semantics.
 
 Subcommands:
@@ -13,7 +13,7 @@ Subcommands:
              unquoted ':' (Section 3.7 friction) BEFORE the verifier.
   mint       Compute canonical converged-plan hash via the package's
              own `compute_artifact_hash` (NOT `hashlib.sha256` on raw
-             bytes — Section 3.8 friction) and write the
+             bytes - Section 3.8 friction) and write the
              `.consensus/design-approved` marker via the package's own
              `mint_design_approval`. Refuses overbroad scope_glob.
   verify     Call `verify_design_approval` on a path; returns the
@@ -70,8 +70,8 @@ from consensus_mcp._session_state import (
 
 
 # Default scope_glob when the operator passes --writing-plans-followup
-# (the brainstorming → writing-plans pipeline produces files under
-# docs/consensus/plans/, so the spec-file glob is too narrow — debrief
+# (the brainstorming -> writing-plans pipeline produces files under
+# docs/consensus/plans/, so the spec-file glob is too narrow - debrief
 # Section 3.9 friction). Default chosen by the converged-plan
 # D1+G_default.
 _DEFAULT_WRITING_PLANS_SCOPE_GLOB = "docs/consensus/**"
@@ -89,7 +89,7 @@ def _prepare(iter_dir: Path) -> dict:
 
     Returns a dict summarising what was copied; does NOT modify
     iteration-outcome.yaml unless one is missing entirely (in which
-    case writes a minimal skeleton naming a TODO closing_state — the
+    case writes a minimal skeleton naming a TODO closing_state - the
     operator must still edit + supply a real closing_state before
     mint).
 
@@ -105,7 +105,7 @@ def _prepare(iter_dir: Path) -> dict:
         family = m.group("family")
         canonical = iter_dir / f"{family}-review.yaml"
         if canonical.exists():
-            # Don't overwrite — operator may have intentionally
+            # Don't overwrite - operator may have intentionally
             # produced a per-pass file alongside a canonical one.
             skipped.append(f"{f.name} -> {canonical.name} (canonical exists; not overwriting)")
             continue
@@ -205,7 +205,7 @@ def _mint(
             "ok": False,
             "error_type": "overbroad_scope",
             "error": (
-                f"scope_glob {scope_glob!r} is overbroad — name the files the "
+                f"scope_glob {scope_glob!r} is overbroad - name the files the "
                 f"converged plan covers (e.g. 'docs/consensus/**' or "
                 f"'consensus_mcp/_x.py')."
             ),
@@ -241,7 +241,7 @@ def _mint(
                 f"iteration-outcome.yaml declares closing_state="
                 f"{declared_state!r}; must be one of "
                 f"{sorted(SEALED_CLOSING_STATES)}. The marker re-validates "
-                f"against this — a mismatched value fails fail-closed."
+                f"against this - a mismatched value fails fail-closed."
             ),
         }
     # closing_state passed in via --closing-state must match what's already
@@ -253,7 +253,7 @@ def _mint(
             "error": (
                 f"--closing-state={closing_state!r} but iteration-outcome.yaml "
                 f"declares closing_state={declared_state!r}. The outcome file "
-                f"is authoritative — either pass --closing-state={declared_state} "
+                f"is authoritative - either pass --closing-state={declared_state} "
                 f"or edit the outcome file."
             ),
         }
@@ -292,7 +292,7 @@ def _mint(
         }
 
     # v1.32.1 (consult iteration-v133-gate-scope-shift-2026-05-26):
-    # mint ALSO writes the session-active marker (D3 — primary
+    # mint ALSO writes the session-active marker (D3 - primary
     # activation trigger). The gate's session_active() probe then
     # treats this iteration as the active scope.
     try:
@@ -354,7 +354,7 @@ def _close(
 
     --abandon mode: skip the delivery-token check; remove both
     markers unconditionally. For recovery from crashed/abandoned
-    consults. Adds zero attack surface — the trust-root model
+    consults. Adds zero attack surface - the trust-root model
     doesn't depend on these markers' presence.
     """
     repo_root = _resolve_repo_root()
@@ -391,7 +391,7 @@ def _close(
             "ok": False,
             "error_type": "no_design_marker",
             "error": (
-                f"no {MARKER_RELPATH} present — nothing to close. Use "
+                f"no {MARKER_RELPATH} present - nothing to close. Use "
                 f"`--abandon` to force-clear any session marker without "
                 f"the delivery-token check."
             ),
@@ -456,7 +456,7 @@ def _close(
             "missing_count": len(missing),
         }
 
-    # All clear — remove both markers.
+    # All clear - remove both markers.
     cleared_session = clear_session_marker(repo_root)
     try:
         design_marker.unlink()
@@ -496,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="consensus-mcp-seal-iteration",
         description=(
             "Path A iteration close-and-seal helper. THIN 1:1 wrapper around "
-            "the package's library functions — no new trust-root semantics."
+            "the package's library functions - no new trust-root semantics."
         ),
     )
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -534,7 +534,7 @@ def main(argv: list[str] | None = None) -> int:
     pm.add_argument(
         "--writing-plans-followup", action="store_true",
         help=(
-            "Use the brainstorming → writing-plans default scope_glob "
+            "Use the brainstorming -> writing-plans default scope_glob "
             "'docs/consensus/**'. Eliminates Section 3.9 friction."
         ),
     )

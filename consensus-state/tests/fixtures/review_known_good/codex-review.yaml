@@ -16,8 +16,8 @@ blocking_objections:
     claim: "Section X contract field Y is unspecified"
     file: "docs/architecture/orchestration-spec.md"
     section: "section_9"
-    evidence: "Field Y appears in §9 schema but its enum is not enumerated"
-    required_change: "Enumerate valid values for field Y in §9"
+    evidence: "Field Y appears in section 9 schema but its enum is not enumerated"
+    required_change: "Enumerate valid values for field Y in section 9"
 
 non_blocking_suggestions: []
 
@@ -42,9 +42,9 @@ self_resolved_questions: []
 
 assumptions_challenged:
   - id: a-001
-    assumption: "Reviewer schema in §9 is final for v1.7.2"
+    assumption: "Reviewer schema in section 9 is final for v1.7.2"
     challenge_result: cleared
-    evidence: "§9 schema header includes schema_version: 1 and is referenced by §13"
+    evidence: "section 9 schema header includes schema_version: 1 and is referenced by section 13"
 
 no_objection_rationale:
   required_when_no_blockers: true

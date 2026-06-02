@@ -41,7 +41,7 @@ audience: ai-only-plus-operator-review
 
 This session covered three discrete arcs:
 
-### Arc A — Phase 1 MCP G1+G2 toolchain implementation (T1-T8)
+### Arc A - Phase 1 MCP G1+G2 toolchain implementation (T1-T8)
 
 Implemented the 6-tool MCP server stack via `subagent-driven-development` skill, dispatching fresh implementer subagents per task with two-stage review (spec compliance + code quality) between each.
 
@@ -58,7 +58,7 @@ Implemented the 6-tool MCP server stack via `subagent-driven-development` skill,
 
 Smoke coverage: **35/35** in `consensus_mcp/_smoke_test.py` (was 34/34 pre-iteration-0006; iteration-0006 added `test_patch_stage_and_dry_run_new_file_creation`).
 
-### Arc B — iteration-0006 real-iteration smoke (T11)
+### Arc B - iteration-0006 real-iteration smoke (T11)
 
 Routed an actual consensus-loop iteration end-to-end through the MCP toolchain to prove G1+G2 work on real workload.
 
@@ -70,19 +70,19 @@ Routed an actual consensus-loop iteration end-to-end through the MCP toolchain t
 | T11.4 | Synthesized consensus.yaml + finalized independence-audit.yaml |
 | T11.5 | T4+T5 applied iteration-outcome.yaml + verification.yaml (canonical-006 gate APPROVED with 0 high findings; apply_step_landed audit recorded) |
 | T11.6 | Out-of-MCP direct edits: parent spec md frontmatter v1.8.2 -> v1.9.0 + revision_history v1.9.0 entry; sibling Phase 1 design spec status flip; ledger spec_version + v1_9_0_application_log + iteration_0006_dispositions |
-| T11.7 | All 4 validators clean on iter-0006 (validate_iteration, validate_consensus, validate_review × 2); 35/35 + 21/21 + 0 disposition findings; iteration_closed audit event recorded |
+| T11.7 | All 4 validators clean on iter-0006 (validate_iteration, validate_consensus, validate_review x 2); 35/35 + 21/21 + 0 disposition findings; iteration_closed audit event recorded |
 
 Reviewer outcome: **unanimous bump_approved=true**, 0 blocking objections, 13 non-blocking suggestions, 1 methodological disagreement (phase vocabulary; codex preserved-ENDED vs claude phase-distinction) resolved by synthesizer preserving both readings.
 
-### Arc C — iteration-0006 self-test discoveries (mid-iteration fixes)
+### Arc C - iteration-0006 self-test discoveries (mid-iteration fixes)
 
 The iteration revealed THREE real toolchain bugs that pre-iteration smoke did not cover:
 
 | Defect | Root cause | Fix |
 |---|---|---|
-| **canonical-iter0006-009** — T4 rejected new-file patches | T4 `patch_stage_and_dry_run.py` line 207 raised `"file not found"` when `real_path` didn't exist, even when `old_string=""` (new-file creation case) | Added new-file branch; smoke test added (count 34 -> 35) |
-| (uncatalogued) — T4 staged_iter_dir name was `"iteration-staged"` | Validators' ITERATION_ID_MISMATCH fired on every file because dir name didn't equal the iteration_id field | Changed to `staging_path / iteration_id` |
-| (uncatalogued) — T3 wrote `event_type:` field key | Legacy `validate_iteration` reads `entry.get("event")`; T3 diverged silently when first authored | Changed T3 to write `event:`; updated 2 smoke test assertions |
+| **canonical-iter0006-009** - T4 rejected new-file patches | T4 `patch_stage_and_dry_run.py` line 207 raised `"file not found"` when `real_path` didn't exist, even when `old_string=""` (new-file creation case) | Added new-file branch; smoke test added (count 34 -> 35) |
+| (uncatalogued) - T4 staged_iter_dir name was `"iteration-staged"` | Validators' ITERATION_ID_MISMATCH fired on every file because dir name didn't equal the iteration_id field | Changed to `staging_path / iteration_id` |
+| (uncatalogued) - T3 wrote `event_type:` field key | Legacy `validate_iteration` reads `entry.get("event")`; T3 diverged silently when first authored | Changed T3 to write `event:`; updated 2 smoke test assertions |
 
 Plus one **canonical-iter0006-008** finding noted-not-blocking: codex reviewer used self-hash-exception form for `reviewed_packet_sha256` cross-artifact reference; spec section 7 says canonical-full for cross-artifact. Root cause: orchestrator-dispatch prompt (T11.2 codex brief) mislabeled the packet field value as canonical-full. Codex review content unaffected; flag for orchestrator-prompt review at next iteration boot.
 
@@ -90,18 +90,18 @@ Plus one **canonical-iter0006-008** finding noted-not-blocking: codex reviewer u
 
 ### New files
 
-- `consensus_mcp/server.py` — stdio JSON-RPC MCP server skeleton; boot validator check (refuses to start if `validate_disposition_index` reports findings); audit log JSONL appends to `consensus-state/state/mcp-server-audit.yaml`
-- `consensus_mcp/tool_registry.py` — `class ToolRegistry` with `register(name, schema, handler)`, `list_tools()`, `get_handler(name)`
-- `consensus_mcp/tools/state_read_decision_ledger.py` — T2; mtime-based cache; canonical_yaml_sha256 formula
-- `consensus_mcp/tools/audit_append_event.py` — T3; 12 canonical event types; first-class kwargs for event-specific fields; atomic append
-- `consensus_mcp/tools/patch_stage_and_dry_run.py` — T4; tempfile-based staging; default validator set (4); supports new-file creation; `dry_run_isolation_caveats` documents bounded-isolation gap
-- `consensus_mcp/tools/patch_apply_consensus_patch.py` — T5; gated on T4; atomic per-file write; partial_apply_failed branch + structured error returns; CONCURRENCY single-writer disclaimer; path-traversal guard via `.resolve() + relative_to()`
-- `consensus_mcp/tools/review_write_and_seal.py` — T6; canonical_yaml_sha256 with self-hash exception; deterministic path; index update; refuses path collision
-- `consensus_mcp/tools/review_read_post_seal.py` — T7; recomputes hash; surfaces `legacy_unsealed=True` for pre-T6 packets; path-safety check
-- `consensus_mcp/_smoke_test.py` — 35 tests covering T1-T7 unit behavior + the 3 iteration-0006 fixes
-- `consensus-state/active/iteration-0006/` — 8 ceremonial files (input, review-packet, codex-review, claude-review, independence-audit, consensus, verification, iteration-outcome)
-- `consensus-state/archive/review-passes/2026-05-09-iteration-0006-consolidated_codex_plus_claude-pass.yaml` — sealed pass-22; packet_sha256 `fe2180352387a81765767e042103a6e60b1f3a478030a5d2791abc83cf287cef`
-- `docs/architecture/phase-1-completion.md` — this file
+- `consensus_mcp/server.py` - stdio JSON-RPC MCP server skeleton; boot validator check (refuses to start if `validate_disposition_index` reports findings); audit log JSONL appends to `consensus-state/state/mcp-server-audit.yaml`
+- `consensus_mcp/tool_registry.py` - `class ToolRegistry` with `register(name, schema, handler)`, `list_tools()`, `get_handler(name)`
+- `consensus_mcp/tools/state_read_decision_ledger.py` - T2; mtime-based cache; canonical_yaml_sha256 formula
+- `consensus_mcp/tools/audit_append_event.py` - T3; 12 canonical event types; first-class kwargs for event-specific fields; atomic append
+- `consensus_mcp/tools/patch_stage_and_dry_run.py` - T4; tempfile-based staging; default validator set (4); supports new-file creation; `dry_run_isolation_caveats` documents bounded-isolation gap
+- `consensus_mcp/tools/patch_apply_consensus_patch.py` - T5; gated on T4; atomic per-file write; partial_apply_failed branch + structured error returns; CONCURRENCY single-writer disclaimer; path-traversal guard via `.resolve() + relative_to()`
+- `consensus_mcp/tools/review_write_and_seal.py` - T6; canonical_yaml_sha256 with self-hash exception; deterministic path; index update; refuses path collision
+- `consensus_mcp/tools/review_read_post_seal.py` - T7; recomputes hash; surfaces `legacy_unsealed=True` for pre-T6 packets; path-safety check
+- `consensus_mcp/_smoke_test.py` - 35 tests covering T1-T7 unit behavior + the 3 iteration-0006 fixes
+- `consensus-state/active/iteration-0006/` - 8 ceremonial files (input, review-packet, codex-review, claude-review, independence-audit, consensus, verification, iteration-outcome)
+- `consensus-state/archive/review-passes/2026-05-09-iteration-0006-consolidated_codex_plus_claude-pass.yaml` - sealed pass-22; packet_sha256 `fe2180352387a81765767e042103a6e60b1f3a478030a5d2791abc83cf287cef`
+- `docs/architecture/phase-1-completion.md` - this file
 
 ### Modified files
 
@@ -136,9 +136,9 @@ Plus one **canonical-iter0006-008** finding noted-not-blocking: codex reviewer u
 
 **100% complete in-place.** 6 tools registered + tested + exercised on real workload. Bounded gaps documented but not yet smoke-covered:
 
-- **gap_1**: T5 partial_apply_failed branch — documented at module-docstring level; NO smoke coverage of mid-write IO failure path
-- **gap_2**: T5 single-writer concurrency assumed — documented prominently; NO smoke coverage of concurrent invocation (operator deferred filelock work to Phase 1.x)
-- **gap_3**: T7 surfaces 21 legacy pre-T6 packets via `legacy_unsealed=True` — documented + smoke-covered
+- **gap_1**: T5 partial_apply_failed branch - documented at module-docstring level; NO smoke coverage of mid-write IO failure path
+- **gap_2**: T5 single-writer concurrency assumed - documented prominently; NO smoke coverage of concurrent invocation (operator deferred filelock work to Phase 1.x)
+- **gap_3**: T7 surfaces 21 legacy pre-T6 packets via `legacy_unsealed=True` - documented + smoke-covered
 
 ### Standalone extraction readiness
 
@@ -149,7 +149,7 @@ Plus one **canonical-iter0006-008** finding noted-not-blocking: codex reviewer u
 
 ### Spec / governance
 
-**v1.9.1 active** (originally landed as v1.9.0 then hardened to v1.9.1 after the third-party review pass — see Section 9 + the consolidated findings doc). `active_contract_readiness: phase_0_validated` UNCHANGED from v1.8.0. `do_not_treat_as_phase_0_ready: false` UNCHANGED. `next_required_action: redirect_to_render_outcomes` UNCHANGED. iteration-0006 closing_state: `implementation_ready_apply_landed`. self-construction phase remains CLOSED at v1.8.2 (architectural-scope reading per codex); Phase 1 MCP maintenance phase OPENED at v1.9.0 by operator strategic pivot (vocabulary distinction per claude); v1.9.1 added the post-review hardening (35/35 -> 37/37 smoke + design spec invariants honesty pass). Both readings preserved.
+**v1.9.1 active** (originally landed as v1.9.0 then hardened to v1.9.1 after the third-party review pass - see Section 9 + the consolidated findings doc). `active_contract_readiness: phase_0_validated` UNCHANGED from v1.8.0. `do_not_treat_as_phase_0_ready: false` UNCHANGED. `next_required_action: redirect_to_render_outcomes` UNCHANGED. iteration-0006 closing_state: `implementation_ready_apply_landed`. self-construction phase remains CLOSED at v1.8.2 (architectural-scope reading per codex); Phase 1 MCP maintenance phase OPENED at v1.9.0 by operator strategic pivot (vocabulary distinction per claude); v1.9.1 added the post-review hardening (35/35 -> 37/37 smoke + design spec invariants honesty pass). Both readings preserved.
 
 ### Render outcomes
 
@@ -181,19 +181,19 @@ The review surfaced 6 methodological red flags. All recorded in `consensus-state
 
 7 non-blocking suggestions, all accepted. Most landed in v1.9.0 directly:
 
-1. `phase_1_mcp_g1_g2_implementation_recorded_at` frontmatter field — landed
-2. `v1_8_2_trigger_gate_overridden_by_operator` field (converged with claude-001) — landed
-3. Ledger `v1_9_0_application_log` block shape — landed
-4. Phase 1 design spec status flip — landed
-5. Ledger spec_version bump — landed
-6. validator-report SHA drift on metadata-only re-run is expected, not a finding — noted
-7. Lock next_iteration_recommendations to render-outcomes-first at iteration-0006 closure — landed
+1. `phase_1_mcp_g1_g2_implementation_recorded_at` frontmatter field - landed
+2. `v1_8_2_trigger_gate_overridden_by_operator` field (converged with claude-001) - landed
+3. Ledger `v1_9_0_application_log` block shape - landed
+4. Phase 1 design spec status flip - landed
+5. Ledger spec_version bump - landed
+6. validator-report SHA drift on metadata-only re-run is expected, not a finding - noted
+7. Lock next_iteration_recommendations to render-outcomes-first at iteration-0006 closure - landed
 
 ### From iteration-0006 self-test (real-workload pushback against the toolchain itself)
 
 The iteration's apply path surfaced 3 toolchain bugs that the unit-test smoke didn't catch:
 
-- T4 didn't support new-file creation (`old_string=""` for non-existent target → "file not found" error). Real-workload requirement; smoke didn't cover.
+- T4 didn't support new-file creation (`old_string=""` for non-existent target -> "file not found" error). Real-workload requirement; smoke didn't cover.
 - T4 staged dir name was hardcoded `"iteration-staged"` causing ITERATION_ID_MISMATCH on every staged file. Real-workload requirement; smoke didn't cover.
 - T3 wrote `event_type:` field but `validate_iteration` reads `event:` field. Cross-tool schema drift; smoke didn't cover.
 
@@ -201,7 +201,7 @@ All 3 fixed during iteration-0006 itself. The iteration is the proof that real-i
 
 ## 5. Open questions
 
-### Q1 — Is iteration-0006 itself the kind of process-polish iteration the operator has been pushing back against?
+### Q1 - Is iteration-0006 itself the kind of process-polish iteration the operator has been pushing back against?
 
 claude-iter0006-005 flagged that iteration-0006's input.yaml is ~290 lines for a bookkeeping bump. The full iteration ran 8 ceremonial files + dual-reviewer dispatch + sealing + apply + spec md + design spec + ledger updates. That is substantial process work.
 
@@ -214,7 +214,7 @@ But: the precedent question remains. If render work surfaces friction that trigg
 
 **Open**: should the operator confirm before any future "consensus pipeline iteration" runs, or treat this iteration as closing the door on routine governance polish?
 
-### Q2 — Should canonical-iter0006-008 (codex sha-form drift) get a pre-emptive orchestrator-prompt fix?
+### Q2 - Should canonical-iter0006-008 (codex sha-form drift) get a pre-emptive orchestrator-prompt fix?
 
 Root cause: T11.2 codex dispatch prompt mislabeled the self-hash-exception form as "canonical-full." Codex followed the prompt literally; claude correctly used canonical-full per spec section 7. Different reviewers, different sha values for the same artifact reference.
 
@@ -222,33 +222,33 @@ The drift will recur in any future iteration that uses similar dispatch prompts.
 
 **Open**: do this pre-emptively now, or wait until next iteration boot when the prompt would be regenerated?
 
-### Q3 — Bounded gaps gap_1 + gap_2: smoke coverage ever, or accepted as documentation-only?
+### Q3 - Bounded gaps gap_1 + gap_2: smoke coverage ever, or accepted as documentation-only?
 
 Both gaps document behaviors that are NOT exercised by the 35 smoke tests:
-- gap_1 (T5 mid-write IO failure → partial_apply_failed): would need a test that simulates IO error mid-loop (e.g., monkeypatch `os.replace` to raise on the 3rd file)
+- gap_1 (T5 mid-write IO failure -> partial_apply_failed): would need a test that simulates IO error mid-loop (e.g., monkeypatch `os.replace` to raise on the 3rd file)
 - gap_2 (T5 single-writer concurrency): would need a multi-process test plus an actual filelock implementation (currently no filelock exists)
 
 claude-iter0006-004 carried both as Phase 1.x test-coverage debt. But Phase 1.x is not scheduled; G3-G5 are shelved.
 
 **Open**: write smoke tests for gap_1 (cheap, no new code; just monkeypatch + assert) before extracting? OR accept "documentation-only verified" as the v1.9.0 honest state and let the gaps surface if they bite real workload?
 
-### Q4 — Standalone extraction: when does it happen, and does decouple come before or after package?
+### Q4 - Standalone extraction: when does it happen, and does decouple come before or after package?
 
-Per operator: "we will then copy it out of the host project so it can be a standalone tool" — operator-manual move. Two preceding tasks were deferred:
+Per operator: "we will then copy it out of the host project so it can be a standalone tool" - operator-manual move. Two preceding tasks were deferred:
 - T9 decouple from host-project paths (configurable REPO_ROOT + artifact dirs)
 - T10 package as installable (pyproject.toml, console_scripts, bundle agent_loop validators + consensus_mcp server)
 
 Both still pending. T9 logically precedes T10 (decoupling makes the package layout clean).
 
-**Open**: trigger condition for T9+T10? Operator preference was "after tool is complete" — iteration-0006 closes that bar but the bounded-gap test coverage debt and Q3 above are also extraction-readiness questions.
+**Open**: trigger condition for T9+T10? Operator preference was "after tool is complete" - iteration-0006 closes that bar but the bounded-gap test coverage debt and Q3 above are also extraction-readiness questions.
 
-### Q5 — Memory promotion (claude-iter0006-006): operator-only step
+### Q5 - Memory promotion (claude-iter0006-006): operator-only step
 
 claude-iter0006-006 recommended promoting "do not keep polishing process unless it directly improves render outcomes" to durable operator memory at `~/.claude/projects/.../memory/feedback_no_process_polishing.md`. This is operator-scope action; flagged in iteration-0006/iteration-outcome.yaml.operator_actions_recommended.
 
 **Open**: operator may choose to do this manually; agent does NOT auto-promote operator guidance to memory.
 
-### Q6 — Was the T11 framing (route a real iteration through MCP) the right test?
+### Q6 - Was the T11 framing (route a real iteration through MCP) the right test?
 
 Pro: surfaced 3 real bugs that unit-smoke missed. Real-workload integration is the correct validation.
 
@@ -261,7 +261,7 @@ Con: the iteration itself was substantial process work and required substantial 
 ### Immediate next operator-directed work
 
 1. **Render outcomes (locked first)**: per `next_required_action: redirect_to_render_outcomes` + canonical-iter0006-005 + codex-iter0006-007. Specific candidates from iteration-0006 next_iteration_recommendations:
-   - Pass 2 lessons-learned re-pass on Book 1 (Sweet Silver Blues) — first book in 14-book corpus; long-deferred
+   - Pass 2 lessons-learned re-pass on Book 1 (Sweet Silver Blues) - first book in 14-book corpus; long-deferred
    - Next chapter render (whichever book is in queue)
 
 ### Operator-triggered (not auto-scheduled)
@@ -284,11 +284,11 @@ Con: the iteration itself was substantial process work and required substantial 
 
 7. **iteration-0007 (if ever)**: claude-iter0006-005 flagged iteration input over-engineering. Future iterations should reference spec sections rather than restating them; ~120 LOC inputs, not ~290.
 
-## 7. Reference points (HISTORICAL v1.9.0 / v1.9.1 snapshot — for current state see frontmatter `scope_disclaimer` + parent spec v1.9.2 revision_history + ledger v1_9_2_application_log)
+## 7. Reference points (HISTORICAL v1.9.0 / v1.9.1 snapshot - for current state see frontmatter `scope_disclaimer` + parent spec v1.9.2 revision_history + ledger v1_9_2_application_log)
 
 | Topic | Path |
 |---|---|
-| Active spec (v1.9.0 at this row's write time; **CURRENT: v1.9.2** — see scope_disclaimer in frontmatter) | `docs/architecture/orchestration-spec.md` |
+| Active spec (v1.9.0 at this row's write time; **CURRENT: v1.9.2** - see scope_disclaimer in frontmatter) | `docs/architecture/orchestration-spec.md` |
 | Phase 1 design spec | `docs/architecture/phase-1-completion.md` |
 | Disposition ledger | `consensus-state/state/disposition-ledger.yaml` (v1.9.0; v1_9_0_application_log + iteration_0006_dispositions) |
 | Iteration-0006 archive | `consensus-state/active/iteration-0006/` |
@@ -298,7 +298,7 @@ Con: the iteration itself was substantial process work and required substantial 
 | Validator suite | `consensus_mcp/validators/run_validator_tests.py` (21/21) |
 | Validator harness | `consensus_mcp/validators/validate_*.py` |
 
-## 8. Acceptance gates at session close (HISTORICAL v1.9.0 / v1.9.1 snapshot — current gates are 51/51 + 21/21 + 0 post-Round-6; see consolidated review-findings MD Round 6 verification block for current state)
+## 8. Acceptance gates at session close (HISTORICAL v1.9.0 / v1.9.1 snapshot - current gates are 51/51 + 21/21 + 0 post-Round-6; see consolidated review-findings MD Round 6 verification block for current state)
 
 - [x] `python_env\python.exe consensus_mcp/_smoke_test.py` -> 37/37 (post-review +2)
 - [x] `python_env\python.exe consensus_mcp/validators/run_validator_tests.py` -> 21/21
@@ -309,25 +309,25 @@ Con: the iteration itself was substantial process work and required substantial 
 - [x] `python_env\python.exe consensus_mcp/validators/validate_review.py --review consensus-state/active/iteration-0006/claude-review.yaml` -> 0 findings
 - [x] iteration-0006 audit log: 9 events in canonical sequence ending in iteration_closed
 - [x] T6 sealed pass-22 in archive; T7 verified=True
-- [x] v1.9.1 active in spec frontmatter at this bullet's original write time (was v1.9.0 at original land; v1.9.1 was the first post-review hardening — see Section 9). **CURRENT post-Phase-2: v1.9.2 active** (G3+G4+G5 implementation 2026-05-09 via second operator strategic pivot — see consolidated review-findings MD + parent spec v1.9.2 revision_history entry)
+- [x] v1.9.1 active in spec frontmatter at this bullet's original write time (was v1.9.0 at original land; v1.9.1 was the first post-review hardening - see Section 9). **CURRENT post-Phase-2: v1.9.2 active** (G3+G4+G5 implementation 2026-05-09 via second operator strategic pivot - see consolidated review-findings MD + parent spec v1.9.2 revision_history entry)
 - [x] Helper scripts (_seal_iter0006.py, _apply_iter0006.py, _debug_t4_stage.py) cleaned up
 
 ## 9. Third-party post-review fixes (2026-05-09)
 
-**See also**: [`2026-05-09-v1.9.x-third-party-review-findings.md`](2026-05-09-v1.9.x-third-party-review-findings.md) — single consolidated doc covering all SIX review rounds (Round 1: 9 findings post-v1.9.0 CLOSED; Round 2: 3 findings post-v1.9.1 CLOSED; Source-MD: 7 doc-consistency findings self-applied/re-review-pending; Codex follow-up: 5 findings self-applied/re-review-pending; MD-set follow-up: 5 findings self-applied/re-review-pending; Round 6: 9 findings from self-dispatched review on v1.9.2 self-applied/re-review-pending) with full citation + reproduction + resolution detail. Total: 38 review findings recorded across 6 rounds.
+**See also**: [`2026-05-09-v1.9.x-third-party-review-findings.md`](2026-05-09-v1.9.x-third-party-review-findings.md) - single consolidated doc covering all SIX review rounds (Round 1: 9 findings post-v1.9.0 CLOSED; Round 2: 3 findings post-v1.9.1 CLOSED; Source-MD: 7 doc-consistency findings self-applied/re-review-pending; Codex follow-up: 5 findings self-applied/re-review-pending; MD-set follow-up: 5 findings self-applied/re-review-pending; Round 6: 9 findings from self-dispatched review on v1.9.2 self-applied/re-review-pending) with full citation + reproduction + resolution detail. Total: 38 review findings recorded across 6 rounds.
 
 After the initial summary doc landed, an external code review surfaced 9 issues. All
 real, all genuinely missed by the session's self-checks. Honest accounting of each:
 
-### Blocking — fixed
+### Blocking - fixed
 
 - **MCP implementation was gitignored**. `.gitignore` had `scripts/*` deny-by-default
   with only `consensus_mcp/validators/**` re-allowlisted. `consensus_mcp/**` was
-  silently ignored — a commit would have recorded docs claiming implementation while
+  silently ignored - a commit would have recorded docs claiming implementation while
   omitting it. **Fix**: added `!consensus_mcp/` + `!consensus_mcp/**`
   re-allowlist; pycache excluded. 11 MCP files now visible to git.
 
-### High — fixed
+### High - fixed
 
 - **`validators_to_run=[]` bypassed canonical-006 gate**. T4 accepted empty list and
   returned `gate_decision: APPROVED` with no findings. Reproduced. **Fix**: T4 refuses
@@ -345,7 +345,7 @@ real, all genuinely missed by the session's self-checks. Honest accounting of ea
   write semantics + single-writer assumption; design spec invariant_4 updated to
   honestly describe v1.0 behavior. Real filelock deferred to Phase 1.x.
 
-### Medium — fixed
+### Medium - fixed
 
 - **T7 path safety only applied to direct paths, not pass_id index lookup**. Bad index
   entry could make T7 read a YAML file outside ARCHIVE_DIR. **Fix**: pass_id mode now
@@ -365,7 +365,7 @@ real, all genuinely missed by the session's self-checks. Honest accounting of ea
   var override; smoke test points it at a per-PID temp file. Real audit log no longer
   touched by smoke runs.
 
-### Low — fixed
+### Low - fixed
 
 - **`pre_canonical_pin_marker` on new T6 packets**. Spec defines that marker for
   pre-v1.7.4 historical hashes; using it on modern packets is semantically wrong.
@@ -374,14 +374,14 @@ real, all genuinely missed by the session's self-checks. Honest accounting of ea
 
 ### Files modified for post-review fixes
 
-- `.gitignore` — re-allowlist `consensus_mcp/`
-- `consensus_mcp/server.py` — `AUDIT_LOG` env-var override; rename .yaml -> .jsonl; docstring update
-- `consensus_mcp/tools/patch_stage_and_dry_run.py` — refuse empty `validators_to_run=[]`
-- `consensus_mcp/tools/review_read_post_seal.py` — `iteration_id + reviewer` mode + path-safety on pass_id lookup; `_finalize_verification` helper extracted
-- `consensus_mcp/tools/audit_append_event.py` — honest CONCURRENCY docstring (read-modify-write, single-writer)
-- `consensus_mcp/tools/review_write_and_seal.py` — `sealed_at_utc` for new packets; `pre_canonical_pin_marker` preserved only if passed in
-- `consensus_mcp/_smoke_test.py` — temp audit sink + 2 new tests (35 -> 37)
-- `docs/architecture/phase-1-completion.md` — invariant_3 + invariant_4 honest about v1.0 limitations
+- `.gitignore` - re-allowlist `consensus_mcp/`
+- `consensus_mcp/server.py` - `AUDIT_LOG` env-var override; rename .yaml -> .jsonl; docstring update
+- `consensus_mcp/tools/patch_stage_and_dry_run.py` - refuse empty `validators_to_run=[]`
+- `consensus_mcp/tools/review_read_post_seal.py` - `iteration_id + reviewer` mode + path-safety on pass_id lookup; `_finalize_verification` helper extracted
+- `consensus_mcp/tools/audit_append_event.py` - honest CONCURRENCY docstring (read-modify-write, single-writer)
+- `consensus_mcp/tools/review_write_and_seal.py` - `sealed_at_utc` for new packets; `pre_canonical_pin_marker` preserved only if passed in
+- `consensus_mcp/_smoke_test.py` - temp audit sink + 2 new tests (35 -> 37)
+- `docs/architecture/phase-1-completion.md` - invariant_3 + invariant_4 honest about v1.0 limitations
 - `consensus-state/state/mcp-server-audit.yaml` -> `mcp-server-audit.jsonl` (file rename + content cleanup)
 
 ### Acceptance after post-review fixes
@@ -396,9 +396,9 @@ real, all genuinely missed by the session's self-checks. Honest accounting of ea
 The session's self-checks reported "100% complete in-place" prematurely. Specifically
 missed:
 
-1. `.gitignore` check for new directories (Karpathy "Think Before Coding" — should
+1. `.gitignore` check for new directories (Karpathy "Think Before Coding" - should
    have grepped before claiming files would commit)
-2. Empty-validator-list edge case (Karpathy "no assumptions" — should have tested the
+2. Empty-validator-list edge case (Karpathy "no assumptions" - should have tested the
    bypass surface)
 3. T7 design-spec interface mismatch (assumed pass_id/path was the only mode without
    re-reading the design spec for required inputs)
@@ -406,6 +406,6 @@ missed:
    semantics
 
 The third-party review caught all four. Memory takeaway: when claiming "100% complete"
-on any toolchain, run a third-party review pass — the same way iteration-0006's dual
+on any toolchain, run a third-party review pass - the same way iteration-0006's dual
 reviewer caught real defects in the iteration's content. Self-review is necessary but
 not sufficient.

@@ -6,7 +6,7 @@ that re-reads environment state on every call so tests can
 `monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))` AFTER import
 and have it actually work.
 
-This module is PURELY ADDITIVE in Phase A — no existing tool is touched.
+This module is PURELY ADDITIVE in Phase A - no existing tool is touched.
 Tools migrate one at a time in iter-0026+ (Phase B). iter-0019's
 `_isolate_archive_root` test helper continues to monkeypatch the cached
 module-level attributes of un-migrated tools.
@@ -17,10 +17,10 @@ concerns (spec / state / project). This module is the reusable embodiment
 of that split.
 
 Environment variable precedence (per resolver):
-  - `repo_root()`         — `CONSENSUS_MCP_REPO_ROOT` → walked-up `__file__` → cwd
-  - `spec_path()`         — `CONSENSUS_MCP_SPEC_PATH` → legacy under repo_root → walked-up → packaged template
-  - `state_root()`        — `CONSENSUS_MCP_STATE_ROOT` → legacy under repo_root → cwd
-  - `project_root()`      — `CONSENSUS_MCP_PROJECT_ROOT` → legacy repo_root → cwd
+  - `repo_root()`         - `CONSENSUS_MCP_REPO_ROOT` -> walked-up `__file__` -> cwd
+  - `spec_path()`         - `CONSENSUS_MCP_SPEC_PATH` -> legacy under repo_root -> walked-up -> packaged template
+  - `state_root()`        - `CONSENSUS_MCP_STATE_ROOT` -> legacy under repo_root -> cwd
+  - `project_root()`      - `CONSENSUS_MCP_PROJECT_ROOT` -> legacy repo_root -> cwd
 
 Derived paths build on the resolvers and inherit their laziness.
 """
@@ -32,7 +32,7 @@ from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
-# Resolvers — read env state on every call.
+# Resolvers - read env state on every call.
 # ---------------------------------------------------------------------------
 
 
@@ -124,37 +124,37 @@ def project_root() -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Derived paths — compose the resolvers above; inherit laziness.
+# Derived paths - compose the resolvers above; inherit laziness.
 # ---------------------------------------------------------------------------
 
 
 def archive_dir() -> Path:
-    """consensus-state/archive/review-passes/ — sealed review-pass archive."""
+    """consensus-state/archive/review-passes/ - sealed review-pass archive."""
     return state_root() / "archive" / "review-passes"
 
 
 def index_path() -> Path:
-    """consensus-state/archive/review-passes/index.yaml — pass index."""
+    """consensus-state/archive/review-passes/index.yaml - pass index."""
     return archive_dir() / "index.yaml"
 
 
 def active_dir() -> Path:
-    """consensus-state/active/ — per-iteration working directories."""
+    """consensus-state/active/ - per-iteration working directories."""
     return state_root() / "active"
 
 
 def audit_log_path() -> Path:
-    """consensus-state/state/audit-log.jsonl — append-only audit event log."""
+    """consensus-state/state/audit-log.jsonl - append-only audit event log."""
     return state_root() / "state" / "audit-log.jsonl"
 
 
 def dispatch_log_path() -> Path:
-    """consensus-state/state/dispatch-log.jsonl — append-only dispatch event log."""
+    """consensus-state/state/dispatch-log.jsonl - append-only dispatch event log."""
     return state_root() / "state" / "dispatch-log.jsonl"
 
 
 # ---------------------------------------------------------------------------
-# Path containment — shared fail-closed guard for operator/AI-supplied paths.
+# Path containment - shared fail-closed guard for operator/AI-supplied paths.
 # 2026-05-22 consensus security review (CR-1/CR-3/CR-5, H-2): every caller that
 # joins an untrusted relative/absolute path to a base directory before reading
 # or writing MUST route it through resolve_contained() so a `../` traversal,

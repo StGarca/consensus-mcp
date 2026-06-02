@@ -12,7 +12,7 @@ These cover the DEFECT 1/2 fix (docs/grok-dispatch-streaming-watchdog-fix.md):
     `GrokStreamCancelledError` invocation failure.
 
 The deterministic clock harness is the proven `_SyncClock`/`_FakePipeReader`
-design from `test_dispatch_codex_streaming.py` (v1.15.9 — fully
+design from `test_dispatch_codex_streaming.py` (v1.15.9 - fully
 Condition-driven, no real-sleep timing). It is injected into production via
 `_invoke_grok`'s `_sleep=`/`time_fn=`/`popen_factory=` seams so the watchdog
 tests are deterministic, NOT wall-clock-timed (the pattern that flaked on
@@ -242,7 +242,7 @@ class StreamingFakeGrokPopen:
 
     @property
     def pid(self):
-        return 2_147_483_647  # never-live PID → os.getpgid raises → fallback
+        return 2_147_483_647  # never-live PID -> os.getpgid raises -> fallback
 
     def wait(self, timeout=None):
         return self.returncode
@@ -328,7 +328,7 @@ def _drive_streaming(clock, th, log_path, *, step: float, until, max_steps: int 
         # Block until production has actually PROCESSED a new streamed line
         # (so last_streamed_ts is provably fresh before the next advance) OR
         # the run reached its terminal state. NOTE: do NOT also return on
-        # `clock._sleepers > 0` — the runner parks in `_sleep` every poll
+        # `clock._sleepers > 0` - the runner parks in `_sleep` every poll
         # iteration, so that would let the driver advance the virtual clock
         # again before the reader thread refreshes last_streamed_ts. Under
         # reader-thread lag (loaded CI) the clock then outruns the last line
@@ -395,7 +395,7 @@ def _stream_lines(*events):
 
 
 # --------------------------------------------------------------------------
-# I1 — streaming run assembles the answer, runs from a fresh temp cwd, cleans up
+# I1 - streaming run assembles the answer, runs from a fresh temp cwd, cleans up
 # --------------------------------------------------------------------------
 
 def test_streaming_assembles_answer_and_uses_clean_temp_cwd(tmp_path):
@@ -436,7 +436,7 @@ def test_streaming_assembles_answer_and_uses_clean_temp_cwd(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# I2 — streaming keeps the watchdog FED across a window that silence kills
+# I2 - streaming keeps the watchdog FED across a window that silence kills
 #      (Gate G5: the case that would have tripped the old silence watchdog)
 # --------------------------------------------------------------------------
 
@@ -446,7 +446,7 @@ def test_streaming_keeps_watchdog_fed(tmp_path):
     clock = _SyncClock()
 
     # Thought lines every 2s out to 16s, then the answer + end at 16s. The
-    # 16s total span FAR exceeds stall_silence_seconds=5 — under the old
+    # 16s total span FAR exceeds stall_silence_seconds=5 - under the old
     # `plain` behavior (one buffered blob at the end) the watchdog would
     # have fired at 5s. Because each streamed line refreshes last_streamed_ts
     # and the lines are 2s apart (< 5s), the watchdog never trips.
@@ -475,13 +475,13 @@ def test_streaming_keeps_watchdog_fed(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# I3 — the failure mode streaming fixes: a silent run trips the watchdog
+# I3 - the failure mode streaming fixes: a silent run trips the watchdog
 # --------------------------------------------------------------------------
 
 def test_silent_run_trips_watchdog(tmp_path):
     """A run that produces NO stdout lines (the old `plain` failure shape:
     grok thinks past the window with everything buffered) trips the silence
-    watchdog and raises — the bug DEFECT 1 fixes by streaming."""
+    watchdog and raises - the bug DEFECT 1 fixes by streaming."""
     repo_root = _setup_repo_root(tmp_path)
     log_path = repo_root / "consensus-state" / "state" / "dispatch-log.jsonl"
     clock = _SyncClock()
@@ -508,7 +508,7 @@ def test_silent_run_trips_watchdog(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# I4 — self-cancel (Cancelled with zero text) surfaces as an invocation error
+# I4 - self-cancel (Cancelled with zero text) surfaces as an invocation error
 # --------------------------------------------------------------------------
 
 def test_self_cancel_raises_invocation_error_and_cleans_cwd(tmp_path):
@@ -521,7 +521,7 @@ def test_self_cancel_raises_invocation_error_and_cleans_cwd(tmp_path):
         (0.0, {"type": "thought", "data": "still thinking..."}),
         (0.0, {"type": "end", "stopReason": "Cancelled"}),
     )
-    # grok exits 0 even on a Cancelled stream → the returncode gate cannot
+    # grok exits 0 even on a Cancelled stream -> the returncode gate cannot
     # catch it; the assembler must.
     factory = _make_factory(clock, scheduled_stdout=scheduled, returncode=0, exit_at=0.5)
 

@@ -4,16 +4,16 @@ Per the weighted-consensus convergence consult (2026-05-24, sealed at
 ``consensus-state/active/iteration-weighted-consensus-converge-2026-05-24/converged-plan.yaml``):
 weights are ADVISORY ONLY. They re-order findings for synthesis prominence; they
 NEVER add/remove a finding, feed the convergence rule, or affect the cross-family
-gate. This module is the static "weak-prior + caps" structure — NO learner and NO
+gate. This module is the static "weak-prior + caps" structure - NO learner and NO
 external ledger (those are Plan 2). Discount-only: a contributor can lose
 attention by being proven unreliable, but is never amplified above baseline.
 
 Firewall invariants this module upholds (locked by tests):
-  - weights-off equivalence: ``order_by_weight`` is a STABLE PERMUTATION — the set
+  - weights-off equivalence: ``order_by_weight`` is a STABLE PERMUTATION - the set
     of findings the gate/convergence rule sees is unchanged.
   - no-self-grade: there is NO public API to write/set a contributor's weight or
     usefulness credit from caller input. A Plan-2 learner may only add a writer
-    that reads the external (non-AI) ledger — never an agent-callable setter.
+    that reads the external (non-AI) ledger - never an agent-callable setter.
 """
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ def order_proposal_paths(paths, contributor_weights: dict[str, float] | None):
 
     A STABLE permutation (never drops/adds a path); unknown contributors default to
     the neutral seed weight. With no weights it is the identity. This is the ONLY
-    way weights touch the engine — the convergence evaluation never receives weights,
+    way weights touch the engine - the convergence evaluation never receives weights,
     so pass/fail is byte-identical regardless (weights-off equivalence)."""
     if not contributor_weights:
         return list(paths)
@@ -170,11 +170,11 @@ def order_proposal_paths(paths, contributor_weights: dict[str, float] | None):
 # --- user-centric: scorecard (decision-support) + operator-declared lean ---
 # Per the SWOT converged design (2026-05-24): the system MEASURES (scorecard) and the
 # OPERATOR declares the lean from it. The machine never auto-applies a learned weight as
-# the bias — build_scorecard informs; the operator's declared lean is what's applied.
+# the bias - build_scorecard informs; the operator's declared lean is what's applied.
 
 
 def build_scorecard(outcomes: list[dict]) -> dict:
-    """Per-contributor performance SCORECARD from the external outcome ledger — pure
+    """Per-contributor performance SCORECARD from the external outcome ledger - pure
     DECISION-SUPPORT for the operator's declared lean. It MEASURES (useful-finding counts
     + rate per contributor); it does NOT set any weight or lean. The operator reviews this
     and declares the lean (e.g. 'lean d,b,c,a'); the machine never decides the bias."""

@@ -1,19 +1,19 @@
-"""Unit tests for tools/loop_verify_codex_patch.py — Task #25 (iter-0015).
+"""Unit tests for tools/loop_verify_codex_patch.py - Task #25 (iter-0015).
 
 Per codex 2026-05-10 v4 directive (memory/project_codex_fix_author_directive.md):
   - Claude verifies codex-emitted patches per CLAUDE.md.
   - The MCP tool BUILDS the verifier-input bundle (reproducibility-bounded);
-    it does NOT itself dispatch a subagent — that's the orchestrator's job.
+    it does NOT itself dispatch a subagent - that's the orchestrator's job.
   - The tool also RECORDS the eventual subagent verdict back into the
     iteration_dir.
 
 Two modes:
-  * mode=build_inputs (default) — read codex-review.yaml, find patch_proposal,
+  * mode=build_inputs (default) - read codex-review.yaml, find patch_proposal,
     assemble verifier_inputs (goal_packet + acceptance_gates + touched files
-    full content + CLAUDE.md + codex finding TEXT only — NOT codex's
+    full content + CLAUDE.md + codex finding TEXT only - NOT codex's
     reasoning trail), compute review_scope_hash. Returns blocked verdict
     placeholder for orchestrator to follow up.
-  * mode=record_verdict — validate subagent's structured verdict and write
+  * mode=record_verdict - validate subagent's structured verdict and write
     to iteration_dir/codex-patch-verifications/<patch_id>.yaml.
 """
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 Per converged-plan.yaml (iteration-v1180-contributor-design-2026-05-22):
 **B-ROUTING + UNIVERSAL PROFILES.** Every built-in AI (claude/codex/gemini/kimi)
-has a YAML *profile* — a pure-data description of how to detect, invoke, parse,
+has a YAML *profile* - a pure-data description of how to detect, invoke, parse,
 install, and authenticate one contributor. Profiles supply:
 
   * the wizard's selectable list,
@@ -30,7 +30,7 @@ Schema (converged-plan ``decision.profile_schema``)::
     invoke:
       transport: stdin | flag
       base_args: [str]
-      prompt_flag: str|null   # transport=flag → the flag; stdin → null
+      prompt_flag: str|null   # transport=flag -> the flag; stdin -> null
       workdir_flag: str       # optional, e.g. -w
       model_flag: str         # optional, e.g. --model
     env: {KEY: str}           # injected into the subprocess
@@ -66,7 +66,7 @@ TRANSPORT_FLAG = "flag"
 VALID_TRANSPORTS = {TRANSPORT_STDIN, TRANSPORT_FLAG}
 
 # Keys allowed in an install map. Mirrors the os names sys.platform maps onto
-# (win32→windows, linux→linux, darwin→darwin) per detect+guide.
+# (win32->windows, linux->linux, darwin->darwin) per detect+guide.
 VALID_INSTALL_OS_KEYS = {"windows", "linux", "darwin"}
 
 # Directory holding the packaged built-in profile YAMLs. Resolved relative to
@@ -177,14 +177,14 @@ def validate_profile(name: str, d: dict) -> None:
                 f"{sorted(bad_keys)}; allowed: {sorted(VALID_INSTALL_OS_KEYS)}"
             )
 
-    # host (claude) needs no detect/invoke/output — it is the in-process env.
+    # host (claude) needs no detect/invoke/output - it is the in-process env.
     if kind == KIND_HOST:
         return
 
     # host_peer (v1.20.0): a same-family blind SWE-reviewer run via a dedicated
     # host review callback. Like host it has NO CLI detect/invoke/output, but it
     # REQUIRES `family` + `role`. `weight` and `gate_eligible` are allowed
-    # (optional) — the adapter stamps the canonical supplementary /
+    # (optional) - the adapter stamps the canonical supplementary /
     # gate_eligible=False provenance regardless, so the profile fields are
     # advisory metadata only.
     if kind == KIND_HOST_PEER:
@@ -256,7 +256,7 @@ def resolve_kind(name: str, profiles: dict) -> str | None:
 
 def independent_count(enabled: list[str], profiles: dict) -> int:
     """Count INDEPENDENT contributors: everything except a known host_peer.
-    Unknown names (no profile) count as independent — config.py keeps its open
+    Unknown names (no profile) count as independent - config.py keeps its open
     model; constructibility stays engine_factory's fail-closed job."""
     return sum(1 for n in enabled if resolve_kind(n, profiles) != KIND_HOST_PEER)
 

@@ -25,7 +25,7 @@ from consensus_mcp.tools import review_write_and_seal as t6
 
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
-    # _paths lazy-resolvers re-read env each call — use setenv (not setattr).
+    # _paths lazy-resolvers re-read env each call - use setenv (not setattr).
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
     return tmp_path
 
@@ -65,8 +65,8 @@ def test_multi_round_converge_both_rounds_seal(repo):
 
 
 def test_non_round_keyed_reseal_still_collides_negative_control(repo):
-    """Non-vacuous proof: the ORIGINAL Bug A behavior — same reviewer_id+pass_id across
-    rounds with DIFFERENT content — must STILL produce index_collision. Round-keying is
+    """Non-vacuous proof: the ORIGINAL Bug A behavior - same reviewer_id+pass_id across
+    rounds with DIFFERENT content - must STILL produce index_collision. Round-keying is
     precisely what gives round 2 a different pass_id so this path is never reached in
     practice; if round-keying silently regressed, round 2 would land here and FAIL to seal."""
     iteration_id = "iteration-emotion-engine-0001"

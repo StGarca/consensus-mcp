@@ -1,8 +1,8 @@
-# Delivery-readiness gate (anti-self-judge enforcement) — consensus-mcp 1.16.0
+# Delivery-readiness gate (anti-self-judge enforcement) - consensus-mcp 1.16.0
 
 A fail-closed gate ensuring an operator-facing artifact has been **consensus-vetted**,
 not self-judged by the agent. **Headline feature for consensus-mcp `1.16.0`**
-(minor bump from 1.15.10) — it fixes a major logic flaw (agent self-judging
+(minor bump from 1.15.10) - it fixes a major logic flaw (agent self-judging
 soundness instead of routing through consensus) that caused real-world bad
 deliverables and work stoppage.
 
@@ -30,10 +30,10 @@ Additional fail-closed conditions:
   iteration (the agent cannot self-vet).
 
 ## Files
-- `consensus_mcp/_delivery_readiness.py` — token schema, `mint_delivery_token`,
+- `consensus_mcp/_delivery_readiness.py` - token schema, `mint_delivery_token`,
   `verify_delivery_token`, `resolve_consensus_ref`, `compute_artifact_hash`, CLI.
-- `tests/test_delivery_readiness.py` — fail-closed coverage (7 tests).
-- `hooks/delivery_gate_pretooluse.py` — optional Claude-Code PreToolUse template.
+- `tests/test_delivery_readiness.py` - fail-closed coverage (7 tests).
+- `hooks/delivery_gate_pretooluse.py` - optional Claude-Code PreToolUse template.
 
 ## Enforcement surfaces (portable-first)
 1. **MCP tool (primary, portable across Kimi CLI / Cursor / Claude Code).**
@@ -68,7 +68,7 @@ Additional fail-closed conditions:
    ```
 3. **PreToolUse hook (Claude-Code only, contrib convenience).** See
    `hooks/delivery_gate_pretooluse.py`; wire in `.claude/settings.json` to block
-   operator-facing tool calls unless `verify` passes. Note: harness-specific —
+   operator-facing tool calls unless `verify` passes. Note: harness-specific -
    invisible to Kimi CLI / Cursor, hence secondary to the MCP tool.
 
 ## Flow
@@ -76,9 +76,9 @@ Additional fail-closed conditions:
 2. After implementing + testing, mint a token citing that sealed iteration +
    its non-claude reviewers.
 3. Delivery (operator-facing send) is gated on `verify_delivery_token` ok=True.
-4. Editing the artifact invalidates the token (hash drift) → re-vet.
+4. Editing the artifact invalidates the token (hash drift) -> re-vet.
 
 ## Decisive test
 `test_mint_refused_without_sealed_ref`: an unsealed `design_consensus_ref` is
-rejected — proving self-judged delivery is impossible without a prior real
+rejected - proving self-judged delivery is impossible without a prior real
 consensus.

@@ -1,14 +1,14 @@
-"""consensus_mcp._resume — read-only operating-context snapshot for orchestrators.
+"""consensus_mcp._resume - read-only operating-context snapshot for orchestrators.
 
 Implements docs/specs/consensus-resume-spec.md (v2, sealed by codex-iter0002-2-pass1
 on 2026-05-11). Addresses pass-2 findings codex-rev-001..005 inline:
 
   rev-001: output includes optional watermark_unchanged_since_prior +
-           snapshot_watermark_drift fields (per §8 fast-path).
+           snapshot_watermark_drift fields (per section 8 fast-path).
   rev-002: recent_activity.kind enum includes bundle-mutation kinds
            (patch_applied, review_packet_rebundled, operator_force_bundle_rewrite).
   rev-003: current_bundle_sha is computed BEFORE review classification (the
-           spec's §5 step ordering was unimplementable as written; fixed here).
+           spec's section 5 step ordering was unimplementable as written; fixed here).
   rev-004: when no bundle_mutation event is present, current_bundle_sha falls
            back to review-packet.yaml's defect_target.base_sha.
   rev-005: recent_activity is sorted (timestamp_utc DESC, line_number DESC)
@@ -35,7 +35,7 @@ from consensus_mcp._self_drive import _scope_signature
 SCHEMA_VERSION = 2
 
 # Mirror of _dispatch_codex._invoke_codex's stall_silence_seconds default (45s).
-# Per spec §6 / pass-1 codex-rev-007 Q1: single source of truth via import.
+# Per spec section 6 / pass-1 codex-rev-007 Q1: single source of truth via import.
 # _invoke_codex's value lives as a kwarg default; we capture it by inspecting
 # the function signature at module-load time so renames or default-bumps in
 # _dispatch_codex propagate automatically.
@@ -113,7 +113,7 @@ def _utc_now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
-# auto-detection (§3): authorized_at_utc DESC primary, dir name DESC tiebreaker.
+# auto-detection (section 3): authorized_at_utc DESC primary, dir name DESC tiebreaker.
 # ---------------------------------------------------------------------------
 
 def _list_active_iterations(active_dir: Path) -> list[tuple[Path, str | None]]:
@@ -142,7 +142,7 @@ def _list_active_iterations(active_dir: Path) -> list[tuple[Path, str | None]]:
     entries.sort(key=lambda t: (t[1] is None, t[1] or "", t[0].name), reverse=False)
     # The default ascending sort with reverse=False above sorts None-first by
     # the t[1] is None key; flip carefully:
-    #   - want None timestamps LAST → sort key (t[1] is None, -timestamp, -name).
+    #   - want None timestamps LAST -> sort key (t[1] is None, -timestamp, -name).
     # Achieve with a two-pass approach:
     with_ts = [(d, ts) for d, ts in entries if ts is not None]
     without_ts = [(d, ts) for d, ts in entries if ts is None]
@@ -167,7 +167,7 @@ def _walk_dispatch_log(log_path: Path, iteration_id: str) -> tuple[list[dict], l
         return events, warnings
     try:
         text = log_path.read_text(encoding="utf-8")
-    # iter-0036 parity (H-8): narrow to IO/decode classes (KEEP the loud warning —
+    # iter-0036 parity (H-8): narrow to IO/decode classes (KEEP the loud warning -
     # this path was never silent, so the orchestrator still learns nothing is
     # readable). Programmer errors now propagate instead of being mislabeled.
     except (OSError, UnicodeDecodeError) as exc:
@@ -208,9 +208,9 @@ def _compute_current_bundle_sha(
     """Return (current_bundle_sha, source_label).
 
     source_label is one of:
-      - "dispatch_log_bundle_mutation" — found a bundle-mutation event
-      - "review_packet_base_sha"       — fell back to review-packet.yaml
-      - "none"                          — neither source available
+      - "dispatch_log_bundle_mutation" - found a bundle-mutation event
+      - "review_packet_base_sha"       - fell back to review-packet.yaml
+      - "none"                          - neither source available
     """
     # rev-003: scan events for the latest bundle-mutation kind.
     mutation_events = [e for e in events if _event_kind(e) in BUNDLE_MUTATION_KINDS]
@@ -222,7 +222,7 @@ def _compute_current_bundle_sha(
         if isinstance(sha, str) and sha:
             return sha, "dispatch_log_bundle_mutation"
         # codex-iter0003-3 rev-001 fix: a bundle-mutation event WITHOUT a usable
-        # hash means we cannot fall through to the review-packet base_sha — that
+        # hash means we cannot fall through to the review-packet base_sha - that
         # would classify post-mutation state against the pre-mutation hash and
         # leave stale reviews looking "open" when they are actually superseded.
         # Report unknown + force the caller to surface a warning.
@@ -243,7 +243,7 @@ def _compute_current_bundle_sha(
 
 
 def _compute_bundle_mutation(events: list[dict]) -> dict | None:
-    """Return the latest bundle-mutation event projected into the §4 bundle_mutation shape."""
+    """Return the latest bundle-mutation event projected into the section 4 bundle_mutation shape."""
     candidates = [e for e in events if _event_kind(e) in BUNDLE_MUTATION_KINDS]
     if not candidates:
         return None
@@ -360,7 +360,7 @@ def _compute_in_flight(
 
 
 # ---------------------------------------------------------------------------
-# review classification (uses current_bundle_sha — rev-003 prereq satisfied).
+# review classification (uses current_bundle_sha - rev-003 prereq satisfied).
 # ---------------------------------------------------------------------------
 
 def _parse_review(path: Path) -> dict | None:
@@ -400,7 +400,7 @@ def _classify_review(
             return ("closing", None, closure_cert.get("_path"))
 
     # codex-iter0003-4 rev-001 fix: when current_bundle_sha is unknown, do NOT
-    # default to "open" — there is no way to verify the review is current. Mark
+    # default to "open" - there is no way to verify the review is current. Mark
     # as invalid so the orchestrator does not act on the review's findings.
     if current_bundle_sha is None:
         return ("invalid", None, None)
@@ -416,7 +416,7 @@ def _classify_review(
 
 
 # ---------------------------------------------------------------------------
-# watermark (§8 / rev-001)
+# watermark (section 8 / rev-001)
 # ---------------------------------------------------------------------------
 
 def _compute_watermark(iter_dir: Path, log_path: Path) -> str:
@@ -463,7 +463,7 @@ def _load_yaml(path: Path) -> dict | None:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    # iter-0036 parity (H-8): mirror _self_drive._read_yaml_or_empty — narrow to
+    # iter-0036 parity (H-8): mirror _self_drive._read_yaml_or_empty - narrow to
     # the IO/decode/parse classes so programmer errors (TypeError, AttributeError,
     # KeyboardInterrupt) propagate instead of being mislabeled as a parse failure.
     # Behavior on missing/unreadable/unparseable files is unchanged (still None).
@@ -555,7 +555,7 @@ def _compute_expected_next_action(
     goal_packet_path: Path,
     review_packet_path: Path,
 ) -> dict:
-    """Exhaustive decision tree per spec §5 step 8. Every branch returns."""
+    """Exhaustive decision tree per spec section 5 step 8. Every branch returns."""
     base = {
         "kind": None,
         "rationale": "",
@@ -626,7 +626,7 @@ def _compute_expected_next_action(
         return base
 
     # codex-iter0003-3 rev-002 fix: when suggesting a cross-family dispatch,
-    # pick the actual valid closer family from closure_invariant_status — not
+    # pick the actual valid closer family from closure_invariant_status - not
     # a hard-coded codex command. After a codex-authored bundle mutation the
     # valid closer is claude (not codex); recommending another codex dispatch
     # would create a stuck loop. Today only codex has a dispatcher CLI; if
@@ -654,7 +654,7 @@ def _compute_expected_next_action(
         return base
     # codex-iter0003-5 rev-002 fix: when there's no mutation event yet (fresh
     # iteration) but a review-packet exists, the natural next action is to
-    # dispatch a cross-family reviewer — that creates the first peer review.
+    # dispatch a cross-family reviewer - that creates the first peer review.
     # Defaulting codex as the suggested adapter (the only one with a CLI
     # dispatcher today; the upcoming `consensus run` will generalize this).
     if review_packet_path.is_file():
@@ -717,14 +717,14 @@ def snapshot(
     prior_snapshot_watermark: str | None = None,
     repo_root: Path | None = None,
 ) -> dict:
-    """Return a read-only operating-context snapshot. See docs/specs/consensus-resume-spec.md §5."""
+    """Return a read-only operating-context snapshot. See docs/specs/consensus-resume-spec.md section 5."""
     repo = _resolve_repo_root(repo_root)
     active = repo / "consensus-state" / "active"
     log_path = repo / "consensus-state" / "state" / "dispatch-log.jsonl"
     warnings: list[str] = []
     multiple: list[str] = []
 
-    # --- §3 iteration resolution ---
+    # --- section 3 iteration resolution ---
     if iteration_id is not None:
         # codex-iter0003-6 rev-001 fix: path-traversal hardening. The MCP input
         # is documented as an iteration DIRECTORY NAME (a single path component),
@@ -789,7 +789,7 @@ def snapshot(
         if len(listed) > 1:
             multiple = [d.name for d, _ in listed]
 
-    # --- §8 watermark fast-path (rev-001 fields) ---
+    # --- section 8 watermark fast-path (rev-001 fields) ---
     watermark = _compute_watermark(iter_dir, log_path)
     if prior_snapshot_watermark is not None and prior_snapshot_watermark == watermark:
         return {
@@ -800,7 +800,7 @@ def snapshot(
             "selected_iteration_id": selected,
         }
 
-    # --- §5 step 2: load goal_packet ---
+    # --- section 5 step 2: load goal_packet ---
     gp_path = iter_dir / "goal_packet.yaml"
     goal_packet = _load_yaml(gp_path)
     goal: dict | None = None
@@ -826,7 +826,7 @@ def snapshot(
     else:
         warnings.append(f"goal_packet.yaml missing or unparseable in {iter_dir.name}")
 
-    # --- §5 step 3: walk dispatch log ---
+    # --- section 5 step 3: walk dispatch log ---
     events, log_warnings = _walk_dispatch_log(log_path, selected)
     warnings.extend(log_warnings)
 
@@ -846,7 +846,7 @@ def snapshot(
             "reviews cannot be verified against the working bundle state"
         )
 
-    # --- §5 step 5: bundle_mutation ---
+    # --- section 5 step 5: bundle_mutation ---
     bundle_mutation = _compute_bundle_mutation(events)
 
     # --- recent_activity (rev-002 enum, rev-005 tiebreaker) ---
@@ -871,7 +871,7 @@ def snapshot(
     # --- iteration_state ---
     iteration_state = _compute_iteration_state(goal_packet, iteration_outcome, closure_cert)
 
-    # --- §5 step 4: classify reviews (now we have current_bundle_sha) ---
+    # --- section 5 step 4: classify reviews (now we have current_bundle_sha) ---
     open_reviews: list[dict] = []
     for review_path in sorted(iter_dir.glob("*-review.yaml")):
         review = _parse_review(review_path)
@@ -920,7 +920,7 @@ def snapshot(
         repo, (goal or {}).get("authorized_at_utc"),
     )
 
-    # --- §8 drift check: re-compute watermark; warn if changed ---
+    # --- section 8 drift check: re-compute watermark; warn if changed ---
     end_watermark = _compute_watermark(iter_dir, log_path)
     snapshot_drift = None
     if end_watermark != watermark:

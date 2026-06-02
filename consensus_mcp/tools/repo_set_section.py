@@ -306,7 +306,7 @@ def _is_scope_allowed(
     if isinstance(allowed_sections, list) and allowed_sections:
         for entry in allowed_sections:
             if isinstance(entry, str):
-                # "<marker>/<section_id>" — split on the last "/"; the section_id
+                # "<marker>/<section_id>" - split on the last "/"; the section_id
                 # part is the literal "frontmatter" or "section_N" trailing token.
                 # We accept any of the file aliases as the marker prefix.
                 for alias in file_aliases:
@@ -448,7 +448,7 @@ def handle(
         if sid == section_id:
             # Target section MUST differ (the write); but if new text reparses
             # to a different target text, that's a parser/round-trip violation
-            # too — flag it. Acceptable target text is whatever the parser
+            # too - flag it. Acceptable target text is whatever the parser
             # extracted from the staged file at this section_id.
             continue
         if pre_smap.sections[sid] != post_smap.sections[sid]:

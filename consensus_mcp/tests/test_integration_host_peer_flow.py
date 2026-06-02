@@ -1,4 +1,4 @@
-"""END-TO-END integration test — the v1.21 "decisive experiment".
+"""END-TO-END integration test - the v1.21 "decisive experiment".
 
 This module proves the v1.21 "full automated superpower->host integration" works
 TOGETHER, not just in isolated unit tests. Each isolated piece already has unit
@@ -12,7 +12,7 @@ asserts the SEAMS hold:
                       design-approved marker exist (exit 0). The gate is wired to
                       the real T6 seal, not a self-asserted boolean.
   2. FORGE RESISTANCE a hand-written marker pointing at a NON-sealed iteration is
-                      DENIED through the full subprocess hook path — the closure
+                      DENIED through the full subprocess hook path - the closure
                       invariant survives the whole pipeline.
   3. host_peer ACTIVATION  consensus.run_iteration drives the (formerly dormant)
                       host_peer path: an enabled host_peer profile + a valid
@@ -21,7 +21,7 @@ asserts the SEAMS hold:
                       now that the path is live).
   4. SOFT-SKIP        same as #3 but no host_peer_review_yaml -> the iteration
                       still succeeds and names the skipped profile under
-                      supplementary_skipped (no hard error — host_peer is
+                      supplementary_skipped (no hard error - host_peer is
                       supplementary by construction).
   5. AGENT FILES      the two installed subagent files parse as frontmatter and
                       grant the `Agent` tool ONLY to the orchestrator (the
@@ -72,7 +72,7 @@ _AGENT_FILES = ("consensus-orchestrator.md", "consensus-host-peer-reviewer.md")
 
 
 # --------------------------------------------------------------------------- #
-# Helpers — reused verbatim in spirit from the reference test modules so the
+# Helpers - reused verbatim in spirit from the reference test modules so the
 # integration assertions exercise the SAME on-disk shapes the unit tests do.
 # --------------------------------------------------------------------------- #
 
@@ -200,7 +200,7 @@ def _tool_set(fm: dict) -> set[str]:
 
 
 # =========================================================================== #
-# E2E #1 — MARKER -> GATE: the same Edit flips from DENY to ALLOW once a genuine
+# E2E #1 - MARKER -> GATE: the same Edit flips from DENY to ALLOW once a genuine
 # cross-family seal + minted marker exist. Proves the design gate is wired to the
 # real T6 seal, end-to-end through the subprocess hook.
 # =========================================================================== #
@@ -224,14 +224,14 @@ def test_e2e_marker_flips_edit_from_deny_to_allow(tmp_path):
     parsed = yaml.safe_load(marker.read_text(encoding="utf-8"))
     assert parsed["design_consensus_ref"] == "iteration-fix-impl"
 
-    # (c) The SAME Edit is now ALLOWED (exit 0) — the gate re-validated the pointer
+    # (c) The SAME Edit is now ALLOWED (exit 0) - the gate re-validated the pointer
     #     against the live seal and let the in-scope edit through.
     after = _run_hook(PRETOOLUSE, edit_ev, repo_root=tmp_path, runtime="present")
     assert after.returncode == 0, after.stderr
 
 
 # =========================================================================== #
-# E2E #2 — FORGE RESISTANCE through the full path: a hand-written marker pointing
+# E2E #2 - FORGE RESISTANCE through the full path: a hand-written marker pointing
 # at a NON-sealed iteration is DENIED. The closure invariant (seal is the trust
 # root, not the marker) survives the whole subprocess pipeline, for BOTH an Edit
 # and a non-allowlisted Bash command.
@@ -284,7 +284,7 @@ def test_e2e_marker_in_process_verify_matches_subprocess_gate(tmp_path):
 
 
 # =========================================================================== #
-# E2E #3 — host_peer ACTIVATION: the (v1.20-dormant) host_peer path is now live.
+# E2E #3 - host_peer ACTIVATION: the (v1.20-dormant) host_peer path is now live.
 # An enabled host_peer profile + a valid host_peer_review_yaml drives the REAL
 # HostPeerAdapter through consensus.run_iteration and SEALS a host-peer artifact
 # carrying the canonical gate_eligible=false / weight=supplementary provenance.
@@ -342,7 +342,7 @@ def test_e2e_host_peer_activation_seals_gate_eligible_false(tmp_path, monkeypatc
 
 
 # =========================================================================== #
-# E2E #4 — SOFT-SKIP: the SAME enabled host_peer profile with NO
+# E2E #4 - SOFT-SKIP: the SAME enabled host_peer profile with NO
 # host_peer_review_yaml is gracefully soft-skipped. The iteration still succeeds
 # and surfaces the skipped profile name (supplementary, never a hard error).
 # =========================================================================== #
@@ -379,7 +379,7 @@ def test_e2e_host_peer_soft_skip_when_no_review_yaml(tmp_path, monkeypatch):
 
 
 # =========================================================================== #
-# E2E #5 — AGENT FILES present + correct: the two installed subagent definitions
+# E2E #5 - AGENT FILES present + correct: the two installed subagent definitions
 # parse as frontmatter and grant the `Agent` (sub-dispatch) tool ONLY to the
 # orchestrator. This is the host-driven dispatch contract: the neutral driver may
 # sub-dispatch the reviewer; the read-only reviewer can neither sub-dispatch nor

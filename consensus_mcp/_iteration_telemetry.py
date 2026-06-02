@@ -2,7 +2,7 @@
 
 "Measure the measurement": both 2026-05 consults flagged that we assert the
 discipline catches bugs but never track cost-per-caught-defect by tier. This is
-the substrate — an append-only JSONL of one record per closed iteration — plus a
+the substrate - an append-only JSONL of one record per closed iteration - plus a
 rollup that reports cost-per-blocking-finding by tier, so the operator can SEE
 whether DEEP-tier rigor pays off versus STANDARD. Pure I/O + aggregation; no AI
 judgement involved.
@@ -74,7 +74,7 @@ def read_iterations(telemetry_path: str | Path) -> list[dict]:
 def summarize_by_tier(records: list[dict]) -> dict[str, dict]:
     """Roll up per-tier: iteration count, total dispatches, total wall-clock, total
     blocking findings, and cost-per-blocking-finding (dispatches / blocking). The
-    last is None when a tier caught zero blocking findings (cost with no payoff —
+    last is None when a tier caught zero blocking findings (cost with no payoff -
     the signal the operator wants to see)."""
     by_tier: dict[str, dict] = {}
     for r in records:

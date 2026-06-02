@@ -1,11 +1,11 @@
-"""v1.21 — tests for per-project Claude Code subagent install (AGENTS-INIT).
+"""v1.21 - tests for per-project Claude Code subagent install (AGENTS-INIT).
 
 Per converged-plan iteration-consensus-agents-init-design (decisions C + E):
 `consensus init` writes two subagent definitions into the PROJECT's
 .claude/agents/ during per-project bootstrap:
 
   - consensus-orchestrator.md       (Agent + consensus MCP tools + Read/Bash/Grep/Glob)
-  - consensus-host-peer-reviewer.md (read-only: Read/Grep/Glob/Bash — NO Agent)
+  - consensus-host-peer-reviewer.md (read-only: Read/Grep/Glob/Bash - NO Agent)
 
 Mechanics mirror the .mcp.json bootstrap: honored by --dry-run ("would write"),
 non-destructive skip-if-exists unless --force, and a --no-agents opt-out.
@@ -111,7 +111,7 @@ def test_rerun_skips_existing_divergent_agent(tmp_path, monkeypatch):
     # User edits the file; a plain rerun must NOT clobber it.
     orch.write_text("USER EDITED CONTENT\n", encoding="utf-8")
     # v1.24 (fix 9): a divergent agent is still PRESERVED (no clobber), but the
-    # per-project init now reports INCOMPLETE (rc 7) instead of a silent rc 0 —
+    # per-project init now reports INCOMPLETE (rc 7) instead of a silent rc 0 -
     # mirroring the global managed-file SKIP -> nonzero behavior. The no-clobber
     # contract this test guards is unchanged.
     assert wiz.main(["--reconfigure", *_init_args()]) == 7

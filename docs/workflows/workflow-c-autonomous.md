@@ -1,11 +1,11 @@
-# Workflow C — autonomous-execute
+# Workflow C - autonomous-execute
 
 **Status (as of v1.15.2):** Contract shipped (v1.14.4). The
 multi-iteration engine is **UNIMPLEMENTED as of v1.15.2; no
 committed target version.** The earlier "v1.15.0" forward-reference
 came due
 unfulfilled (v1.15.0 = convergence-correctness doctrine; v1.15.1 =
-converged-plan machine-enforcement; v1.15.2 = gemini-dispatch fix —
+converged-plan machine-enforcement; v1.15.2 = gemini-dispatch fix -
 none shipped the Workflow C engine) and was corrected in v1.15.3
 rather than re-promised against another version. This doc is the
 single source of truth for status.
@@ -40,7 +40,7 @@ The multi-iteration auto-execution loop. Specifically:
 - Cross-platform interrupt-file watching (Windows `ReadDirectoryChangesW`
   vs Unix `select`/`poll` differences need validation).
 - Integration tests with real peer dispatches (cost: dispatcher
-  latency × N iterations per test run).
+  latency x N iterations per test run).
 - Resume-after-halt semantics (operator returns, hits a parked item,
   approves it; how does the loop pick up?).
 - Autonomy-ledger replay for failure recovery.
@@ -51,7 +51,7 @@ Project-level `.consensus/autonomous-policy.yaml` as a default that
 goal_packets can override per-run. Deferred until empirical evidence
 operators want it across multiple Workflow C runs (we have zero runs
 today; designing for hypothetical reuse is premature). No target
-version is committed — status tracked here, not promised against a
+version is committed - status tracked here, not promised against a
 version number (the v1.15.3 currency hot-patch removed all such
 forward-references).
 
@@ -108,19 +108,19 @@ via `autonomy_contract.skip_halt_on`.
 
 `check_autonomy_scope(proposed_files, contract)` returns one of:
 
-- `approved` — every file is within `allowed_file_patterns` AND none
+- `approved` - every file is within `allowed_file_patterns` AND none
   in `forbidden_file_patterns`. Auto-proceed.
-- `parked` — at least one file is OUTSIDE allowed_file_patterns but
+- `parked` - at least one file is OUTSIDE allowed_file_patterns but
   none are forbidden. Item parked for operator review when they
   return. Other (in-bounds) work continues.
-- `halt` — at least one file is in `forbidden_file_patterns`. Hard
+- `halt` - at least one file is in `forbidden_file_patterns`. Hard
   stop; operator must review before any further autonomous action.
 
 ## Operator interrupt mechanism
 
 To halt a running Workflow C from outside the session, create the
 file `.consensus/interrupt` in the repo root. The engine (once
-implemented — see Status above) checks for this file at every
+implemented - see Status above) checks for this file at every
 iteration boundary
 and halts cleanly if present, deletes the file, and surfaces a
 "halted by operator interrupt" status in the audit log.
@@ -154,7 +154,7 @@ Autonomous mode means "no operator-in-the-loop." The wide cross-AI
 safety net is mandatory by default (Workflow C requires exactly 3
 contributors, enforced at config-load). A future relaxation
 (explicit operator opt-in, e.g. 2-AI Workflow C with a brief safety
-warning) is possible but is NOT committed to any version — when the
+warning) is possible but is NOT committed to any version - when the
 engine lands it ships safety-first.
 
 ## Provenance

@@ -17,7 +17,7 @@ import argparse
 def _build_test_parser() -> argparse.ArgumentParser:
     """Mirror the relevant subset of main()'s parser construction.
 
-    Kept minimal — only the --workflow argument is exercised. If the
+    Kept minimal - only the --workflow argument is exercised. If the
     canonical _build_argparser is ever extracted from main(), switch
     this helper to call it directly.
     """

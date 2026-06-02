@@ -83,7 +83,7 @@ class ContributorAdapter(ABC):
     call `dispatch` with the right phase).
     """
 
-    #: Stable identifier — used in reviewer_id derivation, config matching, etc.
+    #: Stable identifier - used in reviewer_id derivation, config matching, etc.
     name: str = ""
 
     def __init__(self, adapter_config: dict | None = None):

@@ -9,7 +9,7 @@ supplying multi-file `files_touched` (the fast-path requires
 len(files_touched)==1).
 
 Documents observed semantics inline; cases known to be unsupported by the
-v1.0 minimal applier are asserted as clean refusals (DiffApplyError →
+v1.0 minimal applier are asserted as clean refusals (DiffApplyError ->
 diff_apply_failed) rather than silent corruption.
 """
 from __future__ import annotations
@@ -177,7 +177,7 @@ def test_multi_file_diff_partial_failure_aborts(
     _write_target_file(repo_root_env, "scripts/file_b.py", "one\ntwo\n")
 
     # file_b's hunk references context lines that DON'T exist in the file
-    # ("THREE" / "FOUR" — file actually has "one"/"two"). Applier must reject.
+    # ("THREE" / "FOUR" - file actually has "one"/"two"). Applier must reject.
     unified_diff = (
         "--- a/scripts/file_a.py\n"
         "+++ b/scripts/file_a.py\n"
@@ -321,7 +321,7 @@ def test_diff_with_deleted_file(
     `_apply_unified_diff` does NOT support deletions. The +++ header
     parsing strips a leading "b/" prefix only; "/dev/null" is left as the
     segment key, which then fails to match files_touched. The apply step
-    in apply_codex_patch.handle() also has no os.unlink branch — it only
+    in apply_codex_patch.handle() also has no os.unlink branch - it only
     writes new_text via os.replace. Deletions therefore fail cleanly with
     `diff_apply_failed` rather than executing.
 

@@ -1,10 +1,10 @@
-# v1.30.6 Synthesis-Aware Propose-Converge — Implementation Plan
+# v1.30.6 Synthesis-Aware Propose-Converge - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make propose-converge refuse to silently never-converge on a plan deliverable — the autonomous engine (Path B) fails loud when `convergence.requires_synthesis` is declared, and a thin host-driven Path A helper converges on (and seals) ONE synthesized plan.
+**Goal:** Make propose-converge refuse to silently never-converge on a plan deliverable - the autonomous engine (Path B) fails loud when `convergence.requires_synthesis` is declared, and a thin host-driven Path A helper converges on (and seals) ONE synthesized plan.
 
-**Architecture:** Synthesis is a host judgment act; the autonomous engine has no host in the loop, so it must not fake it. (1) An operator-declared goal_packet flag `convergence.requires_synthesis`. (2) A guard in `_run_workflow_4` that raises `WorkflowError` (→ `outcome.error`) when the flag is set. (3) A max-rounds hint for the undeclared case. (4) Two thin engine methods for Path A: `evaluate_plan_convergence` (delegates to `_evaluate_convergence`) and `seal_plan_iteration` (on converge, writes `iteration-outcome.yaml` with a sealed `closing_state` and returns the host's plan path — never overwriting it).
+**Architecture:** Synthesis is a host judgment act; the autonomous engine has no host in the loop, so it must not fake it. (1) An operator-declared goal_packet flag `convergence.requires_synthesis`. (2) A guard in `_run_workflow_4` that raises `WorkflowError` (-> `outcome.error`) when the flag is set. (3) A max-rounds hint for the undeclared case. (4) Two thin engine methods for Path A: `evaluate_plan_convergence` (delegates to `_evaluate_convergence`) and `seal_plan_iteration` (on converge, writes `iteration-outcome.yaml` with a sealed `closing_state` and returns the host's plan path - never overwriting it).
 
 **Tech Stack:** Python 3.13, pytest (pipx venv: `~/.local/share/pipx/venvs/consensus-mcp/bin/python -m pytest`), PyYAML.
 
@@ -38,7 +38,7 @@ Run the suite with: `~/.local/share/pipx/venvs/consensus-mcp/bin/python -m pytes
 - [ ] **Step 1: Write the failing test**
 
 ```python
-"""v1.30.6 — synthesis-aware propose-converge (Path B guard + Path A helper)."""
+"""v1.30.6 - synthesis-aware propose-converge (Path B guard + Path A helper)."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -101,7 +101,7 @@ def test_requires_synthesis_false_on_nonbool_or_unreadable(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `~/.local/share/pipx/venvs/consensus-mcp/bin/python -m pytest consensus_mcp/tests/test_workflow_v1306_synthesis.py -v`
-Expected: FAIL — `AttributeError: 'WorkflowEngine' object has no attribute '_requires_synthesis'`
+Expected: FAIL - `AttributeError: 'WorkflowEngine' object has no attribute '_requires_synthesis'`
 
 - [ ] **Step 3: Add the reader (after `_goal_risk_class`, ~line 561)**
 
@@ -134,7 +134,7 @@ git commit -m "feat(v1.30.6): operator-declared convergence.requires_synthesis r
 
 ---
 
-## Task 2: Path B guard — fail loud, never silently never-converge
+## Task 2: Path B guard - fail loud, never silently never-converge
 
 **Files:**
 - Modify: `consensus_mcp/workflow_engine.py` (`_run_workflow_4`, top of the method ~`:246`; final `outcome.error` ~`:311`)
@@ -170,7 +170,7 @@ def test_path_b_unchanged_without_flag(tmp_path):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `~/.local/share/pipx/venvs/consensus-mcp/bin/python -m pytest consensus_mcp/tests/test_workflow_v1306_synthesis.py -v -k path_b`
-Expected: `test_path_b_fails_loud_on_requires_synthesis` FAILS (no guard yet → it runs the loop / converges, so `outcome.error` is None).
+Expected: `test_path_b_fails_loud_on_requires_synthesis` FAILS (no guard yet -> it runs the loop / converges, so `outcome.error` is None).
 
 - [ ] **Step 3: Add the guard at the TOP of `_run_workflow_4`**
 
@@ -178,13 +178,13 @@ Immediately after the docstring / before `enabled = self.config["contributors"][
 
 ```python
         # v1.30.6: a plan/synthesis-deliverable consult cannot converge in the autonomous
-        # engine — there is no host in the loop to merge proposals into ONE plan and revise
+        # engine - there is no host in the loop to merge proposals into ONE plan and revise
         # it. Fail LOUD here rather than bundle-vote forever. Plan consults use Path A.
         if self._requires_synthesis(goal_packet_path):
             raise WorkflowError(
                 "this consult declares convergence.requires_synthesis: the deliverable is a "
                 "single synthesized plan, which the autonomous engine (Path B / run_iteration) "
-                "cannot author — there is no host in the loop. Converge it via Path A: author "
+                "cannot author - there is no host in the loop. Converge it via Path A: author "
                 "converged-plan.yaml, dispatch contributors to review THAT plan "
                 "(--review-target converged-plan.yaml), then evaluate_plan_convergence + "
                 "seal_plan_iteration. See docs/workflows/path-a-plan-convergence.md."
@@ -207,7 +207,7 @@ with:
         outcome.error = (
             f"workflow #4: convergence not reached after {max_rounds} rounds. "
             "If the deliverable is a single synthesized artifact (e.g. a plan), the "
-            "bundle-vote cannot converge — declare convergence.requires_synthesis and use "
+            "bundle-vote cannot converge - declare convergence.requires_synthesis and use "
             "the Path A flow (docs/workflows/path-a-plan-convergence.md)."
         )
 ```
@@ -226,7 +226,7 @@ git commit -m "feat(v1.30.6): Path B fails loud on requires_synthesis + max-roun
 
 ---
 
-## Task 3: Path A helper — evaluate + seal the synthesized plan
+## Task 3: Path A helper - evaluate + seal the synthesized plan
 
 **Files:**
 - Modify: `consensus_mcp/workflow_engine.py` (add two methods after `_seal_converged_plan`)
@@ -312,7 +312,7 @@ def test_seal_plan_iteration_none_when_not_converged(tmp_path):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `~/.local/share/pipx/venvs/consensus-mcp/bin/python -m pytest consensus_mcp/tests/test_workflow_v1306_synthesis.py -v -k "plan_convergence or seal_plan"`
-Expected: FAIL — `AttributeError: ... 'evaluate_plan_convergence'`
+Expected: FAIL - `AttributeError: ... 'evaluate_plan_convergence'`
 
 - [ ] **Step 3: Add the two methods (after `_seal_converged_plan`)**
 
@@ -325,7 +325,7 @@ Expected: FAIL — `AttributeError: ... 'evaluate_plan_convergence'`
     ) -> ConvergenceOutcome:
         """Path A convergence evaluation: did contributors approve the ONE synthesized plan?
 
-        Vote-counting is identical to the engine's convergence rule — the only difference
+        Vote-counting is identical to the engine's convergence rule - the only difference
         from Path B is WHAT was reviewed (the host-authored plan, not a proposal bundle).
         Thin public wrapper over _evaluate_convergence so the host orchestrator has a named,
         intention-revealing entry point."""
@@ -405,7 +405,7 @@ Create `docs/workflows/path-a-plan-convergence.md`:
 # Path A: converging on a synthesized plan
 
 A propose-converge consult whose deliverable is ONE merged plan cannot converge in the
-autonomous engine (Path B / `run_iteration`) — there is no host in the loop to author/revise
+autonomous engine (Path B / `run_iteration`) - there is no host in the loop to author/revise
 the plan, so the engine would only bundle proposals and vote on the pile. Declare it and use
 Path A:
 
@@ -419,11 +419,11 @@ Path A:
    (the v1.30.5 review_target_content embed makes the plan visible to the sandbox).
 4. Load the sealed review artifacts and call
    `engine.evaluate_plan_convergence(review_artifacts, outcome)`.
-5. If `conv.converged`: `engine.seal_plan_iteration(iter, plan_path, conv, round_number)` →
+5. If `conv.converged`: `engine.seal_plan_iteration(iter, plan_path, conv, round_number)` ->
    writes `iteration-outcome.yaml` (sealed closing_state). With the plan + >=2 cross-family
    review YAMLs present, `mint_design_approval` can now point at this iteration.
 6. If not converged: REVISE `converged-plan.yaml` (fold in the round's findings) and
-   re-dispatch — the next round's review target is the REVISED plan.
+   re-dispatch - the next round's review target is the REVISED plan.
 ```
 
 - [ ] **Step 3: Commit**
@@ -445,7 +445,7 @@ git commit -m "docs(v1.30.6): convergence.requires_synthesis field + Path A flow
 Run: `~/.local/share/pipx/venvs/consensus-mcp/bin/python -m pytest consensus_mcp/tests/ -q`
 Expected: all pass (prior baseline 1673 passed, 7 skipped, + the new v1306 tests)
 
-- [ ] **Step 2: CHANGELOG entry** — prepend under `# Changelog`:
+- [ ] **Step 2: CHANGELOG entry** - prepend under `# Changelog`:
 
 ```markdown
 ## 1.30.6 - 2026-05-24
@@ -455,29 +455,29 @@ autonomous engine (it bundles proposals + votes on the pile, never merging to ON
 
 ### Fixed / Added
 - `_run_workflow_4` now FAILS LOUD when the goal_packet declares
-  `convergence.requires_synthesis: true` — instead of silently never-converging — pointing at
+  `convergence.requires_synthesis: true` - instead of silently never-converging - pointing at
   the host-driven Path A flow. The max-rounds error also hints at this for the undeclared case.
 - New Path A helpers `WorkflowEngine.evaluate_plan_convergence` (delegates to the convergence
   rule) and `seal_plan_iteration` (seals the host-authored plan as the converged artifact via
-  `iteration-outcome.yaml`, never overwriting it) — so a host can converge contributors on ONE
+  `iteration-outcome.yaml`, never overwriting it) - so a host can converge contributors on ONE
   synthesized plan and mint design-approval from it.
 - Operator-declared (never inferred) `convergence.requires_synthesis` goal_packet field + the
   Path A flow doc.
 ```
 
-- [ ] **Step 3: Bump version** in `pyproject.toml`: `version = "1.30.5"` → `version = "1.30.6"`
+- [ ] **Step 3: Bump version** in `pyproject.toml`: `version = "1.30.5"` -> `version = "1.30.6"`
 
-- [ ] **Step 4: Commit + ship** (tag + GitHub Release Latest + main FF if branched + install refresh + assert from /tmp). Follow the release runbook used for v1.30.1–1.30.5.
+- [ ] **Step 4: Commit + ship** (tag + GitHub Release Latest + main FF if branched + install refresh + assert from /tmp). Follow the release runbook used for v1.30.1-1.30.5.
 
 ```bash
 git add CHANGELOG.md pyproject.toml
-git commit -m "release: v1.30.6 — synthesis-aware propose-converge (Path B fail-loud + Path A helper)"
+git commit -m "release: v1.30.6 - synthesis-aware propose-converge (Path B fail-loud + Path A helper)"
 ```
 
 ---
 
 ## Self-Review (completed by plan author)
 
-- **Spec coverage:** detection field (Task 1, 4) ✓; Path B fail-loud + undeclared hint (Task 2) ✓; Path A helper evaluate+seal-the-plan (Task 3) ✓; acceptance tests — Path B raises (Task 2), Path A converges+seals the plan / blocks→None (Task 3) ✓; docs (Task 4) ✓. The "next round target is the revised plan" property is exercised by `seal_plan_iteration` sealing whatever `plan_path` the host passes (round 2 passes the revised path) + the host-driven flow in the doc.
-- **Placeholders:** none — every code/test step shows complete code.
+- **Spec coverage:** detection field (Task 1, 4) [ok]; Path B fail-loud + undeclared hint (Task 2) [ok]; Path A helper evaluate+seal-the-plan (Task 3) [ok]; acceptance tests - Path B raises (Task 2), Path A converges+seals the plan / blocks->None (Task 3) [ok]; docs (Task 4) [ok]. The "next round target is the revised plan" property is exercised by `seal_plan_iteration` sealing whatever `plan_path` the host passes (round 2 passes the revised path) + the host-driven flow in the doc.
+- **Placeholders:** none - every code/test step shows complete code.
 - **Type consistency:** `evaluate_plan_convergence` / `seal_plan_iteration` signatures match between Task 3 definition and its tests; `ConvergenceOutcome` fields used (`.converged`, `.rule`, `.approve_votes`) match the dataclass; `SEALED_CLOSING_STATES` imported from `_delivery_readiness`.
