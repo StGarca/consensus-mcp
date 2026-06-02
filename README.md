@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.40.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.40.1
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -154,7 +154,7 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.40.0 - stable.** Parallel reviewer dispatch + codified consult
+**Current: v1.40.1 - stable.** Parallel reviewer dispatch + codified consult
 lifecycle. The engine now fans out independent reviewers within a phase
 concurrently (a ~4-8 min serial consult becomes ~1-2 min) instead of one at a
 time - with deterministic, reproducible outcomes (results re-sorted into config

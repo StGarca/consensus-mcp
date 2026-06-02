@@ -88,6 +88,26 @@ def test_approve_honors_env_repo_root_finding7(tmp_path, monkeypatch):
     assert (tmp_path / ".consensus" / "design-approved").exists()
 
 
+def test_approve_counts_round_keyed_review_filenames(tmp_path):
+    """H3 interaction: when reviewers seal under distinct pass_ids, their mirror
+    files can be round-keyed (e.g. 'kimi-review-4.yaml'). The >=2 precondition AND
+    the panel derivation must still recognize those families, not just the bare
+    '<fam>-review.yaml' form."""
+    iter_dir = tmp_path / "consensus-state" / "active" / "iter-rk"
+    iter_dir.mkdir(parents=True)
+    (iter_dir / "codex-review.yaml").write_text(
+        yaml.safe_dump({"reviewer_id": "codex"}), encoding="utf-8")
+    (iter_dir / "kimi-review-4.yaml").write_text(
+        yaml.safe_dump({"reviewer_id": "kimi"}), encoding="utf-8")
+    (iter_dir / "converged-plan.yaml").write_text(
+        yaml.safe_dump({"decision": "RATIFIED"}), encoding="utf-8")
+    res = ac.approve_consult("iter-rk", scope_glob="src/**", repo_root=tmp_path)
+    assert res["ok"] is True, res
+    assert res["non_claude_reviewers"] == 2  # codex + kimi (round-keyed) both counted
+    outcome = yaml.safe_load((iter_dir / "iteration-outcome.yaml").read_text())
+    assert set(outcome["panel"]) == {"claude", "codex", "kimi"}
+
+
 def test_approve_accepts_full_path_converged_plan_footgun(tmp_path):
     """The --converged-plan full-path form must not trip a false missing error."""
     iter_dir = _make_consult(tmp_path)

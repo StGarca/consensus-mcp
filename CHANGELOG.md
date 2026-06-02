@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.40.1 - 2026-06-02
+
+**Approve flow counts round/pass-keyed review filenames.** Hot-patch on v1.40.0:
+`_count_non_claude_reviewers` (the approval trust-root) and the approve flow's
+panel derivation globbed only `<fam>-review.yaml`, so a reviewer that sealed
+under a distinct pass_id (the parallel-dispatch H3 fix) writes a round-keyed
+mirror like `kimi-review-4.yaml` and was NOT counted - a 2-reviewer consult with
+one round-keyed name could be under-counted to 1 and fail the `>=2` precondition.
+Both sites now match `<fam>-review[-N].yaml` via a shared `_review_family` helper
+(round-keyed names count once per family). First-round `<fam>-review.yaml` reviews
+were unaffected.
+
 ## 1.40.0 - 2026-06-02
 
 **Parallel reviewer dispatch + codified consult lifecycle + Windows hardening.**
