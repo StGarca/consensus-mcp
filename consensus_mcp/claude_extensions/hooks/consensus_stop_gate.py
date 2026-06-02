@@ -144,12 +144,26 @@ def main(argv=None) -> int:
     if not _runtime_present():
         return 0  # no-op, fail-open.
 
+    repo_root = _repo_root(event)
+
+    # Dormant-by-default parity (v1.33 gate-consistency fix): the Stop gate now
+    # shares the PreToolUse gate's activation predicate (consensus_mcp.
+    # _session_state.gate_should_enforce). When NO consensus consult is in flight
+    # the completion check is a NO-OP — everyday work in any repo is never nagged
+    # for a delivery token it never needed. Probe failure fails OPEN (dormant): a
+    # SOFT directive must never block completion on a probe error.
+    try:
+        from consensus_mcp._session_state import gate_should_enforce
+        if not gate_should_enforce(repo_root):
+            return 0
+    except Exception:
+        return 0
+
     try:
         from consensus_mcp import _delivery_readiness as dr
     except Exception:
         return 0  # cannot load gate -> soft gate stays silent (fail-open).
 
-    repo_root = _repo_root(event)
     unverified: list[str] = []
     for rel in _modified_files(repo_root):
         if not _is_source(rel):

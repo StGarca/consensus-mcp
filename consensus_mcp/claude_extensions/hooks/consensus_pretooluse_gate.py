@@ -453,13 +453,16 @@ def main(argv=None) -> int:
     #
     # PROTECTED-install paths are checked BEFORE this branch — that
     # enforcement floor stays unconditional regardless of activation.
-    from consensus_mcp._session_state import session_active, emit_migration_warning_once
+    from consensus_mcp._session_state import gate_should_enforce, emit_migration_warning_once
     try:
         emit_migration_warning_once(repo_root)
     except Exception:
         pass  # warning emission must NEVER block the gate
-    opted_in = session_active(repo_root)
-    if not (opted_in or os.environ.get("CONSENSUS_MCP_FORCE_OPTED_IN")):
+    # Shared activation predicate (v1.33 gate-consistency fix) — the SAME
+    # gate_should_enforce() the Stop gate and SessionStart injector now use, so
+    # the three hooks cannot drift. GATE_DISABLE is already handled above (full
+    # operator escape hatch); this honors FORCE_OPTED_IN + session_active.
+    if not gate_should_enforce(repo_root):
         return 0
 
     if tool in EDIT_TOOLS:

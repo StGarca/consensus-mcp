@@ -431,6 +431,9 @@ def test_stop_does_not_crash_when_verify_raises(tmp_path, monkeypatch):
 
     monkeypatch.setenv("CONSENSUS_MCP_FORCE_RUNTIME_PRESENT", "1")
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
+    # v1.33: the Stop gate is dormant-by-default; force enforcement so this
+    # fail-soft-on-raise path is actually exercised.
+    monkeypatch.setenv("CONSENSUS_MCP_FORCE_OPTED_IN", "1")
 
     # The gate imports _delivery_readiness lazily inside main(); patch the
     # attribute on the imported module so the gate sees the exploding version.
@@ -469,6 +472,7 @@ def test_stop_resolves_repo_root_from_subdir(tmp_path):
     env["CONSENSUS_MCP_REPO_ROOT"] = str(subdir)  # subdir override -> must climb
     env.pop("CONSENSUS_MCP_FORCE_RUNTIME_ABSENT", None)
     env["CONSENSUS_MCP_FORCE_RUNTIME_PRESENT"] = "1"
+    env["CONSENSUS_MCP_FORCE_OPTED_IN"] = "1"  # v1.33: dormant-by-default
     cp = subprocess.run(
         [sys.executable, str(STOP)],
         input=json.dumps({"hook_event_name": "Stop", "cwd": str(subdir)}),
@@ -526,6 +530,7 @@ def test_sessionstart_resolves_repo_root_from_subdir(tmp_path):
     env["CONSENSUS_MCP_REPO_ROOT"] = str(subdir)
     env.pop("CONSENSUS_MCP_FORCE_RUNTIME_ABSENT", None)
     env["CONSENSUS_MCP_FORCE_RUNTIME_PRESENT"] = "1"
+    env["CONSENSUS_MCP_FORCE_OPTED_IN"] = "1"  # v1.33: dormant-by-default
     cp = subprocess.run(
         [sys.executable, str(SESSIONSTART)],
         input=json.dumps({"hook_event_name": "SessionStart", "source": "startup",
@@ -966,3 +971,82 @@ def test_gatescope_bash_redirect_to_settings_still_denied(tmp_path, monkeypatch)
           "cwd": str(repo_root)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=repo_root, runtime="present", opted_in=True)
     assert cp.returncode == 2, cp.stderr
+
+
+# --------------------------------------------------------------------------- #
+# v1.33 gate-consistency fix — dormant-by-default parity across ALL three hooks.
+# The Stop gate and the SessionStart/UserPromptSubmit injector previously fired
+# in EVERY repo (gated only on `consensus-init` being on PATH), nagging everyday
+# non-consensus work. They now share the PreToolUse gate's activation predicate
+# (consensus_mcp._session_state.gate_should_enforce): NO-OP / silent when no
+# consult is in flight; active only when a real session marker (or opt-in) says so.
+# --------------------------------------------------------------------------- #
+
+def _activate_session(repo_root, ref="iteration-live"):
+    """Write a REAL live session marker (not the env override) pointing at an
+    unsealed iteration dir, so gate_should_enforce(repo_root) is True."""
+    from consensus_mcp._session_state import write_session_marker
+    _make_sealed_iteration(repo_root, ref, closing_state="in_progress")
+    write_session_marker(repo_root, iteration_id=ref, scope_glob="src/**",
+                         activated_by="test", activation_source="test_fixture")
+
+
+def test_stop_dormant_no_directive(tmp_path):
+    # No consult in flight (opted_in=False, no session marker): the Stop gate is
+    # a NO-OP even with a modified source file lacking a delivery token.
+    _git_repo_with_modified_source(tmp_path, "src/app.py")
+    ev = {"hook_event_name": "Stop", "cwd": str(tmp_path)}
+    cp = _run_hook(STOP, ev, repo_root=tmp_path, runtime="present", opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+    assert "STOP" not in cp.stdout, cp.stdout
+
+
+def test_stop_active_via_session_marker_emits(tmp_path):
+    # A real live session marker activates the gate WITHOUT the env override.
+    _git_repo_with_modified_source(tmp_path, "src/app.py")
+    _activate_session(tmp_path)
+    ev = {"hook_event_name": "Stop", "cwd": str(tmp_path)}
+    cp = _run_hook(STOP, ev, repo_root=tmp_path, runtime="present", opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+    assert "STOP" in cp.stdout, cp.stdout
+    assert "src/app.py" in cp.stdout, cp.stdout
+
+
+def test_sessionstart_dormant_silent(tmp_path):
+    # Runtime present but dormant -> SILENT (no precedence framing injected).
+    ev = {"hook_event_name": "SessionStart", "source": "startup",
+          "cwd": str(tmp_path)}
+    cp = _run_hook(SESSIONSTART, ev, repo_root=tmp_path, runtime="present",
+                   opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+    assert cp.stdout.strip() == "", cp.stdout
+
+
+def test_sessionstart_active_via_session_marker_injects(tmp_path):
+    _activate_session(tmp_path)
+    ev = {"hook_event_name": "SessionStart", "source": "startup",
+          "cwd": str(tmp_path)}
+    cp = _run_hook(SESSIONSTART, ev, repo_root=tmp_path, runtime="present",
+                   opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+    ctx = json.loads(cp.stdout)["hookSpecificOutput"]["additionalContext"].lower()
+    assert "precedence" in ctx, ctx
+
+
+def test_sessionstart_dormant_runtime_absent_still_notices(tmp_path):
+    # Dormancy does NOT swallow the runtime-absent notice: absence stays visible.
+    ev = {"hook_event_name": "SessionStart", "source": "startup",
+          "cwd": str(tmp_path)}
+    cp = _run_hook(SESSIONSTART, ev, repo_root=tmp_path, runtime="absent",
+                   opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+    ctx = json.loads(cp.stdout)["hookSpecificOutput"]["additionalContext"].lower()
+    assert "not detected" in ctx
+
+
+def test_userpromptsubmit_dormant_silent(tmp_path):
+    ev = {"hook_event_name": "UserPromptSubmit", "cwd": str(tmp_path)}
+    cp = _run_hook(SESSIONSTART, ev, repo_root=tmp_path, runtime="present",
+                   opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+    assert cp.stdout.strip() == "", cp.stdout
