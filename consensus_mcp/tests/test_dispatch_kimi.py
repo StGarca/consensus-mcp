@@ -108,6 +108,15 @@ def test_peel_falls_back_to_raw_when_not_stream_json():
     assert _dispatch_kimi._peel_assistant_content(raw) == raw
 
 
+def test_peel_falls_back_to_markdown_fenced_json_when_no_envelope():
+    # kimi sometimes prints a ```json ... ``` block directly instead of a
+    # stream-json envelope (same shape gemini emits). With no assistant
+    # envelope present, peel must hand the fenced block back unchanged so the
+    # downstream _extract_json_from_text can recover it — NOT raise.
+    raw = '```json\n{"findings": [], "goal_satisfied": true}\n```'
+    assert _dispatch_kimi._peel_assistant_content(raw) == raw
+
+
 def test_peel_raises_on_empty_output():
     with pytest.raises(_dispatch_kimi.KimiOutputParseError):
         _dispatch_kimi._peel_assistant_content("")
