@@ -52,6 +52,10 @@ class _FakeStdin:
 # ============================================================
 
 def test_stdin_is_interactive_true_for_tty(monkeypatch):
+    # A TTY is interactive only with no agent/CI marker env (v1.33.4): under
+    # CLAUDECODE/AI_AGENT/CI there is no human to answer, so those are cleared.
+    for var in ("CLAUDECODE", "AI_AGENT", "CI"):
+        monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(wiz.sys, "stdin", _FakeStdin(tty=True))
     assert wiz._stdin_is_interactive() is True
 
