@@ -1,8 +1,13 @@
-# Parallel dispatch + codified uniform consult — design
+# Dispatcher hardening — parallel dispatch, codified consult + 2 robustness fixes
 
 **Date:** 2026-06-02
-**Status:** Draft → pending consensus consult ratification → implementation (TDD)
+**Status:** Draft → pending consensus consult ratification (anchored) → implementation (TDD)
 **Author:** Claude (Opus 4.8) with operator (project-contributor)
+**Consult framing:** ANCHORED. Operator contribution (Findings A/B below) added first
+and integrated; panel reviews this whole package.
+**Scope of this consult:** (1) parallel dispatch rewrite, (2) codified uniform consult
+process, (3) grok stale-PATH resolution [Finding A], (4) kimi cp1252 stdin decode
+[Finding B].
 
 ## Problem
 
@@ -101,6 +106,63 @@ fix is to ensure the state dir is outside the integrity scope — NOT to seriali
 - Existing workflow_3 / workflow_4 convergence and seal tests must stay green (behavior parity
   except ordering-by-completion, which Component 2 normalizes away).
 
+## Dispatcher hardening — operator-contributed findings (2026-06-02)
+
+Anchoring contribution from the operator, diagnosed live on the Windows install.
+Two independent dispatcher robustness bugs surfaced while running a real consult.
+Folded into this consult so the panel ratifies the fixes alongside the parallel
+rewrite (they touch the same dispatch path). Neither undermined the codex+gemini
+findings on that run — the payload was sound; these are clean hardening candidates.
+
+### Finding A — grok "binary not found" from a stale server PATH snapshot
+
+Symptom: `grok binary not found: grok` even though `grok.exe` exists at
+`C:\Users\project-contributor\.grok\bin\grok.exe` and is on PATH (current process + user
+registry).
+
+- The dispatcher resolves grok by bare name via `shutil.which("grok")`
+  (`_dispatch_grok.py:172`) because `.consensus/config.yaml` enables grok but sets
+  no `adapters.grok.command`. On `FileNotFoundError` it raises this exact error
+  (`:380`).
+- **Root cause:** stale PATH snapshot in the long-lived consensus-mcp MCP server
+  process. `shutil.which` resolves against the env the server was launched with;
+  that env predated `~/.grok/bin` becoming visible, so `which` returned None. Fresh
+  diagnostic shells see it; the server didn't.
+- **Operator-proposed fix (deterministic):** pin the absolute path in config —
+  `contributors.adapters.grok.command: C:\Users\project-contributor\.grok\bin\grok.exe`.
+  `_resolve_grok_bin` returns a drive-prefixed path verbatim (`:170`), bypassing
+  PATH. Or fully restart Claude Code so the server re-inherits PATH.
+- **Hardening question for the panel:** should the dispatcher re-resolve binaries
+  against the *current* environment (or a configurable search path) rather than the
+  server's launch-time PATH, so a long-lived server doesn't go stale? Applies to ALL
+  bare-name adapter resolution, not just grok.
+
+### Finding B — kimi `'\udc9d' ... surrogates not allowed` (cp1252 stdin decode)
+
+Symptom: kimi dispatch crashes with a lone-surrogate error. A kimi-cli 1.44.0
+Windows bug, not a dispatcher or payload defect.
+
+- Crash is inside kimi-cli's own pydantic `model_dump_json()` serializing the user
+  Message (its request to the model API). The dispatcher sends correct UTF-8 over
+  stdin (`_dispatch_kimi.py:803` `prompt.encode("utf-8")`).
+- `\udc9d` is the surrogateescape of byte `0x9D` — the middle byte of the ❌ emoji's
+  UTF-8 (`E2 9D 8C`). That ❌ came from the consuming project's GUI status icons
+  (❌ ✓ ⚠) in `appointment_processor_gui.py`; byte scan confirmed exactly one `0x9D`.
+- **Mechanism:** kimi-cli reads its UTF-8 stdin under the Windows locale (cp1252)
+  with `surrogateescape`, so ❌ decodes to a lone `\udc9d`; its strict-UTF-8 JSON
+  serializer then refuses it. Deterministic (same byte position every run →
+  non-retryable). codex/gemini ate the same bytes fine.
+- The kimi subprocess env (`_kimi_subprocess_env`, `:264-280`) scrubs API keys but
+  does not set `PYTHONUTF8`.
+- **Operator-proposed fixes:** (1) inject `PYTHONUTF8=1` into `_kimi_subprocess_env()`
+  — a one-line consensus-mcp fix since kimi-cli is a Python app; (2) user-side, launch
+  Claude Code with `PYTHONUTF8=1`; (3) real fix is upstream — kimi-cli should decode
+  stdin as UTF-8 regardless of locale. NOT recommended: stripping the emoji from the
+  source. This is the same cp1252 class as v1.33.4 (see `windows-console-portability`).
+- **Hardening question for the panel:** is forcing `PYTHONUTF8=1` for the kimi
+  subprocess the right scope, or should ALL Python-app adapter subprocesses get a
+  forced-UTF-8 env to immunize the panel against locale-dependent stdin decode?
+
 ## Out of scope (tracked separately)
 
 - Auto-creating containment-marker dirs at init (`todo-containment-marker-dirs`).
@@ -115,3 +177,10 @@ fix is to ensure the state dir is outside the integrity scope — NOT to seriali
    side effects (timestamps, event ordering) that also need normalization?
 3. Any concurrency hazard in the adapters themselves (shared mutable state, temp-file/path
    collisions, audit-log append races) that the fan-out would expose?
+4. **[Finding A]** Should adapter binary resolution re-resolve against the current
+   environment / a configurable search path instead of the server's launch-time PATH, so a
+   long-lived MCP server doesn't go stale? (Pinning `adapters.grok.command` fixes grok now;
+   the class fix covers all bare-name resolution.)
+5. **[Finding B]** Is forcing `PYTHONUTF8=1` for the kimi subprocess the right scope, or
+   should ALL Python-app adapter subprocesses get a forced-UTF-8 env to immunize the panel
+   against locale-dependent stdin decode? (Same cp1252 class as v1.33.4.)
