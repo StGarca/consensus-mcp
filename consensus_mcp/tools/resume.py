@@ -1,9 +1,9 @@
-"""consensus.resume MCP tool — single-call operating-context snapshot.
+"""consensus.resume MCP tool - single-call operating-context snapshot.
 
 Wraps consensus_mcp._resume.snapshot() as an MCP tool. See
 docs/specs/consensus-resume-spec.md for the design.
 
-Per spec §6: implementation is read-only by construction. No side effects.
+Per spec section 6: implementation is read-only by construction. No side effects.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ SCHEMA = {
     },
     "output_schema": {
         "type": "object",
-        "description": "See docs/specs/consensus-resume-spec.md §4 for the full schema.",
+        "description": "See docs/specs/consensus-resume-spec.md section 4 for the full schema.",
     },
 }
 

@@ -103,7 +103,7 @@ def test_order_proposal_paths_no_weights_is_identity():
 def test_module_exposes_no_weight_write_api():
     """no-self-grade (static form): no public callable writes/sets a contributor's
     weight or usefulness credit from caller input. A Plan-2 learner may only add a
-    writer reading the external ledger — never an agent-callable setter. This locks
+    writer reading the external ledger - never an agent-callable setter. This locks
     that invariant so a future regression fails here."""
     forbidden_tokens = ("set_weight", "update_weight", "record_credit", "grade",
                         "set_credit", "update_credit", "write_weight")

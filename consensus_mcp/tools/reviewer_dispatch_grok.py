@@ -13,7 +13,7 @@ into argv, calls main() in-process, captures stdout, returns parsed JSON.
 An earlier dispatch-stall (a `--cwd <iteration_dir>` plus dispatcher-only
 flag combination that could hang grok indefinitely) is resolved in
 `_dispatch_grok.py`: the helper now uses the minimal verified invocation
-shape — inline `-p` prompt, `--cwd /tmp`, and only `--no-memory
+shape - inline `-p` prompt, `--cwd /tmp`, and only `--no-memory
 --disable-web-search` (no `--max-turns`, `--prompt-file`, `--no-plan`,
 `--no-subagents`, or `--permission-mode`). This wrapper inherits that
 shape unchanged.
@@ -83,8 +83,8 @@ SCHEMA = {
                 "enum": ["propose", "review", "converge", None],
                 "description": (
                     "Dispatch phase, mapped internally to --mode via "
-                    "consensus_mcp.contributors._phase_mode. 'propose' → "
-                    "--mode proposal; 'review' / 'converge' → --mode review. "
+                    "consensus_mcp.contributors._phase_mode. 'propose' -> "
+                    "--mode proposal; 'review' / 'converge' -> --mode review. "
                     "Hides the dispatcher template/schema split from MCP "
                     "callers; matches engine adapter abstraction. If both "
                     "phase and mode are set, mode wins as explicit override."

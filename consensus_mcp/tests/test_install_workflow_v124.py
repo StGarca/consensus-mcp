@@ -142,7 +142,7 @@ def test_json_semantically_equal_helper():
 
 def test_hook_command_quote_safe(monkeypatch):
     """v1.30.7: cross-platform under the single-strategy shlex.join contract
-    (consult iteration-v1307-quoting-design-2026-05-26). No Windows skip — the
+    (consult iteration-v1307-quoting-design-2026-05-26). No Windows skip - the
     skipif was tied to the dropped list2cmdline branch."""
     weird = Path('/tmp/we"ird path/hook.py')
     cmd = wiz._build_consensus_hook_command(weird)
@@ -171,13 +171,13 @@ def test_hook_command_plain_path_unchanged():
 @pytest.mark.parametrize("path_str,case_id", [
     # The literal failing shape from the v1.30.6 user report.
     (r"C:\Users\project-contributor\pipx\venvs\consensus-mcp\Scripts\hook.py", "windows-backslash"),
-    # Spaces — Windows "Program Files" and the user's home with spaces.
+    # Spaces - Windows "Program Files" and the user's home with spaces.
     (r"C:\Program Files\python\hook.py", "windows-spaces"),
     # POSIX path with embedded single quote.
     ("/tmp/o'brien/hook.py", "embedded-single-quote"),
     # Non-ASCII path segment (OneDrive-style).
-    (r"C:\Users\stéphane\OneDrive\hook.py", "non-ascii"),
-    # UNC shape — literal preservation only; we do NOT claim exec acceptance
+    ("C:\\Users\\st" + chr(0xE9) + "phane\\OneDrive\\hook.py", "non-ascii"),
+    # UNC shape - literal preservation only; we do NOT claim exec acceptance
     # under MSYS (that requires a Windows Git Bash smoke test, deferred per R2).
     (r"\\fileserver\share\python\hook.py", "unc-literal-preservation"),
 ])
@@ -186,7 +186,7 @@ def test_hook_command_roundtrips_cross_os_shapes(path_str, case_id, monkeypatch)
 
     For every path shape, the command emitted by `_build_consensus_hook_command`
     must survive `shlex.split` and yield exactly `[sys.executable, path_str]`.
-    Backslashes inside single quotes are bash-literal — if any case collapses,
+    Backslashes inside single quotes are bash-literal - if any case collapses,
     the v1.30.6 bug is re-introduced. UNC is literal-preservation only.
     """
     import shlex
@@ -275,7 +275,7 @@ def test_install_does_not_follow_destination_symlink(tmp_path):
     home.mkdir()
     # Point the SKILL.md destination at a symlink to a file OUTSIDE claude_home.
     outside = tmp_path / "outside_target.md"
-    outside.write_text("ORIGINAL OUTSIDE CONTENT — MUST NOT BE CLOBBERED\n", encoding="utf-8")
+    outside.write_text("ORIGINAL OUTSIDE CONTENT - MUST NOT BE CLOBBERED\n", encoding="utf-8")
 
     dst = home / "skills" / "consensus" / "SKILL.md"
     dst.parent.mkdir(parents=True)
@@ -284,7 +284,7 @@ def test_install_does_not_follow_destination_symlink(tmp_path):
     statuses = wiz._install_claude_extensions(home, force=True)
 
     # The symlink target is untouched (we did not write through the link).
-    assert outside.read_text(encoding="utf-8") == "ORIGINAL OUTSIDE CONTENT — MUST NOT BE CLOBBERED\n"
+    assert outside.read_text(encoding="utf-8") == "ORIGINAL OUTSIDE CONTENT - MUST NOT BE CLOBBERED\n"
     # The destination is now a regular file with the shipped content.
     assert not dst.is_symlink()
     assert "name: consensus" in dst.read_text(encoding="utf-8")

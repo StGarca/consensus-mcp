@@ -1,7 +1,7 @@
 """Reference-integrity for the vendored skills.
 
 The 2026-05-23 review (and its re-review) found adapted skills + companion files
-referencing files/skills that were never vendored — dangling links the
+referencing files/skills that were never vendored - dangling links the
 install/packaging tests didn't catch. This test makes that class mechanically
 impossible to reintroduce. It scans EVERY *.md in each skill dir (SKILL.md AND
 companions) for three reference shapes:

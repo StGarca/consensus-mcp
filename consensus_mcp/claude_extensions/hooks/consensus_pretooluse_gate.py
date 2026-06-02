@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse design gate (Claude Code) — THE HARD BACKSTOP.
+"""PreToolUse design gate (Claude Code) - THE HARD BACKSTOP.
 
 Modelled on `contrib/delivery_gate_pretooluse.py` (verified exit-2 block
 pattern): reads the PreToolUse event JSON on stdin; blocks a tool call by
@@ -9,13 +9,13 @@ Contract enforced (see `consensus_mcp/_design_approval.py`):
   Implementation tools (Edit/Write/MultiEdit/NotebookEdit) are DENIED until a
   VALIDATED `.consensus/design-approved` marker covers the scope being touched
   (`verify_design_approval` re-validates the marker pointer against the live T6
-  seal — a hand-written marker cannot self-approve).
+  seal - a hand-written marker cannot self-approve).
 
   Bash is DEFAULT-DENY (decision B2): the old leaky blocklist (`_classify_bash`)
   is GONE. Bash is allowed ONLY if (a) the command is on a conservative
   READ-ONLY ALLOWLIST (matched on the leading command token; pipelines/`&&`
   require EVERY segment allowlisted), OR (b) a tight-scope sealed marker is in
-  force (`marker_is_sealed`). An unknown command is DENIED (fail-safe — the
+  force (`marker_is_sealed`). An unknown command is DENIED (fail-safe - the
   inverse of the unfixable blocklist).
 
   THREAT MODEL: this enforces a COOPERATING agent's discipline, not a malicious
@@ -64,16 +64,16 @@ if str(_PKG_ROOT) not in sys.path:
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
 # A command line is split into segments (pipeline / sequence) that are each
-# allowlisted independently — see _split_segments. Splitting is QUOTE-AWARE: a
+# allowlisted independently - see _split_segments. Splitting is QUOTE-AWARE: a
 # `|`/`;`/`&&` INSIDE a quoted string (e.g. `grep -E 'a|b'`) is part of the
 # argument, not a separator (re-audit 2026-05-23: the old regex split mis-denied
-# such read-only commands). Conservative — anything unrecognised is denied.
+# such read-only commands). Conservative - anything unrecognised is denied.
 
 # Conservative READ-ONLY ALLOWLIST (decision B2 + claude's usability fold-in).
 # A single command segment is allowed iff its LEADING token (or a recognised
 # `git <subcommand>`) is on this list. Default-deny: an unknown leading token is
 # DENIED (fail-safe).
-# v1.24 (codex finding): `pytest` / `python -m pytest` are REMOVED — running tests
+# v1.24 (codex finding): `pytest` / `python -m pytest` are REMOVED - running tests
 # executes arbitrary test/conftest/plugin code, so they are not "read-only" and
 # must not be allowed pre-approval. Run tests behind a sealed marker (or in a
 # non-opted-in repo, where the gate fails open anyway).
@@ -81,14 +81,14 @@ _READ_ONLY_COMMANDS = frozenset({
     "ls", "cat", "head", "tail", "wc", "grep", "rg",
     "echo", "pwd", "which",
 })
-# NOTE: `find` is deliberately NOT allowlisted — `find -exec`/`-delete`/`-fprintf`
+# NOTE: `find` is deliberately NOT allowlisted - `find -exec`/`-delete`/`-fprintf`
 # mutate the filesystem (re-audit codex-rev-001). A leading-token allowlist cannot
 # safely admit a command whose own primaries can write/exec.
 # git subcommands that are read-only.
 _READ_ONLY_GIT_SUBCOMMANDS = frozenset({
     "status", "diff", "log", "show", "branch", "rev-parse",
 })
-# consensus's OWN console scripts (pyproject [project.scripts]) — EXEMPT from the
+# consensus's OWN console scripts (pyproject [project.scripts]) - EXEMPT from the
 # gate. You cannot require a sealed design to bootstrap/repair/validate/run the
 # consensus setup itself: it's chicken-and-egg, `--repair` is the remediation
 # command, `--check` is read-only, and the dispatchers ARE the consult. An
@@ -162,13 +162,13 @@ def _segment_is_read_only(segment: str) -> bool:
         return False
     head = tokens[0]
     # v1.25 (gemini): reject a segment whose COMMAND token opens/closes a subshell
-    # — `(rm x)`, `cmd)` etc. Parens inside a QUOTED arg (`grep '(x)' f`) stay in a
-    # LATER token, so head is clean — no false positive on legitimate regex args.
+    # - `(rm x)`, `cmd)` etc. Parens inside a QUOTED arg (`grep '(x)' f`) stay in a
+    # LATER token, so head is clean - no false positive on legitimate regex args.
     if "(" in head or ")" in head:
         return False
     if head in _READ_ONLY_COMMANDS:
         return True
-    # consensus's own tooling is allowed pre-approval (not read-only, but exempt —
+    # consensus's own tooling is allowed pre-approval (not read-only, but exempt -
     # you can't gate the tooling that bootstraps/repairs the gate). The redirect /
     # subshell / command-substitution rejection above already ran, so a writer
     # chained onto an allowed token (`consensus-init && rm x`, `consensus-init
@@ -182,15 +182,15 @@ def _segment_is_read_only(segment: str) -> bool:
         # Reject exec / file-write injection on ANY read-only subcommand: `-c`
         # (config -> pager/alias exec), `--output`/`--exec-path` (write / exec path),
         # and v1.26 (codex BLOCKING) `--ext-diff`/`--textconv` (run a repo-configured
-        # external command). Match the flag BASE so `--output=f`, `--ext-diff=…` etc.
+        # external command). Match the flag BASE so `--output=f`, `--ext-diff=...` etc.
         # are all caught.
         for t in tokens[1:]:
             base_flag = t.split("=", 1)[0]
             if base_flag in ("-c", "--output", "--exec-path", "--ext-diff", "--textconv"):
                 return False
-        # `git branch` MUTATES when a write flag is present (-d/-D/-m/-M/-c/-C/-u/…)
+        # `git branch` MUTATES when a write flag is present (-d/-D/-m/-M/-c/-C/-u/...)
         # OR a bare positional appears (a NEW branch name = create). Allow read-only
-        # forms — including a positional that is the VALUE of a filter flag such as
+        # forms - including a positional that is the VALUE of a filter flag such as
         # `--contains <sha>` / `--merged <branch>` (v1.26 kimi: do not over-deny those).
         if tokens[1] == "branch":
             _WRITE_BRANCH = {
@@ -199,7 +199,7 @@ def _segment_is_read_only(segment: str) -> bool:
                 "-f", "--force", "--create-reflog",
             }
             # v1.27 (codex+kimi): `--list <pattern>` is a read-only listing form whose
-            # positional is a glob, not a new branch name — its positional is safe.
+            # positional is a glob, not a new branch name - its positional is safe.
             _FILTER_FLAGS = {"--contains", "--no-contains", "--merged",
                              "--no-merged", "--points-at", "--list"}
             args = tokens[2:]
@@ -211,13 +211,13 @@ def _segment_is_read_only(segment: str) -> bool:
             if positionals and not has_filter:
                 return False  # bare positional == branch create
         return True
-    # v1.24 (codex finding): `python -m pytest` is NO LONGER allowed — pytest runs
+    # v1.24 (codex finding): `python -m pytest` is NO LONGER allowed - pytest runs
     # arbitrary test/conftest/plugin code, so it is not read-only. python is denied.
     return False
 
 
 def _split_segments(command: str) -> list[str]:
-    """Split on |, ||, &&, ;, newline — but ONLY outside quotes. A `|` inside
+    """Split on |, ||, &&, ;, newline - but ONLY outside quotes. A `|` inside
     `grep -E 'a|b'` is part of the regex, not a pipeline separator. Returns the
     non-empty segments."""
     segs: list[str] = []
@@ -242,7 +242,7 @@ def _split_segments(command: str) -> list[str]:
             i += 2 if (i + 1 < n and command[i + 1] == "|") else 1
             continue
         if c == "&":
-            # v1.24 (kimi BLOCKING): a SINGLE `&` (background) is also a separator —
+            # v1.24 (kimi BLOCKING): a SINGLE `&` (background) is also a separator -
             # otherwise `cat x & rm -rf y` is one allowlisted segment and the writer
             # after `&` slips through. Split on both `&` and `&&`.
             segs.append("".join(cur)); cur = []
@@ -270,7 +270,7 @@ def _deny(reason: str) -> int:
           f"Seal a Workflow A converged plan (>=2 non-claude reviewers) covering "
           f"this scope, then mint `.consensus/design-approved` pointing at that "
           f"sealed iteration. (The gate re-validates the pointer against the live "
-          f"seal — a hand-written marker cannot self-approve.)",
+          f"seal - a hand-written marker cannot self-approve.)",
           file=sys.stderr)
     return 2
 
@@ -278,7 +278,7 @@ def _deny(reason: str) -> int:
 def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
     """True iff the edit target is consensus GOVERNANCE state (under `.consensus/`
     or `consensus-state/`), not gated code. These must stay writable so the
-    consensus workflow can bootstrap its own approval — the design-approved marker
+    consensus workflow can bootstrap its own approval - the design-approved marker
     is re-validated against the live seal on use, so permitting its WRITE is safe.
     """
     try:
@@ -289,9 +289,9 @@ def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
             gov_dir = repo_root / gov
             # v1.26 (kimi): a SINGLE lstat (no is_symlink()+resolve() double-stat
             # TOCTOU). The governance dir must be a REAL directory, never a symlink
-            # (a symlinked `.consensus` — even to an in-repo dir like `src/` — would
+            # (a symlinked `.consensus` - even to an in-repo dir like `src/` - would
             # let code paths be treated as governance). `base` is then the LITERAL
-            # `rr/gov` (rr already resolved, gov has no traversal) — strictly inside
+            # `rr/gov` (rr already resolved, gov has no traversal) - strictly inside
             # repo_root by construction, with no symlink followed at the gov component.
             try:
                 st = os.lstat(gov_dir)
@@ -300,7 +300,7 @@ def _is_governance_path(file_path: Path, repo_root: Path) -> bool:
             except OSError:
                 continue
             # If it EXISTS, it must be a real directory, never a symlink (a symlinked
-            # .consensus — even to an in-repo dir — would smuggle code paths through).
+            # .consensus - even to an in-repo dir - would smuggle code paths through).
             if st is not None and (stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode)):
                 continue
             base = rr / gov
@@ -319,12 +319,12 @@ def _is_protected_install_path(file_path: Path, repo_root: Path) -> bool:
 
     MINIMAL set per consult iteration-gate-scope-design-2026-05-24 (codex+gemini+kimi):
     the pipx venv is EXCLUDED (tampering it yields an import/exec failure, which the gate
-    already treats as fail-OPEN and is `pipx reinstall`-recoverable — not a silent
+    already treats as fail-OPEN and is `pipx reinstall`-recoverable - not a silent
     self-disable) and skills are instructions, not enforcement. EXPAND this set only if a
     new ENFORCEMENT file is ever added.
 
     Resolves the TARGET (and the protected refs) so an in-repo symlink pointing into the set
-    is caught (symlink-escape). Fail-SAFE to False on error — the caller runs under the
+    is caught (symlink-escape). Fail-SAFE to False on error - the caller runs under the
     global fail-OPEN wrapper, and the gate must never brick editing on a resolution error."""
     try:
         claude = Path.home() / ".claude"
@@ -373,7 +373,7 @@ def _is_protected_install_path(file_path: Path, repo_root: Path) -> bool:
 
 def _resolves_inside_repo(file_path: Path, repo_root: Path) -> bool:
     """True iff the target resolves to repo_root or a path under it. False on an out-of-repo
-    target OR any resolution error — both lead the EDIT_TOOLS branch to ALLOW (out-of-repo
+    target OR any resolution error - both lead the EDIT_TOOLS branch to ALLOW (out-of-repo
     writes are not the gate's concern; erroring -> fail-OPEN, per the gate's prime directive)."""
     try:
         rr = repo_root.resolve()
@@ -396,14 +396,14 @@ def main(argv=None) -> int:
     # gate for a session via CONSENSUS_MCP_GATE_DISABLE=1 in the environment. A safety gate
     # must NEVER be able to deadlock its own operator ("can't mint a seal" must never mean
     # "can't work"). This is read from the Claude Code PROCESS env, set by the operator
-    # before launch — an in-session agent cannot self-enable it (a Bash `export` mutates only
+    # before launch - an in-session agent cannot self-enable it (a Bash `export` mutates only
     # a subshell, not the hook's inherited env). Full override: bypasses every check below,
     # including the protected-install guard, because the operator has chosen to lift the gate.
     if os.environ.get("CONSENSUS_MCP_GATE_DISABLE"):
         return 0
 
     if not _runtime_present():
-        return 0  # FAIL OPEN — plain workflow, never worse.
+        return 0  # FAIL OPEN - plain workflow, never worse.
 
     tool = event.get("tool_name") or event.get("toolName") or ""
     tool_input = event.get("tool_input") or event.get("toolInput") or {}
@@ -417,9 +417,9 @@ def main(argv=None) -> int:
 
     repo_root = _repo_root(event)
 
-    # PROTECTED-INSTALL tamper guard (ALWAYS-ON — fires BEFORE the opt-in check).
+    # PROTECTED-INSTALL tamper guard (ALWAYS-ON - fires BEFORE the opt-in check).
     # consult iteration-gate-scope-design-2026-05-24 (codex+gemini+kimi): this hook is
-    # GLOBAL, so an agent in ANY project — even one that never opted in — could write the
+    # GLOBAL, so an agent in ANY project - even one that never opted in - could write the
     # enforcement surface (~/.claude/settings.json or ~/.claude/hooks/consensus_*.py) and
     # disable the gate for every project. That self-disable threat is opt-in-INDEPENDENT,
     # so it must be checked before the opt-in early-return. (The "never govern a
@@ -429,20 +429,20 @@ def main(argv=None) -> int:
         if _fp and _is_protected_install_path(Path(_fp), repo_root):
             print("[consensus-design-gate] BLOCKED: writing the consensus enforcement "
                   "surface (~/.claude/settings.json or ~/.claude/hooks/consensus_*.py) is "
-                  "refused — it would disable the design gate globally. (To legitimately "
+                  "refused - it would disable the design gate globally. (To legitimately "
                   "update the install, run `consensus-init` or reinstall.)", file=sys.stderr)
             return 2
 
     # Finding 1 (opt-in): enforce ONLY in repos that opted into consensus (a
-    # `.consensus/` dir present). A repo that never enabled consensus — including
-    # the consensus-mcp repo itself, and any unrelated project — fails OPEN so the
+    # `.consensus/` dir present). A repo that never enabled consensus - including
+    # the consensus-mcp repo itself, and any unrelated project - fails OPEN so the
     # gate never bricks development it was never meant to govern.
     # CONSENSUS_MCP_FORCE_OPTED_IN forces enforcement deterministically for tests.
     # v1.32.1 (consult iteration-v133-gate-scope-shift-2026-05-26, 5/5
     # unanimous): activation is PER-INVOCATION. The gate is DORMANT
     # unless either:
     #   (a) a session-state marker is in force (an AI invoked a
-    #       consensus tool — see consensus_mcp._session_state), OR
+    #       consensus tool - see consensus_mcp._session_state), OR
     #   (b) the operator explicitly opted into legacy per-project mode
     #       via CONSENSUS_MCP_LEGACY_ALWAYS_ON=1 or .consensus/
     #       legacy-always-on (legacy_mode_active inside session_active).
@@ -451,14 +451,14 @@ def main(argv=None) -> int:
     # is consensus work", causing the over-fire the operator hit
     # (stale `docs/consensus/**` marker blocking firmware .cpp edits).
     #
-    # PROTECTED-install paths are checked BEFORE this branch — that
+    # PROTECTED-install paths are checked BEFORE this branch - that
     # enforcement floor stays unconditional regardless of activation.
     from consensus_mcp._session_state import gate_should_enforce, emit_migration_warning_once
     try:
         emit_migration_warning_once(repo_root)
     except Exception:
         pass  # warning emission must NEVER block the gate
-    # Shared activation predicate (v1.33 gate-consistency fix) — the SAME
+    # Shared activation predicate (v1.33 gate-consistency fix) - the SAME
     # gate_should_enforce() the Stop gate and SessionStart injector now use, so
     # the three hooks cannot drift. GATE_DISABLE is already handled above (full
     # operator escape hatch); this honors FORCE_OPTED_IN + session_active.
@@ -477,7 +477,7 @@ def main(argv=None) -> int:
         if not _resolves_inside_repo(Path(file_path), repo_root):
             return 0
         # Finding 2 (bootstrap): governance-state writes (.consensus/ incl. the
-        # marker, and consensus-state/) are always permitted — otherwise the gate
+        # marker, and consensus-state/) are always permitted - otherwise the gate
         # cannot mint its own approval marker (a circular lock). The marker is
         # re-validated against the live seal on use, so allowing its write is safe.
         if _is_governance_path(Path(file_path), repo_root):
@@ -491,7 +491,7 @@ def main(argv=None) -> int:
         # (every segment on the conservative allowlist) OR a tight-scope sealed
         # marker is in force. An unknown command is denied (fail-safe).
         if _bash_is_read_only(command):
-            return 0  # read-only allowlist (ls, cat, grep, git status, pytest, …)
+            return 0  # read-only allowlist (ls, cat, grep, git status, pytest, ...)
         res = da.marker_is_sealed(repo_root)
         if res.ok:
             return 0  # a tight-scope sealed plan authorises this Bash command
@@ -504,7 +504,7 @@ def main(argv=None) -> int:
 
 def _main_fail_open() -> int:
     """Run main(), but FAIL OPEN (exit 0) on ANY unexpected exception. A PreToolUse
-    hook that crashes would otherwise block the tool — and since this gate is a GLOBAL
+    hook that crashes would otherwise block the tool - and since this gate is a GLOBAL
     hook, a crash bricks Bash/Edit in EVERY project at once. A hook bug must never be
     able to do that; the delivery/Stop gate is the fail-closed backstop for finished
     work. (A deliberate DENY returns/raises exit 2 and is preserved.)"""

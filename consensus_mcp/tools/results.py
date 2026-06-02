@@ -1,4 +1,4 @@
-"""consensus.results MCP tool — read-only project scorecard.
+"""consensus.results MCP tool - read-only project scorecard.
 
 Returns the aggregated project scorecard built from
 ``consensus-state/state/results-v1.jsonl`` (see
@@ -6,9 +6,9 @@ Returns the aggregated project scorecard built from
 behind the ``consensus results`` console-script.
 
 Per design spec docs/design-consults/v1.19.0-result-logging.md:
-  * callable_by: any (READ-ONLY — never writes the ledger)
+  * callable_by: any (READ-ONLY - never writes the ledger)
   * inputs: {} (no parameters)
-  * outputs: the scorecard dict — authoritative (forward) totals, a SEGREGATED
+  * outputs: the scorecard dict - authoritative (forward) totals, a SEGREGATED
     backfilled (best-effort) section, and a count of skipped unknown-schema
     records.
 

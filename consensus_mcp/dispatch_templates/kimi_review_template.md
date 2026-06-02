@@ -11,12 +11,12 @@ cryptographically and compared with the other reviewers' findings.
 
 The current contents of the files in scope are embedded below. Read these
 AS IF they are the actual repository state. **Do NOT attempt to mutate the
-repository** — this is a review-only dispatch (kimi runs with
+repository** - this is a review-only dispatch (kimi runs with
 `--max-steps-per-turn 1` and is not permitted to author edits). Use ONLY the
 embedded contents below as your authoritative source.
 
 If a file you need is not embedded here, note it as a finding (severity
-medium) explaining which file is missing — do NOT hallucinate content.
+medium) explaining which file is missing - do NOT hallucinate content.
 
 {touched_files_contents_block}
 
@@ -46,7 +46,7 @@ review_target_path: {review_target_path}
 review_target_hash (sha256): {review_target_hash}
 
 You MUST review ONLY the content at review_target_path. Do not infer the
-review surface from the goal_packet allowed_files alone — the
+review surface from the goal_packet allowed_files alone - the
 review_target_path is the canonical input.
 
 # Your task
@@ -58,10 +58,10 @@ review_target_path is the canonical input.
 3. Mark `goal_satisfied: true` ONLY if the proposed change fully meets the
    desired_end_state with no blocking findings.
 
-# Output format — CRITICAL: JSON ONLY
+# Output format - CRITICAL: JSON ONLY
 
 kimi does NOT enforce output schema natively. Your final assistant message
-MUST be PURE JSON conforming to the schema below — no prose preamble, no
+MUST be PURE JSON conforming to the schema below - no prose preamble, no
 markdown fences (no ```json or ``` markers), no commentary, no trailing
 explanation. The first character of your final message MUST be `{` and the
 last character MUST be `}`. The helper validator parses your final message
@@ -71,7 +71,7 @@ dispatch.
 
 ## CRITICAL RULES
 
-### Rule 1 — `id` field MUST match the regex `^kimi-rev-\d+$`
+### Rule 1 - `id` field MUST match the regex `^kimi-rev-\d+$`
 
 Every finding's `id` is a canonical identifier, NOT a description.
 
@@ -80,14 +80,14 @@ CORRECT:
 - `"id": "kimi-rev-002"`
 
 INCORRECT (helper validator REJECTS):
-- `"id": "scope signature mismatch"`     ← narrative text
-- `"id": "codex-rev-001"`                ← wrong prefix (you're kimi, not codex)
-- `"id": "gemini-rev-001"`               ← wrong prefix (you're kimi, not gemini)
-- `"id": "kimi-rev-A1"`                  ← non-digit suffix
+- `"id": "scope signature mismatch"`     <- narrative text
+- `"id": "codex-rev-001"`                <- wrong prefix (you're kimi, not codex)
+- `"id": "gemini-rev-001"`               <- wrong prefix (you're kimi, not gemini)
+- `"id": "kimi-rev-A1"`                  <- non-digit suffix
 
 The narrative goes in `summary`, NOT in `id`.
 
-### Rule 2 — `blocking_objections` MUST equal the SET of finding IDs where severity is "blocking" or "critical"
+### Rule 2 - `blocking_objections` MUST equal the SET of finding IDs where severity is "blocking" or "critical"
 
 CORRECT:
 ```json
@@ -98,16 +98,16 @@ INCORRECT: putting narrative text in `blocking_objections`, or omitting a blocki
 
 The helper computes the expected set as `{f.id for f in findings if f.severity in {"blocking","critical"}}` and rejects on mismatch.
 
-### Rule 3 — `goal_satisfied` MUST be coherent with findings
+### Rule 3 - `goal_satisfied` MUST be coherent with findings
 
 - `goal_satisfied: true` requires `blocking_objections: []`.
 - `goal_satisfied: false` is valid even with no blocking findings if medium/low findings collectively indicate the goal isn't met.
 
-### Rule 4 — `goal_satisfied_rationale` is REQUIRED and non-empty
+### Rule 4 - `goal_satisfied_rationale` is REQUIRED and non-empty
 
 Always populate it, even when goal_satisfied is true.
 
-### Rule 5 — patch_proposal MUST be null
+### Rule 5 - patch_proposal MUST be null
 
 This release scopes kimi as review-only. Per-finding `patch_proposal` field
 MUST be `null` (or omitted). If you want to suggest a fix, describe it in the
@@ -126,7 +126,7 @@ finding's `recommendation` field as prose.
       "summary": "<one-line description>",
       "citation": "<file:line>",
       "risk": "<impact statement>",
-      "recommendation": "<action; prose only — no patch_proposal>",
+      "recommendation": "<action; prose only - no patch_proposal>",
       "patch_proposal": null,
       "patch_not_proposed_reason": null
     }

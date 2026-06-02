@@ -2,21 +2,21 @@
 
 Iteration-1 integration guard from the sp-consensus-optimization consult
 (2026-05-23). The v1.29.4 miss was that the PreToolUse gate blocked consensus's
-OWN `consensus init` / `--repair` in a governed project — a self-referential
+OWN `consensus init` / `--repair` in a governed project - a self-referential
 integration failure that a full 4-AI design consult did not catch because the
 panel reviewed the design, not the artifact running in its real environment.
 
 Unit-level coverage of the exemption lives in ``test_consensus_hooks.py``. THIS
 module is the higher-fidelity guard the consult asked for:
 
-  (B2) It activates the gate through the REAL governed-project detection — a
-       ``.consensus/`` directory on disk — NOT the ``CONSENSUS_MCP_FORCE_OPTED_IN``
+  (B2) It activates the gate through the REAL governed-project detection - a
+       ``.consensus/`` directory on disk - NOT the ``CONSENSUS_MCP_FORCE_OPTED_IN``
        test shortcut. So it proves the gate is genuinely ON (a plain writer is
        blocked) yet still lets the project's own tooling through.
 
   (B7) The own-tooling allow-list test is DATA-DRIVEN from ``pyproject.toml``'s
        ``[project.scripts]``. A newly-added console script that someone forgets to
-       exempt in the gate's ``_CONSENSUS_TOOLING`` set fails HERE — closing the
+       exempt in the gate's ``_CONSENSUS_TOOLING`` set fails HERE - closing the
        bug *class*, not just the one binary that was fixed.
 
 The suite is green on the v1.29.4 hook; it goes red if the exemption is reverted,
@@ -54,7 +54,7 @@ def _governed_project(tmp_path: Path) -> Path:
     shift requires a session-active marker OR a legacy-always-on
     opt-in. We use the legacy-always-on file here so existing
     smoke tests (which assert the gate enforces in a governed
-    project) keep their semantics intact — they're testing the
+    project) keep their semantics intact - they're testing the
     chained-writer rejection, not the activation model."""
     consensus = tmp_path / ".consensus"
     consensus.mkdir()
@@ -67,7 +67,7 @@ def _governed_project(tmp_path: Path) -> Path:
 
 def _run_gate(command: str, repo_root: Path) -> subprocess.CompletedProcess:
     """Invoke the gate as a subprocess (the real Claude Code shape). Runtime is
-    forced PRESENT; opt-in is deliberately NOT forced — the on-disk `.consensus/`
+    forced PRESENT; opt-in is deliberately NOT forced - the on-disk `.consensus/`
     is what must activate the gate, so the smoke exercises the production path."""
     env = dict(os.environ)
     env["CONSENSUS_MCP_REPO_ROOT"] = str(repo_root)
@@ -98,7 +98,7 @@ def test_gate_is_really_active_in_governed_project(tmp_path):
 
 def test_gate_fails_open_without_consensus_dir(tmp_path):
     """Control: with no `.consensus/` on disk the repo is not governed, so the
-    same writer is ALLOWED — confirming it's the on-disk detection (not the env)
+    same writer is ALLOWED - confirming it's the on-disk detection (not the env)
     that activated enforcement above."""
     assert _run_gate("echo hi > f", tmp_path).returncode == 0
 

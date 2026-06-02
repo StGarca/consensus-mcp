@@ -1,4 +1,4 @@
-"""Claude contributor adapter — orchestrator-self artifact emission.
+"""Claude contributor adapter - orchestrator-self artifact emission.
 
 Per iter-0015 converged-plan Section C: claude IS the orchestrator running the
 loop, so the "adapter" for claude doesn't spawn a subprocess. It accepts a
@@ -27,7 +27,7 @@ from consensus_mcp.contributors.base import (
 
 
 class ClaudeAdapter(ContributorAdapter):
-    """Claude contributor — no subprocess; uses caller-provided callback to
+    """Claude contributor - no subprocess; uses caller-provided callback to
     materialize the artifact. The callback receives the DispatchPacket and
     must return a dict in the standard sealed-artifact shape (findings,
     goal_satisfied, blocking_objections, ...).
@@ -81,7 +81,7 @@ class ClaudeAdapter(ContributorAdapter):
 
         # gemini-rev-001 round-1 style cleanup: spread callback's dict FIRST,
         # then assign canonical IDs so they authoritatively override any value
-        # in artifact_dict — no redundant re-assignment.
+        # in artifact_dict - no redundant re-assignment.
         full_artifact = {
             **artifact_dict,
             "iteration_id": iteration_id,
@@ -115,7 +115,7 @@ class ClaudeAdapter(ContributorAdapter):
                 f"claude T6 returned a non-file sealed_path: {archive_path}"
             )
         # The archive filename convention is
-        # <date>-<iteration_id>-<reviewer_id>-pass.yaml — verify the iteration
+        # <date>-<iteration_id>-<reviewer_id>-pass.yaml - verify the iteration
         # and reviewer tokens are present (pass_id is NOT in T6's archive
         # filename, only in the sealed YAML content).
         fname = archive_path.name

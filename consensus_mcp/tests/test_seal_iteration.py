@@ -84,7 +84,7 @@ def _write_outcome(iter_dir: Path, closing_state: str = "quorum_close_passed"):
 def test_prepare_copies_per_pass_review_to_canonical_name(tmp_path, monkeypatch):
     """Section 3.6 friction: kimi sealed at kimi-review-kimi-debrief-1-pass1.yaml.
     `prepare` must produce a canonical kimi-review.yaml so the cross-family
-    counter glob (`*-review.yaml` → `kimi`) sees it."""
+    counter glob (`*-review.yaml` -> `kimi`) sees it."""
     repo, iter_dir = _scaffold_iter(tmp_path, monkeypatch)
     _write_review(iter_dir, "kimi", suffix="-kimi-debrief-1-pass1")
 
@@ -176,7 +176,7 @@ def test_mint_refuses_missing_iteration_outcome(tmp_path, monkeypatch):
 
 
 def test_mint_refuses_closing_state_mismatch(tmp_path, monkeypatch):
-    """The outcome file is authoritative — --closing-state must match."""
+    """The outcome file is authoritative - --closing-state must match."""
     repo, iter_dir = _scaffold_iter(tmp_path, monkeypatch)
     _write_outcome(iter_dir, closing_state="quorum_close_passed")
     _write_converged_plan(iter_dir)
@@ -189,7 +189,7 @@ def test_mint_refuses_closing_state_mismatch(tmp_path, monkeypatch):
 
 def test_mint_refuses_when_lint_fails(tmp_path, monkeypatch):
     """Pre-flight lint blocks mint when ANY YAML in iter_dir is unparseable.
-    The Section 3.7 → 3.8 cascade is short-circuited."""
+    The Section 3.7 -> 3.8 cascade is short-circuited."""
     repo, iter_dir = _scaffold_iter(tmp_path, monkeypatch)
     _write_outcome(iter_dir)
     _write_converged_plan(iter_dir)
@@ -229,7 +229,7 @@ def test_mint_refuses_fewer_than_2_non_claude_reviewers(tmp_path, monkeypatch):
     repo, iter_dir = _scaffold_iter(tmp_path, monkeypatch)
     _write_outcome(iter_dir, closing_state="quorum_close_passed")
     _write_converged_plan(iter_dir)
-    _write_review(iter_dir, "codex")  # only one non-claude — too few
+    _write_review(iter_dir, "codex")  # only one non-claude - too few
 
     # mint itself doesn't enforce the count (mint_design_approval doesn't
     # either; the count is enforced at VERIFY time). But the marker

@@ -264,7 +264,7 @@ iteration-0008-pilot closes implementation_ready iff:
 
 Downstream subsystem-review pages that built on this autonomy contract during the iter-0014..iter-0036 self-drive cycle:
 
-- [[2026-05-10-recent-iteration-failures]] — failure postmortem covering iter-0019..iter-0031
-- [[2026-05-10-visibility-tui-design]] — visibility TUI + v1.10.5 hardening design
-- [[2026-05-10-codex-fix-author-roadmap-results]] — codex-fix-author cycle results (iter-0014..iter-0022)
-- [[2026-05-10-v1.10.4-hardening-expert-review]] — v1.10.4 hardening expert review
+- [[2026-05-10-recent-iteration-failures]] - failure postmortem covering iter-0019..iter-0031
+- [[2026-05-10-visibility-tui-design]] - visibility TUI + v1.10.5 hardening design
+- [[2026-05-10-codex-fix-author-roadmap-results]] - codex-fix-author cycle results (iter-0014..iter-0022)
+- [[2026-05-10-v1.10.4-hardening-expert-review]] - v1.10.4 hardening expert review

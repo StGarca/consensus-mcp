@@ -26,7 +26,7 @@ def _recent_ts(seconds_ago: float = 60.0) -> str:
 
     Relative to now so the seeded event stays inside the watchdog's
     ``--window-days`` filter (default 7d). A hardcoded absolute date ages out of
-    that window and silently disables stale detection — the time-bomb that broke
+    that window and silently disables stale detection - the time-bomb that broke
     the main()-level tests once real time advanced ~7 days past 2026-05-11.
     """
     return (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).strftime(
@@ -85,7 +85,7 @@ def _stalled_event(pass_id: str, iteration_id: str, timestamp: str, **kw) -> dic
 
 
 def test_find_stalled_returns_empty_when_no_orphans():
-    """Start + matching done → no orphan."""
+    """Start + matching done -> no orphan."""
     now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)
     events = [
         _start_event("p1", "iter-001", "2026-05-11T03:00:00Z"),
@@ -96,9 +96,9 @@ def test_find_stalled_returns_empty_when_no_orphans():
 
 
 def test_find_stalled_returns_orphan_older_than_threshold():
-    """Start without terminal, age > threshold → returned."""
+    """Start without terminal, age > threshold -> returned."""
     now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)
-    # Started 30 min ago, threshold 600s (10 min) → stale.
+    # Started 30 min ago, threshold 600s (10 min) -> stale.
     events = [_start_event("p2", "iter-002", "2026-05-11T03:30:00Z")]
     stale = _visibility_watchdog.find_stalled(events, stall_threshold_seconds=600, now=now)
     assert len(stale) == 1
@@ -107,9 +107,9 @@ def test_find_stalled_returns_orphan_older_than_threshold():
 
 
 def test_find_stalled_ignores_orphan_younger_than_threshold():
-    """Start without terminal, age < threshold → not returned."""
+    """Start without terminal, age < threshold -> not returned."""
     now = datetime(2026, 5, 11, 4, 0, 0, tzinfo=timezone.utc)
-    # Started 5 min ago, threshold 600s (10 min) → not stale.
+    # Started 5 min ago, threshold 600s (10 min) -> not stale.
     events = [_start_event("p3", "iter-003", "2026-05-11T03:55:00Z")]
     stale = _visibility_watchdog.find_stalled(events, stall_threshold_seconds=600, now=now)
     assert stale == []
@@ -285,7 +285,7 @@ def test_main_mark_mode_appends_dispatch_stalled(tmp_path, capsys):
 
 
 def test_main_mark_is_idempotent(tmp_path, capsys):
-    """Second --action=mark run on the same log must NOT re-mark — the
+    """Second --action=mark run on the same log must NOT re-mark - the
     dispatch_stalled from the first run is terminal and pairs the orphan.
     """
     log_path = _scaffold_state_dir(tmp_path)
@@ -311,7 +311,7 @@ def test_main_mark_is_idempotent(tmp_path, capsys):
     out2 = capsys.readouterr().out
     line_count_after_second = len(log_path.read_text(encoding="utf-8").strip().splitlines())
 
-    assert rc1 == 1, "first run sees an orphan → rc=1"
+    assert rc1 == 1, "first run sees an orphan -> rc=1"
     assert rc2 == 0, f"second run must see zero stale (terminal exists); got rc={rc2}; out={out2!r}"
     assert line_count_after_first == line_count_after_second == 2, (
         f"idempotency violated: lines went {line_count_after_first} -> {line_count_after_second}"
@@ -319,7 +319,7 @@ def test_main_mark_is_idempotent(tmp_path, capsys):
 
 
 def test_main_returns_0_when_no_orphans(tmp_path, capsys):
-    """Clean state → rc=0."""
+    """Clean state -> rc=0."""
     log_path = _scaffold_state_dir(tmp_path)
     log_path.write_text(
         json.dumps(_start_event("p4", "iter-004", _recent_ts(120))) + "\n"
@@ -332,7 +332,7 @@ def test_main_returns_0_when_no_orphans(tmp_path, capsys):
         "--action", "report",
     ])
     out = capsys.readouterr().out
-    assert rc == 0, f"no orphans → rc=0; got rc={rc}; out={out!r}"
+    assert rc == 0, f"no orphans -> rc=0; got rc={rc}; out={out!r}"
 
 
 def test_main_missing_log_file_returns_0(tmp_path, capsys):
@@ -433,7 +433,7 @@ def test_streaming_reader_skips_old_events_outside_window(tmp_path):
         f"expected only the recent event to survive the window cutoff; got {pass_ids}"
     )
 
-    # No cutoff → both events come through (back-compat with _read_jsonl).
+    # No cutoff -> both events come through (back-compat with _read_jsonl).
     out_all = list(_visibility_watchdog._read_jsonl_streaming(log, since_ts=None))
     assert [ev.get("pass_id") for ev in out_all] == ["p-old", "p-new"]
 
@@ -516,7 +516,7 @@ def test_default_repo_root_raises_when_env_var_invalid(tmp_path, monkeypatch):
 
 
 def test_default_repo_root_raises_when_no_markers_anywhere(tmp_path, monkeypatch):
-    """Walk reaches filesystem root without finding markers → raise."""
+    """Walk reaches filesystem root without finding markers -> raise."""
     monkeypatch.delenv("CONSENSUS_MCP_REPO_ROOT", raising=False)
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -552,7 +552,7 @@ def test_locked_append_creates_parent_dir(tmp_path):
 def test_locked_append_serializes_concurrent_writes(tmp_path):
     """Spawn N threads each calling _locked_append; verify ALL writes are
     persisted as complete JSONL records (no torn lines). This is best-effort
-    — we can't easily force a race on a single host — but a 50-thread fan-out
+    - we can't easily force a race on a single host - but a 50-thread fan-out
     is sensitive enough to catch obviously-broken locking on Windows
     (xplat-rev-007 fix).
     """

@@ -1,21 +1,21 @@
-# Advisory Contributor Weights — static structure + safety firewall (Plan 1)
+# Advisory Contributor Weights - static structure + safety firewall (Plan 1)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use consensus:subagent-driven-development (recommended) or consensus:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the *advisory, static* contributor-weight structure + the safety firewall the weighted-consensus consult converged on — with NO learner and NO external ledger (those are Plan 2). This is the panel's explicit "ship weak-prior + caps only" fallback, valuable on its own and a prerequisite the learner plugs into later.
+**Goal:** Build the *advisory, static* contributor-weight structure + the safety firewall the weighted-consensus consult converged on - with NO learner and NO external ledger (those are Plan 2). This is the panel's explicit "ship weak-prior + caps only" fallback, valuable on its own and a prerequisite the learner plugs into later.
 
-**Architecture:** A pure-function module `consensus_mcp/_contributor_weights.py` computes a per-(contributor, domain) advisory weight from a weak Beta(2,2) seed (posterior-mean mapping, discount-only) and applies floor / cap / same-family-aggregate caps. Weights are ADVISORY: they only ever re-ORDER findings for synthesis prominence — never add/remove findings, never feed the convergence rule or the cross-family gate. The firewall is enforced by tests (weights-off equivalence as a permutation property; no-self-grade as a structural absence-of-write-API). Learning from external outcomes is deliberately out of scope (Plan 2).
+**Architecture:** A pure-function module `consensus_mcp/_contributor_weights.py` computes a per-(contributor, domain) advisory weight from a weak Beta(2,2) seed (posterior-mean mapping, discount-only) and applies floor / cap / same-family-aggregate caps. Weights are ADVISORY: they only ever re-ORDER findings for synthesis prominence - never add/remove findings, never feed the convergence rule or the cross-family gate. The firewall is enforced by tests (weights-off equivalence as a permutation property; no-self-grade as a structural absence-of-write-API). Learning from external outcomes is deliberately out of scope (Plan 2).
 
 **Tech Stack:** Python 3.11+, stdlib only, pytest. Pure functions; no I/O, no engine wiring in this plan.
 
-**Source spec:** `consensus-state/active/iteration-weighted-consensus-converge-2026-05-24/converged-plan.yaml` (D1–D5). Build sequence step 3 ("static advisory structure"); steps 1/4/5 (ledger, learner, A/B) are Plan 2.
+**Source spec:** `consensus-state/active/iteration-weighted-consensus-converge-2026-05-24/converged-plan.yaml` (D1-D5). Build sequence step 3 ("static advisory structure"); steps 1/4/5 (ledger, learner, A/B) are Plan 2.
 
 ---
 
 ## File Structure
 
-- Create `consensus_mcp/_contributor_weights.py` — the whole advisory-weight module (one responsibility: compute + apply advisory weights; reorder findings). Small, pure, no I/O.
-- Create `consensus_mcp/tests/test_contributor_weights.py` — the unit + firewall tests.
+- Create `consensus_mcp/_contributor_weights.py` - the whole advisory-weight module (one responsibility: compute + apply advisory weights; reorder findings). Small, pure, no I/O.
+- Create `consensus_mcp/tests/test_contributor_weights.py` - the unit + firewall tests.
 - No changes to `workflow_engine.py` or `config.py` in this plan: weights are computed as a standalone advisory artifact. Wiring the ordering into a live synthesis consumer is a Plan-2 task (so the weights-off-equivalence test in this plan is a property of the pure functions, kept non-vacuous by the permutation assertion).
 
 **Constants (single source of truth, top of the module):**
@@ -29,7 +29,7 @@ SAME_FAMILY_AGGREGATE_CAP = 1.0  # one independent-contributor-equivalent
 
 ---
 
-### Task 1: posterior-mean → weight mapping (discount-only)
+### Task 1: posterior-mean -> weight mapping (discount-only)
 
 **Files:**
 - Create: `consensus_mcp/_contributor_weights.py`
@@ -55,7 +55,7 @@ def test_weight_from_mean_is_discount_only(mean, expected):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest consensus_mcp/tests/test_contributor_weights.py::test_weight_from_mean_is_discount_only -v`
-Expected: FAIL — module `_contributor_weights` does not exist.
+Expected: FAIL - module `_contributor_weights` does not exist.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -65,7 +65,7 @@ Expected: FAIL — module `_contributor_weights` does not exist.
 Per the weighted-consensus convergence consult (2026-05-24): weights are ADVISORY
 ONLY. They re-order findings for synthesis prominence; they NEVER add/remove a
 finding, feed the convergence rule, or affect the cross-family gate. This module
-is the static "weak-prior + caps" structure — no learner, no external ledger
+is the static "weak-prior + caps" structure - no learner, no external ledger
 (Plan 2). Discount-only: a contributor can lose attention by being proven
 unreliable but can never be amplified above baseline.
 """
@@ -121,7 +121,7 @@ def test_seed_mean_is_neutral_and_weight_is_full():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest consensus_mcp/tests/test_contributor_weights.py::test_seed_mean_is_neutral_and_weight_is_full -v`
-Expected: FAIL — `seed_posterior_mean` / `weight_for` not defined.
+Expected: FAIL - `seed_posterior_mean` / `weight_for` not defined.
 
 - [ ] **Step 3: Write minimal implementation** (append to the module)
 
@@ -183,7 +183,7 @@ def test_order_by_weight_with_no_weights_is_identity():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest consensus_mcp/tests/test_contributor_weights.py -k order_by_weight -v`
-Expected: FAIL — `order_by_weight` not defined.
+Expected: FAIL - `order_by_weight` not defined.
 
 - [ ] **Step 3: Write minimal implementation** (append)
 
@@ -243,7 +243,7 @@ def test_same_family_aggregate_capped_to_one_independent():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest consensus_mcp/tests/test_contributor_weights.py::test_same_family_aggregate_capped_to_one_independent -v`
-Expected: FAIL — `apply_same_family_cap` not defined.
+Expected: FAIL - `apply_same_family_cap` not defined.
 
 - [ ] **Step 3: Write minimal implementation** (append)
 
@@ -295,7 +295,7 @@ def test_module_exposes_no_weight_write_api():
     """no-self-grade (static form): in Plan 1 weights derive ONLY from the seed +
     config; there is NO public function that writes/sets a contributor's weight or
     usefulness credit from caller input. A learner (Plan 2) may only add a writer
-    that reads the external ledger — never an agent-callable setter. This test locks
+    that reads the external ledger - never an agent-callable setter. This test locks
     that: no public callable name implies a write/set/update/record/grade of weight
     or credit."""
     forbidden = ("set_weight", "update_weight", "record_credit", "grade",
@@ -311,9 +311,9 @@ def test_module_exposes_no_weight_write_api():
 - [ ] **Step 2: Run test to verify it fails-then-passes**
 
 Run: `python -m pytest consensus_mcp/tests/test_contributor_weights.py::test_module_exposes_no_weight_write_api -v`
-Expected: PASS immediately (the module has no such API yet). This is a *characterization/firewall* test — it locks the no-self-grade invariant so a future change that adds an agent-callable weight setter fails here. (If it does not pass, a forbidden API already exists — remove it.)
+Expected: PASS immediately (the module has no such API yet). This is a *characterization/firewall* test - it locks the no-self-grade invariant so a future change that adds an agent-callable weight setter fails here. (If it does not pass, a forbidden API already exists - remove it.)
 
-- [ ] **Step 3: (no implementation needed — the invariant is "absence")**
+- [ ] **Step 3: (no implementation needed - the invariant is "absence")**
 
 No code change. The test guards that the absence is intentional and permanent.
 
@@ -332,7 +332,7 @@ git add -A && git commit -m "test(weights): lock no-self-grade firewall (no weig
 
 ### Task 6: full-suite regression + docstring cross-reference
 
-- [ ] **Step 1:** Run the full suite: `python -m pytest consensus_mcp/tests/ -q` — expected: all green (prior 1506 + the new module's tests).
+- [ ] **Step 1:** Run the full suite: `python -m pytest consensus_mcp/tests/ -q` - expected: all green (prior 1506 + the new module's tests).
 - [ ] **Step 2:** Confirm the module docstring cites the converged-plan spec path and the "advisory-only / no learner / Plan 2 = ledger+learner" boundary (already in Task 1 Step 3). If missing, add it.
 - [ ] **Step 3:** Commit any docstring fix: `git commit -am "docs(weights): cite converged spec + Plan-2 boundary"`.
 
@@ -340,11 +340,11 @@ git add -A && git commit -m "test(weights): lock no-self-grade firewall (no weig
 
 ## Self-Review
 
-**1. Spec coverage:** D2 cold-start (Beta(2,2) seed) → T2. D3 posterior-mean mapping → T1. D4 floor/cap/discount-only → T1, same-family cap → T4. D5 weights-off equivalence → T3 (permutation property), no-self-grade → T5. **Out of scope by design (Plan 2):** D1 useful-signal ledger, the learner (mean from real outcomes), decay/min-sample, A/B. Per-domain weights = the (contributor, domain) key throughout. ✓ The one D5 item only partially covered here is the *engine-level* weights-off equivalence (delete-the-table-replay-the-gate) — that lands in Plan 2 when weights are actually wired into a synthesis consumer; in Plan 1 the permutation property is the honest static form, noted in File Structure.
+**1. Spec coverage:** D2 cold-start (Beta(2,2) seed) -> T2. D3 posterior-mean mapping -> T1. D4 floor/cap/discount-only -> T1, same-family cap -> T4. D5 weights-off equivalence -> T3 (permutation property), no-self-grade -> T5. **Out of scope by design (Plan 2):** D1 useful-signal ledger, the learner (mean from real outcomes), decay/min-sample, A/B. Per-domain weights = the (contributor, domain) key throughout. [ok] The one D5 item only partially covered here is the *engine-level* weights-off equivalence (delete-the-table-replay-the-gate) - that lands in Plan 2 when weights are actually wired into a synthesis consumer; in Plan 1 the permutation property is the honest static form, noted in File Structure.
 
-**2. Placeholder scan:** every code step has complete code; no TBD/TODO. ✓
+**2. Placeholder scan:** every code step has complete code; no TBD/TODO. [ok]
 
-**3. Type consistency:** `weight_from_mean`, `seed_posterior_mean`, `weight_for`, `order_by_weight`, `apply_same_family_cap` — names consistent across tasks; weights keyed by `(contributor, domain)` tuple consistently; `apply_same_family_cap` keyed by contributor (a later aggregation step), which is the correct granularity for the family cap. ✓
+**3. Type consistency:** `weight_from_mean`, `seed_posterior_mean`, `weight_for`, `order_by_weight`, `apply_same_family_cap` - names consistent across tasks; weights keyed by `(contributor, domain)` tuple consistently; `apply_same_family_cap` keyed by contributor (a later aggregation step), which is the correct granularity for the family cap. [ok]
 
 ## Notes for Plan 2 (do NOT build here)
 External-outcome adjudication ledger (append-only, sealed, AI-read-only) feeding GOLD/SECONDARY labels; the Beta learner (posterior-mean from ledger, decay half-life 20 + model-version reset, min-sample 5 with linear dampening); wiring `order_by_weight` into the live synthesis consumer in `workflow_engine.py` + the engine-level weights-off-equivalence replay test; A/B vs uniform with revert. Ship the learner ONLY if the ledger is wirable (D5c).

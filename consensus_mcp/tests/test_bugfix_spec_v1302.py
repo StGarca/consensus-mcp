@@ -1,4 +1,4 @@
-"""v1.30.2 — guards for the 3 bugs the external-project consult exposed.
+"""v1.30.2 - guards for the 3 bugs the external-project consult exposed.
 
 Spec: external-project/consensus-state/CONSENSUS-MCP-BUGFIX-SPEC-2026-05-24.md
 A: convergence reviewer_id not round-keyed -> T6 index_collision on round >=2.
@@ -77,10 +77,10 @@ def test_bug_b_v1305_embeds_target_even_with_touched_files():
     # v1.30.5 convergence-deadlock fix (supersedes the old "no double-embed" assertion).
     # When the review-target (the convergence packet) AND touched_files_contents (the round's
     # CONSTITUENT files) are BOTH present, the target content must STILL be embedded. The old
-    # `and not touched_contents` guard SUPPRESSED it, so the reviewer — pointed at the
-    # convergence-packet path, which is NOT in the touched set — got "canonical target not
+    # `and not touched_contents` guard SUPPRESSED it, so the reviewer - pointed at the
+    # convergence-packet path, which is NOT in the touched set - got "canonical target not
     # provided" and every multi-round consult deadlocked. Both blocks are present (DISTINCT
-    # content: the target is the packet, the touched files are its constituents) — correct,
+    # content: the target is the packet, the touched files are its constituents) - correct,
     # not a redundant double-embed of the same bytes.
     rp = {"defect_target": {"touched_files_contents": {"a.py": "CONSTITUENT CODE BODY"}}}
     out = _build_prompt(
@@ -90,7 +90,7 @@ def test_bug_b_v1305_embeds_target_even_with_touched_files():
         review_target_content="THE CONVERGENCE PACKET BODY",
     )
     assert "CONSTITUENT CODE BODY" in out        # touched-files block (prior-round files)
-    assert "THE CONVERGENCE PACKET BODY" in out  # review-target block — NOW embedded (the fix)
+    assert "THE CONVERGENCE PACKET BODY" in out  # review-target block - NOW embedded (the fix)
     assert "REVIEW TARGET CONTENT" in out
 
 

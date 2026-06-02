@@ -140,7 +140,7 @@ def test_mint_writes_pointer_contract_fields(tmp_path):
         "scope_glob",
         "repo_root_id",
     }
-    # The trusted boolean is GONE — no self-asserted approval field.
+    # The trusted boolean is GONE - no self-asserted approval field.
     assert "cross_family_sealed" not in data
     assert data["design_consensus_ref"] == "iteration-fix-impl"
     assert data["scope_glob"] == "src/**"
@@ -148,7 +148,7 @@ def test_mint_writes_pointer_contract_fields(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# FORGE TEST (load-bearing) — a marker is only as good as the live seal it points
+# FORGE TEST (load-bearing) - a marker is only as good as the live seal it points
 # at. A hand-written marker pointing at an unsealed / nonexistent / single-claude
 # iteration is REJECTED; only a pointer to a real sealed cross-family iteration
 # with a matching converged-plan hash is ACCEPTED.
@@ -170,7 +170,7 @@ def test_forge_marker_pointing_at_nonexistent_ref_rejected(tmp_path):
 
 def test_forge_marker_pointing_at_unsealed_ref_rejected(tmp_path):
     # The iteration exists with a converged-plan, but its closing_state is NOT a
-    # sealed state — resolve_consensus_ref must reject it.
+    # sealed state - resolve_consensus_ref must reject it.
     plan_sha = _make_sealed_iteration(
         tmp_path, "iteration-open", closing_state="in_progress")
     _write_marker(
@@ -252,7 +252,7 @@ def test_genuine_sealed_cross_family_marker_accepted(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Scope confinement (decision B3) — out-of-repo / unsafe targets rejected.
+# Scope confinement (decision B3) - out-of-repo / unsafe targets rejected.
 # --------------------------------------------------------------------------- #
 
 def test_verify_rejects_out_of_repo_target(tmp_path):
@@ -290,7 +290,7 @@ def test_verify_rejects_dotdot_escape_target(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Mint-time scope_glob validation (decision B3, kimi) — reject '*'/'**'.
+# Mint-time scope_glob validation (decision B3, kimi) - reject '*'/'**'.
 # --------------------------------------------------------------------------- #
 
 def test_mint_rejects_overbroad_scope_glob_star(tmp_path):

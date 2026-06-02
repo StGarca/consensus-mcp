@@ -6,7 +6,7 @@
 # ProfileAdapter. Full metadata is authored for the wizard + forward-compat.
 #
 # install/auth strings VERIFIED 2026-05-22 (do NOT invent):
-#   npm package: @google/gemini-cli ; auth: run `gemini` → OAuth in browser.
+#   npm package: @google/gemini-cli ; auth: run `gemini` -> OAuth in browser.
 #   env GEMINI_CLI_TRUST_WORKSPACE=true is REQUIRED for headless empty-output
 #   runs on gemini CLI >=0.43 (see reference_gemini_trust_workspace).
 name: gemini

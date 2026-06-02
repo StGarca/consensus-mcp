@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""PreToolUse hook template (Claude Code) — fail-closed delivery gate.
+"""PreToolUse hook template (Claude Code) - fail-closed delivery gate.
 
 CONTRIB CONVENIENCE ONLY. The portable enforcement is the MCP tool
-(`request_delivery`) in server.py — it works across Kimi CLI / Cursor / Claude
+(`request_delivery`) in server.py - it works across Kimi CLI / Cursor / Claude
 Code. This hook is harness-specific to Claude Code (.claude/settings.json) and
 is invisible to other harnesses; ship it as an optional belt-and-suspenders.
 

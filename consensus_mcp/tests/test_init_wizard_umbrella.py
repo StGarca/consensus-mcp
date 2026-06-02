@@ -117,7 +117,7 @@ def test_tty_umbrella_confirm_yes_proceeds(tmp_path, capsys, monkeypatch):
 
 def test_guard_skipped_when_config_exists(tmp_path, capsys, monkeypatch):
     """An already-bootstrapped umbrella routes to the v1.29.0 already-configured
-    path (so you can re-run to clean it up) — NOT the umbrella token."""
+    path (so you can re-run to clean it up) - NOT the umbrella token."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: False)
     _seed_umbrella(tmp_path)
@@ -154,7 +154,7 @@ def test_umbrella_token_documented_in_skill_and_command():
     assert "--here" in skill and "--here" in command
     # exit 8 documented in the skill, distinct from already-configured (exit 4)
     assert "exit code 8" in skill.lower() or "exits with code 8" in skill.lower()
-    # command doc is what Claude Code reads when dispatched — assert it symmetrically
+    # command doc is what Claude Code reads when dispatched - assert it symmetrically
     assert "exit code 8" in command.lower() or "exits with code 8" in command.lower()
 
 

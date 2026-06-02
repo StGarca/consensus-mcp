@@ -1,4 +1,4 @@
-"""reviewer.dispatch_codex MCP tool. Phase 4 v1.1.x — thin wrapper.
+"""reviewer.dispatch_codex MCP tool. Phase 4 v1.1.x - thin wrapper.
 
 Wraps the proven _dispatch_codex helper (LANDED v1.10.0; HARDENED v1.10.4)
 behind an MCP tool surface. Per project_phase_4_v1_1_x_mcp_wrapper_followup
@@ -22,7 +22,7 @@ Flag-exposure decision (claude-iter0009-001, resolved 2026-05-10):
   Rationale: keep the MCP surface minimal; expose only what an MCP caller would
   realistically need to override. No caller has yet expressed a need for any of
   the three. If/when one does (e.g., to swap codex for an alternative reviewer
-  binary), the addition is one schema property + one argv branch — no logic
+  binary), the addition is one schema property + one argv branch - no logic
   change. Decision is reversible, not load-bearing.
 """
 from __future__ import annotations
@@ -85,8 +85,8 @@ SCHEMA = {
                 "enum": ["propose", "review", "converge", None],
                 "description": (
                     "iter-0044: dispatch phase, mapped internally to --mode "
-                    "via consensus_mcp.contributors._phase_mode. 'propose' → "
-                    "--mode proposal; 'review' / 'converge' → --mode review. "
+                    "via consensus_mcp.contributors._phase_mode. 'propose' -> "
+                    "--mode proposal; 'review' / 'converge' -> --mode review. "
                     "Hides the dispatcher template/schema split from MCP "
                     "callers; matches engine adapter abstraction. If both "
                     "phase and mode are set, mode wins as explicit override. "
@@ -173,7 +173,7 @@ def _build_argv(
     if resolved_mode is not None:
         argv += ["--mode", resolved_mode]
     # smoke is a boolean flag (no value arg), so we omit on any falsy
-    # input (None or False) — asymmetric with the value-bearing args above
+    # input (None or False) - asymmetric with the value-bearing args above
     # which use `is not None`. Either way `--smoke` is only added when truthy.
     if smoke:
         argv += ["--smoke"]

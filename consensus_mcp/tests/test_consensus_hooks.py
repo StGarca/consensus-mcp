@@ -104,7 +104,7 @@ def _seal_marker(repo_root: Path, scope_glob: str = "src/**",
 
 
 # --------------------------------------------------------------------------- #
-# Task B2 — PreToolUse design gate
+# Task B2 - PreToolUse design gate
 # --------------------------------------------------------------------------- #
 
 def test_pretooluse_edit_no_marker_denies(tmp_path):
@@ -172,7 +172,7 @@ def test_pretooluse_runtime_absent_fails_open(tmp_path):
     "git tag v1",
     "npm publish",
     "make release",
-    # Previously-LEAKY commands the old blocklist MISSED — now denied by
+    # Previously-LEAKY commands the old blocklist MISSED - now denied by
     # DEFAULT-DENY (these are the load-bearing additions).
     "python -c \"open('x','w').write('y')\"",
     "python3 -c 'import os'",
@@ -247,7 +247,7 @@ def test_pretooluse_consensus_own_tooling_allowed(tmp_path, command):
 ])
 def test_pretooluse_consensus_tooling_does_not_open_exec_hole(tmp_path, command):
     """Allowing consensus tooling must NOT admit a chained writer / substitution /
-    redirection riding on the allowed leading token — those still fail-safe."""
+    redirection riding on the allowed leading token - those still fail-safe."""
     ev = {"tool_name": "Bash", "tool_input": {"command": command},
           "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present")
@@ -312,7 +312,7 @@ def test_pretooluse_malformed_payload_fails_open(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Task B3 — Stop verification soft-gate
+# Task B3 - Stop verification soft-gate
 # --------------------------------------------------------------------------- #
 
 def _git_repo_with_modified_source(tmp_path: Path, rel: str = "src/app.py") -> Path:
@@ -372,7 +372,7 @@ def test_stop_ignores_test_files(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# v1.21 (L1) — Stop gate also catches COMMITTED-but-unverified files.
+# v1.21 (L1) - Stop gate also catches COMMITTED-but-unverified files.
 # --------------------------------------------------------------------------- #
 
 def _git_repo_with_committed_source(tmp_path: Path, rel: str = "src/app.py") -> Path:
@@ -413,7 +413,7 @@ def test_stop_committed_source_without_token_emits_directive(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# v1.21 (L2) — Stop gate must NOT crash when verify_delivery_token raises.
+# v1.21 (L2) - Stop gate must NOT crash when verify_delivery_token raises.
 # --------------------------------------------------------------------------- #
 
 def test_stop_does_not_crash_when_verify_raises(tmp_path, monkeypatch):
@@ -458,13 +458,13 @@ def test_stop_does_not_crash_when_verify_raises(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# v1.21 (H2) — Stop gate resolves repo root from a SUBDIRECTORY via git rev-parse.
+# v1.21 (H2) - Stop gate resolves repo root from a SUBDIRECTORY via git rev-parse.
 # --------------------------------------------------------------------------- #
 
 def test_stop_resolves_repo_root_from_subdir(tmp_path):
     """H2: when the event cwd is a SUBDIR, the gate must climb to the git
     toplevel. If it treated the subdir as repo root, `artifact = repo_root/rel`
-    would not exist and NO directive would fire — so an emitted directive
+    would not exist and NO directive would fire - so an emitted directive
     naming the repo-relative file proves the toplevel was resolved."""
     _git_repo_with_modified_source(tmp_path, "src/app.py")
     subdir = tmp_path / "src"  # a real subdir of the repo
@@ -483,7 +483,7 @@ def test_stop_resolves_repo_root_from_subdir(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Task B4 — SessionStart precedence injector + UserPromptSubmit nudge
+# Task B4 - SessionStart precedence injector + UserPromptSubmit nudge
 # --------------------------------------------------------------------------- #
 
 def test_sessionstart_runtime_present_injects_precedence(tmp_path):
@@ -514,7 +514,7 @@ def test_sessionstart_runtime_absent_benign_notice(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# v1.21 (H2) — SessionStart resolves repo root from a SUBDIRECTORY via rev-parse.
+# v1.21 (H2) - SessionStart resolves repo root from a SUBDIRECTORY via rev-parse.
 # --------------------------------------------------------------------------- #
 
 def test_sessionstart_resolves_repo_root_from_subdir(tmp_path):
@@ -563,11 +563,11 @@ def test_userpromptsubmit_runtime_absent_noop(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Task B5 — degradation integration test
+# Task B5 - degradation integration test
 # --------------------------------------------------------------------------- #
 
 def test_integration_runtime_absent_all_gates_noop(tmp_path):
-    # No marker, modified source, etc. — with runtime absent EVERY gate is a
+    # No marker, modified source, etc. - with runtime absent EVERY gate is a
     # no-op (plain workflow, never worse).
     edit_ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"},
                "cwd": str(tmp_path)}
@@ -601,7 +601,7 @@ def test_integration_runtime_present_no_marker_pretooluse_denies(tmp_path):
 # --- v1.23 enforcement-design fixes (codex install-workflow review 2026-05-23) --- #
 
 def test_v123_opt_in_fail_open_without_dot_consensus(tmp_path):
-    """Finding 1: a repo with NO .consensus/ (never opted in) fails OPEN — the gate
+    """Finding 1: a repo with NO .consensus/ (never opted in) fails OPEN - the gate
     must not brick development it was never meant to govern."""
     ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
@@ -613,12 +613,12 @@ def test_v1321_dormant_when_only_dot_consensus_present(tmp_path):
     a bare `.consensus/` dir is NO LONGER an activation predicate.
     Under per-invocation activation, the gate stays DORMANT until
     an active session marker (or legacy opt-in) is in force. This
-    reverses the v1.23 Finding-1 invariant — see CHANGELOG v1.32.1.
+    reverses the v1.23 Finding-1 invariant - see CHANGELOG v1.32.1.
     """
     (tmp_path / ".consensus").mkdir()
     ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
-    # Gate dormant → allow. Stderr may contain the one-time migration warning.
+    # Gate dormant -> allow. Stderr may contain the one-time migration warning.
     assert cp.returncode == 0, cp.stderr
 
 
@@ -644,7 +644,7 @@ def test_v1321_enforces_when_session_marker_active(tmp_path):
     )
     ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
-    # No design-approved marker → still denied. The session marker
+    # No design-approved marker -> still denied. The session marker
     # only flips the gate to ACTIVE; the verify_design_approval check
     # is what blocks unauthorized writes.
     assert cp.returncode == 2, cp.stderr
@@ -673,7 +673,7 @@ def test_v1321_legacy_always_on_marker_file_restores_per_project_gating(tmp_path
 
 def test_v123_governance_writes_allowed_for_bootstrap(tmp_path):
     """Finding 2: writing the marker itself (and anything under .consensus/ /
-    consensus-state/) is allowed even with no prior approval — otherwise the gate
+    consensus-state/) is allowed even with no prior approval - otherwise the gate
     cannot mint its own marker (circular lock)."""
     for rel in (".consensus/design-approved", "consensus-state/active/x/goal_packet.yaml"):
         ev = {"tool_name": "Write", "tool_input": {"file_path": rel}, "cwd": str(tmp_path)}
@@ -817,14 +817,14 @@ def test_v127_git_branch_list_pattern(tmp_path, command, allowed):
 
 
 # --------------------------------------------------------------------------- #
-# v1.30.4 — gate scope (consult iteration-gate-scope-design-2026-05-24):
+# v1.30.4 - gate scope (consult iteration-gate-scope-design-2026-05-24):
 # protected-install tamper guard (always-on) + 3-class out-of-repo ALLOW.
 # --------------------------------------------------------------------------- #
 
 def _gate_scope_env(tmp_path, monkeypatch):
     """Fake ~/.claude (enforcement surface) + a SIBLING repo so in-repo, out-of-repo, and
     protected paths are all distinct. Path.home() in the subprocess reads $HOME (POSIX) or
-    %USERPROFILE% (Windows) — both set below, threaded through _run_hook's dict(os.environ).
+    %USERPROFILE% (Windows) - both set below, threaded through _run_hook's dict(os.environ).
     Returns (repo_root, claude_dir)."""
     fake_home = tmp_path / "home"
     claude = fake_home / ".claude"
@@ -834,7 +834,7 @@ def _gate_scope_env(tmp_path, monkeypatch):
     (claude / "projects" / "proj" / "memory").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(fake_home))
     # The hook computes the protected surface from Path.home(). On POSIX that reads $HOME,
-    # but on Windows it reads %USERPROFILE% (ntpath.expanduser ignores $HOME) — so without
+    # but on Windows it reads %USERPROFILE% (ntpath.expanduser ignores $HOME) - so without
     # this the Windows hook resolves the REAL profile, the fixture's settings.json looks
     # unprotected, and the DENY assertions fail (ALLOW 0 != DENY 2). Set both for portability.
     monkeypatch.setenv("USERPROFILE", str(fake_home))
@@ -974,7 +974,7 @@ def test_gatescope_bash_redirect_to_settings_still_denied(tmp_path, monkeypatch)
 
 
 # --------------------------------------------------------------------------- #
-# v1.33 gate-consistency fix — dormant-by-default parity across ALL three hooks.
+# v1.33 gate-consistency fix - dormant-by-default parity across ALL three hooks.
 # The Stop gate and the SessionStart/UserPromptSubmit injector previously fired
 # in EVERY repo (gated only on `consensus-init` being on PATH), nagging everyday
 # non-consensus work. They now share the PreToolUse gate's activation predicate

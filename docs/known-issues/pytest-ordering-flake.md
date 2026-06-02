@@ -10,7 +10,7 @@ Five tests fail when running the full pytest suite but pass when run in isolatio
 - `consensus_mcp/tests/test_dispatch_codex.py::test_main_review_target_arg_threaded_through`
 - `consensus_mcp/tests/test_dispatch_codex.py::test_dispatch_done_includes_archive_path_and_audit_id`
 
-Full suite result on main as of v1.13.0: `5 failed, 502 passed, 1 skipped`. Same result on bare main with all v1.13.0 changes stashed — **the flake predates v1.13.0**.
+Full suite result on main as of v1.13.0: `5 failed, 502 passed, 1 skipped`. Same result on bare main with all v1.13.0 changes stashed - **the flake predates v1.13.0**.
 
 ## Root cause hypothesis (unconfirmed)
 
@@ -39,7 +39,7 @@ py -3.11 -m pytest consensus_mcp/tests/test_dispatch_codex.py::test_main_smoke_w
 
 ## Status
 
-Not blocking v1.13.0 release — issue predates this branch and the production code is correct. Five tests pass independently; the failure is in test-environment state, not in `_dispatch_codex.main` or any v1.13.0 code.
+Not blocking v1.13.0 release - issue predates this branch and the production code is correct. Five tests pass independently; the failure is in test-environment state, not in `_dispatch_codex.main` or any v1.13.0 code.
 
 ## Fix sketch (for whichever release picks this up)
 
@@ -48,4 +48,4 @@ Not blocking v1.13.0 release — issue predates this branch and the production c
 3. Switch the offender to `monkeypatch.chdir(...)` / `monkeypatch.setenv(...)` so pytest restores state at test end.
 4. Add a session-level `conftest.py` autouse fixture that snapshots `os.getcwd()` and `os.environ` at session start and asserts they're restored between tests, to prevent regression.
 
-Tracked outside any specific release — pick up when convenient.
+Tracked outside any specific release - pick up when convenient.

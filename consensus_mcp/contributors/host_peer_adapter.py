@@ -1,26 +1,26 @@
-"""Host-peer contributor adapter — same-family blind SWE-reviewer (v1.20.0).
+"""Host-peer contributor adapter - same-family blind SWE-reviewer (v1.20.0).
 
 Per docs/design-consults/v1.20.0-host-peer-agent.md (converged design): a
 `kind: host_peer` contributor runs the host's OWN AI family (e.g. claude when
 claude hosts) as a *fresh-context, adversarial* code reviewer. It is:
 
-  * **supplementary** — it augments cross-family review, never replaces it; and
-  * **EXCLUDED from the cross-family closure invariant** — its sealed artifact
+  * **supplementary** - it augments cross-family review, never replaces it; and
+  * **EXCLUDED from the cross-family closure invariant** - its sealed artifact
     carries `gate_eligible == False`, so `_closure_invariant.check_closure_invariant`
     can never treat it as the different-family signer (even when its family
-    differs from the mutator's — the host is not independent of its own
+    differs from the mutator's - the host is not independent of its own
     orchestration).
 
 Like ClaudeAdapter it does NOT shell out: it accepts a DEDICATED host review
 callback (separate from the orchestrator's `claude_artifact_callback`) so the
 reviewer seam is explicitly a fresh-context blind reviewer, never the
 orchestrator's own voice/context. `dispatch(packet)` invokes the callback with
-ONLY the phase DispatchPacket (structural blindness — no peer artifacts), then
+ONLY the phase DispatchPacket (structural blindness - no peer artifacts), then
 stamps the canonical host_peer provenance and seals a normal SealedArtifact via
 the shared T6 (review.write_and_seal) path.
 
 Fresh-context isolation is a host-runtime CONTRACT (consensus-mcp cannot prove
-memory isolation) — recorded via the independence_attestation, documented as a
+memory isolation) - recorded via the independence_attestation, documented as a
 contract, not a mechanical guarantee.
 """
 from __future__ import annotations
@@ -66,7 +66,7 @@ class HostPeerAdapter(ContributorAdapter):
         self.role = self.adapter_config.get("role") or _ROLE_SWE_REVIEWER
         # v1.21 (converged-plan D): when the review was dispatched as a REAL
         # Claude Code subagent, the host runtime gives the reviewer an isolated
-        # context window — strengthening fresh_context from a runtime CONTRACT
+        # context window - strengthening fresh_context from a runtime CONTRACT
         # to a structural guarantee. Recorded as an ADDITIVE provenance field
         # (not a `method` rename) so no existing consumer of `method` breaks.
         # PROVISIONAL per codex's falsifiability point: consensus-mcp cannot
@@ -165,7 +165,7 @@ class HostPeerAdapter(ContributorAdapter):
             "dispatch_provenance": dispatch_provenance,
         }
 
-        # --- Seal via T6 (review.write_and_seal) — shared seal path ---
+        # --- Seal via T6 (review.write_and_seal) - shared seal path ---
         from consensus_mcp.tools.review_write_and_seal import handle as t6_handle
         t6_result = t6_handle(
             iteration_id=iteration_id,

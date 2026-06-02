@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `consensus init` offer the independent in-house AIs (claude/codex/gemini/kimi) dynamically, add the same-model claude reviewer as a conditional opt-in 0.5 supplemental, and move the "≥2 independent" floor into config validation — without touching the consensus gate.
+**Goal:** Make `consensus init` offer the independent in-house AIs (claude/codex/gemini/kimi) dynamically, add the same-model claude reviewer as a conditional opt-in 0.5 supplemental, and move the ">=2 independent" floor into config validation - without touching the consensus gate.
 
-**Architecture:** A small profile-kind helper layer in `_contributor_profiles.py` (resolve kind, count independents, map host↔host_peer, detect orphans) is consumed by both `config.py` (authoritative validation gate) and `_init_wizard.py` (UX). The consensus gate, convergence, and `_engine_factory` are untouched; `host_peer` stays `gate_eligible=false`.
+**Architecture:** A small profile-kind helper layer in `_contributor_profiles.py` (resolve kind, count independents, map host<->host_peer, detect orphans) is consumed by both `config.py` (authoritative validation gate) and `_init_wizard.py` (UX). The consensus gate, convergence, and `_engine_factory` are untouched; `host_peer` stays `gate_eligible=false`.
 
 **Tech Stack:** Python 3.11+, pytest. No new dependencies.
 
 **Spec:** `docs/design-consults/init-contributor-selection-supplemental-review.md`
 **Converged plan:** `consensus-state/active/iteration-init-supplemental-review-2026-05-22/converged-plan.yaml`
 
-**Doctrine reminders:** strict TDD (red→green→commit); no success claims without running the command and seeing the output; `host_peer` is presentational 0.5 only — NEVER give it a gate vote.
+**Doctrine reminders:** strict TDD (red->green->commit); no success claims without running the command and seeing the output; `host_peer` is presentational 0.5 only - NEVER give it a gate vote.
 
 ---
 
@@ -97,7 +97,7 @@ def resolve_kind(name: str, profiles: dict) -> str | None:
 
 def independent_count(enabled: list[str], profiles: dict) -> int:
     """Count INDEPENDENT contributors: everything except a known host_peer.
-    Unknown names (no profile) count as independent — config.py keeps its open
+    Unknown names (no profile) count as independent - config.py keeps its open
     model; constructibility stays engine_factory's fail-closed job."""
     return sum(1 for n in enabled if resolve_kind(n, profiles) != KIND_HOST_PEER)
 
@@ -154,12 +154,12 @@ Expected: PASS (5 tests).
 
 ```bash
 git add consensus_mcp/_contributor_profiles.py consensus_mcp/tests/test_contributor_profiles.py
-git commit -m "feat(v1.20.1): profile-kind helpers (independent_count, host↔host_peer mapping)"
+git commit -m "feat(v1.20.1): profile-kind helpers (independent_count, host<->host_peer mapping)"
 ```
 
 ---
 
-### Task 2: config.py — independent floor + orphan rejection
+### Task 2: config.py - independent floor + orphan rejection
 
 Move the authoritative floor from raw `len(enabled)` to `independent_count`, and reject orphan host_peers. This is the one gate all paths funnel through (`cfg.validate`).
 
@@ -207,17 +207,17 @@ def test_unknown_open_contributor_counts_independent():
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_config.py -k "host_peer or orphan or unknown_open" -v`
-Expected: FAIL — `test_host_peer_does_not_satisfy_floor` does NOT raise (raw len==2 passes today); `test_orphan_host_peer_rejected` does NOT raise.
+Expected: FAIL - `test_host_peer_does_not_satisfy_floor` does NOT raise (raw len==2 passes today); `test_orphan_host_peer_rejected` does NOT raise.
 
-- [ ] **Step 3: Implement — replace the count block**
+- [ ] **Step 3: Implement - replace the count block**
 
-Replace `config.py:405` and the four gate checks. Insert merged-profile resolution + orphan check, and swap `n_contributors` → `n_independent` in the policy gates (keep operators identical):
+Replace `config.py:405` and the four gate checks. Insert merged-profile resolution + orphan check, and swap `n_contributors` -> `n_independent` in the policy gates (keep operators identical):
 
 ```python
     # === Cross-validation rules per converged-plan.yaml ===
     # Floor is INDEPENDENT count (host_peer is a 0.5 supplemental, never a vote).
     # Resolve kinds via merged built-in + overlay profiles; unknown names count
-    # as independent (open-contributor model). Keep the helper small — do NOT
+    # as independent (open-contributor model). Keep the helper small - do NOT
     # import wizard code here.
     from consensus_mcp._contributor_profiles import (
         load_builtin_profiles, merge_profiles, independent_count, orphan_host_peers,
@@ -249,7 +249,7 @@ Replace `config.py:405` and the four gate checks. Insert merged-profile resoluti
             f"({enabled!r}). Use propose-converge for 2-AI setups."
         )
 
-    # (disposition check unchanged — leave as-is) ...
+    # (disposition check unchanged - leave as-is) ...
 
     if rule == CONVERGE_STRICT_MAJ and n_independent == 1:
         raise ConfigValidationError(
@@ -269,7 +269,7 @@ Leave the raw-count uniqueness/non-empty checks (322-343) and the disposition ru
 - [ ] **Step 4: Run to verify pass**
 
 Run: `python -m pytest consensus_mcp/tests/test_config.py -k "host_peer or orphan or unknown_open" -v`
-Expected: PASS (4 tests). Then full file: `python -m pytest consensus_mcp/tests/test_config.py -v` — fix any older test that assumed raw-count semantics (update to independent semantics).
+Expected: PASS (4 tests). Then full file: `python -m pytest consensus_mcp/tests/test_config.py -v` - fix any older test that assumed raw-count semantics (update to independent semantics).
 
 - [ ] **Step 5: Commit**
 
@@ -280,7 +280,7 @@ git commit -m "feat(v1.20.1): config floor counts independents + rejects orphan 
 
 ---
 
-### Task 3: config.py — dynamic `default_config()` enabled
+### Task 3: config.py - dynamic `default_config()` enabled
 
 No hardcoded AI lists (decision 7): derive the default enabled set from built-in independent profiles in stable order.
 
@@ -303,7 +303,7 @@ def test_default_config_enabled_is_dynamic_independents_in_order():
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_config.py -k default_config_enabled_is_dynamic -v`
-Expected: FAIL — current default is the literal `["claude","codex","gemini"]` (no kimi).
+Expected: FAIL - current default is the literal `["claude","codex","gemini"]` (no kimi).
 
 - [ ] **Step 3: Implement**
 
@@ -311,7 +311,7 @@ Replace the literal at `config.py:174` inside `default_config()`:
 
 ```python
     # enabled: derived from built-in INDEPENDENT profiles (kind != host_peer) in
-    # stable sorted order — no hardcoded AI list (decision 7). Adding a built-in
+    # stable sorted order - no hardcoded AI list (decision 7). Adding a built-in
     # profile extends the default automatically.
     "enabled": _default_independent_enabled(),
 ```
@@ -344,7 +344,7 @@ git commit -m "feat(v1.20.1): default_config enabled derives from built-in indep
 
 ---
 
-### Task 4: wizard — main multi-select excludes host_peer (+ preselect support)
+### Task 4: wizard - main multi-select excludes host_peer (+ preselect support)
 
 **Files:**
 - Modify: `consensus_mcp/_init_wizard.py:369-460` (`_ordered_profile_names`, `_select_contributors_interactive`); delete the now-dead `_contributor_option_note` (393-408)
@@ -390,7 +390,7 @@ def test_multiselect_preselected_defaults(monkeypatch):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_init_wizard_contributors.py -k "selectable_names or multiselect" -v`
-Expected: FAIL — `_independent_ordered_names` missing; current list includes host_peer; no `preselected` param.
+Expected: FAIL - `_independent_ordered_names` missing; current list includes host_peer; no `preselected` param.
 
 - [ ] **Step 3: Implement**
 
@@ -399,7 +399,7 @@ Add the filter helper and rewrite the selection function head:
 ```python
 def _independent_ordered_names(profiles: dict) -> list[str]:
     """Display/selection order over INDEPENDENT profiles only (host first, then
-    sorted). host_peer is excluded — it is offered via the conditional follow-up."""
+    sorted). host_peer is excluded - it is offered via the conditional follow-up."""
     indep = {
         n: p for n, p in profiles.items()
         if isinstance(p, dict) and p.get("kind") != profiles_mod.KIND_HOST_PEER
@@ -422,7 +422,7 @@ def _select_contributors_interactive(profiles: dict, preselected: list[str] | No
 
     print("Select the AI reviewers to use (>=2 required):")
     for idx, name in enumerate(names, start=1):
-        status = "✓ installed" if installed[name] else "✗ missing"
+        status = "[ok] installed" if installed[name] else "[x] missing"
         mark = "x" if name in prechecked else " "
         print(f"  [{mark}] {idx}. {name} ({status})")
     default_hint = ",".join(str(names.index(n) + 1) for n in prechecked) or "none"
@@ -450,7 +450,7 @@ def _select_contributors_interactive(profiles: dict, preselected: list[str] | No
         return chosen
 ```
 
-Delete `_contributor_option_note` (393-408) — host_peer is no longer in this list, so the note is dead.
+Delete `_contributor_option_note` (393-408) - host_peer is no longer in this list, so the note is dead.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -466,7 +466,7 @@ git commit -m "feat(v1.20.1): wizard main select lists independents only (+prese
 
 ---
 
-### Task 5: wizard — dynamic `_detect_available_contributors`
+### Task 5: wizard - dynamic `_detect_available_contributors`
 
 **Files:**
 - Modify: `consensus_mcp/_init_wizard.py:332-339`
@@ -486,7 +486,7 @@ def test_detect_available_is_dynamic_over_profiles(monkeypatch, tmp_path):
     monkeypatch.setattr(wiz, "_load_merged_profiles", lambda *_: fake)
     monkeypatch.setattr(wiz.shutil, "which", lambda c: "/x/" + c if c in ("codex", "kimi") else None)
     got = wiz._detect_available_contributors(tmp_path)
-    assert "kimi" in got                       # dynamic — not hardcoded
+    assert "kimi" in got                       # dynamic - not hardcoded
     assert "claude" in got                     # host always available
     assert "claude-swe-reviewer" not in got    # host_peer excluded
     assert "gemini" not in got                 # not installed
@@ -495,14 +495,14 @@ def test_detect_available_is_dynamic_over_profiles(monkeypatch, tmp_path):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_init_wizard.py -k detect_available_is_dynamic -v`
-Expected: FAIL — current function is hardcoded to claude/codex/gemini (no kimi).
+Expected: FAIL - current function is hardcoded to claude/codex/gemini (no kimi).
 
 - [ ] **Step 3: Implement**
 
 ```python
 def _detect_available_contributors(repo_root: Path) -> list[str]:
     """Installed INDEPENDENT contributors, derived dynamically from the merged
-    profile set (no hardcoded AI list — decision 7). host is always available;
+    profile set (no hardcoded AI list - decision 7). host is always available;
     cli_reviewers iff their detect.command resolves on PATH; host_peer excluded
     (it is offered via the conditional follow-up, never auto-enabled)."""
     profiles = _load_merged_profiles(None)
@@ -527,7 +527,7 @@ git commit -m "feat(v1.20.1): dynamic contributor detection over merged profiles
 
 ---
 
-### Task 6: wizard — conditional supplemental follow-up (fresh path)
+### Task 6: wizard - conditional supplemental follow-up (fresh path)
 
 **Files:**
 - Create helper in `consensus_mcp/_init_wizard.py` (near `_select_contributors_interactive`)
@@ -565,7 +565,7 @@ def test_followup_default_yes_on_empty(monkeypatch):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_init_wizard_contributors.py -k followup -v`
-Expected: FAIL — `_prompt_host_peer_followup` missing.
+Expected: FAIL - `_prompt_host_peer_followup` missing.
 
 - [ ] **Step 3: Implement the follow-up + wire it into the fresh path**
 
@@ -585,10 +585,10 @@ def _prompt_host_peer_followup(selection, profiles, default_yes: bool):
 
     print("\nYou're using claude as the host. Add a same-model claude review agent?")
     print(
-        "This is a SUPPLEMENTAL review (shown as +0.5 in the init summary only — NOT a\n"
+        "This is a SUPPLEMENTAL review (shown as +0.5 in the init summary only - NOT a\n"
         "fully independent reviewer; it shares the host model's blind spots). It gets no\n"
         "vote at the consensus gate and can't close consensus (claude already votes as\n"
-        "host) — but every good idea it raises is still applied on merit. A useful extra\n"
+        "host) - but every good idea it raises is still applied on merit. A useful extra\n"
         "pass if you have the tokens to spare."
     )
     if len(candidates) == 1:
@@ -634,7 +634,7 @@ git commit -m "feat(v1.20.1): conditional opt-in same-model supplemental follow-
 
 ---
 
-### Task 7: wizard — `--contributors` flag floor + orphan rejection
+### Task 7: wizard - `--contributors` flag floor + orphan rejection
 
 **Files:**
 - Modify: `consensus_mcp/_init_wizard.py:463-478` (`_validate_contributor_selection`)
@@ -662,7 +662,7 @@ def test_flag_accepts_independents_plus_supplemental():
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_init_wizard_contributors.py -k "flag_rejects or flag_accepts" -v`
-Expected: FAIL — current `_validate_contributor_selection` uses raw `len(selection) < 2`, no orphan check.
+Expected: FAIL - current `_validate_contributor_selection` uses raw `len(selection) < 2`, no orphan check.
 
 - [ ] **Step 3: Implement**
 
@@ -701,7 +701,7 @@ git commit -m "feat(v1.20.1): --contributors enforces independent floor + orphan
 
 ---
 
-### Task 8: wizard — reconfigure preserves a legacy host_peer
+### Task 8: wizard - reconfigure preserves a legacy host_peer
 
 **Files:**
 - Modify: `consensus_mcp/_init_wizard.py:700-705` (reconfigure branch of `interactive_overrides`)
@@ -743,9 +743,9 @@ def test_reconfigure_invalid_legacy_forces_two_independents(monkeypatch):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_init_wizard_contributors.py -k reconfigure -v`
-Expected: FAIL — `_reconfigure_contributors` does not exist; current reconfigure is free-text.
+Expected: FAIL - `_reconfigure_contributors` does not exist; current reconfigure is free-text.
 
-- [ ] **Step 3: Implement — extract a reconfigure helper and call it**
+- [ ] **Step 3: Implement - extract a reconfigure helper and call it**
 
 ```python
 def _reconfigure_contributors(base: dict, profiles: dict) -> None:
@@ -785,7 +785,7 @@ git commit -m "feat(v1.20.1): reconfigure preserves legacy host_peer; guides inv
 
 ---
 
-### Task 9: wizard — weighted panel summary line
+### Task 9: wizard - weighted panel summary line
 
 **Files:**
 - Modify: `consensus_mcp/_init_wizard.py` (`cmd_init`, after the final config is built ~line 1062)
@@ -813,7 +813,7 @@ def test_panel_summary_no_supplemental(capsys):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `python -m pytest consensus_mcp/tests/test_init_wizard.py -k panel_summary -v`
-Expected: FAIL — `_print_panel_summary` missing.
+Expected: FAIL - `_print_panel_summary` missing.
 
 - [ ] **Step 3: Implement + call from cmd_init**
 
@@ -824,7 +824,7 @@ def _print_panel_summary(enabled: list[str], profiles: dict) -> None:
     if peers:
         total = f"{len(indep)}.5"
         print(
-            f"Panel: {total} reviewers — {len(indep)} independent "
+            f"Panel: {total} reviewers - {len(indep)} independent "
             f"({', '.join(indep)}) + 0.5 supplemental same-model ({', '.join(peers)})."
         )
     else:
@@ -865,9 +865,9 @@ Expected: all pass / 1 skip (the standing skip). Fix any test that assumed raw-c
 - [ ] **Step 2: Assert the gate is untouched**
 
 Run: `git diff --stat origin/v1.20.1 -- consensus_mcp/_engine_factory.py consensus_mcp/workflow_engine.py`
-Expected: NO changes to gate/closure/convergence files. host_peer must remain `gate_eligible=false`. If either file shows in the diff, STOP — the change leaked into the gate.
+Expected: NO changes to gate/closure/convergence files. host_peer must remain `gate_eligible=false`. If either file shows in the diff, STOP - the change leaked into the gate.
 
-- [ ] **Step 3: E2E smoke — non-interactive init**
+- [ ] **Step 3: E2E smoke - non-interactive init**
 
 Run: `python -m consensus_mcp._init_wizard --help` then a non-interactive init in a tmp dir with `--contributors claude,codex,claude-swe-reviewer` and confirm the written `.consensus/config.yaml` validates and the panel summary prints "2.5 reviewers". Also confirm `--contributors claude,claude-swe-reviewer` exits non-zero with the ">=2 independent" message.
 

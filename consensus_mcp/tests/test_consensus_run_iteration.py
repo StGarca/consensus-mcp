@@ -82,7 +82,7 @@ def test_run_iteration_workflow_4_with_fakes(tmp_path, monkeypatch):
     assert result["converged"] is True
     # All three contributors approved (Fake adapters share a name so the
     # engine's _artifact_contributor_key collapses them under one key when
-    # artifact values are identical — counting >=1 approve_vote is enough
+    # artifact values are identical - counting >=1 approve_vote is enough
     # to assert convergence happened).
     assert len(result["approve_votes"]) >= 1
     assert result["final_artifact_path"] is not None
@@ -115,7 +115,7 @@ def test_run_iteration_workflow_3_with_fakes(tmp_path, monkeypatch):
 
 
 def test_run_iteration_block_vote_fails_convergence(tmp_path, monkeypatch):
-    """Workflow #4 with one blocking contributor → converged False."""
+    """Workflow #4 with one blocking contributor -> converged False."""
     _write_config(tmp_path, contributors=["claude", "codex", "gemini"])
     iter_dir, goal, target = _make_iter_dir(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -143,7 +143,7 @@ def test_run_iteration_block_vote_fails_convergence(tmp_path, monkeypatch):
 # ---------- error paths ----------
 
 def test_run_iteration_missing_config_uses_legacy(tmp_path, monkeypatch):
-    """No .consensus/config.yaml → falls back to legacy-mode synthesis.
+    """No .consensus/config.yaml -> falls back to legacy-mode synthesis.
 
     Legacy synthesis returns contributors.enabled=[claude, codex], so the
     engine factory needs both adapters available.
@@ -310,7 +310,7 @@ def test_missing_claude_proposal_yaml_rejected_in_workflow_4(tmp_path, monkeypat
 
 
 def test_missing_claude_proposal_yaml_ok_in_workflow_3(tmp_path, monkeypatch):
-    """Workflow #3 doesn't dispatch ClaudeAdapter — claude_proposal_yaml stays
+    """Workflow #3 doesn't dispatch ClaudeAdapter - claude_proposal_yaml stays
     optional."""
     _write_config(
         tmp_path,
@@ -476,7 +476,7 @@ def test_run_iteration_host_peer_valid_seals_with_gate_eligible_false(tmp_path, 
 def test_run_iteration_host_peer_gate_override_regression(tmp_path, monkeypatch):
     """LOAD-BEARING: a callback dict claiming gate_eligible:true /
     weight:independent is OVERRIDDEN by the adapter's canonical
-    gate_eligible:false — the closure invariant cannot be defeated via the
+    gate_eligible:false - the closure invariant cannot be defeated via the
     host_peer_review_yaml."""
     _write_host_peer_config(tmp_path)
     iter_dir, goal, target = _make_iter_dir(tmp_path)

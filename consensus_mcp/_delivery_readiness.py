@@ -1,8 +1,8 @@
-"""Delivery-readiness gate — fail-closed enforcement that an operator-facing
+"""Delivery-readiness gate - fail-closed enforcement that an operator-facing
 artifact has been CONSENSUS-VETTED, not self-judged.
 
 Origin: internal anti-stall consensus (iteration-antistall-impl-2026-05-22, 4/4).
-Problem fixed: an agent kept FAILING TO INVOKE/UTILIZE consensus-mcp — building
+Problem fixed: an agent kept FAILING TO INVOKE/UTILIZE consensus-mcp - building
 before vetting, self-judging soundness ("I tested it myself, it's sound"), and
 delivering before it was checked. Memories did not bind the agent; only a
 mechanism does. This module is that mechanism.
@@ -16,7 +16,7 @@ iteration to point at, so `mint_delivery_token` refuses and
 consensus.
 
 Enforcement surfaces (portable-first):
-  - MCP tool `consensus.request_delivery` / `delivery_gate_check` (server.py) —
+  - MCP tool `consensus.request_delivery` / `delivery_gate_check` (server.py) -
     works across any harness (Kimi CLI, Cursor, Claude Code).
   - CLI: `python -m consensus_mcp._delivery_readiness {mint,verify} ...`.
   - Optional PreToolUse hook template (contrib/) for Claude Code only.
@@ -46,7 +46,7 @@ from consensus_mcp._self_drive import (
 )
 
 # Mirrors _release_gate_check.gate_real_iter's accepted_states (a module-local
-# there, so mirrored — not imported — with this citation). Keep in sync.
+# there, so mirrored - not imported - with this citation). Keep in sync.
 SEALED_CLOSING_STATES = frozenset(
     {"quorum_close_passed", "implementation_ready_apply_landed"}
 )
@@ -120,7 +120,7 @@ def _canonical_artifact_key(artifact_path: Path, repo_root: Path) -> str:
     hash key for mint, verify, AND close together.
 
     An out-of-repo absolute target (or any resolution error) falls back to the
-    resolved/forward-slashed absolute form — still stable across path forms."""
+    resolved/forward-slashed absolute form - still stable across path forms."""
     p = Path(artifact_path)
     try:
         if p.is_absolute():
@@ -131,7 +131,7 @@ def _canonical_artifact_key(artifact_path: Path, repo_root: Path) -> str:
             rel = Path(os.path.normpath(str(p)))
         return str(rel).replace("\\", "/")
     except ValueError:
-        # Absolute target outside repo_root — no repo-relative form exists.
+        # Absolute target outside repo_root - no repo-relative form exists.
         return str(p.resolve()).replace("\\", "/")
     except Exception:
         return str(p).replace("\\", "/")
@@ -150,13 +150,13 @@ def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
                         operator_ack: bool = False, action_classes: list | None = None,
                         followup_ledger_key: str | None = None,
                         repo_root: Path | None = None) -> dict:
-    """Mint a token — REFUSES unless the design ref is sealed and >=2 non-claude
+    """Mint a token - REFUSES unless the design ref is sealed and >=2 non-claude
     reviewers vetted it. This is the anti-self-judge gate: an agent cannot mint
     readiness from its own assertion.
 
     1.16.1: also REFUSES if the declared `action_classes` carry required
     follow-ups (required_followups.yaml) that are neither resolved nor
-    deferred-with-reason in the follow-up ledger — the mechanical binding of the
+    deferred-with-reason in the follow-up ledger - the mechanical binding of the
     EXISTING complete-fulfillment rule (prevents 'merge a version bump but skip
     the release')."""
     repo_root = repo_root or _resolve_repo_root()
@@ -167,7 +167,7 @@ def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
     if not status.sealed:
         raise DeliveryReadinessError(
             f"design_consensus_ref not sealed: {status.detail}. "
-            f"Soundness must be consensus-vetted — self-judging is not permitted."
+            f"Soundness must be consensus-vetted - self-judging is not permitted."
         )
     non_claude = [r for r in (vetted_by or []) if r and "claude" not in r.lower()]
     if len(non_claude) < 2:
@@ -177,7 +177,7 @@ def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
     known_flaws = list(known_flaws or [])
     if known_flaws and not operator_ack:
         raise DeliveryReadinessError(
-            f"known_flaws non-empty {known_flaws} without operator_ack=True — no caveat-and-ship"
+            f"known_flaws non-empty {known_flaws} without operator_ack=True - no caveat-and-ship"
         )
     # 1.16.1 follow-up completeness: declared action_classes acquire required
     # follow-ups; refuse to mint while any is unresolved/undeferred.
@@ -190,7 +190,7 @@ def mint_delivery_token(artifact_path: Path, *, design_consensus_ref: str,
         if not complete:
             raise DeliveryReadinessError(
                 f"action_classes {action_classes} have unresolved required follow-ups "
-                f"{open_fu} — resolve them or defer-with-reason before delivery "
+                f"{open_fu} - resolve them or defer-with-reason before delivery "
                 f"(complete-fulfillment rule, mechanically enforced)"
             )
     token = {
@@ -230,7 +230,7 @@ def verify_delivery_token(artifact_path: Path, repo_root: Path | None = None) ->
             return {"ok": False, "reason": "token artifact_path mismatch"}
         current = compute_artifact_hash(artifact_path)
         if token.get("artifact_hash") != current:
-            return {"ok": False, "reason": "artifact changed since vetting (hash mismatch) — re-vet"}
+            return {"ok": False, "reason": "artifact changed since vetting (hash mismatch) - re-vet"}
         status = resolve_consensus_ref(token.get("design_consensus_ref", ""), repo_root)
         if not status.sealed:
             return {"ok": False, "reason": f"design ref no longer sealed: {status.detail}"}

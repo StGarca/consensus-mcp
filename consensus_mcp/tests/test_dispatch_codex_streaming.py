@@ -2,15 +2,15 @@
 `_invoke_codex` in `consensus_mcp/_dispatch_codex.py`.
 
 v1.15.9 (iteration-v1159-deterministic-clock-harness, Workflow A
-converged — claude+codex+gemini, weighted-synthesis): the harness is
+converged - claude+codex+gemini, weighted-synthesis): the harness is
 now fully DETERMINISTIC. There are no real `time.sleep` waits on the
 drive path and no "advance the clock + hope the daemon runner is
-scheduled within a wall-clock budget + join(timeout)" — the exact
+scheduled within a wall-clock budget + join(timeout)" - the exact
 pattern that flaked on loaded Windows GitHub runners and forced the
 v1.15.8 Q2(c) `@_FLAKY_WINDOWS_CI` interim skip (now DELETED).
 
 Mechanism:
-  - `_SyncClock` — a `threading.Condition`-backed virtual clock.
+  - `_SyncClock` - a `threading.Condition`-backed virtual clock.
     `now()/advance()` are unchanged in spirit; `sleep(dt)` is
     injected into production `_invoke_codex` via its private,
     keyword-only `_sleep=` seam (defaults to `time.sleep`, so
@@ -21,7 +21,7 @@ Mechanism:
     emitted `dispatch-log.jsonl` events the assertions already use;
     `release_all()` is a root-cause-INDEPENDENT teardown safeguard:
     any failed/timed-out wait releases every waiter, terminates the
-    fake process, and fails LOUD with harness state — a misdiagnosed
+    fake process, and fails LOUD with harness state - a misdiagnosed
     or deadlocked harness can never wedge a CI job.
   - `_FakePipeReader` waits on the same clock (no real 5 ms poll);
     `StreamingFakeCodexPopen` notifies the clock on exit/terminate/
@@ -63,7 +63,7 @@ _CEILING = 20.0
 # notify_all), so under correct operation a waiter wakes in
 # microseconds. _REPOLL is purely a lost-wakeup SAFETY NET: a missed
 # notify self-heals in ~50 ms instead of stalling to _CEILING.
-# Correctness NEVER depends on it — every wait re-checks an exact
+# Correctness NEVER depends on it - every wait re-checks an exact
 # predicate; _REPOLL only bounds wakeup LATENCY, never pass/fail
 # (this is what keeps the harness deterministic, not wall-clock-timed).
 _REPOLL = 0.05
@@ -139,7 +139,7 @@ class _SyncClock:
     def wait_for(self, predicate) -> bool:
         """Block until predicate() is true OR released OR ceiling.
         predicate reads external state (dispatch-log/holder) and does
-        NOT take this lock. Re-checked on every notify — the runner
+        NOT take this lock. Re-checked on every notify - the runner
         emits a progress beat each poll iteration via sleep()."""
         deadline = time.monotonic() + _CEILING
         with self._cond:
@@ -184,7 +184,7 @@ class _SyncClock:
         broken handshake fails fast/loud instead of wedging CI. The
         fake proc's poll() also observes is_released() and
         self-terminates, so the production runner loop actually EXITS
-        (it does not just spin on a never-exiting proc) — without that,
+        (it does not just spin on a never-exiting proc) - without that,
         release_all only unblocked the driver while leaking a spinning
         daemon (codex-v1159-wfb-4 codex-rev-001, integrated)."""
         with self._cond:
@@ -229,8 +229,8 @@ class _FakePipeReader:
     """
 
     def __init__(self, schedule, parent, *, capacity: int | None):
-        # schedule: list[tuple[float, bytes]] — clock-relative time + payload
-        # capacity: BYTE capacity (codex-v11510-wfb-2 codex-rev-002 —
+        # schedule: list[tuple[float, bytes]] - clock-relative time + payload
+        # capacity: BYTE capacity (codex-v11510-wfb-2 codex-rev-002 -
         # a real OS pipe buffer is byte-bounded, ~64 KB, NOT line-count
         # bounded). None = unbounded (preserves the other 7 tests).
         self._schedule = list(schedule)
@@ -250,10 +250,10 @@ class _FakePipeReader:
 
     def write(self, data: bytes) -> bool:
         """NON-BLOCKING producer push (codex-v11510-wfb-2 codex-rev-003:
-        write() must NOT block inside poll() — that parks the runner
+        write() must NOT block inside poll() - that parks the runner
         thread inside poll() so the nominal driver can fall back to
         _CEILING). Returns True if `data` fit within the BYTE capacity
-        (buffered); False if it would overflow (backpressure — caller
+        (buffered); False if it would overflow (backpressure - caller
         does NOT advance the schedule cursor; poll() returns None and
         the runner parks NORMALLY in clock.sleep). A reader consuming
         bytes frees space for a later retry."""
@@ -270,7 +270,7 @@ class _FakePipeReader:
                 self._writer_blocked = False
                 self._parent._clock.notify()
                 return True
-            # Would overflow the byte buffer → backpressure (no append).
+            # Would overflow the byte buffer -> backpressure (no append).
             self._writer_blocked = True
             self._parent._clock.notify()
             return False
@@ -278,7 +278,7 @@ class _FakePipeReader:
     def readline(self):
         # codex-v1159-wfb-4 codex-rev-003 (integrated): production's
         # reader thread calls readline() in a tight `iter(readline,
-        # b"")` loop — so a call here happens-AFTER it processed the
+        # b"")` loop - so a call here happens-AFTER it processed the
         # previous line into a `dispatch_streamed_line` event. Notify
         # the clock so event-count waits (`_drive_streaming` /
         # `_drive_post_stream`) have a TRUE happens-before waker for
@@ -292,7 +292,7 @@ class _FakePipeReader:
                 if self._buffer:
                     line = self._buffer.popleft()
                     self._buffered_bytes -= len(line)
-                    # Space freed → a backpressured writer can retry.
+                    # Space freed -> a backpressured writer can retry.
                     self._writer_blocked = False
                     self._parent._clock.notify()
                     return line
@@ -339,7 +339,7 @@ class StreamingFakeCodexPopen:
         # codex-v1159-wfb-3 codex-rev-001 (BLOCKING): record the
         # SIGTERM/terminate side-effect so the operator-abort test can
         # assert _terminate_process_tree actually ran (H2 names SIGTERM
-        # as required coverage — a regression that stopped killing the
+        # as required coverage - a regression that stopped killing the
         # process must FAIL, not silently pass).
         self._terminated = False
         self.returncode = None
@@ -390,7 +390,7 @@ class StreamingFakeCodexPopen:
         # codex-v1159-wfb-4 codex-rev-001 (integrated): when the clock
         # is released (a harness-timeout teardown), the fake proc MUST
         # exit so the production poll loop terminates and the daemon
-        # runner thread actually dies — instead of _sleep returning
+        # runner thread actually dies - instead of _sleep returning
         # immediately while proc.poll() stays None forever (a spinning
         # leak after the driver raised). release_all() owns the single
         # teardown signal; the fake observes it here (poll() is called
@@ -420,7 +420,7 @@ class StreamingFakeCodexPopen:
             self.returncode = -15  # SIGTERM
             self._exited = True
             self._clock.notify()
-            # Do NOT stage output payload on termination — matches real codex.
+            # Do NOT stage output payload on termination - matches real codex.
 
     def kill(self):
         self._terminated = True
@@ -442,7 +442,7 @@ class StreamingFakeCodexPopen:
         on POSIX. Return a synthetic, never-live PID so os.getpgid raises
         ProcessLookupError and the production OSError-fallback
         (proc.terminate()) runs. (pid 0 == the caller's own process group
-        — that previously made the abort path SIGTERM the pytest job
+        - that previously made the abort path SIGTERM the pytest job
         itself. The suite-wide conftest guard also neutralizes
         os.killpg/os.getpgid.)"""
         return 2_147_483_647
@@ -501,7 +501,7 @@ def _run_invoke_in_thread(
     Injects `_sleep=clock.sleep` (the converged DI seam) so the
     production poll loop is virtual-time-gated. The `finally` notifies
     the clock so the driver's `wait_for` is woken the instant the
-    runner thread dies — on EVERY path incl. exceptions (the universal
+    runner thread dies - on EVERY path incl. exceptions (the universal
     escape that makes the design deadlock-free).
     """
     holder: dict = {}
@@ -532,7 +532,7 @@ def _drive(clock: _SyncClock, th: threading.Thread, *, until=None, chunk: float 
     cleanly, or aborted/raised). It is intentionally NOT a mid-stream
     observable: stopping early on e.g. "a line was streamed" while the
     fake proc has not yet been advanced to its exit_at leaves the
-    production loop spinning on a proc that never exits → wedged. The
+    production loop spinning on a proc that never exits -> wedged. The
     event assertions are checked by the caller AFTER thread death.
 
     Fully park-synced (no t0-capture race, no real-sleep budget):
@@ -540,13 +540,13 @@ def _drive(clock: _SyncClock, th: threading.Thread, *, until=None, chunk: float 
        `_t0 = now()` capture complete) OR the runner already died.
     2. Each round: advance one logical chunk, then wait until the
        runner parked again having observed this advance (still running)
-       OR the runner thread died. Both are Condition-notified —
-       guaranteed waker on every path; ceiling → release_all() → loud
+       OR the runner thread died. Both are Condition-notified -
+       guaranteed waker on every path; ceiling -> release_all() -> loud
        fast fail, never a wedged CI job. `until` is accepted for
        call-site readability only and does not gate termination."""
     # Startup: wait until the runner has parked once (prologue + the
     # fake's _t0=now() capture complete) OR the runner thread already
-    # died — an abort can fire on iteration 1 (e.g. operator-signal
+    # died - an abort can fire on iteration 1 (e.g. operator-signal
     # written before drive) BEFORE the loop ever reaches _sleep, so
     # "parked" is not guaranteed; thread-death is the universal escape.
     if not clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers > 0):
@@ -560,10 +560,10 @@ def _drive(clock: _SyncClock, th: threading.Thread, *, until=None, chunk: float 
         # codex-v1159-wfb-2 codex-rev-001 (BLOCKING, integrated): the
         # per-round wait return MUST be acted on. A False return means
         # _CEILING elapsed with neither runner re-park (epoch>=e) nor
-        # thread death — under correct notify-driven operation that
+        # thread death - under correct notify-driven operation that
         # never happens (wakeups are sub-ms), so False == a genuine
         # wedge. Fire the release_all() safeguard and fail FAST/LOUD
-        # here, not after max_rounds×_CEILING. This is what makes the
+        # here, not after max_roundsx_CEILING. This is what makes the
         # claimed deadlock-free invariant actually true.
         if not clock.wait_for(
             lambda e=e: (not th.is_alive())
@@ -573,7 +573,7 @@ def _drive(clock: _SyncClock, th: threading.Thread, *, until=None, chunk: float 
             th.join(timeout=5)
             raise AssertionError(
                 "_drive: per-round wait hit _CEILING with no runner "
-                "progress — release_all fired. Deadlock/handshake or "
+                "progress - release_all fired. Deadlock/handshake or "
                 "product logic broken; NOT a timing flake."
             )
         rounds += 1
@@ -584,7 +584,7 @@ def _drive(clock: _SyncClock, th: threading.Thread, *, until=None, chunk: float 
     if th.is_alive() or exhausted:
         raise AssertionError(
             f"_drive: runner did not finish within max_rounds={max_rounds} "
-            "(release_all fired — deterministic handshake broke; NOT a "
+            "(release_all fired - deterministic handshake broke; NOT a "
             "timing flake). max_rounds exhaustion is a HARD fail even if "
             "release_all later lets the thread limp out."
         )
@@ -603,10 +603,10 @@ def _drive_heartbeats(
     """Lockstep driver that PROVES the heartbeat interval gate
     (codex-v1159-wfb-5 codex-rev-001, integrated). Advancing exactly
     `interval` per step with one poll/step only checks "one per step"
-    — a regression that emits EVERY poll (or uses a tiny threshold)
+    - a regression that emits EVERY poll (or uses a tiny threshold)
     would still produce one-per-step and pass. So each round we:
       (1) advance a SUB-interval amount, sync, and assert NO new
-          heartbeat (the interval gate held — premature emit fails);
+          heartbeat (the interval gate held - premature emit fails);
       (2) advance the remainder to cross the boundary, sync, and
           assert EXACTLY ONE new heartbeat.
     This restores the cadence coverage the pre-rewrite test had via
@@ -621,23 +621,23 @@ def _drive_heartbeats(
             th.join(timeout=5)
             raise AssertionError(
                 f"_drive_heartbeats: runner did not consume advance "
-                f"({where}) — release_all fired; handshake broken, NOT "
+                f"({where}) - release_all fired; handshake broken, NOT "
                 "a timing flake"
             )
 
     # codex-v1159-wfb-7 codex-rev-001 (BLOCKING, integrated): startup
     # wait must use the SAME release_all()+join loud-fail path as the
-    # other drivers — a bare assert here bypasses the synthetic
+    # other drivers - a bare assert here bypasses the synthetic
     # clock/process teardown (the teardown-bypass class of pass-2/4).
     if not clock.wait_runner_parked(after_epoch=0):
         clock.release_all()
         th.join(timeout=5)
         raise AssertionError(
-            "_drive_heartbeats: runner never parked (startup) — "
+            "_drive_heartbeats: runner never parked (startup) - "
             "release_all fired; handshake broken, NOT a timing flake"
         )
     # codex-v1159-wfb-7 codex-rev-001 (BLOCKING, integrated): check
-    # no-emit JUST BEFORE the boundary, not at half-interval — a
+    # no-emit JUST BEFORE the boundary, not at half-interval - a
     # regression emitting at e.g. 20s for a 30s interval slips past a
     # half-interval (15s) check but is caught at interval-epsilon.
     # Float-robustness refinement on codex's exact-boundary epsilon:
@@ -647,11 +647,11 @@ def _drive_heartbeats(
     # `gap` must exceed `poll_interval`: the production loop sleeps
     # `poll_interval` between polls, so an advance < poll_interval
     # never triggers another poll iteration (the runner would not emit
-    # — the bug a 2*epsilon=0.002 advance vs poll_interval=0.01 hit).
+    # - the bug a 2*epsilon=0.002 advance vs poll_interval=0.01 hit).
     # gap stays << interval so the no-emit check remains a TIGHT gate
     # (catches emit-every-poll and wrong-threshold regressions like
-    # "emit at 20s for a 30s interval": 20 < interval-gap → caught).
-    # Float margin = gap ≫ ~1e-10 double error, so the boundary
+    # "emit at 20s for a 30s interval": 20 < interval-gap -> caught).
+    # Float margin = gap >> ~1e-10 double error, so the boundary
     # comparison cannot be flipped by rounding.
     gap = max(interval / 1000.0, poll_interval * 5.0)
     pre_boundary = interval - gap
@@ -662,7 +662,7 @@ def _drive_heartbeats(
         _sync(e1, f"round {k} pre-boundary")
         mid = _hb()
         assert mid == before, (
-            f"round {k}: heartbeat emitted at +{pre_boundary}s — BEFORE "
+            f"round {k}: heartbeat emitted at +{pre_boundary}s - BEFORE "
             f"the {interval}s interval elapsed: count {before}->{mid}. "
             "The interval gate is broken (regression: emit-every-poll / "
             "wrong threshold)."
@@ -698,7 +698,7 @@ def _drive_streaming(
     accumulates past the hard ceiling. `step` < stall_silence_seconds;
     after each advance, wait until production has actually PROCESSED a
     new streamed line (the durable `dispatch_streamed_line` count rose)
-    — so `last_streamed_ts` is provably fresh at every silence check —
+    - so `last_streamed_ts` is provably fresh at every silence check -
     OR `until` (the wall abort) fired OR the runner died. This removes
     the reader/processing race that a coarse jump would lose to
     pre-first-line silence."""
@@ -712,10 +712,10 @@ def _drive_streaming(
         prev = len(_events(log_path, "dispatch_streamed_line"))
         clock.advance(step)
         # codex-v1159-wfb-2 codex-rev-001 (BLOCKING, integrated):
-        # act on the per-step wait return — False == _CEILING elapsed
+        # act on the per-step wait return - False == _CEILING elapsed
         # with no new processed line / abort / death = a genuine wedge;
         # fire release_all() and fail FAST/LOUD, not after
-        # max_steps×_CEILING.
+        # max_stepsx_CEILING.
         if not clock.wait_for(
             lambda prev=prev: (not th.is_alive())
             or until()
@@ -725,7 +725,7 @@ def _drive_streaming(
             th.join(timeout=5)
             raise AssertionError(
                 "_drive_streaming: per-step wait hit _CEILING with no "
-                "progress — release_all fired. Deadlock/handshake or "
+                "progress - release_all fired. Deadlock/handshake or "
                 "product logic broken; NOT a timing flake."
             )
         steps += 1
@@ -736,7 +736,7 @@ def _drive_streaming(
     if th.is_alive() or exhausted:
         raise AssertionError(
             f"_drive_streaming: did not reach terminal within "
-            f"max_steps={max_steps} (release_all fired — deterministic "
+            f"max_steps={max_steps} (release_all fired - deterministic "
             "handshake broke; NOT a timing flake). max_steps exhaustion "
             "is a HARD fail even if release_all later frees the thread."
         )
@@ -755,10 +755,10 @@ def _advance_until_streamed(
     `min_streamed` `dispatch_streamed_line` events are PROCESSED and
     the runner is back parked mid-run. Establishes a DETERMINISTIC
     mid-run state: callers can then assert post-stream behaviour
-    (silence path) or inject a mid-run operator-abort signal — never
+    (silence path) or inject a mid-run operator-abort signal - never
     the startup/pre-first-line path (codex-v1159-wfb-3 codex-rev-002
     silence; codex-v1159-wfb-4 codex-rev-002 operator). Returns with
-    the runner alive + parked + ≥min_streamed events; raises LOUD
+    the runner alive + parked + >=min_streamed events; raises LOUD
     (release_all) on any wedge or shortfall."""
     if not clock.wait_for(lambda: (not th.is_alive()) or clock._sleepers > 0):
         clock.release_all()
@@ -791,7 +791,7 @@ def _advance_until_streamed(
         raise AssertionError(
             f"_advance_until_streamed: only "
             f"{len(_events(log_path, 'dispatch_streamed_line'))} of "
-            f"{min_streamed} lines processed — deterministic mid-run "
+            f"{min_streamed} lines processed - deterministic mid-run "
             "state NOT established (release_all fired)"
         )
 
@@ -807,7 +807,7 @@ def _drive_post_stream(
     """codex-v1159-wfb-3 codex-rev-002 (integrated): process
     `min_streamed` lines first so `last_streamed_ts` is set and the
     subsequent silence-abort exercises the POST-stream path (not
-    pre-first-line startup silence — the coverage the original test's
+    pre-first-line startup silence - the coverage the original test's
     now-removed `time.sleep(0.1)` guaranteed), then drive to terminal."""
     _advance_until_streamed(clock, th, log_path, min_streamed=min_streamed, step=step)
     _drive(clock, th)
@@ -827,7 +827,7 @@ def _read_log_events(log_path: Path) -> list[dict]:
             # Defensive JSONL parse (v1.15.7 C): a telemetry-log reader
             # must never crash on a partial line. v1.15.8 made the
             # production append OS-lock-atomic so torn lines should not
-            # occur; drop any anyway — the asserted events are whole.
+            # occur; drop any anyway - the asserted events are whole.
             continue
     return out
 
@@ -850,7 +850,7 @@ def _events(log_path, name):
 
 
 # --------------------------------------------------------------------------
-# Test 1 — streamed lines appear in dispatch-log with correct seq + content
+# Test 1 - streamed lines appear in dispatch-log with correct seq + content
 # --------------------------------------------------------------------------
 
 
@@ -899,7 +899,7 @@ def test_streamed_lines_appear_in_dispatch_log(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Test 2 — long lines truncated to 200 chars; full length recorded
+# Test 2 - long lines truncated to 200 chars; full length recorded
 # --------------------------------------------------------------------------
 
 
@@ -940,7 +940,7 @@ def test_long_lines_are_truncated_to_200_chars(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Test 3 — heartbeat fires at heartbeat_interval cadence
+# Test 3 - heartbeat fires at heartbeat_interval cadence
 # --------------------------------------------------------------------------
 
 
@@ -970,7 +970,7 @@ def test_heartbeat_fires_at_interval(tmp_path):
         time_fn=clock.now,
         popen_factory=factory,
     )
-    # 3 lockstep interval rounds — each PROVES the gate: no heartbeat
+    # 3 lockstep interval rounds - each PROVES the gate: no heartbeat
     # at +15s, exactly one at +30s (codex-v1159-wfb-5 codex-rev-001).
     _drive_heartbeats(
         clock, th, log_path,
@@ -985,13 +985,13 @@ def test_heartbeat_fires_at_interval(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Test 4 — heartbeat silence triggers abort
+# Test 4 - heartbeat silence triggers abort
 # --------------------------------------------------------------------------
 
 
 def test_heartbeat_silence_triggers_abort(tmp_path):
     """Codex emits 2 lines then goes silent; advancing virtual time past
-    stall_silence_seconds → `dispatch_aborted` with
+    stall_silence_seconds -> `dispatch_aborted` with
     `abort_source="watchdog_silence"` and CodexInvocationError raised."""
     repo_root = _setup_repo_root(tmp_path)
     clock = _SyncClock()
@@ -1030,18 +1030,18 @@ def test_heartbeat_silence_triggers_abort(tmp_path):
     # silence): the abort is tied to prior streamed output, so a
     # regression in last_streamed_ts handling is caught (codex-rev-002).
     assert aborts[0].get("last_streamed_line_age_seconds") is not None, (
-        "silence abort was startup-silence, not post-stream — "
+        "silence abort was startup-silence, not post-stream - "
         "last_streamed_line_age_seconds is null (codex-rev-002 coverage)"
     )
 
 
 # --------------------------------------------------------------------------
-# Test 5 — operator abort-signal file triggers abort
+# Test 5 - operator abort-signal file triggers abort
 # --------------------------------------------------------------------------
 
 
 def test_operator_abort_signal_file_triggers_abort(tmp_path):
-    """Mid-run `abort-dispatch-<pass_id>.signal` → wrapper SIGTERMs codex,
+    """Mid-run `abort-dispatch-<pass_id>.signal` -> wrapper SIGTERMs codex,
     emits `dispatch_aborted` (`operator_signal_file`), deletes the signal
     file, and raises."""
     repo_root = _setup_repo_root(tmp_path)
@@ -1066,7 +1066,7 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
         popen_factory=factory,
     )
     # codex-v1159-wfb-4 codex-rev-002 (integrated): establish a
-    # DETERMINISTIC mid-run state before writing the signal — wait
+    # DETERMINISTIC mid-run state before writing the signal - wait
     # until the scheduled "working" line is processed and the runner
     # is parked mid-loop. Writing the signal before then could test
     # startup-present-signal handling instead of the named H2 live
@@ -1074,7 +1074,7 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
     _advance_until_streamed(clock, th, log_path, min_streamed=1, step=1.0)
     signal_path = repo_root / "consensus-state" / "state" / "abort-dispatch-codex-test-pass1.signal"
     # Write ATOMICALLY (tmp + replace) so the poller never observes the signal file
-    # existing-but-empty — on a slow CI, write_text creates the file before the content
+    # existing-but-empty - on a slow CI, write_text creates the file before the content
     # lands, and the reader falls back to "operator_signal_file" instead of this reason.
     _sig_tmp = signal_path.with_suffix(".signal.tmp")
     _sig_tmp.write_text("operator manual abort", encoding="utf-8")
@@ -1092,7 +1092,7 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
     # codex-v1159-wfb-3 codex-rev-001 (BLOCKING): assert the actual
     # SIGTERM/terminate side-effect. A regression that removed or broke
     # _terminate_process_tree(proc) in the operator-signal branch would
-    # still emit the event, delete the signal file, and raise — passing
+    # still emit the event, delete the signal file, and raise - passing
     # every assertion above while leaving the real codex process ALIVE.
     # H2 names SIGTERM as required coverage; assert it explicitly.
     assert factory.instances, "no codex process was ever created"
@@ -1103,13 +1103,13 @@ def test_operator_abort_signal_file_triggers_abort(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Test 6 — wall-time hard ceiling
+# Test 6 - wall-time hard ceiling
 # --------------------------------------------------------------------------
 
 
 def test_wall_time_hard_ceiling(tmp_path):
     """Codex streams continuously (silence-abort never fires) but runs
-    past `timeout_seconds + stall_silence_seconds` → `dispatch_aborted`
+    past `timeout_seconds + stall_silence_seconds` -> `dispatch_aborted`
     with `abort_source="wall_time_hard_ceiling"` + CodexInvocationError."""
     repo_root = _setup_repo_root(tmp_path)
     clock = _SyncClock()
@@ -1150,7 +1150,7 @@ def test_wall_time_hard_ceiling(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Test 7 — clean exit returns codex output payload
+# Test 7 - clean exit returns codex output payload
 # --------------------------------------------------------------------------
 
 
@@ -1194,7 +1194,7 @@ def test_clean_exit_returns_output(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Test 8 — stderr drain prevents deadlock (REAL reader threads retained)
+# Test 8 - stderr drain prevents deadlock (REAL reader threads retained)
 # --------------------------------------------------------------------------
 
 
@@ -1205,15 +1205,15 @@ def test_clean_exit_returns_output(tmp_path):
 )
 def test_stderr_drain_prevents_deadlock(tmp_path, drain_stderr, expect_clean):
     """Production MUST drain stderr or a real codex deadlocks on a full
-    OS pipe buffer. ONE clean-exit contract, asserted both ways — this
+    OS pipe buffer. ONE clean-exit contract, asserted both ways - this
     is the mutant gate (codex-v11510-wfb-2 codex-rev-001):
 
     - nominal-drain: the stderr reader relieves backpressure, the proc
-      exits, `out=={"ok": true}`, the byte buffer fully drains → the
+      exits, `out=={"ok": true}`, the byte buffer fully drains -> the
       clean-exit contract HOLDS.
-    - mutant-no-drain: NO stderr reader → the BYTE-bounded pipe
-      (codex-rev-002) saturates → the producer is perpetually
-      backpressured → the proc can NEVER cleanly exit. The SAME
+    - mutant-no-drain: NO stderr reader -> the BYTE-bounded pipe
+      (codex-rev-002) saturates -> the producer is perpetually
+      backpressured -> the proc can NEVER cleanly exit. The SAME
       clean-exit contract MUST FAIL, and that failure is detected
       FAST + DETERMINISTICALLY (codex-rev-003: write() is
       non-blocking so the runner parks normally in clock.sleep, never
@@ -1221,7 +1221,7 @@ def test_stderr_drain_prevents_deadlock(tmp_path, drain_stderr, expect_clean):
       notify-driven `wait_for`, NOT a `_CEILING`/`_drive` timeout).
 
     If a production regression removed/broke the stderr drain, the
-    nominal case's clean-exit assertions would fail → the gate has
+    nominal case's clean-exit assertions would fail -> the gate has
     teeth in both directions.
     """
     repo_root = _setup_repo_root(tmp_path)
@@ -1260,13 +1260,13 @@ def test_stderr_drain_prevents_deadlock(tmp_path, drain_stderr, expect_clean):
 
     if expect_clean:
         # Nominal: backpressure occurs but the live reader relieves it
-        # → the clean-exit contract HOLDS. (If production drain
+        # -> the clean-exit contract HOLDS. (If production drain
         # regressed, these assertions fail = the gate's teeth.)
         _drive(clock, th, until=lambda: not th.is_alive())
         assert not th.is_alive()
         assert "e" not in holder, f"unexpected exception: {holder.get('e')}"
         assert holder.get("out") == '{"ok": true}', (
-            "clean-exit contract BROKEN under a live stderr reader — "
+            "clean-exit contract BROKEN under a live stderr reader - "
             "production stderr drain may have regressed"
         )
         proc = factory.instances[0]
@@ -1277,8 +1277,8 @@ def test_stderr_drain_prevents_deadlock(tmp_path, drain_stderr, expect_clean):
 
     # Mutant: NO stderr reader. Deterministically + FAST establish that
     # the producer is byte-backpressured (write() notify_all()s the
-    # instant it blocks — ms, not _CEILING, no _drive). The proc is
-    # created inside the runner thread → guard instances[0].
+    # instant it blocks - ms, not _CEILING, no _drive). The proc is
+    # created inside the runner thread -> guard instances[0].
     def _byte_backpressured():
         if not factory.instances:
             return False
@@ -1287,11 +1287,11 @@ def test_stderr_drain_prevents_deadlock(tmp_path, drain_stderr, expect_clean):
 
     blocked = clock.wait_for(_byte_backpressured)
     assert blocked, (
-        "stderr writer never byte-backpressured with NO reader — the "
+        "stderr writer never byte-backpressured with NO reader - the "
         "deadlock surface is not modeled, so this gate would NOT catch "
         "a stderr-drain regression"
     )
-    # The dispatch is deadlocked → the clean-exit contract is BROKEN.
+    # The dispatch is deadlocked -> the clean-exit contract is BROKEN.
     # Assert that FAILURE (the gate's point), then release_all() as
     # TEARDOWN only, and prove the unwind is prompt (NOT _CEILING).
     proc = factory.instances[0]
@@ -1301,14 +1301,14 @@ def test_stderr_drain_prevents_deadlock(tmp_path, drain_stderr, expect_clean):
     th.join(timeout=5)
     elapsed = time.monotonic() - t0
     assert not th.is_alive(), (
-        "runner did not unwind within 5s of release_all() — teardown "
+        "runner did not unwind within 5s of release_all() - teardown "
         "does not promptly bound the backpressure deadlock"
     )
     assert elapsed < _CEILING, (
-        f"unwind took {elapsed:.1f}s >= _CEILING — failure was "
+        f"unwind took {elapsed:.1f}s >= _CEILING - failure was "
         "timeout-driven, not the deterministic observation"
     )
     assert "out" not in holder, (
-        "clean-exit contract HELD under no stderr drain — the mutant "
+        "clean-exit contract HELD under no stderr drain - the mutant "
         "gate has no teeth (a stderr-drain regression would slip)"
     )

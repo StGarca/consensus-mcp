@@ -4,19 +4,19 @@ Per spec sections 7, 9, 10, 11, 13, 16, 20, 22 of the multi-agent-consensus-mcp
 spec at v1.7.2. Audits an entire iteration directory
 (`consensus-state/active/<iteration>/`) for:
 
-  - presence of all required artifacts (§20 step list)
+  - presence of all required artifacts (section 20 step list)
   - YAML parseability of each artifact
   - iteration_id coherence across artifacts (matches dir name)
   - schema_version == 1 wherever the field appears
   - independence-audit hash chain (review_returned_and_sealed sha256 must equal
     the canonical sha256 of the referenced file)
-  - independence_proof condition (§13 / cf-001) seal-before-invoke
-  - §22 metrics presence on iteration-outcome.yaml
+  - independence_proof condition (section 13 / cf-001) seal-before-invoke
+  - section 22 metrics presence on iteration-outcome.yaml
   - independent_finding_rate in [0.0, 1.0] or null with rationale
   - cross-artifact reference integrity (review.reviewed_packet_sha256 ==
     canonical sha256 of review-packet.yaml)
-  - review-packet.yaml contains all 10 §7 required_packet_fields
-  - reviewer artifacts contain no corroborated_by anywhere (§13 synthesizer-only)
+  - review-packet.yaml contains all 10 section 7 required_packet_fields
+  - reviewer artifacts contain no corroborated_by anywhere (section 13 synthesizer-only)
 
 Output: structured report (YAML by default, JSON via --json).
 
@@ -66,7 +66,7 @@ REQUIRED_ARTIFACTS = [
     "iteration-outcome.yaml",
 ]
 
-# §7 required_packet_fields (10 fields).
+# section 7 required_packet_fields (10 fields).
 REQUIRED_PACKET_FIELDS = [
     "objective",
     "mode",
@@ -80,7 +80,7 @@ REQUIRED_PACKET_FIELDS = [
     "requested_output_schema",
 ]
 
-# §22 metric blocks and their required sub-fields.
+# section 22 metric blocks and their required sub-fields.
 METRICS_BLOCKS = {
     "tokens_per_iteration": [
         "codex_input_estimate",
@@ -448,7 +448,7 @@ def validate_iteration(iteration_dir: Path) -> dict:
                 "note": "section 13 independence_proof_required; cf-001 weaponization defense",
             })
 
-    # ---- Rule 7: §22 metrics presence on iteration-outcome.yaml ----
+    # ---- Rule 7: section 22 metrics presence on iteration-outcome.yaml ----
     outcome = parsed.get("iteration-outcome.yaml")
     if isinstance(outcome, dict):
         for block_name, sub_fields in METRICS_BLOCKS.items():
@@ -458,7 +458,7 @@ def validate_iteration(iteration_dir: Path) -> dict:
                     "id": "MISSING_METRICS_BLOCK",
                     "severity": "high",
                     "block": block_name,
-                    "claim": f"iteration-outcome.yaml missing required §22 block {block_name!r}",
+                    "claim": f"iteration-outcome.yaml missing required section 22 block {block_name!r}",
                 })
                 continue
             for sf in sub_fields:
@@ -551,7 +551,7 @@ def validate_iteration(iteration_dir: Path) -> dict:
                              f"review-packet.yaml ({actual_packet_sha!r})",
                 })
 
-    # ---- Rule 10: review-packet contains all 10 §7 required_packet_fields ----
+    # ---- Rule 10: review-packet contains all 10 section 7 required_packet_fields ----
     packet = parsed.get("review-packet.yaml")
     if isinstance(packet, dict):
         for field in REQUIRED_PACKET_FIELDS:
@@ -560,7 +560,7 @@ def validate_iteration(iteration_dir: Path) -> dict:
                     "id": "PACKET_MISSING_REQUIRED_FIELD",
                     "severity": "high",
                     "field": field,
-                    "claim": f"review-packet.yaml missing §7 required_packet_fields entry {field!r}",
+                    "claim": f"review-packet.yaml missing section 7 required_packet_fields entry {field!r}",
                 })
 
     # ---- Rule 11: no corroborated_by anywhere on review yamls ----
@@ -575,7 +575,7 @@ def validate_iteration(iteration_dir: Path) -> dict:
                 "review": review_name,
                 "path": hit_path,
                 "claim": f"{review_name} contains corroborated_by at {hit_path!r}; "
-                         f"synthesizer-only per §13 / codex-rev-009",
+                         f"synthesizer-only per section 13 / codex-rev-009",
             })
 
     # ---- Rule 12 (v1.7.5; operator finding 2026-05-08): closure-state coherence ----

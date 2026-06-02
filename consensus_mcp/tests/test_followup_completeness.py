@@ -1,7 +1,7 @@
 """Tests for the follow-up completeness gate (consensus-mcp 1.16.1).
 
 Decisive test: a task declaring action_class=version_bump cannot mint a delivery
-token while {tag, github_release, changelog_entry} are unresolved — proving
+token while {tag, github_release, changelog_entry} are unresolved - proving
 "merge a version bump but skip the release" is mechanically blocked.
 """
 from pathlib import Path

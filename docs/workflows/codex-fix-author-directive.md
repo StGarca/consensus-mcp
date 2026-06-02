@@ -1,6 +1,6 @@
 ---
 name: Codex fix-author directive (operator 2026-05-10)
-description: Operator-locked architectural commitment — codex should fix problems it finds; claude verifies the fix per CLAUDE.md; correction sub-loop if claude finds issues; codex re-reviews; consensus required for close.
+description: Operator-locked architectural commitment - codex should fix problems it finds; claude verifies the fix per CLAUDE.md; correction sub-loop if claude finds issues; codex re-reviews; consensus required for close.
 type: project
 originSessionId: 3dc1e744-0c21-449b-80ee-09dff754acb7
 ---
@@ -15,19 +15,22 @@ consensus pipeline tooling sweep):
 **This locks the architectural model** for the Phase 4.x autonomy expansion:
 
 ```
-codex finds problem → codex emits fix
- ↓
+codex finds problem -> codex emits fix
+ |
+ v
 claude verifies codex's fix per CLAUDE.md
- ├─ no new problems → close (consensus)
- └─ problems found → claude corrects → claude verifies → re-submit to codex
- ↓
+ |-- no new problems -> close (consensus)
+ \-- problems found -> claude corrects -> claude verifies -> re-submit to codex
+ |
+ v
  codex re-reviews
- ↓
+ |
+ v
  (loop until consensus)
 ```
 
 **Why:** The original loop goal (codex's expert verdict bar) was: "codex finds
-blocker → claude fixes → codex re-reviews → close on goal_satisfied=true." The
+blocker -> claude fixes -> codex re-reviews -> close on goal_satisfied=true." The
 operator's directive expands that: codex doesn't just emit findings narratively
 for claude to act on; codex emits the fix itself. Claude's role becomes
 verifier-and-corrector rather than primary fixer. The cross-vendor independence
@@ -35,31 +38,31 @@ property is preserved because each agent reviews the OTHER's contribution.
 
 **Implementation roadmap (Tasks #24-#27, blocking-chained):**
 
-- **#22 iter-0013** — codex prompt-template hardening. PREREQUISITE; codex output
+- **#22 iter-0013** - codex prompt-template hardening. PREREQUISITE; codex output
  reliability must be proven before trusting it to emit unified-diff patch text.
  (DONE 2026-05-10.)
 
-- **#24 iter-0014** — extend `codex_review_schema.json` with optional
+- **#24 iter-0014** - extend `codex_review_schema.json` with optional
  `patch_proposal: {diff, files_touched, rationale}`. Validator extension:
  parse unified diff; require touched files in `goal_packet.allowed_files`;
  reject any forbidden_files paths. Codex still emits findings as primary;
  patch_proposal is per-finding opt-in. Does NOT apply patches yet.
 
-- **#25 iter-0015** — `loop.verify_codex_patch` MCP tool. Dispatches a claude
+- **#25 iter-0015** - `loop.verify_codex_patch` MCP tool. Dispatches a claude
  verifier subagent with (codex finding + proposed diff + CLAUDE.md project
  rules). Subagent emits structured verdict: `approved` OR
  `corrected_resubmit` (with claude's corrections embedded). New state-machine
- states in `loop.run_goal`: `codex_patch_proposed` →
- `claude_verifying_patch` → `patch_verified_ready_for_codex_resubmit` |
+ states in `loop.run_goal`: `codex_patch_proposed` ->
+ `claude_verifying_patch` -> `patch_verified_ready_for_codex_resubmit` |
  `patch_corrected_by_claude_ready_for_codex_resubmit`.
 
-- **#26 iter-0016** — staged-apply of verified codex patches via existing T4/T5
+- **#26 iter-0016** - staged-apply of verified codex patches via existing T4/T5
  tools (`patch.stage_and_dry_run`, `patch.apply_consensus_patch`). Refuse-by-
  default; requires BOTH `goal_packet.authorization.codex_patch_apply_authorized:
  true` AND env `CONSENSUS_MCP_CODEX_PATCH_APPLY=1`. Patches without claude
  verification approval refuse to apply.
 
-- **#27 iter-0017** — capstone: full autonomous demo of the full cycle on a real
+- **#27 iter-0017** - capstone: full autonomous demo of the full cycle on a real
  small defect. Validates the automation-completion path end-to-end.
 
 **Operating rule for claude during verification (key):** When claude verifies
@@ -68,7 +71,7 @@ Four Principles + the project-specific golden rules). The verifier-subagent's
 prompt must explicitly include CLAUDE.md as the authoritative standard, not
 just generic correctness review.
 
-**Independence property to preserve:** codex emits patch → claude verifies.
+**Independence property to preserve:** codex emits patch -> claude verifies.
 Claude must not have authored the original implementation that codex found
 the defect in (or at least, must not be the same dispatch). The supervisor
 already enforces this via subagent independence; ensure the patch-verification
@@ -107,7 +110,7 @@ The supervisor reads the most-recent `apply_step_landed` event to determine
 
 ### Closer must satisfy ALL THREE conditions
 
-Not just "different AI" — must also verify the POST-MUTATION artifact AT
+Not just "different AI" - must also verify the POST-MUTATION artifact AT
 A FRESHER TIMESTAMP:
 
 ```python
@@ -138,7 +141,7 @@ detects drift. applies_to_findings maps patch to specific findings. expected_tes
 lets the verifier check codex's reasoning empirically.
 
 REJECT extra fields like `verified` / `self_verified` / `correct` /
-`approved` — anti-self-verification claims.
+`approved` - anti-self-verification claims.
 
 ### Claude verifier inputs
 
@@ -159,16 +162,16 @@ preserved by source-segregating facts vs reasoning.
 Codex 2026-05-10 v3: "Defense-in-depth matters because one bypass path will
 eventually appear." Three independent enforcement points:
 
-1. `loop.run_goal` transition guard — refuses `ready_to_close` when invariant fails
+1. `loop.run_goal` transition guard - refuses `ready_to_close` when invariant fails
 2. `_self_drive.cmd_check_stop_rules` new stop rule `closer_stale_or_self`
-3. T6 `audit_append_event` `iteration_closed` event — refuses to record close
+3. T6 `audit_append_event` `iteration_closed` event - refuses to record close
  when invariant fails
 
 Any single layer can fail-closed; bypass requires defeating all three.
 
 ### Forbidden state transitions
 
-- `claude_verifying_patch.corrected_resubmit → ready_to_close`: BLOCKED. Must
+- `claude_verifying_patch.corrected_resubmit -> ready_to_close`: BLOCKED. Must
  route through `codex_re_reviewing_after_claude_correction` first.
 - Any path where closer is the same actor as `last_mutation.actor`: BLOCKED.
 - Any path where closer.review_target_hash != last_mutation.post_sha: BLOCKED.
@@ -191,8 +194,8 @@ Any single layer can fail-closed; bypass requires defeating all three.
 ### Sequencing: #28 codifies BEFORE #24
 
 Invariant skeleton must land before codex patching capability. Otherwise codex
-authors patches in a window where close rules aren't fully hardened — risk
-of normalizing unsafe closure patterns. Updated task chain: #22 → #28 → #24.
+authors patches in a window where close rules aren't fully hardened - risk
+of normalizing unsafe closure patterns. Updated task chain: #22 -> #28 -> #24.
 
 ### Stop rule renamed: `closure_cross_verification_failed`
 
@@ -268,7 +271,7 @@ patch_id = f"{finding_id}-patch" # e.g., "codex-rev-001-patch"
 
 The regex moves from `^patch-[0-9a-f]{12}-[0-9a-f]{12}$` to
 `^codex-rev-\d+-patch$`. The validator enforces `patch_id == f"{finding_id}-patch"`.
-The `unified_diff_sha256` field is no longer implicit (in patch_id) — it
+The `unified_diff_sha256` field is no longer implicit (in patch_id) - it
 becomes explicit:
 
 - `_dispatch_codex._validate_patch_proposal` computes
@@ -287,7 +290,7 @@ downstream via the explicit hash field.
 ### review_scope_hash (verifier input bounding)
 
 Claude verifier emits `review_scope_hash`: sha256 of the EXACT inputs
-received. Proves verifier was reproducibility-bounded — not minimal-only,
+received. Proves verifier was reproducibility-bounded - not minimal-only,
 not unbounded.
 
 ### "Reproducibility-bounded" not "facts-only minimal"
@@ -299,7 +302,7 @@ Inputs to claude verifier:
 - goal_packet.yaml
 - acceptance_gates
 - unified_diff
-- **touched-file FULL contents (post-patch)** — not just snippets
+- **touched-file FULL contents (post-patch)** - not just snippets
 - test output (post-patch run)
 - CLAUDE.md constraints
 - base_sha + post_sha (drift detection)
@@ -354,7 +357,7 @@ bug to be fixed, not a workaround to be tolerated.
 
 ### Historical validator
 
-`consensus_mcp/_validate_closure_invariant.py` — scans existing
+`consensus_mcp/_validate_closure_invariant.py` - scans existing
 iterations (iter-0009..iter-0012 historically; all future automatically)
 for invariant compliance. Catches retroactive drift; proves rule is not
 just future-facing.

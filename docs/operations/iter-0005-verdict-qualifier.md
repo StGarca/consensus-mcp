@@ -1,4 +1,4 @@
-# iter-0005 verdict qualifier — incomplete premise
+# iter-0005 verdict qualifier - incomplete premise
 
 ## What
 
@@ -12,18 +12,18 @@ The dispatch was invoked with:
 --review-target docs/design-consults/main-spec-scrub-stale-archive-refs.md
 ```
 
-Per `_dispatch_codex.py:1746-1762`, the dispatcher only parses `touched_files_contents` into the prompt when `--review-target` points at a `.yaml`. A raw `.md` is silently treated as opaque review-target text — its `path` and `sha256` are computed and substituted into the prompt, but the `{touched_files_contents_block}` substitution receives an empty dict.
+Per `_dispatch_codex.py:1746-1762`, the dispatcher only parses `touched_files_contents` into the prompt when `--review-target` points at a `.yaml`. A raw `.md` is silently treated as opaque review-target text - its `path` and `sha256` are computed and substituted into the prompt, but the `{touched_files_contents_block}` substitution receives an empty dict.
 
 Codex thus received the prompt template with:
 - `goal_packet.desired_end_state` (which contains substantial context about the scrub proposal)
 - `review_target_path` and `review_target_hash` (the .md path and its hash)
-- **An empty `# Touched-file contents` block** — no actual design doc text
+- **An empty `# Touched-file contents` block** - no actual design doc text
 
 Codex's verdict was a plausible inference from `desired_end_state` alone. The fact that it landed on Option A is consistent with the goal_packet's framing, not evidence of cross-AI review of the canonical design document.
 
 ## How we know
 
-Compare `dispatch_provenance.review_target_path` across the iter-0005 → iter-0007 series:
+Compare `dispatch_provenance.review_target_path` across the iter-0005 -> iter-0007 series:
 
 | Pass | review_target_path | touched-files-block populated? | Verdict source |
 |---|---|---|---|

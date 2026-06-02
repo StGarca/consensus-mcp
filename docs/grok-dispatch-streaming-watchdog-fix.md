@@ -1,6 +1,6 @@
-# consensus-mcp patch spec — grok dispatcher: streaming vs silence-watchdog defect
+# consensus-mcp patch spec - grok dispatcher: streaming vs silence-watchdog defect
 
-Status: PROPOSED patch spec (non-trivial change to a dispatcher → must go through
+Status: PROPOSED patch spec (non-trivial change to a dispatcher -> must go through
 Workflow A/B review before landing, per the consensus operating procedures).
 Discovered: 2026-05-30 during iteration `iteration-moss-clip-codefix-2026-05-30`
 (grok timed out on a real design-consult packet; root-caused to dispatcher config, not grok).
@@ -10,33 +10,33 @@ Discovered: 2026-05-30 during iteration `iteration-moss-clip-codefix-2026-05-30`
 
 grok stalls/timeouts in this project have been **consensus-mcp dispatcher / invocation bugs**, not grok
 limitations. grok's context window is **512K** and it streams fine. The Claude-side fix is to invoke grok
-*correctly* (below) — never to blame grok or skip it. (Note: "give grok a focused prompt" is part of the
-correct invocation, not "grok can't handle large prompts" — see the agentic-loop finding below.)
+*correctly* (below) - never to blame grok or skip it. (Note: "give grok a focused prompt" is part of the
+correct invocation, not "grok can't handle large prompts" - see the agentic-loop finding below.)
 
 ---
 
-## GETTING THE MOST OUT OF GROK — empirical findings (2026-05-30, for patch planning)
+## GETTING THE MOST OUT OF GROK - empirical findings (2026-05-30, for patch planning)
 
 This section is the evidence base for a proper patch. All data points are from direct grok-CLI runs this
 session (grok-build, `--output-format streaming-json`, clean empty cwd unless noted).
 
-### Empirical observations (invocation → outcome)
+### Empirical observations (invocation -> outcome)
 
 | run | streaming | `--no-plan --no-subagents` | prompt | outcome |
 |---|---|---|---|---|
 | smoke (plain, no flags) | no (plain) | no | tiny | completed |
-| round-1 full | yes | YES | long, 5 questions (~5KB) | **completed** (220 thought → 1885 text → EndTurn) |
+| round-1 full | yes | YES | long, 5 questions (~5KB) | **completed** (220 thought -> 1885 text -> EndTurn) |
 | v2 | yes | YES | long, 5 questions (~4KB) | **Cancelled** (171 thought, 0 text) |
 | v2b (retry of v2) | yes | YES | long, 5 questions | **Cancelled** (254 thought, 0 text) |
-| v2c | yes | YES | SHORT, 3 questions (~1KB) | **completed** (112 thought → 801 text → EndTurn) |
+| v2c | yes | YES | SHORT, 3 questions (~1KB) | **completed** (112 thought -> 801 text -> EndTurn) |
 | self-diagnosis | yes | NO | short (~1KB) | **Cancelled** (69 thought, 0 text) |
 
 ### What the failure actually is
 - The cancel is NOT a rate limit / quota / 429 (the `~/.grok/logs/unified.jsonl` shows normal inference
   turns, no rate errors) and NOT the `timeout` wrapper (process exits 0).
 - grok emits a long run of `{"type":"thought"}` events, then `{"type":"end","stopReason":"Cancelled"}`
-  with ZERO `{"type":"text"}` — i.e. it **thinks, then self-cancels before producing the answer**.
-- The logs show `loop_index` incrementing (e.g. `loop_index:4`, ~231s) — grok-build is an **agentic model
+  with ZERO `{"type":"text"}` - i.e. it **thinks, then self-cancels before producing the answer**.
+- The logs show `loop_index` incrementing (e.g. `loop_index:4`, ~231s) - grok-build is an **agentic model
   that runs multiple internal inference loops**. On open-ended / multi-part prompts it loops until it
   self-cancels without committing a final answer.
 
@@ -44,7 +44,7 @@ session (grok-build, `--output-format streaming-json`, clean empty cwd unless no
 1. **`--no-plan --no-subagents` materially reduce cancellation.** The short prompt WITH them completed
    (v2c); the short prompt WITHOUT them cancelled (self-diagnosis). They suppress agentic branching.
 2. **Shorter / single-focus prompts complete far more reliably.** Long 5-part prompts cancelled 2/3 times
-   (round-1 succeeded once — non-deterministic); the short 3-part prompt completed cleanly.
+   (round-1 succeeded once - non-deterministic); the short 3-part prompt completed cleanly.
 3. **`--output-format streaming-json`** is required for the dispatcher's watchdog (see DEFECT 1) AND lets
    you see `thought` vs `text` vs `stopReason` to detect a cancel programmatically.
 4. **Clean empty cwd** avoids the recursive-watch `PermissionDenied` noise (DEFECT 2).
@@ -107,7 +107,7 @@ after the full stall window, with **no proposal produced**. Trivial smoke prompt
 
 ## Root cause (file: `consensus_mcp/_dispatch_grok.py`)
 
-### DEFECT 1 (primary) — buffered output + silence watchdog is self-contradictory
+### DEFECT 1 (primary) - buffered output + silence watchdog is self-contradictory
 - `_build_grok_cmd` sets **`--output-format plain`** (around line 219). In `plain` mode the grok CLI emits
   **nothing to stdout until the full answer is ready** (buffered).
 - `_invoke_grok` runs a **silence watchdog**: `stdout_reader` (around lines 295-316) updates `last_streamed_ts`
@@ -118,17 +118,17 @@ after the full stall window, with **no proposal produced**. Trivial smoke prompt
   grok for being silent while grok is silent by design.** The smoke prompt only survives because it
   answers before the timer fires.
 
-### DEFECT 2 — hardcoded `--cwd /tmp` trips grok's recursive watcher
+### DEFECT 2 - hardcoded `--cwd /tmp` trips grok's recursive watcher
 - `_build_grok_cmd` appends **`--cwd /tmp`** (~line 227). grok sets up a recursive filesystem watcher
   on its cwd; from `/tmp` it hits `PermissionDenied` on `systemd-private-*` dirs and logs
   `ERROR failed to watch root recursively`. Non-fatal, but it pollutes stderr and is the basis of a
   wrong rationale (below). A **clean empty dir** avoids it entirely.
 
-### DEFECT 3 — misleading code comment (a Claude misdiagnosis baked into source)
+### DEFECT 3 - misleading code comment (a Claude misdiagnosis baked into source)
 - The comment at lines 100-109 claims grok "counts every prompt chunk + MCP rejection + tool-call attempt
   against the message budget and never reaches model output" and implies grok cannot handle large
   "real packets." This is **wrong** and misleads maintainers: grok has **no MCP servers configured**
-  (`grok mcp list` → "No MCP servers configured"), handles 512K context, and the real failure is
+  (`grok mcp list` -> "No MCP servers configured"), handles 512K context, and the real failure is
   DEFECT 1. Remove/correct it.
 
 ## Fix
@@ -137,14 +137,14 @@ after the full stall window, with **no proposal produced**. Trivial smoke prompt
 - In `_build_grok_cmd`, use **`--output-format streaming-json`** instead of `plain`.
   Verified: in streaming mode grok emits `{"type":"thought","data":...}` and `{"type":"text","data":...}`
   lines continuously, ending with `{"type":"end"}`. The existing `stdout_reader` then advances
-  `last_streamed_ts` on every token line → the silence watchdog never false-trips.
+  `last_streamed_ts` on every token line -> the silence watchdog never false-trips.
   (Additional benefit: `thought` events become visible in dispatch logs for the first time, turning
   previously opaque long-running invocations into observable ones.)
 - Add a small parser to assemble the final answer from the stream: concatenate `data` of
   `type=="text"` events (the answer), ignore `type=="thought"` (reasoning), stop at `type=="end"`.
   Feed the assembled text into the existing JSON-proposal extraction/validation.
 - (Alternative if `plain` must be retained: replace the stdout-silence watchdog with a **wall-clock-only**
-  timeout for grok — `plain` is silent by design, so silence is not a liveness signal. Streaming is
+  timeout for grok - `plain` is silent by design, so silence is not a liveness signal. Streaming is
   preferred because it preserves a real liveness signal AND surfaces progress in logs.)
 
 ### Secondary: clean cwd instead of `/tmp`
@@ -191,12 +191,12 @@ The streaming approach is therefore preferred on both correctness and observabil
   "Policy tension" section above are deferred.
 
 **Positive side-effect (not a risk)**: Once streaming is in place, `thought` events become available in the
-dispatch logs. This gives future operators a window into *why* a particular packet took time — something
+dispatch logs. This gives future operators a window into *why* a particular packet took time - something
 that has been completely invisible under `plain` output.
 
 ## Validation performed (2026-05-30)
 - Streaming smoke: `grok -p "..." --output-format streaming-json --no-memory --disable-web-search
-  --no-plan --no-subagents` from a clean empty cwd → streamed `thought`/`text` tokens, exit 0.
+  --no-plan --no-subagents` from a clean empty cwd -> streamed `thought`/`text` tokens, exit 0.
 - Full real packet (the moss-clip design consult, ~the same prompt that timed out under `plain`):
   completed in streaming mode, 2106 stream lines, ~9.3KB substantive proposal. grok's analysis
   materially improved the converged plan (it was the contributor that flagged the C6 garbage-frame risk).
@@ -233,7 +233,7 @@ knowledge does not live only in this patch spec.
 
 ---
 
-## RESOLUTION — landed 2026-05-30
+## RESOLUTION - landed 2026-05-30
 
 Status: **LANDED** on branch `fix/grok-dispatch-streaming-watchdog-2026-05-30`. The full Workflow A/B consensus
 review was **skipped by explicit operator authorization** (2026-05-30); instead the design was settled by a
@@ -249,7 +249,7 @@ integration). Validator and gate untouched.
 1. **cwd fix = Option A, not the "keep /tmp + change process cwd" reconciliation.** The dispatcher now passes a
    fresh empty per-pass temp dir as the **`--cwd` FLAG** (and the Popen cwd), cleaned up in a `finally`.
    Grounds: (a) `dispatch-canon-validator` only inspects grok invocations issued *directly via the Bash tool*
-   and only when `--cwd` is present — it never sees the dispatcher's internal `Popen`, so a temp `--cwd` keeps
+   and only when `--cwd` is present - it never sees the dispatcher's internal `Popen`, so a temp `--cwd` keeps
    **Gate G3** green with zero validator edits; (b) a direct **grok consult (2026-05-30)** ruled that grok's
    recursive watcher keys off the `--cwd` flag (not the OS process cwd), so Option A eliminates the
    `systemd-private` noise and the keep-`/tmp` variant would **not**.
@@ -258,11 +258,11 @@ integration). Validator and gate untouched.
    are `{"type":"thought"|"text"|"end",...}`; the answer field is **`data`**; `stopReason` is camelCase
    (`EndTurn` / `Cancelled`). The parser (`_assemble_grok_stream`) concatenates `text` events' `data`, ignores
    `thought`, stops at `end`, and raises `GrokStreamCancelledError` on cancel-before-text (a
-   `GrokInvocationError` subclass → no wasted parse-retry). It is defensive (skips malformed/typeless lines,
-   `data`→`text` fallback, plain-blob passthrough).
+   `GrokInvocationError` subclass -> no wasted parse-retry). It is defensive (skips malformed/typeless lines,
+   `data`->`text` fallback, plain-blob passthrough).
 
 3. **Added a private `_sleep=` test seam to `_invoke_grok`** (defaults to `time.sleep`; zero production change)
-   so the Gate-G5 watchdog-regression test runs on the *deterministic* clock harness — mirroring
+   so the Gate-G5 watchdog-regression test runs on the *deterministic* clock harness - mirroring
    `_invoke_codex`'s consult-blessed v1.15.9 seam. The "tiny real `poll_interval` + `time_fn`" alternative was
    the exact pattern codex abandoned for flaking on CI.
 
@@ -271,4 +271,4 @@ integration). Validator and gate untouched.
 
 **Gates**: G1 (real moss-clip packet already validated above; real-grok dispatcher smoke passes in ~17 s),
 G2, G3 (validator self-test 13/13, untouched), G4 (full suite **1793 passed / 8 skipped**), G5 (new
-streaming + silence-regression tests) — all green.
+streaming + silence-regression tests) - all green.

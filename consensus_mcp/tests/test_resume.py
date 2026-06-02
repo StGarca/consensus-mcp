@@ -84,7 +84,7 @@ def _append_log(repo: Path, event: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# §3 auto-detection
+# section 3 auto-detection
 # ---------------------------------------------------------------------------
 
 def test_missing_active_dir_returns_unknown(tmp_path: Path):
@@ -115,7 +115,7 @@ def test_autodetect_picks_most_recent_authorized(fake_repo: Path):
 
 
 def test_autodetect_tiebreaker_is_dirname_desc(fake_repo: Path):
-    """Equal authorized_at_utc → dir name DESC wins (codex-rev-002 deterministic tiebreaker)."""
+    """Equal authorized_at_utc -> dir name DESC wins (codex-rev-002 deterministic tiebreaker)."""
     _write_iter(fake_repo, "iter-A", authorized_at="2026-05-11T00:00:00Z")
     _write_iter(fake_repo, "iter-B", authorized_at="2026-05-11T00:00:00Z")
     snap = _resume.snapshot(repo_root=fake_repo)
@@ -136,7 +136,7 @@ def test_explicit_iteration_id_rejects_path_traversal(fake_repo: Path):
 
 
 # ---------------------------------------------------------------------------
-# §5 step 2: goal_packet + scope_signature
+# section 5 step 2: goal_packet + scope_signature
 # ---------------------------------------------------------------------------
 
 def test_scope_signature_validation(fake_repo: Path):
@@ -159,7 +159,7 @@ def test_scope_signature_validation(fake_repo: Path):
 
 
 # ---------------------------------------------------------------------------
-# §5 step 3: dispatch-log walking + malformed-line handling (codex-rev-003 pass-1)
+# section 5 step 3: dispatch-log walking + malformed-line handling (codex-rev-003 pass-1)
 # ---------------------------------------------------------------------------
 
 def test_malformed_dispatch_log_line_skipped_with_warning(fake_repo: Path):
@@ -223,9 +223,9 @@ def test_fresh_iteration_with_review_packet_suggests_dispatch(fake_repo: Path):
 
 def test_unknown_bundle_sha_classifies_review_as_invalid(fake_repo: Path):
     """codex-iter0003-4 rev-001: when current_bundle_sha is unknown, reviews must
-    NOT default to 'open' — that would let orchestrators act on unverified state."""
+    NOT default to 'open' - that would let orchestrators act on unverified state."""
     iter_dir = _write_iter(fake_repo, "iter-unknown-bundle")
-    # No review-packet, no mutation event with hash → current_bundle_sha is None
+    # No review-packet, no mutation event with hash -> current_bundle_sha is None
     # Author a hash-bearing mutation event but WITHOUT the hash field, AND no review-packet
     _append_log(fake_repo, {
         "iteration_id": "iter-unknown-bundle",
@@ -264,7 +264,7 @@ def test_mutation_event_without_hash_returns_unknown_not_fallback(fake_repo: Pat
         "iteration_id": "iter-mut-no-hash",
         "event": "patch_applied",
         "timestamp_utc": "2026-05-11T18:00:00Z",
-        # NO bundle_sha256 / review_target_hash — malformed mutation event
+        # NO bundle_sha256 / review_target_hash - malformed mutation event
         "actor_id": "claude-author-1",
         "model_family": "claude",
     })
@@ -325,7 +325,7 @@ def test_current_bundle_sha_from_mutation_event_wins_over_review_packet(fake_rep
 
 def test_recent_activity_tiebreaker_uses_line_number(fake_repo: Path):
     _write_iter(fake_repo, "iter-tie")
-    # Two events with identical timestamps — line number must determine order.
+    # Two events with identical timestamps - line number must determine order.
     for ev in ("dispatch_heartbeat", "dispatch_streamed_line"):
         _append_log(fake_repo, {
             "iteration_id": "iter-tie",
@@ -379,7 +379,7 @@ def test_include_streamed_lines_threaded_through_to_in_flight(fake_repo: Path):
     d = snap_on["in_flight_dispatches"][0]
     assert "streamed_lines" in d
     assert len(d["streamed_lines"]) == 3
-    # Cap is "last N" — should keep newest 3
+    # Cap is "last N" - should keep newest 3
     assert [l["line"] for l in d["streamed_lines"]] == ["line-2", "line-3", "line-4"]
 
 
@@ -498,8 +498,8 @@ def test_expected_next_action_kind_always_in_enum(fake_repo: Path):
 def test_expected_next_action_dispatch_path_when_no_reviews(fake_repo: Path):
     _write_iter(fake_repo, "iter-fresh")
     snap = _resume.snapshot(repo_root=fake_repo)
-    # Fresh iteration: no mutation, no reviews → dispatch a cross-family reviewer.
-    # (Or operator_decision_required because there's nothing to close yet — both are valid;
+    # Fresh iteration: no mutation, no reviews -> dispatch a cross-family reviewer.
+    # (Or operator_decision_required because there's nothing to close yet - both are valid;
     # the spec's tree picks dispatch_cross_family_reviewer as the default leaf.)
     assert snap["expected_next_action"]["kind"] in (
         "dispatch_cross_family_reviewer", "operator_decision_required",
@@ -512,7 +512,7 @@ def test_expected_next_action_dispatch_path_when_no_reviews(fake_repo: Path):
 # failures. Behavior for genuinely missing/malformed files is UNCHANGED.
 #
 # NOTE on H-8's "silent wrong-state" headline: the dispatch-log read path was
-# NEVER bare/silent — it already appends a warning. The third test below is a
+# NEVER bare/silent - it already appends a warning. The third test below is a
 # regression-lock documenting that the scary framing is not supported by the
 # code; it PASSES today.
 # ---------------------------------------------------------------------------
@@ -544,7 +544,7 @@ def test_load_yaml_returns_none_on_parse_error(fake_repo: Path):
     """
     iter_dir = _write_iter(fake_repo, "iter-load-malformed")
     bad = iter_dir / "bad.yaml"
-    # Unbalanced flow mapping → yaml.YAMLError on safe_load.
+    # Unbalanced flow mapping -> yaml.YAMLError on safe_load.
     bad.write_text("{ this is: not, valid: yaml: ::: [unclosed", encoding="utf-8")
     assert _resume._load_yaml(bad) is None
 
@@ -553,7 +553,7 @@ def test_dispatch_log_read_failure_is_not_silent(fake_repo: Path, monkeypatch):
     """Regression-lock for H-8's FALSE 'silent wrong-state' headline.
 
     When the dispatch-log read raises (e.g. PermissionError), the orchestrator
-    must NOT silently think nothing is in-flight — it must surface a warning AND
+    must NOT silently think nothing is in-flight - it must surface a warning AND
     return an empty in_flight list. This PASSES today (the path already warns);
     the test documents that the HIGH 'silent wrong-state' framing is unfounded.
     """

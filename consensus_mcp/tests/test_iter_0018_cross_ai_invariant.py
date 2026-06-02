@@ -36,7 +36,7 @@ from consensus_mcp.tools import audit_append_event  # noqa: E402
 # ---------------------------------------------------------------------------
 # Shared fixture helpers (small re-use of existing test idioms; intentionally
 # duplicated rather than imported to keep this test file self-contained per the
-# Surgical Changes principle — touching the existing test_closure_invariant
+# Surgical Changes principle - touching the existing test_closure_invariant
 # fixtures would couple modules that should evolve independently).
 # ---------------------------------------------------------------------------
 
@@ -89,7 +89,7 @@ def test_same_model_family_different_actor_ids_fails():
     """Codex-A authors patch; codex-B (different id, SAME family=codex) closes.
 
     Pre-iter-0018: passes because actor.id differs.
-    Post-iter-0018: FAILS because model_family is the same — that's same-family
+    Post-iter-0018: FAILS because model_family is the same - that's same-family
     different-actor, NOT cross-AI.
     """
     lm = _make_lm(
@@ -285,7 +285,7 @@ def test_git_unavailable_blocks_close_fail_closed(tmp_path, monkeypatch):
     Setup: a normal closeable iteration (apply event + cross-family closer
     review). Then monkeypatch subprocess.run to raise FileNotFoundError (git
     binary missing). Unlike the Finding-3/Finding-5 tests, this test does NOT
-    stub _detect_working_tree_changes — it lets the real function body run so
+    stub _detect_working_tree_changes - it lets the real function body run so
     it raises GitUnavailableError, which handle() must surface as
     mutation_completeness_unverifiable.
 
@@ -473,7 +473,7 @@ def _good_patch_proposal(finding_id: str = "codex-rev-001") -> dict:
 
     iter-0028 F4 update: diff body header paths now MUST match files_touched
     (body-vs-declaration consistency check). Prior fixture used 'foo' in the
-    diff vs 'scripts/foo.py' in files_touched — that mismatch is now a
+    diff vs 'scripts/foo.py' in files_touched - that mismatch is now a
     validation error. Use the same path on both sides.
     """
     base_sha = "0" * 64
@@ -540,7 +540,7 @@ def test_strict_mode_finding_missing_both_rejected():
 
 
 def test_strict_mode_finding_with_both_rejected():
-    """Strict mode: mutually exclusive — finding can't have BOTH patch_proposal and patch_not_proposed_reason."""
+    """Strict mode: mutually exclusive - finding can't have BOTH patch_proposal and patch_not_proposed_reason."""
     finding = _make_finding(
         patch_proposal=_good_patch_proposal(),
         patch_not_proposed_reason="contradiction",
@@ -720,8 +720,8 @@ def test_t6_no_mutation_evaluator_none_still_allowed(tmp_path, monkeypatch):
     )
     # H-5: the mutation-completeness gate now FAILS CLOSED when git is
     # unavailable. The pytest tmp_path is not a git repo, so the real helper
-    # would (correctly) raise GitUnavailableError. Stub it to return [] — the
-    # legitimate "git ran, no working-tree changes" signal — so this test
+    # would (correctly) raise GitUnavailableError. Stub it to return [] - the
+    # legitimate "git ran, no working-tree changes" signal - so this test
     # exercises ONLY the no-mutation/evaluator-None path it was written for.
     monkeypatch.setattr(
         aae, "_detect_working_tree_changes", lambda repo_root: [],

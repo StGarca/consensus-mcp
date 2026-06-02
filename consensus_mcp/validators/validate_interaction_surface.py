@@ -3,7 +3,7 @@
 The gate<->init miss (v1.29.4) was a cross-cutting interaction nobody named in the
 consult packet. This validator makes that surface EXPLICIT: a goal_packet must
 declare an ``interaction_surface`` (the gates/hooks/CLIs/dispatch/distribution it
-may perturb), and "none" must be an explicit assertion — never silent omission. A
+may perturb), and "none" must be an explicit assertion - never silent omission. A
 path heuristic flags a *reflexive* "none" when the change actually touches
 interaction-bearing files (hooks/gates/dispatchers/engine).
 
@@ -51,7 +51,7 @@ def validate_interaction_surface(goal_packet: dict, changed_paths=None) -> list[
     warnings: list[str] = []
     if "interaction_surface" not in (goal_packet or {}):
         warnings.append(
-            "interaction_surface is missing — declare it explicitly (the surfaces this "
+            "interaction_surface is missing - declare it explicitly (the surfaces this "
             "change may perturb: hooks/gates/CLIs/dispatch/distribution), or assert 'none'."
         )
         return warnings

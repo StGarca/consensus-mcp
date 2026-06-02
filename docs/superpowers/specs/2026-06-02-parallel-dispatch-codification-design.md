@@ -1,7 +1,7 @@
-# Dispatcher hardening — parallel dispatch, codified consult + 2 robustness fixes
+# Dispatcher hardening - parallel dispatch, codified consult + 2 robustness fixes
 
 **Date:** 2026-06-02
-**Status:** Draft → pending consensus consult ratification (anchored) → implementation (TDD)
+**Status:** Draft -> pending consensus consult ratification (anchored) -> implementation (TDD)
 **Author:** Claude (Opus 4.8) with operator (project-contributor)
 **Consult framing:** ANCHORED. Operator contribution (Findings A/B below) added first
 and integrated; panel reviews this whole package.
@@ -20,8 +20,8 @@ Two layers cause this:
    - `_run_workflow_4` (propose-converge): Phase-1 blind `adapter.propose(...)` one at
      a time, AND every convergence round `adapter.converge(...)` one at a time.
    The code comments admit the contributors are independent ("the contributors
-   themselves don't see each other's outputs"). Four reviewers at ~60–120s each run
-   in ~sum(t) (~4–8 min) instead of ~max(t) (~1–2 min).
+   themselves don't see each other's outputs"). Four reviewers at ~60-120s each run
+   in ~sum(t) (~4-8 min) instead of ~max(t) (~1-2 min).
 
 2. **Orchestrator improvises Path A.** The new-machine session hand-rolled per-reviewer
    `reviewer_dispatch_*` calls, invented a "validate plumbing with one codex dispatch
@@ -30,8 +30,8 @@ Two layers cause this:
 
 ## Goal
 
-Every install runs the SAME, fast process: **write goal_packet → fan out to all enabled
-reviewers in parallel → wait for all → converge.** No improvised probe, no per-session
+Every install runs the SAME, fast process: **write goal_packet -> fan out to all enabled
+reviewers in parallel -> wait for all -> converge.** No improvised probe, no per-session
 variance.
 
 ## Decision summary
@@ -42,24 +42,24 @@ variance.
 
 ## Design
 
-### Component 1 — Engine: concurrent fan-out within a phase
+### Component 1 - Engine: concurrent fan-out within a phase
 
 Replace each blocking per-contributor loop with a `concurrent.futures.ThreadPoolExecutor`
 (`max_workers = len(enabled)`), submitting every contributor's `adapter.review` /
 `adapter.propose` / `adapter.converge` at once and collecting results as futures complete.
 
-- **Threads, not asyncio.** Each adapter call is a blocking subprocess (CLI dispatch) —
+- **Threads, not asyncio.** Each adapter call is a blocking subprocess (CLI dispatch) -
   thread pool is the right tool for I/O-bound subprocess waits; no event-loop rewrite of
   the synchronous adapters.
 - **Rounds stay sequential.** Convergence round N+1 consumes round N's artifacts; only the
   contributors *within* a single phase/round fan out. The round loop is unchanged.
 
 Affected functions: `_run_workflow_3`, `_run_workflow_4` (Phase-1 loop + per-round loop).
-A shared private helper — e.g. `_dispatch_phase_parallel(enabled, fn) -> list[SealedArtifact]`
-— encapsulates the executor, ordering, and error collection so both workflows share one
+A shared private helper - e.g. `_dispatch_phase_parallel(enabled, fn) -> list[SealedArtifact]`
+- encapsulates the executor, ordering, and error collection so both workflows share one
 implementation and cannot drift.
 
-### Component 2 — Determinism & error handling
+### Component 2 - Determinism & error handling
 
 Concurrency must not change outcomes, only wall-clock.
 
@@ -70,19 +70,19 @@ Concurrency must not change outcomes, only wall-clock.
 - **Collect-all, not fail-fast.** A reviewer that raises `DispatchError` (timeout, crash)
   is recorded via the existing per-contributor `timeout_policy` (`_record_timed_out`); the
   remaining reviewers still complete. One bad CLI never aborts the panel. No future's
-  exception propagates out of the helper — each is caught and mapped to the existing
+  exception propagates out of the helper - each is caught and mapped to the existing
   per-contributor failure path.
 - **Per-contributor timeout** is already per-call; parallel dispatch does not change it.
 
-### Component 3 — Skill codification (uniform every install)
+### Component 3 - Skill codification (uniform every install)
 
 Tighten `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`:
 
-- Codify the single path: write goal_packet → ONE fan-out call (the engine /
-  `run_iteration` path) → wait for all → converge.
+- Codify the single path: write goal_packet -> ONE fan-out call (the engine /
+  `run_iteration` path) -> wait for all -> converge.
 - **Explicitly forbid** the improvised "validate plumbing with one reviewer first" probe.
 - Reference containment-marker dirs being auto-created at init (see separate TODO
-  `todo-containment-marker-dirs`) — no hand-creation step in the consult flow.
+  `todo-containment-marker-dirs`) - no hand-creation step in the consult flow.
 
 ## kimi-integrity note
 
@@ -91,13 +91,13 @@ during a dispatch. Reviewer dispatch writes **sealed artifacts to the consensus-
 not repo source. The new-machine run already executed kimi concurrently with gemini+grok
 under Path A without tripping it. Action: before/at implementation, confirm reviewer artifact
 writes do not land where kimi's integrity snapshot watches (expected: safe). If they did, the
-fix is to ensure the state dir is outside the integrity scope — NOT to serialize.
+fix is to ensure the state dir is outside the integrity scope - NOT to serialize.
 
 ## Testing strategy (TDD)
 
 - **Parallelism is observable, not just faster.** Assert concurrency directly rather than by
   timing: inject fake adapters whose `review/propose/converge` block on a shared barrier that
-  only releases once N have entered — proving all N ran concurrently (a sequential loop would
+  only releases once N have entered - proving all N ran concurrently (a sequential loop would
   deadlock the barrier and time out the test). No wall-clock flakiness.
 - **Determinism.** Fake adapters that complete in shuffled order must yield artifacts in
   `enabled` order; assert the sealed/eval order is identical across runs.
@@ -106,15 +106,15 @@ fix is to ensure the state dir is outside the integrity scope — NOT to seriali
 - Existing workflow_3 / workflow_4 convergence and seal tests must stay green (behavior parity
   except ordering-by-completion, which Component 2 normalizes away).
 
-## Dispatcher hardening — operator-contributed findings (2026-06-02)
+## Dispatcher hardening - operator-contributed findings (2026-06-02)
 
 Anchoring contribution from the operator, diagnosed live on the Windows install.
 Two independent dispatcher robustness bugs surfaced while running a real consult.
 Folded into this consult so the panel ratifies the fixes alongside the parallel
 rewrite (they touch the same dispatch path). Neither undermined the codex+gemini
-findings on that run — the payload was sound; these are clean hardening candidates.
+findings on that run - the payload was sound; these are clean hardening candidates.
 
-### Finding A — grok "binary not found" from a stale server PATH snapshot
+### Finding A - grok "binary not found" from a stale server PATH snapshot
 
 Symptom: `grok binary not found: grok` even though `grok.exe` exists at
 `C:\Users\project-contributor\.grok\bin\grok.exe` and is on PATH (current process + user
@@ -128,7 +128,7 @@ registry).
   process. `shutil.which` resolves against the env the server was launched with;
   that env predated `~/.grok/bin` becoming visible, so `which` returned None. Fresh
   diagnostic shells see it; the server didn't.
-- **Operator-proposed fix (deterministic):** pin the absolute path in config —
+- **Operator-proposed fix (deterministic):** pin the absolute path in config -
   `contributors.adapters.grok.command: C:\Users\project-contributor\.grok\bin\grok.exe`.
   `_resolve_grok_bin` returns a drive-prefixed path verbatim (`:170`), bypassing
   PATH. Or fully restart Claude Code so the server re-inherits PATH.
@@ -137,7 +137,7 @@ registry).
   server's launch-time PATH, so a long-lived server doesn't go stale? Applies to ALL
   bare-name adapter resolution, not just grok.
 
-### Finding B — kimi `'\udc9d' ... surrogates not allowed` (cp1252 stdin decode)
+### Finding B - kimi `'\udc9d' ... surrogates not allowed` (cp1252 stdin decode)
 
 Symptom: kimi dispatch crashes with a lone-surrogate error. A kimi-cli 1.44.0
 Windows bug, not a dispatcher or payload defect.
@@ -145,18 +145,18 @@ Windows bug, not a dispatcher or payload defect.
 - Crash is inside kimi-cli's own pydantic `model_dump_json()` serializing the user
   Message (its request to the model API). The dispatcher sends correct UTF-8 over
   stdin (`_dispatch_kimi.py:803` `prompt.encode("utf-8")`).
-- `\udc9d` is the surrogateescape of byte `0x9D` — the middle byte of the ❌ emoji's
-  UTF-8 (`E2 9D 8C`). That ❌ came from the consuming project's GUI status icons
-  (❌ ✓ ⚠) in `appointment_processor_gui.py`; byte scan confirmed exactly one `0x9D`.
+- `\udc9d` is the surrogateescape of byte `0x9D` - the middle byte of the [x] emoji's
+  UTF-8 (`E2 9D 8C`). That [x] came from the consuming project's GUI status icons
+  ([x] [ok] [warn]) in `appointment_processor_gui.py`; byte scan confirmed exactly one `0x9D`.
 - **Mechanism:** kimi-cli reads its UTF-8 stdin under the Windows locale (cp1252)
-  with `surrogateescape`, so ❌ decodes to a lone `\udc9d`; its strict-UTF-8 JSON
-  serializer then refuses it. Deterministic (same byte position every run →
+  with `surrogateescape`, so [x] decodes to a lone `\udc9d`; its strict-UTF-8 JSON
+  serializer then refuses it. Deterministic (same byte position every run ->
   non-retryable). codex/gemini ate the same bytes fine.
 - The kimi subprocess env (`_kimi_subprocess_env`, `:264-280`) scrubs API keys but
   does not set `PYTHONUTF8`.
 - **Operator-proposed fixes:** (1) inject `PYTHONUTF8=1` into `_kimi_subprocess_env()`
-  — a one-line consensus-mcp fix since kimi-cli is a Python app; (2) user-side, launch
-  Claude Code with `PYTHONUTF8=1`; (3) real fix is upstream — kimi-cli should decode
+  - a one-line consensus-mcp fix since kimi-cli is a Python app; (2) user-side, launch
+  Claude Code with `PYTHONUTF8=1`; (3) real fix is upstream - kimi-cli should decode
   stdin as UTF-8 regardless of locale. NOT recommended: stripping the emoji from the
   source. This is the same cp1252 class as v1.33.4 (see `windows-console-portability`).
 - **Hardening question for the panel:** is forcing `PYTHONUTF8=1` for the kimi

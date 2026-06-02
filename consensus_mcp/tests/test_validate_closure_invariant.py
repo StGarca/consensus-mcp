@@ -1,4 +1,4 @@
-"""Tests for _validate_closure_invariant — Phase 5 of Task #28.
+"""Tests for _validate_closure_invariant - Phase 5 of Task #28.
 
 Eight tests covering all verdict states and CLI exit codes.
 Uses tmp_path for filesystem isolation; no real iteration dirs touched.
@@ -88,7 +88,7 @@ def _make_iteration(tmp_path: Path, name: str = "iteration-test") -> Path:
 # ---------------------------------------------------------------------------
 
 def test_n_a_no_audit(tmp_path):
-    """Iteration with no independence-audit.yaml → n/a (no audit)."""
+    """Iteration with no independence-audit.yaml -> n/a (no audit)."""
     d = _make_iteration(tmp_path)
     # No audit file written.
     result = vcl.scan_iteration(d)
@@ -98,7 +98,7 @@ def test_n_a_no_audit(tmp_path):
 
 
 def test_n_a_no_mutation(tmp_path):
-    """Audit exists but has no apply_step_landed events → n/a (no mutation)."""
+    """Audit exists but has no apply_step_landed events -> n/a (no mutation)."""
     d = _make_iteration(tmp_path)
     _write_audit(d, audit_log=[
         {"event": "review_returned_and_sealed", "timestamp_utc": _ts(), "actor": "codex-x-1"},
@@ -109,7 +109,7 @@ def test_n_a_no_mutation(tmp_path):
 
 
 def test_in_flight(tmp_path):
-    """last_mutation present but no closing review with ts > mutation → in_flight."""
+    """last_mutation present but no closing review with ts > mutation -> in_flight."""
     d = _make_iteration(tmp_path)
     mut_ts = _ts(-200)
     _write_audit(d, audit_log=[
@@ -128,7 +128,7 @@ def test_in_flight(tmp_path):
 
 
 def test_compliant(tmp_path):
-    """last_mutation by codex + fresh claude review of same post_sha → compliant."""
+    """last_mutation by codex + fresh claude review of same post_sha -> compliant."""
     d = _make_iteration(tmp_path)
     mut_ts = _ts(-100)
     _write_audit(d, audit_log=[
@@ -146,14 +146,14 @@ def test_compliant(tmp_path):
 
 
 def test_non_compliant_self_close(tmp_path):
-    """last_mutation by codex + closing review also by codex → non_compliant (cross_family)."""
+    """last_mutation by codex + closing review also by codex -> non_compliant (cross_family)."""
     d = _make_iteration(tmp_path)
     mut_ts = _ts(-100)
     _write_audit(d, audit_log=[
         _make_apply_event(actor_id="codex-x-1", model_family="codex",
                           post_sha="POST-CCC", ts=mut_ts),
     ])
-    # Same actor codex closes — violates cross_family.
+    # Same actor codex closes - violates cross_family.
     _write_review(d, "codex-review.yaml",
                   reviewer_id="codex-x-1",
                   packet_sha256="POST-CCC",
@@ -166,10 +166,10 @@ def test_non_compliant_self_close(tmp_path):
 
 def test_summary_counts(tmp_path):
     """Multi-iteration scan returns correct summary tallies."""
-    # iter-a: no audit → n/a
+    # iter-a: no audit -> n/a
     a = _make_iteration(tmp_path, "iteration-a")
 
-    # iter-b: no mutation → n/a
+    # iter-b: no mutation -> n/a
     b = _make_iteration(tmp_path, "iteration-b")
     _write_audit(b, audit_log=[])
 
@@ -259,7 +259,7 @@ def test_reviewer_id_codexica_does_not_match_codex_family(tmp_path):
     """F3-005: 'codexica-bot' must NOT route to codex family (no dash boundary)."""
     d = _make_iteration(tmp_path, "iteration-prefix-test")
     review_path = d / "claude-review.yaml"
-    # File starts with 'claude-' but reviewer_id starts with 'codexica' — neither
+    # File starts with 'claude-' but reviewer_id starts with 'codexica' - neither
     # the reviewer_id prefix nor the file-name prefix should yield 'codex'.
     review_path.write_text(
         yaml.safe_dump({
@@ -273,7 +273,7 @@ def test_reviewer_id_codexica_does_not_match_codex_family(tmp_path):
     verdict = vcl._load_review_yaml(review_path)
     assert verdict is not None
     # Heuristic should fall through to filename, which IS 'claude-' (legitimate
-    # dash boundary) → family becomes 'claude' from filename, not from id.
+    # dash boundary) -> family becomes 'claude' from filename, not from id.
     assert verdict["actor"]["model_family"] == "claude"
 
 
@@ -339,7 +339,7 @@ def test_most_recent_verdict_picks_newer_when_both_present(tmp_path):
                   packet_sha256="POST-BOTH",
                   sealed_at_utc=_ts(0))
     result = vcl.scan_iteration(d)
-    # codex review is newer → it is the closing verdict.
+    # codex review is newer -> it is the closing verdict.
     assert result["closing_verdict_present"] is True
     # cross_family pass: codex closer vs orchestrator mutation family.
     inv = result["invariant_check"]

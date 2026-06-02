@@ -10,7 +10,7 @@ This module owns the SESSION-STATE marker file
   - Pure file operations (read / write / clear / probe).
   - Minimal validation (file shape + iteration_id resolves to a real
     unsealed iteration dir).
-  - NO trust-root logic — that stays in `_design_approval`.
+  - NO trust-root logic - that stays in `_design_approval`.
 
 The session marker is NOT a trust artifact: it carries no SHA, no
 signature, and its only role is to flip the gate's mode from dormant
@@ -23,7 +23,7 @@ Why a separate file from `.consensus/design-approved`:
     across sessions; re-validates the seal on every check).
   - `session-active` is the SESSION FLAG (ephemeral; created on
     consensus tool invocation; removed on close/delivery). Two
-    different lifecycles → two different files.
+    different lifecycles -> two different files.
 
 Schema (consult D2):
     schema_version: 1
@@ -33,14 +33,14 @@ Schema (consult D2):
     activated_at_utc: '<iso8601>'              # when
     activation_source: console_script | mcp_tool | env_override
 
-Activation triggers (D3 — written as a side effect of):
+Activation triggers (D3 - written as a side effect of):
   - `consensus-mcp-seal-iteration mint` (the primary trigger)
   - `consensus-mcp-dispatch-*` console-script invocations in proposal mode
   - consensus-mcp MCP server tool invocations
 
 Deactivation triggers (D4):
-  - `consensus-mcp-seal-iteration close` — explicit, with delivery-token check
-  - `mint_delivery_token` — implicit (defense-in-depth) when the LAST in-scope
+  - `consensus-mcp-seal-iteration close` - explicit, with delivery-token check
+  - `mint_delivery_token` - implicit (defense-in-depth) when the LAST in-scope
     file gets its token
 
 Legacy mode (D6):
@@ -123,7 +123,7 @@ def write_session_marker(
 
 def read_session_marker(repo_root: Path) -> dict | None:
     """Load + minimally validate the session marker. Returns None on
-    missing or unparseable (NOT an error — dormant mode)."""
+    missing or unparseable (NOT an error - dormant mode)."""
     path = _marker_path(repo_root)
     if not path.exists():
         return None
@@ -160,7 +160,7 @@ def legacy_mode_active(repo_root: Path) -> bool:
 
 
 def session_active(repo_root: Path) -> bool:
-    """Authoritative dormant↔active probe used by the gate.
+    """Authoritative dormant<->active probe used by the gate.
 
     Returns True iff:
       (a) Legacy mode opt-in is active (env var or marker file), OR
@@ -170,7 +170,7 @@ def session_active(repo_root: Path) -> bool:
 
     A session marker pointing at an iteration dir that doesn't
     exist is treated as DORMANT (the marker is effectively garbage
-    and ignored — R4 risk mitigation). Operator can clear stale
+    and ignored - R4 risk mitigation). Operator can clear stale
     markers via `consensus-mcp-seal-iteration close --abandon`.
 
     Fail-safe to False (= dormant) on any error.
@@ -193,8 +193,8 @@ def gate_should_enforce(repo_root: Path) -> bool:
     """Single activation predicate shared by ALL consensus hooks.
 
     The v1.32.1 consult (iteration-v133-gate-scope-shift, 5/5 unanimous) made
-    the gate DORMANT-by-default — armed only when a consensus consult is in
-    flight — but that model was wired into ONLY the PreToolUse edit/Bash gate.
+    the gate DORMANT-by-default - armed only when a consensus consult is in
+    flight - but that model was wired into ONLY the PreToolUse edit/Bash gate.
     The Stop gate and the SessionStart/UserPromptSubmit injector kept firing in
     EVERY repo (gated solely on `consensus-init` being on PATH), nagging
     everyday work that had nothing to do with consensus. This predicate is the
@@ -240,7 +240,7 @@ def emit_migration_warning_once(repo_root: Path) -> bool:
     msg = (
         "[consensus-mcp v1.32.1] gate activation is now PER-INVOCATION by "
         "default. This project's `.consensus/` directory used to opt in to "
-        "per-project lockdown — under the new default, the gate is DORMANT "
+        "per-project lockdown - under the new default, the gate is DORMANT "
         "unless an active consensus consult is in flight. To restore the old "
         "per-project always-on behavior, either:\n"
         "  - touch .consensus/legacy-always-on  (persistent marker)\n"

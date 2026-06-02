@@ -106,8 +106,8 @@ def test_schema_file_is_valid_json_and_enum_matches_v1150():
 
 # --------------------------------------------------------------------------
 # Gate: consequence rule
-#   falsifiable_from_artifacts==False ⇒ discriminating_experiment &
-#   refutation_observation non-empty & empirical_status∈{pending,refuted}
+#   falsifiable_from_artifacts==False => discriminating_experiment &
+#   refutation_observation non-empty & empirical_status in {pending,refuted}
 # --------------------------------------------------------------------------
 
 def test_consequence_rule_satisfied_passes_presence():
@@ -155,7 +155,7 @@ def test_refutation_observation_must_not_echo_hypothesis():
 
 
 # --------------------------------------------------------------------------
-# Gate: graduated strictness — hard-reject ONLY (i) safety-class missing a
+# Gate: graduated strictness - hard-reject ONLY (i) safety-class missing a
 #   conforming independent_safeguard; (ii) empirical_status:proven w/o a
 #   recorded experiment result. Else warn+annotate.
 # --------------------------------------------------------------------------
@@ -208,7 +208,7 @@ def test_non_safety_violation_warns_not_hard_rejects_under_graduated():
     conv["falsification"]["discriminating_experiment"] = ""
     r = vcp.validate_convention(conv, risk_class=None, enforcement="graduated")
     assert r["violations"]
-    assert r["hard_reject"] is False  # graduated: non-safety ⇒ warn
+    assert r["hard_reject"] is False  # graduated: non-safety => warn
 
 
 def test_strict_hard_rejects_any_violation():
@@ -245,7 +245,7 @@ def test_warn_surfaces_violations_never_hard_rejects():
 
 # --------------------------------------------------------------------------
 # Gate (HIGHEST-ORDER): recursive-trap structural defense.
-# grep validate_converged_plan.py ⇒ ZERO approved/correct/ready/sound
+# grep validate_converged_plan.py => ZERO approved/correct/ready/sound
 # state-setting from convention blocks.
 # --------------------------------------------------------------------------
 
@@ -333,7 +333,7 @@ def test_engine_absent_convention_at_seal_is_annotated_not_doctrine_only(tmp_pat
     engine = WorkflowEngine(config, adapters, tmp_path)
     d, goal, target = _iter_dir(tmp_path)  # no risk_class, no convention-input
     outcome = engine.run_iteration(d, goal, target)
-    assert outcome.error is None  # graduated + non-safety ⇒ warn, still seals
+    assert outcome.error is None  # graduated + non-safety => warn, still seals
     plan = yaml.safe_load((d / "converged-plan.yaml").read_text(encoding="utf-8"))
     assert plan["convention_schema_version"] == vcp.CONVENTION_SCHEMA_VERSION
     assert plan["convention_gate"]["enforcement"] == "graduated"
@@ -362,7 +362,7 @@ def test_engine_present_invalid_version_not_rewritten_to_current(tmp_path):
     config = _three_contributor_config()
     adapters = {n: FakeAlwaysApprove() for n in ("claude", "codex", "gemini")}
     engine = WorkflowEngine(config, adapters, tmp_path)
-    d, goal, target = _iter_dir(tmp_path)  # non-safety ⇒ graduated warn ⇒ seals
+    d, goal, target = _iter_dir(tmp_path)  # non-safety => graduated warn => seals
     conv = _good_convention(convention_schema_version=999)
     (d / "convention-input.yaml").write_text(
         yaml.safe_dump({"convention": conv}), encoding="utf-8"
@@ -395,7 +395,7 @@ def test_engine_warn_seal_carries_explicit_enforcement_note(tmp_path):
 
 def test_decisive_experiment_block_required(tmp_path):
     """codex-rev-002: decisive_experiment_before_next_iteration is one of
-    the three named blocks — omitting it is a violation. null is allowed
+    the three named blocks - omitting it is a violation. null is allowed
     only for the documented proven/n-a case."""
     conv = _good_convention()
     del conv["decisive_experiment_before_next_iteration"]
@@ -405,7 +405,7 @@ def test_decisive_experiment_block_required(tmp_path):
 
 
 def test_decisive_experiment_null_allowed_only_for_proven_or_na():
-    # n/a (falsifiable_from_artifacts true) ⇒ null is legitimate.
+    # n/a (falsifiable_from_artifacts true) => null is legitimate.
     conv = _good_convention()
     conv["falsification"] = {
         "hypothesis": "tooling off-by-one",
@@ -416,7 +416,7 @@ def test_decisive_experiment_null_allowed_only_for_proven_or_na():
     conv["decisive_experiment_before_next_iteration"] = None
     r = vcp.validate_convention(conv, risk_class=None, enforcement="graduated")
     assert r["presence_ok"] is True
-    # pending (defined class) ⇒ null is NOT allowed.
+    # pending (defined class) => null is NOT allowed.
     conv2 = _good_convention()  # empirical_status pending
     conv2["decisive_experiment_before_next_iteration"] = None
     r2 = vcp.validate_convention(conv2, risk_class=None, enforcement="graduated")
@@ -462,7 +462,7 @@ def test_hard_reject_removes_stale_converged_plan(tmp_path):
     )
     outcome = engine.run_iteration(d, goal, target)
     assert outcome.error is not None
-    # Stale obsolete plan must be gone — outcome reader must not report it.
+    # Stale obsolete plan must be gone - outcome reader must not report it.
     assert not (d / "converged-plan.yaml").exists()
 
 
@@ -487,7 +487,7 @@ def test_legacy_plan_loads_marked_doctrine_only(tmp_path):
     res = cgio.handle(str(d), repo_root=str(tmp_path))
     assert res["ok"] is True
     assert res["converged_plan"]["iteration_id"] == "iteration-0043-legacy"
-    # NOT silently valid, NOT rejected — explicitly doctrine-only.
+    # NOT silently valid, NOT rejected - explicitly doctrine-only.
     assert res["enforcement"] == "doctrine-only"
 
 

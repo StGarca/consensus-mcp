@@ -59,7 +59,7 @@ def _make_iter_dir(tmp_path: Path) -> tuple[Path, Path, Path]:
 def test_convergence_packet_advisory_weights_reorder_but_set_is_identical(tmp_path):
     """S3 decisive experiment (next-step converged plan): contributor_weights in
     _build_convergence_packet change the proposal READING-ORDER but never the SET of
-    proposals — so the gate/convergence (which operate on the set, never on weights)
+    proposals - so the gate/convergence (which operate on the set, never on weights)
     are byte-identical regardless. Proves weights-off equivalence at the engine level."""
     config = _three_contributor_config()
     adapters = {n: FakeAlwaysApprove() for n in ["claude", "codex", "gemini"]}
@@ -143,7 +143,7 @@ def test_workflow_3_all_approve_converges(tmp_path):
 
 
 def test_workflow_3_one_blocks_strict_majority_holds(tmp_path):
-    """codex blocks, gemini approves → strict-majority of 2 non-claude review = 1 of 2 = NOT majority → fails."""
+    """codex blocks, gemini approves -> strict-majority of 2 non-claude review = 1 of 2 = NOT majority -> fails."""
     config = _three_contributor_config(mode=cfg.WORKFLOW_POST_REVIEW, rule=cfg.CONVERGE_STRICT_MAJ)
     config["workflow"]["independence"] = cfg.INDEPENDENCE_VISIBLE
     cfg.validate(config)
@@ -156,7 +156,7 @@ def test_workflow_3_one_blocks_strict_majority_holds(tmp_path):
     iter_dir, goal, target = _make_iter_dir(tmp_path)
     outcome = engine.run_iteration(iter_dir, goal, target)
     # Convergence rule operates on the 2 non-claude artifacts; strict-majority
-    # of 2 = 2 (must have all). codex blocked, so 1/2 approve → not converged.
+    # of 2 = 2 (must have all). codex blocked, so 1/2 approve -> not converged.
     # ALSO blocking_objections from codex prevents convergence regardless.
     assert outcome.convergence.converged is False
     assert "codex" in outcome.convergence.block_votes
@@ -188,7 +188,7 @@ def test_workflow_4_max_rounds_exceeded(tmp_path):
     config = _three_contributor_config()
     config["workflow"]["max_convergence_rounds"] = 2
     cfg.validate(config)
-    # All three block — never converges.
+    # All three block - never converges.
     adapters = {n: FakeAlwaysBlock() for n in ["claude", "codex", "gemini"]}
     engine = WorkflowEngine(config, adapters, tmp_path)
     iter_dir, goal, target = _make_iter_dir(tmp_path)
@@ -213,7 +213,7 @@ def test_workflow_4_one_blocks_strict_majority_fails(tmp_path):
     iter_dir, goal, target = _make_iter_dir(tmp_path)
     outcome = engine.run_iteration(iter_dir, goal, target)
     # 2 approve, 1 block. Strict-majority of 3 = 2. n_approve=2 meets threshold,
-    # BUT blocking_objections is non-empty → not converged.
+    # BUT blocking_objections is non-empty -> not converged.
     assert outcome.convergence.converged is False
     assert outcome.convergence.blocking_objection_ids  # non-empty
 
@@ -247,7 +247,7 @@ def test_convergence_unanimous_requires_all(tmp_path):
     engine = WorkflowEngine(config, adapters, tmp_path)
     iter_dir, goal, target = _make_iter_dir(tmp_path)
     outcome = engine.run_iteration(iter_dir, goal, target)
-    # 2/3 approve, 1 block → unanimous requires ALL → fails.
+    # 2/3 approve, 1 block -> unanimous requires ALL -> fails.
     assert outcome.convergence.converged is False
 
 
@@ -255,7 +255,7 @@ def test_convergence_inclusive_majority_passes(tmp_path):
     """With 2 contributors approving under inclusive-majority, convergence passes.
 
     (Renamed from test_convergence_inclusive_majority_ties_pass per
-    gemini-rev-003 — the prior name implied tie testing that the body didn't
+    gemini-rev-003 - the prior name implied tie testing that the body didn't
     actually exercise.)"""
     config = _three_contributor_config(rule=cfg.CONVERGE_INCL_MAJ)
     config["contributors"]["enabled"] = ["claude", "codex"]
@@ -275,7 +275,7 @@ def test_convergence_inclusive_majority_passes(tmp_path):
 
 def test_timeout_policy_no_vote_default(tmp_path):
     """treat-as-no-vote: timed-out contributors don't count as 'no'.
-    With 3 enabled, codex times out, claude+gemini approve → strict-maj of 3 = 2 approve → passes."""
+    With 3 enabled, codex times out, claude+gemini approve -> strict-maj of 3 = 2 approve -> passes."""
     config = _three_contributor_config()
     config["workflow"]["timeout_policy"] = cfg.TIMEOUT_NO_VOTE
     config["workflow"]["max_convergence_rounds"] = 1
@@ -288,14 +288,14 @@ def test_timeout_policy_no_vote_default(tmp_path):
     engine = WorkflowEngine(config, adapters, tmp_path)
     iter_dir, goal, target = _make_iter_dir(tmp_path)
     outcome = engine.run_iteration(iter_dir, goal, target)
-    # 2 approve out of 3 enabled = strict-majority threshold (3//2)+1 = 2 → passes.
+    # 2 approve out of 3 enabled = strict-majority threshold (3//2)+1 = 2 -> passes.
     assert outcome.convergence.converged is True
     assert "codex" in outcome.convergence.contributors_timed_out
 
 
 def test_timeout_policy_shrink_quorum(tmp_path):
     """shrink-quorum: timed-out contributors REDUCE N. With 3 enabled, codex
-    times out → N=2, strict-maj of 2 = 2 (everyone must approve)."""
+    times out -> N=2, strict-maj of 2 = 2 (everyone must approve)."""
     config = _three_contributor_config()
     config["workflow"]["timeout_policy"] = cfg.TIMEOUT_SHRINK
     config["workflow"]["max_convergence_rounds"] = 1
@@ -308,7 +308,7 @@ def test_timeout_policy_shrink_quorum(tmp_path):
     engine = WorkflowEngine(config, adapters, tmp_path)
     iter_dir, goal, target = _make_iter_dir(tmp_path)
     outcome = engine.run_iteration(iter_dir, goal, target)
-    # responsive N=2, both approve, strict-maj threshold (2//2)+1=2, 2>=2 → passes.
+    # responsive N=2, both approve, strict-maj threshold (2//2)+1=2, 2>=2 -> passes.
     assert outcome.convergence.converged is True
 
 
@@ -326,7 +326,7 @@ def test_timeout_policy_treat_as_blocking(tmp_path):
     engine = WorkflowEngine(config, adapters, tmp_path)
     iter_dir, goal, target = _make_iter_dir(tmp_path)
     outcome = engine.run_iteration(iter_dir, goal, target)
-    # Unanimous requires all approve; codex counted as block under treat-as-blocking → fails.
+    # Unanimous requires all approve; codex counted as block under treat-as-blocking -> fails.
     assert outcome.convergence.converged is False
     assert "codex" in outcome.convergence.block_votes
 
@@ -335,7 +335,7 @@ def test_timeout_policy_blocking_vetoes_strict_majority(tmp_path):
     """H-7: under TIMEOUT_BLOCKING a timed-out contributor MUST veto even a
     strict-majority. 3 enabled, strict-majority, codex times out, claude+gemini
     approve. Two approvals reach the strict-maj threshold ((3//2)+1 == 2), so the
-    approve count alone would converge — but the operator chose treat-as-blocking,
+    approve count alone would converge - but the operator chose treat-as-blocking,
     so codex's non-response is a block that vetoes the majority."""
     config = _three_contributor_config(rule=cfg.CONVERGE_STRICT_MAJ)
     config["workflow"]["timeout_policy"] = cfg.TIMEOUT_BLOCKING
@@ -343,7 +343,7 @@ def test_timeout_policy_blocking_vetoes_strict_majority(tmp_path):
     cfg.validate(config)
     adapters = {
         "claude": FakeAlwaysApprove(),
-        "codex": FakeRaisesDispatchError(),  # times out → no artifact
+        "codex": FakeRaisesDispatchError(),  # times out -> no artifact
         "gemini": FakeAlwaysApprove(),
     }
     engine = WorkflowEngine(config, adapters, tmp_path)
@@ -357,7 +357,7 @@ def test_timeout_blocking_inclusive_majority_two_party(tmp_path):
     """H-7: under TIMEOUT_BLOCKING a timeout vetoes an inclusive-majority too.
     enabled=[claude,codex], inclusive-majority, claude approves, codex times out.
     inclusive-maj threshold ceil(2/2) == 1, so claude's lone approval would
-    otherwise converge — but treat-as-blocking makes codex's timeout a veto."""
+    otherwise converge - but treat-as-blocking makes codex's timeout a veto."""
     config = _three_contributor_config(rule=cfg.CONVERGE_INCL_MAJ)
     config["contributors"]["enabled"] = ["claude", "codex"]
     config["workflow"]["timeout_policy"] = cfg.TIMEOUT_BLOCKING
@@ -365,7 +365,7 @@ def test_timeout_blocking_inclusive_majority_two_party(tmp_path):
     cfg.validate(config)
     adapters = {
         "claude": FakeAlwaysApprove(),
-        "codex": FakeRaisesDispatchError(),  # times out → no artifact
+        "codex": FakeRaisesDispatchError(),  # times out -> no artifact
     }
     engine = WorkflowEngine(config, adapters, tmp_path)
     iter_dir, goal, target = _make_iter_dir(tmp_path)

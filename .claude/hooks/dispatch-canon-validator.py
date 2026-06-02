@@ -46,7 +46,7 @@ GROK_FORBIDDEN_FLAGS = (
 )
 
 # Iteration-dir --cwd is forbidden for grok; only /tmp is allowed.
-# (Round-5 kimi-rev-007 cleanup: removed GROK_CWD_PATTERN compiled regex —
+# (Round-5 kimi-rev-007 cleanup: removed GROK_CWD_PATTERN compiled regex -
 # replaced by shlex token-based --cwd extraction in check_grok_direct_invocation.)
 ALLOWED_GROK_CWDS = ("/tmp", "/tmp/")
 
@@ -85,7 +85,7 @@ def check_consensus_dispatch_bash(tool_input: dict) -> int | None:
     # argv tokens, not substring of quoted prompt content. The prior
     # findall(cmd) version false-positived when the bash command embedded
     # a review-packet whose documentation text mentioned
-    # `consensus-mcp-dispatch-*` strings — a 2+ findall triggered the
+    # `consensus-mcp-dispatch-*` strings - a 2+ findall triggered the
     # batched-multi-dispatch block on what was actually a single dispatch.
     try:
         tokens = shlex.split(cmd, posix=True)

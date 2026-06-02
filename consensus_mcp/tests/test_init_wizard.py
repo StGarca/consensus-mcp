@@ -200,7 +200,7 @@ def test_reconfigure_overwrites(tmp_path, monkeypatch):
 def test_reconfigure_preserves_existing_non_default(tmp_path, monkeypatch):
     """codex-rev-003 (pass 1) / codex-rev-001 (pass 2): --reconfigure must
     preserve existing config values for any dimension not explicitly overridden
-    via CLI flag — including snapshot trigger and contributors.
+    via CLI flag - including snapshot trigger and contributors.
     """
     monkeypatch.chdir(tmp_path)
     config_dir = tmp_path / ".consensus"
@@ -366,7 +366,7 @@ def test_gitignore_malformed_open_marker_preserves_user_lines(tmp_path, monkeypa
         f"# user header\n*.pyc\n"
         f"{wiz.GITIGNORE_OPEN_MARKER}\n"
         f".consensus/tmp/\n"
-        # ← intentionally NO close marker
+        # <- intentionally NO close marker
         f"build/\n"
         f"secrets.env\n"
     )
@@ -490,7 +490,7 @@ def _stub_input(responses):
 
 
 def test_interactive_default_path_prompts(tmp_path, monkeypatch, capsys):
-    """No mode flags → must enter interactive path; user can accept all defaults
+    """No mode flags -> must enter interactive path; user can accept all defaults
     by pressing enter (empty input). With --contributors supplied, 8 prompts remain."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(builtins, "input", _stub_input([""] * 8))
@@ -534,7 +534,7 @@ def test_interactive_user_overrides_workflow(tmp_path, monkeypatch):
     The fresh contributor dimension is now a numbered multi-select (codex-rev-001
     wiring); install detection is forced deterministic so this is hermetic across
     machines/CI, and the first answer is a numeric selection (display order:
-    1=claude,2=codex,3=gemini,4=kimi → "1,2,3" picks claude,codex,gemini)."""
+    1=claude,2=codex,3=gemini,4=kimi -> "1,2,3" picks claude,codex,gemini)."""
     monkeypatch.chdir(tmp_path)
     # v1.28.1: interactive path now requires a real TTY; force it for this test.
     monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
@@ -593,7 +593,7 @@ def test_interactive_defaults_reflect_cli_overrides(tmp_path, monkeypatch, capsy
     monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
     monkeypatch.setattr(wiz, "_profile_installed", lambda profile: True)
     captured_prompts: list[str] = []
-    # First answer is a numeric multi-select (1,2,3 → claude,codex,gemini) now
+    # First answer is a numeric multi-select (1,2,3 -> claude,codex,gemini) now
     # that the fresh contributor dimension is the wired numbered multi-select.
     queue = ["1,2,3", "", "", "", "", "", "", "", ""]  # extra "" declines host_peer follow-up
     def _capturing_input(prompt=""):
@@ -669,7 +669,7 @@ def test_mcp_command_empty_override_raises():
 
 
 def test_init_writes_mcp_json_in_fresh_project(tmp_path, monkeypatch):
-    """A2: fresh project, no existing .mcp.json → consensus-init writes one."""
+    """A2: fresh project, no existing .mcp.json -> consensus-init writes one."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
     rc = wiz.main([
@@ -689,7 +689,7 @@ def test_init_writes_mcp_json_in_fresh_project(tmp_path, monkeypatch):
 
 
 def test_init_merges_existing_mcp_json_with_other_servers(tmp_path, monkeypatch):
-    """A3: existing .mcp.json with another server → merge, both servers present."""
+    """A3: existing .mcp.json with another server -> merge, both servers present."""
     import json
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
@@ -752,8 +752,8 @@ def test_init_mcp_json_is_idempotent_on_rerun(tmp_path, monkeypatch):
 
 
 def test_init_blocks_conflict_without_force(tmp_path, monkeypatch, capsys):
-    """A6: existing consensus-mcp entry with different command → skip+warn,
-    file unchanged, no force flag → blocked."""
+    """A6: existing consensus-mcp entry with different command -> skip+warn,
+    file unchanged, no force flag -> blocked."""
     import json
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(wiz.shutil, "which", lambda name: "/fake/consensus-mcp" if name == "consensus-mcp" else None)
@@ -810,7 +810,7 @@ def test_init_force_replaces_conflict_preserving_other_servers(tmp_path, monkeyp
 
 
 def test_init_malformed_mcp_json_skip_warn(tmp_path, monkeypatch, capsys):
-    """A8: malformed existing .mcp.json → skip+warn, file unchanged."""
+    """A8: malformed existing .mcp.json -> skip+warn, file unchanged."""
     monkeypatch.chdir(tmp_path)
     malformed = "{ this is not valid json, trailing comma, }"
     (tmp_path / ".mcp.json").write_text(malformed, encoding="utf-8")
@@ -886,7 +886,7 @@ def test_detect_available_is_dynamic_over_profiles(monkeypatch, tmp_path):
     monkeypatch.setattr(wiz, "_load_merged_profiles", lambda *_: fake)
     monkeypatch.setattr(wiz.shutil, "which", lambda c: "/x/" + c if c in ("codex", "kimi") else None)
     got = wiz._detect_available_contributors(tmp_path)
-    assert "kimi" in got                       # dynamic — not hardcoded
+    assert "kimi" in got                       # dynamic - not hardcoded
     assert "claude" in got                     # host always available
     assert "claude-swe-reviewer" not in got    # host_peer excluded
     assert "gemini" not in got                 # not installed

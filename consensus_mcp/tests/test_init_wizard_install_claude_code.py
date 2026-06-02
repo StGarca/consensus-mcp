@@ -1,4 +1,4 @@
-"""iter-0040 — tests for consensus-init --install-claude-code + --from-claude-code.
+"""iter-0040 - tests for consensus-init --install-claude-code + --from-claude-code.
 
 Per iter-0039 converged-plan.yaml acceptance gates A1-A7.
 
@@ -76,7 +76,7 @@ def test_install_claude_code_copies_skill_and_command(tmp_path, monkeypatch):
     """A2: --install-claude-code copies SKILL.md + command MD into CLAUDE_HOME.
 
     iter-0040 hot-fix: --install-claude-code is a STANDALONE global install
-    action — it does NOT trigger per-project bootstrap (config.yaml, .mcp.json).
+    action - it does NOT trigger per-project bootstrap (config.yaml, .mcp.json).
     Test runs in a fresh tmp_path with no prior config; expects only the
     extension files to land.
     """
@@ -104,7 +104,7 @@ def test_install_claude_code_idempotent_on_rerun(tmp_path, monkeypatch):
     skill = fake_home / "skills" / "consensus" / "SKILL.md"
     first_text = skill.read_text(encoding="utf-8")
 
-    # Rerun. Skill content is byte-identical → no rewrite.
+    # Rerun. Skill content is byte-identical -> no rewrite.
     second = wiz.main(["--install-claude-code"])
     assert second == 0
     assert skill.read_text(encoding="utf-8") == first_text
@@ -126,7 +126,7 @@ def test_install_claude_code_refuses_overwrite_on_divergent_existing(
     captured = capsys.readouterr()
     # v1.23 (finding 4): a divergent managed file is PRESERVED (not clobbered), but
     # the skip is now surfaced LOUDLY and returns a distinct nonzero (was silently
-    # rc=0 — a silent stale skill is the failure mode codex flagged).
+    # rc=0 - a silent stale skill is the failure mode codex flagged).
     assert rc == 5
     assert "user-edited skill content" in skill.read_text(encoding="utf-8")
     assert "SKIPPED" in captured.err and "--force" in captured.err

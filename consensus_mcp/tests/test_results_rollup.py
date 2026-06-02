@@ -1,4 +1,4 @@
-"""Tests for consensus_mcp._results_rollup — the read-only project scorecard.
+"""Tests for consensus_mcp._results_rollup - the read-only project scorecard.
 
 The rollup reads the project ledger consensus-state/state/results-v1.jsonl
 (one JSON object per line, each conforming to schemas/results-v1.schema.json)
@@ -32,13 +32,13 @@ from consensus_mcp import _results_rollup
 # ---------------------------------------------------------------------------
 
 # Forward (authoritative) records: 3 iterations.
-#   iter-A: converged. 2 findings — 1 high validated_fixed (1 fix, 2 files),
+#   iter-A: converged. 2 findings - 1 high validated_fixed (1 fix, 2 files),
 #           1 medium dismissed_refuted.
-#   iter-B: NOT converged. 2 findings — 1 critical deferred, 1 low open.
-#   iter-C: converged. 1 finding — 1 blocking validated_fixed (1 fix, 1 file).
-# Backfilled (best-effort) record: 1 iteration, 1 high finding — MUST be
+#   iter-B: NOT converged. 2 findings - 1 critical deferred, 1 low open.
+#   iter-C: converged. 1 finding - 1 blocking validated_fixed (1 fix, 1 file).
+# Backfilled (best-effort) record: 1 iteration, 1 high finding - MUST be
 #   segregated, never folded into the forward totals.
-# Unknown-schema record: schema_version == 2 — MUST be skipped with a warning.
+# Unknown-schema record: schema_version == 2 - MUST be skipped with a warning.
 
 _FORWARD_RECORDS = [
     {
@@ -239,7 +239,7 @@ def test_unknown_schema_version_skipped_with_warning(ledger_root: Path, capsys):
 
 
 def test_empty_or_missing_ledger(tmp_path: Path):
-    # No ledger file at all → empty scorecard, no crash.
+    # No ledger file at all -> empty scorecard, no crash.
     card = _results_rollup.build_scorecard(state_root=tmp_path)
     assert card["authoritative"]["iterations"] == 0
     assert card["authoritative"]["total_findings"] == 0
@@ -266,7 +266,7 @@ def test_human_table_is_string_and_mentions_key_figures(ledger_root: Path):
 
 def test_loader_honors_state_root_env(ledger_root: Path, monkeypatch):
     monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(ledger_root))
-    # No explicit state_root arg → must fall back to the env var.
+    # No explicit state_root arg -> must fall back to the env var.
     card = _results_rollup.build_scorecard()
     assert card["authoritative"]["iterations"] == 3
 

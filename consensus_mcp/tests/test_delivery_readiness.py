@@ -1,7 +1,7 @@
 """Tests for the delivery-readiness gate (anti-self-judge enforcement, 1.16.0).
 
 Decisive test: an artifact whose design_consensus_ref is UNSEALED cannot be
-minted/verified — proving self-judged delivery is mechanically impossible.
+minted/verified - proving self-judged delivery is mechanically impossible.
 """
 from pathlib import Path
 

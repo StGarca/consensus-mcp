@@ -1,4 +1,4 @@
-"""v1.31.0 — auto-grok-dispatch helper (grok adapter).
+"""v1.31.0 - auto-grok-dispatch helper (grok adapter).
 
 Gemini-twin (converged consult iteration-v131-grok-design-2026-05-26).
 Reuses generic dispatch infrastructure from `_dispatch_base.py`; supplies
@@ -10,18 +10,18 @@ Key differences from `_dispatch_gemini.py` (by converged decision):
     decision; aligns with dispatch-canon-validator.GROK_FORBIDDEN_FLAGS).
     A per-pass copy is still written to iter_dir for audit/provenance
     (prompt_sha256), but grok itself reads the inline argument.
-  - Auth pre-flight: probe for ~/.grok/auth.json. Missing → raise
+  - Auth pre-flight: probe for ~/.grok/auth.json. Missing -> raise
     `GrokAuthRequiredError` BEFORE invoking the CLI (codex acceptance gate G4).
   - Output: `--output-format streaming-json` so the silence watchdog sees
     token-by-token liveness (DEFECT 1 fix; `_assemble_grok_stream` rebuilds
     the answer from the `text` events).
   - Independence flags: `--no-memory --disable-web-search` + a fresh empty
-    per-pass `--cwd` temp dir (DEFECT 2 fix — grok's recursive watcher
+    per-pass `--cwd` temp dir (DEFECT 2 fix - grok's recursive watcher
     scans the --cwd dir; an empty dir avoids the /tmp systemd-private
     PermissionDenied noise). Prior shape (`--prompt-file` + `--no-plan` +
     `--no-subagents` + `--max-turns` + `--permission-mode` + project-subdir
     `--cwd`) caused indefinite stalls on real packets.
-  - No sandbox / no integrity check — by converged decision (YAGNI; kimi's
+  - No sandbox / no integrity check - by converged decision (YAGNI; kimi's
     hardening earned complexity from a real field bug, grok has no such
     history). The disable-flag set IS the day-one safeguard.
 
@@ -95,7 +95,7 @@ _BLOCKING_SEVERITIES = {"blocking", "critical"}
 
 # Grok's CLI default model resolves to whatever `grok` itself picks; we
 # pass --model only when the operator overrides via --model on this
-# dispatcher (per converged plan D3 — let grok roll forward without
+# dispatcher (per converged plan D3 - let grok roll forward without
 # dispatcher releases). `None` here means "do not pass --model".
 _DEFAULT_GROK_MODEL: str | None = None
 
@@ -107,7 +107,7 @@ _DEFAULT_GROK_MODEL: str | None = None
 # project-subdir --cwd) was removed because that COMBINATION produced
 # indefinite stalls. NOTE: the earlier "grok counts every prompt chunk /
 # MCP rejection / tool-call attempt against a message budget and never
-# reaches model output" rationale was a Claude-side MISDIAGNOSIS — grok
+# reaches model output" rationale was a Claude-side MISDIAGNOSIS - grok
 # has no MCP servers configured (`grok mcp list` -> none), handles its
 # 512K context fine, and the real stall was DEFECT 1: plain output + the
 # silence watchdog. Plain buffers ALL stdout until the answer is ready,
@@ -134,7 +134,7 @@ class GrokInvocationError(RuntimeError):
 
 class GrokStreamCancelledError(GrokInvocationError):
     """grok self-cancelled (stopReason == 'Cancelled') before emitting any
-    text event — the agentic self-cancel on open-ended prompts. A subclass
+    text event - the agentic self-cancel on open-ended prompts. A subclass
     of GrokInvocationError so the parse-retry wrapper treats it as an
     invocation failure, NOT a JSON parse failure (no wasted parse-retry).
     See docs/grok-dispatch-streaming-watchdog-fix.md."""
@@ -204,7 +204,7 @@ def _write_per_pass_prompt(prompt: str, iter_dir: Path, pass_id: str) -> Path:
     in provenance.prompt_sha256 (computed by caller; this helper just
     writes the file).
     """
-    # Sanitize pass_id for use as a filename — alphanumerics + dash/underscore
+    # Sanitize pass_id for use as a filename - alphanumerics + dash/underscore
     # only. The full pass_id format is already filesystem-safe in practice
     # (claude/codex/gemini/kimi pass IDs use `<adapter>-<iteration>-<n>-passN`)
     # but defense-in-depth against an operator-passed weird pass_id.
@@ -242,7 +242,7 @@ def _build_grok_cmd(
     unreadable. The `/tmp` default is the canon fallback. (This is the
     dispatcher's INTERNAL subprocess argv; it is never inspected by
     dispatch-canon-validator, which only checks grok invocations issued
-    directly via the Bash tool — so a per-pass temp `--cwd` keeps Gate G3
+    directly via the Bash tool - so a per-pass temp `--cwd` keeps Gate G3
     green without touching the validator.)
 
     Note: inline `-p` carries a Linux MAX_ARG_STRLEN limit of 128KB per
@@ -287,7 +287,7 @@ def _invoke_grok(
     file we wrote (caller reads it for sha256 provenance).
 
     Thin wrapper that owns the per-pass run-cwd lifecycle: grok runs from a
-    fresh empty temp dir (DEFECT 2 fix — see `_build_grok_cmd`) that is
+    fresh empty temp dir (DEFECT 2 fix - see `_build_grok_cmd`) that is
     ALWAYS removed afterwards, including every watchdog/abort raise path.
     """
     grok_run_cwd = tempfile.mkdtemp(prefix="grok-run-")
@@ -338,13 +338,13 @@ def _invoke_grok_in_cwd(
     Stream-and-watchdog loop: the silence watchdog advances on every stdout
     line via `stdout_reader`; `--output-format streaming-json` emits
     thought/text event lines continuously so the watchdog stays fed (the
-    DEFECT 1 fix — plain output buffered all stdout, starving the watchdog).
+    DEFECT 1 fix - plain output buffered all stdout, starving the watchdog).
     grok reads the prompt inline via `-p` (no stdin piping), so no
     stdin-writer thread + no codex-rev-001 deadlock dance.
 
     `_sleep` is a private test seam (defaults to `time.sleep`; the
     deterministic-clock harness injects it so the watchdog tests do not
-    flake — mirrors `_invoke_codex`'s blessed `_sleep` seam).
+    flake - mirrors `_invoke_codex`'s blessed `_sleep` seam).
     """
     if time_fn is None:
         time_fn = time.time
@@ -552,11 +552,11 @@ def _extract_json_from_text(text: str) -> str:
     response may include leading prose, markdown fences, or trailing
     commentary even when explicitly told to emit JSON only. Mirrors
     gemini's extractor:
-      1. Whole-string trim — if the trimmed text starts with `{` and ends
+      1. Whole-string trim - if the trimmed text starts with `{` and ends
          with `}`, return as-is.
-      2. Fenced-code-block extraction — first ```json ... ``` (or bare
+      2. Fenced-code-block extraction - first ```json ... ``` (or bare
          ``` ... ```) containing a `{...}` block.
-      3. Greedy outermost-brace match — first `{` to last `}`.
+      3. Greedy outermost-brace match - first `{` to last `}`.
     """
     stripped = text.strip()
     if stripped.startswith("{") and stripped.endswith("}"):
@@ -577,20 +577,20 @@ def _assemble_grok_stream(raw: str) -> str:
     grok streams one JSON event per line (field name verified live
     2026-05-30)::
 
-        {"type":"thought","data":...}   # reasoning — ignored
-        {"type":"text","data":...}      # answer chunk — concatenated
+        {"type":"thought","data":...}   # reasoning - ignored
+        {"type":"text","data":...}      # answer chunk - concatenated
         {"type":"end","stopReason":...} # terminal; EndTurn | Cancelled
 
     Returns the concatenation of the ``data`` of every ``text`` event (the
     answer), feeding the existing JSON extraction/validation unchanged.
 
-    Defensive (spec Risks §): unparseable lines, non-dict events, and
-    events without a ``type`` are skipped — never fatal. A ``text`` event
+    Defensive (spec Risks section): unparseable lines, non-dict events, and
+    events without a ``type`` are skipped - never fatal. A ``text`` event
     missing ``data`` falls back to a ``text`` key before being ignored.
 
     Raises ``GrokStreamCancelledError`` when the stream ends with
     ``stopReason == "Cancelled"`` having produced ZERO text (the agentic
-    self-cancel) — surfaced as an invocation failure, not a silent empty
+    self-cancel) - surfaced as an invocation failure, not a silent empty
     answer.
 
     Backward-compat: if NO line is a streaming event carrying a ``type``
@@ -628,7 +628,7 @@ def _assemble_grok_stream(raw: str) -> str:
     if stop_reason == "Cancelled" and not saw_text:
         raise GrokStreamCancelledError(
             "grok self-cancelled (stopReason=Cancelled) with zero text "
-            "events — no answer produced (agentic self-cancel; see "
+            "events - no answer produced (agentic self-cancel; see "
             "docs/grok-dispatch-streaming-watchdog-fix.md). Re-dispatch "
             "with a shorter, single-focus prompt."
         )
@@ -740,7 +740,7 @@ def _parse_grok_output(text: str, goal_packet: dict | None = None) -> dict:
         pp = finding.get("patch_proposal")
         if pp is not None:
             raise GrokOutputParseError(
-                f"findings[{i}].patch_proposal must be null in v1.31.0 — grok is "
+                f"findings[{i}].patch_proposal must be null in v1.31.0 - grok is "
                 f"review-only (patch authoring deferred)"
             )
         reason = finding.get("patch_not_proposed_reason")
@@ -894,10 +894,10 @@ def _invoke_grok_with_retry(
             })
         retry_prompt = (
             prompt
-            + "\n\n# Retry — your previous response failed JSON validation\n\n"
+            + "\n\n# Retry - your previous response failed JSON validation\n\n"
             + f"Parse error: {first_err}\n\n"
             + "Re-emit ONLY valid JSON conforming to the schema in the prompt above. "
-            + "No prose, no markdown fences, no commentary — JSON only, starting with `{` "
+            + "No prose, no markdown fences, no commentary - JSON only, starting with `{` "
             + "and ending with `}`."
         )
         retry_pass_id = f"{pass_id}-retry"
@@ -941,7 +941,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--grok-bin", default="grok")
     p.add_argument("--model", default=_DEFAULT_GROK_MODEL,
                    help=("Optional model id passed via grok --model. When unset, grok "
-                         "uses its own default — letting it roll forward without "
+                         "uses its own default - letting it roll forward without "
                          "dispatcher releases."))
     p.add_argument("--timeout-seconds", type=int, default=600)
     p.add_argument("--review-target", default=None)

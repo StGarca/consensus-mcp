@@ -76,7 +76,7 @@ def test_stdin_is_interactive_false_when_stdin_none(monkeypatch):
 
 def test_prompt_host_peer_followup_eof_raises_keyboardinterrupt(monkeypatch):
     """EOF during the host-peer prompt must surface as KeyboardInterrupt (clean
-    abort, mapped to exit 1) — NOT an uncaught EOFError traceback."""
+    abort, mapped to exit 1) - NOT an uncaught EOFError traceback."""
     profiles = wiz._load_merged_profiles(None)
     monkeypatch.setattr(builtins, "input", _stub_input([]))  # immediate EOF
     with pytest.raises(KeyboardInterrupt):

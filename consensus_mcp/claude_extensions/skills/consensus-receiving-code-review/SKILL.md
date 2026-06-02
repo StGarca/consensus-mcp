@@ -14,7 +14,7 @@ Code review requires technical evaluation, not emotional performance.
 
 **Core principle:** Weigh the SEALED consensus panel findings on merit. Verify before implementing. Ask before assuming. Technical correctness over social comfort.
 
-**Consensus framing:** The findings you are receiving are the **sealed cross-family consensus panel** output (Workflow B), not a single reviewer's opinion. Weigh each finding on merit; record any dismissal with empirical evidence — **grep the cited content first.**
+**Consensus framing:** The findings you are receiving are the **sealed cross-family consensus panel** output (Workflow B), not a single reviewer's opinion. Weigh each finding on merit; record any dismissal with empirical evidence - **grep the cited content first.**
 
 ## The Response Pattern
 
@@ -23,7 +23,7 @@ WHEN receiving the sealed consensus panel findings:
 
 1. READ: Complete sealed findings without reacting
 2. UNDERSTAND: Restate each finding in own words (or ask)
-3. VERIFY: Check against codebase reality — grep the cited content first
+3. VERIFY: Check against codebase reality - grep the cited content first
 4. EVALUATE: Technically sound for THIS codebase?
 5. RESPOND: Technical acknowledgment, or reasoned dismissal recorded WITH empirical evidence
 6. IMPLEMENT: One item at a time, test each
@@ -35,18 +35,18 @@ The panel is cross-family and sealed, which raises the bar for dismissal but doe
 
 ```
 FOR each sealed finding:
-  1. grep the cited content FIRST — confirm the finding describes real code
+  1. grep the cited content FIRST - confirm the finding describes real code
   2. Check: Technically correct for THIS codebase?
   3. Check: Breaks existing functionality?
   4. Check: Reason for the current implementation?
   5. Check: Did the panel have full context?
 
 IF a finding is correct:
-  Implement it (no performative thanks — just fix it)
+  Implement it (no performative thanks - just fix it)
 
 IF you dismiss a finding:
   Record the dismissal WITH empirical evidence (the grep output / test / cited lines).
-  A dismissal without empirical evidence is not allowed — the sealed panel outweighs an unsupported objection.
+  A dismissal without empirical evidence is not allowed - the sealed panel outweighs an unsupported objection.
 ```
 
 ## Forbidden Responses
@@ -78,8 +78,8 @@ WHY: Items may be related. Partial understanding = wrong implementation.
 Sealed panel: "Fix findings 1-6"
 You understand 1,2,3,6. Unclear on 4,5.
 
-❌ WRONG: Implement 1,2,3,6 now, ask about 4,5 later
-✅ RIGHT: "I understand findings 1,2,3,6. Need clarification on 4 and 5 before proceeding."
+[x] WRONG: Implement 1,2,3,6 now, ask about 4,5 later
+[ok] RIGHT: "I understand findings 1,2,3,6. Need clarification on 4 and 5 before proceeding."
 ```
 
 ## Evaluating Sealed Panel Findings
@@ -103,7 +103,7 @@ IF a finding conflicts with prior architectural decisions:
   Stop and discuss first
 ```
 
-**Rule:** The sealed cross-family panel is weighty — be skeptical, but check carefully, and never dismiss without evidence.
+**Rule:** The sealed cross-family panel is weighty - be skeptical, but check carefully, and never dismiss without evidence.
 
 ## YAGNI Check for "Professional" Features
 
@@ -148,15 +148,15 @@ Push back when:
 
 When a finding IS correct:
 ```
-✅ "Fixed. [Brief description of what changed]"
-✅ "Good catch - [specific issue]. Fixed in [location]."
-✅ [Just fix it and show in the code]
+[ok] "Fixed. [Brief description of what changed]"
+[ok] "Good catch - [specific issue]. Fixed in [location]."
+[ok] [Just fix it and show in the code]
 
-❌ "You're absolutely right!"
-❌ "Great point!"
-❌ "Thanks for catching that!"
-❌ "Thanks for [anything]"
-❌ ANY gratitude expression
+[x] "You're absolutely right!"
+[x] "Great point!"
+[x] "Thanks for catching that!"
+[x] "Thanks for [anything]"
+[x] ANY gratitude expression
 ```
 
 **Why no thanks:** Actions speak. Just fix it. The code itself shows you heard the finding.
@@ -167,12 +167,12 @@ When a finding IS correct:
 
 If you pushed back and were wrong:
 ```
-✅ "The panel was right - I checked [X] and it does [Y]. Implementing now."
-✅ "Verified this and the finding is correct. My initial understanding was wrong because [reason]. Fixing."
+[ok] "The panel was right - I checked [X] and it does [Y]. Implementing now."
+[ok] "Verified this and the finding is correct. My initial understanding was wrong because [reason]. Fixing."
 
-❌ Long apology
-❌ Defending why you pushed back
-❌ Over-explaining
+[x] Long apology
+[x] Defending why you pushed back
+[x] Over-explaining
 ```
 
 State the correction factually and move on.
@@ -184,7 +184,7 @@ State the correction factually and move on.
 | Performative agreement | State requirement or just act |
 | Blind implementation | Verify against codebase first |
 | Batch without testing | One at a time, test each |
-| Assuming the panel is right | Check if it breaks things — grep first |
+| Assuming the panel is right | Check if it breaks things - grep first |
 | Dismissing without evidence | Record dismissals WITH empirical evidence |
 | Avoiding pushback | Technical correctness > comfort |
 | Partial implementation | Clarify all items first |
@@ -195,26 +195,26 @@ State the correction factually and move on.
 **Performative Agreement (Bad):**
 ```
 Sealed panel: "Remove legacy code"
-❌ "You're absolutely right! Let me remove that..."
+[x] "You're absolutely right! Let me remove that..."
 ```
 
 **Technical Verification (Good):**
 ```
 Sealed panel: "Remove legacy code"
-✅ "Grepped it... build target is 10.15+, this API needs 13+. Need legacy for backward compat. Current impl has wrong bundle ID - fix it or drop pre-13 support?"
+[ok] "Grepped it... build target is 10.15+, this API needs 13+. Need legacy for backward compat. Current impl has wrong bundle ID - fix it or drop pre-13 support?"
 ```
 
 **YAGNI (Good):**
 ```
 Sealed panel: "Implement proper metrics tracking with database, date filters, CSV export"
-✅ "Grepped codebase - nothing calls this endpoint. Remove it (YAGNI)? Or is there usage I'm missing?"
+[ok] "Grepped codebase - nothing calls this endpoint. Remove it (YAGNI)? Or is there usage I'm missing?"
 ```
 
 **Unclear Item (Good):**
 ```
 Sealed panel: "Fix findings 1-6"
 You understand 1,2,3,6. Unclear on 4,5.
-✅ "Understand 1,2,3,6. Need clarification on 4 and 5 before implementing."
+[ok] "Understand 1,2,3,6. Need clarification on 4 and 5 before implementing."
 ```
 
 ## GitHub Thread Replies
@@ -223,7 +223,7 @@ When replying to inline review comments on GitHub, reply in the comment thread (
 
 ## The Bottom Line
 
-**The sealed consensus panel = findings to weigh on merit, not orders to follow blindly — and not opinions to wave away.**
+**The sealed consensus panel = findings to weigh on merit, not orders to follow blindly - and not opinions to wave away.**
 
 Grep the cited content. Verify. Question. Then implement, or dismiss WITH empirical evidence.
 

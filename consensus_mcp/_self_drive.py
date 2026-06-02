@@ -11,7 +11,7 @@ goal_packet; this script provides PARTIAL enforcement via:
     max_patch_size, validators_required, acceptance_gates, stop_conditions,
     operator_escalation_triggers, authorization.authorized_by)
   - state-machine transition VALIDATION (checks new_state is a known state and
-    reports whether it's terminal) — STATELESS: persists nothing. The canonical
+    reports whether it's terminal) - STATELESS: persists nothing. The canonical
     state store (disposition-ledger.yaml) has a single authorized writer by
     design; the orchestrator owns state via file-presence + ledger.
   - acceptance-gate evaluation (running each `check` command + recording result)
@@ -34,7 +34,7 @@ USAGE
   # 1. Validate goal_packet
   python -m consensus_mcp._self_drive validate <goal_packet.yaml>
 
-  # 2. Validate a state transition (STATELESS — validates new_state + reports
+  # 2. Validate a state transition (STATELESS - validates new_state + reports
   #    terminality; persists NOTHING)
   python -m consensus_mcp._self_drive transition <goal_packet.yaml> <new_state> [--note "<text>"]
 
@@ -331,17 +331,17 @@ def cmd_validate(args) -> int:
 
 
 def cmd_transition(args) -> int:
-    """Validate a state transition. STATELESS — persists NOTHING.
+    """Validate a state transition. STATELESS - persists NOTHING.
 
     Checks that new_state is in VALID_STATES and reports whether it is a
     terminal state. It does NOT write to the canonical state store
     (disposition-ledger.yaml), which has a single authorized writer by design;
     the orchestrator owns state via file-presence + ledger. This command is a
-    pure validator/reporter — the prior "Record state transition" docstring was
+    pure validator/reporter - the prior "Record state transition" docstring was
     inaccurate (M-11 contract correction).
 
     NOTE: a terminal-state guard (rejecting transitions OUT of a terminal state,
-    via a current_state arg) was considered and DEFERRED to consensus — it is a
+    via a current_state arg) was considered and DEFERRED to consensus - it is a
     separate API decision, not part of this contract-honesty fix.
     """
     if args.new_state not in VALID_STATES:
@@ -496,7 +496,7 @@ def _resolve_referenced_path(ref_path: str, iter_dir: Path) -> Path:
         return candidate
     # iter-dir-local fallback restricted to bare basenames (no "/" or "\\").
     # Paths with directory components MUST resolve under repo_root or be
-    # reported as missing — they may not collapse to a same-name file in
+    # reported as missing - they may not collapse to a same-name file in
     # iter_dir.
     if "/" not in ref_path and "\\" not in ref_path:
         return iter_dir / Path(ref_path).name
@@ -524,7 +524,7 @@ def cmd_check_stop_rules(args) -> int:
     # for YAML reads and canonical-sha computations. cmd_check_stop_rules
     # reads claude-review.yaml / codex-review.yaml / consensus.yaml /
     # review-packet.yaml multiple times across separate stop-rule branches;
-    # without a memo, large reviews are parsed up to 4× per invocation. The
+    # without a memo, large reviews are parsed up to 4x per invocation. The
     # cache is invalidated by (resolved Path, mtime_ns, size) so a concurrent
     # writer cannot poison it across invocations.
     read_yaml_memo: dict[tuple, dict] = {}
@@ -545,7 +545,7 @@ def cmd_check_stop_rules(args) -> int:
             return _read_yaml_or_empty(path)
         stamp = _file_stamp(path)
         if stamp is None:
-            # File missing — _read_yaml_or_empty returns {} but we don't cache
+            # File missing - _read_yaml_or_empty returns {} but we don't cache
             # under a synthetic key (the file might appear during this run for
             # tests that race; cheap to re-stat).
             return _read_yaml_or_empty(path)
@@ -743,7 +743,7 @@ def cmd_check_stop_rules(args) -> int:
                     try:
                         text = content.decode("utf-8")
                     except UnicodeDecodeError:
-                        # Binary file; mirror numstat's "-\t-" → 0 lines.
+                        # Binary file; mirror numstat's "-\t-" -> 0 lines.
                         continue
                     # codex-rev-002 (iter-0035 pre-review): text.count("\n")
                     # counts \n separators only; a 1-line file with no
@@ -796,7 +796,7 @@ def cmd_check_stop_rules(args) -> int:
     # Rule: repeated_finding_class_unresolved
     # A non-blocking finding with the same id appears in BOTH current iteration's
     # review yamls AND the immediately-prior iteration's review yamls. Per-reviewer
-    # intersection (claude-current ∩ claude-prior; codex-current ∩ codex-prior; OR'd).
+    # intersection (claude-current & claude-prior; codex-current & codex-prior; OR'd).
     # Cross-reviewer matches do NOT fire (different id spaces).
     parent_dir = iter_dir.parent
     if parent_dir.exists():
@@ -975,7 +975,7 @@ def cmd_check_stop_rules(args) -> int:
             iter-0035 codex-rev-002 + claude-rev-002 fix: check
             blocking_objections BEFORE the goal_satisfied early-return.
             A reviewer that emits blockers but forgets goal_satisfied
-            previously had its blocker silently ignored — `_reviewer_clean`
+            previously had its blocker silently ignored - `_reviewer_clean`
             returned None and the caller's `clean is False` identity check
             failed, dropping the reviewer from `disagreers`.
             """
@@ -1069,7 +1069,7 @@ def cmd_check_stop_rules(args) -> int:
                     if closer_ts and closer_ts > lm_ts:
                         candidates.append((closer_ts, review_path, review))
             # Asymmetric with T6 by design (per Task #28 v4 spec): this stop
-            # rule does NOT fire on "mutation + no fresh review" — that state is
+            # rule does NOT fire on "mutation + no fresh review" - that state is
             # operational normal during in-flight iterations. The fail-closed
             # gate is at T6 (audit_append_event for iteration_closed events).
             # Real loop.run_goal-driven close requires both reviews; this rule

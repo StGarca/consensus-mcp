@@ -1,4 +1,4 @@
-"""loop.run_goal MCP tool — Phase 4 supervisor for the bounded quorum self-drive loop.
+"""loop.run_goal MCP tool - Phase 4 supervisor for the bounded quorum self-drive loop.
 
 This is the SUPERVISOR pattern, not an autonomous Anthropic-API executor.
 It is a state-machine coordinator: detects current iteration state from
@@ -149,7 +149,7 @@ def _validate_goal_packet(goal_packet_path: str) -> tuple[bool, str | None]:
     """Run _self_drive.cmd_validate in-process; capture its JSON stdout.
 
     Returns (is_valid, error_message). is_valid means the packet is structurally
-    sound and authorized — a scope_signature mismatch (cmd_validate exit 2) is
+    sound and authorized - a scope_signature mismatch (cmd_validate exit 2) is
     treated as INVALID for supervisor purposes (the operator must re-seal).
     """
     buf = io.StringIO()
@@ -181,7 +181,7 @@ def _check_stop_rules(goal_packet_path: str, iteration_dir: str) -> list[dict]:
     NOT escape handle() and break the MCP {ok, state, next_action} return
     contract. On exception we surface a synthetic 'check_stop_rules_failed'
     BREADCRUMB entry (joins the breadcrumb_rules filter at the call site so
-    it does not trip blocked_stop_rule_fired by itself — orchestrator can
+    it does not trip blocked_stop_rule_fired by itself - orchestrator can
     inspect the list).
     """
     buf = io.StringIO()
@@ -212,7 +212,7 @@ def _detect_state_from_files(iter_dir: Path, stop_rules_fired: list[dict]) -> st
     in the output).
 
     'review_yaml_parse_failed' breadcrumbs from _self_drive are NOT real
-    stop rules — they're parse-failure breadcrumbs. They're surfaced in
+    stop rules - they're parse-failure breadcrumbs. They're surfaced in
     stop_rules_fired but do not trigger blocked_stop_rule_fired on their
     own; the orchestrator can inspect the list.
     """
@@ -287,7 +287,7 @@ def _detect_state_from_files(iter_dir: Path, stop_rules_fired: list[dict]) -> st
     # Consensus exists, but ready_to_close requires both reviewers to have
     # explicitly emitted goal_satisfied=True. A null/missing verdict from
     # either reviewer means the consensus exists but isn't yet "valid for
-    # close" — orchestrator must add the missing verdict (or fix the
+    # close" - orchestrator must add the missing verdict (or fix the
     # disagreement) before closing.
     claude_data = _read_yaml_or_empty(claude_review)
     codex_data = _read_yaml_or_empty(codex_review)
@@ -335,13 +335,13 @@ def _closure_invariant_blocks_close(iter_dir: Path) -> bool:
                 candidates.append((closer_ts, review))
     if not candidates:
         # Asymmetric with T6 by design (per Task #28 v4 spec): the supervisor
-        # transition guard does NOT block here — it returns "not blocked" so
+        # transition guard does NOT block here - it returns "not blocked" so
         # the supervisor can advance through normal states (needs_consensus,
         # needs_claude_review, etc.) when no fresh post-mutation review exists
         # yet. The fail-closed gate is at T6 (audit_append_event for
         # iteration_closed events). Real loop.run_goal-driven flow can't reach
         # ready_to_close without both reviews present, so this asymmetry only
-        # matters for direct audit.append_event bypass paths — which T6 catches.
+        # matters for direct audit.append_event bypass paths - which T6 catches.
         return False
     candidates.sort(key=lambda x: x[0], reverse=True)
     _, closer_verdict = candidates[0]
@@ -371,7 +371,7 @@ def _detect_patch_verification_state(iter_dir: Path, codex_review: Path) -> str 
 
     The forbidden transition `corrected_resubmit -> ready_to_close` is
     enforced here by returning the patch_corrected state regardless of
-    consensus/outcome presence — this state takes precedence over
+    consensus/outcome presence - this state takes precedence over
     ready_to_close (called BEFORE the consensus/ready_to_close branch
     in _detect_state_from_files).
     """
@@ -488,7 +488,7 @@ def handle(
     return {
         "ok": True,
         "state": state,
-        "next_action": _NEXT_ACTION.get(state, "unknown state — orchestrator decision"),
+        "next_action": _NEXT_ACTION.get(state, "unknown state - orchestrator decision"),
         "actions_taken": actions_taken,
         "stop_rules_fired": stop_rules_fired,
         "error": None,

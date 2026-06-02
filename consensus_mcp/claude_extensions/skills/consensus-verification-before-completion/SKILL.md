@@ -32,7 +32,7 @@ In addition to the iron law above, the consensus gate adds a deterministic token
 
 Concretely:
 
-1. Run the FULL verification commands (tests, build, lint) and read the output — this is the evidence the iron law requires.
+1. Run the FULL verification commands (tests, build, lint) and read the output - this is the evidence the iron law requires.
 2. **Mint/verify the delivery-readiness token** via `consensus_mcp/_delivery_readiness.py` for the modified source files. The token records that fresh verification evidence exists for the delivered scope.
 3. **Run `gate_evaluate_production_with_scope_match`** to confirm the delivered changes match the approved scope and pass the production gate.
 4. Only after the token verifies AND the gate passes may you claim completion.
@@ -51,7 +51,7 @@ BEFORE claiming any status or expressing satisfaction:
    - If NO: State actual status with evidence
    - If YES: continue
 5. TOKEN: Mint/verify the delivery-readiness token (_delivery_readiness.py)
-          + run gate_evaluate_production_with_scope_match
+          then run gate_evaluate_production_with_scope_match
 6. ONLY THEN: Make the claim
 
 Skip any step = lying, not verifying
@@ -87,51 +87,51 @@ Skip any step = lying, not verifying
 | Excuse | Reality |
 |--------|---------|
 | "Should work now" | RUN the verification |
-| "I'm confident" | Confidence ≠ evidence |
+| "I'm confident" | Confidence != evidence |
 | "Just this once" | No exceptions |
-| "Linter passed" | Linter ≠ compiler |
+| "Linter passed" | Linter != compiler |
 | "Agent said success" | Verify independently |
-| "I'm tired" | Exhaustion ≠ excuse |
+| "I'm tired" | Exhaustion != excuse |
 | "Partial check is enough" | Partial proves nothing |
 | "Different words so rule doesn't apply" | Spirit over letter |
-| "Tests pass, no need for the token" | The Stop hook checks the token — mint it |
+| "Tests pass, no need for the token" | The Stop hook checks the token - mint it |
 
 ## Key Patterns
 
 **Tests:**
 ```
-✅ [Run test command] [See: 34/34 pass] "All tests pass"
-❌ "Should pass now" / "Looks correct"
+[ok] [Run test command] [See: 34/34 pass] "All tests pass"
+[x] "Should pass now" / "Looks correct"
 ```
 
 **Regression tests (TDD Red-Green):**
 ```
-✅ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
-❌ "I've written a regression test" (without red-green verification)
+[ok] Write -> Run (pass) -> Revert fix -> Run (MUST FAIL) -> Restore -> Run (pass)
+[x] "I've written a regression test" (without red-green verification)
 ```
 
 **Build:**
 ```
-✅ [Run build] [See: exit 0] "Build passes"
-❌ "Linter passed" (linter doesn't check compilation)
+[ok] [Run build] [See: exit 0] "Build passes"
+[x] "Linter passed" (linter doesn't check compilation)
 ```
 
 **Requirements:**
 ```
-✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
-❌ "Tests pass, phase complete"
+[ok] Re-read plan -> Create checklist -> Verify each -> Report gaps or completion
+[x] "Tests pass, phase complete"
 ```
 
 **Agent delegation:**
 ```
-✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
-❌ Trust agent report
+[ok] Agent reports success -> Check VCS diff -> Verify changes -> Report actual state
+[x] Trust agent report
 ```
 
 **Delivery readiness (consensus gate):**
 ```
-✅ [Run verification] [Mint/verify _delivery_readiness token] [gate_evaluate_production_with_scope_match: PASS] "Ready to deliver"
-❌ "Tests pass, shipping it" (no token = Stop hook will block)
+[ok] [Run verification] [Mint/verify _delivery_readiness token] [gate_evaluate_production_with_scope_match: PASS] "Ready to deliver"
+[x] "Tests pass, shipping it" (no token = Stop hook will block)
 ```
 
 ## Why This Matters
@@ -140,7 +140,7 @@ From 24 failure memories:
 - your human partner said "I don't believe you" - trust broken
 - Undefined functions shipped - would crash
 - Missing requirements shipped - incomplete features
-- Time wasted on false completion → redirect → rework
+- Time wasted on false completion -> redirect -> rework
 - Violates: "Honesty is a core value. If you lie, you'll be replaced."
 
 The consensus delivery-readiness token makes "I verified" a checkable artifact, not a self-report.

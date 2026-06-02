@@ -231,7 +231,7 @@ def test_partial_apply_failed_rolls_back_already_applied_files(
 def test_diff_delete_via_plus_plus_plus_dev_null_explicit_refusal(
     repo_root_env, monkeypatch, stub_clean_dry_run,
 ):
-    """`+++ /dev/null` MUST refuse with an explicit, named reason — not
+    """`+++ /dev/null` MUST refuse with an explicit, named reason - not
     coincidentally fail via files_touched mismatch.
     """
     monkeypatch.setenv("CONSENSUS_MCP_CODEX_PATCH_APPLY", "1")
@@ -315,7 +315,7 @@ def test_diff_add_via_dash_dash_dash_dev_null_works_explicitly(
 
 
 def test_record_verdict_handler_has_no_inline_import_re():
-    """The `import re` inside _record_verdict_handler is stylistically wrong —
+    """The `import re` inside _record_verdict_handler is stylistically wrong -
     the module already has a module-level `re` import elsewhere if needed.
     iter-0026 F4 moved this to module level for consistency.
     """
@@ -395,7 +395,7 @@ def test_refuses_when_base_sha_is_empty_string(
     repo_root_env, monkeypatch, stub_clean_dry_run,
 ):
     """base_sha_missing branch (iter-0025 finding-007.a). An empty base_sha
-    would silently skip drift detection — must fail closed.
+    would silently skip drift detection - must fail closed.
     """
     monkeypatch.setenv("CONSENSUS_MCP_CODEX_PATCH_APPLY", "1")
     iter_dir = _make_active_iter(repo_root_env)
@@ -404,7 +404,7 @@ def test_refuses_when_base_sha_is_empty_string(
     pp = {
         "patch_id": "codex-rev-001-patch",
         "applies_to_findings": ["codex-rev-001"],
-        "base_sha": "",  # ← empty
+        "base_sha": "",  # <- empty
         "unified_diff": "--- a/scripts/foo.py\n+++ b/scripts/foo.py\n@@ -1 +1,2 @@\n hello\n+world\n",
         "files_touched": ["scripts/foo.py"],
     }

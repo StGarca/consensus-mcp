@@ -3,15 +3,15 @@
 Runs the REAL grok CLI end-to-end against a minimal goal_packet +
 review-packet and asserts the dispatcher seals a parseable verdict
 YAML. Active only when `CONSENSUS_MCP_RUN_REAL_GROK_SMOKE=1` is set in
-the environment — same pattern as the gemini/codex smokes.
+the environment - same pattern as the gemini/codex smokes.
 
 Failure modes this smoke catches:
   - grok auth-flow regression (pre-flight passes but CLI errors on
-    expired token) — codex Q1 refuting observation
+    expired token) - codex Q1 refuting observation
   - grok flag rename across versions (R1)
   - prompt-file write-then-read FS race
   - grok respects --no-subagents / --disable-web-search etc (interlock
-    integrity — codex D8 / independent_safeguard)
+    integrity - codex D8 / independent_safeguard)
 
 The pure-code unit tests are in test_dispatch_grok.py.
 """
@@ -42,7 +42,7 @@ def _minimal_goal_packet(tmp_path: Path) -> Path:
         """schema_version: 1
 pilot_id: grok-smoke
 goal:
-  summary: "Smoke test — confirm the grok dispatcher seals a parseable verdict."
+  summary: "Smoke test - confirm the grok dispatcher seals a parseable verdict."
   desired_end_state: |
     Emit a minimal valid review JSON with findings:[] and
     goal_satisfied:true.

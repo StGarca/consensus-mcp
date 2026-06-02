@@ -1,4 +1,4 @@
-"""iter-0038 regression tests — _author_review_packet repo_root containment.
+"""iter-0038 regression tests - _author_review_packet repo_root containment.
 
 Closes codex-rev-001 (HIGH) from iteration-audit-2026-05-11-security:
 operator-supplied `files` paths must be confined to repo_root. Symmetric

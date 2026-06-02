@@ -1,31 +1,31 @@
-# Symbiotic superpowers + consensus pipeline — Implementation Plan
+# Symbiotic superpowers + consensus pipeline - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Wire kimi into the engine (so the 4-AI panel runs through `consensus.run_iteration`) and codify the end-to-end superpowers↔consensus iteration pipeline (dual-path, release-currency, host_peer dispatch) so it's session-independently repeatable.
+**Goal:** Wire kimi into the engine (so the 4-AI panel runs through `consensus.run_iteration`) and codify the end-to-end superpowers<->consensus iteration pipeline (dual-path, release-currency, host_peer dispatch) so it's session-independently repeatable.
 
-**Architecture:** (A) Add `KimiAdapter` (a near-verbatim mirror of `CodexAdapter`, wrapping `_dispatch_kimi.main`) and register it as a built-in so `enabled:[…,kimi]` works. (B/C) Capture the dual-path consult doctrine, release-currency steps, and host_peer dispatch procedure in the existing `consensus-workflow` skill + a `docs/workflows/iteration-pipeline.md` runbook, guarded by a contract test. No new runtime beyond KimiAdapter; the static-echo fix is an explicit out-of-scope follow-up.
+**Architecture:** (A) Add `KimiAdapter` (a near-verbatim mirror of `CodexAdapter`, wrapping `_dispatch_kimi.main`) and register it as a built-in so `enabled:[...,kimi]` works. (B/C) Capture the dual-path consult doctrine, release-currency steps, and host_peer dispatch procedure in the existing `consensus-workflow` skill + a `docs/workflows/iteration-pipeline.md` runbook, guarded by a contract test. No new runtime beyond KimiAdapter; the static-echo fix is an explicit out-of-scope follow-up.
 
 **Tech Stack:** Python 3.11+ (stdlib), pytest.
 
 **Spec:** `docs/superpowers/specs/2026-05-23-symbiotic-workflow-design.md` (authoritative).
 
-**Test runner:** `VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python` → `$VPY -m pytest …` from repo root. **Do NOT edit `build/lib/`.**
+**Test runner:** `VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
 
 **Key verified facts:**
-- `phase_to_mode` (`consensus_mcp/contributors/_phase_mode.py`) maps `PROPOSE→"proposal"`, `REVIEW→"review"`, `CONVERGE→"review"`. kimi's `--mode` accepts `{review, proposal}` (same as codex) — so `phase_to_mode` never emits a kimi-invalid mode.
+- `phase_to_mode` (`consensus_mcp/contributors/_phase_mode.py`) maps `PROPOSE->"proposal"`, `REVIEW->"review"`, `CONVERGE->"review"`. kimi's `--mode` accepts `{review, proposal}` (same as codex) - so `phase_to_mode` never emits a kimi-invalid mode.
 - `_dispatch_kimi.main(argv)` accepts the same flags as `_dispatch_codex.main` (`--goal-packet --iteration-dir --reviewer-id --pass-id --timeout-seconds --mode --review-target`) and emits the same JSON envelope (`ok/pass_id/sealed_path/archive_sealed_path/packet_sha256`).
 
 ---
 
 ## File structure
-- **Create** `consensus_mcp/contributors/kimi.py` — `KimiAdapter` (mirror of `codex.py`).
-- **Modify** `consensus_mcp/_engine_factory.py` — import + register `"kimi": KimiAdapter`.
-- **Create** `consensus_mcp/tests/test_kimi_adapter.py` — adapter-level tests.
-- **Modify** `consensus_mcp/tests/test_engine_factory.py` — `enabled:[…,kimi]` builds `KimiAdapter`.
-- **Modify** `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md` — pipeline section + dual-path + host_peer procedure + `.consensus` caveat + release-currency steps.
-- **Create** `docs/workflows/iteration-pipeline.md` — the runbook.
-- **Create** `consensus_mcp/tests/test_workflow_skill_currency.py` — contract test on the SKILL.md additions.
+- **Create** `consensus_mcp/contributors/kimi.py` - `KimiAdapter` (mirror of `codex.py`).
+- **Modify** `consensus_mcp/_engine_factory.py` - import + register `"kimi": KimiAdapter`.
+- **Create** `consensus_mcp/tests/test_kimi_adapter.py` - adapter-level tests.
+- **Modify** `consensus_mcp/tests/test_engine_factory.py` - `enabled:[...,kimi]` builds `KimiAdapter`.
+- **Modify** `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md` - pipeline section + dual-path + host_peer procedure + `.consensus` caveat + release-currency steps.
+- **Create** `docs/workflows/iteration-pipeline.md` - the runbook.
+- **Create** `consensus_mcp/tests/test_workflow_skill_currency.py` - contract test on the SKILL.md additions.
 - **Modify** `CHANGELOG.md`.
 
 ---
@@ -34,7 +34,7 @@
 
 **Files:** Create `consensus_mcp/contributors/kimi.py`; Test: `consensus_mcp/tests/test_kimi_adapter.py`.
 
-- [ ] **Step 1: Write the failing tests** — create `consensus_mcp/tests/test_kimi_adapter.py`:
+- [ ] **Step 1: Write the failing tests** - create `consensus_mcp/tests/test_kimi_adapter.py`:
 
 ```python
 from __future__ import annotations
@@ -130,19 +130,19 @@ def test_kimi_adapter_returns_sealed_artifact(monkeypatch, tmp_path):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_kimi_adapter.py -q`
-Expected: FAIL — `ModuleNotFoundError`/`ImportError` for `consensus_mcp.contributors.kimi`.
+Expected: FAIL - `ModuleNotFoundError`/`ImportError` for `consensus_mcp.contributors.kimi`.
 
-- [ ] **Step 3: Implement** — create `consensus_mcp/contributors/kimi.py` (verbatim mirror of `codex.py`, swapping `codex`→`kimi`):
+- [ ] **Step 3: Implement** - create `consensus_mcp/contributors/kimi.py` (verbatim mirror of `codex.py`, swapping `codex`->`kimi`):
 
 ```python
-"""Kimi contributor adapter — wraps consensus_mcp._dispatch_kimi.
+"""Kimi contributor adapter - wraps consensus_mcp._dispatch_kimi.
 
-Mirror of contributors/codex.py: normalizes _dispatch_kimi's packet→argv
+Mirror of contributors/codex.py: normalizes _dispatch_kimi's packet->argv
 translation + result extraction into the ContributorAdapter interface, so kimi
 is a first-class built-in (not a generic ProfileAdapter cli_reviewer) and keeps
 _dispatch_kimi's hardened behavior (env-scrub, exit-75 retry, disposable
-workdir, integrity check). Phase→mode via the shared _phase_mode.phase_to_mode
-(CONVERGE→"review", which kimi's --mode {review,proposal} accepts).
+workdir, integrity check). Phase->mode via the shared _phase_mode.phase_to_mode
+(CONVERGE->"review", which kimi's --mode {review,proposal} accepts).
 """
 from __future__ import annotations
 
@@ -160,7 +160,7 @@ from consensus_mcp.contributors.base import (
 
 
 class KimiAdapter(ContributorAdapter):
-    """Kimi contributor — subprocess via _dispatch_kimi.main."""
+    """Kimi contributor - subprocess via _dispatch_kimi.main."""
 
     name = "kimi"
 
@@ -260,7 +260,7 @@ git commit -m "feat(engine): KimiAdapter wrapping _dispatch_kimi (mirrors CodexA
 
 **Files:** Modify `consensus_mcp/_engine_factory.py`; Test: `consensus_mcp/tests/test_engine_factory.py`.
 
-- [ ] **Step 1: Write the failing test** — append to `consensus_mcp/tests/test_engine_factory.py`:
+- [ ] **Step 1: Write the failing test** - append to `consensus_mcp/tests/test_engine_factory.py`:
 
 ```python
 def test_build_adapters_kimi_is_builtin_kimiadapter():
@@ -275,14 +275,14 @@ def test_build_adapters_kimi_is_builtin_kimiadapter():
     assert isinstance(adapters["kimi"], KimiAdapter)
 ```
 
-NOTE: match `build_adapters`'s ACTUAL signature/kwargs by copying an existing call in `test_engine_factory.py` (it may take `claude_artifact_callback`/`host_peer_review_callback`/etc.). If `claude` requires a callback to build, pass the same stub the existing tests use, or restrict `enabled` to `["codex","gemini","kimi"]` and assert only `adapters["kimi"]`. Keep the assertion (kimi → `KimiAdapter`) intact.
+NOTE: match `build_adapters`'s ACTUAL signature/kwargs by copying an existing call in `test_engine_factory.py` (it may take `claude_artifact_callback`/`host_peer_review_callback`/etc.). If `claude` requires a callback to build, pass the same stub the existing tests use, or restrict `enabled` to `["codex","gemini","kimi"]` and assert only `adapters["kimi"]`. Keep the assertion (kimi -> `KimiAdapter`) intact.
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_engine_factory.py -k kimi -q`
-Expected: FAIL — `EngineFactoryError` (no adapter for "kimi") or KeyError.
+Expected: FAIL - `EngineFactoryError` (no adapter for "kimi") or KeyError.
 
-- [ ] **Step 3: Implement** — in `consensus_mcp/_engine_factory.py`:
+- [ ] **Step 3: Implement** - in `consensus_mcp/_engine_factory.py`:
 
 Add the import alongside the others (after the `gemini` import):
 ```python
@@ -316,7 +316,7 @@ git commit -m "feat(engine): register kimi as a built-in adapter (4-AI panel wor
 
 **Files:** Modify `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`; Test: create `consensus_mcp/tests/test_workflow_skill_currency.py`. **(Do NOT edit `build/lib/`.)**
 
-- [ ] **Step 1: Write the failing contract test** — create `consensus_mcp/tests/test_workflow_skill_currency.py`:
+- [ ] **Step 1: Write the failing contract test** - create `consensus_mcp/tests/test_workflow_skill_currency.py`:
 
 ```python
 from pathlib import Path
@@ -357,37 +357,37 @@ def test_consensus_gate_caveat_documented():
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_workflow_skill_currency.py -q`
-Expected: FAIL — the strings aren't in SKILL.md yet.
+Expected: FAIL - the strings aren't in SKILL.md yet.
 
-- [ ] **Step 3: Implement** — edit `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`:
+- [ ] **Step 3: Implement** - edit `consensus_mcp/claude_extensions/skills/consensus-workflow/SKILL.md`:
 
 (a) Add a new section (place it near the top, after the workflow-selection section). Insert verbatim:
 
 ```markdown
-## End-to-end iteration pipeline (superpowers ↔ consensus)
+## End-to-end iteration pipeline (superpowers <-> consensus)
 
 One repeatable pipeline. Each superpowers stage maps to a consensus role:
 
-1. `superpowers:brainstorming` → intent + design exploration.
+1. `superpowers:brainstorming` -> intent + design exploration.
 2. **Consensus consult = the design approval gate** (consensus is the approver):
    author goal_packet + review-packet; run the panel; converge (weighted-synthesis).
-3. `superpowers:writing-plans` → TDD implementation plan from the converged design.
-4. `superpowers:subagent-driven-development` → implement task-by-task (implementer
+3. `superpowers:writing-plans` -> TDD implementation plan from the converged design.
+4. `superpowers:subagent-driven-development` -> implement task-by-task (implementer
    + spec-compliance review + code-quality review per task).
-5. `superpowers:finishing-a-development-branch` → release cut (see "Release cadence").
+5. `superpowers:finishing-a-development-branch` -> release cut (see "Release cadence").
 
 ### Dual-path consult selection
-- **Path B — `consensus.run_iteration`** (the built engine dispatches
+- **Path B - `consensus.run_iteration`** (the built engine dispatches
   codex/gemini/kimi via adapters + claude/host_peer via callbacks, runs
   blind-first-reveal, seals): use for **post-review / execution / clear-design /
   hot-patches**. claude + host_peer are supplied as `claude_proposal_yaml` /
-  `host_peer_review_yaml` (static across rounds — acceptable here).
-- **Path A — orchestrator-driven** (dispatch shell binaries + host-supplied blind
+  `host_peer_review_yaml` (static across rounds - acceptable here).
+- **Path A - orchestrator-driven** (dispatch shell binaries + host-supplied blind
   subagents + manual weighted-synthesis): use for **propose-converge with real
   design surface**, where claude/host_peer must genuinely re-converge across
   rounds. KEPT as the documented advanced path; its sole justification is genuine
   multi-round host convergence. (Known follow-up: per-round host re-convergence in
-  Path B needs a `run_iteration` pause/resume API — not yet built.)
+  Path B needs a `run_iteration` pause/resume API - not yet built.)
 - **host_peer is first-class in BOTH paths.**
 
 ### host_peer dispatch procedure (repeatable, not improvised)
@@ -406,29 +406,29 @@ One repeatable pipeline. Each superpowers stage maps to a consensus role:
 The PreToolUse enforcement gate (seal `.consensus/design-approved`, mint a
 delivery token) is **project-scoped**: it only fires where a `.consensus/config.yaml`
 exists. In a repo without one (e.g. consensus-mcp itself dogfooding via shell
-binaries), those seal/mint steps are **aspirational** — follow the discipline by
+binaries), those seal/mint steps are **aspirational** - follow the discipline by
 convention, or activate the gate via `consensus init` to make it enforced.
 
 ### Concurrency warning (4-AI engine runs)
 Do NOT mutate the repo (edits, or concurrent subagent writes) while a
-`run_iteration` engine run is dispatching kimi — kimi's integrity check shells
+`run_iteration` engine run is dispatching kimi - kimi's integrity check shells
 `git status` and false-positives on concurrent changes, spuriously rejecting the
 review.
 ```
 
 (b) In the **"Release cadence"** cut-sequence, after the step that publishes the
-GitHub Release / fast-forwards main, add these steps (the install-currency steps —
+GitHub Release / fast-forwards main, add these steps (the install-currency steps -
 the global pipx install is a non-editable COPY, so without them the operator's CLI
 stays on the old tag):
 
 ```markdown
-- **Make the release LIVE locally (install-currency — REQUIRED):**
+- **Make the release LIVE locally (install-currency - REQUIRED):**
   1. `pipx install --force git+https://github.com/StGarca/consensus-mcp.git@vX.Y.Z`
      (the global install is a non-editable COPY pinned to a tag; `pipx upgrade`
      will NOT move a tag pin).
   2. `consensus-init --install-claude-code --force` (refresh `~/.claude`
      skills/commands to the new version).
-  3. **Smoke the INSTALLED binary AND assert its version == `vX.Y.Z`** — the
+  3. **Smoke the INSTALLED binary AND assert its version == `vX.Y.Z`** - the
      stale-pipx failure is a binary that *runs* but reports the OLD version, so a
      "binary runs" check is insufficient.
 ```
@@ -451,28 +451,28 @@ git commit -m "docs(workflow): codify iteration pipeline + dual-path + host_peer
 
 **Files:** Create `docs/workflows/iteration-pipeline.md`.
 
-- [ ] **Step 1: Create the runbook** — write `docs/workflows/iteration-pipeline.md`:
+- [ ] **Step 1: Create the runbook** - write `docs/workflows/iteration-pipeline.md`:
 
 ```markdown
-# Iteration pipeline: superpowers ↔ consensus (repeatable runbook)
+# Iteration pipeline: superpowers <-> consensus (repeatable runbook)
 
 A session-independent walkthrough of one iteration. The load-bearing detail lives
 in the `consensus-workflow` skill; this is the linear checklist.
 
 ## Stages
-1. **Brainstorm** (`superpowers:brainstorming`) — explore intent → design.
-2. **Consult = approval gate** — consensus is the approver. Author goal_packet +
+1. **Brainstorm** (`superpowers:brainstorming`) - explore intent -> design.
+2. **Consult = approval gate** - consensus is the approver. Author goal_packet +
    review-packet; run the panel (offer panel size 2/3/4 + framing anchored/open);
    converge (weighted-synthesis).
-3. **Plan** (`superpowers:writing-plans`) — TDD plan from the converged design.
-4. **Implement** (`superpowers:subagent-driven-development`) — implementer +
+3. **Plan** (`superpowers:writing-plans`) - TDD plan from the converged design.
+4. **Implement** (`superpowers:subagent-driven-development`) - implementer +
    spec-compliance review + code-quality review per task.
-5. **Finish** (`superpowers:finishing-a-development-branch`) — release cut.
+5. **Finish** (`superpowers:finishing-a-development-branch`) - release cut.
 
 ## Choosing the consult path
-- **Path B (`consensus.run_iteration`)** — execution / post-review / clear-design /
+- **Path B (`consensus.run_iteration`)** - execution / post-review / clear-design /
   hot-patches. Engine dispatches codex/gemini/kimi + claude/host_peer callbacks.
-- **Path A (orchestrator-driven)** — high-design-surface propose-converge needing
+- **Path A (orchestrator-driven)** - high-design-surface propose-converge needing
   genuine multi-round host re-convergence. host_peer first-class in both.
 
 ## host_peer
@@ -481,7 +481,7 @@ Dispatch a blind Claude subagent (fresh context, no peer artifacts) with
 YAML; feed `run_iteration` (Path B) or seal it (Path A). One-shot.
 
 ## Release-currency (after tag + GitHub Release + main FF)
-1. `pipx install --force git+…@vX.Y.Z` (global install is a non-editable COPY).
+1. `pipx install --force git+...@vX.Y.Z` (global install is a non-editable COPY).
 2. `consensus-init --install-claude-code --force` (refresh ~/.claude).
 3. Smoke the INSTALLED binary and assert version == vX.Y.Z.
 
@@ -516,11 +516,11 @@ git commit -m "docs(workflow): add iteration-pipeline runbook"
 ### Added
 - `KimiAdapter` (`contributors/kimi.py`), registered as a built-in, so
   `consensus.run_iteration` dispatches all four AIs (claude/codex/gemini/kimi)
-  out of the box — kimi keeps its hardened `_dispatch_kimi` behavior instead of
+  out of the box - kimi keeps its hardened `_dispatch_kimi` behavior instead of
   the generic `ProfileAdapter` path. (`ProfileAdapter` remains for user-defined
   `cli_reviewer`s.)
 - `consensus-workflow` skill now codifies the end-to-end **iteration pipeline**
-  (superpowers ↔ consensus), the **dual-path** consult-selection rule (Path B
+  (superpowers <-> consensus), the **dual-path** consult-selection rule (Path B
   `run_iteration` for execution; Path A orchestrator-driven for high-design-surface),
   the **host_peer dispatch procedure**, the `.consensus` gate caveat, and the
   **release install-currency** steps (`pipx install --force` + `--install-claude-code
@@ -543,26 +543,26 @@ git commit -m "docs(changelog): KimiAdapter + codified iteration pipeline (1.29.
 
 ### Task 6: Full-suite verification
 
-- [ ] **Step 1: Full suite** — Run: `$VPY -m pytest consensus_mcp/tests/ -q` — expect all pass (baseline 1456 + new kimi/factory/skill tests).
-- [ ] **Step 2: Engine smoke** — confirm `enabled:[claude,codex,gemini,kimi]` builds without a kimi profile:
-  `$VPY -c "from consensus_mcp import _engine_factory as f; a=f.build_adapters(enabled=['codex','gemini','kimi'], profiles={}); from consensus_mcp.contributors.kimi import KimiAdapter; print('kimi ->', type(a['kimi']).__name__)"` → `kimi -> KimiAdapter`. (Match the real `build_adapters` kwargs.)
-- [ ] **Step 3: `build/lib` untouched** — `git diff --stat <base> HEAD | grep -c build/lib` → 0.
-- [ ] **Step 4: Report** — artifact-scoped (branch + that no tag is cut yet).
+- [ ] **Step 1: Full suite** - Run: `$VPY -m pytest consensus_mcp/tests/ -q` - expect all pass (baseline 1456 + new kimi/factory/skill tests).
+- [ ] **Step 2: Engine smoke** - confirm `enabled:[claude,codex,gemini,kimi]` builds without a kimi profile:
+  `$VPY -c "from consensus_mcp import _engine_factory as f; a=f.build_adapters(enabled=['codex','gemini','kimi'], profiles={}); from consensus_mcp.contributors.kimi import KimiAdapter; print('kimi ->', type(a['kimi']).__name__)"` -> `kimi -> KimiAdapter`. (Match the real `build_adapters` kwargs.)
+- [ ] **Step 3: `build/lib` untouched** - `git diff --stat <base> HEAD | grep -c build/lib` -> 0.
+- [ ] **Step 4: Report** - artifact-scoped (branch + that no tag is cut yet).
 
 ---
 
 ## Self-review (against the spec)
 
-- **A — KimiAdapter (T1a)** → Task 1 (mirror of codex.py, `phase_to_mode`); converge→review tested (iter-0044 guard). ✓
-- **A — register built-in (T3a)** → Task 2; `build_adapters` test asserts `KimiAdapter` not `ProfileAdapter`. ✓
-- **ProfileAdapter retained for user cli_reviewers** → not touched; noted in CHANGELOG. ✓
-- **B — dual-path (T2)** → Task 3 SKILL.md section + Task 4 runbook; static-echo recorded as follow-up (CHANGELOG + runbook). ✓
-- **C — extend consensus-workflow (T4b)** → Task 3; runbook Task 4. ✓
-- **C — release-currency (T5)** incl. version-asserting smoke → Task 3 (b) + contract test `test_release_currency_steps_documented`. ✓
-- **C — host_peer procedure (T6a)** → Task 3 section + contract test `test_dual_path_and_host_peer_documented`. ✓
-- **`.consensus` caveat** → Task 3 section + `test_consensus_gate_caveat_documented`. ✓
-- **kimi concurrency warning** → Task 3 section. ✓
-- **Phase→mode (iter-0044 guard)** → Task 1 `test_kimi_adapter_converge_forwards_mode_review`. ✓
+- **A - KimiAdapter (T1a)** -> Task 1 (mirror of codex.py, `phase_to_mode`); converge->review tested (iter-0044 guard). [ok]
+- **A - register built-in (T3a)** -> Task 2; `build_adapters` test asserts `KimiAdapter` not `ProfileAdapter`. [ok]
+- **ProfileAdapter retained for user cli_reviewers** -> not touched; noted in CHANGELOG. [ok]
+- **B - dual-path (T2)** -> Task 3 SKILL.md section + Task 4 runbook; static-echo recorded as follow-up (CHANGELOG + runbook). [ok]
+- **C - extend consensus-workflow (T4b)** -> Task 3; runbook Task 4. [ok]
+- **C - release-currency (T5)** incl. version-asserting smoke -> Task 3 (b) + contract test `test_release_currency_steps_documented`. [ok]
+- **C - host_peer procedure (T6a)** -> Task 3 section + contract test `test_dual_path_and_host_peer_documented`. [ok]
+- **`.consensus` caveat** -> Task 3 section + `test_consensus_gate_caveat_documented`. [ok]
+- **kimi concurrency warning** -> Task 3 section. [ok]
+- **Phase->mode (iter-0044 guard)** -> Task 1 `test_kimi_adapter_converge_forwards_mode_review`. [ok]
 - No placeholders; names consistent (`KimiAdapter`, `_BUILTIN_ADAPTERS`, the test names). The Task 2 build_adapters call + Task 6 smoke carry an explicit "match the real `build_adapters` kwargs" note (signature confirmation, not unresolved design).
-- **Out of scope:** static-echo fix, host_peer helper, gate dogfooding, ProfileAdapter deprecation — all named follow-ups, no task. ✓
+- **Out of scope:** static-echo fix, host_peer helper, gate dogfooding, ProfileAdapter deprecation - all named follow-ups, no task. [ok]
 ```

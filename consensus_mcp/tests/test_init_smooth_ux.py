@@ -2,20 +2,20 @@
 
 Covers four post-recon polish behaviors in `consensus_mcp/_init_wizard.py`:
 
-  #4 POST-INIT STATUS SUMMARY — a fresh per-project bootstrap prints a concise
+  #4 POST-INIT STATUS SUMMARY - a fresh per-project bootstrap prints a concise
      friendly summary (config path, panel composition, present/missing CLIs,
      MCP-command resolvability, first concrete next step). Suppressed for
      --check / --print-defaults / --install-claude-code.
 
-  #5 MCP-COMMAND RESOLVABILITY — when the resolved .mcp.json command does not
+  #5 MCP-COMMAND RESOLVABILITY - when the resolved .mcp.json command does not
      resolve on PATH, a clear WARNING is printed (does not fail). No warning
      when it resolves.
 
-  #6 DEGENERATE-PANEL GUARD — non-interactive bootstrap with <2 independent
+  #6 DEGENERATE-PANEL GUARD - non-interactive bootstrap with <2 independent
      contributors prints an explicit single-reviewer (degraded) WARNING. No
      warning at >=2.
 
-  #7 ORPHANED hooks.json removed — the pre-v1.21 inert manifest is gone from
+  #7 ORPHANED hooks.json removed - the pre-v1.21 inert manifest is gone from
      the package and nothing load-bearing references it.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ from consensus_mcp import _init_wizard as wiz
 
 
 # --------------------------------------------------------------------------- #
-# #4 — POST-INIT STATUS / NEXT-STEPS SUMMARY
+# #4 - POST-INIT STATUS / NEXT-STEPS SUMMARY
 # --------------------------------------------------------------------------- #
 
 def test_fresh_init_prints_status_summary(tmp_path, capsys, monkeypatch):
@@ -134,7 +134,7 @@ def test_status_summary_from_claude_code_mentions_restart(tmp_path, capsys, monk
 
 
 # --------------------------------------------------------------------------- #
-# #5 — MCP-COMMAND RESOLVABILITY CHECK
+# #5 - MCP-COMMAND RESOLVABILITY CHECK
 # --------------------------------------------------------------------------- #
 
 def test_mcp_resolvability_warns_when_command_absent(tmp_path, capsys, monkeypatch):
@@ -200,7 +200,7 @@ def test_mcp_resolvability_helper_detects_present(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# #6 — DEGENERATE-PANEL GUARD (non-interactive only)
+# #6 - DEGENERATE-PANEL GUARD (non-interactive only)
 # --------------------------------------------------------------------------- #
 
 def test_degenerate_panel_warns_single_contributor(tmp_path, capsys, monkeypatch):
@@ -237,7 +237,7 @@ def test_degenerate_panel_no_warn_when_two_or_more(tmp_path, capsys, monkeypatch
 
 
 # --------------------------------------------------------------------------- #
-# #7 — ORPHANED hooks.json REMOVED
+# #7 - ORPHANED hooks.json REMOVED
 # --------------------------------------------------------------------------- #
 
 def test_orphaned_hooks_json_removed_from_package():

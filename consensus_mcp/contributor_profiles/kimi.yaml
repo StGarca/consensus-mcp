@@ -1,6 +1,6 @@
 # Built-in contributor profile: kimi (Moonshot Kimi CLI).
 #
-# kimi IS consumed by ProfileAdapter — the ONLY built-in routed through the new
+# kimi IS consumed by ProfileAdapter - the ONLY built-in routed through the new
 # generic adapter in v1.18.0 (codex/gemini/claude keep their existing classes).
 # This profile is therefore the live invocation contract, not just metadata.
 #
@@ -21,7 +21,7 @@ invoke:
   base_args:
     - "--quiet"
     - "--thinking"
-  prompt_flag: null        # stdin transport → no prompt flag
+  prompt_flag: null        # stdin transport -> no prompt flag
   workdir_flag: "-w"       # sets cwd so the CLI loads project context
   model_flag: null
 env: {}
@@ -39,5 +39,5 @@ auth:
   env_vars: []
   note: "OAuth/subscription login (interactive)"
 instructions:
-  filename: AGENTS.md       # codex AND kimi both read AGENTS.md → dedupe to one file
+  filename: AGENTS.md       # codex AND kimi both read AGENTS.md -> dedupe to one file
 timeout_seconds: 1800

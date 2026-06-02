@@ -1,4 +1,4 @@
-"""Unit tests for tools/loop_run_goal.py — Phase 4 supervisor MCP tool.
+"""Unit tests for tools/loop_run_goal.py - Phase 4 supervisor MCP tool.
 
 The supervisor is a state-machine coordinator: it reads filesystem state of
 an iteration_dir, recognizes which phase the iteration is in, and returns
@@ -65,7 +65,7 @@ def _write_valid_goal_packet(tmp_path: Path, **overrides) -> Path:
 
 
 def _write_invalid_goal_packet_missing_field(tmp_path: Path) -> Path:
-    """Goal packet missing a required field — cmd_validate returns 1."""
+    """Goal packet missing a required field - cmd_validate returns 1."""
     packet = {
         "schema_version": 1,
         "pilot_id": "test-invalid",
@@ -466,7 +466,7 @@ def test_state_closed_iteration_outcome_present(tmp_path):
 def test_state_blocked_stop_rule_fired_max_iterations(tmp_path):
     """max_iterations exceeded via independence-audit.yaml -> blocked_stop_rule_fired."""
     iter_dir = _make_iter_dir(tmp_path)
-    # No review-packet.yaml present yet — but max iterations already hit.
+    # No review-packet.yaml present yet - but max iterations already hit.
     audit_log = {
         "audit_log": [
             {"event": "patch_applied"},
@@ -689,13 +689,13 @@ def test_no_orphan_yaml_import(tmp_path):
 # ---- Task #25 (iter-0015): patch-verification state-machine extensions -----
 #
 # The supervisor learns to detect three new states:
-#   * codex_patch_proposed                                      — codex-review.yaml has
+#   * codex_patch_proposed                                      - codex-review.yaml has
 #     at least one finding with patch_proposal AND no corresponding entry in
 #     codex-patch-verifications/.
-#   * patch_verified_ready_for_codex_resubmit                   — verification yaml
+#   * patch_verified_ready_for_codex_resubmit                   - verification yaml
 #     shows verdict=approved (still needs codex's post-correction re-review
 #     before close).
-#   * patch_corrected_by_claude_ready_for_codex_resubmit        — verification yaml
+#   * patch_corrected_by_claude_ready_for_codex_resubmit        - verification yaml
 #     shows verdict=corrected_resubmit; claude's corrections need to be applied
 #     and codex must re-review.
 #
@@ -1030,14 +1030,14 @@ def test_check_stop_rules_swallows_exception_returns_breadcrumb(tmp_path, monkey
     assert "malformed independence-audit.yaml" in detail_blob
     # check_stop_rules_failed is a BREADCRUMB (mirrors review_yaml_parse_failed
     # / git_check_failed at line 212); it must NOT trip blocked_stop_rule_fired
-    # by itself — the supervisor should advance to needs_implementation when
+    # by itself - the supervisor should advance to needs_implementation when
     # the iter_dir is empty.
     assert result["state"] == "needs_implementation"
 
 
 def test_check_stop_rules_normal_path_still_works(tmp_path):
     """iter-0030 F3 negative: the try/except wrapper must not regress the
-    happy path — _self_drive.cmd_check_stop_rules running cleanly returns
+    happy path - _self_drive.cmd_check_stop_rules running cleanly returns
     the parsed stop_rules_fired list unchanged."""
     iter_dir = _make_iter_dir(tmp_path)
     pkt = _write_valid_goal_packet(tmp_path)
@@ -1070,7 +1070,7 @@ def test_corrected_resubmit_does_NOT_advance_to_ready_to_close(tmp_path):
     )
     patch_id = "patch-aaaaaaaaaaaa-bbbbbbbbbbbb"
     _write_codex_review_with_patch(iter_dir, patch_id=patch_id)
-    # Even include a consensus.yaml — should NOT advance to ready_to_close.
+    # Even include a consensus.yaml - should NOT advance to ready_to_close.
     (iter_dir / "consensus.yaml").write_text(
         yaml.safe_dump({"reviewed_artifacts": {}}), encoding="utf-8"
     )

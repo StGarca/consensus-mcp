@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "consensus_mcp/schemas/converged_plan_convention.schema.json",
   "title": "Converged-plan convention block (v1.15.0 doctrine, machine-enforced from v1.15.1)",
-  "description": "Machine contract for the falsification / independent_safeguard / decisive_experiment_before_next_iteration blocks defined in docs/workflows/converged-plan-convention.md. The schema validates STRUCTURE and PRESENCE only. It does NOT and CANNOT assert the hypothesis is true or the safeguard adequate — that remains a human judgement (see validators/validate_converged_plan.py GATE_SCOPE_DISCLAIMER).",
+  "description": "Machine contract for the falsification / independent_safeguard / decisive_experiment_before_next_iteration blocks defined in docs/workflows/converged-plan-convention.md. The schema validates STRUCTURE and PRESENCE only. It does NOT and CANNOT assert the hypothesis is true or the safeguard adequate - that remains a human judgement (see validators/validate_converged_plan.py GATE_SCOPE_DISCLAIMER).",
   "type": "object",
   "required": [
     "convention_schema_version",
@@ -30,7 +30,7 @@
         },
         "falsifiable_from_artifacts": {
           "type": "boolean",
-          "description": "true: refutable by reading evidence already in the packet (proof is a test shippable now). false: the DEFINED CLASS — refutable only by an external observation (hardware/firmware state, environment/toolchain, concurrency/timing)."
+          "description": "true: refutable by reading evidence already in the packet (proof is a test shippable now). false: the DEFINED CLASS - refutable only by an external observation (hardware/firmware state, environment/toolchain, concurrency/timing)."
         },
         "discriminating_experiment": {
           "type": "string",
@@ -43,7 +43,7 @@
         "empirical_status": {
           "type": "string",
           "enum": ["proven", "pending", "refuted", "n/a"],
-          "description": "n/a: falsifiable_from_artifacts true and proving test ships here. pending: defined class, experiment named, not yet run ('fixed/shipped/root-cause-correct' FORBIDDEN). proven: experiment ran, refutation_observation did NOT occur (requires experiment_result). refuted: experiment ran, refutation_observation DID occur — load-bearing terminal state."
+          "description": "n/a: falsifiable_from_artifacts true and proving test ships here. pending: defined class, experiment named, not yet run ('fixed/shipped/root-cause-correct' FORBIDDEN). proven: experiment ran, refutation_observation did NOT occur (requires experiment_result). refuted: experiment ran, refutation_observation DID occur - load-bearing terminal state."
         },
         "reason_na": {
           "type": "string",
@@ -88,7 +88,7 @@
       "type": "array",
       "minItems": 1,
       "items": {"type": "string", "minLength": 1},
-      "description": "Provenance-by-citation: the contributor pass_ids whose content this orchestrator-authored synthesis draws from. Non-empty — the blocks are sealed INTO converged-plan.yaml (same hash), not a loose untracked sidecar, and not a mechanical single-winner extraction."
+      "description": "Provenance-by-citation: the contributor pass_ids whose content this orchestrator-authored synthesis draws from. Non-empty - the blocks are sealed INTO converged-plan.yaml (same hash), not a loose untracked sidecar, and not a mechanical single-winner extraction."
     }
   }
 }

@@ -277,7 +277,7 @@ def test_patch_size_git_failure_does_not_fire(tmp_path, capsys, monkeypatch):
     assert "patch_size_exceeds_max" not in _fired_rules(parsed)
 
 
-# ---- iter-0035 patch_size_exceeds_max — union counting (codex-rev-001/002) -
+# ---- iter-0035 patch_size_exceeds_max - union counting (codex-rev-001/002) -
 
 
 def _make_size_fake_run(numstat_lines: str = "", untracked_files: list[str] | None = None):
@@ -332,7 +332,7 @@ def test_patch_size_untracked_symlink_does_not_dereference(tmp_path, capsys, mon
     """iter-0035 codex-rev-001 (pre-review refinement): untracked symlinks
     are counted as 1 line (the link itself), not dereferenced. Following
     the symlink could count an arbitrary out-of-repo target or crash on
-    broken links — neither matches `git add -A && git commit` semantics.
+    broken links - neither matches `git add -A && git commit` semantics.
     """
     iter_dir = tmp_path / "iter"
     iter_dir.mkdir()
@@ -355,7 +355,7 @@ def test_patch_size_untracked_symlink_does_not_dereference(tmp_path, capsys, mon
                                             untracked_files=["link_to_outside.txt"]))
     rc, parsed = _run_check_stop_rules(packet, iter_dir, capsys)
     fired = _fired_rules(parsed)
-    # cap=10; symlink counted as 1 → no fire. Pre-fix: dereferenced to
+    # cap=10; symlink counted as 1 -> no fire. Pre-fix: dereferenced to
     # 100k lines, fires (false-positive based on out-of-repo content).
     assert "patch_size_exceeds_max" not in fired, (
         f"symlink should be counted as 1 (not dereferenced); fired={fired}"
@@ -371,8 +371,8 @@ def test_patch_size_counts_no_trailing_newline_multi_line(tmp_path, capsys, monk
     iter_dir.mkdir()
     packet = _write_goal_packet(tmp_path, max_patch_size=2)  # discriminating cap
 
-    # 3 lines, no trailing newline. Pre-fix: count("\n") = 2 → 2 > 2 False → no fire.
-    # Post-fix: 2 + 1 = 3 → 3 > 2 True → fire.
+    # 3 lines, no trailing newline. Pre-fix: count("\n") = 2 -> 2 > 2 False -> no fire.
+    # Post-fix: 2 + 1 = 3 -> 3 > 2 True -> fire.
     untracked_file = tmp_path / "three_lines_no_newline.txt"
     untracked_file.write_text("a\nb\nc", encoding="utf-8")
 
@@ -383,7 +383,7 @@ def test_patch_size_counts_no_trailing_newline_multi_line(tmp_path, capsys, monk
     rc, parsed = _run_check_stop_rules(packet, iter_dir, capsys)
     fired = _fired_rules(parsed)
     assert "patch_size_exceeds_max" in fired, (
-        f"3-line no-newline file should count as 3 (post-fix), cap=2 → fire; got {fired}"
+        f"3-line no-newline file should count as 3 (post-fix), cap=2 -> fire; got {fired}"
     )
     entry = next(r for r in parsed["stop_rules_fired"]
                  if r["rule"] == "patch_size_exceeds_max")
@@ -392,7 +392,7 @@ def test_patch_size_counts_no_trailing_newline_multi_line(tmp_path, capsys, monk
 
 def test_patch_size_treats_untracked_binary_as_zero(tmp_path, capsys, monkeypatch):
     """iter-0035: binary untracked files contribute 0 lines (UnicodeDecodeError
-    silently skips, mirroring numstat's '-\\t-' → 0 policy).
+    silently skips, mirroring numstat's '-\\t-' -> 0 policy).
     """
     iter_dir = tmp_path / "iter"
     iter_dir.mkdir()
@@ -456,7 +456,7 @@ def test_reviewer_with_blockers_missing_goal_satisfied_is_not_clean(tmp_path, ca
 
 def test_reviewer_with_no_signal_is_treated_as_in_flight(tmp_path, capsys, monkeypatch):
     """iter-0035: reviewer with no blockers AND no goal_satisfied stays
-    in-flight (returns None from _reviewer_clean → not in disagreers).
+    in-flight (returns None from _reviewer_clean -> not in disagreers).
     """
     iter_dir = tmp_path / "iter"
     iter_dir.mkdir()
@@ -514,7 +514,7 @@ def test_closure_invariant_import_failure_emits_stop_rule(tmp_path, capsys, monk
 
 def test_resolve_referenced_path_basename_only_falls_back_to_iter_dir(tmp_path, monkeypatch):
     """iter-0035: bare basename (no directory components) MISSING under
-    repo_root still falls back to iter_dir/<basename> — preserving the
+    repo_root still falls back to iter_dir/<basename> - preserving the
     legitimate iter-relative-fixture pattern.
     """
     iter_dir = tmp_path / "iter"
@@ -1643,7 +1643,7 @@ def test_transition_is_stateless(tmp_path, capsys):
     """cmd_transition validates new_state and reports terminality but persists
     NOTHING. The real behavioral contract: invoking it writes no files.
 
-    M-11 was a contract-honesty fix — the docstring claimed transitions are
+    M-11 was a contract-honesty fix - the docstring claimed transitions are
     "recorded" while the function only printed. This asserts the true (no
     side-effect) behavior so the corrected contract cannot silently regress
     into an actual writer without failing this test.

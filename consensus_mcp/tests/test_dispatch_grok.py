@@ -4,9 +4,9 @@ Focused on grok-specific behavior:
   - _check_grok_auth (auth pre-flight raises when ~/.grok/auth.json absent)
   - _build_grok_cmd (CLI flag shape: inline -p, disabled tools, --cwd /tmp, --model)
   - _write_per_pass_prompt (per-pass filename embeds pass_id; content sha256)
-  - _extract_json_from_text (free-form → JSON substring)
+  - _extract_json_from_text (free-form -> JSON substring)
   - _parse_grok_output (validates JSON shape; grok-rev-N ID pattern; patch_proposal MUST be null)
-  - main() smoke env gate (--smoke without env var → refusal)
+  - main() smoke env gate (--smoke without env var -> refusal)
   - main() auth pre-flight + error code path
 
 Does NOT run the real grok CLI (smoke env-gated to
@@ -44,7 +44,7 @@ def test_check_grok_auth_passes_when_auth_file_present(monkeypatch, tmp_path):
     grok_dir = tmp_path / ".grok"
     grok_dir.mkdir()
     (grok_dir / "auth.json").write_text('{"token": "test"}', encoding="utf-8")
-    # No exception → pre-flight passes.
+    # No exception -> pre-flight passes.
     _dispatch_grok._check_grok_auth()
 
 
@@ -81,7 +81,7 @@ def test_build_grok_cmd_cwd_defaults_to_tmp():
     """Default run_cwd is /tmp (canon fallback). The dispatcher overrides
     this per-pass with a fresh empty temp dir (DEFECT 2 fix: grok's
     recursive watcher scans the --cwd dir, so an empty dir avoids the
-    /tmp systemd-private PermissionDenied noise — confirmed by grok)."""
+    /tmp systemd-private PermissionDenied noise - confirmed by grok)."""
     cmd = _dispatch_grok._build_grok_cmd("grok", "p", model=None)
     assert "--cwd" in cmd
     assert cmd[cmd.index("--cwd") + 1] == "/tmp"
@@ -89,7 +89,7 @@ def test_build_grok_cmd_cwd_defaults_to_tmp():
 
 def test_build_grok_cmd_uses_given_run_cwd():
     """When the dispatcher passes a fresh per-pass temp dir, it becomes the
-    --cwd value (Option A — grok ruled that its recursive watcher keys off
+    --cwd value (Option A - grok ruled that its recursive watcher keys off
     the --cwd FLAG, not the OS process cwd, so an empty --cwd dir is what
     eliminates the systemd-private watcher noise)."""
     cmd = _dispatch_grok._build_grok_cmd(
@@ -242,7 +242,7 @@ def test_parse_finding_id_accepts_grok_rev_pattern():
         "severity": "low", "summary": "x", "citation": "f:1",
         "risk": "r", "recommendation": "r",
     }]
-    data["goal_satisfied"] = False  # non-blocking findings → still coherent
+    data["goal_satisfied"] = False  # non-blocking findings -> still coherent
     parsed = _dispatch_grok._parse_grok_output(json.dumps(data))
     assert parsed["findings"][0]["id"] == "grok-rev-001"
 
@@ -261,7 +261,7 @@ def test_parse_patch_proposal_must_be_null_in_v1310():
 
 
 def test_parse_blocking_objections_invariant():
-    """Set of blocking_objections must equal set of {f.id : severity ∈ blocking/critical}."""
+    """Set of blocking_objections must equal set of {f.id : severity  in  blocking/critical}."""
     data = _minimal_valid()
     data["findings"] = [{
         "id": "grok-rev-001",
@@ -342,7 +342,7 @@ def test_grok_disabled_tools_list_is_stable():
     iter-0045 (panel: codex high finding + kimi finding; operator
     decision): the dispatch-canon-validator forbids --prompt-file,
     --no-plan, --no-subagents, --max-turns, and --permission-mode for
-    direct grok invocations — those flags caused the stall behavior.
+    direct grok invocations - those flags caused the stall behavior.
     The dispatcher now ships the minimal verified-working shape:
     inline -p (in _build_grok_cmd) + --no-memory + --disable-web-search
     + --cwd /tmp.
@@ -401,7 +401,7 @@ def test_assemble_stream_cancel_before_text_raises_invocation_error():
 
 def test_assemble_stream_cancel_after_text_returns_text():
     """A Cancelled stopReason AFTER some text was emitted is NOT the error
-    case — only cancel-BEFORE-any-text raises. We keep what grok produced."""
+    case - only cancel-BEFORE-any-text raises. We keep what grok produced."""
     raw = _stream(
         {"type": "text", "data": "partial answer"},
         {"type": "end", "stopReason": "Cancelled"},
@@ -410,12 +410,12 @@ def test_assemble_stream_cancel_after_text_returns_text():
 
 
 def test_assemble_stream_skips_malformed_and_typeless_lines():
-    """Defensive parse (spec Risks §): non-JSON lines, JSON without a
+    """Defensive parse (spec Risks section ): non-JSON lines, JSON without a
     `type`, and truncated lines are skipped, never fatal."""
     raw = "\n".join([
         "not json at all",
         json.dumps({"no_type": 1}),
-        '{"type":"text","data":"par',  # truncated → unparseable
+        '{"type":"text","data":"par',  # truncated -> unparseable
         "",                              # blank line
         json.dumps({"type": "text", "data": "ok"}),
         json.dumps({"type": "end", "stopReason": "EndTurn"}),

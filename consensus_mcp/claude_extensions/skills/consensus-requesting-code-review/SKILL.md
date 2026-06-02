@@ -1,16 +1,16 @@
 <!-- Vendored from Superpowers (c) 2025 Jesse Vincent, github.com/obra/superpowers, v5.1.0 @ f2cbfbe, MIT. Adapted for consensus-mcp. -->
 ---
 name: consensus-requesting-code-review
-description: "Consensus-adapted: Use when completing tasks, implementing major features, or before merging to verify work meets requirements — dispatches a cross-family consensus Workflow B panel, not a single-Claude reviewer."
+description: "Consensus-adapted: Use when completing tasks, implementing major features, or before merging to verify work meets requirements - dispatches a cross-family consensus Workflow B panel, not a single-Claude reviewer."
 ---
 
 # Requesting Code Review
 
 > Consensus has precedence at decision gates (see the consensus bootstrap / consensus-workflow).
 
-Dispatch a **consensus Workflow B cross-family review panel** to catch issues before they cascade. The review is the sealed cross-family audit — NOT a single-Claude reviewer-subagent pass. Cross-family reviewers get precisely crafted context (the git-range diff + requirements), never your session's history. This keeps the review focused on the work product and produces an independent, sealed verdict.
+Dispatch a **consensus Workflow B cross-family review panel** to catch issues before they cascade. The review is the sealed cross-family audit - NOT a single-Claude reviewer-subagent pass. Cross-family reviewers get precisely crafted context (the git-range diff + requirements), never your session's history. This keeps the review focused on the work product and produces an independent, sealed verdict.
 
-**Core principle:** Review early, review often — and the review is a sealed cross-family panel, not one Claude.
+**Core principle:** Review early, review often - and the review is a sealed cross-family panel, not one Claude.
 
 ## When to Request Review
 
@@ -26,7 +26,7 @@ Dispatch a **consensus Workflow B cross-family review panel** to catch issues be
 
 ## How to Request
 
-**1. Get git SHAs (diff preparation — keep this):**
+**1. Get git SHAs (diff preparation - keep this):**
 ```bash
 BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
 HEAD_SHA=$(git rev-parse HEAD)
@@ -34,7 +34,7 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 Prepare the git-range diff for the reviewers. The diff `BASE_SHA..HEAD_SHA` plus the plan/requirements is exactly the context the cross-family panel needs.
 
-**2. Invoke consensus Workflow B — dispatch cross-family reviewers:**
+**2. Invoke consensus Workflow B - dispatch cross-family reviewers:**
 
 > **Invoke consensus Workflow B: dispatch cross-family reviewers (`reviewer_dispatch_codex`, and gemini/kimi per panel size); the sealed cross-family audit IS the review, not a single-Claude pass.**
 
@@ -109,5 +109,5 @@ You: [Fix progress indicators]
 
 **If the panel is wrong:**
 - Push back with technical reasoning (see consensus:receiving-code-review)
-- Show code/tests that prove it works — grep the cited content first
+- Show code/tests that prove it works - grep the cited content first
 - Record the dismissal with the empirical evidence

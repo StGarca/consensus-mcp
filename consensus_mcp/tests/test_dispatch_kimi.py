@@ -5,7 +5,7 @@ behavior, all kept BEHIND the same surface as gemini so the operator sees
 identical CLI flags + sealed kimi-review.yaml + timing/log lines:
 
   - _kimi_subprocess_env (scrubs KIMI_API_KEY + OPENAI_API_KEY so a stray
-    external key can't hijack the OAuth file-cred call — the INVERSE of
+    external key can't hijack the OAuth file-cred call - the INVERSE of
     gemini's GEMINI_CLI_TRUST_WORKSPACE injection)
   - _peel_assistant_content (peels `content` off the stream-json line)
   - _extract_json_from_text (reused from gemini; content is free text inside)
@@ -112,7 +112,7 @@ def test_peel_falls_back_to_markdown_fenced_json_when_no_envelope():
     # kimi sometimes prints a ```json ... ``` block directly instead of a
     # stream-json envelope (same shape gemini emits). With no assistant
     # envelope present, peel must hand the fenced block back unchanged so the
-    # downstream _extract_json_from_text can recover it — NOT raise.
+    # downstream _extract_json_from_text can recover it - NOT raise.
     raw = '```json\n{"findings": [], "goal_satisfied": true}\n```'
     assert _dispatch_kimi._peel_assistant_content(raw) == raw
 
@@ -386,7 +386,7 @@ def _make_factory(stdout_lines, returncode, captured_cmd, captured_env, captured
 
 def test_invoke_kimi_builds_expected_argv():
     """FIX TRACK 2 (B4/H3): the argv is the verified kimi.yaml STDIN-transport
-    profile — `kimi --quiet --thinking --work-dir <workdir>` with the prompt on
+    profile - `kimi --quiet --thinking --work-dir <workdir>` with the prompt on
     STDIN. NO --print (which auto-enabled --afk tool approval), NO --afk, and NO
     -p (the prompt is not carried on argv, so the single-arg size limit can't
     be hit). --quiet keeps the reviewer read-only."""
@@ -828,7 +828,7 @@ def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
 def test_main_integrity_check_rejects_when_real_repo_dirty(monkeypatch, capsys):
     """FIX TRACK 2 (B4 independent safeguard): if the REAL repo's
     `git status --short` is non-empty after the dispatch, the review output is
-    REJECTED (ok:false, KimiIntegrityError, rc=1) — kimi mutated the real repo
+    REJECTED (ok:false, KimiIntegrityError, rc=1) - kimi mutated the real repo
     despite the disposable temp work-dir."""
     repo_root = ROOT
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
@@ -934,7 +934,7 @@ def test_main_degrades_to_no_copy_on_enospc_and_seals(monkeypatch, capsys):
 
 def test_main_degrade_no_copy_still_rejects_real_repo_mutation(monkeypatch, capsys):
     """v1.30.3 D4 safety: even in the degraded no-copy path, the before/after snapshot
-    control still fires — a mutation to the real repo is DETECTED and the output REJECTED
+    control still fires - a mutation to the real repo is DETECTED and the output REJECTED
     (this is WHY degrading to no-copy is safe: detect + reject, never zero control)."""
     repo_root = ROOT
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
@@ -1097,7 +1097,7 @@ def test_repo_status_snapshot_hashes_dirty_files(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_dispatch_kimi.subprocess, "run", lambda *a, **k: _Result())
     snap = _dispatch_kimi._repo_status_snapshot(tmp_path)
-    # dict {path: content-hash} — content is hashed so mutations to already-dirty
+    # dict {path: content-hash} - content is hashed so mutations to already-dirty
     # files are detectable (re-audit codex-rev-001).
     assert set(snap) == {"consensus_mcp/foo.py", "bar.py"}
     import hashlib as _h

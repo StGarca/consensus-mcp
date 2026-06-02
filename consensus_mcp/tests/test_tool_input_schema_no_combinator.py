@@ -4,7 +4,7 @@ The Anthropic tool API rejects a top-level combinator in `input_schema`, which k
 any subagent granted that tool on launch (the v1.30.1 incident: `review.read_post_seal`
 expressed "exactly one of pass_id|path" as a top-level `oneOf`). This data-driven test
 enumerates EVERY tool module's SCHEMA and fails if any input_schema carries a top-level
-combinator — so a newly-added tool can't reintroduce the class. (output_schema may use
+combinator - so a newly-added tool can't reintroduce the class. (output_schema may use
 oneOf; it is never sent to the API as the tool's input_schema.)
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ def test_input_schema_has_no_top_level_combinator(name, schema):
     ins = schema.get("input_schema") or schema.get("inputSchema")
     offending = _COMBINATORS & set(ins.keys())
     assert not offending, (
-        f"tool {name!r} input_schema has top-level {sorted(offending)} — the Anthropic "
+        f"tool {name!r} input_schema has top-level {sorted(offending)} - the Anthropic "
         f"tool API rejects it and any subagent granted this tool fails to launch. "
         f"Flatten it (optional properties + enforce the constraint in handle())."
     )

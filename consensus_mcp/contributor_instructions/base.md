@@ -1,7 +1,7 @@
 <!--
 Source: https://github.com/multica-ai/andrej-karpathy-skills/blob/main/CLAUDE.md
 (vendored 2026-05-22). Shared consensus-mcp contributor operating guidelines.
-The content below is the upstream file verbatim; do not edit in place — re-vendor
+The content below is the upstream file verbatim; do not edit in place - re-vendor
 from the source URL to update.
 -->
 
@@ -54,15 +54,15 @@ The test: Every changed line should trace directly to the user's request.
 **Define success criteria. Loop until verified.**
 
 Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
+- "Add validation" -> "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" -> "Write a test that reproduces it, then make it pass"
+- "Refactor X" -> "Ensure tests pass before and after"
 
 For multi-step tasks, state a brief plan:
 ```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+1. [Step] -> verify: [check]
+2. [Step] -> verify: [check]
+3. [Step] -> verify: [check]
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.

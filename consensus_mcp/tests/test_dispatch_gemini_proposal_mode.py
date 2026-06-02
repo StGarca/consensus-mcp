@@ -1,6 +1,6 @@
 """Tests for gemini dispatcher --mode proposal (iter-0028 per iter-0027 converged plan).
 
-Mirrors test_dispatch_codex_proposal_mode for symmetry — both dispatchers
+Mirrors test_dispatch_codex_proposal_mode for symmetry - both dispatchers
 must support the same --mode contract.
 """
 from __future__ import annotations
@@ -205,7 +205,7 @@ def test_gemini_dispatcher_has_schema_flag():
 
 
 def test_gemini_proposal_parser_invariant_rejects_empty_rationale(tmp_path):
-    """codex pass-4 rev-002: same invariant as codex — empty rationale rejected
+    """codex pass-4 rev-002: same invariant as codex - empty rationale rejected
     regardless of schema."""
     from consensus_mcp._dispatch_gemini import _parse_gemini_proposal_output, GeminiOutputParseError
     loose_schema = {

@@ -46,7 +46,7 @@ def test_build_adapters_solo_claude(tmp_path):
 def test_build_adapters_unknown_key_raises(tmp_path):
     config = _three_contributor_config()
     config["contributors"]["enabled"] = ["claude", "fictional-ai"]
-    # validate() rejects this — so bypass for the factory test.
+    # validate() rejects this - so bypass for the factory test.
     with pytest.raises(factory.EngineFactoryError, match="unknown contributor key"):
         factory.build_adapters(config)
 

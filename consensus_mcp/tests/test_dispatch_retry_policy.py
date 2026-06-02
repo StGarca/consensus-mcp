@@ -29,7 +29,7 @@ def test_transient_high_priority_retries_once_then_falls_back():
 
 
 def test_transient_low_priority_does_not_retry():
-    # a chore isn't worth a retry — skip immediately on the first transient failure
+    # a chore isn't worth a retry - skip immediately on the first transient failure
     assert rp.decide(rp.RATE_LIMIT, attempt=1, priority=rp.LOW)["action"] == rp.SKIP
 
 

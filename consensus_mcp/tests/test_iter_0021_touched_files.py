@@ -1,4 +1,4 @@
-"""Unit tests for iter-0021 — embed touched-file contents in review-packet.
+"""Unit tests for iter-0021 - embed touched-file contents in review-packet.
 
 Per iter-0020 empirical finding: codex's read-only sandbox cannot reliably read
 repo files even when given paths. iter-0021 fix: stop expecting codex to read
@@ -103,7 +103,7 @@ def test_format_touched_files_contents_unknown_extension_uses_text_fence():
 
 
 # ---------------------------------------------------------------------------
-# Default template authoring smoke — placeholder is present
+# Default template authoring smoke - placeholder is present
 # ---------------------------------------------------------------------------
 
 

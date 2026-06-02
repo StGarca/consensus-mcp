@@ -6,14 +6,14 @@ delivering the configurable workflow engine. It provides:
 
   * Schema constants (workflow modes, independence models, convergence rules,
     finding dispositions, snapshot triggers, patch authoring, timeout policies)
-  * `ConfigValidationError` — raised on illegal config or invalid combinations
-  * `load(path)` — parse YAML, normalize aliases + defaults, validate, return
+  * `ConfigValidationError` - raised on illegal config or invalid combinations
+  * `load(path)` - parse YAML, normalize aliases + defaults, validate, return
     the effective config dict
-  * `validate(config)` — pure check on an already-loaded dict
-  * `normalize(config)` — apply default values + alias resolution (e.g.
-    `workflow.mode: 3` → `workflow.mode: post-review`)
-  * `default_config()` — return the canonical default config dict
-  * `effective_config_sha256(config)` — deterministic hash for sealed provenance
+  * `validate(config)` - pure check on an already-loaded dict
+  * `normalize(config)` - apply default values + alias resolution (e.g.
+    `workflow.mode: 3` -> `workflow.mode: post-review`)
+  * `default_config()` - return the canonical default config dict
+  * `effective_config_sha256(config)` - deterministic hash for sealed provenance
 
 This module does NOT load files into the engine, does NOT dispatch
 contributors, does NOT run the wizard. Those land in iter-0016b/c/d.
@@ -38,7 +38,7 @@ SCHEMA_VERSION = 1
 WORKFLOW_POST_REVIEW = "post-review"
 WORKFLOW_PROPOSE_CONVERGE = "propose-converge"
 WORKFLOW_ADVISORY = "advisory"
-# iter-workflow-abc-introduce: Workflow C — autonomous-execute. v1.14.4
+# iter-workflow-abc-introduce: Workflow C - autonomous-execute. v1.14.4
 # ships the contract (alias, validators, scope_check helper, schema);
 # multi-iteration engine path is named-blocker for v1.15.0.
 WORKFLOW_AUTONOMOUS_EXECUTE = "autonomous-execute"
@@ -140,7 +140,7 @@ VALID_TIMEOUT_POLICY = {TIMEOUT_NO_VOTE, TIMEOUT_BLOCKING, TIMEOUT_SHRINK}
 # === Allowed contributor identities (v1 closed enum per converged plan SO-5) ===
 # kimi added 2026-05-22: it is a real default contributor; excluding it from the
 # allow-list (a) made `validate()` reject any project that configures kimi and
-# (b) made the anchoring linter blind to kimi-anchoring — the exact bias it was
+# (b) made the anchoring linter blind to kimi-anchoring - the exact bias it was
 # built to catch. (Found by independent QA, not self-review.) Note: enabling
 # kimi still requires a KimiAdapter in the engine (tracked separately); this
 # allow-list entry just stops kimi being a second-class identity.
@@ -156,7 +156,7 @@ def _default_independent_enabled() -> list[str]:
     """Derive the default enabled set from built-in INDEPENDENT profiles (decision 7).
 
     Lazy import avoids any import-cycle risk with _contributor_profiles.
-    host_peer profiles (e.g. claude-swe-reviewer) are excluded — they are
+    host_peer profiles (e.g. claude-swe-reviewer) are excluded - they are
     opt-in overlays, not independent contributors.
     """
     from consensus_mcp._contributor_profiles import (  # noqa: PLC0415
@@ -262,11 +262,11 @@ def normalize(config: dict) -> dict:
     """Apply defaults + alias resolution. Returns a NEW dict; does not mutate input.
 
     Currently handles:
-      - `workflow.mode` aliases (A → propose-converge, B → post-review,
-        C → autonomous-execute; numeric 3/4 deprecated but still resolved)
+      - `workflow.mode` aliases (A -> propose-converge, B -> post-review,
+        C -> autonomous-execute; numeric 3/4 deprecated but still resolved)
       - Filling unspecified keys with defaults from `default_config()`
 
-    Does NOT validate — see `validate()` for that.
+    Does NOT validate - see `validate()` for that.
     """
     import warnings
     if not isinstance(config, dict):
@@ -349,7 +349,7 @@ def validate(config: dict) -> None:
             f"contributors.enabled must be unique; got {enabled!r}"
         )
     # OPEN contributor set (2026-05-22, "2-or-20-or-200 AIs" acceptance):
-    # validation is STRUCTURAL only — it no longer rejects names outside a closed
+    # validation is STRUCTURAL only - it no longer rejects names outside a closed
     # enum, so a clean install supports ANY number of contributors with ANY
     # names (min-2 / max-N). Whether a name is actually CONSTRUCTIBLE is checked
     # at build time by engine_factory (fail-closed with a register_contributor
@@ -361,26 +361,26 @@ def validate(config: dict) -> None:
                 f"contributors.enabled entries must be non-empty, non-whitespace "
                 f"strings; got {c!r}"
             )
-    # NOTE: min-2 is NOT blanket-enforced here — it is MODE-SPECIFIC below
+    # NOTE: min-2 is NOT blanket-enforced here - it is MODE-SPECIFIC below
     # (propose-converge / sequential / strict-majority each require >=2), so
     # single-contributor modes (e.g. solo-claude post-review) stay valid. There
     # is NO upper cap on N anywhere.
-    # v1.18.0 (open-contributor model — converged plan): claude is OPTIONAL (the
+    # v1.18.0 (open-contributor model - converged plan): claude is OPTIONAL (the
     # host orchestrates the loop regardless of whether claude is itself a
     # contributor) and a per-contributor `contributors.adapters` entry is
-    # OPTIONAL. Whether a name is actually CONSTRUCTIBLE — a built-in class, a
-    # registered adapter, or a kind:cli_reviewer profile — is the engine_factory's
+    # OPTIONAL. Whether a name is actually CONSTRUCTIBLE - a built-in class, a
+    # registered adapter, or a kind:cli_reviewer profile - is the engine_factory's
     # fail-closed job (see the STRUCTURAL-only note above), NOT config.validate's.
     # We keep only the adapters-is-a-mapping type check.
     adapters = contributors.get("adapters", {})
     if not isinstance(adapters, dict):
         raise ConfigValidationError("contributors.adapters must be a mapping")
 
-    # === contributors.profiles (v1.18.0 — optional operator overlay) ===
+    # === contributors.profiles (v1.18.0 - optional operator overlay) ===
     # Validate each operator-supplied profile against the contributor-profile
     # schema (loader/validator lives in _contributor_profiles). config overrides
     # built-in profiles by same name; this block only checks the OVERLAY supplied
-    # in config — built-in profiles are validated by their own test suite. Plain
+    # in config - built-in profiles are validated by their own test suite. Plain
     # ValueErrors from validate_profile are re-raised as ConfigValidationError to
     # keep the config-layer error type consistent.
     profiles = contributors.get("profiles")
@@ -424,7 +424,7 @@ def validate(config: dict) -> None:
     # === Cross-validation rules per converged-plan.yaml ===
     # Floor is INDEPENDENT count (host_peer is a 0.5 supplemental, never a vote).
     # Resolve kinds via merged built-in + overlay profiles; unknown names count
-    # as independent (open-contributor model). Keep the helper small — do NOT
+    # as independent (open-contributor model). Keep the helper small - do NOT
     # import wizard code here.
     from consensus_mcp._contributor_profiles import (
         load_builtin_profiles,
@@ -606,7 +606,7 @@ def synthesize_legacy_config(repo_root: Path) -> dict:
     representing that behavior so the engine has a uniform config object to
     consume regardless of whether real config exists.
 
-    Schema_version=0 is INTENTIONALLY not 1 — it's a sentinel marking legacy
+    Schema_version=0 is INTENTIONALLY not 1 - it's a sentinel marking legacy
     synthesis. validate() rejects it; the engine uses a separate code path.
     """
     return {
@@ -619,7 +619,7 @@ def synthesize_legacy_config(repo_root: Path) -> dict:
             "timeout_policy": TIMEOUT_NO_VOTE,
         },
         "contributors": {
-            # Historical legacy list — intentional pre-iter-0015 state, NOT the
+            # Historical legacy list - intentional pre-iter-0015 state, NOT the
             # canonical default (which is dynamic via _default_independent_enabled).
             "enabled": ["claude", "codex"],
             "adapters": {

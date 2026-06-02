@@ -23,7 +23,7 @@ Tests must verify real behavior, not mock behavior. Mocks are a means to isolate
 
 **The violation:**
 ```typescript
-// ❌ BAD: Testing that the mock exists
+// [x] BAD: Testing that the mock exists
 test('renders sidebar', () => {
   render(<Page />);
   expect(screen.getByTestId('sidebar-mock')).toBeInTheDocument();
@@ -39,7 +39,7 @@ test('renders sidebar', () => {
 
 **The fix:**
 ```typescript
-// ✅ GOOD: Test real component or don't mock it
+// [ok] GOOD: Test real component or don't mock it
 test('renders sidebar', () => {
   render(<Page />);  // Don't mock sidebar
   expect(screen.getByRole('navigation')).toBeInTheDocument();
@@ -65,7 +65,7 @@ BEFORE asserting on any mock element:
 
 **The violation:**
 ```typescript
-// ❌ BAD: destroy() only used in tests
+// [x] BAD: destroy() only used in tests
 class Session {
   async destroy() {  // Looks like production API!
     await this._workspaceManager?.destroyWorkspace(this.id);
@@ -85,7 +85,7 @@ afterEach(() => session.destroy());
 
 **The fix:**
 ```typescript
-// ✅ GOOD: Test utilities handle test cleanup
+// [ok] GOOD: Test utilities handle test cleanup
 // Session has no destroy() - it's stateless in production
 
 // In test-utils/
@@ -120,7 +120,7 @@ BEFORE adding any method to production class:
 
 **The violation:**
 ```typescript
-// ❌ BAD: Mock breaks test logic
+// [x] BAD: Mock breaks test logic
 test('detects duplicate server', () => {
   // Mock prevents config write that test depends on!
   vi.mock('ToolCatalog', () => ({
@@ -139,13 +139,13 @@ test('detects duplicate server', () => {
 
 **The fix:**
 ```typescript
-// ✅ GOOD: Mock at correct level
+// [ok] GOOD: Mock at correct level
 test('detects duplicate server', () => {
   // Mock the slow part, preserve behavior test needs
   vi.mock('MCPServerManager'); // Just mock slow server startup
 
   await addServer(config);  // Config written
-  await addServer(config);  // Duplicate detected ✓
+  await addServer(config);  // Duplicate detected [ok]
 });
 ```
 
@@ -179,7 +179,7 @@ BEFORE mocking any method:
 
 **The violation:**
 ```typescript
-// ❌ BAD: Partial mock - only fields you think you need
+// [x] BAD: Partial mock - only fields you think you need
 const mockResponse = {
   status: 'success',
   data: { userId: '123', name: 'Alice' }
@@ -199,7 +199,7 @@ const mockResponse = {
 
 **The fix:**
 ```typescript
-// ✅ GOOD: Mirror real API completeness
+// [ok] GOOD: Mirror real API completeness
 const mockResponse = {
   status: 'success',
   data: { userId: '123', name: 'Alice' },
@@ -230,8 +230,8 @@ BEFORE creating mock responses:
 
 **The violation:**
 ```
-✅ Implementation complete
-❌ No tests written
+[ok] Implementation complete
+[x] No tests written
 "Ready for testing"
 ```
 
@@ -264,10 +264,10 @@ TDD cycle:
 ## TDD Prevents These Anti-Patterns
 
 **Why TDD helps:**
-1. **Write test first** → Forces you to think about what you're actually testing
-2. **Watch it fail** → Confirms test tests real behavior, not mocks
-3. **Minimal implementation** → No test-only methods creep in
-4. **Real dependencies** → You see what the test actually needs before mocking
+1. **Write test first** -> Forces you to think about what you're actually testing
+2. **Watch it fail** -> Confirms test tests real behavior, not mocks
+3. **Minimal implementation** -> No test-only methods creep in
+4. **Real dependencies** -> You see what the test actually needs before mocking
 
 **If you're testing mock behavior, you violated TDD** - you added mocks without watching test fail against real code first.
 

@@ -39,7 +39,7 @@ def test_install_freshness_warns_when_below_floor(tmp_path, monkeypatch, capsys)
     assert rc == 6, err
     assert "STALE or partial" in err
     assert "ABORTING" in err
-    # Nothing was copied — the install aborted before touching CLAUDE_HOME.
+    # Nothing was copied - the install aborted before touching CLAUDE_HOME.
     assert not (home / "skills" / "consensus" / "SKILL.md").exists()
 
 

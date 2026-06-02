@@ -77,7 +77,7 @@ from consensus_mcp.tools.audit_append_event import handle as audit_handle  # noq
 
 
 def _ledger_path() -> Path:
-    """<state_root>/state/disposition-ledger.yaml — lazy."""
+    """<state_root>/state/disposition-ledger.yaml - lazy."""
     return state_root() / "state" / "disposition-ledger.yaml"
 
 

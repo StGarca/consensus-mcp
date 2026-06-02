@@ -1,4 +1,4 @@
-"""apply.codex_patch MCP tool — Task #26 (iter-0016).
+"""apply.codex_patch MCP tool - Task #26 (iter-0016).
 
 Per codex 2026-05-10 v4 directive (memory/project_codex_fix_author_directive.md):
 Staged-apply of a codex-emitted patch that has been claude-verified per
@@ -21,7 +21,7 @@ The implementation:
     semantics; codex patches use a different shape (patch_proposal with
     base_sha/unified_diff) so apply_codex_patch authors its own apply step.
     If T5's apply contract evolves to match patch_proposal shape, the bespoke
-    apply could be replaced with a T5 call — currently they diverge.
+    apply could be replaced with a T5 call - currently they diverge.
 """
 from __future__ import annotations
 
@@ -501,7 +501,7 @@ def _apply_unified_diff(
     # with named reason `file_deletion_unsupported` instead of coincidentally
     # failing via files_touched lookup further down the pipeline. The matching
     # `--- /dev/null` (file-add) case works correctly via the existing
-    # target.exists()==False branch — no explicit handling needed.
+    # target.exists()==False branch - no explicit handling needed.
     lines = unified_diff.splitlines(keepends=False)
     file_segments: dict[str, list[str]] = {}
     current_file: str | None = None

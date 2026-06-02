@@ -3,7 +3,7 @@ as iter-0013 prerequisite #2 (per codex 2026-05-10 v2 guardrail #2).
 
 Each closed iteration produces a sealed codex pass that gets entered in
 consensus-state/archive/review-passes/index.yaml. The spec md (section 24) mirrors
-that index. The mirror is currently MANUAL — when it drifts, the disposition
+that index. The mirror is currently MANUAL - when it drifts, the disposition
 validator flags ARCHIVE_INDEX_HAS_PASSES_NOT_IN_SPEC_24 and the MCP server
 refuses to boot in smoke (4 manual fixes required this session: iter-0009/0010/
 0011/0012).
@@ -75,7 +75,7 @@ def _section_24_pass_ids(spec_text: str) -> list[str]:
       - {id: <pass-id>, archived_at: "<path>", ...other fields...}
 
     We extract the id field directly via a regex that doesn't require parsing
-    the whole markdown — section 24 has comment lines, multi-line wrapping,
+    the whole markdown - section 24 has comment lines, multi-line wrapping,
     and id-only entries that resist round-trip yaml parsing.
     """
     # Find the "archived:" block in section 24 (not the same as status_counts.archived).

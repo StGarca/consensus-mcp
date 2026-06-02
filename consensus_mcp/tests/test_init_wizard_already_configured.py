@@ -137,7 +137,7 @@ def test_tty_menu_ctrl_c_returns_1(tmp_path, capsys, monkeypatch):
 
 def test_tty_menu_reconfigure_stays_interactive(tmp_path, monkeypatch):
     """Menu 'reconfigure' must re-prompt (interactive), not silently accept
-    defaults — guards against the accept_defaults regression."""
+    defaults - guards against the accept_defaults regression."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(wiz, "_stdin_is_interactive", lambda: True)
     monkeypatch.setattr(wiz, "_prompt_existing_config_action", lambda _p: "reconfigure")
@@ -229,16 +229,16 @@ def _ext_dir():
 
 def test_contract_token_present_in_skill_and_command():
     """The skill/command matchers MUST stay in sync with the binary token.
-    If the token string changes, these docs must change too — this test fails
+    If the token string changes, these docs must change too - this test fails
     on drift, which is the whole point of the binary<->skill contract."""
     token = wiz.ALREADY_CONFIGURED_TOKEN
     skill = (_ext_dir() / "skills" / "consensus" / "SKILL.md").read_text(encoding="utf-8")
     command = (_ext_dir() / "commands" / "consensus-init.md").read_text(encoding="utf-8")
     assert token in skill, "SKILL.md must reference the exact already-configured token"
     assert token in command, "consensus-init.md must reference the exact token"
-    # exit code 4 is the paired half of the contract — keep it documented too.
+    # exit code 4 is the paired half of the contract - keep it documented too.
     assert "exit code 4" in skill.lower() or "exits with code 4" in skill.lower()
-    # consensus-init.md is what Claude Code reads when dispatched — test it symmetrically.
+    # consensus-init.md is what Claude Code reads when dispatched - test it symmetrically.
     assert "exit code 4" in command.lower() or "exits with code 4" in command.lower()
 
 

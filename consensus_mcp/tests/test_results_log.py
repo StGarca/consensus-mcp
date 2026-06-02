@@ -8,9 +8,9 @@ The authored record MUST validate against
 are derived from sealed review passes (claude/codex/gemini-review.yaml), the
 converged-plan.yaml when present, and the audit events. Disposition per finding:
 
-  validated_fixed   — finding id linked to an apply event / closure disposition
-  dismissed_refuted — a closure disposition says so (carries evidence_ref)
-  deferred / open    — otherwise
+  validated_fixed   - finding id linked to an apply event / closure disposition
+  dismissed_refuted - a closure disposition says so (carries evidence_ref)
+  deferred / open    - otherwise
 
 Conventions mirror test_iter_0018_cross_ai_invariant.py: build a fake iteration
 dir under a tmp_path-rooted consensus-state/, point CONSENSUS_MCP_REPO_ROOT at
@@ -249,7 +249,7 @@ def test_disposition_dismissed_refuted_carries_evidence(tmp_path):
         {
             "id": "gemini-rev-001",
             "disposition": "dismissed_refuted",
-            "evidence_ref": "commit:abc123 — finding refuted by grep, file content absent",
+            "evidence_ref": "commit:abc123 - finding refuted by grep, file content absent",
         }
     ]
     record = _results_log.build_results_record(
@@ -310,7 +310,7 @@ def test_jsonl_upsert_keeps_one_snapshot_per_iteration(tmp_path, monkeypatch):
     assert rec1["iteration_id"] == "iteration-results-upsert"
     _validate(rec1)
 
-    # Second write (re-author) — must REPLACE, not append.
+    # Second write (re-author) - must REPLACE, not append.
     _results_log.write_results_record(iter_dir)
     lines2 = [l for l in ledger.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert len(lines2) == 1, f"upsert appended a duplicate: {lines2}"
@@ -442,7 +442,7 @@ def test_iteration_closed_writes_results_record(tmp_path, monkeypatch):
 
 
 def test_results_write_failure_is_nonfatal_to_close(tmp_path, monkeypatch, capsys):
-    """A results-logging failure must NOT break a valid iteration_closed —
+    """A results-logging failure must NOT break a valid iteration_closed -
     non-fatal-but-warns, mirroring the closure-certificate author."""
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(tmp_path))
     importlib.reload(audit_append_event)

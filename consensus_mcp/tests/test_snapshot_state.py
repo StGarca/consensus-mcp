@@ -37,7 +37,7 @@ def test_sanitize_label_rejects_invalid():
     with pytest.raises(ss.SnapshotError):
         ss._sanitize_label("a" * 65)
     with pytest.raises(ss.SnapshotError):
-        ss._sanitize_label("emoji-🚀-no")
+        ss._sanitize_label("emoji-" + chr(0x1F680) + "-no")
 
 
 def test_sanitize_label_empty_returns_none():
@@ -95,7 +95,7 @@ def test_next_unique_tag_returns_candidate_when_free(monkeypatch):
 
 
 def test_next_unique_tag_appends_suffix_on_collision(monkeypatch):
-    """codex-rev-001 round-2 fix: same-second collision → -1, -2, ..."""
+    """codex-rev-001 round-2 fix: same-second collision -> -1, -2, ..."""
     seen = []
     def fake_run(args, cwd=None, check=True):
         # args: ["rev-parse", "--verify", "--quiet", "refs/tags/<tag>"]

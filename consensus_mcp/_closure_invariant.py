@@ -19,7 +19,7 @@ Hash binding is PRIMARY because clocks and generated timestamps can drift;
 hashes can't. Freshness is SECONDARY defense-in-depth against re-played stale
 verdicts on the right post-mutation hash.
 
-Pure helpers — no side effects. Filesystem reads are confined to bundle_sha.
+Pure helpers - no side effects. Filesystem reads are confined to bundle_sha.
 Three independent enforcement layers (T6 audit_append_event, _self_drive
 stop rule, loop.run_goal transition guard) call check_closure_invariant
 against the same logic; defense-in-depth requires defeating all three to bypass.
@@ -40,7 +40,7 @@ def _normalize_path(p: str) -> str:
     converts backslashes-as-separators only when fed through PurePath; we go
     through PurePath then re-emit as POSIX.
     """
-    # Normalise separators first (handles 'a\\b.py' on POSIX too — pure string
+    # Normalise separators first (handles 'a\\b.py' on POSIX too - pure string
     # replace, not path-aware, because PurePath on POSIX treats '\\' as a
     # literal character, not a separator).
     s = p.replace("\\", "/")
@@ -70,7 +70,7 @@ def bundle_sha(repo_root: Path, files_touched: list[str]) -> str:
     form separators (\\0 or \\n) raise ValueError.
 
     iter-0024 F3-008: OSError on file read is silently treated as empty
-    content (preserves the original semantics — missing/unreadable file ==
+    content (preserves the original semantics - missing/unreadable file ==
     empty bundle contribution). This masks permission errors and disk
     corruption; downstream drift detection still catches post_sha mismatches.
     Documented; not surfaced via side channel (out of scope for this fix).
@@ -99,7 +99,7 @@ def last_mutation_from_audit(audit_log: list[dict]) -> Optional[dict]:
     audit log, not mutable state text). Cannot drift from reality.
 
     Returns None if no apply_step_landed events found (no mutation has
-    occurred yet — close paths without mutation aren't gated by this rule).
+    occurred yet - close paths without mutation aren't gated by this rule).
 
     Backward-compat: pre-#28 audit logs may have apply_step_landed events
     without the structured actor/patch_id fields. Returns the legacy event
@@ -126,7 +126,7 @@ def last_mutation_from_audit(audit_log: list[dict]) -> Optional[dict]:
     # Per iter-0017 capstone finding: apply_codex_patch (Task #26) emits its
     # structured per-mutation fields nested under `last_mutation` (because T6's
     # apply_step_landed canonical event type doesn't have actor/post_sha as
-    # named top-level fields — they go in extra_fields). This reader must
+    # named top-level fields - they go in extra_fields). This reader must
     # accept BOTH shapes:
     #   - top-level (legacy / unit-test shape): {actor, post_sha, ...}
     #   - nested (real apply_codex_patch shape): {extra_fields: {last_mutation: {actor, post_sha, ...}}}
@@ -197,7 +197,7 @@ def _parse_utc_timestamp(value) -> Optional[datetime]:
 def _actor_model_family(actor) -> Optional[str]:
     """Extract actor model_family from the structured dict form.
 
-    Legacy string actors have no model_family — return None (which causes the
+    Legacy string actors have no model_family - return None (which causes the
     cross-family check to FAIL as undeterminable, per v5 Finding 1).
     """
     if isinstance(actor, dict):
@@ -229,7 +229,7 @@ def check_closure_invariant(
     cross_actor check that compared only actor.id. Codex-A -> Codex-B with
     different actor.ids passes cross_actor but is NOT cross-AI; the family
     check catches that. If either side's model_family is missing, the check
-    FAILS (treat undeterminable as failed) — operators MUST author actor
+    FAILS (treat undeterminable as failed) - operators MUST author actor
     objects with model_family.
 
     closing_verdict shape:
@@ -261,7 +261,7 @@ def check_closure_invariant(
 
     # v1.20.0 host_peer gate exclusion (ADDITIVE, minimal): a closer tagged
     # gate_eligible == False (a same-family blind SWE-reviewer / host_peer) can
-    # NEVER be the different-family signer that closes a mutation — even when its
+    # NEVER be the different-family signer that closes a mutation - even when its
     # model_family differs from the mutator's. The host is not independent of its
     # own orchestration, so its supplementary review augments cross-family review
     # but can never satisfy it. Only the LITERAL boolean False excludes; absent /
@@ -271,7 +271,7 @@ def check_closure_invariant(
 
     # v5 Finding 1: cross-family check (BOTH families must be present AND
     # different). actor.id difference is necessary (a node cannot close its
-    # own work) but not sufficient — same-family-different-actor doesn't
+    # own work) but not sufficient - same-family-different-actor doesn't
     # buy independence.
     cross_family = (
         not closer_gate_excluded

@@ -7,7 +7,7 @@ description: Bootstrap or check consensus-mcp in this project. Trigger when the 
 
 This skill is the entry point for setting up the **consensus-mcp** cross-AI
 consensus workflow in a project. It is invoked when the user expresses intent
-to initialize consensus-mcp — typically by typing phrases like
+to initialize consensus-mcp - typically by typing phrases like
 "consensus init", "set up consensus", or "bootstrap consensus" without a
 leading slash.
 
@@ -15,7 +15,7 @@ leading slash.
 
 1. Run the shell binary `consensus-init --from-claude-code` (installed by
    `pipx install consensus-mcp`).
-2. Surface the binary's stdout/stderr verbatim — `consensus-init` already
+2. Surface the binary's stdout/stderr verbatim - `consensus-init` already
    prints the right next-step guidance, so don't paraphrase or summarize.
 3. If `consensus-init` fails because the binary is not on PATH, tell the
    user to run `pipx install consensus-mcp` once globally.
@@ -27,34 +27,34 @@ leading slash.
 
 Use Bash to run `consensus-init --from-claude-code` from the current
 working directory. The binary detects the project root automatically
-(git rev-parse → strong markers → cwd, per iter-0031).
+(git rev-parse -> strong markers -> cwd, per iter-0031).
 
 ## Workflow modes the operator can pick (v1.14.4+)
 
 The wizard will prompt for `--workflow`. Three modes plus advisory:
 
-- **Workflow A** = `propose-converge` (DEFAULT) — all contributors
+- **Workflow A** = `propose-converge` (DEFAULT) - all contributors
   propose blindly, then converge across reviewed rounds. Use for
   design questions where reasonable people could disagree.
-- **Workflow B** = `post-review` — one AI implements, others audit.
+- **Workflow B** = `post-review` - one AI implements, others audit.
   Lightweight; use for execution per a converged design or hot-patches.
-- **Workflow C** = `autonomous-execute` (NEW) — runs to completion
+- **Workflow C** = `autonomous-execute` (NEW) - runs to completion
   overnight without operator-in-the-loop, auto-approving emergent
   scope items within an operator-pre-declared `autonomy_contract`.
   v1.14.4 ships the CONTRACT (validators, scope_check, halt-set,
   audit-ledger); the multi-iteration engine is **UNIMPLEMENTED as
-  of v1.15.2 — no committed target version**. Operators can stage
+  of v1.15.2 - no committed target version**. Operators can stage
   and validate Workflow C goal_packets; running one raises a clear
   `NotImplementedError`. Status:
   `docs/workflows/workflow-c-autonomous.md`.
-- **Advisory** — dispatches happen but no vote is load-bearing. Rare.
+- **Advisory** - dispatches happen but no vote is load-bearing. Rare.
 
 Numeric aliases (3, 4) still resolve at the CLI but emit a
 `DeprecationWarning`; will be removed in a future minor release.
 
 For the operating procedures (when to use which workflow, how to
 dispatch peers, halt conditions, etc.) the bootstrap pack also
-installs `~/.claude/skills/consensus-workflow/SKILL.md` — that
+installs `~/.claude/skills/consensus-workflow/SKILL.md` - that
 skill is the load-bearing reference and triggers automatically
 on workflow-execution intent.
 
@@ -67,15 +67,15 @@ is the ONE case where you do **not** surface the output verbatim:
 1. Consume (do not display) the `STATUS: already-configured` line. The stderr
    guidance after it is human-readable; you may show it.
 2. Present these options to the user via `AskUserQuestion`:
-   - **Leave as-is** — already set up; do nothing.
-   - **Verify / repair** — re-create any missing pieces, report diverged ones (non-destructive).
-   - **Reconfigure** — update settings, keeping current values as defaults.
-   - **Force overwrite** — discard local config edits and write fresh.
+   - **Leave as-is** - already set up; do nothing.
+   - **Verify / repair** - re-create any missing pieces, report diverged ones (non-destructive).
+   - **Reconfigure** - update settings, keeping current values as defaults.
+   - **Force overwrite** - discard local config edits and write fresh.
 3. Act on the choice **one-shot** (do NOT loop):
-   - Leave → stop; tell the user nothing changed.
-   - Verify / repair → run `consensus-init --from-claude-code --repair` once; relay its `OK:`/`REPAIRED:`/`SKIP:`/`REPORT-GLOBAL:` summary lines.
-   - Reconfigure → run `consensus-init --from-claude-code --reconfigure` once.
-   - Force overwrite → run `consensus-init --from-claude-code --force` once.
+   - Leave -> stop; tell the user nothing changed.
+   - Verify / repair -> run `consensus-init --from-claude-code --repair` once; relay its `OK:`/`REPAIRED:`/`SKIP:`/`REPORT-GLOBAL:` summary lines.
+   - Reconfigure -> run `consensus-init --from-claude-code --reconfigure` once.
+   - Force overwrite -> run `consensus-init --from-claude-code --force` once.
 
 The resolving flag stops the token from re-firing, so there is no menu loop.
 
@@ -83,14 +83,14 @@ The resolving flag stops the token from re-firing, so there is no menu loop.
 
 If `consensus-init` exits with **code 8** AND the first line of its stdout is
 exactly `STATUS: looks-like-workspace-umbrella`, the current directory is a
-*workspace folder containing git projects*, not a project — bootstrapping it
+*workspace folder containing git projects*, not a project - bootstrapping it
 would blanket every sub-project. Do NOT surface the raw error. Instead:
 
 1. Consume (do not display) the token line; the stderr guidance names the child
    projects found.
 2. Present these options via `AskUserQuestion`:
    - One option per child project found (enumerate them from the stderr list,
-     **capped at ~10**) — "Initialize `<that project>`" -> re-run
+     **capped at ~10**) - "Initialize `<that project>`" -> re-run
      `consensus-init --from-claude-code` from inside that project directory.
    - **Initialize here anyway** -> re-run `consensus-init --from-claude-code --here`.
    - **Cancel** -> stop; nothing was written.
@@ -101,14 +101,14 @@ would blanket every sub-project. Do NOT surface the raw error. Instead:
 
 - Don't reimplement any of `consensus-init`'s logic. It writes
   `.consensus/config.yaml`, `.mcp.json`, and a `.gitignore` managed
-  block — let the binary handle all of that. (The ONE exception is the
+  block - let the binary handle all of that. (The ONE exception is the
   already-configured carve-out above: exit code 4 + the
   `STATUS: already-configured` token triggers the AskUserQuestion menu,
   and the workspace-umbrella carve-out (exit code 8 + the `STATUS: looks-like-workspace-umbrella` token).)
 - Don't paraphrase the binary's output. Operators rely on the exact
   next-step text from the CLI.
 - Don't run if the user is asking a conceptual question
-  ("what is consensus-mcp?", "how does consensus work?") — that is
+  ("what is consensus-mcp?", "how does consensus work?") - that is
   not a bootstrap intent.
 
 ## Expected output flow
@@ -126,5 +126,5 @@ if your build supports it.
 ```
 
 After running, confirm the message to the user and stop. Do not
-attempt to invoke any consensus-mcp MCP tool in the same session —
+attempt to invoke any consensus-mcp MCP tool in the same session -
 they won't be available until Claude Code reloads.

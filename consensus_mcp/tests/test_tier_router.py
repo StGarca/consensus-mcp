@@ -30,7 +30,7 @@ def test_no_governance_no_floor():
 
 @pytest.mark.parametrize("bad", [None, "", "ultra", "QUICK", 2])
 def test_effective_tier_requires_explicit_declaration(bad):
-    """No inference, no silent default — a missing/invalid declaration escalates."""
+    """No inference, no silent default - a missing/invalid declaration escalates."""
     with pytest.raises(ValueError):
         tr.effective_tier(bad)
 

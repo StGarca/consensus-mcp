@@ -11,19 +11,19 @@ description: "Consensus-adapted: Use when executing implementation plans with in
 Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review.
 
 > **Consensus is the binding review gate (consensus adaptation).** The two-stage
-> review below — spec-reviewer + code-quality-reviewer subagents, driven by the
+> review below - spec-reviewer + code-quality-reviewer subagents, driven by the
 > prompts vendored in this skill (`./spec-reviewer-prompt.md`,
-> `./code-quality-reviewer-prompt.md`) — is a FAST INNER LOOP for catching defects
+> `./code-quality-reviewer-prompt.md`) - is a FAST INNER LOOP for catching defects
 > per task. It is NOT the approval. The binding sign-off is a consensus **Workflow B
 > sealed cross-family review** (`consensus:requesting-code-review`): a model family
 > DIFFERENT from the author must approve before the work counts as reviewed. Local
 > subagent review never substitutes for that cross-family closure.
 
-**Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
+**Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history - you construct exactly what they need. This also preserves your own context for coordination work.
 
 **Core principle:** Fresh subagent per task + two-stage review (spec then quality) = high quality, fast iteration
 
-**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
+**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time - they asked you to execute the plan, so execute it.
 
 ## When to Use
 
@@ -109,9 +109,9 @@ Use the least powerful model that can handle each role to conserve cost and incr
 **Architecture, design, and review tasks**: use the most capable available model.
 
 **Task complexity signals:**
-- Touches 1-2 files with a complete spec → cheap model
-- Touches multiple files with integration concerns → standard model
-- Requires design judgment or broad codebase understanding → most capable model
+- Touches 1-2 files with a complete spec -> cheap model
+- Touches multiple files with integration concerns -> standard model
+- Requires design judgment or broad codebase understanding -> most capable model
 
 ## Handling Implementer Status
 
@@ -163,7 +163,7 @@ Implementer: "Got it. Implementing now..."
   - Committed
 
 [Dispatch spec compliance reviewer]
-Spec reviewer: ✅ Spec compliant - all requirements met, nothing extra
+Spec reviewer: [ok] Spec compliant - all requirements met, nothing extra
 
 [Get git SHAs, dispatch code quality reviewer]
 Code reviewer: Strengths: Good test coverage, clean. Issues: None. Approved.
@@ -183,7 +183,7 @@ Implementer:
   - Committed
 
 [Dispatch spec compliance reviewer]
-Spec reviewer: ❌ Issues:
+Spec reviewer: [x] Issues:
   - Missing: Progress reporting (spec says "report every 100 items")
   - Extra: Added --json flag (not requested)
 
@@ -191,7 +191,7 @@ Spec reviewer: ❌ Issues:
 Implementer: Removed --json flag, added progress reporting
 
 [Spec reviewer reviews again]
-Spec reviewer: ✅ Spec compliant now
+Spec reviewer: [ok] Spec compliant now
 
 [Dispatch code quality reviewer]
 Code reviewer: Strengths: Solid. Issues (Important): Magic number (100)
@@ -200,7 +200,7 @@ Code reviewer: Strengths: Solid. Issues (Important): Magic number (100)
 Implementer: Extracted PROGRESS_INTERVAL constant
 
 [Code reviewer reviews again]
-Code reviewer: ✅ Approved
+Code reviewer: [ok] Approved
 
 [Mark Task 2 complete]
 
@@ -258,7 +258,7 @@ Done!
 - Accept "close enough" on spec compliance (spec reviewer found issues = not done)
 - Skip review loops (reviewer found issues = implementer fixes = review again)
 - Let implementer self-review replace actual review (both are needed)
-- **Start code quality review before spec compliance is ✅** (wrong order)
+- **Start code quality review before spec compliance is [ok]** (wrong order)
 - Move to next task while either review has open issues
 
 **If subagent asks questions:**

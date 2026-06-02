@@ -1,4 +1,4 @@
-"""Workflow engine — orchestrates contributors per `.consensus/config.yaml`.
+"""Workflow engine - orchestrates contributors per `.consensus/config.yaml`.
 
 Third sub-component of iter-0016. Reads project config, validates, copies
 effective config to iteration dir, then dispatches enabled contributors per
@@ -81,7 +81,7 @@ class WorkflowEngine:
     """Orchestrates an iteration end-to-end per `.consensus/config.yaml`.
 
     Construction:
-      - `adapters`: dict mapping contributor name → ContributorAdapter instance.
+      - `adapters`: dict mapping contributor name -> ContributorAdapter instance.
         For tests, pass fake adapters. For real runtime, the engine factory
         builds these from config.
       - `config`: the normalized + validated config dict (use `cfg.load(...)`
@@ -154,7 +154,7 @@ class WorkflowEngine:
                 # (alias, validators, scope_check helper, schema,
                 # autonomy_contract block) but NOT the multi-iteration
                 # auto-execution loop. The engine path remains
-                # UNIMPLEMENTED as of v1.15.2 — no committed target
+                # UNIMPLEMENTED as of v1.15.2 - no committed target
                 # version (v1.15.0/1/2 shipped other work; the earlier
                 # "lands in v1.15.0" forward-reference came due
                 # unfulfilled and was corrected in v1.15.3 rather than
@@ -190,7 +190,7 @@ class WorkflowEngine:
         outcome: IterationOutcome,
     ) -> None:
         """Post-review: claude is assumed to have already produced target;
-        non-claude contributors review it in parallel (conceptually — the
+        non-claude contributors review it in parallel (conceptually - the
         engine dispatches them sequentially within this synchronous loop,
         but they're independent of each other)."""
         enabled = self.config["contributors"]["enabled"]
@@ -240,17 +240,17 @@ class WorkflowEngine:
              convergence packet; dispatch each contributor in converge phase.
              Each contributor proposes the synthesized plan based on full
              visibility.
-          3. Evaluate convergence rule; if passed → seal final converged_plan;
+          3. Evaluate convergence rule; if passed -> seal final converged_plan;
              else loop to step 2 up to max_convergence_rounds.
         """
         # v1.30.6: a plan/synthesis-deliverable consult cannot converge in the autonomous
-        # engine — there is no host in the loop to merge proposals into ONE plan and revise
+        # engine - there is no host in the loop to merge proposals into ONE plan and revise
         # it. Fail LOUD here rather than bundle-vote forever. Plan consults use Path A.
         if self._requires_synthesis(goal_packet_path):
             raise WorkflowError(
                 "this consult declares convergence.requires_synthesis: the deliverable is a "
                 "single synthesized plan, which the autonomous engine (Path B / run_iteration) "
-                "cannot author — there is no host in the loop. Converge it via Path A: author "
+                "cannot author - there is no host in the loop. Converge it via Path A: author "
                 "converged-plan.yaml, dispatch contributors to review THAT plan "
                 "(--review-target converged-plan.yaml), then evaluate_plan_convergence + "
                 "seal_plan_iteration. See docs/workflows/path-a-plan-convergence.md."
@@ -323,7 +323,7 @@ class WorkflowEngine:
         outcome.error = (
             f"workflow #4: convergence not reached after {max_rounds} rounds. "
             "If the deliverable is a single synthesized artifact (e.g. a plan), the "
-            "bundle-vote cannot converge — declare convergence.requires_synthesis and use "
+            "bundle-vote cannot converge - declare convergence.requires_synthesis and use "
             "the Path A flow (docs/workflows/path-a-plan-convergence.md)."
         )
 
@@ -383,7 +383,7 @@ class WorkflowEngine:
         """Bundle blind proposals into a convergence review-packet.
 
         contributor_weights (optional, ADVISORY): reorders proposals for synthesis
-        reading-ORDER only — a stable permutation that never drops a proposal and is
+        reading-ORDER only - a stable permutation that never drops a proposal and is
         NEVER seen by _evaluate_convergence (pass/fail). Convergence is therefore
         byte-identical regardless of weights (weights-off equivalence). Default None
         = identity order (no behavior change)."""
@@ -490,10 +490,10 @@ class WorkflowEngine:
         # H-7: under TIMEOUT_BLOCKING the operator explicitly chose to treat a
         # non-response as a block, so a timeout MUST veto even under majority
         # rules. We narrowly add ONLY the timeout-block votes to the majority
-        # veto (Option B) — a responsive soft-no (goal_satisfied=False with NO
+        # veto (Option B) - a responsive soft-no (goal_satisfied=False with NO
         # formal blocking_objection) is intentionally NOT a veto under majority,
-        # because that is precisely what majority rules mean. (Option A —
-        # vetoing on `n_block == 0` — would let a soft-no override the majority.)
+        # because that is precisely what majority rules mean. (Option A -
+        # vetoing on `n_block == 0` - would let a soft-no override the majority.)
         timeout_block = timed_out if timeout_policy == cfg.TIMEOUT_BLOCKING else []
         converged: bool
         rationale: str
@@ -537,11 +537,11 @@ class WorkflowEngine:
         """Read the OPTIONAL orchestrator-authored convention.
 
         v1.15.1 / converged plan Q1: the convention blocks enter through
-        the ONE channel that already reaches seal time — a file in
+        the ONE channel that already reaches seal time - a file in
         `iteration_dir` (every artifact already lives here; no new
         parameter is threaded through run_iteration / the MCP tool). The
         validated blocks are then sealed INTO converged-plan.yaml (same
-        write, same hash) — not a loose untracked sidecar.
+        write, same hash) - not a loose untracked sidecar.
         """
         path = iteration_dir / "convention-input.yaml"
         if not path.exists():
@@ -599,7 +599,7 @@ class WorkflowEngine:
         """Write converged-plan.yaml summarizing the converged round.
 
         v1.15.1: ingests the optional orchestrator-authored convention,
-        runs the structural/consequence validator, and — fail-closed —
+        runs the structural/consequence validator, and - fail-closed -
         does NOT write converged-plan.yaml when enforcement hard-rejects.
         """
         plan = {
@@ -629,7 +629,7 @@ class WorkflowEngine:
         out = iteration_dir / "converged-plan.yaml"
 
         # codex-rev-001: every plan SEALED by the engine is new (v1.15.1+).
-        # A missing convention-input is therefore NOT "legacy" — it is a
+        # A missing convention-input is therefore NOT "legacy" - it is a
         # new convergence missing its blocks, validated under the
         # configured level so safety/strict still hard-reject and graduated
         # still annotates. `enforcement: doctrine-only` is exclusively a
@@ -661,7 +661,7 @@ class WorkflowEngine:
         # distinguish a v1.15.1 seal from a true pre-v1.15.1 legacy plan).
         # codex-rev-002 (pass-2): when a convention IS present, stamp its
         # version VERBATIM (never rewrite an invalid/foreign version to the
-        # current one — the validator already flagged it; a misleading
+        # current one - the validator already flagged it; a misleading
         # top-level field would undo pass-1 codex-rev-003). The
         # current-version default applies ONLY to the absent-convention
         # case, which is a legitimate v1.15.1 engine seal with no input.
@@ -682,7 +682,7 @@ class WorkflowEngine:
         }
         # codex-rev-001 (pass-2) transparency: the converged plan's q4/q5
         # DELIBERATELY makes graduated default = warn+annotate for a new
-        # non-safety convergence missing blocks (papercut-avoidance — an
+        # non-safety convergence missing blocks (papercut-avoidance - an
         # explicit named risk in the consult). That is NOT a silent bypass:
         # surface it loudly so an operator/outcome-reader cannot mistake an
         # annotated incomplete seal for a complete one.
@@ -713,7 +713,7 @@ class WorkflowEngine:
     ) -> ConvergenceOutcome:
         """Path A convergence evaluation: did contributors approve the ONE synthesized plan?
 
-        Vote-counting is identical to the engine's convergence rule — the only difference
+        Vote-counting is identical to the engine's convergence rule - the only difference
         from Path B is WHAT was reviewed (the host-authored plan, not a proposal bundle).
         Thin public wrapper over _evaluate_convergence so the host orchestrator has a named,
         intention-revealing entry point."""

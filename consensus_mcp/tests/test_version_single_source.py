@@ -2,7 +2,7 @@
 
 Origin: `consensus_mcp/__init__.py.__version__` was frozen at `"2.0.0"` (the
 initial-commit internal name) while `pyproject.toml` tracked the public `1.33.x`
-line — three different version strings across the package (the editable dist
+line - three different version strings across the package (the editable dist
 metadata was a stale fourth). The reconciliation makes `__init__.__version__`
 the ONE source and has `pyproject` derive its version from it via setuptools'
 `dynamic`/`attr`, so the two can no longer drift by construction.
@@ -39,7 +39,7 @@ def test_pyproject_derives_version_from_init():
     data = _pyproject()
     project = data["project"]
     assert "version" not in project, (
-        "pyproject [project] still has a static `version` literal — it must be "
+        "pyproject [project] still has a static `version` literal - it must be "
         "`dynamic` so it derives from consensus_mcp.__version__"
     )
     assert "version" in project.get("dynamic", []), \

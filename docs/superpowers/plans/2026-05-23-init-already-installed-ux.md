@@ -1,10 +1,10 @@
-# Graceful "already installed" init UX — Implementation Plan
+# Graceful "already installed" init UX - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Re-running `consensus init` on an already-bootstrapped project shows a clean choice (leave / reconfigure / force) instead of a raw exit-4 error — an interactive menu in a real terminal, a skill-presented menu under Claude Code.
+**Goal:** Re-running `consensus init` on an already-bootstrapped project shows a clean choice (leave / reconfigure / force) instead of a raw exit-4 error - an interactive menu in a real terminal, a skill-presented menu under Claude Code.
 
-**Architecture:** The existing-config guard in `_init_wizard.py` becomes install-aware: a TTY gets an interactive menu; a non-TTY (Claude Code / CI / pipe / explicit non-interactive) emits a stable, machine-detectable contract — `STATUS: already-configured` on stdout line 1 + human guidance on stderr + exit 4 — which the `consensus` skill detects to present its own `AskUserQuestion` menu and re-invoke once with the chosen flag.
+**Architecture:** The existing-config guard in `_init_wizard.py` becomes install-aware: a TTY gets an interactive menu; a non-TTY (Claude Code / CI / pipe / explicit non-interactive) emits a stable, machine-detectable contract - `STATUS: already-configured` on stdout line 1 + human guidance on stderr + exit 4 - which the `consensus` skill detects to present its own `AskUserQuestion` menu and re-invoke once with the chosen flag.
 
 **Tech Stack:** Python 3.11+ (stdlib only), pytest. Spec: `docs/superpowers/specs/2026-05-23-init-already-installed-ux-design.md`.
 
@@ -14,7 +14,7 @@ VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python
 ```
 Run all init tests with: `$VPY -m pytest consensus_mcp/tests/ -k init -q`
 
-**Do NOT hand-edit** `build/lib/consensus_mcp/...` — it is a generated build artifact.
+**Do NOT hand-edit** `build/lib/consensus_mcp/...` - it is a generated build artifact.
 
 ---
 
@@ -23,13 +23,13 @@ Run all init tests with: `$VPY -m pytest consensus_mcp/tests/ -k init -q`
 - **Modify** `consensus_mcp/_init_wizard.py`
   - Add module constant `ALREADY_CONFIGURED_TOKEN` (the contract token).
   - Add helper `_prompt_existing_config_action()` (the TTY menu).
-  - Replace the existing-config guard (currently ~lines 1733–1739) with the install-aware branch.
+  - Replace the existing-config guard (currently ~lines 1733-1739) with the install-aware branch.
   - Add `--force` > `--reconfigure` precedence normalization.
-- **Modify** `consensus_mcp/claude_extensions/skills/consensus/SKILL.md` — the one carve-out from "surface verbatim".
-- **Modify** `consensus_mcp/claude_extensions/commands/consensus-init.md` — mirror the carve-out.
-- **Modify** `consensus_mcp/tests/test_init_wizard.py` — update 3 legacy tests to the new contract.
-- **Create** `consensus_mcp/tests/test_init_wizard_already_configured.py` — helper unit tests, gate integration tests, and the mandatory contract regression test.
-- **Modify** `CHANGELOG.md` — feature entry + verify/repair follow-up note (consult Q3c).
+- **Modify** `consensus_mcp/claude_extensions/skills/consensus/SKILL.md` - the one carve-out from "surface verbatim".
+- **Modify** `consensus_mcp/claude_extensions/commands/consensus-init.md` - mirror the carve-out.
+- **Modify** `consensus_mcp/tests/test_init_wizard.py` - update 3 legacy tests to the new contract.
+- **Create** `consensus_mcp/tests/test_init_wizard_already_configured.py` - helper unit tests, gate integration tests, and the mandatory contract regression test.
+- **Modify** `CHANGELOG.md` - feature entry + verify/repair follow-up note (consult Q3c).
 
 ---
 
@@ -96,7 +96,7 @@ def test_prompt_existing_config_action_ctrl_c_propagates(tmp_path, monkeypatch):
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard_already_configured.py -q`
-Expected: FAIL — `AttributeError: module ... has no attribute 'ALREADY_CONFIGURED_TOKEN'` / `_prompt_existing_config_action`.
+Expected: FAIL - `AttributeError: module ... has no attribute 'ALREADY_CONFIGURED_TOKEN'` / `_prompt_existing_config_action`.
 
 - [ ] **Step 3: Add the constant and helper**
 
@@ -123,9 +123,9 @@ def _prompt_existing_config_action(config_path: Path) -> str:
     (caller maps it to exit 1), matching the rest of the wizard.
     """
     print(f"consensus-mcp is already configured here: {config_path}")
-    print("  [1] Leave as-is — no changes            (default)")
-    print("  [2] Reconfigure — re-prompt, keep current settings as defaults, show diff")
-    print("  [3] Force overwrite — discard local config edits, write fresh")
+    print("  [1] Leave as-is - no changes            (default)")
+    print("  [2] Reconfigure - re-prompt, keep current settings as defaults, show diff")
+    print("  [3] Force overwrite - discard local config edits, write fresh")
     while True:
         try:
             raw = input("Choose [1/2/3, default 1]: ").strip()
@@ -157,7 +157,7 @@ git commit -m "feat(init): add already-configured token + interactive menu helpe
 ### Task 2: Install-aware existing-config gate
 
 **Files:**
-- Modify: `consensus_mcp/_init_wizard.py` (the guard at ~lines 1733–1739)
+- Modify: `consensus_mcp/_init_wizard.py` (the guard at ~lines 1733-1739)
 - Modify: `consensus_mcp/tests/test_init_wizard.py` (legacy tests at ~lines 134, 162, 432)
 - Test: `consensus_mcp/tests/test_init_wizard_already_configured.py` (append integration tests)
 
@@ -190,7 +190,7 @@ In the guard-runs-first test (~line 432, `rc = wiz.main([])` with the `_explode`
     assert out.splitlines()[0] == wiz.ALREADY_CONFIGURED_TOKEN
 ```
 
-(That test must already import `wiz`; it does. The `_explode` input stub still must NOT be called — the non-TTY branch never prompts.)
+(That test must already import `wiz`; it does. The `_explode` input stub still must NOT be called - the non-TTY branch never prompts.)
 
 - [ ] **Step 2: Append integration tests for the new gate**
 
@@ -287,7 +287,7 @@ def test_tty_menu_ctrl_c_returns_1(tmp_path, capsys, monkeypatch):
 - [ ] **Step 3: Run the new + legacy tests to verify they fail**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard_already_configured.py consensus_mcp/tests/test_init_wizard.py -q`
-Expected: FAIL — the new integration tests and the 3 updated legacy tests fail because the gate still prints "error: ... already exists" with no token.
+Expected: FAIL - the new integration tests and the 3 updated legacy tests fail because the gate still prints "error: ... already exists" with no token.
 
 - [ ] **Step 4: Replace the gate with the install-aware branch**
 
@@ -324,7 +324,7 @@ with:
             print(
                 f"consensus-mcp is already configured at {config_path}. "
                 f"Re-run with --reconfigure to update (keeps current settings as "
-                f"defaults) or --force to overwrite — or run "
+                f"defaults) or --force to overwrite - or run "
                 f"`consensus init --reconfigure` in an interactive terminal.",
                 file=sys.stderr,
             )
@@ -386,7 +386,7 @@ def test_force_beats_reconfigure(tmp_path, capsys, monkeypatch):
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard_already_configured.py::test_force_beats_reconfigure -q`
-Expected: FAIL — the reconfigure diff is printed because both flags are honored.
+Expected: FAIL - the reconfigure diff is printed because both flags are honored.
 
 - [ ] **Step 3: Add the precedence normalization**
 
@@ -433,21 +433,21 @@ def _ext_dir():
 
 def test_contract_token_present_in_skill_and_command():
     """The skill/command matchers MUST stay in sync with the binary token.
-    If the token string changes, these docs must change too — this test fails
+    If the token string changes, these docs must change too - this test fails
     on drift, which is the whole point of the binary<->skill contract."""
     token = wiz.ALREADY_CONFIGURED_TOKEN
     skill = (_ext_dir() / "skills" / "consensus" / "SKILL.md").read_text(encoding="utf-8")
     command = (_ext_dir() / "commands" / "consensus-init.md").read_text(encoding="utf-8")
     assert token in skill, "SKILL.md must reference the exact already-configured token"
     assert token in command, "consensus-init.md must reference the exact token"
-    # exit code 4 is the paired half of the contract — keep it documented too.
+    # exit code 4 is the paired half of the contract - keep it documented too.
     assert "exit code 4" in skill.lower() or "exits with code 4" in skill.lower()
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard_already_configured.py::test_contract_token_present_in_skill_and_command -q`
-Expected: FAIL — the token is not yet in SKILL.md / consensus-init.md.
+Expected: FAIL - the token is not yet in SKILL.md / consensus-init.md.
 
 - [ ] **Step 3: Add the carve-out to SKILL.md**
 
@@ -463,13 +463,13 @@ is the ONE case where you do **not** surface the output verbatim:
 1. Consume (do not display) the `STATUS: already-configured` line. The stderr
    guidance after it is human-readable; you may show it.
 2. Present these three options to the user via `AskUserQuestion`:
-   - **Leave as-is** — already set up; do nothing.
-   - **Reconfigure** — update settings, keeping current values as defaults.
-   - **Force overwrite** — discard local config edits and write fresh.
+   - **Leave as-is** - already set up; do nothing.
+   - **Reconfigure** - update settings, keeping current values as defaults.
+   - **Force overwrite** - discard local config edits and write fresh.
 3. Act on the choice **one-shot** (do NOT loop):
-   - Leave → stop; tell the user nothing changed.
-   - Reconfigure → run `consensus-init --from-claude-code --reconfigure` once.
-   - Force overwrite → run `consensus-init --from-claude-code --force` once.
+   - Leave -> stop; tell the user nothing changed.
+   - Reconfigure -> run `consensus-init --from-claude-code --reconfigure` once.
+   - Force overwrite -> run `consensus-init --from-claude-code --force` once.
 
 The resolving flag stops the token from re-firing, so there is no menu loop.
 ```
@@ -479,7 +479,7 @@ Then update the first bullet under `## What NOT to do` from:
 ```markdown
 - Don't reimplement any of `consensus-init`'s logic. It writes
   `.consensus/config.yaml`, `.mcp.json`, and a `.gitignore` managed
-  block — let the binary handle all of that.
+  block - let the binary handle all of that.
 ```
 
 to:
@@ -487,7 +487,7 @@ to:
 ```markdown
 - Don't reimplement any of `consensus-init`'s logic. It writes
   `.consensus/config.yaml`, `.mcp.json`, and a `.gitignore` managed
-  block — let the binary handle all of that. (The ONE exception is the
+  block - let the binary handle all of that. (The ONE exception is the
   already-configured carve-out above: exit code 4 + the
   `STATUS: already-configured` token triggers the AskUserQuestion menu.)
 ```
@@ -499,7 +499,7 @@ In `consensus_mcp/claude_extensions/commands/consensus-init.md`, insert before t
 ```markdown
 **Already configured:** if the binary exits with code 4 and the first stdout
 line is exactly `STATUS: already-configured`, the project is already set up. Do
-not surface the raw error — consume that token line and present three options
+not surface the raw error - consume that token line and present three options
 via `AskUserQuestion` (leave as-is / reconfigure / force overwrite), then
 re-invoke `consensus-init --from-claude-code --reconfigure` or `--force` once
 (one-shot; "leave" does nothing).
@@ -538,9 +538,9 @@ Insert at the very top of `CHANGELOG.md`, above `## 1.28.1 - 2026-05-23` (the op
 presents the same three choices.
 
 ### Added
-- The `_init_wizard` existing-config guard is now install-aware. TTY → an
+- The `_init_wizard` existing-config guard is now install-aware. TTY -> an
   interactive leave/reconfigure/force menu. Non-TTY (`--from-claude-code`, CI,
-  a pipe, or `--non-interactive`/`--accept-defaults`) → exit 4 plus a stable
+  a pipe, or `--non-interactive`/`--accept-defaults`) -> exit 4 plus a stable
   `STATUS: already-configured` token on the first line of stdout and
   human-readable guidance on stderr. The `consensus` skill and `consensus-init`
   command detect that contract and present an `AskUserQuestion` menu, then
@@ -552,7 +552,7 @@ presents the same three choices.
 - "Leave as-is" is a pure no-op: it does NOT verify or repair a partially
   broken install (e.g. a missing `.mcp.json` or a dead enforcement hook). A
   future release will add an explicit "verify/repair" option. (4-AI consult
-  Q3c — `iteration-init-already-installed-ux-2026-05-23`.)
+  Q3c - `iteration-init-already-installed-ux-2026-05-23`.)
 ```
 
 - [ ] **Step 2: Commit**
@@ -589,15 +589,15 @@ Run: `git log --oneline -6` and confirm the feature commits are present, then re
 
 ## Self-review (against the spec)
 
-- **Q1a keep exit 4** → Task 2 gate returns 4; legacy tests updated (Task 2 Step 1). ✓
-- **Q2a exit 4 + stable token, stdout/stderr split** → constant (Task 1), gate prints token to stdout line 1 + guidance to stderr (Task 2), contract test (Task 4). ✓
-- **Q3c pure no-op + follow-up note** → "leave" returns 0 without writing (Task 2 `test_tty_menu_leave...`); CHANGELOG follow-up note (Task 5). ✓
-- **Ordering fix** → TTY-awareness merged *into* the guard (Task 2 Step 4). ✓
-- **One-shot / no-loop** → token emitted only when no resolving flag; skill carve-out re-invokes once (Task 2 comment + `test_token_absent_when_*` + Task 4 SKILL text). ✓
-- **Slash-command parity** → Task 4 Step 4. ✓
-- **TTY EOF→leave, Ctrl-C→exit 1** → Task 1 helper + Task 2 `test_tty_menu_ctrl_c_returns_1`. ✓
-- **--dry-run defined** → Task 2 `test_dry_run_existing_non_tty_emits_token`; TTY dry-run shows menu (gate has no dry-run special-case). ✓
-- **--force > --reconfigure** → Task 3. ✓
-- **Contract regression test mandatory** → Task 4. ✓
-- **build/lib not edited** → noted in header; no task touches it. ✓
+- **Q1a keep exit 4** -> Task 2 gate returns 4; legacy tests updated (Task 2 Step 1). [ok]
+- **Q2a exit 4 + stable token, stdout/stderr split** -> constant (Task 1), gate prints token to stdout line 1 + guidance to stderr (Task 2), contract test (Task 4). [ok]
+- **Q3c pure no-op + follow-up note** -> "leave" returns 0 without writing (Task 2 `test_tty_menu_leave...`); CHANGELOG follow-up note (Task 5). [ok]
+- **Ordering fix** -> TTY-awareness merged *into* the guard (Task 2 Step 4). [ok]
+- **One-shot / no-loop** -> token emitted only when no resolving flag; skill carve-out re-invokes once (Task 2 comment + `test_token_absent_when_*` + Task 4 SKILL text). [ok]
+- **Slash-command parity** -> Task 4 Step 4. [ok]
+- **TTY EOF->leave, Ctrl-C->exit 1** -> Task 1 helper + Task 2 `test_tty_menu_ctrl_c_returns_1`. [ok]
+- **--dry-run defined** -> Task 2 `test_dry_run_existing_non_tty_emits_token`; TTY dry-run shows menu (gate has no dry-run special-case). [ok]
+- **--force > --reconfigure** -> Task 3. [ok]
+- **Contract regression test mandatory** -> Task 4. [ok]
+- **build/lib not edited** -> noted in header; no task touches it. [ok]
 - No placeholders; types/names consistent (`ALREADY_CONFIGURED_TOKEN`, `_prompt_existing_config_action` used identically across tasks).

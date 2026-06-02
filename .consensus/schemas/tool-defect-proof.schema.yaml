@@ -5,7 +5,7 @@
 #
 # Per codex-meta-author-3 sealed proposal (2026-05-27, iteration
 # iteration-claude-screwup-prevention-meta-2026-05-27): the artifact uses a
-# constrained "simple YAML" shape — top-level "key: value" pairs only, no
+# constrained "simple YAML" shape - top-level "key: value" pairs only, no
 # nesting, no lists. The hook validator
 # (.claude/hooks/tool-defect-gate.py) parses this with stdlib-only
 # (no PyYAML dependency) to keep the gate self-contained and unambiguous.
@@ -45,7 +45,7 @@ field_descriptions:
     behavior. Must be derivable from a docstring, README, or test.
   reproduction_command: |
     A copy-pasteable command that reproduces the defect INDEPENDENTLY of
-    Claude's session — i.e., does not depend on orchestrator state.
+    Claude's session - i.e., does not depend on orchestrator state.
   independent_observer_id: |
     Identifier of the entity that produced this artifact. MUST NOT be the
     orchestrator Claude. The Tooling Defect Diagnoser subagent ID is the

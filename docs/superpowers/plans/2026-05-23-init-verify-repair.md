@@ -2,25 +2,25 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `consensus init --repair` — a deterministic, non-destructive verify+repair that makes a partially-broken install healthy (re-create missing pieces, report diverged ones), surfaced as a CLI flag, a 4th existing-config menu option, and a skill carve-out.
+**Goal:** Add `consensus init --repair` - a deterministic, non-destructive verify+repair that makes a partially-broken install healthy (re-create missing pieces, report diverged ones), surfaced as a CLI flag, a 4th existing-config menu option, and a skill carve-out.
 
-**Architecture:** A new verify/repair engine in `consensus_mcp/_init_wizard.py` (where all the install primitives already live — no new module, no import cycle) that *composes the existing non-destructive installers* (`_write_mcp_json`, `update_gitignore`, `_install_project_agents`, `_provision_instruction_files`) plus a read-only global-enforcement detector, classifies each of 6 components, emits version-stable summary lines, and returns a 4-value exit code (0/2/3/7). `cmd_init` gains a `--repair` flag + handler + a gate carve-out so repair doesn't trip the v1.29.0 already-configured gate.
+**Architecture:** A new verify/repair engine in `consensus_mcp/_init_wizard.py` (where all the install primitives already live - no new module, no import cycle) that *composes the existing non-destructive installers* (`_write_mcp_json`, `update_gitignore`, `_install_project_agents`, `_provision_instruction_files`) plus a read-only global-enforcement detector, classifies each of 6 components, emits version-stable summary lines, and returns a 4-value exit code (0/2/3/7). `cmd_init` gains a `--repair` flag + handler + a gate carve-out so repair doesn't trip the v1.29.0 already-configured gate.
 
 **Tech Stack:** Python 3.11+ (stdlib only), pytest.
 
 **Spec:** `docs/superpowers/specs/2026-05-23-init-verify-repair-design.md` (read it; the 6-component table + exit taxonomy + contract are authoritative).
 
-**Test runner:** `VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python` → `$VPY -m pytest …` from repo root. **Do NOT edit `build/lib/`.**
+**Test runner:** `VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
 
 **Reuse map (exact, in `consensus_mcp/_init_wizard.py`):**
-- `_detect_repo_root()` L62 · `_resolve_config_path(args, repo_root)` L843 · `_resolve_claude_home()` L116 · `_resolve_mcp_json_path(repo_root)` L659
-- `.mcp.json`: `_load_existing_mcp_json(path) -> (dict|None, str|None)` L680 · `_build_consensus_mcp_entry(command, args, state_root, project_root) -> dict` L663 · `_resolve_mcp_command(explicit) -> (str, list[str], bool)` L612 · `_write_mcp_json(repo_root, state_root, project_root, command, args) -> (status_str, Path)` L781
-- `.gitignore`: `update_gitignore(repo_root) -> bool` L1525 · `GITIGNORE_OPEN_MARKER` L53
-- agents: `_install_project_agents(repo_root, force) -> list[str]` L270 · `_PROJECT_AGENT_FILES` L259 · `_agents_source_root()` L265
-- instructions: `_provision_instruction_files(selection, profiles, repo_root) -> list[Path]` L1200 · `INSTRUCTION_BEGIN_MARKER` L871
-- enforcement (#6, read-only): `_resolve_settings_json_path(claude_home)` L371 · `_load_existing_settings_json(path) -> (dict, str|None)` L485 · `_build_consensus_hook_groups(claude_home) -> dict[str,list[dict]]` L408 · `_installed_hook_script_path(claude_home, script)` L375
-- config: `cfg.load(path)` raises `cfg.ConfigValidationError` · `cfg.default_config()`
-- gate + menu: existing-config gate in `cmd_init` (the `if config_path.exists() and not (args.reconfigure or args.force):` block) · `_prompt_existing_config_action(config_path)` L1629 · arg parser L2061+
+- `_detect_repo_root()` L62 - `_resolve_config_path(args, repo_root)` L843 - `_resolve_claude_home()` L116 - `_resolve_mcp_json_path(repo_root)` L659
+- `.mcp.json`: `_load_existing_mcp_json(path) -> (dict|None, str|None)` L680 - `_build_consensus_mcp_entry(command, args, state_root, project_root) -> dict` L663 - `_resolve_mcp_command(explicit) -> (str, list[str], bool)` L612 - `_write_mcp_json(repo_root, state_root, project_root, command, args) -> (status_str, Path)` L781
+- `.gitignore`: `update_gitignore(repo_root) -> bool` L1525 - `GITIGNORE_OPEN_MARKER` L53
+- agents: `_install_project_agents(repo_root, force) -> list[str]` L270 - `_PROJECT_AGENT_FILES` L259 - `_agents_source_root()` L265
+- instructions: `_provision_instruction_files(selection, profiles, repo_root) -> list[Path]` L1200 - `INSTRUCTION_BEGIN_MARKER` L871
+- enforcement (#6, read-only): `_resolve_settings_json_path(claude_home)` L371 - `_load_existing_settings_json(path) -> (dict, str|None)` L485 - `_build_consensus_hook_groups(claude_home) -> dict[str,list[dict]]` L408 - `_installed_hook_script_path(claude_home, script)` L375
+- config: `cfg.load(path)` raises `cfg.ConfigValidationError` - `cfg.default_config()`
+- gate + menu: existing-config gate in `cmd_init` (the `if config_path.exists() and not (args.reconfigure or args.force):` block) - `_prompt_existing_config_action(config_path)` L1629 - arg parser L2061+
 
 ---
 
@@ -28,13 +28,13 @@
 
 - **Modify** `consensus_mcp/_init_wizard.py`:
   - Add summary-line prefix constants + a `RepairComponent` result structure + `_repair_exit_code(...)` (Task 1).
-  - Add `_verify_repair_install(repo_root, *, dry_run, claude_home)` engine + per-component helpers (Tasks 2–4).
+  - Add `_verify_repair_install(repo_root, *, dry_run, claude_home)` engine + per-component helpers (Tasks 2-4).
   - Add `--repair` arg, the `--repair` handler in `cmd_init`, and the gate carve-out (Task 5).
   - Extend `_prompt_existing_config_action` to a 4th "repair" option + map it in the gate (Task 6).
-- **Create** `consensus_mcp/tests/test_init_repair.py` — engine + component + exit-code tests (Tasks 1–4).
-- **Modify** `consensus_mcp/tests/test_init_wizard_already_configured.py` — `--repair` CLI/gate tests + menu 4th option (Tasks 5–6).
-- **Modify** `consensus_mcp/claude_extensions/skills/consensus/SKILL.md` + `commands/consensus-init.md` — verify/repair menu option (Task 7).
-- **Modify** `CHANGELOG.md` — 1.29.1 entry (Task 8).
+- **Create** `consensus_mcp/tests/test_init_repair.py` - engine + component + exit-code tests (Tasks 1-4).
+- **Modify** `consensus_mcp/tests/test_init_wizard_already_configured.py` - `--repair` CLI/gate tests + menu 4th option (Tasks 5-6).
+- **Modify** `consensus_mcp/claude_extensions/skills/consensus/SKILL.md` + `commands/consensus-init.md` - verify/repair menu option (Task 7).
+- **Modify** `CHANGELOG.md` - 1.29.1 entry (Task 8).
 
 ---
 
@@ -51,7 +51,7 @@ import consensus_mcp._init_wizard as wiz
 
 
 def test_summary_prefixes_are_stable():
-    # The skill parses these — they are a contract.
+    # The skill parses these - they are a contract.
     assert wiz.REPAIR_OK == "OK:"
     assert wiz.REPAIR_FIXED == "REPAIRED:"
     assert wiz.REPAIR_SKIP == "SKIP:"
@@ -89,7 +89,7 @@ def test_exit_code_global_dead_is_7():
 
 
 def test_exit_code_config_outranks_diverged():
-    # config missing/invalid is the prerequisite failure → wins over 7.
+    # config missing/invalid is the prerequisite failure -> wins over 7.
     comps = [wiz.RepairComponent("config", "missing_config"),
              wiz.RepairComponent(".gitignore", "skipped_diverged")]
     assert wiz._repair_exit_code(comps) == 2
@@ -98,7 +98,7 @@ def test_exit_code_config_outranks_diverged():
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_repair.py -q`
-Expected: FAIL — `AttributeError` (`REPAIR_OK` / `RepairComponent` / `_repair_exit_code` undefined).
+Expected: FAIL - `AttributeError` (`REPAIR_OK` / `RepairComponent` / `_repair_exit_code` undefined).
 
 - [ ] **Step 3: Implement**
 
@@ -108,7 +108,7 @@ In `consensus_mcp/_init_wizard.py`, add (e.g. just above `def _prompt_existing_c
 from dataclasses import dataclass
 
 # v1.29.1 (verify/repair consult): version-STABLE summary prefixes. The consensus
-# skill parses these to relay repair results — treat as a contract (a regression
+# skill parses these to relay repair results - treat as a contract (a regression
 # test pins them), like ALREADY_CONFIGURED_TOKEN.
 REPAIR_OK = "OK:"            # present and healthy
 REPAIR_FIXED = "REPAIRED:"   # was missing, recreated
@@ -164,7 +164,7 @@ git commit -m "feat(repair): repair result vocabulary + exit-code aggregation"
 
 Each component check returns a `RepairComponent` and appends a summary line. config (#1) is NOT repairable (report-only); `.mcp.json` (#2) repairs when missing, reports when diverged.
 
-- [ ] **Step 1: Write the failing tests** — append to `test_init_repair.py`:
+- [ ] **Step 1: Write the failing tests** - append to `test_init_repair.py`:
 
 ```python
 import yaml
@@ -223,28 +223,28 @@ def test_check_mcp_present_ok(tmp_path, monkeypatch):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_repair.py -q`
-Expected: FAIL — `_repair_check_config` / `_repair_check_mcp` undefined.
+Expected: FAIL - `_repair_check_config` / `_repair_check_mcp` undefined.
 
-- [ ] **Step 3: Implement** — add to `consensus_mcp/_init_wizard.py`:
+- [ ] **Step 3: Implement** - add to `consensus_mcp/_init_wizard.py`:
 
 ```python
 def _repair_check_config(config_path: Path) -> tuple[RepairComponent, str]:
-    """#1 config.yaml — NOT repairable (can't synthesize panel choices)."""
+    """#1 config.yaml - NOT repairable (can't synthesize panel choices)."""
     if not config_path.exists():
         return (RepairComponent("config.yaml", "missing_config"),
-                f"{REPAIR_SKIP} config.yaml missing — run `consensus init` "
+                f"{REPAIR_SKIP} config.yaml missing - run `consensus init` "
                 f"(cannot synthesize your panel choices)")
     try:
         cfg.load(config_path)
     except cfg.ConfigValidationError as exc:
         return (RepairComponent("config.yaml", "invalid_config"),
-                f"{REPAIR_SKIP} config.yaml invalid ({exc}) — run "
+                f"{REPAIR_SKIP} config.yaml invalid ({exc}) - run "
                 f"`consensus init --reconfigure`")
     return (RepairComponent("config.yaml", "ok"), f"{REPAIR_OK} config.yaml")
 
 
 def _repair_check_mcp(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#2 .mcp.json — repair when the consensus-mcp entry is missing; report when
+    """#2 .mcp.json - repair when the consensus-mcp entry is missing; report when
     present-but-diverged; ok when present-and-matching."""
     mcp_path = _resolve_mcp_json_path(repo_root)
     existing, _ = _load_existing_mcp_json(mcp_path)
@@ -265,7 +265,7 @@ def _repair_check_mcp(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponen
     return (RepairComponent(".mcp.json", "ok"), f"{REPAIR_OK} .mcp.json")
 ```
 
-NOTE for implementer: confirm `_build_consensus_mcp_entry`'s exact `project_root`/`state_root` argument semantics by reading L663–L700 and mirror what `cmd_init` passes at the `_write_mcp_json` call (~L1948); the equality check `have != expected` must compare the same shape the writer produces. If `_resolve_mcp_command(None)` requires a different sentinel for "no explicit command", match `cmd_init`'s call.
+NOTE for implementer: confirm `_build_consensus_mcp_entry`'s exact `project_root`/`state_root` argument semantics by reading L663-L700 and mirror what `cmd_init` passes at the `_write_mcp_json` call (~L1948); the equality check `have != expected` must compare the same shape the writer produces. If `_resolve_mcp_command(None)` requires a different sentinel for "no explicit command", match `cmd_init`'s call.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -287,7 +287,7 @@ git commit -m "feat(repair): config + .mcp.json component checks"
 
 These three repair-when-missing using the existing installers. agents (#4) already SKIPs diverged internally.
 
-- [ ] **Step 1: Write the failing tests** — append:
+- [ ] **Step 1: Write the failing tests** - append:
 
 ```python
 def test_check_gitignore_missing_repairs(tmp_path, monkeypatch):
@@ -337,13 +337,13 @@ def test_check_instructions_missing_repairs(tmp_path, monkeypatch):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_repair.py -q`
-Expected: FAIL — the three `_repair_check_*` undefined.
+Expected: FAIL - the three `_repair_check_*` undefined.
 
-- [ ] **Step 3: Implement** — add to `consensus_mcp/_init_wizard.py`:
+- [ ] **Step 3: Implement** - add to `consensus_mcp/_init_wizard.py`:
 
 ```python
 def _repair_check_gitignore(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#3 .gitignore managed block — re-add when absent."""
+    """#3 .gitignore managed block - re-add when absent."""
     gi = repo_root / ".gitignore"
     text = gi.read_text(encoding="utf-8") if gi.exists() else ""
     if GITIGNORE_OPEN_MARKER in text:
@@ -354,7 +354,7 @@ def _repair_check_gitignore(repo_root: Path, *, dry_run: bool) -> tuple[RepairCo
 
 
 def _repair_check_agents(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#4 .claude/agents/ — re-copy missing subagent files (installer SKIPs diverged)."""
+    """#4 .claude/agents/ - re-copy missing subagent files (installer SKIPs diverged)."""
     agents_dir = repo_root / ".claude" / "agents"
     missing = [f for f in _PROJECT_AGENT_FILES if not (agents_dir / f).exists()]
     if not missing:
@@ -366,7 +366,7 @@ def _repair_check_agents(repo_root: Path, *, dry_run: bool) -> tuple[RepairCompo
 
 
 def _repair_check_instructions(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponent, str]:
-    """#5 per-AI instruction managed blocks — re-seed when absent. Reads enabled
+    """#5 per-AI instruction managed blocks - re-seed when absent. Reads enabled
     contributors from the existing config."""
     config_path = _resolve_config_path_for_repo(repo_root)
     loaded = cfg.load(config_path)
@@ -402,13 +402,13 @@ git commit -m "feat(repair): .gitignore + agents + instructions component checks
 
 **Files:** Modify `consensus_mcp/_init_wizard.py`. Test: append to `test_init_repair.py`.
 
-#6 is REPORT-ONLY (never writes ~/.claude). The engine runs #1 first (short-circuits to 2/3 if config unusable), then #2–#5, then #6, returning (summary_lines, exit_code).
+#6 is REPORT-ONLY (never writes ~/.claude). The engine runs #1 first (short-circuits to 2/3 if config unusable), then #2-#5, then #6, returning (summary_lines, exit_code).
 
-- [ ] **Step 1: Write the failing tests** — append:
+- [ ] **Step 1: Write the failing tests** - append:
 
 ```python
 def test_check_enforcement_dead_reports_global(tmp_path):
-    # empty claude_home → no settings.json hooks → dead
+    # empty claude_home -> no settings.json hooks -> dead
     comp, line = wiz._repair_check_enforcement(tmp_path / "fake_claude_home")
     assert comp.state == "report_global"
     assert line.startswith(wiz.REPAIR_GLOBAL)
@@ -447,13 +447,13 @@ def test_engine_idempotent_second_run_all_ok(tmp_path, monkeypatch):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_repair.py -q`
-Expected: FAIL — `_repair_check_enforcement` / `_verify_repair_install` undefined.
+Expected: FAIL - `_repair_check_enforcement` / `_verify_repair_install` undefined.
 
-- [ ] **Step 3: Implement** — add to `consensus_mcp/_init_wizard.py`:
+- [ ] **Step 3: Implement** - add to `consensus_mcp/_init_wizard.py`:
 
 ```python
 def _repair_check_enforcement(claude_home: Path) -> tuple[RepairComponent, str]:
-    """#6 global enforcement — READ-ONLY. Healthy iff settings.json carries the
+    """#6 global enforcement - READ-ONLY. Healthy iff settings.json carries the
     consensus hooks for every expected event AND every referenced hook script
     exists on disk. Never writes ~/.claude (that's --install-claude-code)."""
     settings_path = _resolve_settings_json_path(claude_home)
@@ -464,7 +464,7 @@ def _repair_check_enforcement(claude_home: Path) -> tuple[RepairComponent, str]:
         if not hooks.get(event):
             return (RepairComponent("enforcement", "report_global"),
                     f"{REPAIR_GLOBAL} enforcement: settings.json missing consensus "
-                    f"{event} hook — run `consensus-init --install-claude-code`")
+                    f"{event} hook - run `consensus-init --install-claude-code`")
     # referenced hook scripts present?
     for groups in expected.values():
         for group in groups:
@@ -474,7 +474,7 @@ def _repair_check_enforcement(claude_home: Path) -> tuple[RepairComponent, str]:
                     if tok.endswith(".py") and tok.startswith(str(claude_home)) and not Path(tok).exists():
                         return (RepairComponent("enforcement", "report_global"),
                                 f"{REPAIR_GLOBAL} enforcement: hook script missing ({tok}) "
-                                f"— run `consensus-init --install-claude-code`")
+                                f"- run `consensus-init --install-claude-code`")
     return (RepairComponent("enforcement", "ok"), f"{REPAIR_OK} enforcement")
 
 
@@ -502,7 +502,7 @@ def _verify_repair_install(repo_root: Path, *, dry_run: bool,
     return lines, _repair_exit_code(comps)
 ```
 
-NOTE for implementer: add the tiny helper `_resolve_config_path_for_repo(repo_root)` = `repo_root / ".consensus" / "config.yaml"` (or reuse `_resolve_config_path` with a stub args having `config=None`). The enforcement hook-script token detection above is heuristic; verify against the real `command` strings `_build_consensus_hook_groups` produces (read L408–L484) and tighten the token match to the exact script-path form they use (`_installed_hook_script_path(claude_home, name)`), iterating the known hook-script names rather than string-sniffing if that's cleaner.
+NOTE for implementer: add the tiny helper `_resolve_config_path_for_repo(repo_root)` = `repo_root / ".consensus" / "config.yaml"` (or reuse `_resolve_config_path` with a stub args having `config=None`). The enforcement hook-script token detection above is heuristic; verify against the real `command` strings `_build_consensus_hook_groups` produces (read L408-L484) and tighten the token match to the exact script-path form they use (`_installed_hook_script_path(claude_home, name)`), iterating the known hook-script names rather than string-sniffing if that's cleaner.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -522,7 +522,7 @@ git commit -m "feat(repair): enforcement detection + verify/repair engine"
 
 **Files:** Modify `consensus_mcp/_init_wizard.py`. Test: `consensus_mcp/tests/test_init_wizard_already_configured.py` (append).
 
-- [ ] **Step 1: Write the failing tests** — append to `test_init_wizard_already_configured.py`:
+- [ ] **Step 1: Write the failing tests** - append to `test_init_wizard_already_configured.py`:
 
 ```python
 def test_repair_flag_runs_engine_and_exits_0(tmp_path, capsys, monkeypatch):
@@ -568,7 +568,7 @@ def test_repair_dry_run_writes_nothing(tmp_path, capsys, monkeypatch):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard_already_configured.py -q`
-Expected: FAIL — `--repair` unknown arg / token still emitted.
+Expected: FAIL - `--repair` unknown arg / token still emitted.
 
 - [ ] **Step 3: Implement**
 
@@ -591,7 +591,7 @@ Expected: FAIL — `--repair` unknown arg / token still emitted.
         return code
 ```
 
-(c) Gate carve-out — change the gate condition so `--repair` is exempt (it returns above, but make the exemption explicit and defensive for any future reordering):
+(c) Gate carve-out - change the gate condition so `--repair` is exempt (it returns above, but make the exemption explicit and defensive for any future reordering):
 
 ```python
     if config_path.exists() and not (args.reconfigure or args.force or args.repair):
@@ -634,9 +634,9 @@ def test_prompt_existing_config_action_choices(tmp_path, monkeypatch, raw, expec
     assert wiz._prompt_existing_config_action(tmp_path / ".consensus" / "config.yaml") == expected
 ```
 
-Update `test_prompt_existing_config_action_reprompts_on_invalid` to feed a now-invalid token then a valid one, e.g. `_stub_input(["x", "9", "4"])` → `"force"`.
+Update `test_prompt_existing_config_action_reprompts_on_invalid` to feed a now-invalid token then a valid one, e.g. `_stub_input(["x", "9", "4"])` -> `"force"`.
 
-Append a menu→repair integration test:
+Append a menu->repair integration test:
 
 ```python
 def test_tty_menu_repair_runs_repair(tmp_path, capsys, monkeypatch):
@@ -655,7 +655,7 @@ def test_tty_menu_repair_runs_repair(tmp_path, capsys, monkeypatch):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard_already_configured.py -q`
-Expected: FAIL — menu returns wrong values for new numbering; `"repair"` action unhandled.
+Expected: FAIL - menu returns wrong values for new numbering; `"repair"` action unhandled.
 
 - [ ] **Step 3: Implement**
 
@@ -663,10 +663,10 @@ Expected: FAIL — menu returns wrong values for new numbering; `"repair"` actio
 
 ```python
     print(f"consensus-mcp is already configured here: {config_path}")
-    print("  [1] Leave as-is — no changes            (default)")
-    print("  [2] Verify / repair — re-create missing pieces, report diverged")
-    print("  [3] Reconfigure — re-prompt, keep current settings as defaults, show diff")
-    print("  [4] Force overwrite — discard local config edits, write fresh")
+    print("  [1] Leave as-is - no changes            (default)")
+    print("  [2] Verify / repair - re-create missing pieces, report diverged")
+    print("  [3] Reconfigure - re-prompt, keep current settings as defaults, show diff")
+    print("  [4] Force overwrite - discard local config edits, write fresh")
     while True:
         try:
             raw = input("Choose [1/2/3/4, default 1]: ").strip()
@@ -725,7 +725,7 @@ git commit -m "feat(repair): add verify/repair as the 4th existing-config menu o
 
 The skill's AskUserQuestion menu (shown on the `STATUS: already-configured` token) gains a "Verify / repair" choice that re-invokes `--repair`.
 
-- [ ] **Step 1: Write the failing contract test** — append:
+- [ ] **Step 1: Write the failing contract test** - append:
 
 ```python
 def test_repair_option_documented_in_skill_and_command():
@@ -748,15 +748,15 @@ In `SKILL.md`, update the "If the project is already configured" section's optio
 
 ```markdown
 2. Present these options to the user via `AskUserQuestion`:
-   - **Leave as-is** — already set up; do nothing.
-   - **Verify / repair** — re-create any missing pieces, report diverged ones (non-destructive).
-   - **Reconfigure** — update settings, keeping current values as defaults.
-   - **Force overwrite** — discard local config edits and write fresh.
+   - **Leave as-is** - already set up; do nothing.
+   - **Verify / repair** - re-create any missing pieces, report diverged ones (non-destructive).
+   - **Reconfigure** - update settings, keeping current values as defaults.
+   - **Force overwrite** - discard local config edits and write fresh.
 3. Act on the choice **one-shot** (do NOT loop):
-   - Leave → stop; tell the user nothing changed.
-   - Verify / repair → run `consensus-init --from-claude-code --repair` once; relay its `OK:`/`REPAIRED:`/`SKIP:`/`REPORT-GLOBAL:` summary lines.
-   - Reconfigure → run `consensus-init --from-claude-code --reconfigure` once.
-   - Force overwrite → run `consensus-init --from-claude-code --force` once.
+   - Leave -> stop; tell the user nothing changed.
+   - Verify / repair -> run `consensus-init --from-claude-code --repair` once; relay its `OK:`/`REPAIRED:`/`SKIP:`/`REPORT-GLOBAL:` summary lines.
+   - Reconfigure -> run `consensus-init --from-claude-code --reconfigure` once.
+   - Force overwrite -> run `consensus-init --from-claude-code --force` once.
 ```
 
 In `consensus-init.md`, extend the "Already configured" paragraph to mention the verify/repair option re-invoking `consensus-init --from-claude-code --repair`.
@@ -784,7 +784,7 @@ git commit -m "feat(skill): verify/repair menu option + contract test"
 ```markdown
 ## 1.29.1 - unreleased
 
-**`consensus init --repair` — verify & repair a partially-broken install.**
+**`consensus init --repair` - verify & repair a partially-broken install.**
 Re-running init on a project whose `.mcp.json`, `.gitignore` block,
 `.claude/agents/` files, or instruction blocks went missing can now restore
 them non-destructively, instead of only leave/reconfigure/force.
@@ -814,27 +814,27 @@ git commit -m "docs(changelog): consensus init --repair (1.29.1)"
 
 ### Task 9: Full-suite verification
 
-- [ ] **Step 1: Full suite** — Run: `$VPY -m pytest consensus_mcp/tests/ -q` — expect all pass (baseline 1422 + new repair tests).
-- [ ] **Step 2: Manual smoke (branch code)** — from a temp dir with a broken install (valid `.consensus/config.yaml` but no `.mcp.json`), run `PYTHONPATH=<repo> $VPY -m consensus_mcp._init_wizard --repair`; expect a `REPAIRED: .mcp.json` line, `.mcp.json` created, exit 0 (or 7 if enforcement dead in that env). Confirm `--repair --dry-run` writes nothing.
-- [ ] **Step 3: `--check` untouched** — Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard.py -k check -q` — the 3 `--check` tests still pass.
-- [ ] **Step 4: Report** — artifact-scoped: name the branch + that no tag is cut yet.
+- [ ] **Step 1: Full suite** - Run: `$VPY -m pytest consensus_mcp/tests/ -q` - expect all pass (baseline 1422 + new repair tests).
+- [ ] **Step 2: Manual smoke (branch code)** - from a temp dir with a broken install (valid `.consensus/config.yaml` but no `.mcp.json`), run `PYTHONPATH=<repo> $VPY -m consensus_mcp._init_wizard --repair`; expect a `REPAIRED: .mcp.json` line, `.mcp.json` created, exit 0 (or 7 if enforcement dead in that env). Confirm `--repair --dry-run` writes nothing.
+- [ ] **Step 3: `--check` untouched** - Run: `$VPY -m pytest consensus_mcp/tests/test_init_wizard.py -k check -q` - the 3 `--check` tests still pass.
+- [ ] **Step 4: Report** - artifact-scoped: name the branch + that no tag is cut yet.
 
 ---
 
 ## Self-review (against the spec)
 
-- **Q1a repair-missing/report-diverged** → component checks re-create missing, report diverged (Tasks 2–3); `.mcp.json` diverged → `skipped_diverged` → exit 7. ✓
-- **Q2a comprehensive verify, project repair / global report** → engine checks #1–#6; #6 read-only `_repair_check_enforcement` (Task 4). ✓
-- **Q3a flag + menu + skill** → Task 5 (flag), Task 6 (menu), Task 7 (skill/command). ✓
-- **Q4a keep `--check`** → untouched; Task 9 Step 3 verifies its 3 tests. ✓
-- **Q5a deterministic** → engine has no TTY branch; same in both (Task 4). ✓
-- **Exit taxonomy 0/2/3/7** → `_repair_exit_code` (Task 1), config outranks 7. ✓
-- **Gate carve-out** → Task 5 (c) + `test_repair_does_not_emit_already_configured_token`. ✓
-- **Version-stable summary** → prefixes pinned by `test_summary_prefixes_are_stable` (Task 1) + skill contract test (Task 7). ✓
-- **`--dry-run` composes** → engine `dry_run` param + tests (Tasks 2–5). ✓
-- **Idempotency** → `test_engine_idempotent_second_run_all_ok` (Task 4). ✓
-- **config not repairable** → `_repair_check_config` → 2/3, no write (Task 2); engine short-circuits (Task 4). ✓
-- **Dead global enforcement loud + exit 7** → `REPORT-GLOBAL` line + `report_global`→7 (Tasks 1, 4). ✓
-- **Both entry points** → `consensus`/`consensus-init` share `main`; `--repair` on the parser covers both. ✓
-- **Menu test 4th option** → Task 6 updates parametrization + asserts. ✓
-- No placeholders; names consistent (`RepairComponent`, `_repair_check_*`, `_verify_repair_install`, `_repair_exit_code`, `REPAIR_*`). Two implementer NOTES flag where to confirm exact reuse-helper shapes (mcp entry equality; instruction selection derivation; enforcement hook-script token match) — these are "read the named helper to match its shape," not unresolved design.
+- **Q1a repair-missing/report-diverged** -> component checks re-create missing, report diverged (Tasks 2-3); `.mcp.json` diverged -> `skipped_diverged` -> exit 7. [ok]
+- **Q2a comprehensive verify, project repair / global report** -> engine checks #1-#6; #6 read-only `_repair_check_enforcement` (Task 4). [ok]
+- **Q3a flag + menu + skill** -> Task 5 (flag), Task 6 (menu), Task 7 (skill/command). [ok]
+- **Q4a keep `--check`** -> untouched; Task 9 Step 3 verifies its 3 tests. [ok]
+- **Q5a deterministic** -> engine has no TTY branch; same in both (Task 4). [ok]
+- **Exit taxonomy 0/2/3/7** -> `_repair_exit_code` (Task 1), config outranks 7. [ok]
+- **Gate carve-out** -> Task 5 (c) + `test_repair_does_not_emit_already_configured_token`. [ok]
+- **Version-stable summary** -> prefixes pinned by `test_summary_prefixes_are_stable` (Task 1) + skill contract test (Task 7). [ok]
+- **`--dry-run` composes** -> engine `dry_run` param + tests (Tasks 2-5). [ok]
+- **Idempotency** -> `test_engine_idempotent_second_run_all_ok` (Task 4). [ok]
+- **config not repairable** -> `_repair_check_config` -> 2/3, no write (Task 2); engine short-circuits (Task 4). [ok]
+- **Dead global enforcement loud + exit 7** -> `REPORT-GLOBAL` line + `report_global`->7 (Tasks 1, 4). [ok]
+- **Both entry points** -> `consensus`/`consensus-init` share `main`; `--repair` on the parser covers both. [ok]
+- **Menu test 4th option** -> Task 6 updates parametrization + asserts. [ok]
+- No placeholders; names consistent (`RepairComponent`, `_repair_check_*`, `_verify_repair_install`, `_repair_exit_code`, `REPAIR_*`). Two implementer NOTES flag where to confirm exact reuse-helper shapes (mcp entry equality; instruction selection derivation; enforcement hook-script token match) - these are "read the named helper to match its shape," not unresolved design.

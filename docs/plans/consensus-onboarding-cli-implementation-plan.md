@@ -20,7 +20,7 @@
 | **iter-0005d** | Run orchestration | `_run.py` + diff handling + git apply + commit logic | Largest piece; depends on a/b/c |
 | **iter-0005e** | CLI surface | `_cli.py` + `pyproject.toml` console_scripts + `consensus status/close/history` glue | Argparse glue; depends on all prior |
 
-Each sub-iter authors a goal_packet, implements, runs tests green, then dispatches codex for cross-family closure. Total ~5 codex review rounds (matching the cost profile we've seen in iters 0001–0003).
+Each sub-iter authors a goal_packet, implements, runs tests green, then dispatches codex for cross-family closure. Total ~5 codex review rounds (matching the cost profile we've seen in iters 0001-0003).
 
 ---
 
@@ -28,30 +28,30 @@ Each sub-iter authors a goal_packet, implements, runs tests green, then dispatch
 
 ```
 consensus_mcp/
-├── _cli.py                       # NEW (iter-0005e) — argparse entry
-├── _adapter_runtime.py           # NEW (iter-0005a) — manifest loader + invocation
-├── _onboarding.py                # NEW (iter-0005c) — `consensus init` wizard
-├── _run.py                       # NEW (iter-0005d) — `consensus run` orchestration
-├── adapters/                     # NEW (iter-0005a) — directory + 2 manifests
-│   ├── __init__.py
-│   ├── claude.yaml
-│   └── codex.yaml
-├── _dispatch_codex.py            # MODIFIED (iter-0005b) — accepts adapter manifest
-└── tests/
-    ├── test_adapter_runtime.py   # NEW (iter-0005a)
-    ├── test_onboarding.py        # NEW (iter-0005c)
-    ├── test_run.py               # NEW (iter-0005d)
-    ├── test_cli.py               # NEW (iter-0005e)
-    └── test_dispatch_codex.py    # MODIFIED (iter-0005b) — fixture for adapter manifest
+|-- _cli.py                       # NEW (iter-0005e) - argparse entry
+|-- _adapter_runtime.py           # NEW (iter-0005a) - manifest loader + invocation
+|-- _onboarding.py                # NEW (iter-0005c) - `consensus init` wizard
+|-- _run.py                       # NEW (iter-0005d) - `consensus run` orchestration
+|-- adapters/                     # NEW (iter-0005a) - directory + 2 manifests
+|   |-- __init__.py
+|   |-- claude.yaml
+|   \-- codex.yaml
+|-- _dispatch_codex.py            # MODIFIED (iter-0005b) - accepts adapter manifest
+\-- tests/
+    |-- test_adapter_runtime.py   # NEW (iter-0005a)
+    |-- test_onboarding.py        # NEW (iter-0005c)
+    |-- test_run.py               # NEW (iter-0005d)
+    |-- test_cli.py               # NEW (iter-0005e)
+    \-- test_dispatch_codex.py    # MODIFIED (iter-0005b) - fixture for adapter manifest
 
-pyproject.toml                    # MODIFIED (iter-0005e) — [project.scripts]
+pyproject.toml                    # MODIFIED (iter-0005e) - [project.scripts]
 ```
 
 ---
 
-# Sub-iteration 0005a — Adapter foundation
+# Sub-iteration 0005a - Adapter foundation
 
-**Goal:** Load and validate adapter YAML manifests. Resolve binaries on disk. Substitute templates into invocation commands. **No subprocess execution yet — pure loader logic.**
+**Goal:** Load and validate adapter YAML manifests. Resolve binaries on disk. Substitute templates into invocation commands. **No subprocess execution yet - pure loader logic.**
 
 **Files:**
 - Create: `consensus_mcp/_adapter_runtime.py`
@@ -117,7 +117,7 @@ Expected: ImportError on `_adapter_runtime` (module doesn't exist).
 # consensus_mcp/_adapter_runtime.py
 """Adapter manifest loader + resolver. iter-0005a.
 
-Implements docs/specs/consensus-onboarding-cli-spec.md §8.
+Implements docs/specs/consensus-onboarding-cli-spec.md section 8.
 """
 from __future__ import annotations
 
@@ -593,13 +593,13 @@ mkdir -p consensus-state/active/iteration-0005a-adapter-foundation
 - [ ] **Step 3: Address any codex findings; re-dispatch if needed**
 
 Decision tree mirrors iter-0003's path:
-- If `goal_satisfied: true` and no blocking → write iteration-outcome.yaml + closure-certificate.yaml → done
-- If blocking → fix, re-author review-packet (new bundle_sha), re-dispatch as pass-2
-- If non-blocking medium findings → operator decides (usually: fix + re-dispatch)
+- If `goal_satisfied: true` and no blocking -> write iteration-outcome.yaml + closure-certificate.yaml -> done
+- If blocking -> fix, re-author review-packet (new bundle_sha), re-dispatch as pass-2
+- If non-blocking medium findings -> operator decides (usually: fix + re-dispatch)
 
 ---
 
-# Sub-iteration 0005b — Dispatch refactor
+# Sub-iteration 0005b - Dispatch refactor
 
 **Goal:** Make `_invoke_codex` adapter-agnostic. Rename to `_invoke_subprocess_ai`, accept adapter manifest, preserve existing CLI invocation path for backward compat.
 
@@ -607,7 +607,7 @@ Decision tree mirrors iter-0003's path:
 - Modify: `consensus_mcp/_dispatch_codex.py`
 - Modify: `consensus_mcp/tests/test_dispatch_codex.py`
 
-### Task B1: Rename _invoke_codex → _invoke_subprocess_ai, accept adapter manifest
+### Task B1: Rename _invoke_codex -> _invoke_subprocess_ai, accept adapter manifest
 
 **Files:**
 - Modify: `consensus_mcp/_dispatch_codex.py` (function definition at ~line 604)
@@ -655,7 +655,7 @@ def test_invoke_subprocess_ai_uses_adapter_command(tmp_path, monkeypatch):
 Run: `python -m pytest consensus_mcp/tests/test_dispatch_codex.py::test_invoke_subprocess_ai_uses_adapter_command -v`
 Expected: AttributeError on `_invoke_subprocess_ai`.
 
-- [ ] **Step 3: Refactor `_invoke_codex` → `_invoke_subprocess_ai`**
+- [ ] **Step 3: Refactor `_invoke_codex` -> `_invoke_subprocess_ai`**
 
 In `consensus_mcp/_dispatch_codex.py`:
 
@@ -742,7 +742,7 @@ Expected: New test passes. All EXISTING tests in test_dispatch_codex.py also con
 
 ```bash
 git add consensus_mcp/_dispatch_codex.py consensus_mcp/tests/test_dispatch_codex.py
-git commit -m "refactor(dispatch): _invoke_codex → _invoke_subprocess_ai (adapter-agnostic)"
+git commit -m "refactor(dispatch): _invoke_codex -> _invoke_subprocess_ai (adapter-agnostic)"
 ```
 
 ### Task B2: Add --adapter CLI flag (default codex for back-compat)
@@ -803,7 +803,7 @@ Same pattern as iter-0005a.
 
 ---
 
-# Sub-iteration 0005c — Onboarding wizard
+# Sub-iteration 0005c - Onboarding wizard
 
 **Goal:** `consensus init` flow: project scan, AI detection, family-coherent prompt, probe, write `.consensus/config.yaml`.
 
@@ -1150,7 +1150,7 @@ def init(repo_root: Path, *, non_interactive: bool = False,
     config_path.write_text(yaml.safe_dump(config, sort_keys=False))
     gitignore = config_path.parent / ".gitignore"
     gitignore.write_text("cache/\n*.log\n")
-    print(f"\n✓ Setup complete. Try: consensus run \"fix a typo in the README\"")
+    print(f"\n[ok] Setup complete. Try: consensus run \"fix a typo in the README\"")
     return 0
 
 
@@ -1186,7 +1186,7 @@ git commit -m "feat(onboarding): init wizard with probe + non-interactive mode +
 
 ---
 
-# Sub-iteration 0005d — Run orchestration
+# Sub-iteration 0005d - Run orchestration
 
 **Goal:** `consensus run` end-to-end: author goal_packet, spawn primary, capture diff, apply, author review-packet, dispatch secondary, verdict, exit.
 
@@ -1225,7 +1225,7 @@ Implementation pattern: derive `pilot_id = "iter-NNNN-<slug>"` by scanning conse
 
 ### Task D2: Primary AI dispatch + diff extraction
 
-- [ ] **Step 1: Failing test** — mocks subprocess, sends a fenced ```diff block as stdout, asserts we extract it cleanly.
+- [ ] **Step 1: Failing test** - mocks subprocess, sends a fenced ```diff block as stdout, asserts we extract it cleanly.
 
 - [ ] **Step 2..5: Implement `dispatch_primary_and_extract_diff(adapter, prompt, ...)`**, run, commit.
 
@@ -1249,9 +1249,9 @@ Reject codex-cli's `*** Begin Patch` shape (reuse the existing guard from `_disp
 
 ### Task D5: Verdict assembly + exit code
 
-- [ ] Tests: blocking finding → exit 1; clean → exit 0; scope violation in primary diff → exit 2; budget overflow → exit 3.
+- [ ] Tests: blocking finding -> exit 1; clean -> exit 0; scope violation in primary diff -> exit 2; budget overflow -> exit 3.
 
-- [ ] Implementation: read the sealed review YAML, project to the user-facing summary lines, return the correct exit code per spec §4.
+- [ ] Implementation: read the sealed review YAML, project to the user-facing summary lines, return the correct exit code per spec section 4.
 
 ### Iter-0005d closure
 
@@ -1260,7 +1260,7 @@ Reject codex-cli's `*** Begin Patch` shape (reuse the existing guard from `_disp
 
 ---
 
-# Sub-iteration 0005e — CLI surface + console_scripts
+# Sub-iteration 0005e - CLI surface + console_scripts
 
 **Goal:** `consensus init / run / status / close / history` argparse glue + `pyproject.toml` entry point.
 
@@ -1273,17 +1273,17 @@ Reject codex-cli's `*** Begin Patch` shape (reuse the existing guard from `_disp
 
 - [ ] Tests: `consensus --help` lists 5 subcommands; `consensus run` requires `intent` positional; invalid subcommand exits 2.
 
-- [ ] Implementation: argparse with `subparsers`. Each subcommand dispatches to its module (`_run.main`, `_onboarding.init`, `_resume.snapshot` → console formatter, etc.).
+- [ ] Implementation: argparse with `subparsers`. Each subcommand dispatches to its module (`_run.main`, `_onboarding.init`, `_resume.snapshot` -> console formatter, etc.).
 
 ### Task E2: `consensus status` (formats `_resume.snapshot` output)
 
-- [ ] Tests: snapshot with no active iteration → printed "no active iteration"; with iteration → formatted table.
+- [ ] Tests: snapshot with no active iteration -> printed "no active iteration"; with iteration -> formatted table.
 
 - [ ] Implementation: call `_resume.snapshot()`, format selected fields to a readable summary. `--json` flag prints raw JSON instead.
 
 ### Task E3: `consensus close` (writes closure-certificate when invariant is satisfiable)
 
-- [ ] Tests: when `closure_invariant_status.satisfiable_now` is true → write closure-certificate.yaml + iteration-outcome.yaml using `validated_closer_pass_id`; when not → exit 1 with reason.
+- [ ] Tests: when `closure_invariant_status.satisfiable_now` is true -> write closure-certificate.yaml + iteration-outcome.yaml using `validated_closer_pass_id`; when not -> exit 1 with reason.
 
 - [ ] Implementation: read snapshot, branch on satisfiable_now, author closure artifacts.
 
@@ -1304,7 +1304,7 @@ consensus = "consensus_mcp._cli:main"
 
 - [ ] **Step 2**: After `pip install -e .`, run `consensus --help` and verify subcommands list.
 
-- [ ] **Step 3**: Smoke test — in a fresh tmpdir:
+- [ ] **Step 3**: Smoke test - in a fresh tmpdir:
   ```bash
   cd $(mktemp -d)
   git init
@@ -1319,7 +1319,7 @@ consensus = "consensus_mcp._cli:main"
 
 - [ ] Full regression suite green.
 - [ ] Author iter-0005e goal_packet, dispatch codex closure review.
-- [ ] After closure: bump `pyproject.toml` version → 2.1.0 (feature release). Build wheel; smoke-test install.
+- [ ] After closure: bump `pyproject.toml` version -> 2.1.0 (feature release). Build wheel; smoke-test install.
 
 ---
 
@@ -1329,27 +1329,27 @@ consensus = "consensus_mcp._cli:main"
 
 | Spec section | Tasks |
 |---|---|
-| §4 CLI surface | E1, E2, E3, E4 |
-| §5 init flow | C1, C2, C3 |
-| §6 run flow | D1–D5 |
-| §7 config schema | C3 (writes), implied throughout |
-| §8 adapter system | A1, A2, A3, A4, A5 |
-| §9 integration | B1, B2 |
-| §10 test plan | each task's tests |
-| §11 implementation order | mirrored in sub-iter order |
-| §13 codex-confirmed decisions | A2 (windows_suffixes), A1 (3 output_contracts) |
+| section 4 CLI surface | E1, E2, E3, E4 |
+| section 5 init flow | C1, C2, C3 |
+| section 6 run flow | D1-D5 |
+| section 7 config schema | C3 (writes), implied throughout |
+| section 8 adapter system | A1, A2, A3, A4, A5 |
+| section 9 integration | B1, B2 |
+| section 10 test plan | each task's tests |
+| section 11 implementation order | mirrored in sub-iter order |
+| section 13 codex-confirmed decisions | A2 (windows_suffixes), A1 (3 output_contracts) |
 
 No spec gaps.
 
 **Placeholder scan:** none. Every step has either complete code or a clear test/command.
 
-**Type consistency:** function names used in later tasks (`_invoke_subprocess_ai`, `resolve_adapter`, `scan_project`, `author_goal_packet`) are defined in their introducing tasks. Adapter manifest field names are consistent with the spec §8 schema.
+**Type consistency:** function names used in later tasks (`_invoke_subprocess_ai`, `resolve_adapter`, `scan_project`, `author_goal_packet`) are defined in their introducing tasks. Adapter manifest field names are consistent with the spec section 8 schema.
 
 **Risk areas / known gotchas:**
-1. **`tomllib` is 3.11+** — pyproject.toml states 3.10+. Task C1 needs an import shim (`try: tomllib; except: import tomli as tomllib`) OR raise the Python floor.
-2. **Windows shell quoting** — task D2's primary AI invocation uses `shlex.quote` which is POSIX-only. Need a Windows-aware variant (PowerShell quoting differs). Add to D2 implementation: use `subprocess.list2cmdline` for Windows or pass args as a list (preferred — no shell at all).
-3. **Codex CLI invocation in `_run.py` for primary mode** — `codex exec --sandbox workspace-write` is the proposed primary-mode command; if codex doesn't support workspace-write sandbox emitting fenced diffs reliably, the codex.yaml primary contract may need adjustment. Validate empirically in task A4.
-4. **Large prompt handling** — D2 enforces `prompt_budget_bytes`; cite the codex stall lesson from iter-0002/0003 (we needed 600–1200s threshold for 50–60KB prompts).
+1. **`tomllib` is 3.11+** - pyproject.toml states 3.10+. Task C1 needs an import shim (`try: tomllib; except: import tomli as tomllib`) OR raise the Python floor.
+2. **Windows shell quoting** - task D2's primary AI invocation uses `shlex.quote` which is POSIX-only. Need a Windows-aware variant (PowerShell quoting differs). Add to D2 implementation: use `subprocess.list2cmdline` for Windows or pass args as a list (preferred - no shell at all).
+3. **Codex CLI invocation in `_run.py` for primary mode** - `codex exec --sandbox workspace-write` is the proposed primary-mode command; if codex doesn't support workspace-write sandbox emitting fenced diffs reliably, the codex.yaml primary contract may need adjustment. Validate empirically in task A4.
+4. **Large prompt handling** - D2 enforces `prompt_budget_bytes`; cite the codex stall lesson from iter-0002/0003 (we needed 600-1200s threshold for 50-60KB prompts).
 
 **Add a follow-up task** for risk #3 (codex primary-mode empirical validation):
 

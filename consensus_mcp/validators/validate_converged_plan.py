@@ -1,6 +1,6 @@
 """Structural + consequence validator for the converged-plan convention.
 
-v1.15.1 — machine-enforcement of the v1.15.0 doctrine
+v1.15.1 - machine-enforcement of the v1.15.0 doctrine
 (docs/workflows/converged-plan-convention.md). Converged plan:
 iteration-converged-plan-machine-enforcement (Workflow A
 weighted-synthesis: claude + codex + gemini).
@@ -12,7 +12,7 @@ code path that derives any approval / readiness state from the
 convention blocks. A passing gate means "the required thinking was
 RECORDED", never "the thinking is true". The auditable structural test
 `test_validator_source_sets_no_correctness_state` greps this file and
-must find zero such state being set — keep it that way.
+must find zero such state being set - keep it that way.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from __future__ import annotations
 GATE_SCOPE_DISCLAIMER = (
     "presence-and-consistency only; NOT a soundness assertion. A passing "
     "gate is not evidence the hypothesis is true or the safeguard adequate "
-    "— only that the required thinking was recorded. 'Would this safeguard "
+    "- only that the required thinking was recorded. 'Would this safeguard "
     "still work if the root cause were entirely different?' remains a human "
     "judgement."
 )
@@ -56,7 +56,7 @@ def _norm(s: str | None) -> str:
 def _safeguard_conforms(sg: dict) -> bool:
     """A conforming safeguard is decoupled from the hypothesis by design.
 
-    Structural check only — this asks 'are the decoupling attestations
+    Structural check only - this asks 'are the decoupling attestations
     present and set to the doctrine-required values', NOT 'is the
     safeguard actually adequate' (that is the human judgement named in
     GATE_SCOPE_DISCLAIMER).
@@ -109,7 +109,7 @@ def validate_convention(
         violations.append(
             "convention_schema_version must be exactly "
             f"{CONVENTION_SCHEMA_VERSION} for a present convention "
-            f"(got {schema_ver!r}) — not defaulted, not grandfathered"
+            f"(got {schema_ver!r}) - not defaulted, not grandfathered"
         )
 
     # ---- falsification block ----
@@ -147,17 +147,17 @@ def validate_convention(
     if ffa is False:
         if not _nonempty(fal.get("discriminating_experiment")):
             violations.append(
-                "falsifiable_from_artifacts=false ⇒ discriminating_experiment "
+                "falsifiable_from_artifacts=false => discriminating_experiment "
                 "must be non-empty"
             )
         if not _nonempty(refute):
             violations.append(
-                "falsifiable_from_artifacts=false ⇒ refutation_observation "
+                "falsifiable_from_artifacts=false => refutation_observation "
                 "must be non-empty"
             )
         if status in {"n/a"}:
             violations.append(
-                "falsifiable_from_artifacts=false ⇒ empirical_status must be "
+                "falsifiable_from_artifacts=false => empirical_status must be "
                 "pending|refuted|proven (never n/a) for the defined class"
             )
 
@@ -174,14 +174,14 @@ def validate_convention(
     sg = convention.get("independent_safeguard")
     if not isinstance(sg, dict) or "applicable" not in sg:
         violations.append(
-            "independent_safeguard block missing — the judgement must be "
+            "independent_safeguard block missing - the judgement must be "
             "RECORDED even when not applicable"
         )
         sg = {}
     elif sg.get("applicable") is False:
         if not _nonempty(sg.get("why")):
             violations.append(
-                "independent_safeguard.applicable=false ⇒ why must record "
+                "independent_safeguard.applicable=false => why must record "
                 "the reason the risk class is not triggered"
             )
     else:
@@ -206,7 +206,7 @@ def validate_convention(
 
     # ---- decisive_experiment_before_next_iteration (codex-rev-002) ----
     # The THIRD named block. The key must be present. null is legitimate
-    # ONLY when empirical_status is proven or n/a (convention doc §3);
+    # ONLY when empirical_status is proven or n/a (convention doc section 3);
     # otherwise it must name a non-empty experiment.
     if "decisive_experiment_before_next_iteration" not in convention:
         violations.append(
@@ -253,7 +253,7 @@ def _finish(
     if enforcement == "off":
         # codex-rev-001 (pass-3): `off` disables BLOCKING, not VISIBILITY.
         # Fabricating presence_ok=True / empty violations would make
-        # disabled enforcement masquerade as a clean structural pass —
+        # disabled enforcement masquerade as a clean structural pass -
         # exactly the recursive-trap this whole iteration defends against.
         # Preserve the REAL presence_ok + violations; only suppress
         # hard-reject; stamp an explicit disabled status.

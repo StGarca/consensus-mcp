@@ -9,13 +9,13 @@
 
 ## 1. Context
 
-consensus-mcp today is **orchestrator-driven**: a human runs an interactive AI session (typically Claude Code), that session calls the MCP tool surface to dispatch the secondary AI (codex) as a subprocess. The README points new users at hand-authored `goal_packet.yaml` templates and long `python -m consensus_mcp._dispatch_codex …` invocations. The only supported secondary AI is codex; the only supported primary mode is "an interactive session you're already running."
+consensus-mcp today is **orchestrator-driven**: a human runs an interactive AI session (typically Claude Code), that session calls the MCP tool surface to dispatch the secondary AI (codex) as a subprocess. The README points new users at hand-authored `goal_packet.yaml` templates and long `python -m consensus_mcp._dispatch_codex ...` invocations. The only supported secondary AI is codex; the only supported primary mode is "an interactive session you're already running."
 
 This spec adds a **standalone, headless `consensus` CLI** in which both AIs are subprocesses. The user runs one shell command; the CLI orchestrates the primary AI (proposes change) and secondary AI (cross-reviews), then prints a verdict. No interactive editor required. No hand-authored YAML.
 
 Three problems this addresses:
 
-1. **First-run friction.** Install → invoke → result. Currently this is three sequential setup steps with hand-authored YAML. Target: `pip install consensus-mcp` → `consensus init` → `consensus run "intent"` → verdict.
+1. **First-run friction.** Install -> invoke -> result. Currently this is three sequential setup steps with hand-authored YAML. Target: `pip install consensus-mcp` -> `consensus init` -> `consensus run "intent"` -> verdict.
 2. **AI lock-in.** Today only codex is supported as the reviewer. Different users have different AI preferences (claude/codex, gemini/claude, etc.). A pluggable adapter system removes the hardcoding.
 3. **Orchestrator session startup performance.** Already addressed by `consensus_resume` (iter-0002/0003); this spec wires it into the new CLI as `consensus status`.
 
@@ -28,12 +28,12 @@ Three problems this addresses:
 
 ## 3. Non-goals
 
-- Auto-iteration. When the secondary flags a blocking finding, the CLI halts and reports. The user explicitly runs `consensus run --continue` to iterate. (Decision: halt+report over auto-iterate — predictable, no surprise token burn.)
+- Auto-iteration. When the secondary flags a blocking finding, the CLI halts and reports. The user explicitly runs `consensus run --continue` to iterate. (Decision: halt+report over auto-iterate - predictable, no surprise token burn.)
 - Workflow #4 (pre-review-then-integrate). v1 ships workflow #3 only. `--workflow 4` is a follow-up.
 - Pre-commit / git hook integration. v1 is shell-only; CI hooks come later.
 - Cross-iteration learning index. The "guild-inspired memory layer" remains out of scope.
 - Web UI / GUI surface.
-- Auto-detection beyond CLI discovery — we do not attempt to download/install missing AI CLIs; we print install hints and exit.
+- Auto-detection beyond CLI discovery - we do not attempt to download/install missing AI CLIs; we print install hints and exit.
 
 ## 4. CLI surface
 
@@ -77,16 +77,16 @@ Goal: one command, no prerequisite reading.
 $ consensus init
 
 Scanning project...
-  ✓ README.md found (138 lines)
-  ✓ pyproject.toml detected (Python project, package: my-app)
-  ✓ File tree: top-5 dirs by size: src/, tests/, docs/, scripts/, data/
-  ✓ Git repository (branch: main, 12 commits)
+  [ok] README.md found (138 lines)
+  [ok] pyproject.toml detected (Python project, package: my-app)
+  [ok] File tree: top-5 dirs by size: src/, tests/, docs/, scripts/, data/
+  [ok] Git repository (branch: main, 12 commits)
 
 Detecting AI CLIs on $PATH...
-  ✓ claude     → C:\Users\<you>\AppData\Roaming\npm\claude.cmd (v1.x)
-  ✓ codex      → C:\Users\<you>\AppData\Roaming\npm\codex.cmd (codex-cli 0.130.0)
-  ✗ gemini     → not found
-  ✗ aider      → not found
+  [ok] claude     -> C:\Users\<you>\AppData\Roaming\npm\claude.cmd (v1.x)
+  [ok] codex      -> C:\Users\<you>\AppData\Roaming\npm\codex.cmd (codex-cli 0.130.0)
+  [x] gemini     -> not found
+  [x] aider      -> not found
 
 Which AI should be PRIMARY (proposes / commits changes)?
   [1] claude  (Claude Code CLI)
@@ -94,17 +94,17 @@ Which AI should be PRIMARY (proposes / commits changes)?
 > 1
 
 Which AI should be SECONDARY (cross-reviews)?
-  [1] codex   (Codex CLI)            ← only candidate (must be different family from primary)
+  [1] codex   (Codex CLI)            <- only candidate (must be different family from primary)
 > 1
 
 Verifying both CLIs respond...
-  ✓ claude --version → 1.x
-  ✓ codex --version  → codex-cli 0.130.0
+  [ok] claude --version -> 1.x
+  [ok] codex --version  -> codex-cli 0.130.0
 
 Writing .consensus/config.yaml ...
 Writing .consensus/.gitignore (excludes runtime state) ...
 
-✓ Setup complete. Try: consensus run "fix a typo in the README"
+[ok] Setup complete. Try: consensus run "fix a typo in the README"
 ```
 
 ### Behavior contract
@@ -122,26 +122,26 @@ Writing .consensus/.gitignore (excludes runtime state) ...
 ```
 $ consensus run "fix the off-by-one in the pagination helper" --scope src/pagination/
 
-[1/5] Authoring goal_packet ......................................... ✓ (32ms)
+[1/5] Authoring goal_packet ......................................... [ok] (32ms)
       iteration:  iter-0042-fix-pagination-helper
       scope:      src/pagination/ (3 files, 421 lines)
       primary:    claude  (claude-code-author-1)
       secondary:  codex   (codex-iter0042-1)
 
-[2/5] Dispatching primary AI (claude) ............................... ✓ (47s)
+[2/5] Dispatching primary AI (claude) ............................... [ok] (47s)
       diff: 4 lines changed in src/pagination/helpers.py
       bundle_sha: 8a91...3d2c
 
-[3/5] Authoring review-packet ....................................... ✓ (8ms)
+[3/5] Authoring review-packet ....................................... [ok] (8ms)
 
-[4/5] Dispatching secondary AI (codex) for cross-review ............. ✓ (38s)
+[4/5] Dispatching secondary AI (codex) for cross-review ............. [ok] (38s)
       findings: 0 blocking, 1 medium, 0 low
       goal_satisfied: true
 
-[5/5] Consensus verdict ............................................. ✓
-      ✓ Consensus reached. Diff applied to working tree.
-      ⚠ 1 medium finding (non-blocking) — see consensus-state/active/iter-0042-fix-pagination-helper/codex-review.yaml
-      ✓ Auto-committed: fix(pagination): off-by-one [iter-0042]
+[5/5] Consensus verdict ............................................. [ok]
+      [ok] Consensus reached. Diff applied to working tree.
+      [warn] 1 medium finding (non-blocking) - see consensus-state/active/iter-0042-fix-pagination-helper/codex-review.yaml
+      [ok] Auto-committed: fix(pagination): off-by-one [iter-0042]
 
 To inspect: consensus status
 ```
@@ -149,9 +149,9 @@ To inspect: consensus status
 ### Algorithm
 
 1. **Author goal_packet** auto-generated from:
-   - `intent` → `goal.summary`
-   - `--scope` glob → `allowed_files` (default: files git-diff-from-clean would touch). `forbidden_files` always includes `.consensus/`, `consensus-state/`, `.git/`, `.env*`, and any user-added entries from `safety.forbidden_files`.
-   - `consensus init` project summary → `goal.desired_end_state` prefix
+   - `intent` -> `goal.summary`
+   - `--scope` glob -> `allowed_files` (default: files git-diff-from-clean would touch). `forbidden_files` always includes `.consensus/`, `consensus-state/`, `.git/`, `.env*`, and any user-added entries from `safety.forbidden_files`.
+   - `consensus init` project summary -> `goal.desired_end_state` prefix
    - `pilot_id` = `iter-NNNN-<slug-of-intent>` (auto-incremented)
    - `authorization.authorized_by` = `cli:<$USER>`; `authorized_at_utc` = now; `scope_signature` from `_self_drive._scope_signature`
 
@@ -163,18 +163,18 @@ To inspect: consensus status
 
 5. **Secondary AI dispatch** via the secondary adapter's `invocation.secondary.command`. Same JSON-schema output, same audit log, same `review.write_and_seal`.
 
-6. **Verdict + exit.** Read sealed codex review. Compute exit code per §4. Print summary; halt (no auto-iteration).
+6. **Verdict + exit.** Read sealed codex review. Compute exit code per section 4. Print summary; halt (no auto-iteration).
 
-`consensus run --continue` re-dispatches the primary with the prior secondary's findings embedded in the prompt, then loops back through 3–6. Iteration count is bounded by goal_packet's `max_iterations` (default 3).
+`consensus run --continue` re-dispatches the primary with the prior secondary's findings embedded in the prompt, then loops back through 3-6. Iteration count is bounded by goal_packet's `max_iterations` (default 3).
 
 ### Failure modes
 
-- Primary returns no diff / garbage → save raw to `consensus-state/active/<iter>/primary-output-raw.txt`; exit 2.
-- Primary's diff hits `forbidden_files` → existing `_self_drive` scope check; exit 2; nothing applied.
-- `git apply` fails → diff was structurally invalid; exit 2; suggest `--continue`.
-- Secondary stalls → existing watchdog auto-aborts at `stall_silence_seconds`; exit 2 with dispatch-log path.
-- Cross-AI disagreement (blocking finding) → exit 1; print finding IDs + citations; suggest `--continue`.
-- Scope exceeds prompt budget → exit 3 with explicit budget breakdown.
+- Primary returns no diff / garbage -> save raw to `consensus-state/active/<iter>/primary-output-raw.txt`; exit 2.
+- Primary's diff hits `forbidden_files` -> existing `_self_drive` scope check; exit 2; nothing applied.
+- `git apply` fails -> diff was structurally invalid; exit 2; suggest `--continue`.
+- Secondary stalls -> existing watchdog auto-aborts at `stall_silence_seconds`; exit 2 with dispatch-log path.
+- Cross-AI disagreement (blocking finding) -> exit 1; print finding IDs + citations; suggest `--continue`.
+- Scope exceeds prompt budget -> exit 3 with explicit budget breakdown.
 
 ## 7. Config schema
 
@@ -216,7 +216,7 @@ safety:
   max_patch_size_default: 2000
 ```
 
-Adapter overrides live inline in `config.yaml` (user choice — see §13).
+Adapter overrides live inline in `config.yaml` (user choice - see section 13).
 
 ### `.consensus/.gitignore` (committed)
 
@@ -235,7 +235,7 @@ An **adapter** is a YAML manifest declaring how to invoke one AI CLI. Built-ins 
 ```yaml
 schema_version: 1
 name: claude
-model_family: claude                   # REQUIRED — used by cross-family invariant
+model_family: claude                   # REQUIRED - used by cross-family invariant
 display_name: Claude Code CLI
 description: Anthropic Claude Code CLI in print-mode for headless invocations.
 
@@ -274,11 +274,11 @@ Codex's manifest is structurally identical with `model_family: codex`, different
 
 ### Output contracts (v1)
 
-Three contracts ship in v1 (codex-consulted in iter-0004; see §13):
+Three contracts ship in v1 (codex-consulted in iter-0004; see section 13):
 
-- `unified_diff_in_fenced_block` — extracts the first ` ```diff ` block; multi-block fails; validated via `git apply --check`.
-- `unified_diff_only` — stdout IS the diff (no fence required); banner/version-string leaks are caught by the init probe step + `git apply --check`.
-- `codex_review_schema_v1` — the existing strict JSON schema from `dispatch_templates/codex_review_schema.json`.
+- `unified_diff_in_fenced_block` - extracts the first ` ```diff ` block; multi-block fails; validated via `git apply --check`.
+- `unified_diff_only` - stdout IS the diff (no fence required); banner/version-string leaks are caught by the init probe step + `git apply --check`.
+- `codex_review_schema_v1` - the existing strict JSON schema from `dispatch_templates/codex_review_schema.json`.
 
 Contract names are keys into a Python parser registry in `consensus_mcp/_adapter_runtime.py`. New contracts are added by registering a parser; no schema versioning needed at the manifest level.
 
@@ -286,10 +286,10 @@ Contract names are keys into a Python parser registry in `consensus_mcp/_adapter
 
 The `command:` strings use mustache-style substitution. Variables (whitelisted, no eval):
 
-- `{{binary}}` — resolved binary path
-- `{{quoted_prompt}}` — full prompt, shell-quoted for the platform
-- `{{schema_path}}` — path to the output-contract JSON schema (when applicable)
-- `{{iteration_dir}}` — current iteration directory absolute path
+- `{{binary}}` - resolved binary path
+- `{{quoted_prompt}}` - full prompt, shell-quoted for the platform
+- `{{schema_path}}` - path to the output-contract JSON schema (when applicable)
+- `{{iteration_dir}}` - current iteration directory absolute path
 
 ### Adapter resolution at `consensus run` time
 
@@ -305,19 +305,19 @@ The `command:` strings use mustache-style substitution. Variables (whitelisted, 
 
 ```
 consensus_mcp/
-├── _cli.py                       # NEW — argparse entry, dispatches to subcommands
-├── _adapter_runtime.py           # NEW — manifest loading, binary resolution, invocation
-├── _onboarding.py                # NEW — `consensus init` wizard logic
-├── _run.py                       # NEW — `consensus run` orchestration
-├── adapters/                     # NEW — built-in adapter manifests
-│   ├── claude.yaml
-│   └── codex.yaml
-├── _resume.py                    # EXISTING — powers `consensus status`
-├── _dispatch_codex.py            # EXISTING — refactored to accept adapter manifest
-├── _author_review_packet.py      # EXISTING — unchanged
-├── _self_drive.py                # EXISTING — unchanged
-├── _closure_invariant.py         # EXISTING — unchanged
-└── tools/                        # EXISTING MCP tools — unchanged
+|-- _cli.py                       # NEW - argparse entry, dispatches to subcommands
+|-- _adapter_runtime.py           # NEW - manifest loading, binary resolution, invocation
+|-- _onboarding.py                # NEW - `consensus init` wizard logic
+|-- _run.py                       # NEW - `consensus run` orchestration
+|-- adapters/                     # NEW - built-in adapter manifests
+|   |-- claude.yaml
+|   \-- codex.yaml
+|-- _resume.py                    # EXISTING - powers `consensus status`
+|-- _dispatch_codex.py            # EXISTING - refactored to accept adapter manifest
+|-- _author_review_packet.py      # EXISTING - unchanged
+|-- _self_drive.py                # EXISTING - unchanged
+|-- _closure_invariant.py         # EXISTING - unchanged
+\-- tools/                        # EXISTING MCP tools - unchanged
 ```
 
 `pyproject.toml` adds:
@@ -329,17 +329,17 @@ consensus = "consensus_mcp._cli:main"
 
 ### `_dispatch_codex.py` refactor (only breaking-shape change in existing code)
 
-- `_invoke_codex(...)` is renamed `_invoke_subprocess_ai(adapter_manifest, role, ...)` where `role ∈ {"primary", "secondary"}`. Adapter manifest carries `command`, `stall_silence_seconds`, `timeout_seconds`, `output_contract`.
-- A thin shim preserves the existing `python -m consensus_mcp._dispatch_codex …` CLI invocation; new `--adapter <name>` flag defaults to `codex` so existing scripts work unchanged.
+- `_invoke_codex(...)` is renamed `_invoke_subprocess_ai(adapter_manifest, role, ...)` where `role  in  {"primary", "secondary"}`. Adapter manifest carries `command`, `stall_silence_seconds`, `timeout_seconds`, `output_contract`.
+- A thin shim preserves the existing `python -m consensus_mcp._dispatch_codex ...` CLI invocation; new `--adapter <name>` flag defaults to `codex` so existing scripts work unchanged.
 - The Popen + reader threads + heartbeat + abort-signal + cross-platform process-group termination behavior is unchanged.
 
 ### State layout
 
 | Path | Purpose | Gitignored? |
 |---|---|---|
-| `.consensus/config.yaml` | User config | NO — committed |
-| `.consensus/adapters/<name>.yaml` | User-defined plugin manifests | NO — committed |
-| `.consensus/.gitignore` | Excludes `.consensus/cache/` | NO — committed |
+| `.consensus/config.yaml` | User config | NO - committed |
+| `.consensus/adapters/<name>.yaml` | User-defined plugin manifests | NO - committed |
+| `.consensus/.gitignore` | Excludes `.consensus/cache/` | NO - committed |
 | `.consensus/cache/probes.json` | Last successful probe results (skip slow re-probes) | YES |
 | `consensus-state/active/iter-NNNN-<slug>/` | Per-iteration working state | YES (except `.gitkeep`) |
 | `consensus-state/archive/review-passes/` | Sealed review-pass archive | YES |
@@ -350,7 +350,7 @@ No new top-level directories. `.consensus/` is the only addition.
 ### Backward compatibility
 
 - MCP tool surface unchanged.
-- `python -m consensus_mcp._dispatch_codex …` unchanged (with new `--adapter` defaulting to codex).
+- `python -m consensus_mcp._dispatch_codex ...` unchanged (with new `--adapter` defaulting to codex).
 - Hand-authored `goal_packet.yaml` workflow unchanged.
 
 ## 10. Test plan
@@ -359,13 +359,13 @@ No new top-level directories. `.consensus/` is the only addition.
 Unchanged for `_self_drive.py`, `_closure_invariant.py`, `_author_review_packet.py`, `_resume.py`, MCP tools, `_visibility_*`. The `_dispatch_codex.py` signature change ripples into ~3 test files (passing an adapter manifest fixture).
 
 ### New tests (target ~30)
-- `test_adapter_runtime.py` — manifest loading, template substitution, binary resolution including Windows suffix loop, family-coherence enforcement, missing-binary handling.
-- `test_onboarding.py` — project-scan output shape; family-coherent secondary filter; idempotency; non-interactive mode; probe failure recovery.
-- `test_run.py` — the 6-step orchestration, mocked subprocess; failure-mode coverage (no-diff, garbled output, scope violation, stalled dispatch, blocking finding).
-- `test_cli.py` — argparse routing; subcommand dispatch; exit code mapping.
+- `test_adapter_runtime.py` - manifest loading, template substitution, binary resolution including Windows suffix loop, family-coherence enforcement, missing-binary handling.
+- `test_onboarding.py` - project-scan output shape; family-coherent secondary filter; idempotency; non-interactive mode; probe failure recovery.
+- `test_run.py` - the 6-step orchestration, mocked subprocess; failure-mode coverage (no-diff, garbled output, scope violation, stalled dispatch, blocking finding).
+- `test_cli.py` - argparse routing; subcommand dispatch; exit code mapping.
 
 ### Integration smoke
-`tests/integration/test_consensus_run_smoke.py` (skipped unless `CONSENSUS_INTEGRATION=1` env var set) — actually invokes claude + codex against a fake one-file project. CI optional.
+`tests/integration/test_consensus_run_smoke.py` (skipped unless `CONSENSUS_INTEGRATION=1` env var set) - actually invokes claude + codex against a fake one-file project. CI optional.
 
 ## 11. Implementation order
 
@@ -385,9 +385,9 @@ Each step ships green tests before the next begins.
 - **Workflow #4** (claude proposes, codex pre-reviews, claude integrates). Multi-round headless orchestration; complex but high catch-rate. Future spec.
 - **Auto-iterate** (`defaults.auto_iterate > 0`). Pipe findings back to primary, loop. Cap at N rounds. Requires budget-monitoring telemetry.
 - **CI integration**: pre-commit hook, GitHub Actions wrapper. Reuses the same CLI.
-- **Locked `safety.forbidden_files`** — enforce that `.consensus/`, `consensus-state/`, `.git/`, `.env*` cannot be removed from the user's config. Distant revision per user decision in section 4.
-- **Cross-iteration learning index** — guild-inspired memory layer; remains deferred.
-- **Web/GUI surface** — not in scope.
+- **Locked `safety.forbidden_files`** - enforce that `.consensus/`, `consensus-state/`, `.git/`, `.env*` cannot be removed from the user's config. Distant revision per user decision in section 4.
+- **Cross-iteration learning index** - guild-inspired memory layer; remains deferred.
+- **Web/GUI surface** - not in scope.
 
 ## 13. Decisions confirmed by cross-AI consult (iter-0004)
 
@@ -398,7 +398,7 @@ Two design choices were ratified by codex via the consensus-mcp dispatcher itsel
 | Binary path resolution: explicit `windows_suffixes` array vs. `resolution_strategy: npm/brew/...` enum | **Explicit array** | "Option B hides platform behavior in registry code; first-time plugin authors pick the wrong strategy and get confusing discovery failures. Option A pays manifest-noise but keeps YAML behavior inspectable." |
 | Output contracts in v1: just `{fenced_diff, codex_review}` vs. add `unified_diff_only` | **Add `unified_diff_only`** | "Option A forces diff-native CLIs into wrappers or custom parsers, raising plugin friction. Option B's loosened invariant is acceptable because the init-probe + `git apply` validation catch the banner-leak failure mode." |
 
-Both confirmations are independent of claude's prior soft leans — codex emitted rationale for *why the loser loses*, not generic concurrence. The sealed packet is at `consensus-state/active/iteration-0004-onboarding-design-consult/codex-review.yaml` (packet sha `e1c1...` — see archive for full hash).
+Both confirmations are independent of claude's prior soft leans - codex emitted rationale for *why the loser loses*, not generic concurrence. The sealed packet is at `consensus-state/active/iteration-0004-onboarding-design-consult/codex-review.yaml` (packet sha `e1c1...` - see archive for full hash).
 
 This is the first design-only consult in consensus-mcp. The pattern (small review-target doc + two findings carrying the verdict in `recommendation` + rationale in `risk`) is reusable for future architecture decisions.
 

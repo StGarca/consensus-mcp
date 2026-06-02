@@ -2,7 +2,7 @@
 2 or 20 or 200 AIs?"
 
 1.17 consensus review (codex-003 / kimi-002,003): this test now goes through the
-REAL shipped path — `register_contributor` + `build_adapters` — not a
+REAL shipped path - `register_contributor` + `build_adapters` - not a
 hand-built adapters dict, and N=50 actually BUILDS (not just validates). It
 registers N contributors with ARBITRARY names (none built-in), builds via the
 registry, and runs an iteration to convergence with ZERO per-contributor
@@ -81,7 +81,7 @@ def test_clean_install_n_arbitrary_contributors_converges(tmp_path, n):
 
 
 def test_large_N_builds_through_registry_no_cap(tmp_path):
-    """N=50 is actually BUILT via the registry (not merely validated) — proves no
+    """N=50 is actually BUILT via the registry (not merely validated) - proves no
     upper cap on the real construction path."""
     config, names = _config(50)
     registered = _register_arbitrary(names)

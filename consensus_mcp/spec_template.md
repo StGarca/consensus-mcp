@@ -13,7 +13,7 @@ reader_guidance: |
   own project. The DECISION-HISTORY prose (revision_history blocks, operator-
   pivot rationale, phase-N completion notes) references the upstream project
   where consensus-mcp was developed; you can safely skim or skip those
-  sections — they're preserved for fidelity, not because you need them to
+  sections - they're preserved for fidelity, not because you need them to
   use the package.
 v1_9_5_release_stabilization_recorded_at: v1.9.5   # 2026-05-09 iteration-0009-stabilization; addresses Round 9 F1-F8; release gate 9/9 from current tree; pilot/prototype exception added to autonomy contract; _self_drive.py downgraded to PARTIAL helper. CLOSED 2026-05-09 by step-6 external cross-model re-review (sonnet on opus's patch): OVERALL accept; 1 LOW finding S1 applied; release gate 9/9 reverified post-fix.
 v1_9_6_render_outcomes_lock_lifted_at: v1.9.6   # 2026-05-09 operator directive "remove render-outcomes as a barrier"; the canonical-iter0006-005 + codex-iter0006-007 lock-redirect-at-closure preserved across all v1.9.x iterations is hereby LIFTED. Render outcomes remains a valid + recommended next-move, but it is NO LONGER an exclusive lock that blocks other consensus pipeline work (notably Phase 4 v1.1 auto-codex-dispatch). The "do not keep polishing process unless it directly improves render outcomes" rule (feedback_no_process_polishing.md) is UNCHANGED; that rule guards against process-for-process-sake, which is a different constraint than the next-action lock.
@@ -1431,7 +1431,7 @@ revision_history:
 
       Round 9 finding-by-finding (full table in
       docs/architecture/2026-05-09-v1.9.x-third-party-review-findings.md
-      §"iter-0009 release stabilization"):
+      section "iter-0009 release stabilization"):
 
       F1 (BLOCKING) -- "9 gates green" overclaim: CORRECTED across spec md
       frontmatter line 7, this revision_history v1.9.4 entry's "What v1.9.4 does
@@ -1440,11 +1440,11 @@ revision_history:
       gate.9_release_gates_integrity_preserved. Each location now records the
       Round 9 falsification + iter-0009 remediation note.
 
-      F2 (BLOCKING) -- closure ceremony bypass: RESOLVED via §7.1
+      F2 (BLOCKING) -- closure ceremony bypass: RESOLVED via section 7.1
       pilot/prototype exception clause added to autonomy contract MD. iter-0008's
       three pilots are retroactively documented as prototype-class (NOT shippable
       self-drive proof). Production self-drive iterations still require the full
-      §7 ceremony (fresh dual-reviewer + post-apply verification + ledger update +
+      section 7 ceremony (fresh dual-reviewer + post-apply verification + ledger update +
       MD writeback + both reviewers' goal_satisfied:true).
 
       F3 (HIGH) -- untracked Phase 4 artifacts: STAGED. _self_drive.py +
@@ -1457,7 +1457,7 @@ revision_history:
       operator_escalation_triggers, authorization.authorized_by. Excludes only
       the signature self-reference + authorized_at_utc timestamp. The 3 closed
       pilot packets retain their v1.0-form signatures as historical record;
-      §7.1 prototype exception covers the form transition.
+      section 7.1 prototype exception covers the form transition.
 
       F5 (HIGH) -- only 2 of 8 stop rules implemented: DOWNGRADED to "PARTIAL
       helper" per Round 9 F5's stated alternative. Module docstring + new
@@ -1497,7 +1497,7 @@ revision_history:
 
       What v1.9.5 records:
         - iter-0009-stabilization closure (release-gate green from current tree)
-        - autonomy contract §7.1 pilot/prototype exception clause
+        - autonomy contract section 7.1 pilot/prototype exception clause
         - _self_drive.py partial-helper downgrade + sig-coverage hardening +
           documented path matcher
         - F1-F8 corrections across spec md + ledger + iteration-outcome +
@@ -1673,7 +1673,7 @@ revision_history:
           dispatch_provenance key in returned packet. main() builds the dict from
           already-computed codex_version + 4 sha256 hashes + scope_signature and
           passes through. T6 hashes the whole packet, so dispatch_provenance is part
-          of the seal — sealed YAML now independently verifiable without
+          of the seal - sealed YAML now independently verifiable without
           dispatch-log.jsonl.
         - 1 new pytest verifies provenance present in sealed YAML with all 6 fields.
 

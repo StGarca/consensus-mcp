@@ -1,4 +1,4 @@
-"""iter-0021 — Author a review-packet skeleton with embedded touched-file contents.
+"""iter-0021 - Author a review-packet skeleton with embedded touched-file contents.
 
 Per iter-0020 empirical finding: codex's read-only sandbox cannot reliably
 read repo files even when given paths. The fix: embed file contents directly
@@ -170,19 +170,19 @@ def author_review_packet(
     # rides through consensus uncaught. Lint the goal_packet's contributor-term
     # skew at author time + embed the report so contributors (and the operator)
     # see it WITHOUT relying on anyone noticing. Contributor set comes from
-    # config (never hardcoded — that would be the bias under guard).
+    # config (never hardcoded - that would be the bias under guard).
     # FAIL-LOUD, not fail-open (1.17 consensus review, unanimous top finding:
     # codex-001/gemini-001/kimi-001). An anti-bias gate that silently returns
     # "no anchoring" on a crash is indistinguishable from a clean result and lets
     # bias through unseen. So a real audit FAILURE is surfaced as an explicit
     # `anchoring_audit_error` key in the packet (distinguishable from clean) plus
-    # a loud stderr line — never a silent empty result.
+    # a loud stderr line - never a silent empty result.
     try:
         anchoring = _anchoring_audit(iteration_dir, repo_root)
     except Exception as exc:
         merged["anchoring_audit_error"] = f"{type(exc).__name__}: {exc}"
         sys.stderr.write(
-            f"[anchoring-lint] AUDIT FAILED — bias was NOT checked: "
+            f"[anchoring-lint] AUDIT FAILED - bias was NOT checked: "
             f"{type(exc).__name__}: {exc}\n")
         anchoring = None
     if anchoring:
@@ -218,7 +218,7 @@ def _configured_contributors(repo_root: Path | None = None) -> list[str]:
                     break
     # Fallback = the FULL known contributor allow-list (NOT the narrower
     # enabled-default), so anchoring DETECTION covers every known contributor
-    # including kimi. (QA caught that using `enabled` here dropped kimi —
+    # including kimi. (QA caught that using `enabled` here dropped kimi -
     # blinding the linter to the exact bias it guards against.)
     try:
         from consensus_mcp.config import KNOWN_CONTRIBUTORS
@@ -289,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
         # bucket as "file missing") so callers can treat both as fail-closed.
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    except Exception as exc:  # pragma: no cover — defensive
+    except Exception as exc:  # pragma: no cover - defensive
         print(f"error: unexpected failure: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 

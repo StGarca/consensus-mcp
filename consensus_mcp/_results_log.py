@@ -1,8 +1,8 @@
-"""v1.19.0 result logging — author a per-iteration results record + upsert the
+"""v1.19.0 result logging - author a per-iteration results record + upsert the
 durable JSONL ledger.
 
 See docs/design-consults/v1.19.0-result-logging.md (converged design) and
-schemas/results-v1.schema.json (the shared contract — the authored record MUST
+schemas/results-v1.schema.json (the shared contract - the authored record MUST
 validate against it).
 
 Storage (per the design):
@@ -16,10 +16,10 @@ Record building derives findings from the iteration's sealed review passes
 (claude/codex/gemini-review.yaml), the converged-plan.yaml when present, and the
 audit events. Findings are deduped by id within an iteration. Disposition:
 
-  validated_fixed   — finding id linked to an apply_step_landed.finding_ids,
+  validated_fixed   - finding id linked to an apply_step_landed.finding_ids,
                       or a closure finding_disposition says validated_fixed
-  dismissed_refuted — a closure finding_disposition says so (carries evidence_ref)
-  deferred / open    — otherwise (deferred by default; open is the schema-allowed
+  dismissed_refuted - a closure finding_disposition says so (carries evidence_ref)
+  deferred / open    - otherwise (deferred by default; open is the schema-allowed
                       synonym for a finding raised but not acted on)
 
 `counts` aggregates by_severity, validated, dismissed, deferred, fixes_applied.
@@ -81,7 +81,7 @@ def _is_supplementary(parsed: dict) -> bool:
 
 def _family_for_pass(parsed: dict, static_family: str | None) -> str | None:
     """Resolve a pass's reviewer family: prefer the sealed actor.model_family
-    (authoritative — host_peer's family is host-dependent), else the static
+    (authoritative - host_peer's family is host-dependent), else the static
     per-file default."""
     if isinstance(parsed, dict):
         actor = parsed.get("actor")

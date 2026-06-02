@@ -1,7 +1,7 @@
 # consensus-state/
 
 Runtime state for the consensus pipeline. **Most of this tree is
-gitignored** — it is per-iteration working scratch, not source.
+gitignored** - it is per-iteration working scratch, not source.
 
 | Path | What it is | Tracked? |
 |---|---|---|

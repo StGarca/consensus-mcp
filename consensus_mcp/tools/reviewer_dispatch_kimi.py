@@ -81,8 +81,8 @@ SCHEMA = {
                 "enum": ["propose", "review", "converge", None],
                 "description": (
                     "Dispatch phase, mapped internally to --mode via "
-                    "consensus_mcp.contributors._phase_mode. 'propose' → "
-                    "--mode proposal; 'review' / 'converge' → --mode review. "
+                    "consensus_mcp.contributors._phase_mode. 'propose' -> "
+                    "--mode proposal; 'review' / 'converge' -> --mode review. "
                     "Hides the dispatcher template/schema split from MCP "
                     "callers; matches engine adapter abstraction. If both "
                     "phase and mode are set, mode wins as explicit override."
@@ -174,7 +174,7 @@ def handle(
     """Dispatch kimi via _dispatch_kimi.main; return parsed JSON dict.
 
     Default timeout 1800s if caller omits (vs codex/gemini default 600)
-    — passed through to the helper which has its own default of 1800 for
+    - passed through to the helper which has its own default of 1800 for
     kimi already, but explicit-passthrough here keeps the wrapper
     behavior obvious to MCP callers.
     """

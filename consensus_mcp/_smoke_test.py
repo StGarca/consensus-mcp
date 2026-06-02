@@ -3167,7 +3167,7 @@ def test_server_registry_has_apply_codex_patch() -> bool:
 
 
 def test_author_review_packet_helper_works() -> bool:
-    """iter-0021 — _author_review_packet helper writes review-packet.yaml with embedded contents.
+    """iter-0021 - _author_review_packet helper writes review-packet.yaml with embedded contents.
 
     Smoke probe for the new author-time helper. Creates a tmp scratch tree
     with two source files, invokes the helper, and validates the resulting

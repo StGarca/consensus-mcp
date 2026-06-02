@@ -10,7 +10,7 @@ with a PROFILE-DRIVEN invoke step.
 These tests are hermetic: the real CLI subprocess is replaced by a fake invoker
 (monkeypatched onto the adapter's `_invoke` seam, mirroring how
 test_dispatch_gemini fakes `_invoke_gemini`), and the T6 seal is replaced by a
-capturing fake so the sealed packet — and its `dispatch_provenance` block — can
+capturing fake so the sealed packet - and its `dispatch_provenance` block - can
 be asserted without a real consensus-state tree.
 
 Coverage (per converged-plan acceptance gates):
@@ -219,7 +219,7 @@ def test_repo_root_resolved_above_consensus_state(tmp_path, monkeypatch):
         f"cwd should be the repo root {repo!s}, got {call['cwd']!r} "
         f"(iter_dir.parent would be the consensus-state/active bug)"
     )
-    # kimi profile carries workdir_flag '-w' → cmd must point it at the repo root.
+    # kimi profile carries workdir_flag '-w' -> cmd must point it at the repo root.
     assert "-w" in call["cmd"] and str(repo) in call["cmd"]
 
 
