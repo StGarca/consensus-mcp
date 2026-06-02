@@ -1646,15 +1646,37 @@ def _looks_like_workspace_umbrella(root: Path) -> list[Path]:
     return children
 
 
+# Marker env vars set by agent harnesses (Claude Code) and CI. When any is
+# present there is no human to answer a prompt, so the wizard MUST take the
+# non-interactive path regardless of isatty(). This is the reliable signal on
+# Windows, where a ConPTY-backed subprocess can report isatty()=True even though
+# it is launched by an agent and unanswerable (the v1.33.4 Windows report:
+# `consensus-init` "went interactive asking for reviewer selection" under a
+# Claude Code skill). CLAUDECODE / AI_AGENT are set by Claude Code; CI is the
+# de-facto standard set by every major CI runner.
+_NON_INTERACTIVE_ENV_MARKERS = ("CLAUDECODE", "AI_AGENT", "CI")
+
+
+def _running_under_agent_or_ci() -> bool:
+    """True when an agent/CI marker env var is set (no human to prompt)."""
+    return any(os.environ.get(var) for var in _NON_INTERACTIVE_ENV_MARKERS)
+
+
 def _stdin_is_interactive() -> bool:
-    """True only when stdin is a real interactive TTY.
+    """True only when stdin is a real interactive TTY with a human to answer.
 
     Claude Code's Bash tool, CI runners, and pipes all present a non-TTY stdin;
     there, the wizard's input() prompts hit EOF on the first read (an uncaught
     EOFError crash, or a premature "aborted by user"). Callers downgrade to the
     non-interactive path when this is False. Defensive: a closed / detached
     stdin can make isatty() raise (ValueError/OSError) or stdin can be None.
+
+    An agent/CI marker env var (CLAUDECODE / AI_AGENT / CI) forces False BEFORE
+    consulting isatty(): on Windows a ConPTY subprocess reports isatty()=True
+    even when launched by an agent that cannot answer the prompt.
     """
+    if _running_under_agent_or_ci():
+        return False
     stream = getattr(sys, "stdin", None)
     if stream is None:
         return False
@@ -2361,7 +2383,31 @@ def cmd_init(args) -> int:
     return 0
 
 
+def _force_utf8_streams() -> None:
+    """Make stdout/stderr tolerate non-ASCII glyphs regardless of the console
+    code page. The wizard prints status glyphs ('✓'/'✗') and '->' arrows; on a
+    Windows console defaulting to cp1252 the first such print() raises
+    UnicodeEncodeError and aborts the whole run (the v1.33.4 Windows report).
+    Reconfiguring to UTF-8 with errors='replace' removes the dependency on the
+    ambient code page / PYTHONUTF8. Best-effort: streams that are None, lack
+    reconfigure() (e.g. a captured StringIO under pytest), or whose buffer is
+    detached are left untouched.
+    """
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError, AttributeError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    # Windows-portability (v1.33.4): make output encoding-safe before any print()
+    # so a cp1252 console can't crash the wizard on the first '✓' status line.
+    _force_utf8_streams()
     # iter-0040 (per iter-0039 converged plan Q6 bonus): the package also ships
     # a `consensus` console-script alias. When invoked as `consensus init ...`,
     # argv[0] is the literal subcommand "init". Strip it so argparse sees the
