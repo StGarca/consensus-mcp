@@ -22,8 +22,10 @@ Convergence evaluation:
 """
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import math
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -41,6 +43,53 @@ from consensus_mcp.contributors import (
 )
 from consensus_mcp.contributors.base import DispatchPacket
 from consensus_mcp.validators import validate_converged_plan as vcp
+
+
+def _max_dispatch_workers() -> int | None:
+    """Optional concurrency cap for parallel phase dispatch (Q1 refinement).
+
+    Reads CONSENSUS_MCP_MAX_DISPATCH_WORKERS; returns the int, or None (= one
+    worker per contributor) when unset/invalid. A cap bounds host resource use
+    without reintroducing a serial path - it is NOT a kill-switch."""
+    raw = os.environ.get("CONSENSUS_MCP_MAX_DISPATCH_WORKERS")
+    if not raw:
+        return None
+    try:
+        v = int(raw)
+        return v if v >= 1 else None
+    except ValueError:
+        return None
+
+
+def _dispatch_phase_parallel(items, fn, max_workers=None):
+    """Run fn(item) for every item CONCURRENTLY; return results in items order.
+
+    The consult-ratified parallel-dispatch primitive. Contributors within a
+    phase are independent, so they fan out via a ThreadPoolExecutor (each
+    fn(item) is a blocking subprocess dispatch -- I/O-bound, ideal for threads).
+    Rounds stay sequential; only within-phase items go concurrent.
+
+    Determinism + thread-safety (hazards H2/Q2): results are collected in the
+    CALLING thread and returned re-sorted into items order, so worker threads
+    never mutate shared engine state and concurrency changes only wall-clock,
+    not outcomes. Collect-all (not fail-fast): an fn that raises has its slot set
+    to ('err', exc) instead of propagating, so one bad dispatch never aborts the
+    panel. Each result is ('ok', value) or ('err', exception), in items order.
+    Empty items -> []. max_workers caps concurrency (default: one per item)."""
+    n = len(items)
+    if n == 0:
+        return []
+    workers = n if max_workers is None else max(1, min(int(max_workers), n))
+    results: list = [None] * n
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        fut_to_idx = {ex.submit(fn, item): i for i, item in enumerate(items)}
+        for fut in concurrent.futures.as_completed(fut_to_idx):
+            i = fut_to_idx[fut]
+            try:
+                results[i] = ("ok", fut.result())
+            except Exception as exc:  # noqa: BLE001 - collect-all by design
+                results[i] = ("err", exc)
+    return results
 
 
 class WorkflowError(RuntimeError):
@@ -194,24 +243,28 @@ class WorkflowEngine:
         engine dispatches them sequentially within this synchronous loop,
         but they're independent of each other)."""
         enabled = self.config["contributors"]["enabled"]
-        # Dispatch all non-claude contributors with review packets.
+        # Dispatch all non-claude contributors with review packets IN PARALLEL
+        # (consult-ratified). claude is the orchestrator/author, not a reviewer
+        # here. Results come back in non_claude order; the outcome mutation +
+        # timeout recording happen in THIS (main) thread (hazard H2).
+        non_claude = [c for c in enabled if c != cfg.CLAUDE]
         review_artifacts: list[SealedArtifact] = []
-        for c in enabled:
-            if c == cfg.CLAUDE:
-                # Claude's "implementation" is the target_path; engine doesn't
-                # re-emit it. (Real runtime: claude wrote target_path before
-                # calling the engine.)
-                continue
-            adapter = self.adapters[c]
-            try:
-                art = adapter.review(iteration_dir, goal_packet_path, target_path)
-            except DispatchError as exc:
-                outcome.contributor_artifacts.setdefault(c, [])
-                # Record timeout per workflow.timeout_policy.
-                self._record_timed_out(c, exc, outcome)
-                continue
-            review_artifacts.append(art)
-            outcome.contributor_artifacts.setdefault(c, []).append(art)
+        results = _dispatch_phase_parallel(
+            non_claude,
+            lambda c: self.adapters[c].review(
+                iteration_dir, goal_packet_path, target_path
+            ),
+            max_workers=_max_dispatch_workers(),
+        )
+        for c, (status, val) in zip(non_claude, results):
+            if status == "err":
+                if isinstance(val, DispatchError):
+                    # Record timeout per workflow.timeout_policy.
+                    self._record_timed_out(c, val, outcome)
+                    continue
+                raise val  # non-DispatchError = a real bug; do not swallow
+            review_artifacts.append(val)
+            outcome.contributor_artifacts.setdefault(c, []).append(val)
         # codex-rev-001 round-1 BLOCKING fix: workflow #3 dispatches only the
         # non-claude reviewers; claude is the orchestrator/author, not a voter.
         # Pass the dispatched set as eligible_voters so claude isn't falsely
@@ -258,19 +311,26 @@ class WorkflowEngine:
         enabled = self.config["contributors"]["enabled"]
         max_rounds = self.config["workflow"]["max_convergence_rounds"]
 
-        # Phase 1: blind proposals (sequential dispatch in engine; the
-        # contributors themselves don't see each other's outputs because
-        # the input to each is just the problem statement).
+        # Phase 1: blind proposals dispatched IN PARALLEL (consult-ratified).
+        # Contributors don't see each other's outputs (input is just the problem
+        # statement), so independence is preserved regardless of timing. Results
+        # come back in enabled order; outcome mutation happens in the main thread.
         proposals: list[SealedArtifact] = []
-        for c in enabled:
-            adapter = self.adapters[c]
-            try:
-                art = adapter.propose(iteration_dir, goal_packet_path, problem_statement_path)
-            except DispatchError as exc:
-                self._record_timed_out(c, exc, outcome)
-                continue
-            proposals.append(art)
-            outcome.contributor_artifacts.setdefault(c, []).append(art)
+        prop_results = _dispatch_phase_parallel(
+            enabled,
+            lambda c: self.adapters[c].propose(
+                iteration_dir, goal_packet_path, problem_statement_path
+            ),
+            max_workers=_max_dispatch_workers(),
+        )
+        for c, (status, val) in zip(enabled, prop_results):
+            if status == "err":
+                if isinstance(val, DispatchError):
+                    self._record_timed_out(c, val, outcome)
+                    continue
+                raise val
+            proposals.append(val)
+            outcome.contributor_artifacts.setdefault(c, []).append(val)
 
         if not proposals:
             raise WorkflowError(
@@ -285,21 +345,27 @@ class WorkflowEngine:
             convergence_packet_path = self._build_convergence_packet(
                 iteration_dir, proposal_paths, round_n
             )
+            # Within a round, contributors converge INDEPENDENTLY against the
+            # same packet -> dispatch in parallel. Rounds themselves stay
+            # sequential (round N+1 consumes round N's artifacts).
             convergence_artifacts: list[SealedArtifact] = []
-            for c in enabled:
-                if c not in self.adapters:
-                    continue
-                adapter = self.adapters[c]
-                try:
-                    art = adapter.converge(
-                        iteration_dir, goal_packet_path,
-                        convergence_packet_path, round_number=round_n,
-                    )
-                except DispatchError as exc:
-                    self._record_timed_out(c, exc, outcome)
-                    continue
-                convergence_artifacts.append(art)
-                outcome.contributor_artifacts.setdefault(c, []).append(art)
+            conv_items = [c for c in enabled if c in self.adapters]
+            conv_results = _dispatch_phase_parallel(
+                conv_items,
+                lambda c: self.adapters[c].converge(
+                    iteration_dir, goal_packet_path,
+                    convergence_packet_path, round_number=round_n,
+                ),
+                max_workers=_max_dispatch_workers(),
+            )
+            for c, (status, val) in zip(conv_items, conv_results):
+                if status == "err":
+                    if isinstance(val, DispatchError):
+                        self._record_timed_out(c, val, outcome)
+                        continue
+                    raise val
+                convergence_artifacts.append(val)
+                outcome.contributor_artifacts.setdefault(c, []).append(val)
             last_convergence_artifacts = convergence_artifacts
             conv = self._evaluate_convergence(convergence_artifacts, outcome)
             if conv.converged:

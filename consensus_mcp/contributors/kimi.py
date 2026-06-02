@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 from consensus_mcp.contributors.base import (
+    capture_stdout_threadsafe,
     ContributorAdapter,
     DispatchError,
     DispatchPacket,
@@ -48,9 +49,8 @@ class KimiAdapter(ContributorAdapter):
 
         from consensus_mcp import _dispatch_kimi
 
-        buf = io.StringIO()
         rc = 0
-        with contextlib.redirect_stdout(buf):
+        with capture_stdout_threadsafe() as buf:
             try:
                 rc = _dispatch_kimi.main(argv) or 0
             except SystemExit as exc:

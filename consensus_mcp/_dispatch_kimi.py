@@ -277,6 +277,13 @@ def _kimi_subprocess_env() -> dict:
     env = os.environ.copy()
     env.pop("KIMI_API_KEY", None)
     env.pop("OPENAI_API_KEY", None)
+    # Consult Finding B / Q5: kimi-cli is a Python app that decodes its UTF-8
+    # stdin under the ambient locale (cp1252 on a default Windows console) with
+    # surrogateescape, then its strict-UTF-8 JSON serializer rejects the lone
+    # surrogate -> the dispatch crashes on any review payload carrying a
+    # non-cp1252 byte. Forcing PYTHONUTF8=1 makes kimi-cli read stdin as UTF-8
+    # regardless of console code page. Harmless when already UTF-8.
+    env["PYTHONUTF8"] = "1"
     return env
 
 

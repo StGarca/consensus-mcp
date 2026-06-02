@@ -151,6 +151,9 @@ review_read_post_seal.register(registry)
 from consensus_mcp.tools import state_update_decision_ledger  # noqa: E402
 state_update_decision_ledger.register(registry)
 
+from consensus_mcp.tools import approve_consult as _approve_consult_tool  # noqa: E402
+_approve_consult_tool.register(registry)
+
 from consensus_mcp.tools import repo_get_section  # noqa: E402
 repo_get_section.register(registry)
 

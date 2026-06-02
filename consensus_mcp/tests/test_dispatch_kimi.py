@@ -72,6 +72,16 @@ def test_kimi_subprocess_env_does_not_mutate_os_environ(monkeypatch):
     assert os.environ.get("KIMI_API_KEY") == "sk-stray"
 
 
+def test_kimi_subprocess_env_forces_pythonutf8(monkeypatch):
+    # v1.33.x consult Finding B / Q5: kimi-cli (a Python app) decodes its UTF-8
+    # stdin under the Windows locale (cp1252) and crashes on a lone surrogate
+    # when a review payload carries a non-cp1252 byte. Forcing PYTHONUTF8=1 makes
+    # kimi-cli decode stdin as UTF-8 regardless of console code page.
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    env = _dispatch_kimi._kimi_subprocess_env()
+    assert env["PYTHONUTF8"] == "1"
+
+
 def test_kimi_subprocess_env_does_not_set_kimi_api_key():
     # Per task: do NOT set KIMI_API_KEY (OAuth file creds are authoritative).
     env = _dispatch_kimi._kimi_subprocess_env()

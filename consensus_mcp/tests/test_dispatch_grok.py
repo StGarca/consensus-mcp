@@ -450,3 +450,24 @@ def test_assemble_stream_stops_at_end_event():
         {"type": "text", "data": "ignored-after-end"},
     )
     assert _dispatch_grok._assemble_grok_stream(raw) == "kept"
+
+
+# ----- Q4 / Finding A: configurable search-path fallback for bare-name resolution ---
+
+def test_resolve_grok_bin_uses_configurable_search_path(tmp_path, monkeypatch):
+    """When the (long-lived server's) PATH is stale and bare-name which() fails,
+    resolution falls back to CONSENSUS_MCP_BIN_DIRS so grok is found without a
+    per-machine config edit (consult Finding A / Q4)."""
+    binp = tmp_path / "grok"
+    binp.write_text("#!/bin/sh\necho ok\n")
+    binp.chmod(0o755)
+    monkeypatch.setenv("PATH", "/nonexistent-sentinel-dir")  # which("grok") -> None
+    monkeypatch.setenv("CONSENSUS_MCP_BIN_DIRS", str(tmp_path))
+    assert _dispatch_grok._resolve_grok_bin("grok") == str(binp)
+
+
+def test_resolve_grok_bin_no_search_path_returns_bare(monkeypatch):
+    """No override + which() miss -> unchanged behavior (returns the bare name)."""
+    monkeypatch.setenv("PATH", "/nonexistent-sentinel-dir")
+    monkeypatch.delenv("CONSENSUS_MCP_BIN_DIRS", raising=False)
+    assert _dispatch_grok._resolve_grok_bin("grok") == "grok"

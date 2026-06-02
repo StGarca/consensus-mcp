@@ -138,6 +138,36 @@ One repeatable pipeline. Each superpowers stage maps to a consensus role:
 3. Path B: pass it as `consensus.run_iteration(..., host_peer_review_yaml=<yaml>)`.
    Path A: seal it via the host_peer path. One-shot; never loop.
 
+### Codified consult flow - SAME every install (no improvisation)
+
+The consult pipeline is fixed. Run it the SAME way every time; do NOT invent
+per-session steps.
+
+1. **Author the goal_packet + review-packet.** Finalize them BEFORE dispatching
+   (mid-flight rewrites waste dispatches).
+2. **Fan out to ALL enabled reviewers AT ONCE - in parallel.** Make the packet,
+   send it to every reviewer concurrently, wait for all to seal. **Do NOT** run a
+   "validate the plumbing with a single reviewer first, then parallelize the rest"
+   probe - that improvised serial pre-flight is FORBIDDEN. The engine
+   (`run_iteration`) now fans out within a phase automatically; for the shell-binary
+   path, dispatch the binaries concurrently (background + wait). Allocate a
+   **reviewer-distinct `--pass-id`** to each (the T6 seal keys on `(iteration,
+   pass_id)`; reusing one pass_id across reviewers collides - only the first seals).
+3. **Synthesize** the sealed reviews into ONE host-authored `converged-plan.yaml`
+   (weighted-synthesis). This is YOUR artifact - the approve step never authors it.
+4. **Approve in ONE step:** `consensus-mcp-approve --iteration <name> --scope-glob
+   <glob>` (or the `consensus.approve` MCP tool). It validates the >=2-non-claude
+   precondition, seals the outcome mechanically (no manual `EDIT_ME` editing),
+   mints `.consensus/design-approved`, and re-validates - emitting an ACTIONABLE
+   error on any unmet precondition. Both the CLI and the MCP tool use the SAME
+   strict repo-root resolver (`CONSENSUS_MCP_REPO_ROOT` env-first), so they can
+   never resolve different roots. Accepts `--converged-plan` as a bare name or a
+   full path. Do NOT hand-roll the prepare -> edit -> mint sequence.
+
+Containment-marker dirs (`consensus-state/`, `consensus_mcp/`,
+`consensus_mcp/validators/`) must exist at the repo root for resolution; in the
+consensus-mcp repo itself they already do.
+
 ### `.consensus` gate caveat
 The PreToolUse enforcement gate (seal `.consensus/design-approved`, mint a
 delivery token) is **project-scoped**: it only fires where a `.consensus/config.yaml`

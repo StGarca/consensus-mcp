@@ -41,6 +41,14 @@ def test_gemini_subprocess_env_sets_trust_workspace():
     assert env["GEMINI_CLI_TRUST_WORKSPACE"] == "true"
 
 
+def test_gemini_subprocess_env_forces_pythonutf8(monkeypatch):
+    # Consult Q5: force UTF-8 for adapter subprocesses (defense-in-depth against
+    # the cp1252 stdin-decode class; harmless to a non-Python CLI).
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    env = _dispatch_gemini._gemini_subprocess_env()
+    assert env["PYTHONUTF8"] == "1"
+
+
 def test_gemini_subprocess_env_preserves_parent_env(monkeypatch):
     monkeypatch.setenv("PATH", "/sentinel/path")
     monkeypatch.setenv("SOME_UNRELATED_VAR", "keepme")
