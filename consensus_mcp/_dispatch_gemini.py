@@ -127,6 +127,10 @@ def _gemini_subprocess_env() -> dict:
     """
     env = os.environ.copy()
     env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+    # Consult Q5 (defense-in-depth): force UTF-8 so any locale-dependent stdin
+    # decode in an adapter subprocess can't hit the cp1252 surrogate class.
+    # Harmless to a non-Python CLI.
+    env["PYTHONUTF8"] = "1"
     return env
 
 

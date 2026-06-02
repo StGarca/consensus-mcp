@@ -21,10 +21,72 @@ fields that the engine fills in.
 """
 from __future__ import annotations
 
+import contextlib
+import io
+import sys
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+
+# --- Hazard H1: thread-safe stdout capture for concurrent dispatch ----------
+# The peer adapters capture a dispatch's stdout to parse its JSON result. The
+# original `contextlib.redirect_stdout(buf)` swaps the PROCESS-GLOBAL sys.stdout
+# for the whole (multi-minute) dispatch; once contributors fan out concurrently
+# (consult-ratified parallel dispatch) those swaps race and cross-capture each
+# other's output. The proxy below is installed as sys.stdout ONCE and never
+# swapped per-call: each thread routes its writes to its own buffer via a
+# thread-local, so concurrent captures stay isolated.
+
+class _ThreadLocalStdoutProxy:
+    def __init__(self, real):
+        self._real = real
+        self._local = threading.local()
+
+    def _target(self):
+        buf = getattr(self._local, "buf", None)
+        return buf if buf is not None else self._real
+
+    def write(self, s):
+        return self._target().write(s)
+
+    def flush(self):
+        return self._target().flush()
+
+    def __getattr__(self, name):
+        # isatty / encoding / fileno / etc. -> the active target.
+        return getattr(self._target(), name)
+
+
+_STDOUT_PROXY_LOCK = threading.Lock()
+
+
+def _ensure_stdout_proxy() -> "_ThreadLocalStdoutProxy":
+    """Install the proxy as sys.stdout if it isn't already. Re-wraps when
+    something else (e.g. pytest's per-test capture) has replaced sys.stdout."""
+    with _STDOUT_PROXY_LOCK:
+        cur = sys.stdout
+        if not isinstance(cur, _ThreadLocalStdoutProxy):
+            cur = _ThreadLocalStdoutProxy(cur)
+            sys.stdout = cur
+        return cur
+
+
+@contextlib.contextmanager
+def capture_stdout_threadsafe():
+    """Capture THIS thread's stdout into a fresh StringIO WITHOUT swapping the
+    process-global sys.stdout per call -- safe under concurrent dispatch (H1).
+    Yields the StringIO buffer."""
+    buf = io.StringIO()
+    proxy = _ensure_stdout_proxy()
+    prev = getattr(proxy._local, "buf", None)
+    proxy._local.buf = buf
+    try:
+        yield buf
+    finally:
+        proxy._local.buf = prev
 
 
 # Phase identifiers as Literal type alias.

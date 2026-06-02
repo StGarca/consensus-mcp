@@ -170,7 +170,32 @@ def _resolve_grok_bin(grok_bin: str) -> str:
     if os.path.sep in grok_bin or (len(grok_bin) > 1 and grok_bin[1] == ":"):
         return grok_bin
     resolved = shutil.which(grok_bin)
-    return resolved if resolved is not None else grok_bin
+    if resolved is not None:
+        return resolved
+    # Consult Finding A / Q4: a long-lived MCP server resolves bare names against
+    # its LAUNCH-TIME PATH, which can be stale (e.g. ~/.grok/bin became visible
+    # after the server started) -> which() returns None even though the binary
+    # exists. Fall back to a configurable extra search path so resolution
+    # succeeds without a per-machine config edit. CONSENSUS_MCP_BIN_DIRS is an
+    # os.pathsep-separated list of directories searched in order.
+    found = _search_extra_bin_dirs(grok_bin)
+    return found if found is not None else grok_bin
+
+
+def _search_extra_bin_dirs(name: str) -> str | None:
+    """Look for an executable `name` in CONSENSUS_MCP_BIN_DIRS (os.pathsep list).
+
+    Returns the absolute path of the first executable match, or None. Bypasses
+    the process PATH entirely, so it works even when the server's launch-time
+    PATH is stale (consult Finding A / Q4)."""
+    raw = os.environ.get("CONSENSUS_MCP_BIN_DIRS", "")
+    for d in raw.split(os.pathsep):
+        if not d:
+            continue
+        cand = shutil.which(name, path=d)
+        if cand is not None:
+            return cand
+    return None
 
 
 def _get_grok_version(grok_bin: str) -> str:

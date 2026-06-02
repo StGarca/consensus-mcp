@@ -163,6 +163,45 @@ Windows bug, not a dispatcher or payload defect.
   subprocess the right scope, or should ALL Python-app adapter subprocesses get a
   forced-UTF-8 env to immunize the panel against locale-dependent stdin decode?
 
+### Finding C - post-consult seal + approval-marker minting is uncodified
+
+Symptom (observed on the new-project install): after the panel returns sealed
+review packets and the orchestrator synthesizes, the agent does NOT know how to
+turn that into an accepted `.consensus/design-approved` marker that unblocks
+`src/` edits. It reverse-engineers `_design_approval` internals over many calls -
+discovering `SEALED_CLOSING_STATES`, `resolve_consensus_ref`,
+`compute_artifact_hash`, the >=2-non-claude-reviewer rule, scope_glob confinement,
+and the prepare->scaffold-outcome->mint sequence - just to legitimately approve a
+consult it already ran.
+
+- The trust model is CORRECT and must NOT be weakened: the marker is a pointer
+  re-validated against the live cross-family seal (no self-approval; >=2 non-claude
+  reviewers; `converged_plan_sha256` must match the iteration's converged-plan;
+  scope-confined; fail-closed). `mint_design_approval()` exists.
+- The GAP is purely ergonomic: there is no single codified "consult converged ->
+  seal iteration -> mint approval marker -> unblock" command, and the
+  consensus-workflow skill does not spell out the exact post-convergence steps. So
+  every fresh agent re-derives the internals.
+- Related sub-gap: how the orchestrator CONSUMES the returned sealed packets
+  (read + synthesize) is also improvised per session.
+- Field-confirmed sub-friction (the seal sequence itself): `prepare` scaffolds an
+  outcome with `EDIT_ME` / `EDIT_ME_TO_A_SEALED_STATE` placeholders the agent must
+  hand-fill, then `mint`. And a FOOTGUN: `mint --converged-plan` wants a BARE
+  filename (joined to the iteration dir), so passing a full path fails with a
+  misleading `missing_converged_plan` "not found" error even though the file is on
+  disk. The codified approve-flow should accept either form (or default it) and
+  never emit a "not found" error for a file that exists.
+- **Operator-proposed fix:** a single composed command/flow - e.g.
+  `consensus approve --iteration <dir>` (or an MCP tool) that runs the existing
+  prepare/seal + `mint_design_approval` primitives end-to-end, validates the
+  >=2-non-claude + hash + scope preconditions, and emits a clear actionable error
+  when a precondition is unmet (e.g. "only 1 non-claude review sealed; need >=2").
+  Plus a codified "consume returned packets -> synthesize converged-plan" step in
+  the skill. Trust model unchanged; only the UX is codified.
+- **Hardening question for the panel:** should the codified approve-flow be a CLI
+  binary, an MCP tool, or both, and where should the consensus-workflow skill draw
+  the line between "engine does it" vs "documented operator steps"?
+
 ## Out of scope (tracked separately)
 
 - Auto-creating containment-marker dirs at init (`todo-containment-marker-dirs`).
@@ -184,3 +223,6 @@ Windows bug, not a dispatcher or payload defect.
 5. **[Finding B]** Is forcing `PYTHONUTF8=1` for the kimi subprocess the right scope, or
    should ALL Python-app adapter subprocesses get a forced-UTF-8 env to immunize the panel
    against locale-dependent stdin decode? (Same cp1252 class as v1.33.4.)
+6. **[Finding C]** Codified post-consult approve-flow: CLI binary, MCP tool, or both? Where
+   is the line between engine-automated sealing/minting and documented operator steps in the
+   consensus-workflow skill? (Trust model stays as-is; only the UX is codified.)

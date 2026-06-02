@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.33.3
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.40.0
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -154,16 +154,23 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.33.3 - stable.** Grok dispatcher streaming fix: the
-dispatcher now invokes grok with `--output-format streaming-json` so its
-silence watchdog sees token-by-token liveness (the earlier `plain`-output
-buffering made the watchdog kill grok for being silent while grok was
-silent by design), and runs grok from a fresh empty per-pass temp `--cwd`
-to drop the `/tmp` watcher noise. All five reviewers - Claude, Codex,
-Gemini, Grok, and Kimi - are MCP-surfaced (visible in Claude Code's
-active-tools strip). 1,800+ regression tests, green on CI across Linux +
-Windows and Python 3.11+. Self-hosted: every release is built through
-consensus-mcp's own cross-AI review.
+**Current: v1.40.0 - stable.** Parallel reviewer dispatch + codified consult
+lifecycle. The engine now fans out independent reviewers within a phase
+concurrently (a ~4-8 min serial consult becomes ~1-2 min) instead of one at a
+time - with deterministic, reproducible outcomes (results re-sorted into config
+order; concurrency changes only wall-clock). Two concurrency hazards a 4-AI
+panel verified were fixed in the same change: process-global stdout capture
+(now thread-local) and a shared-outcome dict race (now collected in the main
+thread). New `consensus-mcp-approve` CLI + `consensus.approve` MCP tool turn a
+converged consult into an accepted approval marker in ONE step (no manual
+seal/edit/mint slog), over one strict repo-root resolver shared by CLI + MCP.
+Windows hardening: `consensus-init` no longer crashes on a cp1252 console, kimi
+forces `PYTHONUTF8`, and grok resolves via a configurable search path when the
+server's PATH is stale. The whole tree is ASCII-only (enforced by a guard test).
+All five reviewers - Claude, Codex, Gemini, Grok, and Kimi - are MCP-surfaced.
+1,800+ regression tests, green on CI across Linux + Windows and Python 3.11+.
+Self-hosted: this release was ratified by consensus-mcp's own 4-AI cross-AI
+review.
 
 - What changed in each release -> [`CHANGELOG.md`](CHANGELOG.md)
 - Known-issue releases + which version to upgrade to ->

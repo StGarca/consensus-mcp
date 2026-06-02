@@ -1,5 +1,75 @@
 # Changelog
 
+## 1.40.0 - 2026-06-02
+
+**Parallel reviewer dispatch + codified consult lifecycle + Windows hardening.**
+Ratified by consensus-mcp's own 4-AI anchored panel (codex + gemini + grok +
+kimi; goal_satisfied 4/4, zero blocking objections).
+
+Parallel dispatch (the headline):
+- The engine fanned reviewers out SERIALLY (one `adapter.review/propose/converge`
+  at a time) in both workflows even though they are independent - a 4-reviewer
+  consult ran in ~sum(t) (~4-8 min) instead of ~max(t) (~1-2 min). New
+  `_dispatch_phase_parallel` runs contributors within a phase concurrently via a
+  ThreadPoolExecutor; rounds stay sequential. Optional
+  `CONSENSUS_MCP_MAX_DISPATCH_WORKERS` caps concurrency.
+- Determinism preserved: results are collected in the calling thread and
+  re-sorted into `enabled` config order before sealing/convergence, so
+  concurrency changes only wall-clock, not outcomes.
+- Two concurrency hazards the panel independently verified (and confirmed in
+  tree) were fixed in the same change: (H1) all four adapters captured dispatch
+  stdout via process-global `redirect_stdout` which cross-captures under
+  concurrency - now a thread-local stdout proxy; (H2) `IterationOutcome` was
+  mutated from would-be worker threads - now collected in the main thread.
+
+Codified consult lifecycle (no more per-session improvisation):
+- New `consensus-mcp-approve` CLI + `consensus.approve` MCP tool: validate a
+  converged consult and mint the `.consensus/design-approved` marker in ONE step
+  (precondition check + mechanical outcome seal + mint + re-validate), replacing
+  the manual prepare -> edit `EDIT_ME` -> mint slog. Actionable precondition
+  errors ("only 1 non-claude review sealed; need >=2"). Accepts `--converged-plan`
+  as a bare name or full path. The approve flow VALIDATES + MINTS but never
+  authors the converged plan (no self-approval blur); the trust model (>=2
+  non-claude families, hash match, scope confinement, fail-closed) is unchanged.
+- Finding #7 fix: the CLI and the MCP tool use ONE strict repo-root resolver
+  (`CONSENSUS_MCP_REPO_ROOT` env-first), so they can never resolve different
+  roots the way the prior MCP delivery path did.
+- The consensus-workflow skill now documents the single fan-out -> converge ->
+  approve flow and FORBIDS the improvised "validate plumbing with one reviewer
+  first" serial probe. Parallel fan-out must allocate reviewer-distinct
+  `--pass-id` values (the T6 seal keys on `(iteration, pass_id)`).
+
+Dispatcher hardening (field-reported from a fresh Windows install):
+- kimi: inject `PYTHONUTF8=1` into the subprocess env so kimi-cli decodes its
+  UTF-8 stdin as UTF-8 regardless of a cp1252 console (a non-cp1252 byte in a
+  consuming project's source was crashing the dispatch with a lone-surrogate
+  error). gemini gets the same defense-in-depth.
+- grok: bare-name resolution falls back to a configurable `CONSENSUS_MCP_BIN_DIRS`
+  search path when the long-lived server's launch-time PATH is stale.
+
+Repo hygiene:
+- All non-ASCII characters purged repo-wide (em-dashes, arrows, checkmarks,
+  box-drawing, etc. -> ASCII) and a guard test (`test_no_non_ascii.py`) fails on
+  any reintroduced non-ASCII byte. Non-ASCII typography is an "AI-slop" tell and
+  a cp1252 portability liability.
+
+Known issue (environmental, not a regression): the `@_REQUIRES_REAL_CODEX` smoke
+tests in `test_dispatch_codex.py` need a live codex OAuth token; they skip where
+codex is absent (CI) and fail on a machine whose codex token is revoked. Run
+`codex login` to clear them.
+
+## 1.33.4 - 2026-06-02
+
+**Windows console portability for `consensus-init`.** The init wizard crashed two
+ways on a fresh Windows install: it printed status glyphs to a cp1252 stdout
+(UnicodeEncodeError), and it dropped into the interactive reviewer prompt under a
+Claude Code skill because `isatty()` reports True for a ConPTY subprocess. Fixed:
+`main()` reconfigures stdout/stderr to UTF-8 before any output, and the
+interactivity guard treats agent/CI marker env vars (`CLAUDECODE`/`AI_AGENT`/`CI`)
+as non-interactive before consulting `isatty()`. Also: dormant-by-default parity
+across all three hooks (the Stop gate + SessionStart injector no longer fire in
+every repo) and kimi markdown-fenced-JSON recovery.
+
 ## 1.33.3 - 2026-05-30
 
 **Grok dispatcher streams its output so the silence watchdog stays fed.** The
