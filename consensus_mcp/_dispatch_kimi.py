@@ -705,9 +705,15 @@ def _peel_assistant_content(raw_output: str) -> str:
         return last_content
 
     # No assistant envelope found. If the raw output already looks like a JSON
-    # object/array, hand it back so _extract_json_from_text can try.
+    # object/array -- or a markdown-fenced JSON block (kimi sometimes prints
+    # ```json ... ``` directly instead of a stream-json envelope) -- hand it
+    # back so _extract_json_from_text can recover it, exactly as for gemini.
     stripped = raw_output.strip()
-    if stripped.startswith("{") or stripped.startswith("["):
+    if (
+        stripped.startswith("{")
+        or stripped.startswith("[")
+        or stripped.startswith("```")
+    ):
         return stripped
 
     raise KimiOutputParseError(
