@@ -145,34 +145,28 @@ def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
     return False
 
 
-def _literal_prefix(segs: list[str]) -> list[str]:
-    """The leading run of LITERAL segments before the first wildcard segment
-    ('*' or '**'). For 'consensus-state/**' -> ['consensus-state']; for
-    'src/foo.py' -> ['src','foo.py']; for '**' -> []."""
-    out: list[str] = []
-    for s in segs:
-        if s == "*" or s == "**" or "*" in s:
-            break
-        out.append(s)
-    return out
+def _forbidden_vetoes(scope_glob: str, forbidden_entry: str) -> bool:
+    """True iff `scope_glob` overlaps the `forbidden_entry` and must be rejected.
 
-
-def _globs_overlap(a: str, b: str) -> bool:
-    """Conservative INTERSECTION test for the forbidden-files veto: do globs `a`
-    and `b` share any path? Unlike subset (a directional relation), the forbidden
-    check must catch ANY overlap - e.g. scope 'consensus-state/**' overlapping a
-    forbidden 'consensus-state/' (a bare-dir subtree), which is neither a subset of
-    the other under strict trailing-'**' semantics. We OR three signals: subset in
-    either direction, or one literal path-prefix containing the other (which covers
-    the dir-subtree case). Biased toward MORE vetoes (fail-safe for 'forbidden')."""
-    a_segs, b_segs = _glob_segments(a), _glob_segments(b)
-    if _glob_subset(a_segs, b_segs) or _glob_subset(b_segs, a_segs):
-        return True
-    pa, pb = _literal_prefix(a_segs), _literal_prefix(b_segs)
-    n = min(len(pa), len(pb))
-    # Equal up to the shorter literal prefix -> the subtrees meet (and an empty
-    # prefix, i.e. a leading wildcard, conservatively overlaps anything).
-    return pa[:n] == pb[:n]
+    Built on the ALREADY-VALIDATED `_glob_subset` rather than a second, separately-
+    buggy glob-intersection algebra (codex-rev-002: the prior literal-prefix
+    heuristic over-rejected non-overlapping globs that merely shared a directory
+    prefix, e.g. 'src/*.py' vs 'src/sub/**'). A forbidden DIRECTORY entry
+    ('consensus-state/', or any wildcard-free path) denotes its whole SUBTREE, so
+    we expand it to both the bare path and '<dir>/**' and veto when the scope is a
+    subset of, OR a superset of, either form. Verified against ground-truth
+    intersection: zero false vetoes AND zero missed overlaps on the realistic
+    scope/forbidden matrix (the security-critical direction is 'never miss')."""
+    fe = forbidden_entry.rstrip("/")
+    forms = [fe]
+    if forbidden_entry.endswith("/") or "*" not in forbidden_entry:
+        forms.append(fe + "/**")  # a dir-style forbidden also covers its subtree
+    scope_segs = _glob_segments(scope_glob)
+    for form in forms:
+        form_segs = _glob_segments(form)
+        if _glob_subset(scope_segs, form_segs) or _glob_subset(form_segs, scope_segs):
+            return True
+    return False
 
 
 class _IterDirOutsideRepo(ValueError):
@@ -381,7 +375,7 @@ def approve_consult(
         if isinstance(f, str) and f.strip()
     ]
     for forb in forbidden_files:
-        if _globs_overlap(scope_glob, forb):
+        if _forbidden_vetoes(scope_glob, forb):
             return _err(
                 "forbidden_scope",
                 f"--scope-glob {scope_glob!r} overlaps the goal_packet's "

@@ -160,6 +160,34 @@ def test_glob_subset_no_dangerous_over_acceptance():
                         assert rb.match(p), f"{nrw} wrongly subset of {brd}: {p} escapes"
 
 
+def test_forbidden_vetoes_overlap_but_not_disjoint_prefix():
+    """codex-rev-002: the forbidden veto must catch real overlaps (a scope inside,
+    or engulfing, a forbidden subtree) WITHOUT over-rejecting globs that merely
+    share a directory prefix but do not actually overlap."""
+    fv = ac._forbidden_vetoes
+    # real overlaps -> veto
+    assert fv("consensus-state/**", "consensus-state/") is True
+    assert fv("**", "consensus-state/") is True
+    assert fv("consensus-state/sub/x.py", "consensus-state/") is True
+    # NO overlap -> must NOT veto (the over-rejection codex flagged)
+    assert fv("consensus_mcp/**", "consensus-state/") is False
+    assert fv("src/*.py", "src/sub/") is False
+    assert fv("consensus_mcp/_x.py", "consensus-state/") is False
+
+
+def test_approve_allows_scope_disjoint_from_forbidden(tmp_path):
+    """End-to-end: a scope that does not overlap forbidden_files is NOT vetoed."""
+    iter_dir = _make_consult(tmp_path, allowed_files=("consensus_mcp/**",))
+    gp = iter_dir / "goal_packet.yaml"
+    import yaml as _y
+    data = _y.safe_load(gp.read_text())
+    data["forbidden_files"] = ["consensus-state/"]
+    gp.write_text(_y.safe_dump(data), encoding="utf-8")
+    res = ac.approve_consult("iter-test", scope_glob="consensus_mcp/**",
+                             repo_root=tmp_path)
+    assert res["ok"] is True, res
+
+
 def test_approve_rejects_bare_dir_scope_under_doublestar_allowed(tmp_path):
     """kimi-rev-001 at approve level: allowed=['src/**'], scope='src' must be a
     scope escalation (it would authorize editing a file literally named 'src' that
