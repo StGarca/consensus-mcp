@@ -46,13 +46,19 @@ from consensus_mcp._design_approval import (
     _revalidate_seal,
     mint_design_approval,
 )
-from consensus_mcp._dispatch_base import _resolve_repo_root
+import fnmatch
+
+from consensus_mcp._dispatch_base import (
+    _resolve_repo_root,
+    validate_explicit_repo_root,
+)
 from consensus_mcp._session_state import write_session_marker
 
 # The canonical sealed state a converged Workflow-A consult closes on. Must be in
 # SEALED_CLOSING_STATES (resolve_consensus_ref refuses anything else).
 _DEFAULT_CLOSING_STATE = "quorum_close_passed"
 _PLAN_FILENAME = "converged-plan.yaml"
+_GOAL_PACKET_FILENAME = "goal_packet.yaml"
 
 
 def _err(error_type: str, message: str) -> dict:
@@ -61,10 +67,72 @@ def _err(error_type: str, message: str) -> dict:
 
 def _resolve_repo(repo_root: str | os.PathLike | None) -> Path:
     """Single repo-root resolver shared by CLI + MCP (Finding #7). An explicit
-    repo_root is used verbatim; otherwise the strict env-first resolver runs."""
+    repo_root is VALIDATED against the same marker contract auto-discovery uses
+    (codex finding: never accept an explicit --repo-root verbatim); otherwise the
+    strict env-first resolver runs."""
     if repo_root:
-        return Path(repo_root).resolve()
+        return validate_explicit_repo_root(repo_root)
     return _resolve_repo_root()
+
+
+def _glob_segments(glob: str) -> list[str]:
+    """Split a forward-slash glob into path segments, dropping empty parts so a
+    leading/trailing '/' does not introduce phantom segments. '**' and '*' remain
+    their own segments; literal segments may carry intra-segment metachars."""
+    return [seg for seg in str(glob).strip().split("/") if seg != ""]
+
+
+def _glob_subset(narrow: list[str], broad: list[str]) -> bool:
+    """True iff EVERY path matched by glob `narrow` is also matched by `broad`
+    (segment-wise language containment). Wildcards: '*' matches exactly one
+    segment (any chars, no '/'); '**' matches zero or more segments.
+
+    This is the scope-confinement primitive: an approval scope is acceptable only
+    when it is a subset of the goal_packet's authorized files (narrowing is fine;
+    expansion is a scope escalation). Sound (no false 'subset' verdicts) for the
+    glob shapes consensus uses; conservative (returns False) when unsure."""
+    if not narrow and not broad:
+        return True
+    if not broad:
+        # broad exhausted but narrow can still produce >=1 segment -> not covered.
+        return False
+    if broad[0] == "**":
+        # '**' absorbs zero segments (skip it) or one narrow segment (consume).
+        if _glob_subset(narrow, broad[1:]):
+            return True
+        if narrow and _glob_subset(narrow[1:], broad):
+            return True
+        return False
+    if not narrow:
+        # broad still needs >=1 concrete segment but narrow produced none.
+        return False
+    n0, b0 = narrow[0], broad[0]
+    if n0 == "**":
+        # narrow '**' can emit MANY segments; a single non-'**' broad segment
+        # cannot cover all of them -> not a subset.
+        return False
+    if b0 == "*":
+        # '*' covers any single segment (narrow's n0 is one segment here).
+        return _glob_subset(narrow[1:], broad[1:])
+    if n0 == "*":
+        # narrow '*' emits an arbitrary segment; a literal broad segment can't
+        # cover all of them.
+        return False
+    # Both literal segments (each may carry fnmatch metachars, e.g. '*.py').
+    if n0 == b0 or fnmatch.fnmatchcase(n0, b0):
+        return _glob_subset(narrow[1:], broad[1:])
+    return False
+
+
+def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
+    """True iff `scope_glob` is a subset of AT LEAST ONE allowed_files pattern."""
+    scope_segs = _glob_segments(scope_glob)
+    for allowed in allowed_files:
+        if not isinstance(allowed, str) or not allowed.strip():
+            continue
+        if _glob_subset(scope_segs, _glob_segments(allowed)):
+            return True
+    return False
 
 
 def _resolve_iter_dir(iteration: str, repo_root: Path) -> Path:
@@ -170,6 +238,51 @@ def approve_consult(
             f"NOT author the plan.",
         )
 
+    # Scope-confinement gate (kimi finding): the approval scope_glob must be a
+    # SUBSET of what the consult's goal_packet authorized. Narrowing is fine;
+    # EXPANDING the scope at approval time (e.g. approving '**' for a consult
+    # scoped to 'src/foo.py') is a privilege escalation - the gate would then
+    # bless edits the panel never reviewed the scope of. mint_design_approval
+    # only rejects the absolute-overbroad '*'/'**'; it cannot know the consult's
+    # intended scope. We enforce it here, against the goal_packet of record.
+    gp_path = iter_dir / _GOAL_PACKET_FILENAME
+    if not gp_path.is_file():
+        return _err(
+            "missing_goal_packet",
+            f"'{_GOAL_PACKET_FILENAME}' not found in {iter_dir}; cannot validate "
+            f"that --scope-glob is within the authorized scope. A consult started "
+            f"via consensus-mcp-start-consult always writes one. Author it (with an "
+            f"'allowed_files' list) before approving.",
+        )
+    try:
+        gp = yaml.safe_load(gp_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # unreadable/non-YAML packet
+        return _err(
+            "missing_goal_packet",
+            f"'{_GOAL_PACKET_FILENAME}' in {iter_dir} is unreadable/not valid YAML "
+            f"({exc}); cannot validate scope confinement.",
+        )
+    allowed_files = [
+        a for a in (gp.get("allowed_files") or [])
+        if isinstance(a, str) and a.strip()
+    ]
+    if not allowed_files:
+        return _err(
+            "missing_goal_packet",
+            f"the goal_packet in {iter_dir} declares no 'allowed_files'; there is "
+            f"nothing for --scope-glob to be confined to. Add the authorized files "
+            f"to the goal_packet before approving.",
+        )
+    if not _scope_within_allowed(scope_glob, allowed_files):
+        return _err(
+            "scope_escalation",
+            f"--scope-glob {scope_glob!r} is NOT within the goal_packet's "
+            f"allowed_files {allowed_files}. An approval may only NARROW the scope "
+            f"the consult authorized, never expand it. Re-run with a scope_glob "
+            f"that is a subset of the allowed_files, or start a new consult scoped "
+            f"to the broader set.",
+        )
+
     _ensure_sealed_outcome(iter_dir, closing_state)
 
     sha = compute_artifact_hash(plan)
@@ -218,6 +331,22 @@ def approve_consult(
         "marker_path": str(_marker_path(rr)),
         "revalidated": reason,
         "gate_armed": True,
+        # gemini finding: arming has a matching DISARM, and the lifecycle is only
+        # complete when the gate returns to dormant. Surface the exact close
+        # command so the gate is never left armed after the edits land. (mint a
+        # delivery token per edited file first; then close.)
+        "next_steps": {
+            "1_edit_within_scope": (
+                f"Edits to files matching {scope_glob!r} are now allowed; "
+                f"out-of-scope edits stay blocked."),
+            "2_deliver_each_edited_file": (
+                "consensus-mcp-deliver --file <path> --design-consensus-ref "
+                f"{iter_dir.name} --vetted-by <fam1>,<fam2>"),
+            "3_disarm_when_done": (
+                "consensus-mcp-seal-iteration close --iteration-dir "
+                f"consensus-state/active/{iter_dir.name}   # clears the "
+                "session-active + design-approved markers; gate back to dormant"),
+        },
     }
 
 

@@ -124,6 +124,19 @@ _GROK_DISABLED_TOOLS = (
     "--disable-web-search",
 )
 
+# Inline `-p <prompt>` is the proven default shape (iter-0045), but a single argv
+# entry is bounded by Linux MAX_ARG_STRLEN (128KB). A large review-packet (the
+# cold-start consult finding) blows past it and grok dies with an opaque E2BIG /
+# "Argument list too long" before producing any output. When the prompt exceeds a
+# safe inline ceiling we instead hand grok the per-pass prompt FILE we already
+# write for provenance, via `--prompt-file` - keeping the small-prompt path
+# (every existing test) byte-for-byte unchanged. `--prompt-file` is the
+# dispatcher's INTERNAL subprocess argv (never inspected by
+# dispatch-canon-validator, which only constrains Bash-issued grok invocations),
+# so routing oversized prompts through it does not touch Gate G3. The ceiling is
+# well under 128KB to leave headroom for the rest of the argv.
+_GROK_INLINE_PROMPT_MAX_BYTES = 96 * 1024
+
 
 class GrokAuthRequiredError(RuntimeError):
     """Raised when ~/.grok/auth.json is missing (the auth pre-flight)."""
@@ -245,11 +258,19 @@ def _build_grok_cmd(
     prompt: str,
     model: str | None,
     run_cwd: str = "/tmp",
+    prompt_file: "Path | None" = None,
 ) -> list[str]:
     """Construct the grok CLI command list for a dispatch.
 
     Shape: inline `-p <prompt>` + `--output-format streaming-json` +
     `--no-memory` + `--disable-web-search` + `--cwd <run_cwd>`.
+
+    Oversized-prompt fallback (cold-start consult finding): inline `-p` is bounded
+    by Linux MAX_ARG_STRLEN (128KB). When `prompt` exceeds
+    `_GROK_INLINE_PROMPT_MAX_BYTES` AND a `prompt_file` is supplied, grok reads the
+    prompt from that file via `--prompt-file` instead of the inline argument -
+    avoiding the opaque E2BIG crash on a large review-packet. Small prompts (every
+    existing test + the common case) keep the proven inline `-p` shape exactly.
 
     `--output-format streaming-json` (DEFECT 1 fix): plain output buffers
     all stdout until the answer is ready, so the silence watchdog in
@@ -275,11 +296,19 @@ def _build_grok_cmd(
     argument. If a packet ever exceeds that, the CLI will fail loudly
     with E2BIG; the caller should chunk or summarize the prompt.
     """
-    cmd = [
-        _resolve_grok_bin(grok_bin),
-        "-p", prompt,
-        "--output-format", "streaming-json",
-    ]
+    too_large = len(prompt.encode("utf-8")) > _GROK_INLINE_PROMPT_MAX_BYTES
+    if too_large and prompt_file is not None:
+        cmd = [
+            _resolve_grok_bin(grok_bin),
+            "--prompt-file", str(prompt_file),
+            "--output-format", "streaming-json",
+        ]
+    else:
+        cmd = [
+            _resolve_grok_bin(grok_bin),
+            "-p", prompt,
+            "--output-format", "streaming-json",
+        ]
     cmd.extend(_GROK_DISABLED_TOOLS)
     cmd.extend(["--cwd", run_cwd])
     if model:
@@ -388,7 +417,8 @@ def _invoke_grok_in_cwd(
     # (prompt_sha256 in dispatch_log + dispatch_provenance), but grok
     # itself receives the prompt inline via `-p` (iter-0045 shape).
     prompt_path = _write_per_pass_prompt(prompt, iter_dir, pass_id)
-    cmd = _build_grok_cmd(grok_bin, prompt, model, run_cwd=grok_run_cwd)
+    cmd = _build_grok_cmd(grok_bin, prompt, model, run_cwd=grok_run_cwd,
+                          prompt_file=prompt_path)
 
     if sys.platform == "win32":
         popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}

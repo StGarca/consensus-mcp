@@ -26,7 +26,10 @@ from pathlib import Path
 
 import yaml
 
-from consensus_mcp._dispatch_base import _resolve_repo_root
+from consensus_mcp._dispatch_base import (
+    _resolve_repo_root,
+    validate_explicit_repo_root,
+)
 from consensus_mcp._session_state import write_session_marker
 
 
@@ -36,7 +39,9 @@ def _slugify(text: str) -> str:
 
 
 def _resolve_repo(repo_root):
-    return Path(repo_root).resolve() if repo_root else _resolve_repo_root()
+    """Explicit repo_root is VALIDATED against the marker contract (codex finding:
+    never accept an explicit --repo-root verbatim); else strict auto-discovery."""
+    return validate_explicit_repo_root(repo_root) if repo_root else _resolve_repo_root()
 
 
 def start_consult(question: str, scope_glob: str, reviewers=None,
@@ -141,6 +146,12 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
                 f"consensus-state/active/{iter_id}/converged-plan.yaml (weighted-synthesis)."),
             "3_approve_to_unblock_edits": (
                 f"consensus-mcp-approve --iteration {iter_id} --scope-glob {scope_glob!r}"),
+            "4_disarm_when_done": (
+                "consensus-mcp-seal-iteration close --iteration-dir "
+                f"consensus-state/active/{iter_id}   # after edits + delivery "
+                "tokens: clears the gate markers, returns it to dormant. The gate "
+                "is armed NOW, so finish with this even if you abandon the consult "
+                "(add --abandon to force-clear)."),
         },
     }
 

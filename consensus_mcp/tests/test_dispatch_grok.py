@@ -122,6 +122,33 @@ def test_build_grok_cmd_output_format_streaming_json():
     assert cmd[cmd.index("--output-format") + 1] == "streaming-json"
 
 
+def test_build_grok_cmd_oversized_prompt_uses_prompt_file(tmp_path):
+    """Cold-start consult finding: a prompt larger than the inline argv ceiling is
+    routed through --prompt-file (the per-pass file) instead of inline -p, avoiding
+    the opaque E2BIG / 'Argument list too long' crash on a big review-packet."""
+    big = "x" * (_dispatch_grok._GROK_INLINE_PROMPT_MAX_BYTES + 1)
+    pf = tmp_path / "grok-prompt-passX.txt"
+    pf.write_text(big, encoding="utf-8")
+    cmd = _dispatch_grok._build_grok_cmd("grok", big, model=None, prompt_file=pf)
+    assert "--prompt-file" in cmd
+    assert cmd[cmd.index("--prompt-file") + 1] == str(pf)
+    assert "-p" not in cmd                      # the huge prompt is NOT inline
+    assert big not in cmd
+    # streaming-json + disabled tools still present on the file path.
+    assert cmd[cmd.index("--output-format") + 1] == "streaming-json"
+    assert "--no-memory" in cmd
+
+
+def test_build_grok_cmd_oversized_without_file_stays_inline(tmp_path):
+    """Defensive: if no prompt_file is supplied we cannot use --prompt-file, so we
+    fall back to inline -p (the caller always supplies the per-pass file in
+    practice; this only guards a direct unit call)."""
+    big = "y" * (_dispatch_grok._GROK_INLINE_PROMPT_MAX_BYTES + 1)
+    cmd = _dispatch_grok._build_grok_cmd("grok", big, model=None)
+    assert "-p" in cmd
+    assert "--prompt-file" not in cmd
+
+
 # ---------- _write_per_pass_prompt ----------
 
 def test_write_per_pass_prompt_embeds_pass_id_in_filename(tmp_path):
