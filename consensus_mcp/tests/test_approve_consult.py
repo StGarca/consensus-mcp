@@ -125,39 +125,34 @@ def test_approve_surfaces_disarm_next_step(tmp_path):
     assert "iter-test" in disarm
 
 
-def test_glob_subset_trailing_doublestar_excludes_bare_prefix():
-    """kimi-rev-001: a trailing '**' matches paths UNDER the prefix, not the bare
-    prefix itself, so 'src' is NOT a subset of 'src/**' (gate-consistent). Middle
-    '**' still matches zero segments."""
-    seg = ac._glob_segments
-    assert ac._glob_subset(seg("src"), seg("src/**")) is False        # bare dir excluded
-    assert ac._glob_subset(seg("src/**"), seg("src/**")) is True
-    assert ac._glob_subset(seg("src/a.py"), seg("src/**")) is True
-    assert ac._glob_subset(seg("src/sub/**"), seg("src/**")) is True
-    assert ac._glob_subset(seg("b"), seg("**/b")) is True             # middle ** -> zero ok
+def test_fnmatch_subset_matches_gate_containment():
+    """gemini-rev-001 (round 7): scope confinement uses the gate's fnmatch
+    containment. '*'/'**' match any chars incl '/'. Key cases:"""
+    fs = ac._fnmatch_subset
+    assert fs("src/**", "src/**") is True             # reflexive
+    assert fs("src/a.py", "src/**") is True           # narrowing
+    assert fs("src/sub/**", "src/**") is True
+    assert fs("src", "src/**") is False               # bare dir not under src/**
+    assert fs("**", "src/**") is False                # broader -> escalation
+    assert fs("src/sub/x.py", "src/*") is True        # fnmatch '*' spans '/'
 
 
-def test_glob_subset_no_dangerous_over_acceptance():
-    """Property check: _glob_subset must never declare a subset that lets a path
-    escape the broad pattern (no scope-escalation false-positive)."""
-    import itertools, re
-    def to_regex(glob):
-        out = []
-        for p in glob.split("/"):
-            out.append("(?:[^/]+/)*[^/]+" if p == "**"
-                       else re.escape(p).replace(r"\*", "[^/]*"))
-        return re.compile("^" + "/".join(out) + "$")
-    pool = ["src", "a", "b", "sub", "x.py", "a.py", "secret.py"]
-    paths = ["/".join(c) for n in range(1, 5) for c in itertools.product(pool, repeat=n)]
-    globs = ["src/**", "src/*", "src/a.py", "src/sub/**", "**", "a/**",
-             "**/secret.py", "src", "*.py", "src/*.py", "src/sub/x.py"]
-    for nrw in globs:
-        for brd in globs:
-            if ac._glob_subset(ac._glob_segments(nrw), ac._glob_segments(brd)):
-                rb = to_regex(brd)
-                for p in paths:
-                    if to_regex(nrw).match(p):
-                        assert rb.match(p), f"{nrw} wrongly subset of {brd}: {p} escapes"
+def test_fnmatch_subset_no_escalation_property():
+    """Security property: _fnmatch_subset must NEVER declare a subset that lets a
+    file matched by `a` escape `b` under fnmatch (no scope-escalation)."""
+    import fnmatch as _fn
+    import itertools
+    pool = ["a", "b", "c", "sub", "x.py", "secret.py", "src", "cm"]
+    files = ["/".join(c) for n in range(1, 4) for c in itertools.product(pool, repeat=n)]
+    globs = ["src/*", "src/**", "src/a/*", "src/*/b", "cm/**", "**", "*.py",
+             "src/*.py", "a/*/c", "src/sub/**", "src/a.py", "src/sub/x.py"]
+    for a in globs:
+        for b in globs:
+            if ac._fnmatch_subset(a, b):
+                for f in files:
+                    if _fn.fnmatchcase(f, a):
+                        assert _fn.fnmatchcase(f, b), \
+                            f"{a} wrongly subset of {b}: {f} escapes (ESCALATION)"
 
 
 def test_fnmatch_patterns_overlap_matches_gate_semantics():
@@ -170,6 +165,10 @@ def test_fnmatch_patterns_overlap_matches_gate_semantics():
     # the other must still be caught (the security under-veto).
     assert ov("src/*/secret.py", "src/sub/**") is True   # share src/sub/secret.py
     assert ov("a/**/c", "**/secret.py") is False         # tails 'c' vs 'secret.py' differ
+    # codex-rev-001 (round 7): bracket expressions are fail-safe -> conservative
+    # overlap (never an under-veto), since the exact DP cannot model [seq] classes.
+    assert ov("src/[abc].py", "src/sub/**") is True       # conservative, not missed
+    assert ov("src/x.py", "src/[!q]*") is True            # bracket on either side
 
 
 def test_forbidden_vetoes_uses_fnmatch_overlap():

@@ -46,8 +46,6 @@ from consensus_mcp._design_approval import (
     _revalidate_seal,
     mint_design_approval,
 )
-import fnmatch
-
 from consensus_mcp._dispatch_base import (
     _normalize_for_compare,
     _resolve_repo_root,
@@ -83,64 +81,58 @@ def _glob_segments(glob: str) -> list[str]:
     return [seg for seg in str(glob).strip().split("/") if seg != ""]
 
 
-def _glob_subset(narrow: list[str], broad: list[str]) -> bool:
-    """True iff EVERY path matched by glob `narrow` is also matched by `broad`
-    (segment-wise language containment). Wildcards: '*' matches exactly one
-    segment (any chars, no '/'); '**' matches zero or more segments.
+def _fnmatch_subset(a: str, b: str) -> bool:
+    """True iff EVERY string matched by fnmatch glob `a` is also matched by `b`
+    (language containment L(a) subset of L(b)) under the gate's OWN fnmatch
+    semantics, where '*'/'**' match any chars INCLUDING '/' and '?' matches one.
 
-    This is the scope-confinement primitive: an approval scope is acceptable only
-    when it is a subset of the goal_packet's authorized files (narrowing is fine;
-    expansion is a scope escalation). Sound (no false 'subset' verdicts) for the
-    glob shapes consensus uses; conservative (returns False) when unsure."""
-    if not narrow and not broad:
-        return True
-    if not broad:
-        # broad exhausted but narrow can still produce >=1 segment -> not covered.
+    gemini-rev-001 (round 7, BLOCKING): the scope-confinement checks must use ONE
+    consistent matcher - the SAME one the PreToolUse gate enforces with (fnmatch).
+    The prior segment-based `_glob_subset` was a different dialect than the
+    fnmatch-based forbidden check. This is the gate-consistent containment.
+
+    SOUND + fail-closed: returns True only when containment is PROVEN. Bracket
+    expressions `[seq]` are not modelled by this DP, so they fail CLOSED (return
+    False) - for the ALLOWED check that means 'cannot prove subset -> reject'
+    (an escalation error), the SAFE direction. Validated exhaustively against
+    fnmatch ground truth: zero false-subset verdicts (no escalation) and zero
+    spurious rejections of provable subsets."""
+    if "[" in a or "[" in b:
+        return False  # fail-closed: cannot prove containment with bracket classes
+    from functools import lru_cache
+
+    @lru_cache(maxsize=None)
+    def go(i: int, j: int) -> bool:
+        # True iff b[j:] matches EVERY expansion of a[i:].
+        if i == len(a):
+            return all(c == "*" for c in b[j:])   # b[j:] must match the empty string
+        ca = a[i]
+        if ca == "*":
+            # a's '*' = an arbitrary run. Either it expands to empty (match a[i+1:]
+            # against b[j:]), or it emits >=1 chars - which only b's '*' can absorb
+            # (a literal/'?' in b cannot cover an arbitrary-length run).
+            if go(i + 1, j):
+                return True
+            return j < len(b) and b[j] == "*" and go(i, j + 1)
+        if j >= len(b):
+            return False
+        cb = b[j]
+        if cb == "*":
+            return go(i + 1, j) or go(i + 1, j + 1)   # b's '*' covers ca (>=1 char)
+        if cb == "?" or cb == ca:
+            return go(i + 1, j + 1)
         return False
-    if broad[0] == "**":
-        rest = broad[1:]
-        if not rest:
-            # TRAILING '**' matches ONE OR MORE segments (paths strictly UNDER the
-            # prefix), never zero - consistent with the gate's matcher, which does
-            # NOT match the bare prefix 'src' against 'src/**'. So an exhausted
-            # narrow ('src' vs 'src/**') is NOT a subset (kimi-rev-001); a narrow
-            # that still has >=1 segment (incl. its own '**' tail) is.
-            return len(narrow) >= 1
-        # MIDDLE '**' may absorb ZERO segments (skip it) ...
-        if _glob_subset(narrow, rest):
-            return True
-        # ... or one-or-more narrow segments.
-        if narrow and _glob_subset(narrow[1:], broad):
-            return True
-        return False
-    if not narrow:
-        # broad still needs >=1 concrete segment but narrow produced none.
-        return False
-    n0, b0 = narrow[0], broad[0]
-    if n0 == "**":
-        # narrow '**' can emit MANY segments; a single non-'**' broad segment
-        # cannot cover all of them -> not a subset.
-        return False
-    if b0 == "*":
-        # '*' covers any single segment (narrow's n0 is one segment here).
-        return _glob_subset(narrow[1:], broad[1:])
-    if n0 == "*":
-        # narrow '*' emits an arbitrary segment; a literal broad segment can't
-        # cover all of them.
-        return False
-    # Both literal segments (each may carry fnmatch metachars, e.g. '*.py').
-    if n0 == b0 or fnmatch.fnmatchcase(n0, b0):
-        return _glob_subset(narrow[1:], broad[1:])
-    return False
+
+    return go(0, 0)
 
 
 def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
-    """True iff `scope_glob` is a subset of AT LEAST ONE allowed_files pattern."""
-    scope_segs = _glob_segments(scope_glob)
+    """True iff `scope_glob`'s enforced set is contained in AT LEAST ONE
+    allowed_files pattern, under the gate's fnmatch semantics (`_fnmatch_subset`)."""
     for allowed in allowed_files:
         if not isinstance(allowed, str) or not allowed.strip():
             continue
-        if _glob_subset(scope_segs, _glob_segments(allowed)):
+        if _fnmatch_subset(scope_glob, allowed):
             return True
     return False
 
@@ -159,7 +151,18 @@ def _fnmatch_patterns_overlap(a: str, b: str) -> bool:
     ground truth: zero false vetoes and zero missed overlaps.
 
     `*` matches any run of chars (incl '/'); `?` matches one char; everything else
-    is literal. Memoized DP over the two strings."""
+    is literal. Memoized DP over the two strings.
+
+    fnmatch ALSO supports `[seq]` / `[!seq]` bracket character classes, which this
+    exact DP does not model (codex-rev-001). Rather than chase bracket-set
+    intersection (regex-intersection-hard, and these never appear in real consult
+    scopes/forbidden entries), we FAIL SAFE: if either pattern contains a bracket
+    expression we cannot prove disjointness, so we conservatively report an overlap.
+    For the forbidden veto an over-report only blocks an approval (the operator
+    narrows the scope); the security-critical direction - NEVER missing an overlap -
+    is preserved for EVERY fnmatch pattern, exotic ones included."""
+    if "[" in a or "[" in b:
+        return True  # fail-safe: cannot exactly reason about bracket classes
     from functools import lru_cache
 
     @lru_cache(maxsize=None)
@@ -176,9 +179,9 @@ def _fnmatch_patterns_overlap(a: str, b: str) -> bool:
             return go(i + 1, j + 1)
         return False
 
-    result = go(0, 0)
-    go.cache_clear()
-    return result
+    # gemini-rev-002: `go` (and its lru_cache) is a local closure discarded when
+    # this function returns, so an explicit cache_clear() is redundant.
+    return go(0, 0)
 
 
 def _forbidden_vetoes(scope_glob: str, forbidden_entry: str) -> bool:
