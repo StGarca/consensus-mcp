@@ -124,18 +124,24 @@ _GROK_DISABLED_TOOLS = (
     "--disable-web-search",
 )
 
-# Inline `-p <prompt>` is the proven default shape (iter-0045), but a single argv
-# entry is bounded by Linux MAX_ARG_STRLEN (128KB). A large review-packet (the
-# cold-start consult finding) blows past it and grok dies with an opaque E2BIG /
-# "Argument list too long" before producing any output. When the prompt exceeds a
-# safe inline ceiling we instead hand grok the per-pass prompt FILE we already
-# write for provenance, via `--prompt-file` - keeping the small-prompt path
-# (every existing test) byte-for-byte unchanged. `--prompt-file` is the
-# dispatcher's INTERNAL subprocess argv (never inspected by
+# Inline `-p <prompt>` is the proven default shape (iter-0045), but passing the
+# prompt as an argv entry is bounded by the OS command-line limit. A large
+# review-packet (the cold-start consult finding) blows past it and grok dies with
+# an opaque E2BIG / "Argument list too long" before producing any output. When the
+# prompt exceeds a safe inline ceiling we instead hand grok the per-pass prompt
+# FILE we already write for provenance, via `--prompt-file` - keeping the
+# small-prompt path (every existing test) byte-for-byte unchanged. `--prompt-file`
+# is the dispatcher's INTERNAL subprocess argv (never inspected by
 # dispatch-canon-validator, which only constrains Bash-issued grok invocations),
-# so routing oversized prompts through it does not touch Gate G3. The ceiling is
-# well under 128KB to leave headroom for the rest of the argv.
-_GROK_INLINE_PROMPT_MAX_BYTES = 96 * 1024
+# so routing oversized prompts through it does not touch Gate G3.
+#
+# Portability (kimi-rev-002): the ceiling MUST clear the SMALLEST platform limit,
+# not Linux's. Linux MAX_ARG_STRLEN is 128KB per arg, but Windows CreateProcessW
+# caps the ENTIRE command line at ~32767 UTF-16 chars - so on win32 a 96KB inline
+# prompt would fail there while passing on Linux. We therefore pick the ceiling per
+# platform: a conservative ~28KB on Windows (headroom under 32767 for the rest of
+# the argv), 96KB elsewhere (well under Linux's 128KB per-arg limit).
+_GROK_INLINE_PROMPT_MAX_BYTES = (28 * 1024) if sys.platform == "win32" else (96 * 1024)
 
 
 class GrokAuthRequiredError(RuntimeError):
@@ -394,8 +400,9 @@ def _invoke_grok_in_cwd(
     line via `stdout_reader`; `--output-format streaming-json` emits
     thought/text event lines continuously so the watchdog stays fed (the
     DEFECT 1 fix - plain output buffered all stdout, starving the watchdog).
-    grok reads the prompt inline via `-p` (no stdin piping), so no
-    stdin-writer thread + no codex-rev-001 deadlock dance.
+    grok reads the prompt inline via `-p` (or, for an oversized prompt, from the
+    per-pass `--prompt-file`; see `_build_grok_cmd`) - never over stdin, so there
+    is no stdin-writer thread + no codex-rev-001 deadlock dance either way.
 
     `_sleep` is a private test seam (defaults to `time.sleep`; the
     deterministic-clock harness injects it so the watchdog tests do not

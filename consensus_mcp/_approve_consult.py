@@ -135,16 +135,44 @@ def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
     return False
 
 
+class _IterDirOutsideRepo(ValueError):
+    """The requested iteration path resolves OUTSIDE the repo root (containment
+    breach). Raised so approve_consult never reads a goal_packet / converged-plan
+    from an attacker-influenced location outside the project (gemini-rev-001 path
+    traversal; codex-rev-001; kimi-rev-003)."""
+
+
+def _is_within(child: Path, parent: Path) -> bool:
+    """True iff `child` is `parent` or a descendant, after resolution. Symlink- and
+    `..`-safe because both sides are fully resolved before the comparison."""
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def _resolve_iter_dir(iteration: str, repo_root: Path) -> Path:
-    """Accept an absolute path, a bare iteration NAME (-> consensus-state/active/
-    <name>), or a repo-relative path."""
+    """Resolve an iteration to a directory CONFINED to repo_root.
+
+    Accepts an absolute path, a bare iteration NAME (-> consensus-state/active/
+    <name>), or a repo-relative path -- but the resolved result must live inside
+    repo_root. An absolute path outside the repo, or a `..`-escaping relative
+    path, raises `_IterDirOutsideRepo` (gemini-rev-001/codex-rev-001/kimi-rev-003:
+    approve must never read a goal_packet/plan from outside the project tree)."""
     p = Path(iteration)
     if p.is_absolute():
-        return p.resolve()
-    active = repo_root / "consensus-state" / "active" / iteration
-    if active.is_dir():
-        return active.resolve()
-    return (repo_root / iteration).resolve()
+        resolved = p.resolve()
+    else:
+        active = repo_root / "consensus-state" / "active" / iteration
+        resolved = active.resolve() if active.is_dir() else (repo_root / iteration).resolve()
+    if not _is_within(resolved, repo_root):
+        raise _IterDirOutsideRepo(
+            f"iteration {iteration!r} resolves to {resolved}, which is OUTSIDE the "
+            f"repo root {repo_root.resolve()}. approve only operates on iterations "
+            f"inside the project (no out-of-repo / '..'-escaping paths)."
+        )
+    return resolved
 
 
 def _sealed_reviewer_families(iter_dir: Path) -> list[str]:
@@ -200,7 +228,10 @@ def approve_consult(
     except Exception as exc:  # RepoRootResolutionError etc.
         return _err("repo_root_unresolved", str(exc))
 
-    iter_dir = _resolve_iter_dir(iteration, rr)
+    try:
+        iter_dir = _resolve_iter_dir(iteration, rr)
+    except _IterDirOutsideRepo as exc:
+        return _err("iteration_outside_repo", str(exc))
     if not iter_dir.is_dir():
         return _err(
             "missing_iteration",
@@ -245,6 +276,16 @@ def approve_consult(
     # bless edits the panel never reviewed the scope of. mint_design_approval
     # only rejects the absolute-overbroad '*'/'**'; it cannot know the consult's
     # intended scope. We enforce it here, against the goal_packet of record.
+    # Reject traversal in the scope itself (kimi-rev-005): a '..' segment in the
+    # approved scope is meaningless for in-repo confinement and could let a glob
+    # "escape" the project under a naive matcher. Forbid it outright.
+    if ".." in _glob_segments(scope_glob):
+        return _err(
+            "invalid_scope",
+            f"--scope-glob {scope_glob!r} contains a '..' segment; approval scopes "
+            f"must be in-repo paths with no parent-directory traversal.",
+        )
+
     gp_path = iter_dir / _GOAL_PACKET_FILENAME
     if not gp_path.is_file():
         return _err(
@@ -283,6 +324,28 @@ def approve_consult(
             f"to the broader set.",
         )
 
+    # forbidden_files veto (kimi-rev-001): allowed_files passing is necessary but
+    # not sufficient - the goal_packet can ALSO declare forbidden_files the
+    # approval must never cover (e.g. 'consensus-state/'). Reject if the scope
+    # either falls entirely within a forbidden pattern OR swallows one (a broad
+    # scope that engulfs a forbidden area). Conservative on the clear cases the
+    # panel cited; the goal_packet's intent wins over a permissive allowed_files.
+    forbidden_files = [
+        f for f in (gp.get("forbidden_files") or [])
+        if isinstance(f, str) and f.strip()
+    ]
+    scope_segs = _glob_segments(scope_glob)
+    for forb in forbidden_files:
+        forb_segs = _glob_segments(forb)
+        if _glob_subset(scope_segs, forb_segs) or _glob_subset(forb_segs, scope_segs):
+            return _err(
+                "forbidden_scope",
+                f"--scope-glob {scope_glob!r} overlaps the goal_packet's "
+                f"forbidden_files entry {forb!r}; an approval may not authorize "
+                f"edits to a path the consult explicitly forbade. Narrow the scope "
+                f"to exclude {forb!r}.",
+            )
+
     _ensure_sealed_outcome(iter_dir, closing_state)
 
     sha = compute_artifact_hash(plan)
@@ -314,12 +377,28 @@ def approve_consult(
             activated_by="consensus-mcp-approve",
             activation_source="console_script",
         )
-    except Exception as exc:  # marker minted but gate not armed - surface it
+    except Exception as exc:  # marker minted but gate not armed - ROLL BACK
+        # grok-rev-001 (blocking): minting the design-approved marker before arming
+        # the session marker left a HALF-STATE on arm failure - a stale
+        # design-approved trust pointer persisting with no live session, which a
+        # later approve/session could trip over. Make approval ALL-OR-NOTHING: if
+        # arming fails, remove the just-minted design-approved marker so the repo
+        # returns to its pre-approve state. A failed approve leaves NO markers.
+        rollback_note = "design-approved marker rolled back"
+        try:
+            marker_file = _marker_path(rr)
+            if marker_file.exists():
+                marker_file.unlink()
+        except OSError as rb_exc:
+            rollback_note = (
+                f"FAILED to roll back design-approved marker ({rb_exc}); remove "
+                f"{_marker_path(rr)} manually before re-running approve"
+            )
         return _err(
             "gate_arm_failed",
-            f"design-approved marker minted but failed to ARM the gate "
-            f"(session marker write failed): {exc}. The approval will not "
-            f"enforce scope until the session marker is written.",
+            f"failed to ARM the gate (session marker write failed): {exc}. "
+            f"{rollback_note}. No partial approval remains; re-run approve once "
+            f"the cause is fixed.",
         )
 
     return {

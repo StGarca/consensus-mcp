@@ -26,6 +26,7 @@ from pathlib import Path
 
 import yaml
 
+from consensus_mcp._design_approval import _marker_path as _design_marker_path
 from consensus_mcp._dispatch_base import (
     _resolve_repo_root,
     validate_explicit_repo_root,
@@ -44,6 +45,35 @@ def _resolve_repo(repo_root):
     return validate_explicit_repo_root(repo_root) if repo_root else _resolve_repo_root()
 
 
+_DEFAULT_REVIEWERS = ["codex", "gemini", "grok", "kimi"]
+
+
+def _configured_reviewers(rr: Path) -> list[str] | None:
+    """The project's CONFIGURED independent panel from `.consensus/config.yaml`
+    (`contributors.enabled`, minus host/host_peer kinds), or None if there is no
+    config / no usable list. codex-rev-002 / kimi-rev-006: a consult must dispatch
+    the panel the operator actually chose at init, not a hardcoded set that may
+    name CLIs they never installed (or omit ones they did)."""
+    cfg_path = rr / ".consensus" / "config.yaml"
+    if not cfg_path.is_file():
+        return None
+    try:
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
+    contributors = cfg.get("contributors") or {}
+    enabled = [n for n in (contributors.get("enabled") or [])
+               if isinstance(n, str) and n.strip()]
+    profiles = contributors.get("profiles") or {}
+
+    def _is_host(name: str) -> bool:
+        kind = ((profiles.get(name) or {}).get("kind") or "")
+        return kind in ("host", "host_peer") or name == "claude"
+
+    indep = [n for n in enabled if not _is_host(n)]
+    return indep or None
+
+
 def start_consult(question: str, scope_glob: str, reviewers=None,
                   repo_root=None, iteration_slug=None) -> dict:
     if not question or not question.strip():
@@ -57,7 +87,8 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
     except Exception as exc:
         return {"ok": False, "error_type": "repo_root_unresolved", "error": str(exc)}
 
-    reviewers = reviewers or ["codex", "gemini", "grok", "kimi"]
+    # Panel precedence: explicit arg > project config > built-in default.
+    reviewers = reviewers or _configured_reviewers(rr) or _DEFAULT_REVIEWERS
     slug = iteration_slug or _slugify(question)
     # short content hash keeps the iteration id globally unique (avoids collisions
     # with a prior same-slug consult).
@@ -114,6 +145,20 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
     }
     (iter_dir / "review-packet.yaml").write_text(
         yaml.safe_dump(review_packet, sort_keys=False), encoding="utf-8")
+
+    # Stale-marker hygiene (kimi-rev-004): a brand-new consult is UNAPPROVED, so
+    # any pre-existing `.consensus/design-approved` belongs to a PRIOR consult and
+    # must not carry over - otherwise the gate would arm for THIS iteration while a
+    # stale design-approved still authorizes an OLD scope (marker poisoning). Clear
+    # it so the gate is correctly "armed but unapproved" until this consult's own
+    # approve runs. (The design-approved is a re-validated trust pointer, not data
+    # we lose anything by clearing - a still-valid prior approval can be re-minted.)
+    try:
+        stale_marker = _design_marker_path(rr)
+        if stale_marker.exists():
+            stale_marker.unlink()
+    except OSError:
+        pass  # non-fatal: arming still blocks edits until approve
 
     # ARM the gate: edits stay blocked until consensus-mcp-approve runs.
     try:

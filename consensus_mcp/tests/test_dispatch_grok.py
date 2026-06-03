@@ -139,6 +139,18 @@ def test_build_grok_cmd_oversized_prompt_uses_prompt_file(tmp_path):
     assert "--no-memory" in cmd
 
 
+def test_inline_prompt_ceiling_is_platform_safe():
+    """kimi-rev-002: the inline-prompt ceiling must clear the SMALLEST platform
+    cmdline limit. On Windows (CreateProcessW ~32767 chars) it must be well under
+    32KB; elsewhere it stays under Linux's 128KB per-arg limit."""
+    import sys as _sys
+    ceiling = _dispatch_grok._GROK_INLINE_PROMPT_MAX_BYTES
+    if _sys.platform == "win32":
+        assert ceiling <= 30 * 1024     # safely under the ~32767 CreateProcessW cap
+    else:
+        assert 32 * 1024 <= ceiling <= 120 * 1024
+
+
 def test_build_grok_cmd_oversized_without_file_stays_inline(tmp_path):
     """Defensive: if no prompt_file is supplied we cannot use --prompt-file, so we
     fall back to inline -p (the caller always supplies the per-pass file in
