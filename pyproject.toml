@@ -29,6 +29,8 @@ consensus-mcp-seal-iteration = "consensus_mcp._seal_iteration:main"
 consensus-mcp-approve = "consensus_mcp._approve_consult:main"
 # delivery-token CLI (P0.3): mint a token for a vetted modified file.
 consensus-mcp-deliver = "consensus_mcp._deliver:main"
+# cold-start scaffold (P2.1): one-call "start a consult" entrypoint.
+consensus-mcp-start-consult = "consensus_mcp._start_consult:main"
 consensus-init = "consensus_mcp._init_wizard:main"
 # v1.19.0: read-only project scorecard rollup over results-v1.jsonl.
 consensus-results = "consensus_mcp._results_rollup:main"

@@ -1066,6 +1066,20 @@ def _print_status_summary(
         print("  -> Run a consult with the consensus-workflow skill (or restart "
               "Claude Code to load the consensus-mcp server), then start a "
               "consult.")
+    # P1.3 / Q4 / grok's "every cold surface": tell the user+AI the EXACT first
+    # move and the real enforcement status - never leave them guessing.
+    print()
+    print("Your first review (after restart):")
+    print('  - In Claude Code, say: "run a consensus review on <your question>"')
+    print("  - Or scaffold it directly:")
+    print('      consensus-mcp-start-consult --question "<what to review>" '
+          '--scope-glob "<files>"')
+    print("    (it prints the exact dispatch + approve commands).")
+    print("Enforcement status:")
+    print("  - Edit-gating + precedence injection are wired by the GLOBAL step "
+          "`consensus-init --install-claude-code` (run once per machine).")
+    print("  - Until then consensus runs in ADVISORY mode here: consults work, "
+          "but edits are NOT gated. Run that command to enable enforcement.")
 
 
 def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes: bool) -> str | None:
@@ -1169,10 +1183,39 @@ def _detect_and_guide(selection: list[str], profiles: dict) -> None:
         print(_DETECT_GUIDE_REMINDER)
 
 
+# P1.2: a cold AI reading CLAUDE.md must learn how consensus OPERATES here, not
+# just generic coding guidelines. This short preamble is the guaranteed-seen
+# pointer; the detailed runbook is single-sourced in the consensus-workflow skill.
+_CONSENSUS_OPERATING_PREAMBLE = """\
+## consensus-mcp is active in this project
+
+This project uses consensus-mcp: design decisions are approved by a CROSS-AI
+consult (a panel of different AIs reviewing independently), not by one model's
+say-so. As the host AI:
+
+- To run a review/consult: scaffold it with `consensus-mcp-start-consult
+  --question "<what to review>" --scope-glob "<files>"` (or the
+  `consensus.start_consult` MCP tool). It prints the EXACT next commands.
+- Dispatch each reviewer in its OWN shell via `consensus-mcp-dispatch-<reviewer>`
+  (omit `--pass-id`; it auto-derives a unique one). Do NOT use the MCP
+  `reviewer_dispatch_*` wrappers (45s timeout). Run kimi LAST/alone.
+- Synthesize the sealed `*-review.yaml` (read them via
+  `consensus.get_iteration_outcome`) into one `converged-plan.yaml`, then approve:
+  `consensus-mcp-approve --iteration <name> --scope-glob "<files>"`. Approval ARMS
+  the edit gate and authorizes in-scope edits.
+- The full operating procedure lives in the `consensus-workflow` skill - load it
+  for anything beyond this summary.
+
+---
+
+"""
+
+
 def _vendored_instructions_text() -> str:
-    """Return the vendored Karpathy guidelines (contributor_instructions/base.md)."""
+    """Return the consensus operating preamble (P1.2) + the vendored Karpathy
+    guidelines (contributor_instructions/base.md)."""
     base = Path(__file__).resolve().parent / "contributor_instructions" / "base.md"
-    return base.read_text(encoding="utf-8")
+    return _CONSENSUS_OPERATING_PREAMBLE + base.read_text(encoding="utf-8")
 
 
 def _upsert_managed_block(existing: str, block_body: str) -> str:
