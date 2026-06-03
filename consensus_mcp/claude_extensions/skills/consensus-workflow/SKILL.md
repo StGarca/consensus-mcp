@@ -10,6 +10,33 @@ project-specific tips - they apply in every project that uses the
 cross-AI consensus workflow. Follow them by default; deviate only when
 the operator explicitly says otherwise.
 
+## STEP 0 - Project preflight: AUTO-INITIALIZE an un-set-up project
+
+BEFORE running any consult, confirm THIS project is set up. If
+`.consensus/config.yaml` does NOT exist in the project root, the project is not
+initialized yet - do NOT fail, and do NOT tell the user to go run `consensus-init`
+themselves. Initialize it for them (the user installed consensus globally once;
+per-project setup should be automatic):
+
+1. **Detect the available AIs** - run `consensus-init --detect-contributors`
+   (read-only; prints JSON: each independent contributor with `installed` + `host`).
+2. **Confirm + choose the panel in ONE `AskUserQuestion`:**
+   - Tell the user consensus isn't set up in this project yet and that initializing
+     writes `.consensus/config.yaml`, `.mcp.json`, a managed `.gitignore` block, and
+     seeds reviewer house-rules into `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` /
+     `GROK.md`. (So it is never a surprise file write.)
+   - Offer a MULTI-SELECT of the detected AIs for the panel: pre-select the
+     `installed` ones; list any not-installed ones as "available (needs install)".
+     A panel needs **>= 2 independent reviewers**. Always include a way to cancel.
+3. **On confirm**, run from the project root:
+   `consensus-init --from-claude-code --non-interactive --contributors <chosen,comma,list>`
+   Surface its output verbatim. You do NOT need a Claude Code reload to continue:
+   the consult runs via the shell binaries below, which work immediately. (The MCP
+   tools load on the next reload; they are optional for the consult.)
+4. **On cancel**, stop - do not run the consult.
+
+If `.consensus/config.yaml` already exists, skip STEP 0 entirely and proceed.
+
 ## Workflow selection
 
 **Default to Workflow A (propose-converge with blind-first-reveal) for

@@ -60,33 +60,38 @@ release.
 
 ## Quick start
 
-Install once per machine (works in any project):
+**One time, per machine:**
 
 ```bash
 pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.41.0
 
-# Optional: add a small Claude Code helper so you can type
-# "consensus init" inside Claude Code chat in any project.
+# Install the Claude Code helper once. This is what lets you set up and run
+# consensus from chat in ANY project - including auto-initializing a new one.
 consensus-init --install-claude-code
 ```
 
-Then, in any project:
+(If `consensus-init` isn't found right after install, run `pipx ensurepath` and
+reopen your terminal.)
+
+**Then, in any project, just ask.** Open Claude Code in the project and say in
+plain language - e.g. *"get a consensus review on this change."* If the project
+isn't set up for consensus yet, it notices, asks which AIs you want on the panel
+and to confirm, then initializes the project for you (writes a small config +
+registers the MCP server) and runs the review. There is no per-project setup
+command to remember.
+
+**Prefer to set it up from the terminal?** That still works - from the project
+root:
 
 ```bash
-cd /path/to/your-project
-consensus-init                       # interactive setup, or:
-consensus-init --non-interactive --accept-defaults
+consensus-init                       # interactive: pick your panel, etc.
+consensus-init --non-interactive --accept-defaults   # or just take the defaults
 ```
 
-That writes a small config and registers the tool with Claude Code.
-Reopen Claude Code in the project and just ask in plain language -
-e.g. *"get a consensus review on this change."*
-
-**Pick your panel at setup.** `consensus-init` runs an interactive
-multi-select of the independent AIs it detects on your PATH and lets
-you choose the panel (minimum two *independent* reviewers). The list is
-derived dynamically from the installed profiles, so any AI you add -
-Kimi or your own - shows up automatically. Claude is optional: you can
+**Pick your panel.** Whether you set up from chat or the terminal, you choose the
+panel from the independent AIs detected on your PATH (minimum two *independent*
+reviewers). The list is derived dynamically from the installed profiles, so any AI
+you add - Kimi or your own - shows up automatically. Claude is optional: you can
 run, say, Codex + Gemini + Kimi with no Claude at all.
 
 If the host AI (Claude) is on your panel, init then offers an

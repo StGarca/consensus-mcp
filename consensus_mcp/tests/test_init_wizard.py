@@ -707,6 +707,33 @@ def test_run_verification_pass_returns_problem_count(monkeypatch, capsys):
     assert "console scripts on PATH" in out
 
 
+def test_detect_contributors_outputs_json(tmp_path, monkeypatch, capsys):
+    """Auto-init support: --detect-contributors prints JSON of independent
+    contributors + install status, so the Claude Code skill can build the
+    'which AIs' panel question dynamically."""
+    import json as _json
+    monkeypatch.chdir(tmp_path)
+    rc = wiz.main(["--detect-contributors"])
+    assert rc == 0
+    data = _json.loads(capsys.readouterr().out)
+    assert "contributors" in data and isinstance(data["contributors"], list)
+    assert data["contributors"], "should list at least the host (claude)"
+    for c in data["contributors"]:
+        assert set(c) >= {"name", "installed", "host"}
+        assert isinstance(c["installed"], bool) and isinstance(c["host"], bool)
+    # claude is the host and always present
+    hosts = [c for c in data["contributors"] if c["host"]]
+    assert any(c["name"] == "claude" for c in hosts)
+
+
+def test_detect_contributors_is_read_only(tmp_path, monkeypatch):
+    """--detect-contributors must not write any project files (no config etc.)."""
+    monkeypatch.chdir(tmp_path)
+    wiz.main(["--detect-contributors"])
+    assert not (tmp_path / ".consensus").exists()
+    assert not (tmp_path / ".mcp.json").exists()
+
+
 def test_verification_degenerate_panel_is_hard_problem(monkeypatch, capsys):
     """kimi-rev-002: fewer than 2 INSTALLED independent reviewers is a hard
     problem, not a false 'ready'."""
