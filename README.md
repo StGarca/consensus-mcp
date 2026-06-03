@@ -63,7 +63,7 @@ release.
 Install once per machine (works in any project):
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.40.1
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.41.0
 
 # Optional: add a small Claude Code helper so you can type
 # "consensus init" inside Claude Code chat in any project.
@@ -154,8 +154,13 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.40.1 - stable.** Parallel reviewer dispatch + codified consult
-lifecycle. The engine now fans out independent reviewers within a phase
+**Current: v1.41.0 - stable.** Guess-free cold start + machinery hardening: a new
+`consensus-mcp-start-consult` scaffolds a consult in one call, the managed
+`CLAUDE.md` block now teaches the workflow, init states the exact first move +
+enforcement status, `consensus-mcp-approve` now actually arms the edit gate, the
+inspectors surface every reviewer family, and dispatch pass_ids are collision-proof
+by default. Built on v1.40's parallel reviewer dispatch + codified consult
+lifecycle. The engine fans out independent reviewers within a phase
 concurrently (a ~4-8 min serial consult becomes ~1-2 min) instead of one at a
 time - with deterministic, reproducible outcomes (results re-sorted into config
 order; concurrency changes only wall-clock). Two concurrency hazards a 4-AI
