@@ -63,7 +63,7 @@ release.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.41.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.41.1
 
 # Install the Claude Code helper once. This is what lets you set up and run
 # consensus from chat in ANY project - including auto-initializing a new one.
@@ -159,28 +159,41 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.41.0 - stable.** Guess-free cold start + machinery hardening: a new
-`consensus-mcp-start-consult` scaffolds a consult in one call, the managed
-`CLAUDE.md` block now teaches the workflow, init states the exact first move +
-enforcement status, `consensus-mcp-approve` now actually arms the edit gate, the
-inspectors surface every reviewer family, and dispatch pass_ids are collision-proof
-by default. Built on v1.40's parallel reviewer dispatch + codified consult
-lifecycle. The engine fans out independent reviewers within a phase
-concurrently (a ~4-8 min serial consult becomes ~1-2 min) instead of one at a
-time - with deterministic, reproducible outcomes (results re-sorted into config
-order; concurrency changes only wall-clock). Two concurrency hazards a 4-AI
-panel verified were fixed in the same change: process-global stdout capture
-(now thread-local) and a shared-outcome dict race (now collected in the main
-thread). New `consensus-mcp-approve` CLI + `consensus.approve` MCP tool turn a
-converged consult into an accepted approval marker in ONE step (no manual
-seal/edit/mint slog), over one strict repo-root resolver shared by CLI + MCP.
-Windows hardening: `consensus-init` no longer crashes on a cp1252 console, kimi
-forces `PYTHONUTF8`, and grok resolves via a configurable search path when the
-server's PATH is stale. The whole tree is ASCII-only (enforced by a guard test).
-All five reviewers - Claude, Codex, Gemini, Grok, and Kimi - are MCP-surfaced.
-1,800+ regression tests, green on CI across Linux + Windows and Python 3.11+.
-Self-hosted: this release was ratified by consensus-mcp's own 4-AI cross-AI
-review.
+**Current: v1.41.1 - stable.** *The "install it, ask for a review, and it just
+works" release.* This one is all about the first ten minutes: install once, then
+ask for a consensus review in any project and consensus sets itself up for you -
+no per-project setup command to remember.
+
+- **Zero-friction first run.** Ask for a review in a brand-new project and
+  consensus notices it isn't set up, asks which AIs you want on the panel, confirms
+  the handful of files it will write, then initializes and runs the review - all
+  from chat. The first consult dispatches through the shell binaries, so it starts
+  immediately (no Claude Code reload required).
+- **The helper does what you typed.** `consensus-init --install-claude-code` is now
+  honored as the global install whether you run it in a terminal or type it in
+  chat - it no longer silently substitutes the per-project bootstrap or loop back
+  to offer you the command you just ran. Flags like `--non-interactive` /
+  `--accept-defaults` are carried through verbatim.
+- **No "command not found" surprises.** Init now flags the classic
+  `pipx ensurepath` PATH trap up front, ships an offline `consensus init --verify`
+  preflight (console scripts on PATH + each reviewer CLI installed/authenticated,
+  no model calls), and detects your panel dynamically (`--detect-contributors`).
+- **One brain for "where am I."** Init and the runtime now agree on the project
+  root and on scope rules: the edit gate's path matching, the approval scope
+  containment, and the forbidden-files veto all use the gate's own `fnmatch`
+  semantics - each exhaustively brute-forced against ground truth (zero scope
+  escalations, zero missed forbidden overlaps). Approval is transactional
+  (all-or-nothing), and every marker writes through one symlink-safe atomic writer.
+
+Built on v1.41.0's guess-free cold start + v1.40's parallel reviewer dispatch. The
+engine still fans out independent reviewers within a phase concurrently (a ~4-8 min
+serial consult becomes ~1-2 min) with deterministic, reproducible outcomes. All
+five reviewers - Claude, Codex, Gemini, Grok, and Kimi - are MCP-surfaced, and the
+whole tree is ASCII-only (enforced by a guard test). 1,900+ regression tests, green
+on CI across Linux + Windows and Python 3.11+. Self-hosted: this release's
+cold-start fixes were converged through eight of consensus-mcp's own blind 4-AI
+review rounds (the panel caught a real scope-escalation bug mid-flight - exactly
+what it's for).
 
 - What changed in each release -> [`CHANGELOG.md`](CHANGELOG.md)
 - Known-issue releases + which version to upgrade to ->
