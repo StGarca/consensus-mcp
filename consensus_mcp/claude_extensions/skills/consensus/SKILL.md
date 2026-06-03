@@ -84,26 +84,31 @@ installs `~/.claude/skills/consensus-workflow/SKILL.md` - that
 skill is the load-bearing reference and triggers automatically
 on workflow-execution intent.
 
-## If the project is already configured
+## If the project is already configured -> treat re-init as an UPGRADE
 
-If `consensus-init` exits with **code 4** AND the first line of its stdout is
-exactly `STATUS: already-configured`, the project is already bootstrapped. This
-is the ONE case where you do **not** surface the output verbatim:
+If `consensus-init` exits with code 4 AND the first line of its stdout is
+exactly `STATUS: already-configured`, the project is already set up - this is the
+normal RE-INIT case (e.g. after upgrading the package). Do NOT show a
+leave/reconfigure/force menu, and do NOT surface the raw "Error" - re-running init
+on an existing project should behave like an idempotent **upgrade**, not a prompt.
 
-1. Consume (do not display) the `STATUS: already-configured` line. The stderr
-   guidance after it is human-readable; you may show it.
-2. Present these options to the user via `AskUserQuestion`:
-   - **Leave as-is** - already set up; do nothing.
-   - **Verify / repair** - re-create any missing pieces, report diverged ones (non-destructive).
-   - **Reconfigure** - update settings, keeping current values as defaults.
-   - **Force overwrite** - discard local config edits and write fresh.
-3. Act on the choice **one-shot** (do NOT loop):
-   - Leave -> stop; tell the user nothing changed.
-   - Verify / repair -> run `consensus-init --from-claude-code --repair` once; relay its `OK:`/`REPAIRED:`/`SKIP:`/`REPORT-GLOBAL:` summary lines.
-   - Reconfigure -> run `consensus-init --from-claude-code --reconfigure` once.
-   - Force overwrite -> run `consensus-init --from-claude-code --force` once.
+1. Consume (do not display) the `STATUS: already-configured` token line.
+2. Run `consensus-init --from-claude-code --repair` once. This is the upgrade:
+   it verifies + refreshes the consensus-managed pieces (`.mcp.json`, the
+   `.gitignore` block, the agent files, the instruction managed-blocks) WITHOUT
+   touching the user's panel/config, and reports the REAL enforcement state.
+3. Relay its summary lines verbatim (`OK:` / `REPAIRED:` / `SKIP:` /
+   `REPORT-GLOBAL:`). Tell the user the project is up to date.
+   - If it exits 0: confirm everything is current; stop.
+   - If a line is `SKIP:` (a managed file DIVERGED because the user hand-edited
+     it), tell the user that re-running with `--force` overwrites those SPECIFIC
+     files - but do NOT force automatically.
+   - If a line is `REPORT-GLOBAL:` (the once-per-machine enforcement step hasn't
+     run), relay that they can enable edit-gating with
+     `consensus-init --install-claude-code`. Do NOT suggest this when no
+     `REPORT-GLOBAL:` line is present - enforcement is already on.
 
-The resolving flag stops the token from re-firing, so there is no menu loop.
+This is a single, non-looping pass; never re-offer a command the user already ran.
 
 ## If it looks like a workspace folder (not a project)
 

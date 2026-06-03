@@ -53,16 +53,20 @@ the binary's stdout/stderr verbatim - it already prints the correct next-step
 guidance, including the Claude Code restart instructions. If the binary is not on
 PATH, tell the user to run `pipx install consensus-mcp` once globally and retry.
 
-**Already configured:** if the binary exits with code 4 and the first stdout line
-is exactly `STATUS: already-configured`, the project is already set up. Do not
-surface the raw error - consume that token line. If the user passed
-`--non-interactive` or `--accept-defaults` (they signalled NO prompts), do NOT show
-an interactive menu: just relay the binary's one-line already-configured guidance
-(re-run with `--reconfigure` or `--force`) and stop. Otherwise present four options
-via `AskUserQuestion` (leave as-is / verify-repair / reconfigure / force overwrite),
-then re-invoke `consensus-init --from-claude-code --repair`, `--reconfigure`, or
-`--force` once as appropriate (one-shot; "leave" does nothing). The `--repair` flag
-re-creates missing pieces and reports diverged ones non-destructively.
+**Already configured -> treat re-init as an UPGRADE:** if the binary exit code 4
+appears and the first stdout line is exactly `STATUS: already-configured`, the
+project is already set up (the normal re-init case, e.g. after a package upgrade).
+Do NOT surface the raw "Error" and do NOT pop a leave/reconfigure/force menu -
+re-running init on an existing project should behave like an idempotent upgrade.
+Consume the token line and run `consensus-init --from-claude-code --repair` once:
+it verifies + refreshes the consensus-managed pieces (`.mcp.json`, the `.gitignore`
+block, agent files, instruction managed-blocks) WITHOUT touching the user's
+panel/config, and reports the real enforcement state. Relay its `OK:` / `REPAIRED:`
+/ `SKIP:` / `REPORT-GLOBAL:` summary lines and stop. Only if a `SKIP:` line appears
+(a managed file the user hand-edited diverged) tell them `--force` overwrites those
+specific files - never force automatically. Only if a `REPORT-GLOBAL:` line appears
+mention `consensus-init --install-claude-code` (enforcement is otherwise already
+on - do not re-offer it). Single pass; no loop.
 
 **Workspace umbrella:** if the binary exits with code 8 and the first stdout line
 is exactly `STATUS: looks-like-workspace-umbrella`, the current directory is a

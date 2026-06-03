@@ -243,7 +243,11 @@ def test_contract_token_present_in_skill_and_command():
 
 
 def test_repair_option_documented_in_skill_and_command():
+    """Re-init on an already-configured project is now an idempotent UPGRADE:
+    both helper files drive `--repair` directly (no leave/reconfigure/force menu)."""
     skill = (_ext_dir() / "skills" / "consensus" / "SKILL.md").read_text(encoding="utf-8")
     command = (_ext_dir() / "commands" / "consensus-init.md").read_text(encoding="utf-8")
-    assert "--repair" in skill and "Verify / repair" in skill
-    assert "--repair" in command
+    assert "consensus-init --from-claude-code --repair" in skill
+    assert "consensus-init --from-claude-code --repair" in command
+    # the upgrade framing replaced the old interactive menu.
+    assert "upgrade" in skill.lower() and "upgrade" in command.lower()

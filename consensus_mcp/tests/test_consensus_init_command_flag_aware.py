@@ -40,6 +40,21 @@ def test_command_still_does_project_bootstrap_by_default():
     assert "looks-like-workspace-umbrella" in text
 
 
+def test_already_configured_is_treated_as_upgrade_not_menu():
+    """Re-running init on an existing project should behave like an idempotent
+    upgrade (auto --repair), not pop a leave/reconfigure/force menu (the friction
+    + the 'run the thing you just ran' loop the user reported)."""
+    for text in (_command(), _skill()):
+        lower = text.lower()
+        assert "upgrade" in lower
+        assert "consensus-init --from-claude-code --repair" in text
+        # the old 4-option AskUserQuestion menu wording must be gone from the
+        # already-configured path.
+        assert "force overwrite" not in lower or "do not" in lower
+        # only suggest the global step when a REPORT-GLOBAL line is actually present
+        assert "report-global" in lower
+
+
 def test_skill_handles_install_claude_code_flag():
     text = _skill()
     assert "--install-claude-code" in text
