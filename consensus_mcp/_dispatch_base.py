@@ -173,13 +173,14 @@ def _resolve_repo_root() -> Path:
         # a clear message naming the env var. Empty-string env (treated as
         # falsy above) is the "unset" case and DOES fall through.
         raise RepoRootResolutionError(
-            f"CONSENSUS_MCP_REPO_ROOT={override!r} was set but the path "
-            f"{candidate} does not contain all required repo markers "
-            f"{_REPO_ROOT_MARKERS}. Not falling through to cwd / __file__ "
-            f"discovery - operator-supplied env var is authoritative. "
-            f"Either fix the path (it must contain {_REPO_ROOT_MARKERS} as "
-            f"subdirectories) or unset CONSENSUS_MCP_REPO_ROOT to use "
-            f"automatic discovery."
+            f"CONSENSUS_MCP_REPO_ROOT/CONSENSUS_MCP_PROJECT_ROOT={override!r} was "
+            f"set but the path {candidate} is not a consensus root: it has neither "
+            f"the consensus-mcp source markers {_REPO_ROOT_MARKERS} (as "
+            f"subdirectories) NOR a consuming-project '.consensus/config.yaml' "
+            f"(written by `consensus init`). Not falling through to cwd / __file__ "
+            f"discovery - the operator-supplied env var is authoritative. Either "
+            f"fix the path, run `consensus init` there first, or unset the env var "
+            f"to use automatic discovery."
         )
 
     cwd = Path.cwd().resolve()
@@ -225,6 +226,32 @@ def _resolve_repo_root() -> Path:
         f"\n"
         f"See docs/consensus/operations/first-consult-quickstart.md (packaged with\n"
         f"the install) for the full Path A workflow."
+    )
+
+
+def validate_explicit_repo_root(repo_root: str | os.PathLike) -> Path:
+    """Validate an OPERATOR-SUPPLIED repo root the same way auto-discovery does.
+
+    Resolves `repo_root` and requires consensus repo markers (the consensus-mcp
+    source markers OR a consuming project's `.consensus/config.yaml`). Raises
+    `RepoRootResolutionError` naming PROJECT_ROOT/.consensus on failure.
+
+    Codex finding (cold-start blind consult): the composed flows
+    (`_approve_consult`, `_start_consult`) previously accepted an explicit
+    `--repo-root` VERBATIM (`Path(repo_root).resolve()`) with no marker check, so
+    a typo'd or arbitrary path could arm the gate / seal an outcome into a tree
+    that is not a consensus project at all. The env-var branch of
+    `_resolve_repo_root` already validates; an explicit `--repo-root` must be held
+    to the SAME bar (one resolver, one contract - Finding #7)."""
+    candidate = Path(repo_root).resolve()
+    if _has_repo_markers(candidate):
+        return candidate
+    raise RepoRootResolutionError(
+        f"--repo-root {str(repo_root)!r} resolved to {candidate} but it is not a "
+        f"consensus project root: it has neither the consensus-mcp source markers "
+        f"{_REPO_ROOT_MARKERS} nor a consuming-project '.consensus/config.yaml' "
+        f"(written by `consensus init`). Run `consensus init` there first, or point "
+        f"--repo-root / CONSENSUS_MCP_PROJECT_ROOT at an initialized project root."
     )
 
 

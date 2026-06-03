@@ -6,9 +6,20 @@ import yaml
 from consensus_mcp import _approve_consult as ac
 
 
+def _init_project(repo_root):
+    """Make `repo_root` a valid consuming-project root: write .consensus/config.yaml
+    (what `consensus init` writes), so the now-validated explicit --repo-root
+    resolver accepts it (codex finding)."""
+    cfg = repo_root / ".consensus" / "config.yaml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(yaml.safe_dump({"schema_version": 1}), encoding="utf-8")
+
+
 def _make_consult(repo_root, name="iter-test", families=("codex", "gemini"),
-                  with_plan=True):
-    """Build a synthetic post-consult iteration: sealed reviews + converged-plan."""
+                  with_plan=True, allowed_files=("src/**",), with_goal_packet=True):
+    """Build a synthetic post-consult iteration: sealed reviews + converged-plan +
+    a goal_packet (carrying the authorized allowed_files the scope gate checks)."""
+    _init_project(repo_root)
     iter_dir = repo_root / "consensus-state" / "active" / name
     iter_dir.mkdir(parents=True)
     for fam in families:
@@ -19,6 +30,11 @@ def _make_consult(repo_root, name="iter-test", families=("codex", "gemini"),
     if with_plan:
         (iter_dir / "converged-plan.yaml").write_text(
             yaml.safe_dump({"decision": "RATIFIED", "iteration_id": name}),
+            encoding="utf-8",
+        )
+    if with_goal_packet:
+        (iter_dir / "goal_packet.yaml").write_text(
+            yaml.safe_dump({"pilot_id": name, "allowed_files": list(allowed_files)}),
             encoding="utf-8",
         )
     return iter_dir
@@ -62,10 +78,63 @@ def test_approve_does_not_author_missing_converged_plan(tmp_path):
 
 
 def test_approve_rejects_overbroad_scope(tmp_path):
-    _make_consult(tmp_path)
+    # allowed_files=['**'] so the scope passes the escalation gate and reaches
+    # mint_design_approval's absolute-overbroad guard (the behavior under test).
+    _make_consult(tmp_path, allowed_files=("**",))
     res = ac.approve_consult("iter-test", scope_glob="**", repo_root=tmp_path)
     assert res["ok"] is False
     assert res["error_type"] == "invalid_scope"
+
+
+def test_approve_rejects_scope_escalation_beyond_allowed(tmp_path):
+    """kimi finding: approving a scope BROADER than the goal_packet authorized is a
+    privilege escalation - reject it. allowed=['src/foo.py'], scope='**'."""
+    _make_consult(tmp_path, allowed_files=("src/foo.py",))
+    res = ac.approve_consult("iter-test", scope_glob="**", repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "scope_escalation"
+    assert not (tmp_path / ".consensus" / "design-approved").exists()
+
+
+def test_approve_accepts_scope_narrowing_within_allowed(tmp_path):
+    """kimi finding: NARROWING the scope is fine. allowed=['src/*'], scope=
+    'src/bar.py' (a subset) must approve."""
+    _make_consult(tmp_path, allowed_files=("src/*",))
+    res = ac.approve_consult("iter-test", scope_glob="src/bar.py", repo_root=tmp_path)
+    assert res["ok"] is True, res
+
+
+def test_approve_requires_goal_packet_for_scope_check(tmp_path):
+    """kimi finding: with no goal_packet there is nothing to confine the scope to;
+    fail closed with an actionable error rather than minting an unbounded marker."""
+    _make_consult(tmp_path, with_goal_packet=False)
+    res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "missing_goal_packet"
+    assert not (tmp_path / ".consensus" / "design-approved").exists()
+
+
+def test_approve_surfaces_disarm_next_step(tmp_path):
+    """gemini finding: a successful approve must surface the DISARM/close command
+    so the gate is never left armed after the edits land."""
+    _make_consult(tmp_path)
+    res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=tmp_path)
+    assert res["ok"] is True, res
+    disarm = res["next_steps"]["3_disarm_when_done"]
+    assert "consensus-mcp-seal-iteration close" in disarm
+    assert "iter-test" in disarm
+
+
+def test_approve_validates_explicit_repo_root(tmp_path):
+    """codex finding: an explicit --repo-root that is not a consensus project root
+    (no .consensus/config.yaml, no source markers) must be REJECTED, not accepted
+    verbatim - otherwise the gate arms in an arbitrary tree."""
+    bogus = tmp_path / "not-a-project"
+    bogus.mkdir()
+    res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=bogus)
+    assert res["ok"] is False
+    assert res["error_type"] == "repo_root_unresolved"
+    assert ".consensus" in res["error"]
 
 
 def test_approve_rejects_non_canonical_plan_name(tmp_path):
@@ -117,6 +186,7 @@ def test_approve_counts_round_keyed_review_filenames(tmp_path):
     files can be round-keyed (e.g. 'kimi-review-4.yaml'). The >=2 precondition AND
     the panel derivation must still recognize those families, not just the bare
     '<fam>-review.yaml' form."""
+    _init_project(tmp_path)
     iter_dir = tmp_path / "consensus-state" / "active" / "iter-rk"
     iter_dir.mkdir(parents=True)
     (iter_dir / "codex-review.yaml").write_text(
@@ -125,6 +195,8 @@ def test_approve_counts_round_keyed_review_filenames(tmp_path):
         yaml.safe_dump({"reviewer_id": "kimi"}), encoding="utf-8")
     (iter_dir / "converged-plan.yaml").write_text(
         yaml.safe_dump({"decision": "RATIFIED"}), encoding="utf-8")
+    (iter_dir / "goal_packet.yaml").write_text(
+        yaml.safe_dump({"allowed_files": ["src/**"]}), encoding="utf-8")
     res = ac.approve_consult("iter-rk", scope_glob="src/**", repo_root=tmp_path)
     assert res["ok"] is True, res
     assert res["non_claude_reviewers"] == 2  # codex + kimi (round-keyed) both counted
