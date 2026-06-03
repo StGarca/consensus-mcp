@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.41.0 - 2026-06-02
+
+**Guess-free cold start + consult-machinery hardening.** Ratified by a 3-family
+consult (gemini/codex/grok, 0 blocking; all three verified the #1 blocker in
+source) on top of a 9-facet cold-start UX analysis.
+
+Verified blockers (a cold AI/user hit these on a fresh install):
+- **P0.1 - approve now arms the gate.** `consensus-mcp-approve` minted
+  `.consensus/design-approved` but never wrote the session marker the gate keys
+  on, so edits were silently allowed AFTER "approval". It now writes the session
+  marker (the gate's own predicate flips); a hypothesis-independent test asserts it.
+- **P0.2 - inspectors stop dropping reviewer families.**
+  `consensus.get_iteration_outcome` discovers every `<fam>-review[-N].yaml` /
+  `<fam>-proposal.yaml` dynamically (was hardcoded claude/codex/gemini);
+  `review.read_post_seal`'s independence gate is panel-agnostic (named family +
+  >=1 other sealed) instead of hardcoded codex+claude (which rejected grok/kimi).
+- **P0.3 - real delivery-token CLI.** New `consensus-mcp-deliver` wraps
+  `mint_delivery_token` (refuses self-judging); the Stop gate no longer names the
+  phantom `consensus-verify`.
+
+Cold-start onboarding (make the first consult guess-free):
+- **`consensus-mcp-start-consult` + `consensus.start_consult`** - the one-call
+  "start a review" entrypoint: scaffolds the iteration dir + a valid goal_packet,
+  arms the gate, and prints the EXACT dispatch + approve commands. No more
+  hand-authoring a goal_packet.
+- The managed `CLAUDE.md`/`AGENTS.md` block leads with a consensus operating
+  preamble (how to run a review here), not just generic guidelines.
+- `consensus init` output states the exact first move (trigger phrase +
+  start-consult command) AND the real enforcement status (advisory until the
+  global `consensus-init --install-claude-code`).
+
+Dispatch hardening (field-discovered live):
+- **pass_id collisions fixed at the source.** `derive_pass_id` (hash of
+  iteration/packet/contributor) is the dispatcher default across all 4
+  dispatchers - the T6 seal index is a GLOBAL pass_id namespace, so the old
+  `<reviewer>-pass1` default collided across iterations. Omit `--pass-id`.
+- Skill codified: one Bash call per reviewer, shell binaries (not the 45s-timeout
+  MCP wrappers), auto pass_id, and kimi-runs-last-alone (its whole-repo integrity
+  check false-positives on a sibling reviewer's concurrent write).
+
+Full suite: 1844 passed, 8 skipped. (Remaining cold-start plan items - P0-OPS
+kimi-integrity/grok-cwd code fixes, a human-readable converged-plan render, the
+decode recipe, install-drift version guard - are captured in the spec for a
+focused follow-up.)
+
 ## 1.40.1 - 2026-06-02
 
 **Approve flow counts round/pass-keyed review filenames.** Hot-patch on v1.40.0:
