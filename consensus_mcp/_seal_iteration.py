@@ -46,6 +46,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -345,6 +346,34 @@ def _mint(
 
 # ----- close (v1.32.1) -----
 
+def _git_modified_relpaths(repo_root: Path) -> set[str] | None:
+    """Repo-relative POSIX paths git reports as CHANGED (modified, added, or
+    untracked) under `repo_root`, or None when git is unavailable / this is not a
+    git work tree (so the caller can fall back to a conservative all-in-scope
+    check). Used to scope the close-time delivery-token check to the actual change
+    delta (grok-rev-001)."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo_root), "status", "--porcelain", "--untracked-files=all"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=15, check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode != 0:
+        return None  # not a git repo / git error -> conservative fallback
+    changed: set[str] = set()
+    for line in (proc.stdout or "").splitlines():
+        if not line.strip():
+            continue
+        # Porcelain v1: 'XY <path>' or 'XY <old> -> <new>' for renames.
+        path = line[3:] if len(line) > 3 else line.strip()
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1]
+        changed.add(path.strip().strip('"').replace("\\", "/"))
+    return changed
+
+
 def _close(
     iter_dir: Path,
     abandon: bool = False,
@@ -365,9 +394,8 @@ def _close(
     """
     repo_root = _resolve_repo_root()
     design_marker = repo_root / MARKER_RELPATH
-    # gemini-rev-002: no placeholder reassignment - bind the session marker once.
-    from consensus_mcp._session_state import MARKER_RELPATH as SESSION_RELPATH
-    session_marker = repo_root / SESSION_RELPATH
+    # gemini-rev-001/002: session marker is cleared via clear_session_marker();
+    # no local binding needed here.
 
     if abandon:
         cleared_session = clear_session_marker(repo_root)
@@ -439,6 +467,20 @@ def _close(
         if fnmatch.fnmatch(rel_str, scope_glob):
             in_scope.append(p)
 
+    # grok-rev-001: a delivery token proves a CHANGED file was vetted. Requiring
+    # one for EVERY file matching scope_glob made a broad scope (e.g.
+    # 'consensus_mcp/**') impossible to close - hundreds of UNCHANGED files would
+    # each demand a token, forcing --abandon. The token check belongs on the
+    # MODIFIED DELTA, not the whole scope. Restrict in_scope to files git reports
+    # as changed (modified/added/untracked) when git is available; fall back to the
+    # conservative all-in-scope set when it is not (no weaker than before).
+    modified = _git_modified_relpaths(repo_root)
+    if modified is not None:
+        in_scope = [
+            p for p in in_scope
+            if str(p.relative_to(repo_root)).replace("\\", "/") in modified
+        ]
+
     # Verify delivery tokens exist for each (the delivery-readiness
     # module hashes the artifact path to compute the token filename).
     from consensus_mcp._delivery_readiness import _token_path
@@ -453,10 +495,12 @@ def _close(
             "ok": False,
             "error_type": "missing_delivery_tokens",
             "error": (
-                f"{len(missing)} in-scope file(s) lack delivery tokens; "
-                f"mint them via `consensus_mcp._delivery_readiness."
-                f"mint_delivery_token` before close, OR use `--abandon` "
-                f"to force-clear (recovery path)."
+                f"{len(missing)} CHANGED in-scope file(s) lack delivery tokens; "
+                f"mint one per file with `consensus-mcp-deliver --file <path> "
+                f"--design-consensus-ref <iter> --vetted-by <fam1>,<fam2>` before "
+                f"close, OR use `--abandon` to disarm without the token check "
+                f"(e.g. a review-only consult that landed no edits - the seal + "
+                f"audit trail are unaffected; markers are session caches)."
             ),
             "missing": missing[:20],  # cap output
             "missing_count": len(missing),
