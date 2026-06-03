@@ -135,6 +135,11 @@ def test_fnmatch_subset_matches_gate_containment():
     assert fs("src", "src/**") is False               # bare dir not under src/**
     assert fs("**", "src/**") is False                # broader -> escalation
     assert fs("src/sub/x.py", "src/*") is True        # fnmatch '*' spans '/'
+    # EXACT (automaton) containment accepts narrowings the conservative version
+    # could not prove, with no escalation:
+    assert fs("src/a/test", "src/*/test") is True
+    assert fs("a/b/c", "a/**/c") is True
+    assert fs("a/c", "a/**/c") is False               # '**' requires >=1 segment
 
 
 def test_fnmatch_subset_no_escalation_exhaustive():
@@ -283,6 +288,30 @@ def test_approve_rolls_back_marker_on_gate_arm_failure(tmp_path, monkeypatch):
     assert res["error_type"] == "gate_arm_failed"
     # the just-minted design-approved marker must NOT survive the failed approve.
     assert not (tmp_path / ".consensus" / "design-approved").exists()
+    # grok-rev-003: TRANSACTIONAL - the outcome this call wrote is rolled back too.
+    assert not (tmp_path / "consensus-state" / "active" / "iter-test"
+                / "iteration-outcome.yaml").exists()
+
+
+def test_approve_arm_failure_preserves_preexisting_outcome(tmp_path, monkeypatch):
+    """grok-rev-003: rollback removes only what THIS call wrote. A pre-existing
+    SEALED iteration-outcome.yaml (from an earlier run) must be preserved on a
+    failed approve, not deleted."""
+    iter_dir = _make_consult(tmp_path)
+    outcome = iter_dir / "iteration-outcome.yaml"
+    sealed = next(iter(ac.SEALED_CLOSING_STATES))
+    outcome.write_text(yaml.safe_dump(
+        {"iteration_id": "iter-test", "closing_state": sealed,
+         "sealed_by": "prior-run"}), encoding="utf-8")
+
+    def _boom(*a, **k):
+        raise OSError("arm failure")
+    monkeypatch.setattr(ac, "write_session_marker", _boom)
+    res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=tmp_path)
+    assert res["ok"] is False and res["error_type"] == "gate_arm_failed"
+    # the pre-existing sealed outcome survives (we did not create it).
+    assert outcome.exists()
+    assert yaml.safe_load(outcome.read_text())["sealed_by"] == "prior-run"
 
 
 def test_approve_validates_explicit_repo_root(tmp_path):

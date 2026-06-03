@@ -82,58 +82,82 @@ def _glob_segments(glob: str) -> list[str]:
     return [seg for seg in str(glob).strip().split("/") if seg != ""]
 
 
-def _literal_prefix(pattern: str) -> str:
-    """The leading run of literal characters before the first fnmatch metachar
-    (`*`, `?`, `[`). Every string matched by `pattern` begins with this prefix."""
-    out: list[str] = []
-    for c in pattern:
-        if c in "*?[":
-            break
-        out.append(c)
-    return "".join(out)
+# A single sentinel char standing in for "any character that is NOT a literal in
+# either pattern". Globs are over an infinite alphabet, but every such char behaves
+# identically wrt two given patterns (matched only by '*'/'?', never by a literal),
+# so ONE representative makes the alphabet finite without losing soundness.
+_GLOB_OTHER_CHAR = "\x00"
 
 
 def _fnmatch_subset(a: str, b: str) -> bool:
-    """True when EVERY string matched by fnmatch glob `a` is also matched by `b`
-    (language containment), under the gate's OWN fnmatch semantics.
+    """True iff EVERY string matched by fnmatch glob `a` is also matched by `b`
+    (language containment L(a) subset of L(b)) under the gate's OWN fnmatch
+    semantics, where '*'/'**' match any chars INCLUDING '/' and '?' matches one.
 
-    This is the scope-confinement (allowed) check, where a FALSE-positive is a
-    privilege ESCALATION. General glob containment needs an automaton-product; a
-    hand-rolled DP gets it subtly wrong (a round-7 attempt admitted real
-    escalations, e.g. '?b*a' wrongly judged subset of '?ba', and even the older
-    segment matcher escaped vs fnmatch - both caught by exhaustive brute-force).
-    So this is a SOUND, CONSERVATIVE test: it returns True ONLY when containment is
-    PROVABLE, and fails CLOSED (reject) otherwise - the safe direction for an
-    escalation guard. Two provable cases, both gate-consistent (fnmatch):
+    This is the scope-confinement (allowed) check, where a FALSE positive is a
+    privilege ESCALATION. EXACT, not conservative: decided by an automaton product
+    - run a's NFA against the COMPLEMENT of b's NFA over the finite alphabet
+    {literals in a,b} + one OTHER sentinel; if a string accepted by `a` but NOT by
+    `b` is reachable, `a` is not contained. A hand-rolled DP got this subtly wrong
+    (a round-7 attempt admitted real escalations like '?b*a' subset of '?ba'); the
+    automaton is provably correct and was validated by EXHAUSTIVE brute-force vs
+    fnmatch (600k+ pattern pairs over strings up to length 6): zero escalations AND
+    zero spurious rejections.
 
-      1. a == b (after per-OS case normalization - codex-rev-001: fnmatch.fnmatch
-         lowercases on Windows; os.path.normcase is a no-op on POSIX).
-      2. b is a PURE-PREFIX SUBTREE: its literal prefix followed by a suffix of
-         ONLY `*` characters (e.g. 'src/**', 'src/*', '**'). fnmatch '*' spans '/',
-         so L(b) is exactly 'every string starting with b's literal prefix'. Then
-         a subset b iff a's literal prefix starts with b's literal prefix (every
-         string a generates then also starts with that prefix). A '/' or other
-         literal in b's suffix is MANDATORY and breaks this, so it is excluded.
+    codex-rev-001 (round 8): inputs are os.path.normcase'd first to match the gate's
+    per-OS case-normalization (fnmatch.fnmatch lowercases on Windows; no-op on
+    POSIX). Bracket classes `[seq]` are not modelled, so they fail CLOSED (return
+    False) for this allowed check - the SAFE direction (reject -> scope_escalation).
+    """
+    from collections import deque
 
-    Verified by exhaustive brute-force vs fnmatch (110k+ pattern pairs): ZERO
-    escalations. It is intentionally conservative - a narrowing it cannot prove is
-    rejected with a scope_escalation error, and the operator uses the consult's
-    exact scope. (A complete sound fnmatch CONTAINMENT via automaton product is a
-    documented follow-up; it is deliberately NOT hand-rolled here.) Brackets fail
-    closed (return False)."""
     a = os.path.normcase(a)
     b = os.path.normcase(b)
     if "[" in a or "[" in b:
         return False  # fail-closed: bracket classes not modelled
-    if a == b:
-        return True
-    bp = _literal_prefix(b)
-    suffix = b[len(bp):]
-    if suffix and set(suffix) == {"*"}:
-        # L(b) == {strings starting with bp}; a subset b iff a only ever produces
-        # such strings, i.e. a's own literal prefix starts with bp.
-        return _literal_prefix(a).startswith(bp)
-    return False
+    alphabet = {ch for ch in (a + b) if ch not in "*?"} | {_GLOB_OTHER_CHAR}
+
+    def _epsilon_closure(pattern: str, states: frozenset) -> frozenset:
+        # '*' can match the empty string -> epsilon move from i to i+1.
+        seen = set(states)
+        stack = list(states)
+        while stack:
+            i = stack.pop()
+            if i < len(pattern) and pattern[i] == "*" and (i + 1) not in seen:
+                seen.add(i + 1)
+                stack.append(i + 1)
+        return frozenset(seen)
+
+    def _advance(pattern: str, states: frozenset, ch: str) -> frozenset:
+        nxt = set()
+        for i in states:
+            if i >= len(pattern):
+                continue
+            pc = pattern[i]
+            if pc == "*":
+                nxt.add(i)            # '*' self-loop: consume ch, stay
+            elif pc == "?":
+                nxt.add(i + 1)        # '?' consumes exactly one char
+            elif pc == ch:
+                nxt.add(i + 1)        # literal match
+        return _epsilon_closure(pattern, frozenset(nxt))
+
+    start_a = _epsilon_closure(a, frozenset({0}))
+    start_b = _epsilon_closure(b, frozenset({0}))
+    seen = {(start_a, start_b)}
+    queue = deque([(start_a, start_b)])
+    while queue:
+        sa, sb = queue.popleft()
+        # Reachable string here is accepted by `a` (len(a) in sa) but NOT by `b`
+        # (len(b) not in sb) -> a is NOT contained in b.
+        if (len(a) in sa) and (len(b) not in sb):
+            return False
+        for ch in alphabet:
+            nxt = (_advance(a, sa, ch), _advance(b, sb, ch))
+            if nxt not in seen:
+                seen.add(nxt)
+                queue.append(nxt)
+    return True
 
 
 def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
@@ -273,10 +297,13 @@ def _sealed_reviewer_families(iter_dir: Path) -> list[str]:
     return sorted(fams)
 
 
-def _ensure_sealed_outcome(iter_dir: Path, closing_state: str) -> None:
+def _ensure_sealed_outcome(iter_dir: Path, closing_state: str) -> bool:
     """Write iteration-outcome.yaml with a SEALED closing_state + a panel derived
     from the sealed reviews, UNLESS a sealed outcome already exists (then respect
-    it). Mechanical metadata only -- never the converged plan's content."""
+    it). Mechanical metadata only -- never the converged plan's content.
+
+    Returns True iff THIS call wrote the file (so a failed approve can roll it back
+    transactionally), False if a pre-existing sealed outcome was respected."""
     op = iter_dir / "iteration-outcome.yaml"
     if op.exists():
         try:
@@ -284,7 +311,7 @@ def _ensure_sealed_outcome(iter_dir: Path, closing_state: str) -> None:
         except Exception:
             existing = {}
         if existing.get("closing_state") in SEALED_CLOSING_STATES:
-            return
+            return False
     panel = ["claude"] + _sealed_reviewer_families(iter_dir)
     outcome = {
         "iteration_id": iter_dir.name,
@@ -299,6 +326,7 @@ def _ensure_sealed_outcome(iter_dir: Path, closing_state: str) -> None:
     # grok-rev-002: route through the single shared atomic writer (consistency
     # with the marker writers), not a bare write_text.
     atomic_write_text(op, yaml.safe_dump(outcome, sort_keys=False))
+    return True
 
 
 def approve_consult(
@@ -433,7 +461,28 @@ def approve_consult(
                 f"to exclude {forb!r}.",
             )
 
-    _ensure_sealed_outcome(iter_dir, closing_state)
+    # grok-rev-003: approve is TRANSACTIONAL. The outcome is written before mint
+    # (mint/revalidate read its sealed closing_state), so any failure AFTER this
+    # point must undo everything THIS call created - the outcome (only if we wrote
+    # it, never a pre-existing sealed one) and the design-approved marker - so a
+    # failed approve leaves the repo exactly as it was found.
+    outcome_path = iter_dir / "iteration-outcome.yaml"
+    outcome_created = _ensure_sealed_outcome(iter_dir, closing_state)
+
+    def _rollback(*, marker: bool) -> None:
+        if marker:
+            try:
+                mf = _marker_path(rr)
+                if mf.exists():
+                    mf.unlink()
+            except OSError:
+                pass
+        if outcome_created:
+            try:
+                if outcome_path.exists():
+                    outcome_path.unlink()
+            except OSError:
+                pass
 
     sha = compute_artifact_hash(plan)
     try:
@@ -444,10 +493,12 @@ def approve_consult(
             converged_plan_sha256=sha,
         )
     except ValueError as exc:  # overbroad / empty scope_glob
+        _rollback(marker=False)   # mint failed -> only the outcome may exist
         return _err("invalid_scope", str(exc))
 
     ok, reason = _revalidate_seal(marker, rr)
     if not ok:
+        _rollback(marker=True)
         return _err("revalidation_failed", reason)
 
     # P0.1 (consult-verified #1 blocker): minting the design-approved marker is
@@ -465,27 +516,18 @@ def approve_consult(
             activation_source="console_script",
         )
     except Exception as exc:  # marker minted but gate not armed - ROLL BACK
-        # grok-rev-001 (blocking): minting the design-approved marker before arming
-        # the session marker left a HALF-STATE on arm failure - a stale
-        # design-approved trust pointer persisting with no live session, which a
-        # later approve/session could trip over. Make approval ALL-OR-NOTHING: if
-        # arming fails, remove the just-minted design-approved marker so the repo
-        # returns to its pre-approve state. A failed approve leaves NO markers.
-        rollback_note = "design-approved marker rolled back"
-        try:
-            marker_file = _marker_path(rr)
-            if marker_file.exists():
-                marker_file.unlink()
-        except OSError as rb_exc:
-            rollback_note = (
-                f"FAILED to roll back design-approved marker ({rb_exc}); remove "
-                f"{_marker_path(rr)} manually before re-running approve"
-            )
+        # grok-rev-001 (blocking) + grok-rev-003: minting the design-approved marker
+        # before arming the session marker left a HALF-STATE on arm failure - a
+        # stale design-approved trust pointer (and the sealed outcome) persisting
+        # with no live session, which a later approve/session could trip over. Make
+        # approval ALL-OR-NOTHING: roll back BOTH the marker and the outcome (if we
+        # wrote it) so the repo returns to its exact pre-approve state.
+        _rollback(marker=True)
         return _err(
             "gate_arm_failed",
             f"failed to ARM the gate (session marker write failed): {exc}. "
-            f"{rollback_note}. No partial approval remains; re-run approve once "
-            f"the cause is fixed.",
+            f"design-approved marker + sealed outcome rolled back. No partial "
+            f"approval remains; re-run approve once the cause is fixed.",
         )
 
     return {
