@@ -137,22 +137,34 @@ def test_fnmatch_subset_matches_gate_containment():
     assert fs("src/sub/x.py", "src/*") is True        # fnmatch '*' spans '/'
 
 
-def test_fnmatch_subset_no_escalation_property():
-    """Security property: _fnmatch_subset must NEVER declare a subset that lets a
-    file matched by `a` escape `b` under fnmatch (no scope-escalation)."""
+def test_fnmatch_subset_no_escalation_exhaustive():
+    """Security property (regression guard for the round-7 escalation bug): over an
+    EXHAUSTIVE char-level matrix of wildcard patterns, _fnmatch_subset must NEVER
+    declare a subset that lets a string matched by `a` escape `b` under fnmatch.
+    A curated matrix missed this class once; brute-force is the real check."""
     import fnmatch as _fn
     import itertools
-    pool = ["a", "b", "c", "sub", "x.py", "secret.py", "src", "cm"]
-    files = ["/".join(c) for n in range(1, 4) for c in itertools.product(pool, repeat=n)]
-    globs = ["src/*", "src/**", "src/a/*", "src/*/b", "cm/**", "**", "*.py",
-             "src/*.py", "a/*/c", "src/sub/**", "src/a.py", "src/sub/x.py"]
-    for a in globs:
-        for b in globs:
+    alpha = ["a", "b", "/", "x"]
+    strings = set()
+    for n in range(1, 5):
+        for c in itertools.product(alpha, repeat=n):
+            strings.add("".join(c))
+    patom = ["a", "b", "x", "/", "*"]
+    pats = set()
+    for n in range(1, 4):
+        for c in itertools.product(patom, repeat=n):
+            pats.add("".join(c))
+    escalations = 0
+    for a in pats:
+        if not any(_fn.fnmatchcase(s, a) for s in strings):
+            continue
+        for b in pats:
             if ac._fnmatch_subset(a, b):
-                for f in files:
-                    if _fn.fnmatchcase(f, a):
-                        assert _fn.fnmatchcase(f, b), \
-                            f"{a} wrongly subset of {b}: {f} escapes (ESCALATION)"
+                for s in strings:
+                    if _fn.fnmatchcase(s, a) and not _fn.fnmatchcase(s, b):
+                        escalations += 1
+                        break
+    assert escalations == 0, f"{escalations} escalation pairs (over-accepted subset)"
 
 
 def test_fnmatch_patterns_overlap_matches_gate_semantics():

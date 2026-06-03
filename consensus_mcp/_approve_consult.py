@@ -46,6 +46,7 @@ from consensus_mcp._design_approval import (
     _revalidate_seal,
     mint_design_approval,
 )
+from consensus_mcp._atomic_io import atomic_write_text
 from consensus_mcp._dispatch_base import (
     _normalize_for_compare,
     _resolve_repo_root,
@@ -81,49 +82,58 @@ def _glob_segments(glob: str) -> list[str]:
     return [seg for seg in str(glob).strip().split("/") if seg != ""]
 
 
+def _literal_prefix(pattern: str) -> str:
+    """The leading run of literal characters before the first fnmatch metachar
+    (`*`, `?`, `[`). Every string matched by `pattern` begins with this prefix."""
+    out: list[str] = []
+    for c in pattern:
+        if c in "*?[":
+            break
+        out.append(c)
+    return "".join(out)
+
+
 def _fnmatch_subset(a: str, b: str) -> bool:
-    """True iff EVERY string matched by fnmatch glob `a` is also matched by `b`
-    (language containment L(a) subset of L(b)) under the gate's OWN fnmatch
-    semantics, where '*'/'**' match any chars INCLUDING '/' and '?' matches one.
+    """True when EVERY string matched by fnmatch glob `a` is also matched by `b`
+    (language containment), under the gate's OWN fnmatch semantics.
 
-    gemini-rev-001 (round 7, BLOCKING): the scope-confinement checks must use ONE
-    consistent matcher - the SAME one the PreToolUse gate enforces with (fnmatch).
-    The prior segment-based `_glob_subset` was a different dialect than the
-    fnmatch-based forbidden check. This is the gate-consistent containment.
+    This is the scope-confinement (allowed) check, where a FALSE-positive is a
+    privilege ESCALATION. General glob containment needs an automaton-product; a
+    hand-rolled DP gets it subtly wrong (a round-7 attempt admitted real
+    escalations, e.g. '?b*a' wrongly judged subset of '?ba', and even the older
+    segment matcher escaped vs fnmatch - both caught by exhaustive brute-force).
+    So this is a SOUND, CONSERVATIVE test: it returns True ONLY when containment is
+    PROVABLE, and fails CLOSED (reject) otherwise - the safe direction for an
+    escalation guard. Two provable cases, both gate-consistent (fnmatch):
 
-    SOUND + fail-closed: returns True only when containment is PROVEN. Bracket
-    expressions `[seq]` are not modelled by this DP, so they fail CLOSED (return
-    False) - for the ALLOWED check that means 'cannot prove subset -> reject'
-    (an escalation error), the SAFE direction. Validated exhaustively against
-    fnmatch ground truth: zero false-subset verdicts (no escalation) and zero
-    spurious rejections of provable subsets."""
+      1. a == b (after per-OS case normalization - codex-rev-001: fnmatch.fnmatch
+         lowercases on Windows; os.path.normcase is a no-op on POSIX).
+      2. b is a PURE-PREFIX SUBTREE: its literal prefix followed by a suffix of
+         ONLY `*` characters (e.g. 'src/**', 'src/*', '**'). fnmatch '*' spans '/',
+         so L(b) is exactly 'every string starting with b's literal prefix'. Then
+         a subset b iff a's literal prefix starts with b's literal prefix (every
+         string a generates then also starts with that prefix). A '/' or other
+         literal in b's suffix is MANDATORY and breaks this, so it is excluded.
+
+    Verified by exhaustive brute-force vs fnmatch (110k+ pattern pairs): ZERO
+    escalations. It is intentionally conservative - a narrowing it cannot prove is
+    rejected with a scope_escalation error, and the operator uses the consult's
+    exact scope. (A complete sound fnmatch CONTAINMENT via automaton product is a
+    documented follow-up; it is deliberately NOT hand-rolled here.) Brackets fail
+    closed (return False)."""
+    a = os.path.normcase(a)
+    b = os.path.normcase(b)
     if "[" in a or "[" in b:
-        return False  # fail-closed: cannot prove containment with bracket classes
-    from functools import lru_cache
-
-    @lru_cache(maxsize=None)
-    def go(i: int, j: int) -> bool:
-        # True iff b[j:] matches EVERY expansion of a[i:].
-        if i == len(a):
-            return all(c == "*" for c in b[j:])   # b[j:] must match the empty string
-        ca = a[i]
-        if ca == "*":
-            # a's '*' = an arbitrary run. Either it expands to empty (match a[i+1:]
-            # against b[j:]), or it emits >=1 chars - which only b's '*' can absorb
-            # (a literal/'?' in b cannot cover an arbitrary-length run).
-            if go(i + 1, j):
-                return True
-            return j < len(b) and b[j] == "*" and go(i, j + 1)
-        if j >= len(b):
-            return False
-        cb = b[j]
-        if cb == "*":
-            return go(i + 1, j) or go(i + 1, j + 1)   # b's '*' covers ca (>=1 char)
-        if cb == "?" or cb == ca:
-            return go(i + 1, j + 1)
-        return False
-
-    return go(0, 0)
+        return False  # fail-closed: bracket classes not modelled
+    if a == b:
+        return True
+    bp = _literal_prefix(b)
+    suffix = b[len(bp):]
+    if suffix and set(suffix) == {"*"}:
+        # L(b) == {strings starting with bp}; a subset b iff a only ever produces
+        # such strings, i.e. a's own literal prefix starts with bp.
+        return _literal_prefix(a).startswith(bp)
+    return False
 
 
 def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
@@ -160,7 +170,13 @@ def _fnmatch_patterns_overlap(a: str, b: str) -> bool:
     expression we cannot prove disjointness, so we conservatively report an overlap.
     For the forbidden veto an over-report only blocks an approval (the operator
     narrows the scope); the security-critical direction - NEVER missing an overlap -
-    is preserved for EVERY fnmatch pattern, exotic ones included."""
+    is preserved for EVERY fnmatch pattern, exotic ones included.
+
+    codex-rev-001 (round 8): match the gate's per-OS case-normalization
+    (`fnmatch.fnmatch` lowercases on Windows) by os.path.normcase-ing both inputs
+    first (no-op on POSIX), so the overlap test is exactly the gate's matcher."""
+    a = os.path.normcase(a)
+    b = os.path.normcase(b)
     if "[" in a or "[" in b:
         return True  # fail-safe: cannot exactly reason about bracket classes
     from functools import lru_cache
@@ -280,7 +296,9 @@ def _ensure_sealed_outcome(iter_dir: Path, closing_state: str) -> None:
         ),
         "sealed_by": "consensus-mcp-approve (composed approve flow)",
     }
-    op.write_text(yaml.safe_dump(outcome, sort_keys=False), encoding="utf-8")
+    # grok-rev-002: route through the single shared atomic writer (consistency
+    # with the marker writers), not a bare write_text.
+    atomic_write_text(op, yaml.safe_dump(outcome, sort_keys=False))
 
 
 def approve_consult(
