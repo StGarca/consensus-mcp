@@ -56,6 +56,8 @@ from pathlib import Path
 
 import yaml
 
+from consensus_mcp._atomic_io import atomic_write_text
+
 
 SCHEMA_VERSION = 1
 MARKER_RELPATH = Path(".consensus") / "session-active"
@@ -113,26 +115,11 @@ def write_session_marker(
         "activation_source": activation_source,
     }
     path = _marker_path(repo_root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Atomic write via a UNIQUE temp file in the same dir, then replace
-    # (kimi-rev-003): the prior fixed `.tmp` suffix was a predictable name an
-    # attacker could pre-create / symlink, and two concurrent writers would race
-    # on it. mkstemp gives an O_EXCL, randomly-named fd in the target directory so
-    # the rename stays atomic and the temp name can't be guessed/pre-staged.
-    import tempfile
-    payload = yaml.safe_dump(marker, sort_keys=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=".session-active-", suffix=".tmp",
-                                    dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(payload)
-        os.replace(tmp_name, path)
-    except BaseException:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
+    # kimi-rev-003 / gemini-rev-001: write through the SINGLE blessed symlink-safe
+    # atomic writer (O_EXCL + unpredictable temp name + fsync + os.replace) rather
+    # than a bespoke/predictable temp file - the same primitive the init wizard and
+    # the design-approved marker use, so the guarantees can never diverge.
+    atomic_write_text(path, yaml.safe_dump(marker, sort_keys=True))
     return path
 
 

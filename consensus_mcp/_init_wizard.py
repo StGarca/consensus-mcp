@@ -38,6 +38,7 @@ import yaml
 
 from consensus_mcp import config as cfg
 from consensus_mcp import _contributor_profiles as profiles_mod
+from consensus_mcp._atomic_io import atomic_write_bytes as _shared_atomic_write_bytes
 
 
 # iter-0031 (per iter-0030 converged plan Q3): marker-based project-root
@@ -715,37 +716,13 @@ def _load_existing_mcp_json(path: Path) -> tuple[dict | None, str | None]:
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
-    """Atomically write `data` to `path` via a SECURE, unpredictable temp file.
-
-    v1.26 (codex+gemini+kimi BLOCKING - the single ROOT fix for the tmp-symlink
-    class across ALL writers): the temp file is created with O_CREAT|O_EXCL|O_WRONLY
-    and an UNPREDICTABLE name, so a pre-planted symlink (or file) at the temp path
-    cannot redirect the write - O_EXCL fails on any existing path, and the random
-    name defeats prediction. os.replace then atomically swaps it into place,
-    replacing a destination symlink (the link itself, never its target). The tmp is
-    cleaned up on any error. This is the ONLY low-level writer; text/json/config/
-    gitignore all route through it.
+    """The SECURE, symlink-safe atomic writer (v1.26 root-fix for the tmp-symlink
+    class). Now a thin alias over the single shared primitive in
+    `consensus_mcp._atomic_io` (gemini-rev-001 / kimi-rev-001: the same writer is
+    reused by the session-active marker and the design-approved trust pointer so
+    the guarantees can never diverge). text/json/config/gitignore route through it.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    while True:
-        tmp = path.with_name(f".{path.name}.{os.urandom(8).hex()}.tmp")
-        try:
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            break
-        except FileExistsError:
-            continue
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    _shared_atomic_write_bytes(path, data)
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
