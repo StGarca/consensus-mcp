@@ -1065,6 +1065,15 @@ def _print_status_summary(
     if missing:
         print(f"  CLIs missing: {', '.join(missing)} "
               f"(install them or they will be skipped)")
+    # goal item 6: the exact cold-start trap - pipx installed the package but
+    # `pipx ensurepath` was never run, so the console scripts are not on PATH and
+    # every later command fails with "command not found". Surface it loudly here.
+    missing_scripts = _missing_console_scripts()
+    if missing_scripts:
+        print(f"  CONSOLE SCRIPTS: WARNING - {', '.join(missing_scripts)} not on "
+              f"PATH; fix before first use: {_path_export_hint()}")
+    else:
+        print("  Console scripts: on PATH.")
     if mcp_command is not None:
         if mcp_resolves:
             print(f"  MCP server: '{mcp_command}' resolves on PATH.")
@@ -1193,6 +1202,138 @@ def _detect_and_guide(selection: list[str], profiles: dict) -> None:
         if auth.get("note"):
             print(f"  note:    {auth['note']}")
         print(_DETECT_GUIDE_REMINDER)
+
+
+# --- cold-start goal: prerequisite + verification preflight (goal items 1/5/6) ---
+
+# The console scripts a working install must expose on PATH. If pipx installed the
+# package but `pipx ensurepath` was never run, these are missing and EVERY later
+# step fails with "command not found" - the exact friction a cold user hits. We
+# surface it explicitly rather than letting it fail opaquely later.
+_CORE_CONSOLE_SCRIPTS = ("consensus-mcp", "consensus-init")
+
+
+def _missing_console_scripts() -> list[str]:
+    """Core consensus console scripts NOT resolvable on PATH (goal item 6: 'no
+    missing scripts'). Empty list == all present."""
+    return [s for s in _CORE_CONSOLE_SCRIPTS if shutil.which(s) is None]
+
+
+def _path_export_hint() -> str:
+    """The exact, OS-appropriate command to put pipx's bin dir on PATH."""
+    if sys.platform == "win32":
+        return ("pipx ensurepath   (then reopen the terminal; or add "
+                "%USERPROFILE%\\.local\\bin to PATH)")
+    return ("pipx ensurepath   (then reopen the shell; or add ~/.local/bin to "
+            "your PATH in ~/.profile / ~/.zshrc)")
+
+
+def _reviewer_auth_state(profile: dict) -> tuple[str, str | None]:
+    """Best-effort auth signal for an installed reviewer CLI, WITHOUT a model call.
+
+    Returns (state, hint) where state is 'authed' (an auth env var is set or a
+    declared auth state file exists), 'unknown' (installed but no positive auth
+    signal), or 'n/a' (no auth contract). hint is the auth command to run when not
+    yet authed. Deliberately conservative: a real auth check would cost a request,
+    so 'unknown' means 'we could not confirm', not 'definitely unauthenticated'."""
+    auth = profile.get("auth") or {}
+    if not auth:
+        return ("n/a", None)
+    for var in auth.get("env_vars") or []:
+        if os.environ.get(var):
+            return ("authed", None)
+    state_path = auth.get("state_path")
+    if state_path and Path(state_path).expanduser().exists():
+        return ("authed", None)
+    return ("unknown", auth.get("command"))
+
+
+def _verify_reviewer(name: str, profile: dict) -> dict:
+    """Preflight ONE reviewer: is its CLI installed, does it run, is it authed?
+
+    No model call (cheap + offline-friendly). Returns a structured result the
+    caller renders. `version_ok` is True only if `<bin> --version` exits 0; some
+    CLIs lack --version, so installed-but-not-responsive is reported, not failed."""
+    command = (profile.get("detect") or {}).get("command")
+    result = {"name": name, "command": command, "installed": False,
+              "version_ok": False, "auth_state": "n/a", "auth_hint": None,
+              "version": None}
+    if not command:
+        return result
+    resolved = shutil.which(command)
+    result["installed"] = resolved is not None
+    if not resolved:
+        return result
+    try:
+        proc = subprocess.run([resolved, "--version"], capture_output=True,
+                              text=True, encoding="utf-8", errors="replace",
+                              timeout=15, check=False)
+        result["version_ok"] = proc.returncode == 0
+        result["version"] = (proc.stdout or proc.stderr or "").strip().splitlines()[0:1]
+        result["version"] = result["version"][0] if result["version"] else None
+    except (OSError, subprocess.TimeoutExpired):
+        result["version_ok"] = False
+    state, hint = _reviewer_auth_state(profile)
+    result["auth_state"] = state
+    result["auth_hint"] = hint
+    return result
+
+
+def _run_verification_pass(enabled: list[str], profiles: dict) -> int:
+    """Optional cold-start verification (goal item 5): confirm there are NO errors
+    or missing scripts/CLIs before the user's first real question - WITHOUT a paid
+    model call. Checks: core console scripts on PATH, then per independent reviewer
+    installed + responsive + best-effort auth. Prints a readable PASS/CHECK report.
+
+    Returns the number of HARD problems (missing console scripts, or a selected
+    reviewer whose CLI is absent) so a caller can exit non-zero."""
+    print("Verification pass (preflight - no model calls):")
+    problems = 0
+
+    missing_scripts = _missing_console_scripts()
+    if missing_scripts:
+        problems += len(missing_scripts)
+        print(f"  [X] console scripts MISSING on PATH: {', '.join(missing_scripts)}")
+        print(f"      fix: {_path_export_hint()}")
+    else:
+        print(f"  [OK] console scripts on PATH: {', '.join(_CORE_CONSOLE_SCRIPTS)}")
+
+    independent = [
+        n for n in enabled
+        if profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST
+        and profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST_PEER
+    ]
+    if not independent:
+        print("  [!] no independent reviewers enabled; a panel needs >=2.")
+    for name in independent:
+        profile = profiles.get(name)
+        if profile is None:
+            continue
+        r = _verify_reviewer(name, profile)
+        if not r["installed"]:
+            problems += 1
+            print(f"  [X] {name}: CLI '{r['command']}' NOT installed (panel will "
+                  f"skip it). Install it (see the guidance above), then re-verify.")
+            continue
+        ver = f" ({r['version']})" if r["version"] else ""
+        run_note = "responds" if r["version_ok"] else "installed (no --version)"
+        if r["auth_state"] == "authed":
+            auth_note = "authenticated"
+        elif r["auth_state"] == "unknown":
+            auth_note = "auth UNCONFIRMED"
+            if r["auth_hint"]:
+                auth_note += f" - to authenticate: {r['auth_hint']}"
+        else:
+            auth_note = "no auth required"
+        print(f"  [OK] {name}: {run_note}{ver}; {auth_note}")
+
+    if problems:
+        print(f"  -> {problems} hard problem(s) to resolve before consensus can "
+              f"run a full panel.")
+    else:
+        print("  -> ready: scripts present and selected reviewer CLIs installed. "
+              "Ask consensus your first question.")
+    return problems
 
 
 # P1.2: a cold AI reading CLAUDE.md must learn how consensus OPERATES here, not
@@ -2017,6 +2158,26 @@ def cmd_init(args) -> int:
         print(yaml.safe_dump(loaded, sort_keys=False, default_flow_style=False))
         return 0
 
+    # goal item 5: optional verification pass. Runs against the EXISTING config
+    # (offline, no model calls) and exits non-zero if there are hard problems
+    # (missing scripts / uninstalled selected CLIs) so a cold user can confirm
+    # "no errors, no missing scripts" before their first real question.
+    if getattr(args, "verify", False):
+        if not config_path.exists():
+            print(f"error: {config_path} does not exist - run `consensus init` "
+                  f"first, then --verify", file=sys.stderr)
+            return 2
+        try:
+            loaded = cfg.load(config_path)
+        except cfg.ConfigValidationError as exc:
+            print(f"error: invalid config: {exc}", file=sys.stderr)
+            return 3
+        contributors = loaded.get("contributors") or {}
+        v_profiles = _load_merged_profiles(contributors.get("profiles"))
+        v_enabled = contributors.get("enabled") or []
+        problems = _run_verification_pass(v_enabled, v_profiles)
+        return 0 if problems == 0 else 2
+
     if args.print_defaults:
         print(yaml.safe_dump(cfg.default_config(), sort_keys=False, default_flow_style=False))
         return 0
@@ -2300,6 +2461,18 @@ def cmd_init(args) -> int:
         enabled = (new_config.get("contributors") or {}).get("enabled") or []
         _detect_and_guide(enabled, merged_profiles)
         _print_panel_summary(enabled, merged_profiles)
+        # goal item 5: offer the optional verification pass right after setup, so a
+        # first-time user can confirm there are no errors / missing scripts before
+        # their first question. Interactive only (a non-interactive run can call
+        # `consensus init --verify` explicitly); default No to stay unobtrusive.
+        if interactive and not args.non_interactive:
+            try:
+                ans = input("\nRun a quick verification pass now (no model calls)? "
+                            "[y/N]: ").strip().lower()
+            except EOFError:
+                ans = ""
+            if ans.startswith("y"):
+                _run_verification_pass(enabled, merged_profiles)
         if not args.no_instructions:
             for path in _provision_instruction_files(enabled, merged_profiles, repo_root):
                 print(f"seeded instruction file {path}")
@@ -2482,6 +2655,9 @@ def main(argv: list[str] | None = None) -> int:
         description="Initialize .consensus/config.yaml for cross-AI workflow",
     )
     parser.add_argument("--check", action="store_true", help="validate existing config and exit")
+    parser.add_argument("--verify", action="store_true",
+                        help="run an offline verification pass (console scripts on PATH + "
+                             "selected reviewer CLIs installed/authed) and exit 0/2")
     parser.add_argument("--print-defaults", action="store_true", help="print default YAML to stdout")
     parser.add_argument("--dry-run", action="store_true", help="show intended config; do not write")
     parser.add_argument("--non-interactive", action="store_true", help="no prompts")
