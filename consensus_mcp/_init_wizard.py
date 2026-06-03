@@ -75,6 +75,12 @@ def _detect_repo_root(start: Path | None = None) -> Path:
 
     iter-0031 (per iter-0030 converged plan Q3): use marker-based detection
     instead of .git-only walking. Precedence:
+      0. An ancestor carrying `.consensus/config.yaml` - the SAME consuming-project
+         marker `_dispatch_base._resolve_repo_root` keys on. Checking it FIRST
+         makes a re-init resolve to exactly the root the dispatch/approve resolver
+         will later pick, eliminating the divergence hazard the panel flagged
+         (gemini-rev-002 / grok-rev-003): init must not set up at root X while the
+         runtime resolver resolves to root Y.
       1. `git rev-parse --show-toplevel` if git is available and start is
          inside a git working tree.
       2. Walk up from start (or cwd) looking for any strong marker
@@ -83,6 +89,12 @@ def _detect_repo_root(start: Path | None = None) -> Path:
       3. Fall back to start / cwd.
     """
     cwd = (start or Path.cwd()).resolve()
+
+    # 0. Already-initialized project: defer to the resolver's marker so init and
+    # the runtime resolver agree. (First match walking up from cwd.)
+    for candidate in (cwd, *cwd.parents):
+        if (candidate / ".consensus" / "config.yaml").is_file():
+            return candidate
 
     # 1. git rev-parse - most authoritative when git is on PATH.
     try:

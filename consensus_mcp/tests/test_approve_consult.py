@@ -125,6 +125,56 @@ def test_approve_surfaces_disarm_next_step(tmp_path):
     assert "iter-test" in disarm
 
 
+def test_approve_rejects_out_of_repo_iteration_path(tmp_path):
+    """gemini-rev-001/codex-rev-001/kimi-rev-003: an absolute --iteration that
+    resolves OUTSIDE the repo must be refused, never read from."""
+    _make_consult(tmp_path)
+    outside = tmp_path.parent / "evil-outside-iter"
+    res = ac.approve_consult(str(outside), scope_glob="src/**", repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "iteration_outside_repo"
+
+
+def test_approve_rejects_dotdot_in_scope(tmp_path):
+    """kimi-rev-005: a '..' segment in the approval scope is a traversal smell;
+    reject it outright as an invalid scope."""
+    _make_consult(tmp_path, allowed_files=("**",))
+    res = ac.approve_consult("iter-test", scope_glob="../etc/passwd", repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "invalid_scope"
+
+
+def test_approve_rejects_scope_overlapping_forbidden_files(tmp_path):
+    """kimi-rev-001: allowed_files alone is not enough - a scope that overlaps the
+    goal_packet's forbidden_files must be rejected (forbidden wins)."""
+    iter_dir = _make_consult(tmp_path, allowed_files=("**",))
+    gp = iter_dir / "goal_packet.yaml"
+    import yaml as _y
+    data = _y.safe_load(gp.read_text())
+    data["forbidden_files"] = ["consensus-state/"]
+    gp.write_text(_y.safe_dump(data), encoding="utf-8")
+    res = ac.approve_consult("iter-test", scope_glob="consensus-state/**",
+                             repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "forbidden_scope"
+
+
+def test_approve_rolls_back_marker_on_gate_arm_failure(tmp_path, monkeypatch):
+    """grok-rev-001 (blocking): if arming the session marker fails AFTER the
+    design-approved marker is minted, approval must be ALL-OR-NOTHING - the
+    design-approved marker is rolled back so no half-state persists."""
+    _make_consult(tmp_path)
+
+    def _boom(*a, **k):
+        raise OSError("simulated session-marker write failure")
+    monkeypatch.setattr(ac, "write_session_marker", _boom)
+    res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "gate_arm_failed"
+    # the just-minted design-approved marker must NOT survive the failed approve.
+    assert not (tmp_path / ".consensus" / "design-approved").exists()
+
+
 def test_approve_validates_explicit_repo_root(tmp_path):
     """codex finding: an explicit --repo-root that is not a consensus project root
     (no .consensus/config.yaml, no source markers) must be REJECTED, not accepted

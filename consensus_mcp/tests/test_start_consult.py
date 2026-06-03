@@ -47,6 +47,40 @@ def test_start_consult_unique_iteration_ids(tmp_path):
     assert a["iteration"] != b["iteration"]
 
 
+def test_start_consult_uses_configured_panel(tmp_path):
+    """codex-rev-002 / kimi-rev-006: when reviewers are not passed explicitly,
+    start_consult dispatches the project's CONFIGURED panel (contributors.enabled
+    minus host), not a hardcoded set."""
+    cfg = tmp_path / ".consensus" / "config.yaml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(yaml.safe_dump({
+        "contributors": {
+            "enabled": ["claude", "codex", "kimi"],
+            "profiles": {"claude": {"kind": "host"}},
+        }
+    }), encoding="utf-8")
+    res = sc.start_consult("q", scope_glob="x.py", repo_root=tmp_path)
+    assert res["ok"] is True, res
+    cmds = res["next_steps"]["1_dispatch_each_reviewer_in_its_OWN_shell"]
+    joined = "\n".join(cmds)
+    assert "dispatch-codex" in joined and "dispatch-kimi" in joined
+    assert "dispatch-claude" not in joined        # host excluded
+    assert "dispatch-gemini" not in joined         # not in configured panel
+    assert "dispatch-grok" not in joined
+
+
+def test_start_consult_clears_stale_design_approved(tmp_path):
+    """kimi-rev-004: a fresh (unapproved) consult must clear any prior
+    design-approved marker so it cannot authorize an OLD scope for the new
+    iteration (marker poisoning)."""
+    _init_project(tmp_path)
+    stale = tmp_path / ".consensus" / "design-approved"
+    stale.write_text("stale prior approval\n", encoding="utf-8")
+    res = sc.start_consult("q", scope_glob="x.py", reviewers=["codex"], repo_root=tmp_path)
+    assert res["ok"] is True, res
+    assert not stale.exists()                      # cleared on arm
+
+
 def test_start_consult_rejects_uninitialized_repo_root(tmp_path):
     """codex finding: an explicit --repo-root with no .consensus/config.yaml (not a
     consensus project) must be rejected, not scaffolded into verbatim."""

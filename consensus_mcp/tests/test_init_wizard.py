@@ -629,6 +629,23 @@ def test_repo_root_walks_up_to_git(tmp_path, monkeypatch):
     assert not (sub / ".consensus" / "config.yaml").exists()
 
 
+def test_repo_root_prefers_consensus_config_over_git(tmp_path, monkeypatch):
+    """gemini-rev-002 / grok-rev-003: an already-initialized project (carrying
+    .consensus/config.yaml) must resolve to the SAME root the dispatch/approve
+    resolver keys on - even when a .git ancestor sits elsewhere. The config marker
+    takes precedence so init and the runtime resolver never diverge."""
+    # outer dir has .git; inner initialized project has .consensus/config.yaml.
+    outer = tmp_path / "outer"
+    (outer / ".git").mkdir(parents=True)
+    project = outer / "project"
+    (project / ".consensus").mkdir(parents=True)
+    (project / ".consensus" / "config.yaml").write_text("schema_version: 1\n",
+                                                        encoding="utf-8")
+    deep = project / "a" / "b"
+    deep.mkdir(parents=True)
+    assert wiz._detect_repo_root(deep) == project
+
+
 # ---------- iter-0031: .mcp.json bootstrap ----------
 
 
