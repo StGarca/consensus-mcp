@@ -11,17 +11,43 @@ to initialize consensus-mcp - typically by typing phrases like
 "consensus init", "set up consensus", or "bootstrap consensus" without a
 leading slash.
 
-## What it does
+## First: which operation did the user ask for?
+
+Inspect the FLAGS the user actually typed and run EXACTLY that command - never
+silently substitute a different one, and never afterward offer to run a command
+the user just typed.
+
+- **`--install-claude-code`** -> the ONE-TIME, MACHINE-WIDE install (the README's
+  "add a small Claude Code helper so you can type 'consensus init' in any
+  project"): it copies the consensus skills + slash command + enforcement hooks
+  into `~/.claude`. This is NOT the per-project bootstrap. Run
+  `consensus-init --install-claude-code` (add `--force` only if the user did),
+  surface its output, and on exit 0 tell the user to restart Claude Code (or
+  `/mcp`); then OFFER to run the per-project bootstrap
+  (`consensus-init --from-claude-code`) since the helper install does not set up
+  the current project. On exit 5 relay the stale `SKIP:` files (`--force`
+  updates); on exit 6 the install is INCOMPLETE (enforcement OFF) - relay the
+  remedy from stderr (e.g. `pipx install --force consensus-mcp`). Do NOT offer
+  `--install-claude-code` again - you just ran it.
+- **`--uninstall-claude-code`** -> run `consensus-init --uninstall-claude-code`.
+- **otherwise (the default, plain "consensus init")** -> the per-project bootstrap
+  below.
+
+## What it does (the per-project bootstrap)
 
 1. Run the shell binary `consensus-init --from-claude-code` (installed by
-   `pipx install consensus-mcp`).
+   `pipx install consensus-mcp`), carrying through any other flags the user typed
+   (e.g. `--reconfigure`, `--force`, `--repair`).
 2. Surface the binary's stdout/stderr verbatim - `consensus-init` already
    prints the right next-step guidance, so don't paraphrase or summarize.
 3. If `consensus-init` fails because the binary is not on PATH, tell the
    user to run `pipx install consensus-mcp` once globally.
 4. After a successful bootstrap, point the user at the restart step
    (Claude Code must reload to pick up the new MCP server). The CLI output
-   already says this; just confirm.
+   already says this; just confirm. If the binary's "Enforcement status" line
+   reports ADVISORY mode (the one-time global step has not run on this machine),
+   you MAY offer to run `consensus-init --install-claude-code` once to enable
+   edit-gating - but only if the user did NOT already ask for it this turn.
 
 ## How to invoke
 
