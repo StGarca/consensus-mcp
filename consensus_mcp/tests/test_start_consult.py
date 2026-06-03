@@ -81,6 +81,26 @@ def test_start_consult_clears_stale_design_approved(tmp_path):
     assert not stale.exists()                      # cleared on arm
 
 
+def test_start_consult_cli_defaults_to_configured_panel(tmp_path, capsys):
+    """codex-rev-001: the CLI's --reviewers default must be None (not a hardcoded
+    list) so an omitted flag falls through to the configured panel, not a shadow
+    default."""
+    import json
+    cfg = tmp_path / ".consensus" / "config.yaml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(yaml.safe_dump({
+        "contributors": {"enabled": ["claude", "codex", "kimi"],
+                         "profiles": {"claude": {"kind": "host"}}}
+    }), encoding="utf-8")
+    rc = sc.main(["--question", "q", "--scope-glob", "x.py",
+                  "--repo-root", str(tmp_path)])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    cmds = "\n".join(out["next_steps"]["1_dispatch_each_reviewer_in_its_OWN_shell"])
+    assert "dispatch-codex" in cmds and "dispatch-kimi" in cmds
+    assert "dispatch-gemini" not in cmds and "dispatch-grok" not in cmds
+
+
 def test_start_consult_rejects_uninitialized_repo_root(tmp_path):
     """codex finding: an explicit --repo-root with no .consensus/config.yaml (not a
     consensus project) must be rejected, not scaffolded into verbatim."""

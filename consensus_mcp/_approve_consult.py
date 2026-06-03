@@ -49,6 +49,7 @@ from consensus_mcp._design_approval import (
 import fnmatch
 
 from consensus_mcp._dispatch_base import (
+    _normalize_for_compare,
     _resolve_repo_root,
     validate_explicit_repo_root,
 )
@@ -143,13 +144,19 @@ class _IterDirOutsideRepo(ValueError):
 
 
 def _is_within(child: Path, parent: Path) -> bool:
-    """True iff `child` is `parent` or a descendant, after resolution. Symlink- and
-    `..`-safe because both sides are fully resolved before the comparison."""
-    try:
-        child.resolve().relative_to(parent.resolve())
-        return True
-    except ValueError:
-        return False
+    """True iff `child` is `parent` or a descendant, after resolution.
+
+    Cross-platform (gemini-rev-001 blocking / grok-rev-003): a naive
+    `Path.relative_to` is a CASE-SENSITIVE string compare and does not handle the
+    Windows extended-length (long-path) prefix, so on Windows it false-rejects
+    valid in-repo iterations (drive-letter or 8.3 case differences) and breaks
+    `approve`.
+    We reuse `_dispatch_base._normalize_for_compare` - the same normalization the
+    dispatch containment guard uses - so the two paths agree on every platform.
+    Symlink- and `..`-safe because both sides are fully resolved first."""
+    c = _normalize_for_compare(child.resolve())
+    p = _normalize_for_compare(parent.resolve())
+    return c == p or c.startswith(p + os.sep)
 
 
 def _resolve_iter_dir(iteration: str, repo_root: Path) -> Path:

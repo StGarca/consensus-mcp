@@ -125,6 +125,18 @@ def test_approve_surfaces_disarm_next_step(tmp_path):
     assert "iter-test" in disarm
 
 
+def test_is_within_uses_xplat_normalization(tmp_path):
+    """gemini-rev-001/grok-rev-003: containment must use the shared xplat
+    normalizer (not a case-sensitive relative_to). A descendant is within; a
+    sibling is not."""
+    parent = tmp_path / "repo"
+    parent.mkdir()
+    (parent / "a").mkdir()
+    assert ac._is_within(parent / "a", parent) is True
+    assert ac._is_within(parent, parent) is True
+    assert ac._is_within(tmp_path / "other", parent) is False
+
+
 def test_approve_rejects_out_of_repo_iteration_path(tmp_path):
     """gemini-rev-001/codex-rev-001/kimi-rev-003: an absolute --iteration that
     resolves OUTSIDE the repo must be refused, never read from."""

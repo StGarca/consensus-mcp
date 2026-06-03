@@ -701,9 +701,49 @@ def test_run_verification_pass_returns_problem_count(monkeypatch, capsys):
     profiles = {"codex": {"kind": "cli_reviewer", "detect": {"command": "codex"}}}
     problems = wiz._run_verification_pass(["codex"], profiles)
     out = capsys.readouterr().out
-    assert problems == 1
+    # codex not installed (+1) AND <2 installed independent reviewers (+1).
+    assert problems == 2
     assert "NOT installed" in out
     assert "console scripts on PATH" in out
+
+
+def test_verification_degenerate_panel_is_hard_problem(monkeypatch, capsys):
+    """kimi-rev-002: fewer than 2 INSTALLED independent reviewers is a hard
+    problem, not a false 'ready'."""
+    monkeypatch.setattr(wiz.shutil, "which",
+                        lambda name, *a, **k: ("/usr/bin/" + name
+                                               if name in wiz._CORE_CONSOLE_SCRIPTS
+                                               or name == "codex" else None))
+    monkeypatch.setattr(wiz.subprocess, "run",
+                        lambda *a, **k: type("P", (), {"returncode": 0, "stdout": "v", "stderr": ""})())
+    profiles = {"codex": {"kind": "cli_reviewer", "detect": {"command": "codex"}}}
+    problems = wiz._run_verification_pass(["codex"], profiles)
+    out = capsys.readouterr().out
+    assert problems >= 1
+    assert "degenerate panel" in out
+    assert "ready:" not in out
+
+
+def test_verification_unconfirmed_auth_not_reported_ready(monkeypatch, capsys):
+    """codex-rev-002: do not print the unqualified 'ready' line while a reviewer's
+    auth is unconfirmed - tell the user to authenticate first."""
+    monkeypatch.setattr(wiz.shutil, "which", lambda name, *a, **k: "/usr/bin/" + name)
+    monkeypatch.setattr(wiz.subprocess, "run",
+                        lambda *a, **k: type("P", (), {"returncode": 0, "stdout": "v", "stderr": ""})())
+    # two installed independent reviewers, neither with an auth env var set.
+    profiles = {
+        "codex": {"kind": "cli_reviewer", "detect": {"command": "codex"},
+                  "auth": {"command": "codex login", "env_vars": ["CODEX_TOKEN"]}},
+        "gemini": {"kind": "cli_reviewer", "detect": {"command": "gemini"},
+                   "auth": {"command": "gemini", "env_vars": ["GEMINI_KEY"]}},
+    }
+    monkeypatch.delenv("CODEX_TOKEN", raising=False)
+    monkeypatch.delenv("GEMINI_KEY", raising=False)
+    problems = wiz._run_verification_pass(["codex", "gemini"], profiles)
+    out = capsys.readouterr().out
+    assert problems == 0                         # not a HARD problem
+    assert "authenticate first" in out
+    assert "ready: scripts present, >=2" not in out
 
 
 def test_verify_flag_runs_against_existing_config(tmp_path, monkeypatch, capsys):

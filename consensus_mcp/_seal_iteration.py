@@ -305,24 +305,30 @@ def _mint(
         )
         session_path_rel = str(session_path.relative_to(repo_root))
     except Exception as exc:
-        # The marker is non-trust-bearing; failure to write it is a
-        # WARN-level event, not a mint failure. The design-approved
-        # marker is already written; verify_design_approval still
-        # works. Return the warning in the result.
-        session_path_rel = None
+        # codex-rev-003 / kimi-rev-001: arming the session marker AFTER minting the
+        # design-approved marker leaves a HALF-STATE on failure - a stale
+        # design-approved trust pointer with no live session. Returning ok=True
+        # with only a warning (the prior behavior) papered over an inconsistent
+        # repo and diverged from `_approve_consult`, which makes approval
+        # all-or-nothing. Match it: ROLL BACK the just-minted design-approved
+        # marker and fail loudly so the caller re-runs cleanly.
+        rollback_note = "design-approved marker rolled back"
+        try:
+            marker_file = repo_root / MARKER_RELPATH
+            if marker_file.exists():
+                marker_file.unlink()
+        except OSError as rb_exc:
+            rollback_note = (
+                f"FAILED to roll back design-approved marker ({rb_exc}); remove "
+                f"{repo_root / MARKER_RELPATH} manually before re-running mint"
+            )
         return {
-            "ok": True,
-            "marker_path": str((repo_root / MARKER_RELPATH).relative_to(repo_root)),
-            "design_consensus_ref": iter_dir.name,
-            "scope_glob": scope_glob,
-            "converged_plan_sha256": sha,
-            "marker": marker,
-            "session_marker_path": None,
-            "session_marker_warning": (
-                f"design-approved marker written, but session-active marker "
-                f"failed: {type(exc).__name__}: {exc}. The gate may stay "
-                f"dormant for this iteration; set "
-                f"CONSENSUS_MCP_FORCE_OPTED_IN=1 to force activation."
+            "ok": False,
+            "error_type": "gate_arm_failed",
+            "error": (
+                f"design-approved minted but arming the session-active marker "
+                f"failed: {type(exc).__name__}: {exc}. {rollback_note}. No partial "
+                f"approval remains; re-run mint once the cause is fixed."
             ),
         }
 
@@ -359,7 +365,7 @@ def _close(
     """
     repo_root = _resolve_repo_root()
     design_marker = repo_root / MARKER_RELPATH
-    session_marker = repo_root / "_session_state_MARKER_RELPATH_placeholder"  # set below
+    # gemini-rev-002: no placeholder reassignment - bind the session marker once.
     from consensus_mcp._session_state import MARKER_RELPATH as SESSION_RELPATH
     session_marker = repo_root / SESSION_RELPATH
 

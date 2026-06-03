@@ -1303,8 +1303,8 @@ def _run_verification_pass(enabled: list[str], profiles: dict) -> int:
         if profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST
         and profiles_mod.resolve_kind(n, profiles) != profiles_mod.KIND_HOST_PEER
     ]
-    if not independent:
-        print("  [!] no independent reviewers enabled; a panel needs >=2.")
+    installed_independent = 0
+    auth_unconfirmed: list[str] = []
     for name in independent:
         profile = profiles.get(name)
         if profile is None:
@@ -1315,11 +1315,13 @@ def _run_verification_pass(enabled: list[str], profiles: dict) -> int:
             print(f"  [X] {name}: CLI '{r['command']}' NOT installed (panel will "
                   f"skip it). Install it (see the guidance above), then re-verify.")
             continue
+        installed_independent += 1
         ver = f" ({r['version']})" if r["version"] else ""
         run_note = "responds" if r["version_ok"] else "installed (no --version)"
         if r["auth_state"] == "authed":
             auth_note = "authenticated"
         elif r["auth_state"] == "unknown":
+            auth_unconfirmed.append(name)
             auth_note = "auth UNCONFIRMED"
             if r["auth_hint"]:
                 auth_note += f" - to authenticate: {r['auth_hint']}"
@@ -1327,12 +1329,27 @@ def _run_verification_pass(enabled: list[str], profiles: dict) -> int:
             auth_note = "no auth required"
         print(f"  [OK] {name}: {run_note}{ver}; {auth_note}")
 
+    # kimi-rev-002: a panel needs >=2 INSTALLED independent reviewers or the very
+    # first approve will fail at the cross-family gate. Reporting 'ready' with
+    # fewer is a false green - count it as a hard problem.
+    if installed_independent < 2:
+        problems += 1
+        print(f"  [X] degenerate panel: {installed_independent} installed "
+              f"independent reviewer(s); consensus needs >=2 (approval is refused "
+              f"below that). Install/select another reviewer, then re-verify.")
+
     if problems:
         print(f"  -> {problems} hard problem(s) to resolve before consensus can "
               f"run a full panel.")
+    elif auth_unconfirmed:
+        # codex-rev-002: do NOT claim 'ready' while auth is unconfirmed - the first
+        # real dispatch would fail at the CLI's own auth pre-flight. Qualify it.
+        print(f"  -> scripts + CLIs present, but authenticate first: "
+              f"{', '.join(auth_unconfirmed)} (run each auth command above). Then "
+              f"you are ready to ask consensus your first question.")
     else:
-        print("  -> ready: scripts present and selected reviewer CLIs installed. "
-              "Ask consensus your first question.")
+        print("  -> ready: scripts present, >=2 reviewer CLIs installed and "
+              "authenticated. Ask consensus your first question.")
     return problems
 
 

@@ -52,6 +52,21 @@ def test_write_session_marker_creates_yaml_with_required_fields(tmp_path):
     assert "activated_at_utc" in data
 
 
+def test_write_session_marker_leaves_no_predictable_tmp(tmp_path):
+    """kimi-rev-003: the atomic write must not leave a predictable
+    `session-active.tmp` behind, and the marker round-trips. mkstemp temp files
+    are removed by the rename; nothing guessable lingers in .consensus/."""
+    repo = _repo(tmp_path)
+    ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="x/**",
+                            activated_by="t", activation_source="test_fixture")
+    consensus_dir = repo / ".consensus"
+    # no predictable '<name>.tmp' sibling, and no leftover mkstemp temp files.
+    assert not (consensus_dir / "session-active.tmp").exists()
+    leftovers = [p.name for p in consensus_dir.iterdir() if p.name.endswith(".tmp")]
+    assert leftovers == [], leftovers
+    assert ss.read_session_marker(repo)["iteration_id"] == "iter-test"
+
+
 def test_write_session_marker_refuses_unsafe_iteration_id(tmp_path):
     repo = _repo(tmp_path)
     for bad in ("", "../escape", "iter/with/slashes", "iter\\with\\backslashes", "iter..traversal"):

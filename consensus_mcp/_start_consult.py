@@ -210,13 +210,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--question", required=True, help="the design question / what to review")
     p.add_argument("--scope-glob", required=True,
                    help="files the eventual approval will cover (e.g. 'consensus_mcp/_x.py')")
-    p.add_argument("--reviewers", default="codex,gemini,grok,kimi",
-                   help="comma-separated reviewer families")
+    p.add_argument("--reviewers", default=None,
+                   help="comma-separated reviewer families (default: the project's "
+                        "configured panel from .consensus/config.yaml, else the "
+                        "built-in default)")
     p.add_argument("--repo-root", default=None)
     args = p.parse_args(argv)
+    # codex-rev-001: leave reviewers=None when --reviewers is omitted so the
+    # CONFIGURED panel is used. A hardcoded argparse default would shadow the
+    # config every time and re-introduce the very bypass we just fixed.
+    explicit_reviewers = (
+        [r.strip() for r in args.reviewers.split(",") if r.strip()]
+        if args.reviewers else None
+    )
     res = start_consult(
         question=args.question, scope_glob=args.scope_glob,
-        reviewers=[r.strip() for r in args.reviewers.split(",") if r.strip()],
+        reviewers=explicit_reviewers,
         repo_root=args.repo_root)
     print(json.dumps(res, indent=2))
     return 0 if res.get("ok") else 2
