@@ -48,6 +48,32 @@ def test_skill_handles_install_claude_code_flag():
     assert "consensus-init --from-claude-code" in text
 
 
+def test_command_passes_user_flags_through_verbatim():
+    """The reported bug: typing `consensus-init --non-interactive --accept-defaults`
+    in chat ran a bare `--from-claude-code`, dropping the flags. The command must
+    instruct appending the user's arguments verbatim."""
+    text = _command().lower()
+    assert "verbatim" in text
+    assert "--non-interactive" in text and "--accept-defaults" in text
+    assert "never drop a flag" in text or "never drop" in text
+
+
+def _workflow_skill() -> str:
+    return (_EXT / "skills" / "consensus-workflow" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_workflow_skill_has_auto_init_preamble():
+    """Auto-init UX (operator-chosen): asking for a consensus review in an
+    un-set-up project must trigger a confirm + which-AIs auto-init, not a manual
+    'go run consensus-init' instruction."""
+    text = _workflow_skill()
+    assert "auto-init" in text.lower() or "auto-initialize" in text.lower()
+    assert ".consensus/config.yaml" in text          # the missing-file check
+    assert "--detect-contributors" in text           # dynamic panel question
+    assert "AskUserQuestion" in text                  # confirm + choose
+    assert "--from-claude-code --non-interactive --contributors" in text
+
+
 def test_helper_files_are_ascii_only():
-    for text in (_command(), _skill()):
+    for text in (_command(), _skill(), _workflow_skill()):
         text.encode("ascii")  # raises UnicodeEncodeError on any non-ASCII byte

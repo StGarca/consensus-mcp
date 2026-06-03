@@ -43,19 +43,26 @@ Run `consensus-init --uninstall-claude-code` via Bash and surface its output.
 ## C) Otherwise - per-project bootstrap (the default)
 
 Run `consensus-init --from-claude-code` via Bash from the current working
-directory, CARRYING THROUGH any other flags the user passed (e.g. `--reconfigure`,
-`--force`, `--repair`, `--contributors`, `--workflow`). Surface the binary's
-stdout/stderr verbatim - it already prints the correct next-step guidance,
-including the Claude Code restart instructions. If the binary is not on PATH, tell
-the user to run `pipx install consensus-mcp` once globally and retry.
+directory, and **APPEND THE USER'S ARGUMENTS VERBATIM** - everything in
+`$ARGUMENTS` (e.g. `--non-interactive`, `--accept-defaults`, `--reconfigure`,
+`--force`, `--repair`, `--contributors`, `--workflow`). Concretely: if the user
+typed `consensus-init --non-interactive --accept-defaults`, you run
+`consensus-init --from-claude-code --non-interactive --accept-defaults`. The ONLY
+thing you add is `--from-claude-code`; you NEVER drop a flag the user typed. Surface
+the binary's stdout/stderr verbatim - it already prints the correct next-step
+guidance, including the Claude Code restart instructions. If the binary is not on
+PATH, tell the user to run `pipx install consensus-mcp` once globally and retry.
 
 **Already configured:** if the binary exits with code 4 and the first stdout line
 is exactly `STATUS: already-configured`, the project is already set up. Do not
-surface the raw error - consume that token line and present four options via
-`AskUserQuestion` (leave as-is / verify-repair / reconfigure / force overwrite),
+surface the raw error - consume that token line. If the user passed
+`--non-interactive` or `--accept-defaults` (they signalled NO prompts), do NOT show
+an interactive menu: just relay the binary's one-line already-configured guidance
+(re-run with `--reconfigure` or `--force`) and stop. Otherwise present four options
+via `AskUserQuestion` (leave as-is / verify-repair / reconfigure / force overwrite),
 then re-invoke `consensus-init --from-claude-code --repair`, `--reconfigure`, or
-`--force` once as appropriate (one-shot; "leave" does nothing). The `--repair`
-flag re-creates missing pieces and reports diverged ones non-destructively.
+`--force` once as appropriate (one-shot; "leave" does nothing). The `--repair` flag
+re-creates missing pieces and reports diverged ones non-destructively.
 
 **Workspace umbrella:** if the binary exits with code 8 and the first stdout line
 is exactly `STATUS: looks-like-workspace-umbrella`, the current directory is a

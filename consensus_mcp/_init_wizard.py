@@ -2213,6 +2213,24 @@ def cmd_init(args) -> int:
         print(yaml.safe_dump(cfg.default_config(), sort_keys=False, default_flow_style=False))
         return 0
 
+    # Auto-init support: the Claude Code skill calls this BEFORE writing config to
+    # offer the user a panel of the AIs actually present (the "which AIs" question).
+    # Prints JSON listing every INDEPENDENT contributor with its install status +
+    # whether it is the host, derived dynamically from the merged profiles (so a
+    # custom-profile AI shows up too). Read-only; never writes anything.
+    if getattr(args, "detect_contributors", False):
+        profiles = _load_merged_profiles(None)
+        contributors = []
+        for name in _independent_ordered_names(profiles):
+            profile = profiles[name]
+            contributors.append({
+                "name": name,
+                "installed": _profile_installed(profile),
+                "host": profile.get("kind") == profiles_mod.KIND_HOST,
+            })
+        print(json.dumps({"contributors": contributors}, indent=2))
+        return 0
+
     # iter-0040 hot-fix: `--install-claude-code` is a one-time GLOBAL operation
     # (copy skill + slash command into ~/.claude). It is NOT a per-project
     # bootstrap, and should not trigger the interactive wizard or write
@@ -2689,6 +2707,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verify", action="store_true",
                         help="run an offline verification pass (console scripts on PATH + "
                              "selected reviewer CLIs installed/authed) and exit 0/2")
+    parser.add_argument("--detect-contributors", action="store_true",
+                        help="print JSON of independent contributors + install status "
+                             "(used by the Claude Code auto-init panel question); read-only")
     parser.add_argument("--print-defaults", action="store_true", help="print default YAML to stdout")
     parser.add_argument("--dry-run", action="store_true", help="show intended config; do not write")
     parser.add_argument("--non-interactive", action="store_true", help="no prompts")
