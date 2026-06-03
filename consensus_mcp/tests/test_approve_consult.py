@@ -125,6 +125,51 @@ def test_approve_surfaces_disarm_next_step(tmp_path):
     assert "iter-test" in disarm
 
 
+def test_glob_subset_trailing_doublestar_excludes_bare_prefix():
+    """kimi-rev-001: a trailing '**' matches paths UNDER the prefix, not the bare
+    prefix itself, so 'src' is NOT a subset of 'src/**' (gate-consistent). Middle
+    '**' still matches zero segments."""
+    seg = ac._glob_segments
+    assert ac._glob_subset(seg("src"), seg("src/**")) is False        # bare dir excluded
+    assert ac._glob_subset(seg("src/**"), seg("src/**")) is True
+    assert ac._glob_subset(seg("src/a.py"), seg("src/**")) is True
+    assert ac._glob_subset(seg("src/sub/**"), seg("src/**")) is True
+    assert ac._glob_subset(seg("b"), seg("**/b")) is True             # middle ** -> zero ok
+
+
+def test_glob_subset_no_dangerous_over_acceptance():
+    """Property check: _glob_subset must never declare a subset that lets a path
+    escape the broad pattern (no scope-escalation false-positive)."""
+    import itertools, re
+    def to_regex(glob):
+        out = []
+        for p in glob.split("/"):
+            out.append("(?:[^/]+/)*[^/]+" if p == "**"
+                       else re.escape(p).replace(r"\*", "[^/]*"))
+        return re.compile("^" + "/".join(out) + "$")
+    pool = ["src", "a", "b", "sub", "x.py", "a.py", "secret.py"]
+    paths = ["/".join(c) for n in range(1, 5) for c in itertools.product(pool, repeat=n)]
+    globs = ["src/**", "src/*", "src/a.py", "src/sub/**", "**", "a/**",
+             "**/secret.py", "src", "*.py", "src/*.py", "src/sub/x.py"]
+    for nrw in globs:
+        for brd in globs:
+            if ac._glob_subset(ac._glob_segments(nrw), ac._glob_segments(brd)):
+                rb = to_regex(brd)
+                for p in paths:
+                    if to_regex(nrw).match(p):
+                        assert rb.match(p), f"{nrw} wrongly subset of {brd}: {p} escapes"
+
+
+def test_approve_rejects_bare_dir_scope_under_doublestar_allowed(tmp_path):
+    """kimi-rev-001 at approve level: allowed=['src/**'], scope='src' must be a
+    scope escalation (it would authorize editing a file literally named 'src' that
+    the consult never allowed)."""
+    _make_consult(tmp_path, allowed_files=("src/**",))
+    res = ac.approve_consult("iter-test", scope_glob="src", repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "scope_escalation"
+
+
 def test_is_within_uses_xplat_normalization(tmp_path):
     """gemini-rev-001/grok-rev-003: containment must use the shared xplat
     normalizer (not a case-sensitive relative_to). A descendant is within; a

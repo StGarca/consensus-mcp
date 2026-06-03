@@ -746,6 +746,56 @@ def test_verification_unconfirmed_auth_not_reported_ready(monkeypatch, capsys):
     assert "ready: scripts present, >=2" not in out
 
 
+def test_workflow_prompt_accepts_letter_alias(monkeypatch):
+    """codex-rev-002: the workflow prompt advertises A/B/C, so the prompt's valid
+    set must accept them and the call site resolves the alias. Previously 'A' was
+    rejected by _prompt because valid held only the semantic strings."""
+    import builtins
+    monkeypatch.setattr(builtins, "input", lambda *a, **k: "A")
+    valid = [cfg.WORKFLOW_POST_REVIEW, cfg.WORKFLOW_PROPOSE_CONVERGE,
+             cfg.WORKFLOW_ADVISORY, cfg.WORKFLOW_AUTONOMOUS_EXECUTE,
+             "A", "B", "C", "a", "b", "c"]
+    choice = wiz._prompt("Workflow mode", "propose-converge", valid=valid)
+    assert choice == "A"   # accepted, not rejected/looped
+    assert cfg.WORKFLOW_ALIASES.get(choice, choice) == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_repair_exit_code_fail_safe_on_unknown_state():
+    """gemini-rev-001: success (0) requires EVERY component to be ok/repaired; any
+    other state - including an unrecognized/failed one - maps to 7 (fail-safe)."""
+    RC = wiz.RepairComponent
+    assert wiz._repair_exit_code([RC("a", "ok"), RC("b", "repaired")]) == 0
+    assert wiz._repair_exit_code([RC("a", "ok"), RC("b", "repair_failed")]) == 7
+    assert wiz._repair_exit_code([RC("a", "ok"), RC("b", "some_future_state")]) == 7
+    assert wiz._repair_exit_code([RC("a", "skipped_diverged")]) == 7
+    assert wiz._repair_exit_code([RC("a", "missing_config")]) == 2
+    assert wiz._repair_exit_code([RC("a", "invalid_config")]) == 3
+
+
+def test_repair_loop_catches_raised_check_as_failure(tmp_path, monkeypatch):
+    """gemini-rev-001: a repair check that RAISES is recorded as a failed
+    component (exit 7), never a crash or false success."""
+    repo = tmp_path / "proj"
+    (repo / ".consensus").mkdir(parents=True)
+    (repo / ".consensus" / "config.yaml").write_text(
+        yaml.safe_dump(cfg.default_config()
+                       if hasattr(cfg, "default_config") else {"schema_version": 1}),
+        encoding="utf-8")
+    # make config load cleanly: write a real default config
+    import subprocess as _sp
+    monkeypatch.chdir(repo)
+    wiz.main(["--non-interactive", "--accept-defaults", "--contributors",
+              "claude,codex,gemini", "--no-mcp-json", "--no-agents"])
+
+    def _boom(repo_root, *, dry_run):
+        raise OSError("disk full")
+    monkeypatch.setattr(wiz, "_repair_check_mcp", _boom)
+    lines, code = wiz._verify_repair_install(
+        repo, dry_run=False, claude_home=tmp_path / "claude_home")
+    assert code == 7
+    assert any("repair FAILED" in l for l in lines)
+
+
 def test_verify_flag_runs_against_existing_config(tmp_path, monkeypatch, capsys):
     """`consensus init --verify` runs the offline pass against an existing config
     and exits 0 when clean / 2 when there are hard problems."""

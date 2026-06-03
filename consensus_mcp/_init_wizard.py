@@ -1572,11 +1572,16 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
         choice = _prompt(
             "Workflow mode (A=propose-converge, B=post-review, C=autonomous-execute, advisory)",
             default_workflow,
+            # codex-rev-002: the prompt advertises the A/B/C letter aliases, so
+            # `valid` MUST accept them too - otherwise _prompt rejects the very
+            # input it told the user to type. The alias -> semantic resolution
+            # below (WORKFLOW_ALIASES.get) then normalizes the stored value.
             valid=[
                 cfg.WORKFLOW_POST_REVIEW,
                 cfg.WORKFLOW_PROPOSE_CONVERGE,
                 cfg.WORKFLOW_ADVISORY,
                 cfg.WORKFLOW_AUTONOMOUS_EXECUTE,
+                "A", "B", "C", "a", "b", "c",
             ],
         )
         # Resolve letter alias (A/B/C) to semantic string before storing.
@@ -1922,16 +1927,25 @@ def _repair_exit_code(components: list["RepairComponent"]) -> int:
     """Aggregate component states into the repair exit code.
 
     0 = healthy or fully repaired; 2 = config missing; 3 = config invalid;
-    7 = repair incomplete (diverged left for --force, or global enforcement
-    dead). Config prerequisite (2/3) outranks 7 (you can't repair #2-#5 without
-    a valid config). 'ok' and 'repaired' do not raise the code.
+    7 = repair incomplete (diverged left for --force, global enforcement dead, OR
+    any component that did not end healthy). Config prerequisite (2/3) outranks 7
+    (you can't repair #2-#5 without a valid config). ONLY 'ok' and 'repaired' are
+    success states.
+
+    gemini-rev-001: this is FAIL-SAFE. Previously it returned 0 unless a specific
+    bad state was present, so a component that failed to repair (a raised write,
+    or any state outside the known-bad set) could still report success. Now
+    success (0) requires EVERY component to be 'ok' or 'repaired'; any other state
+    - including an unrecognized/failed one - maps to 7.
     """
     states = {c.state for c in components}
     if "missing_config" in states:
         return 2
     if "invalid_config" in states:
         return 3
-    if "skipped_diverged" in states or "report_global" in states:
+    _SUCCESS_STATES = {"ok", "repaired"}
+    if states - _SUCCESS_STATES:
+        # skipped_diverged / report_global / repair_failed / anything unexpected.
         return 7
     return 0
 
@@ -2119,7 +2133,15 @@ def _verify_repair_install(repo_root: Path, *, dry_run: bool,
 
     for check in (_repair_check_mcp, _repair_check_gitignore,
                   _repair_check_agents, _repair_check_instructions):
-        c, l = check(repo_root, dry_run=dry_run)
+        # gemini-rev-001: a repair attempt that RAISES (e.g. an OSError writing
+        # .mcp.json) must NOT crash the command or be silently dropped - record it
+        # as a failed component so the exit code reflects the incomplete repair.
+        try:
+            c, l = check(repo_root, dry_run=dry_run)
+        except Exception as exc:  # noqa: BLE001 - any failure is a repair failure
+            name = getattr(check, "__name__", "repair_check").replace("_repair_check_", "")
+            c = RepairComponent(name, "repair_failed", str(exc))
+            l = f"{REPAIR_SKIP} {name}: repair FAILED ({type(exc).__name__}: {exc})"
         comps.append(c); lines.append(l)
     c6, l6 = _repair_check_enforcement(claude_home)
     comps.append(c6); lines.append(l6)

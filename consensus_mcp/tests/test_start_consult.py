@@ -124,6 +124,10 @@ def test_start_consult_fails_closed_when_stale_marker_unclearable(tmp_path, monk
     res = sc.start_consult("q", scope_glob="x.py", reviewers=["codex"], repo_root=tmp_path)
     assert res["ok"] is False
     assert res["error_type"] == "stale_marker_unclearable"
+    # codex-rev-001: the check runs BEFORE any iteration state is created, so no
+    # half-created iteration dir is left behind.
+    active = tmp_path / "consensus-state" / "active"
+    assert not active.exists() or list(active.iterdir()) == []
 
 
 def test_start_consult_rejects_uninitialized_repo_root(tmp_path):
