@@ -1,5 +1,74 @@
 # Changelog
 
+## 1.41.1 - 2026-06-03
+
+**The "install it, ask for a review, and it just works" release.** v1.41.0 made the
+first consult guess-free; this one makes the first ten *minutes* guess-free -
+installation, initialization, and first run, smoothed end to end and made
+consistent with each other. Converged across eight blind 4-AI review rounds on
+consensus-mcp's own panel (the panel caught a real scope-escalation bug mid-flight
+- precisely the job).
+
+### First run: ask for a review, and it sets itself up
+
+- **Auto-initialize a brand-new project.** Ask for a consensus review in a project
+  that isn't set up yet and consensus no longer fails or tells you to go run a
+  command. It detects the missing setup, asks (one prompt) which AIs you want on
+  the panel + confirms the handful of files it will write
+  (`.consensus/config.yaml`, `.mcp.json`, a `.gitignore` block, reviewer house
+  rules in `CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`GROK.md`), then initializes and runs
+  the review - all from chat. The consult dispatches through the shell binaries, so
+  it starts immediately; no Claude Code reload required.
+- New read-only `consensus-init --detect-contributors` (JSON: each independent
+  contributor + install/host status, dynamic from the merged profiles) powers the
+  "which AIs" panel question.
+
+### Installation: the helper does what you actually typed
+
+- **`--install-claude-code` is honored, not substituted.** Typing
+  `consensus-init --install-claude-code` inside Claude Code used to silently run the
+  per-project bootstrap (`--from-claude-code`) instead, then circularly offer to run
+  the very command you had just typed. The Claude Code helper (slash command + skill)
+  is now flag-aware: `--install-claude-code` runs the one-time global install (with
+  exit 5/6 remedies surfaced), `--uninstall-claude-code` uninstalls, and the default
+  path is the per-project bootstrap.
+- **Your flags survive.** The per-project path now appends your arguments verbatim,
+  so `consensus-init --non-interactive --accept-defaults` is no longer flattened to
+  a bare `--from-claude-code`; an already-configured project under non-interactive
+  intent reports instead of popping an interactive menu.
+- **No silent "command not found."** Init flags the `pipx ensurepath` PATH trap up
+  front and ships an offline `consensus init --verify` preflight: console scripts on
+  PATH + each selected reviewer CLI installed, responsive, and (best-effort)
+  authenticated - degenerate-panel and unconfirmed-auth are reported, not waved
+  through. No model calls.
+
+### Initialization + first consult: one set of rules, everywhere
+
+- **Init and the runtime agree on the project root.** `consensus init`'s root
+  detection now prefers an existing `.consensus/config.yaml` ancestor - the same
+  marker the dispatch/approve resolver keys on - so they can't pick different roots.
+  An explicit `--repo-root` is validated against that same contract.
+- **One scope matcher, the gate's own.** Approval scope-confinement and the
+  forbidden-files veto now use the PreToolUse gate's actual `fnmatch` semantics
+  (where `*`/`**` match `/`), replacing a divergent segment-glob dialect. Both are
+  EXHAUSTIVELY brute-forced against ground truth: zero scope escalations, zero
+  missed forbidden overlaps; bracket classes and Windows case-normalization handled;
+  approval scope may only narrow what the consult authorized, never expand it, and
+  may not cover a forbidden path.
+- **`start_consult` dispatches your configured panel**, not a hardcoded set; the
+  lifecycle now surfaces the matching disarm/close step; the close-time
+  delivery-token check is scoped to the changed delta (a broad scope is closable).
+- **Crash-consistent state.** `consensus-mcp-approve` is transactional
+  (all-or-nothing: a failed approve rolls back both the design-approved marker and
+  the sealed outcome); both mint paths roll back on gate-arm failure; the
+  design-approved trust pointer, the session marker, and the init wizard all write
+  through ONE shared symlink-safe atomic writer (O_EXCL + unpredictable temp name +
+  fsync + atomic replace).
+- Grok dispatch survives a large review packet (oversized prompts route through
+  `--prompt-file`, with a Windows-safe command-line ceiling).
+
+1,900+ regression tests, green on Linux + Windows / Python 3.11+.
+
 ## 1.41.0 - 2026-06-02
 
 **Guess-free cold start + consult-machinery hardening.** Ratified by a 3-family
