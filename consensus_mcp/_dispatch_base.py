@@ -94,8 +94,23 @@ class RepoRootResolutionError(RuntimeError):
 
 
 def _has_repo_markers(candidate: Path) -> bool:
-    """Return True iff candidate contains all _REPO_ROOT_MARKERS as subpaths."""
-    return all((candidate / marker).is_dir() for marker in _REPO_ROOT_MARKERS)
+    """True iff candidate is a valid consensus root - EITHER the consensus-mcp
+    source tree (all _REPO_ROOT_MARKERS) OR a CONSUMING project that ran
+    `consensus init` (has `.consensus/config.yaml`).
+
+    The consuming-project case is essential and was the cold-start blocker: every
+    consensus operation (scaffold, dispatch, seal, approve, the gate marker)
+    targets the consuming PROJECT root (where `consensus-state/` + `.consensus/`
+    live), which NEVER contains consensus-mcp's own source markers. Without this,
+    a tool run in a consuming project either failed marker validation or silently
+    resolved to consensus-mcp's OWN repo (observed: a dry-run scaffold armed the
+    gate in the wrong tree). Still rejects site-packages (neither marker set),
+    preserving the v1.10.4 fix. Cross-platform (pathlib only)."""
+    if all((candidate / marker).is_dir() for marker in _REPO_ROOT_MARKERS):
+        return True
+    if (candidate / ".consensus" / "config.yaml").is_file():
+        return True
+    return False
 
 
 def derive_pass_id(iteration_id: str, review_target, reviewer_id: str) -> str:
@@ -139,10 +154,15 @@ def _resolve_repo_root() -> Path:
     """
     candidates_tried: list[tuple[str, Path]] = []
 
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+    # CONSENSUS_MCP_PROJECT_ROOT is what `consensus init` writes into a consuming
+    # project's .mcp.json (the consensus-mcp server is launched with it); honor it
+    # alongside the legacy CONSENSUS_MCP_REPO_ROOT so consuming-project tools
+    # resolve the PROJECT root, not consensus-mcp's install.
+    override = (os.environ.get("CONSENSUS_MCP_REPO_ROOT")
+                or os.environ.get("CONSENSUS_MCP_PROJECT_ROOT"))
     if override:
         candidate = Path(override).resolve()
-        candidates_tried.append(("CONSENSUS_MCP_REPO_ROOT", candidate))
+        candidates_tried.append(("CONSENSUS_MCP_REPO_ROOT/PROJECT_ROOT", candidate))
         if _has_repo_markers(candidate):
             return candidate
         # iter-0028 F5 (codex-rev-004): operator-supplied env var is
@@ -166,6 +186,15 @@ def _resolve_repo_root() -> Path:
     candidates_tried.append(("Path.cwd()", cwd))
     if _has_repo_markers(cwd):
         return cwd
+
+    # Walk UP from cwd for a project marker - so running a consensus command from
+    # a SUBDIRECTORY of a consuming project still resolves the project root. This
+    # is checked BEFORE the __file__ walk so a consuming project never falls
+    # through to consensus-mcp's own install tree.
+    for parent in cwd.parents:
+        candidates_tried.append((f"cwd ancestor ({parent.name})", parent))
+        if _has_repo_markers(parent):
+            return parent
 
     # __file__-parent walk: only finds repo root when source-tree-installed.
     here = Path(__file__).resolve()
