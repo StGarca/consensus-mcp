@@ -145,7 +145,7 @@ def _load_marker(repo_root: Path) -> tuple[dict | None, Result | None]:
 # `<fam>-review-<N>.yaml` form an adapter writes when reviewers seal under
 # distinct pass_ids (the parallel-dispatch H3 seal-collision fix). `<fam>` is
 # non-greedy so `kimi-review-4.yaml` -> 'kimi', not 'kimi-review-4'.
-_REVIEW_FILE_RE = re.compile(r"^(?P<fam>.+?)-review(?:-\d+)?\.yaml$")
+_REVIEW_FILE_RE = re.compile(r"^(?P<fam>.+?)-review(?:-.+)?\.yaml$")
 
 
 def _review_family(filename: str) -> str | None:

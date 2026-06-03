@@ -149,10 +149,34 @@ per-session steps.
    send it to every reviewer concurrently, wait for all to seal. **Do NOT** run a
    "validate the plumbing with a single reviewer first, then parallelize the rest"
    probe - that improvised serial pre-flight is FORBIDDEN. The engine
-   (`run_iteration`) now fans out within a phase automatically; for the shell-binary
-   path, dispatch the binaries concurrently (background + wait). Allocate a
-   **reviewer-distinct `--pass-id`** to each (the T6 seal keys on `(iteration,
-   pass_id)`; reusing one pass_id across reviewers collides - only the first seals).
+   (`run_iteration`) now fans out within a phase automatically. For the shell-binary
+   path, follow these RULES (they are load-bearing - they were the source of repeated
+   field failures):
+   - **Use the shell binaries (`consensus-mcp-dispatch-<reviewer>`), NOT the MCP
+     `reviewer_dispatch_*` wrappers.** The MCP wrappers have a 45s cold-start silence
+     timeout that kills real reviews; the shell binaries honor
+     `CONSENSUS_MCP_STALL_SILENCE_SECONDS` (set 300).
+   - **ONE Bash call PER reviewer - never bundle them into a single `& ... wait`
+     script.** Each dispatch is its own background Bash invocation, so each reviewer
+     runs in its own observable shell, a hang/failure in one is isolated and
+     diagnosable, and there is no single bundled call hiding which reviewer stalled.
+     Launch them back to back (each `run_in_background`), then collect each.
+   - **Use a RANDOM `--pass-id` per dispatch.** The T6 seal index is a GLOBAL
+     pass_id namespace across ALL iterations ever (it is a content-identity tamper
+     guard: a given pass_id must always carry the same content). Reusing a pass_id
+     from any prior consult - including bare integers like `1`/`2`/`3` - collides
+     with a cryptic `index_collision` error that even cites the OTHER iteration's
+     file. So make the pass_id RANDOM: `--pass-id <reviewer>-$(openssl rand -hex 6)`
+     (or any random token). NEVER reuse bare integers or any value from a prior
+     consult. (As of the random-default hardening, omitting `--pass-id` auto-
+     generates a hash of (iteration, packet, contributor) - prefer that.)
+   - **Dispatch kimi LAST, alone, with the repo QUIESCENT.** kimi's post-dispatch
+     integrity check content-snapshots the WHOLE repo and REJECTS its review if
+     ANY file changed during its run - INCLUDING a sibling reviewer's output
+     (P0-OPS.3). So let the other reviewers (codex/gemini/grok) seal FIRST, then
+     dispatch kimi by itself, and do not edit the repo (or run other repo-writing
+     work) while kimi runs. (grok can also write a stray proposal file to the repo
+     root - P0-OPS.4; if one appears, delete it before dispatching kimi.)
 3. **Synthesize** the sealed reviews into ONE host-authored `converged-plan.yaml`
    (weighted-synthesis). This is YOUR artifact - the approve step never authors it.
 4. **Approve in ONE step:** `consensus-mcp-approve --iteration <name> --scope-glob

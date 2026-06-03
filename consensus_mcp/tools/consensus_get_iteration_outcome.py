@@ -9,6 +9,7 @@ without re-running.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -95,12 +96,12 @@ SCHEMA = {
 }
 
 
-_KNOWN_CONTRIB_FILES = {
-    "claude-review.yaml": "claude",
-    "claude-proposal.yaml": "claude",
-    "codex-review.yaml": "codex",
-    "gemini-review.yaml": "gemini",
-}
+# P0.2: discover any reviewer family dynamically instead of a hardcoded list.
+# Matches `<fam>-review.yaml` / `<fam>-proposal.yaml` and round/hash-keyed mirror
+# names (`<fam>-review-<N>.yaml`, `<fam>-review-<fam>-<hash>.yaml`). `<fam>` is
+# non-greedy so it stops at the first `-review`/`-proposal`. (Excludes
+# `review-packet.yaml`, which has no `<x>-review` prefix.)
+_ARTIFACT_RE = re.compile(r"^(?P<fam>.+?)-(?:review|proposal)(?:-.+)?\.yaml$")
 
 
 def handle(iteration_dir: str, repo_root: str | None = None) -> dict:
@@ -142,10 +143,22 @@ def handle(iteration_dir: str, repo_root: str | None = None) -> dict:
                 }
 
         contributor_artifacts = []
-        for fname, contributor in _KNOWN_CONTRIB_FILES.items():
-            fpath = iter_dir / fname
-            if not fpath.exists():
+        # P0.2: discover EVERY sealed reviewer artifact dynamically (registry-
+        # agnostic) so no family is silently dropped. Matches `<fam>-review.yaml`
+        # and `<fam>-proposal.yaml` plus round/hash-keyed mirrors
+        # (`<fam>-review-<N>.yaml`, `<fam>-review-<fam>-<hash>.yaml`). De-duped per
+        # family (a family's first sealed artifact wins).
+        seen_families: set[str] = set()
+        artifact_paths = sorted(iter_dir.glob("*-review*.yaml")) + sorted(
+            iter_dir.glob("*-proposal*.yaml"))
+        for fpath in artifact_paths:
+            m = _ARTIFACT_RE.match(fpath.name)
+            if m is None:
                 continue
+            contributor = m.group("fam").strip().lower()
+            if not contributor or contributor in seen_families:
+                continue
+            seen_families.add(contributor)
             entry = {
                 "contributor": contributor,
                 "path": str(fpath),

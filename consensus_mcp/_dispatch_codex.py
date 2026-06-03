@@ -56,6 +56,7 @@ import yaml
 # main don't need to be rewritten and (b) tests that access these via
 # `_dispatch_codex.<name>` continue to resolve through the import binding.
 from consensus_mcp._dispatch_base import (
+    derive_pass_id,
     _REPO_ROOT_MARKERS,
     RepoRootResolutionError,
     _has_repo_markers,
@@ -940,7 +941,7 @@ def main(argv: list[str] | None = None) -> int:
     log_path = repo_root / "consensus-state" / "state" / "dispatch-log.jsonl"
     _pre_iter_id = Path(ns.iteration_dir).name or "unknown-iteration"
     _pre_reviewer_id = ns.reviewer_id or f"codex-{_pre_iter_id}-1"
-    _pre_pass_id = ns.pass_id or f"{_pre_reviewer_id}-pass1"
+    _pre_pass_id = ns.pass_id or derive_pass_id(_pre_iter_id, ns.review_target, _pre_reviewer_id)
 
     # Per v1.10.4 F5: normalize all operator-supplied relative paths against
     # repo_root, NOT the process cwd. The codex subprocess runs with --cd repo_root,
@@ -1007,7 +1008,7 @@ def main(argv: list[str] | None = None) -> int:
     # the now-normalized iteration_id. The pre-normalize values were used only
     # for the early-fail event above.
     reviewer_id = ns.reviewer_id or f"codex-{iteration_id}-1"
-    pass_id = ns.pass_id or f"{reviewer_id}-pass1"
+    pass_id = ns.pass_id or derive_pass_id(iteration_id, ns.review_target, reviewer_id)
 
     # Per codex review F3 (2026-05-09): if --smoke is passed without the env-gate set,
     # refuse before invoking codex. Operators/automation that pass --smoke are signaling

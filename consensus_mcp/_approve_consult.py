@@ -47,6 +47,7 @@ from consensus_mcp._design_approval import (
     mint_design_approval,
 )
 from consensus_mcp._dispatch_base import _resolve_repo_root
+from consensus_mcp._session_state import write_session_marker
 
 # The canonical sealed state a converged Workflow-A consult closes on. Must be in
 # SEALED_CLOSING_STATES (resolve_consensus_ref refuses anything else).
@@ -186,6 +187,28 @@ def approve_consult(
     if not ok:
         return _err("revalidation_failed", reason)
 
+    # P0.1 (consult-verified #1 blocker): minting the design-approved marker is
+    # NOT enough - the PreToolUse gate enforces only when the SESSION marker is
+    # present (session_active -> gate_should_enforce). Without it the gate stays
+    # dormant and edits are silently allowed AFTER approval, so the design marker
+    # never actually scopes anything. Arm the gate here (mirrors
+    # _seal_iteration.py, which writes the session marker on its mint path).
+    try:
+        write_session_marker(
+            rr,
+            iteration_id=iter_dir.name,
+            scope_glob=scope_glob,
+            activated_by="consensus-mcp-approve",
+            activation_source="console_script",
+        )
+    except Exception as exc:  # marker minted but gate not armed - surface it
+        return _err(
+            "gate_arm_failed",
+            f"design-approved marker minted but failed to ARM the gate "
+            f"(session marker write failed): {exc}. The approval will not "
+            f"enforce scope until the session marker is written.",
+        )
+
     return {
         "ok": True,
         "iteration": iter_dir.name,
@@ -194,6 +217,7 @@ def approve_consult(
         "scope_glob": scope_glob,
         "marker_path": str(_marker_path(rr)),
         "revalidated": reason,
+        "gate_armed": True,
     }
 
 

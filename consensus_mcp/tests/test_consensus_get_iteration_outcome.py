@@ -49,6 +49,29 @@ def test_returns_contributor_artifacts_when_present(tmp_path):
     assert codex_entry["sealed_at"] == "2026-05-13T07:00:00Z"
 
 
+def test_discovers_all_reviewer_families_not_just_hardcoded(tmp_path):
+    """P0.2: the inspector must surface EVERY sealed reviewer family (grok, kimi,
+    incl. hash/round-keyed mirror names), not only the hardcoded codex/claude/
+    gemini - else a cold AI reading back a 4-AI panel silently loses families."""
+    iter_dir = tmp_path / "iter-panel"
+    iter_dir.mkdir()
+    for fname, fam in [
+        ("codex-review.yaml", "codex"),
+        ("grok-review.yaml", "grok"),
+        ("kimi-review-kimi-0c532a488f1cbfd5.yaml", "kimi"),  # hash-keyed mirror
+        ("claude-proposal.yaml", "claude"),
+    ]:
+        (iter_dir / fname).write_text(
+            yaml.safe_dump({"goal_satisfied": True, "pass_id": fam}), encoding="utf-8")
+    # noise that must NOT be picked up as a reviewer artifact
+    (iter_dir / "review-packet.yaml").write_text("x: 1", encoding="utf-8")
+    (iter_dir / "converged-plan.yaml").write_text("decision: RATIFIED", encoding="utf-8")
+    result = tool.handle(iteration_dir=str(iter_dir))
+    assert result["ok"] is True
+    keys = {a["contributor"] for a in result["contributor_artifacts"]}
+    assert keys == {"codex", "grok", "kimi", "claude"}
+
+
 def test_returns_effective_config_path_when_present(tmp_path):
     iter_dir = tmp_path / "iter-z"
     iter_dir.mkdir()

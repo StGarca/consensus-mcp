@@ -98,6 +98,25 @@ def _has_repo_markers(candidate: Path) -> bool:
     return all((candidate / marker).is_dir() for marker in _REPO_ROOT_MARKERS)
 
 
+def derive_pass_id(iteration_id: str, review_target, reviewer_id: str) -> str:
+    """Default dispatch pass_id = hash of (iteration#, packet name, contributor).
+
+    The T6 seal index is a GLOBAL pass_id namespace (a content-identity tamper
+    guard: a given pass_id must always carry the same content). The legacy default
+    `<reviewer>-pass1` is identical across EVERY iteration, so two consults collide
+    with a cryptic `index_collision` (observed twice 2026-06-02). Hashing the
+    dispatch coordinates makes the pass_id globally unique per (iteration, packet,
+    contributor) yet deterministic + idempotent for an identical re-dispatch.
+    Operator design 2026-06-02. Result: `<reviewer>-<16 hex>` (filesystem-safe,
+    readable; reviewer_id is also folded into the hash).
+    """
+    packet = "" if review_target is None else Path(review_target).name
+    key = f"{iteration_id}\x1f{packet}\x1f{reviewer_id}"
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    safe_prefix = re.sub(r"[^A-Za-z0-9._-]+", "_", str(reviewer_id))
+    return f"{safe_prefix}-{digest}"
+
+
 def _resolve_repo_root() -> Path:
     """Resolve the repo root, fail-closed if no valid candidate is found.
 
