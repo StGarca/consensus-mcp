@@ -223,6 +223,29 @@ def test_mint_succeeds_on_valid_sealed_iteration(tmp_path, monkeypatch):
     assert res.ok, res.reason
 
 
+def test_mint_rolls_back_design_marker_on_gate_arm_failure(tmp_path, monkeypatch):
+    """codex-rev-003 / kimi-rev-001: if arming the session marker fails after the
+    design-approved marker is minted, mint must be ALL-OR-NOTHING - roll back the
+    design-approved marker and return ok=False (not ok=True with a warning)."""
+    repo, iter_dir = _scaffold_iter(tmp_path, monkeypatch)
+    _write_outcome(iter_dir, closing_state="quorum_close_passed")
+    _write_converged_plan(iter_dir)
+    _write_review(iter_dir, "codex")
+    _write_review(iter_dir, "gemini")
+
+    def _boom(*a, **k):
+        raise OSError("simulated session-marker write failure")
+    monkeypatch.setattr(si, "write_session_marker", _boom)
+
+    result = si._mint(iter_dir, "quorum_close_passed", "consensus_mcp/**")
+    assert result["ok"] is False
+    assert result["error_type"] == "gate_arm_failed"
+    from consensus_mcp._session_state import MARKER_RELPATH as _S
+    from consensus_mcp._design_approval import MARKER_RELPATH as _D
+    assert not (repo / _D).exists()      # design-approved rolled back
+    assert not (repo / _S).exists()      # session never armed
+
+
 def test_mint_refuses_fewer_than_2_non_claude_reviewers(tmp_path, monkeypatch):
     """G6 trust-root regression: a hand-fabricated marker for an iteration
     with only 1 non-claude review must NOT pass mint."""

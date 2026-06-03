@@ -114,10 +114,25 @@ def write_session_marker(
     }
     path = _marker_path(repo_root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Atomic write via tmp + replace.
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(yaml.safe_dump(marker, sort_keys=True), encoding="utf-8")
-    os.replace(tmp, path)
+    # Atomic write via a UNIQUE temp file in the same dir, then replace
+    # (kimi-rev-003): the prior fixed `.tmp` suffix was a predictable name an
+    # attacker could pre-create / symlink, and two concurrent writers would race
+    # on it. mkstemp gives an O_EXCL, randomly-named fd in the target directory so
+    # the rename stays atomic and the temp name can't be guessed/pre-staged.
+    import tempfile
+    payload = yaml.safe_dump(marker, sort_keys=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=".session-active-", suffix=".tmp",
+                                    dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
     return path
 
 
