@@ -646,6 +646,82 @@ def test_repo_root_prefers_consensus_config_over_git(tmp_path, monkeypatch):
     assert wiz._detect_repo_root(deep) == project
 
 
+# ---------- cold-start goal: preflight + verification pass ----------
+
+def test_missing_console_scripts_detects_absence(monkeypatch):
+    """goal item 6: when the console scripts are not on PATH (pipx ensurepath not
+    run), they are reported missing."""
+    monkeypatch.setattr(wiz.shutil, "which", lambda name, *a, **k: None)
+    missing = wiz._missing_console_scripts()
+    assert "consensus-mcp" in missing and "consensus-init" in missing
+
+
+def test_missing_console_scripts_empty_when_present(monkeypatch):
+    monkeypatch.setattr(wiz.shutil, "which", lambda name, *a, **k: "/usr/bin/" + name)
+    assert wiz._missing_console_scripts() == []
+
+
+def test_verify_reviewer_reports_uninstalled(monkeypatch):
+    monkeypatch.setattr(wiz.shutil, "which", lambda name, *a, **k: None)
+    r = wiz._verify_reviewer("codex", {"detect": {"command": "codex"}})
+    assert r["installed"] is False
+    assert r["name"] == "codex"
+
+
+def test_verify_reviewer_reports_installed_and_responsive(monkeypatch):
+    monkeypatch.setattr(wiz.shutil, "which", lambda name, *a, **k: "/usr/bin/codex")
+
+    class _P:
+        returncode = 0
+        stdout = "codex 1.2.3\n"
+        stderr = ""
+    monkeypatch.setattr(wiz.subprocess, "run", lambda *a, **k: _P())
+    r = wiz._verify_reviewer("codex", {"detect": {"command": "codex"},
+                                       "auth": {"env_vars": ["CODEX_TOKEN"],
+                                                "command": "codex login"}})
+    assert r["installed"] is True and r["version_ok"] is True
+    assert r["version"] == "codex 1.2.3"
+    assert r["auth_state"] == "unknown"           # env var not set -> unconfirmed
+    assert r["auth_hint"] == "codex login"
+
+
+def test_reviewer_auth_state_authed_via_env(monkeypatch):
+    monkeypatch.setenv("CODEX_TOKEN", "x")
+    state, hint = wiz._reviewer_auth_state({"auth": {"env_vars": ["CODEX_TOKEN"]}})
+    assert state == "authed" and hint is None
+
+
+def test_run_verification_pass_returns_problem_count(monkeypatch, capsys):
+    """goal item 5: the pass returns the count of hard problems (missing scripts +
+    uninstalled selected CLIs)."""
+    # console scripts present, but the one selected reviewer's CLI is absent.
+    def _which(name, *a, **k):
+        return "/usr/bin/" + name if name in wiz._CORE_CONSOLE_SCRIPTS else None
+    monkeypatch.setattr(wiz.shutil, "which", _which)
+    profiles = {"codex": {"kind": "cli_reviewer", "detect": {"command": "codex"}}}
+    problems = wiz._run_verification_pass(["codex"], profiles)
+    out = capsys.readouterr().out
+    assert problems == 1
+    assert "NOT installed" in out
+    assert "console scripts on PATH" in out
+
+
+def test_verify_flag_runs_against_existing_config(tmp_path, monkeypatch, capsys):
+    """`consensus init --verify` runs the offline pass against an existing config
+    and exits 0 when clean / 2 when there are hard problems."""
+    monkeypatch.chdir(tmp_path)
+    wiz.main(["--non-interactive", "--accept-defaults",
+              "--contributors", "claude,codex,gemini"])
+    capsys.readouterr()
+    # all CLIs present -> exit 0
+    monkeypatch.setattr(wiz.shutil, "which", lambda name, *a, **k: "/usr/bin/" + name)
+    monkeypatch.setattr(wiz.subprocess, "run",
+                        lambda *a, **k: type("P", (), {"returncode": 0, "stdout": "v1", "stderr": ""})())
+    rc = wiz.main(["--verify"])
+    assert rc == 0
+    assert "Verification pass" in capsys.readouterr().out
+
+
 # ---------- iter-0031: .mcp.json bootstrap ----------
 
 
