@@ -98,9 +98,18 @@ def _glob_subset(narrow: list[str], broad: list[str]) -> bool:
         # broad exhausted but narrow can still produce >=1 segment -> not covered.
         return False
     if broad[0] == "**":
-        # '**' absorbs zero segments (skip it) or one narrow segment (consume).
-        if _glob_subset(narrow, broad[1:]):
+        rest = broad[1:]
+        if not rest:
+            # TRAILING '**' matches ONE OR MORE segments (paths strictly UNDER the
+            # prefix), never zero - consistent with the gate's matcher, which does
+            # NOT match the bare prefix 'src' against 'src/**'. So an exhausted
+            # narrow ('src' vs 'src/**') is NOT a subset (kimi-rev-001); a narrow
+            # that still has >=1 segment (incl. its own '**' tail) is.
+            return len(narrow) >= 1
+        # MIDDLE '**' may absorb ZERO segments (skip it) ...
+        if _glob_subset(narrow, rest):
             return True
+        # ... or one-or-more narrow segments.
         if narrow and _glob_subset(narrow[1:], broad):
             return True
         return False
@@ -134,6 +143,36 @@ def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
         if _glob_subset(scope_segs, _glob_segments(allowed)):
             return True
     return False
+
+
+def _literal_prefix(segs: list[str]) -> list[str]:
+    """The leading run of LITERAL segments before the first wildcard segment
+    ('*' or '**'). For 'consensus-state/**' -> ['consensus-state']; for
+    'src/foo.py' -> ['src','foo.py']; for '**' -> []."""
+    out: list[str] = []
+    for s in segs:
+        if s == "*" or s == "**" or "*" in s:
+            break
+        out.append(s)
+    return out
+
+
+def _globs_overlap(a: str, b: str) -> bool:
+    """Conservative INTERSECTION test for the forbidden-files veto: do globs `a`
+    and `b` share any path? Unlike subset (a directional relation), the forbidden
+    check must catch ANY overlap - e.g. scope 'consensus-state/**' overlapping a
+    forbidden 'consensus-state/' (a bare-dir subtree), which is neither a subset of
+    the other under strict trailing-'**' semantics. We OR three signals: subset in
+    either direction, or one literal path-prefix containing the other (which covers
+    the dir-subtree case). Biased toward MORE vetoes (fail-safe for 'forbidden')."""
+    a_segs, b_segs = _glob_segments(a), _glob_segments(b)
+    if _glob_subset(a_segs, b_segs) or _glob_subset(b_segs, a_segs):
+        return True
+    pa, pb = _literal_prefix(a_segs), _literal_prefix(b_segs)
+    n = min(len(pa), len(pb))
+    # Equal up to the shorter literal prefix -> the subtrees meet (and an empty
+    # prefix, i.e. a leading wildcard, conservatively overlaps anything).
+    return pa[:n] == pb[:n]
 
 
 class _IterDirOutsideRepo(ValueError):
@@ -341,10 +380,8 @@ def approve_consult(
         f for f in (gp.get("forbidden_files") or [])
         if isinstance(f, str) and f.strip()
     ]
-    scope_segs = _glob_segments(scope_glob)
     for forb in forbidden_files:
-        forb_segs = _glob_segments(forb)
-        if _glob_subset(scope_segs, forb_segs) or _glob_subset(forb_segs, scope_segs):
+        if _globs_overlap(scope_glob, forb):
             return _err(
                 "forbidden_scope",
                 f"--scope-glob {scope_glob!r} overlaps the goal_packet's "
