@@ -160,18 +160,32 @@ def test_glob_subset_no_dangerous_over_acceptance():
                         assert rb.match(p), f"{nrw} wrongly subset of {brd}: {p} escapes"
 
 
-def test_forbidden_vetoes_overlap_but_not_disjoint_prefix():
-    """codex-rev-002: the forbidden veto must catch real overlaps (a scope inside,
-    or engulfing, a forbidden subtree) WITHOUT over-rejecting globs that merely
-    share a directory prefix but do not actually overlap."""
+def test_fnmatch_patterns_overlap_matches_gate_semantics():
+    """The forbidden overlap test must use the gate's OWN fnmatch semantics, where
+    '*' (and '**') matches ANY chars INCLUDING '/'. Validated cases:"""
+    ov = ac._fnmatch_patterns_overlap
+    assert ov("src/*", "src/a/b/c") is True          # fnmatch '*' spans '/'
+    assert ov("consensus_mcp/**", "consensus-state/*") is False
+    # codex-rev-001: a PARTIAL intersection where NEITHER pattern is a subset of
+    # the other must still be caught (the security under-veto).
+    assert ov("src/*/secret.py", "src/sub/**") is True   # share src/sub/secret.py
+    assert ov("a/**/c", "**/secret.py") is False         # tails 'c' vs 'secret.py' differ
+
+
+def test_forbidden_vetoes_uses_fnmatch_overlap():
+    """The forbidden veto catches real overlaps (under fnmatch semantics) including
+    partial intersections, and never vetoes a genuinely disjoint scope."""
     fv = ac._forbidden_vetoes
     # real overlaps -> veto
     assert fv("consensus-state/**", "consensus-state/") is True
     assert fv("**", "consensus-state/") is True
     assert fv("consensus-state/sub/x.py", "consensus-state/") is True
-    # NO overlap -> must NOT veto (the over-rejection codex flagged)
+    # under fnmatch, 'src/*.py' CAN match 'src/sub/x.py' (forbidden subtree) -> veto
+    assert fv("src/*.py", "src/sub/") is True
+    # codex-rev-001 partial intersection (neither a subset) -> veto
+    assert fv("src/*/secret.py", "src/sub/") is True
+    # genuinely disjoint (different first segment) -> NO veto
     assert fv("consensus_mcp/**", "consensus-state/") is False
-    assert fv("src/*.py", "src/sub/") is False
     assert fv("consensus_mcp/_x.py", "consensus-state/") is False
 
 

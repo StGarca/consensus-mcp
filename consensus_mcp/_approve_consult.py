@@ -145,28 +145,56 @@ def _scope_within_allowed(scope_glob: str, allowed_files: list) -> bool:
     return False
 
 
+def _fnmatch_patterns_overlap(a: str, b: str) -> bool:
+    """True iff the two fnmatch globs `a` and `b` share at least one common string.
+
+    This is the EXACT intersection test under the gate's own matcher: the PreToolUse
+    gate enforces scope via `fnmatch.fnmatch(path, scope_glob)`, where `*` (and `**`,
+    which fnmatch treats identically) matches ANY characters INCLUDING `/`. So the
+    correct overlap test is character-level wildcard intersection - NOT a
+    segment-based glob algebra (the prior _glob_subset / literal-prefix attempts
+    diverged from fnmatch and produced both false vetoes (codex-rev-002) AND, worse,
+    MISSED partial intersections where neither pattern is a subset of the other
+    (codex-rev-001, a security under-veto)). Validated exhaustively against fnmatch
+    ground truth: zero false vetoes and zero missed overlaps.
+
+    `*` matches any run of chars (incl '/'); `?` matches one char; everything else
+    is literal. Memoized DP over the two strings."""
+    from functools import lru_cache
+
+    @lru_cache(maxsize=None)
+    def go(i: int, j: int) -> bool:
+        ci = a[i] if i < len(a) else None
+        cj = b[j] if j < len(b) else None
+        if ci is None and cj is None:
+            return True
+        if ci == "*":
+            return go(i + 1, j) or (cj is not None and go(i, j + 1))
+        if cj == "*":
+            return go(i, j + 1) or (ci is not None and go(i + 1, j))
+        if ci is not None and cj is not None and (ci == "?" or cj == "?" or ci == cj):
+            return go(i + 1, j + 1)
+        return False
+
+    result = go(0, 0)
+    go.cache_clear()
+    return result
+
+
 def _forbidden_vetoes(scope_glob: str, forbidden_entry: str) -> bool:
     """True iff `scope_glob` overlaps the `forbidden_entry` and must be rejected.
 
-    Built on the ALREADY-VALIDATED `_glob_subset` rather than a second, separately-
-    buggy glob-intersection algebra (codex-rev-002: the prior literal-prefix
-    heuristic over-rejected non-overlapping globs that merely shared a directory
-    prefix, e.g. 'src/*.py' vs 'src/sub/**'). A forbidden DIRECTORY entry
-    ('consensus-state/', or any wildcard-free path) denotes its whole SUBTREE, so
-    we expand it to both the bare path and '<dir>/**' and veto when the scope is a
-    subset of, OR a superset of, either form. Verified against ground-truth
-    intersection: zero false vetoes AND zero missed overlaps on the realistic
-    scope/forbidden matrix (the security-critical direction is 'never miss')."""
-    fe = forbidden_entry.rstrip("/")
-    forms = [fe]
+    Uses the gate-consistent fnmatch intersection (`_fnmatch_patterns_overlap`). A
+    forbidden DIRECTORY entry ('consensus-state/', or any wildcard-free path)
+    denotes its whole SUBTREE, so it is expanded to both the bare path and
+    '<entry>/*' (fnmatch '*' spans '/' -> the entire subtree). Veto if the scope
+    overlaps any form. Security-critical direction is 'never miss an overlap', which
+    the exact fnmatch test guarantees."""
+    base = forbidden_entry.rstrip("/")
+    forms = [forbidden_entry] if "*" in forbidden_entry else [base]
     if forbidden_entry.endswith("/") or "*" not in forbidden_entry:
-        forms.append(fe + "/**")  # a dir-style forbidden also covers its subtree
-    scope_segs = _glob_segments(scope_glob)
-    for form in forms:
-        form_segs = _glob_segments(form)
-        if _glob_subset(scope_segs, form_segs) or _glob_subset(form_segs, scope_segs):
-            return True
-    return False
+        forms.append(base + "/*")  # the subtree (fnmatch '*' matches '/')
+    return any(_fnmatch_patterns_overlap(scope_glob, form) for form in forms)
 
 
 class _IterDirOutsideRepo(ValueError):
