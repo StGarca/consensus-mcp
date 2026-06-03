@@ -772,6 +772,22 @@ def test_repair_exit_code_fail_safe_on_unknown_state():
     assert wiz._repair_exit_code([RC("a", "invalid_config")]) == 3
 
 
+def test_repair_check_mcp_unparseable_not_reported_repaired(tmp_path, monkeypatch):
+    """codex-rev-001: a present-but-unparseable .mcp.json must NOT be reported
+    'repaired' (which would yield exit 0); it is skipped_diverged so --repair exits
+    non-zero and the user fixes/removes it."""
+    repo = tmp_path / "proj"
+    (repo / ".consensus").mkdir(parents=True)
+    mcp = wiz._resolve_mcp_json_path(repo)
+    mcp.parent.mkdir(parents=True, exist_ok=True)
+    mcp.write_text("{ this is not valid json", encoding="utf-8")
+    comp, line = wiz._repair_check_mcp(repo, dry_run=False)
+    assert comp.state == "skipped_diverged"
+    assert "unparseable" in line
+    # and it never overwrote the corrupt file in dry-run-equivalent (no write path)
+    assert mcp.read_text(encoding="utf-8") == "{ this is not valid json"
+
+
 def test_repair_loop_catches_raised_check_as_failure(tmp_path, monkeypatch):
     """gemini-rev-001: a repair check that RAISES is recorded as a failed
     component (exit 7), never a crash or false success."""

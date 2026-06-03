@@ -42,7 +42,9 @@ from __future__ import annotations
 
 import dataclasses
 import fnmatch
+import os
 import re
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -117,7 +119,23 @@ def mint_design_approval(
     }
     path = _marker_path(repo_root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(marker, sort_keys=True), encoding="utf-8")
+    # kimi-rev-001: the design-approved marker is the TRUST POINTER - write it
+    # atomically (unique temp file in the same dir + os.replace) so a crash or
+    # concurrent reader never observes a torn/partial marker, matching the
+    # hardened session-marker writer.
+    payload = yaml.safe_dump(marker, sort_keys=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=".design-approved-", suffix=".tmp",
+                                    dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
     return marker
 
 

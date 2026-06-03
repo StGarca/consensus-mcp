@@ -1969,7 +1969,16 @@ def _repair_check_mcp(repo_root: Path, *, dry_run: bool) -> tuple[RepairComponen
     """#2 .mcp.json - repair when the consensus-mcp entry is missing; report when
     present-but-diverged; ok when present-and-matching."""
     mcp_path = _resolve_mcp_json_path(repo_root)
-    existing, _ = _load_existing_mcp_json(mcp_path)
+    existing, load_err = _load_existing_mcp_json(mcp_path)
+    if load_err is not None:
+        # codex-rev-001: the file is PRESENT but unparseable. The old code discarded
+        # this error and fell through to the "missing -> write + report repaired"
+        # branch, claiming success even when nothing could be safely written (we
+        # must not clobber a corrupt user file blindly). Report it instead so the
+        # exit code is non-zero and the user fixes/removes it (or passes --force).
+        return (RepairComponent(".mcp.json", "skipped_diverged"),
+                f"{REPAIR_SKIP} .mcp.json is present but unparseable ({load_err}); "
+                f"NOT auto-repaired - fix or remove it, or pass --force to overwrite")
     command, mcp_args, _ = _resolve_mcp_command(None)
     state_root = repo_root / "consensus-state"
     expected = _build_consensus_mcp_entry(command, mcp_args, state_root, repo_root)
@@ -2143,7 +2152,13 @@ def _verify_repair_install(repo_root: Path, *, dry_run: bool,
             c = RepairComponent(name, "repair_failed", str(exc))
             l = f"{REPAIR_SKIP} {name}: repair FAILED ({type(exc).__name__}: {exc})"
         comps.append(c); lines.append(l)
-    c6, l6 = _repair_check_enforcement(claude_home)
+    # kimi-rev-002: enforcement check gets the same exception-safe treatment as
+    # #2-#5 so a raised read can't crash --repair or yield a false success.
+    try:
+        c6, l6 = _repair_check_enforcement(claude_home)
+    except Exception as exc:  # noqa: BLE001
+        c6 = RepairComponent("enforcement", "repair_failed", str(exc))
+        l6 = f"{REPAIR_SKIP} enforcement: check FAILED ({type(exc).__name__}: {exc})"
     comps.append(c6); lines.append(l6)
     return lines, _repair_exit_code(comps)
 
