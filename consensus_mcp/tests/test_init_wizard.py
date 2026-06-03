@@ -707,6 +707,34 @@ def test_run_verification_pass_returns_problem_count(monkeypatch, capsys):
     assert "console scripts on PATH" in out
 
 
+def test_status_summary_reports_enforced_when_hooks_installed(monkeypatch, capsys, tmp_path):
+    """Bug fix: when the global hooks ARE installed, the per-project status must say
+    ENABLED and must NOT tell the user to run `--install-claude-code` (that produced
+    the 'run the thing you just ran' loop)."""
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "ok"), "OK: enforcement"))
+    wiz._print_status_summary(
+        tmp_path / ".consensus" / "config.yaml", ["claude"],
+        wiz._load_merged_profiles(None),
+        mcp_command="consensus-mcp", mcp_resolves=True, from_claude_code=True)
+    out = capsys.readouterr().out
+    assert "ENABLED" in out
+    assert "consensus-init --install-claude-code" not in out   # no circular re-offer
+
+
+def test_status_summary_reports_advisory_when_hooks_missing(monkeypatch, capsys, tmp_path):
+    """When the global step has NOT run, advisory + the exact one-time command."""
+    monkeypatch.setattr(wiz, "_repair_check_enforcement",
+                        lambda ch: (wiz.RepairComponent("enforcement", "report_global"), "REPORT-GLOBAL: x"))
+    wiz._print_status_summary(
+        tmp_path / ".consensus" / "config.yaml", ["claude"],
+        wiz._load_merged_profiles(None),
+        mcp_command="consensus-mcp", mcp_resolves=True, from_claude_code=True)
+    out = capsys.readouterr().out
+    assert "ADVISORY" in out
+    assert "consensus-init --install-claude-code" in out
+
+
 def test_detect_contributors_outputs_json(tmp_path, monkeypatch, capsys):
     """Auto-init support: --detect-contributors prints JSON of independent
     contributors + install status, so the Claude Code skill can build the

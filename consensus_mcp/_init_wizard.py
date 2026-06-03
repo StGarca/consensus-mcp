@@ -1073,11 +1073,24 @@ def _print_status_summary(
     print('      consensus-mcp-start-consult --question "<what to review>" '
           '--scope-glob "<files>"')
     print("    (it prints the exact dispatch + approve commands).")
+    # Report the ACTUAL enforcement state - do NOT unconditionally tell the user to
+    # run the global step (that produced the "run the thing you just ran" loop when
+    # they had already installed it). _repair_check_enforcement is the read-only
+    # detector: 'ok' iff the consensus hooks are in ~/.claude/settings.json AND the
+    # referenced hook scripts exist.
+    try:
+        _enf_comp, _ = _repair_check_enforcement(_resolve_claude_home())
+        _enforced = _enf_comp.state == "ok"
+    except Exception:
+        _enforced = False
     print("Enforcement status:")
-    print("  - Edit-gating + precedence injection are wired by the GLOBAL step "
-          "`consensus-init --install-claude-code` (run once per machine).")
-    print("  - Until then consensus runs in ADVISORY mode here: consults work, "
-          "but edits are NOT gated. Run that command to enable enforcement.")
+    if _enforced:
+        print("  - ENABLED: edit-gating + precedence injection are active "
+              "machine-wide (the global hooks are installed). Nothing to do.")
+    else:
+        print("  - ADVISORY here: consults run, but edits are NOT gated. To enable "
+              "edit-gating + precedence injection, run ONCE per machine: "
+              "consensus-init --install-claude-code")
 
 
 def _prompt_host_peer_followup(selection: list[str], profiles: dict, default_yes: bool) -> str | None:
