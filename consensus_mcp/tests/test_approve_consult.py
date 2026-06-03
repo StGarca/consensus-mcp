@@ -88,6 +88,30 @@ def test_approve_honors_env_repo_root_finding7(tmp_path, monkeypatch):
     assert (tmp_path / ".consensus" / "design-approved").exists()
 
 
+def test_approve_arms_the_gate(tmp_path):
+    """P0.1 (consult-verified #1 blocker): a successful approve must ARM the gate
+    by writing the session-active marker, not just mint the design marker -
+    otherwise the gate stays dormant and edits are silently allowed after
+    'approval'. Hypothesis-independent: assert the gate's OWN predicate."""
+    from consensus_mcp import _session_state as ss
+    _make_consult(tmp_path)
+    assert ss.session_active(tmp_path) is False          # dormant before approve
+    res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=tmp_path)
+    assert res["ok"] is True, res
+    assert res.get("gate_armed") is True
+    assert ss.session_active(tmp_path) is True            # gate now armed
+
+
+def test_review_family_handles_hash_and_digit_suffixes():
+    """The derive_pass_id default makes kimi's mirror `kimi-review-kimi-<hash>.yaml`;
+    the family counter must recognize hash suffixes as well as digit suffixes."""
+    from consensus_mcp._design_approval import _review_family
+    assert _review_family("kimi-review-kimi-0c532a488f1cbfd5.yaml") == "kimi"
+    assert _review_family("grok-review-4.yaml") == "grok"
+    assert _review_family("codex-review.yaml") == "codex"
+    assert _review_family("review-packet.yaml") is None  # not a review artifact
+
+
 def test_approve_counts_round_keyed_review_filenames(tmp_path):
     """H3 interaction: when reviewers seal under distinct pass_ids, their mirror
     files can be round-keyed (e.g. 'kimi-review-4.yaml'). The >=2 precondition AND

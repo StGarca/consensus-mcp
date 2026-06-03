@@ -70,6 +70,7 @@ from pathlib import Path
 import yaml
 
 from consensus_mcp._dispatch_base import (
+    derive_pass_id,
     RepoRootResolutionError,
     _resolve_repo_root,
     OutsideRepoPathError,
@@ -984,7 +985,7 @@ def main(argv: list[str] | None = None) -> int:
     log_path = repo_root / "consensus-state" / "state" / "dispatch-log.jsonl"
     _pre_iter_id = Path(ns.iteration_dir).name or "unknown-iteration"
     _pre_reviewer_id = ns.reviewer_id or f"grok-{_pre_iter_id}-1"
-    _pre_pass_id = ns.pass_id or f"{_pre_reviewer_id}-pass1"
+    _pre_pass_id = ns.pass_id or derive_pass_id(_pre_iter_id, ns.review_target, _pre_reviewer_id)
 
     try:
         iter_dir = _normalize_relative_to_repo(ns.iteration_dir, repo_root)
@@ -1033,7 +1034,7 @@ def main(argv: list[str] | None = None) -> int:
             review_target_path_str = str(review_target_normalized)
 
     reviewer_id = ns.reviewer_id or f"grok-{iteration_id}-1"
-    pass_id = ns.pass_id or f"{reviewer_id}-pass1"
+    pass_id = ns.pass_id or derive_pass_id(iteration_id, ns.review_target, reviewer_id)
 
     if ns.smoke and os.environ.get("CONSENSUS_MCP_RUN_REAL_GROK_SMOKE") != "1":
         refuse_msg = (

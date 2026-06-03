@@ -293,11 +293,6 @@ def handle(
 
     # --- iteration_id + reviewer mode: G1 both-sealed enforcement ---
     if has_iter:
-        if reviewer not in ("codex", "claude"):
-            return {
-                "error": "unknown_reviewer",
-                "detail": f"reviewer must be 'codex' or 'claude'; got {reviewer!r}",
-            }
         from consensus_mcp._paths import active_dir
         iter_dir = active_dir() / iteration_id
         if not iter_dir.is_dir():
@@ -313,24 +308,29 @@ def handle(
         except Exception as exc:
             return {"error": "invalid_yaml", "detail": f"independence-audit.yaml: {exc}"}
         audit_log = audit_data.get("audit_log", []) or []
-        # Need: reviewer_invoked AND review_returned_and_sealed for BOTH codex AND claude.
-        invoked = {
-            e.get("actor") for e in audit_log
-            if e.get("event") == "reviewer_invoked" and e.get("actor") in ("codex", "claude")
-        }
+        # P0.2 (generalized from a hardcoded codex+claude pair): cross-family
+        # independence requires the NAMED reviewer to have sealed AND at least one
+        # OTHER distinct family to also have sealed. Panel-agnostic: works for
+        # grok, kimi, gemini, any future family - not just codex+claude (which
+        # silently rejected every other reviewer with `unknown_reviewer`).
         sealed = {
             e.get("actor") for e in audit_log
-            if e.get("event") == "review_returned_and_sealed"
-            and e.get("actor") in ("codex", "claude")
+            if e.get("event") == "review_returned_and_sealed" and e.get("actor")
         }
-        missing_invoked = {"codex", "claude"} - invoked
-        missing_sealed = {"codex", "claude"} - sealed
-        if missing_invoked or missing_sealed:
+        if reviewer not in sealed:
             return {
                 "error": "both_reviews_not_sealed",
                 "detail": (
-                    f"missing reviewer_invoked for {sorted(missing_invoked) or 'none'}; "
-                    f"missing review_returned_and_sealed for {sorted(missing_sealed) or 'none'}"
+                    f"named reviewer {reviewer!r} has not sealed yet "
+                    f"(sealed families: {sorted(sealed) or 'none'})"
+                ),
+            }
+        if not (sealed - {reviewer}):
+            return {
+                "error": "both_reviews_not_sealed",
+                "detail": (
+                    f"no independent cross-reviewer has sealed besides {reviewer!r} "
+                    f"(need >=2 distinct families for independence)"
                 ),
             }
         # Both sealed -> serve the per-reviewer review file from the iteration dir.

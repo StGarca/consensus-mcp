@@ -11,8 +11,8 @@ Behaviour:
   - else: `git diff --name-only HEAD`; for each modified NON-TEST SOURCE file
     call `_delivery_readiness.verify_delivery_token`; if any lacks a valid token,
     print a directive naming the file(s):
-      "STOP - verification not satisfied for <file>: invoke consensus-verify /
-       mint a delivery token"
+      "STOP - verification not satisfied for <file>: mint a delivery token via
+       consensus-mcp-deliver"
 
 Test/runtime overrides (env): same as the PreToolUse gate
   (CONSENSUS_MCP_FORCE_RUNTIME_ABSENT / _PRESENT, CONSENSUS_MCP_REPO_ROOT).
@@ -190,10 +190,11 @@ def main(argv=None) -> int:
     if unverified:
         files = ", ".join(unverified)
         directive = (
-            f"STOP - verification not satisfied for {files}: "
-            f"invoke consensus-verify / mint a delivery token before claiming "
-            f"completion. Each modified source file must carry a valid "
-            f"delivery-readiness token (consensus-vetted, hash-current, sealed)."
+            f"STOP - verification not satisfied for {files}: mint a delivery token "
+            f"before claiming completion. Run, per file:\n"
+            f"  consensus-mcp-deliver --file <file> --design-consensus-ref <sealed-iteration> --vetted-by <fam1>,<fam2>\n"
+            f"Each modified source file must carry a valid delivery-readiness token "
+            f"(consensus-vetted by >=2 non-claude reviewers, hash-current, sealed)."
         )
         print(directive)
     return 0

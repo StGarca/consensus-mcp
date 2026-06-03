@@ -27,6 +27,8 @@ consensus-mcp-dispatch-kimi = "consensus_mcp._dispatch_kimi:main"
 consensus-mcp-seal-iteration = "consensus_mcp._seal_iteration:main"
 # v1.40.0: composed consult-approval (validate + seal + mint in one step).
 consensus-mcp-approve = "consensus_mcp._approve_consult:main"
+# delivery-token CLI (P0.3): mint a token for a vetted modified file.
+consensus-mcp-deliver = "consensus_mcp._deliver:main"
 consensus-init = "consensus_mcp._init_wizard:main"
 # v1.19.0: read-only project scorecard rollup over results-v1.jsonl.
 consensus-results = "consensus_mcp._results_rollup:main"
