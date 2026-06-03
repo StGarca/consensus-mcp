@@ -63,7 +63,7 @@ release.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.41.1
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.41.2
 
 # Install the Claude Code helper once. This is what lets you set up and run
 # consensus from chat in ANY project - including auto-initializing a new one.
@@ -159,10 +159,14 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.41.1 - stable.** *The "install it, ask for a review, and it just
-works" release.* This one is all about the first ten minutes: install once, then
-ask for a consensus review in any project and consensus sets itself up for you -
-no per-project setup command to remember.
+**Current: v1.41.2 - stable.** *The "install it, ask for a review, and it just
+works" release* (with the re-install rough edges sanded off in .2). This line is
+all about the first ten minutes: install once, then ask for a consensus review in
+any project and consensus sets itself up for you - no per-project setup command to
+remember. v1.41.2 makes re-running setup honest about itself: the status line
+reports the *real* enforcement state (no more "run the command you just ran"), and
+re-initializing an already-configured project behaves like an idempotent upgrade
+(verify + refresh, keep your panel) instead of popping a menu.
 
 - **Zero-friction first run.** Ask for a review in a brand-new project and
   consensus notices it isn't set up, asks which AIs you want on the panel, confirms

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.41.2 - 2026-06-03
+
+**Re-install, re-run, no runaround.** A fast follow on v1.41.1 that sands off two
+rough edges you hit the moment you upgrade the package and set up again:
+
+- **The status line tells the truth about enforcement.** After installing the
+  global edit-gating step, re-running per-project setup used to *still* say "edit
+  gating is advisory - run `consensus-init --install-claude-code`" - i.e. it told
+  you to run the command you had just run. The per-project summary now uses the
+  read-only enforcement detector and reports the REAL state: "ENABLED ... Nothing
+  to do" when the global hooks are installed, and names the one-time command ONLY
+  when enforcement is genuinely missing.
+- **Re-init is an upgrade, not a menu.** Running setup again on an
+  already-configured project (the normal thing to do after a package upgrade) no
+  longer pops a leave/reconfigure/force prompt. The Claude Code helper treats it as
+  an idempotent upgrade: it runs `--repair` once (verify + refresh the
+  consensus-managed pieces, keep your panel/config untouched), reports what it did,
+  and only mentions `--force` (if you'd hand-edited a managed file) or the global
+  enforcement step (if it's actually missing) when warranted.
+
+Suite: 1907 tests, green on Linux + Windows / Python 3.11+.
+
 ## 1.41.1 - 2026-06-03
 
 **The "install it, ask for a review, and it just works" release.** v1.41.0 made the
