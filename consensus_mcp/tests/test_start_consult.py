@@ -101,6 +101,31 @@ def test_start_consult_cli_defaults_to_configured_panel(tmp_path, capsys):
     assert "dispatch-gemini" not in cmds and "dispatch-grok" not in cmds
 
 
+def test_start_consult_fails_closed_when_stale_marker_unclearable(tmp_path, monkeypatch):
+    """grok-rev-002: if a stale design-approved marker cannot be removed, start
+    must FAIL CLOSED (not silently pass) so a poisoned prior-scope marker can't
+    authorize edits under the new, unapproved consult."""
+    _init_project(tmp_path)
+    stale = tmp_path / ".consensus" / "design-approved"
+    stale.write_text("stale\n", encoding="utf-8")
+
+    real_unlink = stale.unlink
+
+    class _StubPath:
+        def exists(self):
+            return True
+        def unlink(self):
+            raise OSError("permission denied")
+        def __fspath__(self):
+            return str(stale)
+        def __str__(self):
+            return str(stale)
+    monkeypatch.setattr(sc, "_design_marker_path", lambda rr: _StubPath())
+    res = sc.start_consult("q", scope_glob="x.py", reviewers=["codex"], repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "stale_marker_unclearable"
+
+
 def test_start_consult_rejects_uninitialized_repo_root(tmp_path):
     """codex finding: an explicit --repo-root with no .consensus/config.yaml (not a
     consensus project) must be rejected, not scaffolded into verbatim."""

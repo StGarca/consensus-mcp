@@ -223,6 +223,79 @@ def test_mint_succeeds_on_valid_sealed_iteration(tmp_path, monkeypatch):
     assert res.ok, res.reason
 
 
+def test_git_modified_relpaths_none_without_git(monkeypatch):
+    """_git_modified_relpaths returns None (conservative fallback) when git is
+    unavailable, so _close keeps the all-in-scope check."""
+    def _boom(*a, **k):
+        raise FileNotFoundError("git not found")
+    monkeypatch.setattr(si.subprocess, "run", _boom)
+    assert si._git_modified_relpaths(Path(".")) is None
+
+
+def _git(repo, *args):
+    import subprocess
+    subprocess.run(["git", "-C", str(repo), *args], check=True,
+                   capture_output=True, text=True)
+
+
+def test_close_only_requires_tokens_for_modified_delta(tmp_path, monkeypatch):
+    """grok-rev-001: with a broad scope, close must require delivery tokens only
+    for the CHANGED delta - a clean tree closes with zero token demands instead of
+    demanding a token for every file matching the scope."""
+    if si.shutil.which("git") is None:
+        import pytest
+        pytest.skip("git not available")
+    repo, iter_dir = _scaffold_iter(tmp_path, monkeypatch)
+    _write_outcome(iter_dir, closing_state="quorum_close_passed")
+    _write_converged_plan(iter_dir)
+    _write_review(iter_dir, "codex")
+    _write_review(iter_dir, "gemini")
+    # several in-scope files that, under the OLD behavior, would each demand a token
+    src = repo / "consensus_mcp"
+    for n in ("a.py", "b.py", "c.py"):
+        (src / n).write_text("# in scope\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+
+    result = si._mint(iter_dir, "quorum_close_passed", "consensus_mcp/**")
+    assert result["ok"], result
+    # clean tree: no modified in-scope files -> close needs no tokens.
+    closed = si._close(iter_dir)
+    assert closed["ok"] is True, closed
+    assert closed["in_scope_files_verified"] == 0
+
+
+def test_close_requires_token_for_modified_in_scope_file(tmp_path, monkeypatch):
+    """The flip side: a MODIFIED in-scope file with no delivery token blocks close
+    (the token guarantee still holds for the actual change)."""
+    if si.shutil.which("git") is None:
+        import pytest
+        pytest.skip("git not available")
+    repo, iter_dir = _scaffold_iter(tmp_path, monkeypatch)
+    _write_outcome(iter_dir, closing_state="quorum_close_passed")
+    _write_converged_plan(iter_dir)
+    _write_review(iter_dir, "codex")
+    _write_review(iter_dir, "gemini")
+    target = repo / "consensus_mcp" / "a.py"
+    target.write_text("# v1\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    result = si._mint(iter_dir, "quorum_close_passed", "consensus_mcp/**")
+    assert result["ok"], result
+    # modify the file (now git-dirty) without minting a token.
+    target.write_text("# v2 changed\n", encoding="utf-8")
+    closed = si._close(iter_dir)
+    assert closed["ok"] is False
+    assert closed["error_type"] == "missing_delivery_tokens"
+    assert any("a.py" in m for m in closed["missing"])
+
+
 def test_mint_rolls_back_design_marker_on_gate_arm_failure(tmp_path, monkeypatch):
     """codex-rev-003 / kimi-rev-001: if arming the session marker fails after the
     design-approved marker is minted, mint must be ALL-OR-NOTHING - roll back the

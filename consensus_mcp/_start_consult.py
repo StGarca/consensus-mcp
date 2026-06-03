@@ -153,12 +153,23 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
     # it so the gate is correctly "armed but unapproved" until this consult's own
     # approve runs. (The design-approved is a re-validated trust pointer, not data
     # we lose anything by clearing - a still-valid prior approval can be re-minted.)
-    try:
-        stale_marker = _design_marker_path(rr)
-        if stale_marker.exists():
+    # grok-rev-002: this must FAIL CLOSED. If a stale design-approved exists and we
+    # cannot remove it, arming the session would activate the gate while that stale
+    # marker still re-validates an OLD scope (verify_design_approval runs whenever
+    # the session is active) - i.e. marker poisoning. Rather than silently pass and
+    # leave a poisoned state, refuse to scaffold so the operator fixes it first.
+    stale_marker = _design_marker_path(rr)
+    if stale_marker.exists():
+        try:
             stale_marker.unlink()
-    except OSError:
-        pass  # non-fatal: arming still blocks edits until approve
+        except OSError as exc:
+            return {"ok": False, "error_type": "stale_marker_unclearable",
+                    "error": (f"a prior design-approved marker at {stale_marker} "
+                              f"could not be removed ({exc}); it would authorize an "
+                              f"OLD scope for this new consult. Remove it manually "
+                              f"(or run `consensus-mcp-seal-iteration close --abandon`)"
+                              f", then re-run start-consult."),
+                    "iteration": iter_id}
 
     # ARM the gate: edits stay blocked until consensus-mcp-approve runs.
     try:
