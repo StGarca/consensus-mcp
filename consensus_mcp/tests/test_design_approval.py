@@ -470,6 +470,50 @@ def test_mint_rejects_empty_list(tmp_path):
             scope_glob=[], converged_plan_sha256="x")
 
 
+def test_forged_over_limit_marker_rejected_on_read(tmp_path):
+    # codex-rev-001 (Workflow B, HIGH): the G3 anti-bypass bounds (cap/dedup/overbroad)
+    # must be enforced on the READ side, not only at mint. A hand-forged marker that
+    # points at a REAL sealed iteration but carries an over-limit scope_globs list (or
+    # duplicates) is REFUSED by both verify (Edit) and marker_is_sealed (Bash).
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    over_limit = [f"root{i}/**" for i in range(da._MAX_SCOPE_GLOBS + 1)]
+    _write_marker(
+        tmp_path,
+        schema_version=2,
+        design_consensus_ref="iteration-fix-impl",
+        converged_plan_sha256=plan_sha,
+        scope_globs=over_limit,
+        repo_root_id="x",
+    )
+    assert da.verify_design_approval(tmp_path / "root0/x.py", repo_root=tmp_path).ok is False
+    assert da.marker_is_sealed(tmp_path).ok is False
+    # Duplicates are likewise refused on read.
+    _write_marker(
+        tmp_path,
+        schema_version=2,
+        design_consensus_ref="iteration-fix-impl",
+        converged_plan_sha256=plan_sha,
+        scope_globs=["a/**", "a/**"],
+        repo_root_id="x",
+    )
+    assert da.marker_is_sealed(tmp_path).ok is False
+
+
+def test_forged_overbroad_single_glob_rejected_by_verify(tmp_path):
+    # codex-rev-001 corollary: a forged v1 marker with an OVERBROAD scope_glob can no
+    # longer authorize an Edit (previously verify did not reject overbroad on read).
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    _write_marker(
+        tmp_path,
+        schema_version=1,
+        design_consensus_ref="iteration-fix-impl",
+        converged_plan_sha256=plan_sha,
+        scope_glob="**",
+        repo_root_id="x",
+    )
+    assert da.verify_design_approval(tmp_path / "anything.py", repo_root=tmp_path).ok is False
+
+
 def test_legacy_v1_marker_verifies_and_seals_unchanged(tmp_path):
     # A genuine pre-G3 v1 marker (only scope_glob, no scope_globs) still verifies
     # and seals exactly as before (A4 backward-compat).

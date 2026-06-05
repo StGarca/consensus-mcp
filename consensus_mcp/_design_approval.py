@@ -331,9 +331,18 @@ def verify_design_approval(target_path: Path, repo_root: Path) -> Result:
         if not ok:
             return Result(False, reason)
 
-        globs = _marker_scope_globs(data)
-        if not globs:
+        raw_globs = _marker_scope_globs(data)
+        if not raw_globs:
             return Result(False, "design-approval marker has no scope_glob (fail-closed)")
+        # codex-rev-001 (Workflow B, HIGH): enforce the G3 anti-bypass bounds on the
+        # READ side too, not just at mint - the marker file is the trust boundary, and
+        # a hand-written marker pointing at a real seal could otherwise carry an
+        # over-limit / duplicate / overbroad scope list that mint would have rejected.
+        # Reuse the SAME validator as mint so the two cannot drift (DRY).
+        try:
+            globs = _normalize_scope_globs(raw_globs)
+        except ValueError as exc:
+            return Result(False, f"design-approval marker scope is invalid (fail-closed): {exc}")
 
         rel, reject = _confine_to_repo(target_path, repo_root)
         if rel is None:
@@ -379,17 +388,21 @@ def marker_is_sealed(repo_root: Path) -> Result:
         if deny is not None:
             return deny
 
-        globs = _marker_scope_globs(data)
-        if not globs:
+        raw_globs = _marker_scope_globs(data)
+        if not raw_globs:
             return Result(False, "design-approval marker has no scope_glob (fail-closed)")
-        # G3: for Bash authorization EVERY glob must be tight - a single overbroad
-        # entry anywhere in the list cannot ride in on the back of tight siblings.
-        broad = [g for g in globs if _is_overbroad_scope(g)]
-        if broad:
+        # G3 + codex-rev-001: for Bash authorization EVERY glob must be tight AND the
+        # list must satisfy the mint-time bounds (cap, dedup, no blanks) - enforced on
+        # READ via the SAME validator as mint, so a forged over-limit / overbroad list
+        # cannot ride in by skipping mint. A single overbroad entry taints the whole
+        # marker.
+        try:
+            _normalize_scope_globs(raw_globs)
+        except ValueError as exc:
             return Result(
                 False,
-                f"design-approval marker scope_glob {broad[0]!r} is too broad to "
-                f"authorize Bash (a tight, file-naming scope is required)",
+                f"design-approval marker scope is invalid for Bash authorization "
+                f"(fail-closed): {exc}",
             )
 
         ok, reason = _revalidate_seal(data, repo_root)

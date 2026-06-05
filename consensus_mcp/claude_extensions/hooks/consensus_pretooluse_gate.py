@@ -180,9 +180,13 @@ def _repo_root(event: dict) -> Path:
 
 
 def _segment_is_read_only(segment: str) -> bool:
-    """True iff a single command segment's leading token is on the read-only
-    allowlist. Recognises `git <read-only-subcommand>` and `python[3] -m pytest`.
-    Anything else (incl. redirections, unknown tokens) -> False (default-deny)."""
+    """True iff a single command segment is read-only. After rejecting redirects /
+    command substitution / subshells, a leading benign `VAR=value` assignment prefix
+    is stripped (an exec-affecting assignment name denies the segment), then the
+    remaining LEADING token must be on the read-only allowlist - the `_READ_ONLY_COMMANDS`
+    set (incl. `cd`/`pushd`/`popd`), a read-only `git <subcommand>`, or an explicit
+    consensus-tooling exemption. Anything else (incl. unknown tokens and pytest
+    runners) -> False (default-deny). codex-rev-002: pytest is NOT recognized."""
     seg = segment.strip()
     if not seg:
         return False
