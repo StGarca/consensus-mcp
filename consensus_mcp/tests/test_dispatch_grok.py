@@ -496,11 +496,22 @@ def test_assemble_stream_stops_at_end_event():
 def test_resolve_grok_bin_uses_configurable_search_path(tmp_path, monkeypatch):
     """When the (long-lived server's) PATH is stale and bare-name which() fails,
     resolution falls back to CONSENSUS_MCP_BIN_DIRS so grok is found without a
-    per-machine config edit (consult Finding A / Q4)."""
-    binp = tmp_path / "grok"
-    binp.write_text("#!/bin/sh\necho ok\n")
-    binp.chmod(0o755)
-    monkeypatch.setenv("PATH", "/nonexistent-sentinel-dir")  # which("grok") -> None
+    per-machine config edit (consult Finding A / Q4).
+
+    Portability: `shutil.which` only treats a file as executable on Windows when it
+    carries a PATHEXT extension (an extensionless `grok` is invisible to it there),
+    so the fixture binary is named `grok.exe` on Windows - mirroring a real native
+    grok install - for the search-path fallback to find it.
+    """
+    import sys
+    if sys.platform == "win32":
+        binp = tmp_path / "grok.exe"
+        binp.write_bytes(b"MZ")  # content irrelevant; which() matches on PATHEXT
+    else:
+        binp = tmp_path / "grok"
+        binp.write_text("#!/bin/sh\necho ok\n")
+        binp.chmod(0o755)
+    monkeypatch.setenv("PATH", "nonexistent-sentinel-dir")  # which("grok") -> None
     monkeypatch.setenv("CONSENSUS_MCP_BIN_DIRS", str(tmp_path))
     assert _dispatch_grok._resolve_grok_bin("grok") == str(binp)
 
