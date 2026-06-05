@@ -29,7 +29,7 @@ audit_log:
     actor: orchestrator
     reviewer: codex
     artifact: codex-review.yaml
-    sha256: "e8ea128c87b19c1ba972542e7d5d2ada8accef54275dbe3c7ed69c25862530ad"
+    sha256: "7f0a003db6e40069d07190c1dcb9deb31c3332b8282eff45011345cecb5412c9"
     sealed: true
 
   - utc: "2026-05-08T00:00:03Z"
