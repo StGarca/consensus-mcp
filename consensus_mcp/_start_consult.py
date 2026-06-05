@@ -74,12 +74,20 @@ def _configured_reviewers(rr: Path) -> list[str] | None:
     return indep or None
 
 
-def start_consult(question: str, scope_glob: str, reviewers=None,
+def start_consult(question: str, scope_glob, reviewers=None,
                   repo_root=None, iteration_slug=None) -> dict:
     if not question or not question.strip():
         return {"ok": False, "error_type": "missing_question",
                 "error": "a non-empty consult question is required"}
-    if not scope_glob or not scope_glob.strip():
+    # G3: scope_glob may be a single glob (str) or a list (multi-root consult).
+    # The eventual approval is confined to these as the goal_packet allowed_files.
+    if isinstance(scope_glob, str):
+        globs = [scope_glob] if scope_glob.strip() else []
+    elif isinstance(scope_glob, (list, tuple)):
+        globs = [g for g in scope_glob if isinstance(g, str) and g.strip()]
+    else:
+        globs = []
+    if not globs:
         return {"ok": False, "error_type": "missing_scope",
                 "error": "scope_glob is required (the files the eventual approval will cover)"}
     try:
@@ -111,7 +119,7 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
     slug = iteration_slug or _slugify(question)
     # short content hash keeps the iteration id globally unique (avoids collisions
     # with a prior same-slug consult).
-    h = hashlib.sha256(f"{slug}\x1f{question}\x1f{scope_glob}".encode()).hexdigest()[:8]
+    h = hashlib.sha256(f"{slug}\x1f{question}\x1f{chr(31).join(globs)}".encode()).hexdigest()[:8]
     iter_id = f"iteration-{slug}-{h}"
     iter_dir = rr / "consensus-state" / "active" / iter_id
     if iter_dir.exists():
@@ -131,7 +139,7 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
             ),
             "non_goals": ["implement before approval", "audit unrelated code"],
         },
-        "allowed_files": [scope_glob],
+        "allowed_files": list(globs),
         "allowed_sections": [],
         "forbidden_files": ["consensus-state/"],
         "max_iterations": 1,
@@ -157,7 +165,7 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
         "schema_version": 1,
         "iteration_id": iter_id,
         "question": question.strip(),
-        "scope_glob": scope_glob,
+        **({"scope_glob": globs[0]} if len(globs) == 1 else {"scope_globs": globs}),
         "instructions": (
             "Answer the question with a structured proposal. State the prior you "
             "reasoned from. Do not propose edits before approval."),
@@ -167,7 +175,7 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
 
     # ARM the gate: edits stay blocked until consensus-mcp-approve runs.
     try:
-        write_session_marker(rr, iteration_id=iter_id, scope_glob=scope_glob,
+        write_session_marker(rr, iteration_id=iter_id, scope_glob=globs,
                              activated_by="consensus-mcp-start-consult",
                              activation_source="console_script")
     except Exception as exc:
@@ -195,7 +203,8 @@ def start_consult(question: str, scope_glob: str, reviewers=None,
                 f"consensus.get_iteration_outcome), then author "
                 f"consensus-state/active/{iter_id}/converged-plan.yaml (weighted-synthesis)."),
             "3_approve_to_unblock_edits": (
-                f"consensus-mcp-approve --iteration {iter_id} --scope-glob {scope_glob!r}"),
+                f"consensus-mcp-approve --iteration {iter_id} "
+                + " ".join(f"--scope-glob {g!r}" for g in globs)),
             "4_disarm_when_done": (
                 "consensus-mcp-seal-iteration close --iteration-dir "
                 f"consensus-state/active/{iter_id}   # after edits + delivery "
@@ -213,8 +222,10 @@ def main(argv: list[str] | None = None) -> int:
                      "valid goal_packet, arm the gate, and print the exact next "
                      "commands. The one-call cold-start entrypoint."))
     p.add_argument("--question", required=True, help="the design question / what to review")
-    p.add_argument("--scope-glob", required=True,
-                   help="files the eventual approval will cover (e.g. 'consensus_mcp/_x.py')")
+    p.add_argument("--scope-glob", required=True, action="append", dest="scope_glob",
+                   help="files the eventual approval will cover (e.g. 'consensus_mcp/_x.py'). "
+                        "Repeat for a multi-root consult (G3): --scope-glob 'consensus_mcp/**' "
+                        "--scope-glob 'docs/**'. A single flag is the legacy behavior.")
     p.add_argument("--reviewers", default=None,
                    help="comma-separated reviewer families (default: the project's "
                         "configured panel from .consensus/config.yaml, else the "

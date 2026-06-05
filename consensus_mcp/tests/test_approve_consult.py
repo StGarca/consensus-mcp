@@ -400,3 +400,65 @@ def test_approve_accepts_full_path_converged_plan_footgun(tmp_path):
     res = ac.approve_consult("iter-test", scope_glob="src/**",
                              converged_plan=full, repo_root=tmp_path)
     assert res["ok"] is True, res
+
+
+# --------------------------------------------------------------------------- #
+# G3: multi-glob approvals (a single approval covering a multi-root change).
+# --------------------------------------------------------------------------- #
+
+def test_approve_multi_glob_within_allowed_mints(tmp_path):
+    _make_consult(tmp_path, allowed_files=("consensus_mcp/**", "docs/**", "pyproject.toml"))
+    res = ac.approve_consult(
+        "iter-test",
+        scope_glob=["consensus_mcp/_x.py", "docs/guide.md", "pyproject.toml"],
+        repo_root=tmp_path)
+    assert res["ok"] is True, res
+    assert res["scope_glob"] is None          # scalar omitted for multi
+    assert res["scope_globs"] == ["consensus_mcp/_x.py", "docs/guide.md", "pyproject.toml"]
+    data = yaml.safe_load(
+        (tmp_path / ".consensus" / "design-approved").read_text())
+    assert data["schema_version"] == 2
+    assert data["scope_globs"] == ["consensus_mcp/_x.py", "docs/guide.md", "pyproject.toml"]
+
+
+def test_approve_single_element_list_keeps_scalar_output(tmp_path):
+    _make_consult(tmp_path, allowed_files=("src/**",))
+    res = ac.approve_consult("iter-test", scope_glob=["src/foo.py"], repo_root=tmp_path)
+    assert res["ok"] is True, res
+    assert res["scope_glob"] == "src/foo.py"   # scalar preserved for single
+    assert res["scope_globs"] == ["src/foo.py"]
+    data = yaml.safe_load((tmp_path / ".consensus" / "design-approved").read_text())
+    assert data["schema_version"] == 1 and data["scope_glob"] == "src/foo.py"
+
+
+def test_approve_multi_glob_one_entry_escalates_rejected(tmp_path):
+    # docs/** is NOT in allowed_files -> the WHOLE multi-glob approval is rejected.
+    _make_consult(tmp_path, allowed_files=("src/**",))
+    res = ac.approve_consult(
+        "iter-test", scope_glob=["src/a.py", "docs/b.md"], repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "scope_escalation"
+
+
+def test_approve_multi_glob_overbroad_entry_rejected(tmp_path):
+    _make_consult(tmp_path, allowed_files=("**",))
+    res = ac.approve_consult(
+        "iter-test", scope_glob=["src/a.py", "**"], repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "invalid_scope"
+
+
+def test_approve_multi_glob_too_many_rejected(tmp_path):
+    _make_consult(tmp_path, allowed_files=("**",))
+    many = [f"root{i}/x.py" for i in range(9)]
+    res = ac.approve_consult("iter-test", scope_glob=many, repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "invalid_scope"
+
+
+def test_approve_multi_glob_dotdot_entry_rejected(tmp_path):
+    _make_consult(tmp_path, allowed_files=("**",))
+    res = ac.approve_consult(
+        "iter-test", scope_glob=["src/a.py", "../etc/passwd"], repo_root=tmp_path)
+    assert res["ok"] is False
+    assert res["error_type"] == "invalid_scope"

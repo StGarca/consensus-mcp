@@ -331,12 +331,17 @@ def _ensure_sealed_outcome(iter_dir: Path, closing_state: str) -> bool:
 
 def approve_consult(
     iteration: str,
-    scope_glob: str,
+    scope_glob,
     converged_plan: str = _PLAN_FILENAME,
     repo_root: str | os.PathLike | None = None,
     closing_state: str = _DEFAULT_CLOSING_STATE,
 ) -> dict:
     """Validate + seal + mint a design-approval marker for a converged consult.
+
+    `scope_glob` accepts a single glob (str) or a LIST of globs (G3 multi-root).
+    Each glob is confined to the goal_packet's allowed_files INDEPENDENTLY, so a
+    multi-glob approval authorizes exactly the union that separate single-glob
+    mints could - never more.
 
     Returns {'ok': True, ...} on success or {'ok': False, 'error_type', 'error'}
     with an actionable message. Does NOT author the converged plan."""
@@ -396,12 +401,21 @@ def approve_consult(
     # Reject traversal in the scope itself (kimi-rev-005): a '..' segment in the
     # approved scope is meaningless for in-repo confinement and could let a glob
     # "escape" the project under a naive matcher. Forbid it outright.
-    if ".." in _glob_segments(scope_glob):
-        return _err(
-            "invalid_scope",
-            f"--scope-glob {scope_glob!r} contains a '..' segment; approval scopes "
-            f"must be in-repo paths with no parent-directory traversal.",
-        )
+    # G3: accept a single glob (str) or a list. Normalize to a list and validate
+    # EACH glob independently below; an empty/blank set is rejected.
+    globs = (
+        [scope_glob] if isinstance(scope_glob, str)
+        else [g for g in scope_glob if isinstance(g, str) and g.strip()]
+    )
+    if not globs:
+        return _err("invalid_scope", "at least one --scope-glob is required.")
+    for g in globs:
+        if ".." in _glob_segments(g):
+            return _err(
+                "invalid_scope",
+                f"--scope-glob {g!r} contains a '..' segment; approval scopes "
+                f"must be in-repo paths with no parent-directory traversal.",
+            )
 
     gp_path = iter_dir / _GOAL_PACKET_FILENAME
     if not gp_path.is_file():
@@ -431,15 +445,16 @@ def approve_consult(
             f"nothing for --scope-glob to be confined to. Add the authorized files "
             f"to the goal_packet before approving.",
         )
-    if not _scope_within_allowed(scope_glob, allowed_files):
-        return _err(
-            "scope_escalation",
-            f"--scope-glob {scope_glob!r} is NOT within the goal_packet's "
-            f"allowed_files {allowed_files}. An approval may only NARROW the scope "
-            f"the consult authorized, never expand it. Re-run with a scope_glob "
-            f"that is a subset of the allowed_files, or start a new consult scoped "
-            f"to the broader set.",
-        )
+    for g in globs:
+        if not _scope_within_allowed(g, allowed_files):
+            return _err(
+                "scope_escalation",
+                f"--scope-glob {g!r} is NOT within the goal_packet's "
+                f"allowed_files {allowed_files}. An approval may only NARROW the scope "
+                f"the consult authorized, never expand it. Re-run with scope globs "
+                f"that are each a subset of the allowed_files, or start a new consult "
+                f"scoped to the broader set.",
+            )
 
     # forbidden_files veto (kimi-rev-001): allowed_files passing is necessary but
     # not sufficient - the goal_packet can ALSO declare forbidden_files the
@@ -451,15 +466,16 @@ def approve_consult(
         f for f in (gp.get("forbidden_files") or [])
         if isinstance(f, str) and f.strip()
     ]
-    for forb in forbidden_files:
-        if _forbidden_vetoes(scope_glob, forb):
-            return _err(
-                "forbidden_scope",
-                f"--scope-glob {scope_glob!r} overlaps the goal_packet's "
-                f"forbidden_files entry {forb!r}; an approval may not authorize "
-                f"edits to a path the consult explicitly forbade. Narrow the scope "
-                f"to exclude {forb!r}.",
-            )
+    for g in globs:
+        for forb in forbidden_files:
+            if _forbidden_vetoes(g, forb):
+                return _err(
+                    "forbidden_scope",
+                    f"--scope-glob {g!r} overlaps the goal_packet's "
+                    f"forbidden_files entry {forb!r}; an approval may not authorize "
+                    f"edits to a path the consult explicitly forbade. Narrow the scope "
+                    f"to exclude {forb!r}.",
+                )
 
     # grok-rev-003: approve is TRANSACTIONAL. The outcome is written before mint
     # (mint/revalidate read its sealed closing_state), so any failure AFTER this
@@ -484,15 +500,18 @@ def approve_consult(
             except OSError:
                 pass
 
+    # Display form: a scalar for the common single-glob case (byte-similar output
+    # + next_steps), the list for multi-glob.
+    scope_display = globs[0] if len(globs) == 1 else globs
     sha = compute_artifact_hash(plan)
     try:
         marker = mint_design_approval(
             rr,
             design_consensus_ref=iter_dir.name,
-            scope_glob=scope_glob,
+            scope_glob=globs,   # mint validates cap / dedup / overbroad per glob
             converged_plan_sha256=sha,
         )
-    except ValueError as exc:  # overbroad / empty scope_glob
+    except ValueError as exc:  # overbroad / empty / too-many / duplicate scope_glob(s)
         _rollback(marker=False)   # mint failed -> only the outcome may exist
         return _err("invalid_scope", str(exc))
 
@@ -511,7 +530,7 @@ def approve_consult(
         write_session_marker(
             rr,
             iteration_id=iter_dir.name,
-            scope_glob=scope_glob,
+            scope_glob=globs,
             activated_by="consensus-mcp-approve",
             activation_source="console_script",
         )
@@ -535,7 +554,10 @@ def approve_consult(
         "iteration": iter_dir.name,
         "non_claude_reviewers": n,
         "converged_plan_sha256": sha,
-        "scope_glob": scope_glob,
+        # Backward-compat output: scalar scope_glob for the single-glob case (None
+        # when multi), plus the always-present scope_globs list (G3).
+        "scope_glob": globs[0] if len(globs) == 1 else None,
+        "scope_globs": globs,
         "marker_path": str(_marker_path(rr)),
         "revalidated": reason,
         "gate_armed": True,
@@ -545,7 +567,7 @@ def approve_consult(
         # delivery token per edited file first; then close.)
         "next_steps": {
             "1_edit_within_scope": (
-                f"Edits to files matching {scope_glob!r} are now allowed; "
+                f"Edits to files matching {scope_display!r} are now allowed; "
                 f"out-of-scope edits stay blocked."),
             "2_deliver_each_edited_file": (
                 "consensus-mcp-deliver --file <path> --design-consensus-ref "
@@ -569,8 +591,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--iteration", required=True,
                         help="iteration name (-> consensus-state/active/<name>) or path")
-    parser.add_argument("--scope-glob", required=True,
-                        help="files the approval authorizes edits to (e.g. 'src/**')")
+    parser.add_argument("--scope-glob", required=True, action="append",
+                        dest="scope_glob",
+                        help="files the approval authorizes edits to (e.g. 'src/**'). "
+                             "Repeat the flag to cover a multi-root change in ONE "
+                             "approval (G3): --scope-glob 'consensus_mcp/**' "
+                             "--scope-glob 'docs/**'. A single flag is byte-identical "
+                             "to the legacy single-glob approval.")
     parser.add_argument("--converged-plan", default=_PLAN_FILENAME,
                         help="converged plan file (bare name or path; canonical name required)")
     parser.add_argument("--repo-root", default=None,

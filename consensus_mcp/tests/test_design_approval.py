@@ -364,3 +364,124 @@ def test_marker_is_sealed_false_for_broad_scope(tmp_path):
     )
     res = da.marker_is_sealed(tmp_path)
     assert res.ok is False, "marker_is_sealed requires a TIGHT scope_glob"
+
+
+# --------------------------------------------------------------------------- #
+# G3 (consult iteration-resolve-gate-ux-frictions-g2-and-g3): multi-glob markers.
+# A marker may carry a LIST of tight globs (`scope_globs`); a target is approved
+# if it matches ANY; Bash auth requires EVERY glob tight; single-glob stays v1
+# byte-identical; list is capped/deduped/overbroad-rejected.
+# --------------------------------------------------------------------------- #
+
+def test_mint_single_element_list_is_v1_byte_identical(tmp_path):
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    da.mint_design_approval(
+        repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+        scope_glob=["src/**"], converged_plan_sha256=plan_sha)
+    data = yaml.safe_load(
+        (tmp_path / ".consensus" / "design-approved").read_text(encoding="utf-8"))
+    assert data["schema_version"] == 1
+    assert data["scope_glob"] == "src/**"
+    assert "scope_globs" not in data  # a single glob writes the legacy v1 shape
+
+
+def test_mint_multi_glob_writes_v2_scope_globs(tmp_path):
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    da.mint_design_approval(
+        repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+        scope_glob=["consensus_mcp/**", "docs/**", "pyproject.toml"],
+        converged_plan_sha256=plan_sha)
+    data = yaml.safe_load(
+        (tmp_path / ".consensus" / "design-approved").read_text(encoding="utf-8"))
+    assert data["schema_version"] == da.SCHEMA_VERSION_MULTI
+    assert data["scope_globs"] == ["consensus_mcp/**", "docs/**", "pyproject.toml"]
+    assert "scope_glob" not in data
+
+
+def test_verify_multi_glob_matches_any_root(tmp_path):
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    da.mint_design_approval(
+        repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+        scope_glob=["consensus_mcp/**", "docs/**", "pyproject.toml"],
+        converged_plan_sha256=plan_sha)
+    assert da.verify_design_approval(tmp_path / "consensus_mcp/_x.py", repo_root=tmp_path).ok
+    assert da.verify_design_approval(tmp_path / "docs/guide.md", repo_root=tmp_path).ok
+    assert da.verify_design_approval(tmp_path / "pyproject.toml", repo_root=tmp_path).ok
+    # A path under no glob is OUT OF SCOPE.
+    out = da.verify_design_approval(tmp_path / "README.md", repo_root=tmp_path)
+    assert out.ok is False and "OUT OF SCOPE" in out.reason
+
+
+def test_marker_is_sealed_true_for_multi_all_tight(tmp_path):
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    da.mint_design_approval(
+        repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+        scope_glob=["consensus_mcp/**", "docs/**"],
+        converged_plan_sha256=plan_sha)
+    assert da.marker_is_sealed(tmp_path).ok is True
+
+
+def test_marker_is_sealed_false_if_any_glob_overbroad(tmp_path):
+    # Forge a v2 marker (mint would reject the overbroad entry) with one '**' among
+    # otherwise-tight globs -> Bash auth must refuse the WHOLE marker.
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    _write_marker(
+        tmp_path,
+        schema_version=2,
+        design_consensus_ref="iteration-fix-impl",
+        converged_plan_sha256=plan_sha,
+        scope_globs=["consensus_mcp/**", "**"],
+        repo_root_id="x",
+    )
+    res = da.marker_is_sealed(tmp_path)
+    assert res.ok is False, "one overbroad glob taints the whole list for Bash auth"
+
+
+def test_mint_rejects_overbroad_entry_in_list(tmp_path):
+    import pytest
+    with pytest.raises(ValueError):
+        da.mint_design_approval(
+            repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+            scope_glob=["consensus_mcp/**", "**"], converged_plan_sha256="x")
+
+
+def test_mint_rejects_too_many_globs(tmp_path):
+    import pytest
+    many = [f"root{i}/**" for i in range(da._MAX_SCOPE_GLOBS + 1)]
+    with pytest.raises(ValueError):
+        da.mint_design_approval(
+            repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+            scope_glob=many, converged_plan_sha256="x")
+
+
+def test_mint_rejects_duplicate_globs(tmp_path):
+    import pytest
+    with pytest.raises(ValueError):
+        da.mint_design_approval(
+            repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+            scope_glob=["a/**", "a/**"], converged_plan_sha256="x")
+
+
+def test_mint_rejects_empty_list(tmp_path):
+    import pytest
+    with pytest.raises(ValueError):
+        da.mint_design_approval(
+            repo_root=tmp_path, design_consensus_ref="iteration-fix-impl",
+            scope_glob=[], converged_plan_sha256="x")
+
+
+def test_legacy_v1_marker_verifies_and_seals_unchanged(tmp_path):
+    # A genuine pre-G3 v1 marker (only scope_glob, no scope_globs) still verifies
+    # and seals exactly as before (A4 backward-compat).
+    plan_sha = _make_sealed_iteration(tmp_path, "iteration-fix-impl")
+    _write_marker(
+        tmp_path,
+        schema_version=1,
+        design_consensus_ref="iteration-fix-impl",
+        converged_plan_sha256=plan_sha,
+        scope_glob="consensus_mcp/**",
+        repo_root_id="x",
+    )
+    assert da.verify_design_approval(tmp_path / "consensus_mcp/_x.py", repo_root=tmp_path).ok
+    assert da.verify_design_approval(tmp_path / "docs/x.md", repo_root=tmp_path).ok is False
+    assert da.marker_is_sealed(tmp_path).ok is True

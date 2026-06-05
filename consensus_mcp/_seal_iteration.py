@@ -438,8 +438,11 @@ def _close(
             "error_type": "design_marker_unparseable",
             "error": str(exc),
         }
-    scope_glob = marker_data.get("scope_glob")
-    if not isinstance(scope_glob, str) or not scope_glob.strip():
+    # G3: a marker may carry a single scope_glob OR a list of scope_globs; a file
+    # is in-scope if it matches ANY of them (the union the approval authorized).
+    from consensus_mcp._design_approval import _marker_scope_globs
+    scope_globs = _marker_scope_globs(marker_data)
+    if not scope_globs:
         return {
             "ok": False,
             "error_type": "design_marker_missing_scope",
@@ -464,7 +467,7 @@ def _close(
             continue
         if rel_str.startswith(".delivery-readiness/"):
             continue
-        if fnmatch.fnmatch(rel_str, scope_glob):
+        if any(fnmatch.fnmatch(rel_str, g) for g in scope_globs):
             in_scope.append(p)
 
     # grok-rev-001: a delivery token proves a CHANGED file was vetted. Requiring
@@ -524,7 +527,8 @@ def _close(
         "session_marker_cleared": cleared_session,
         "design_marker_cleared": cleared_design,
         "in_scope_files_verified": len(in_scope),
-        "scope_glob": scope_glob,
+        "scope_glob": scope_globs[0] if len(scope_globs) == 1 else None,
+        "scope_globs": scope_globs,
     }
 
 

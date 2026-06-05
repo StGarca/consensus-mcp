@@ -61,6 +61,16 @@ SCHEMA_VERSION = 1
 # kimi): a sealed plan must name the files it covers, not "everything".
 _OVERBROAD_SCOPE_GLOBS = frozenset({"*", "**", "**/*", "*/*"})
 
+# G3 (consult iteration-resolve-gate-ux-frictions-g2-and-g3): a marker may carry a
+# LIST of tight globs (`scope_globs`) so one approval can cover a legitimate small
+# multi-root change. Hard upper bound so a list of narrow globs cannot reconstitute
+# an effective `**` for a real tree (cap chosen by the panel: covers code+docs+toml
+# +tests with headroom). Raising it later needs no schema migration.
+_MAX_SCOPE_GLOBS = 8
+# Marker schema version written when a multi-glob list is used. A single-glob mint
+# stays v1 (scope_glob: str) byte-identical, so legacy markers/tests are unchanged.
+SCHEMA_VERSION_MULTI = 2
+
 # Minimum DISTINCT non-claude reviewer families a sealed iteration must carry for
 # the marker to authorize implementation (mirrors mint_delivery_token's
 # >=2-non-claude rule).
@@ -84,10 +94,63 @@ def _is_overbroad_scope(scope_glob: str) -> bool:
     return scope_glob.strip() in _OVERBROAD_SCOPE_GLOBS
 
 
+def _marker_scope_globs(data: dict) -> list[str]:
+    """The effective list of scope globs a marker authorizes, normalizing the two
+    on-disk forms: a v2 marker's `scope_globs` (list) OR a v1 marker's single
+    `scope_glob` (str) -> one-item list. Returns [] when neither is present/valid
+    (callers treat that as fail-closed). Non-string / blank entries are dropped."""
+    globs = data.get("scope_globs")
+    if isinstance(globs, list):
+        return [g for g in globs if isinstance(g, str) and g.strip()]
+    g = data.get("scope_glob")
+    if isinstance(g, str) and g.strip():
+        return [g]
+    return []
+
+
+def _normalize_scope_globs(scope_glob) -> list[str]:
+    """Coerce a str | list[str] scope argument to a validated list of globs.
+
+    Raises ValueError (fail-closed at mint time) if: empty; any entry is not a
+    non-blank string; any entry is overbroad ('*'/'**'/...); there are duplicates
+    after stripping; or the count exceeds _MAX_SCOPE_GLOBS. Each guarantee is the
+    G3 anti-bypass rule - a multi-glob marker can authorize only the union of what
+    separate tight single-glob mints could, and a narrow-glob list cannot
+    reconstitute an effective '**'."""
+    if isinstance(scope_glob, str):
+        raw = [scope_glob]
+    elif isinstance(scope_glob, (list, tuple)):
+        raw = list(scope_glob)
+    else:
+        raise ValueError(f"scope_glob must be a string or list of strings, got {type(scope_glob).__name__}")
+    globs = []
+    for g in raw:
+        if not isinstance(g, str) or not g.strip():
+            raise ValueError("every scope_glob must be a non-empty string")
+        globs.append(g.strip())
+    if not globs:
+        raise ValueError("scope_glob must name at least one path glob")
+    if len(globs) > _MAX_SCOPE_GLOBS:
+        raise ValueError(
+            f"too many scope globs ({len(globs)} > {_MAX_SCOPE_GLOBS}); a single "
+            f"approval may not span more roots than that - split the change or use "
+            f"a phased mint"
+        )
+    if len(set(globs)) != len(globs):
+        raise ValueError(f"scope_globs contains duplicate entries: {globs!r}")
+    for g in globs:
+        if _is_overbroad_scope(g):
+            raise ValueError(
+                f"scope_glob {g!r} is too broad to confine a sealed plan - name the "
+                f"files the converged plan covers (e.g. 'consensus_mcp/_x.py')"
+            )
+    return globs
+
+
 def mint_design_approval(
     repo_root: Path,
     design_consensus_ref: str,
-    scope_glob: str,
+    scope_glob,
     converged_plan_sha256: str,
     repo_root_id: str | None = None,
 ) -> dict:
@@ -97,26 +160,28 @@ def mint_design_approval(
     NO trust by itself - it merely points at `design_consensus_ref`, which
     `verify_design_approval` re-validates against the live seal on every check.
 
-    Rejects an overly-broad `scope_glob` ('*'/'**'/...) at mint time (decision B3):
-    a sealed plan must confine itself to the files it actually covers.
+    `scope_glob` accepts a single glob (str) OR a list of globs (G3). Each must be
+    tight (rejects '*'/'**'/...); a list is additionally capped, deduped, and
+    bounded (`_normalize_scope_globs`) - decision B3 + the G3 anti-bypass rule.
 
-    Returns the marker dict that was written.
+    A SINGLE glob writes the v1 marker (`scope_glob: str`) byte-identically to the
+    pre-G3 format, so legacy markers/readers are unchanged; a multi-glob list
+    writes a v2 marker (`scope_globs: [...]`). Returns the marker dict written.
     """
-    if not isinstance(scope_glob, str) or not scope_glob.strip():
-        raise ValueError("scope_glob must be a non-empty string")
-    if _is_overbroad_scope(scope_glob):
-        raise ValueError(
-            f"scope_glob {scope_glob!r} is too broad to confine a sealed plan - "
-            f"name the files the converged plan covers (e.g. 'consensus_mcp/_x.py')"
-        )
+    globs = _normalize_scope_globs(scope_glob)
     repo_root = Path(repo_root)
     marker = {
         "schema_version": SCHEMA_VERSION,
         "design_consensus_ref": design_consensus_ref,
         "converged_plan_sha256": converged_plan_sha256,
-        "scope_glob": scope_glob,
         "repo_root_id": repo_root_id if repo_root_id is not None else repo_root.name,
     }
+    if len(globs) == 1:
+        # v1 byte-identical single-glob marker (A4 backward-compat).
+        marker["scope_glob"] = globs[0]
+    else:
+        marker["schema_version"] = SCHEMA_VERSION_MULTI
+        marker["scope_globs"] = globs
     path = _marker_path(repo_root)
     # kimi-rev-001 / gemini-rev-001: the design-approved marker is the TRUST
     # POINTER - write it through the SINGLE blessed symlink-safe atomic writer
@@ -266,22 +331,34 @@ def verify_design_approval(target_path: Path, repo_root: Path) -> Result:
         if not ok:
             return Result(False, reason)
 
-        scope_glob = data.get("scope_glob")
-        if not isinstance(scope_glob, str) or not scope_glob:
+        globs = _marker_scope_globs(data)
+        if not globs:
             return Result(False, "design-approval marker has no scope_glob (fail-closed)")
 
         rel, reject = _confine_to_repo(target_path, repo_root)
         if rel is None:
             return Result(False, reject)
 
-        if not fnmatch.fnmatch(rel, scope_glob):
+        # G3: a multi-glob marker approves the target if it matches ANY tight glob
+        # (the union the consult authorized). A single-glob marker is the one-item
+        # case, so the message stays byte-similar for the common path.
+        match = next((g for g in globs if fnmatch.fnmatch(rel, g)), None)
+        if match is None:
+            scope_repr = (
+                f"scope_glob={globs[0]!r}" if len(globs) == 1
+                else f"scope_globs={globs!r}"
+            )
             return Result(
                 False,
-                f"{rel} is OUT OF SCOPE for the sealed plan (scope_glob={scope_glob!r})",
+                f"{rel} is OUT OF SCOPE for the sealed plan ({scope_repr})",
             )
+        scope_repr = (
+            f"scope_glob={match!r}" if len(globs) == 1
+            else f"one of scope_globs={globs!r}"
+        )
         return Result(
             True,
-            f"consensus-sealed: {rel} matches scope_glob={scope_glob!r}; {reason}",
+            f"consensus-sealed: {rel} matches {scope_repr}; {reason}",
         )
     except Exception as exc:  # fail-closed
         return Result(False, f"design-approval verify error (fail-closed): {exc}")
@@ -302,13 +379,16 @@ def marker_is_sealed(repo_root: Path) -> Result:
         if deny is not None:
             return deny
 
-        scope_glob = data.get("scope_glob")
-        if not isinstance(scope_glob, str) or not scope_glob:
+        globs = _marker_scope_globs(data)
+        if not globs:
             return Result(False, "design-approval marker has no scope_glob (fail-closed)")
-        if _is_overbroad_scope(scope_glob):
+        # G3: for Bash authorization EVERY glob must be tight - a single overbroad
+        # entry anywhere in the list cannot ride in on the back of tight siblings.
+        broad = [g for g in globs if _is_overbroad_scope(g)]
+        if broad:
             return Result(
                 False,
-                f"design-approval marker scope_glob {scope_glob!r} is too broad to "
+                f"design-approval marker scope_glob {broad[0]!r} is too broad to "
                 f"authorize Bash (a tight, file-naming scope is required)",
             )
 

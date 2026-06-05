@@ -52,6 +52,25 @@ def test_write_session_marker_creates_yaml_with_required_fields(tmp_path):
     assert "activated_at_utc" in data
 
 
+def test_write_session_marker_accepts_glob_list(tmp_path):
+    # G3: a list scope_glob writes scope_globs (and no scalar scope_glob); a
+    # single-element list stays byte-compatible (scalar scope_glob).
+    repo = _repo(tmp_path)
+    path = ss.write_session_marker(
+        repo, iteration_id="iter-test",
+        scope_glob=["consensus_mcp/**", "docs/**"],
+        activated_by="test-fixture", activation_source="test_fixture")
+    data = yaml.safe_load(path.read_text())
+    assert data["scope_globs"] == ["consensus_mcp/**", "docs/**"]
+    assert "scope_glob" not in data
+    # single-element list -> scalar (byte-compatible with the legacy shape)
+    path2 = ss.write_session_marker(
+        repo, iteration_id="iter-test", scope_glob=["src/**"],
+        activated_by="t", activation_source="test_fixture")
+    data2 = yaml.safe_load(path2.read_text())
+    assert data2["scope_glob"] == "src/**" and "scope_globs" not in data2
+
+
 def test_write_session_marker_leaves_no_predictable_tmp(tmp_path):
     """kimi-rev-003: the atomic write must not leave a predictable
     `session-active.tmp` behind, and the marker round-trips. mkstemp temp files
