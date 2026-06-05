@@ -2,7 +2,7 @@
 
 Consensus-mcp is host-agnostic: any AI (Codex, Gemini, Grok, ...) can act as the
 *host* that drives a consult, not just Claude. A Codex-hosted run in a consuming
-project (2026-06-04) proved this end-to-end — but it also exposed two friction
+project (2026-06-04) proved this end-to-end - but it also exposed two friction
 points this page exists to remove. See the converged design at
 `docs/consensus/field-notes-and-recommendations.md`.
 
@@ -21,7 +21,7 @@ consensus-mcp-run-iteration \
 ```
 
 It is a thin wrapper around `consensus_mcp.tools.consensus_run_iteration.handle()`
-— the single execution implementation. **Do not hand-roll your own shim that calls
+- the single execution implementation. **Do not hand-roll your own shim that calls
 `handle()` directly** (the field host did, before this script existed); the
 supported surface keeps you on the same dispatch / sealing / provenance path
 everyone else uses.
@@ -47,13 +47,13 @@ escalated execution** (or otherwise ensure the reviewer CLIs can write their own
 HOME/config/session paths).
 
 This is the *only* host-environment requirement. It is a local execution
-constraint, not a packaging one: there is no PyPI/npm/registry/CI step involved —
+constraint, not a packaging one: there is no PyPI/npm/registry/CI step involved -
 consensus-mcp ships via git tags + pipx.
 
 ## What "host" means
 
 The host authors the `goal_packet` + proposal, launches the panel, and (for
 propose-converge with real design surface) synthesizes the converged plan. The
-contributors — codex/gemini/grok/kimi — are dispatched as independent,
+contributors - codex/gemini/grok/kimi - are dispatched as independent,
 blind-first reviewers regardless of which AI is hosting. A non-Claude host is a
 first-class host; nothing about the workflow assumes Claude specifically.
