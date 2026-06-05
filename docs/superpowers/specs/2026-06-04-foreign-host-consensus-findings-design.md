@@ -1,4 +1,4 @@
-# Foreign-Host Consensus Findings — Design
+# Foreign-Host Consensus Findings - Design
 
 Date: 2026-06-04
 Branch: `fix/dispatch-log-payload-cap`
@@ -15,7 +15,7 @@ consensus-mcp defect with an unambiguous fix (already shipped, below). Two are
 workflow/onboarding gaps that this design takes to a consensus consult for
 approval.
 
-## Already shipped (Phase A — pure bug fix, no consult)
+## Already shipped (Phase A - pure bug fix, no consult)
 
 **Dispatch-log payload bloat.** A kimi workdir copytree failure raised a
 `shutil.Error` whose `str()` embedded the entire copied-file manifest (~188 MB).
@@ -35,7 +35,7 @@ The root log cap already neutralizes the real harm regardless of copy outcome.
 
 ## Proposed for the consult
 
-### Component 1 — Embed the review target in the convergence packet
+### Component 1 - Embed the review target in the convergence packet
 
 **Problem.** In propose-converge, `_build_convergence_packet`
 (`workflow_engine.py:442`) bundles the per-contributor proposal YAMLs into
@@ -55,10 +55,10 @@ truncation-marker discipline as the log cap (large targets get an explicit
   existing `touched_files_contents` map.
 - Does embedding the target change any independence/provenance property? (The
   target is already visible to reviewers in the propose round, so likely
-  neutral — panel to confirm.)
+  neutral - panel to confirm.)
 - Truncation threshold for large targets.
 
-### Component 2 — Official `consensus-mcp-run-iteration` CLI + foreign-host doc
+### Component 2 - Official `consensus-mcp-run-iteration` CLI + foreign-host doc
 
 **Problem.** Entry points exist (`consensus-mcp-start-consult` CLI, the
 `consensus_run_iteration` MCP tool) but **no console script runs a full
