@@ -102,6 +102,7 @@ _CONSENSUS_TOOLING = frozenset({
     "consensus-mcp-dispatch-grok", "consensus-mcp-dispatch-kimi",
     "consensus-mcp-seal-iteration", "consensus-mcp-approve",
     "consensus-mcp-deliver", "consensus-mcp-start-consult",
+    "consensus-mcp-run-iteration",
 })
 
 

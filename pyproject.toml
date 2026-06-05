@@ -34,6 +34,9 @@ consensus-mcp-start-consult = "consensus_mcp._start_consult:main"
 consensus-init = "consensus_mcp._init_wizard:main"
 # v1.19.0: read-only project scorecard rollup over results-v1.jsonl.
 consensus-results = "consensus_mcp._results_rollup:main"
+# run a full iteration end-to-end (consult iteration-approve-two-...-f641f060,
+# Component 2): supported surface for non-Claude hosts (replaces hand-rolled shims).
+consensus-mcp-run-iteration = "consensus_mcp._run_iteration_cli:main"
 # iter-0040 bonus per iter-0039 converged plan Q6: alias so `consensus init`
 # (with a SPACE) also works at the shell, matching the natural mental model.
 consensus = "consensus_mcp._init_wizard:main"

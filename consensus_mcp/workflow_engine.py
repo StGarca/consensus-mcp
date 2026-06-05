@@ -343,7 +343,8 @@ class WorkflowEngine:
         last_convergence_artifacts: list[SealedArtifact] = []
         for round_n in range(1, max_rounds + 1):
             convergence_packet_path = self._build_convergence_packet(
-                iteration_dir, proposal_paths, round_n
+                iteration_dir, proposal_paths, round_n,
+                target_path=problem_statement_path,
             )
             # Within a round, contributors converge INDEPENDENTLY against the
             # same packet -> dispatch in parallel. Rounds themselves stay
@@ -445,6 +446,7 @@ class WorkflowEngine:
         proposal_paths: list[str],
         round_number: int,
         contributor_weights: dict[str, float] | None = None,
+        target_path: Path | None = None,
     ) -> Path:
         """Bundle blind proposals into a convergence review-packet.
 
@@ -452,9 +454,30 @@ class WorkflowEngine:
         reading-ORDER only - a stable permutation that never drops a proposal and is
         NEVER seen by _evaluate_convergence (pass/fail). Convergence is therefore
         byte-identical regardless of weights (weights-off equivalence). Default None
-        = identity order (no behavior change)."""
+        = identity order (no behavior change).
+
+        target_path (optional): the actual DOCUMENT UNDER REVIEW. When supplied it is
+        embedded FIRST in touched_files_contents (consult iteration-approve-two-...-
+        f641f060, Component 1) so converge-round reviewers can author line-accurate
+        patches - the field gap that returned patch_proposal:null. Size-guarded with
+        the shared cap helper; an unreadable/missing target degrades to proposals-only
+        (never crashes packet build). Default None preserves prior behavior exactly."""
         from consensus_mcp import _contributor_weights as _cw
+        from consensus_mcp._dispatch_base import cap_text_field
         touched: dict[str, str] = {}
+        # Embed the target document FIRST (insertion order => listed first in
+        # defect_target.files for human scan order).
+        if target_path is not None:
+            tp = Path(target_path)
+            if tp.is_file():
+                try:
+                    rel = str(tp.relative_to(self.repo_root)).replace("\\", "/")
+                except ValueError:
+                    rel = tp.name
+                try:
+                    touched[rel] = cap_text_field(tp.read_text(encoding="utf-8"))
+                except OSError:
+                    pass  # unreadable target: degrade to proposals-only
         for p in _cw.order_proposal_paths(proposal_paths, contributor_weights):
             p_path = Path(p)
             if p_path.exists():
@@ -463,7 +486,7 @@ class WorkflowEngine:
                     rel = str(p_path.relative_to(self.repo_root)).replace("\\", "/")
                 except ValueError:
                     rel = p_path.name
-                touched[rel] = p_path.read_text(encoding="utf-8")
+                touched.setdefault(rel, p_path.read_text(encoding="utf-8"))
         packet = {
             "defect_target": {
                 "files": list(touched.keys()),

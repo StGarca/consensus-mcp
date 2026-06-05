@@ -55,6 +55,34 @@ from pathlib import Path
 # lock here; see CHANGELOG v1.15.7.)
 _DISPATCH_LOG_LOCK = threading.Lock()
 
+# Per-field char cap for dispatch-log values. A failing adapter can hand the
+# writer a multi-megabyte string (e.g. a shutil.Error whose str() embeds the
+# entire copied-file manifest from a kimi workdir copytree failure). Logging it
+# verbatim produced a single 188 MB JSON line and a 702 MB append-only log in
+# the field (2026-06-04 Codex-hosted consult). Cap here, at the one writer every
+# adapter shares, so an oversized field is truncated with a marker that preserves
+# the original length for debugging.
+_MAX_DISPATCH_FIELD_CHARS = 16384
+
+
+def cap_text_field(text: str, max_chars: int = _MAX_DISPATCH_FIELD_CHARS) -> str:
+    """Truncate an oversized text field, appending a marker that preserves the
+    original length. The SINGLE source of the cap discipline, shared by the
+    dispatch-log writer and the convergence-packet builder (consult
+    iteration-approve-two-...-f641f060 Q3 / grok DRY refinement) so the two cannot
+    drift apart."""
+    if len(text) > max_chars:
+        return text[:max_chars] + f"...[truncated {len(text)} chars]"
+    return text
+
+
+def _cap_dispatch_field(value):
+    """Truncate an oversized string value, leaving everything else untouched."""
+    if isinstance(value, str):
+        return cap_text_field(value)
+    return value
+
+
 import yaml
 
 
@@ -1057,7 +1085,8 @@ def _log_dispatch(log_path: Path, event: dict) -> None:
     logged; only their sha256 digests are.
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    event_with_ts = {"timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **event}
+    capped = {k: _cap_dispatch_field(v) for k, v in event.items()}
+    event_with_ts = {"timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **capped}
     line = json.dumps(event_with_ts) + "\n"
     # v1.15.7 (A, corrected): serialize concurrent emitters (main +
     # stdout/stderr reader threads) of THIS process with an in-process
