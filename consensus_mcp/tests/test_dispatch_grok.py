@@ -503,7 +503,6 @@ def test_resolve_grok_bin_uses_configurable_search_path(tmp_path, monkeypatch):
     so the fixture binary is named `grok.exe` on Windows - mirroring a real native
     grok install - for the search-path fallback to find it.
     """
-    import sys
     if sys.platform == "win32":
         binp = tmp_path / "grok.exe"
         binp.write_bytes(b"MZ")  # content irrelevant; which() matches on PATHEXT
@@ -513,7 +512,11 @@ def test_resolve_grok_bin_uses_configurable_search_path(tmp_path, monkeypatch):
         binp.chmod(0o755)
     monkeypatch.setenv("PATH", "nonexistent-sentinel-dir")  # which("grok") -> None
     monkeypatch.setenv("CONSENSUS_MCP_BIN_DIRS", str(tmp_path))
-    assert _dispatch_grok._resolve_grok_bin("grok") == str(binp)
+    resolved = _dispatch_grok._resolve_grok_bin("grok")
+    # os.path.normcase: on Windows `shutil.which` returns the PATHEXT casing
+    # (`grok.EXE`) while the fixture is `grok.exe`, and the FS is case-insensitive -
+    # so compare case- and separator-normalized (a no-op on POSIX).
+    assert os.path.normcase(resolved) == os.path.normcase(str(binp))
 
 
 def test_resolve_grok_bin_no_search_path_returns_bare(monkeypatch):
