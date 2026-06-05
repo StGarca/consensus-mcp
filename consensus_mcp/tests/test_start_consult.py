@@ -34,6 +34,22 @@ def test_start_consult_scaffolds_and_arms_gate(tmp_path):
     assert "consensus-mcp-seal-iteration close" in res["next_steps"]["4_disarm_when_done"]
 
 
+def test_start_consult_multi_scope_sets_allowed_files_list(tmp_path):
+    # G3: a list scope_glob scaffolds a multi-root consult whose allowed_files
+    # carries every root, so a multi-glob approval can later be confined to them.
+    _init_project(tmp_path)
+    res = sc.start_consult("Multi-root change",
+                           scope_glob=["consensus_mcp/**", "docs/**", "pyproject.toml"],
+                           reviewers=["codex", "gemini"], repo_root=tmp_path)
+    assert res["ok"] is True, res
+    iter_dir = tmp_path / "consensus-state" / "active" / res["iteration"]
+    gp = yaml.safe_load((iter_dir / "goal_packet.yaml").read_text())
+    assert gp["allowed_files"] == ["consensus_mcp/**", "docs/**", "pyproject.toml"]
+    # the printed approve command repeats --scope-glob for each root.
+    approve = res["next_steps"]["3_approve_to_unblock_edits"]
+    assert approve.count("--scope-glob") == 3
+
+
 def test_start_consult_requires_scope(tmp_path):
     _init_project(tmp_path)
     res = sc.start_consult("q", scope_glob="", repo_root=tmp_path)

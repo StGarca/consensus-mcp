@@ -80,7 +80,44 @@ EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 _READ_ONLY_COMMANDS = frozenset({
     "ls", "cat", "head", "tail", "wc", "grep", "rg",
     "echo", "pwd", "which",
+    # G2 (consult iteration-resolve-gate-ux-frictions-g2-and-g3, operator-ratified):
+    # `cd`/`pushd`/`popd` are pure shell builtins that change cwd / the dir stack -
+    # no filesystem write, no exec. A writer chained after them rides a SEPARATE
+    # segment (split on | || && & ; newline) that is still allowlisted independently,
+    # and the redirect / $( / ${ / backtick / subshell-paren pre-rejection below
+    # already blocks `cd >file`, `cd $(...)`, etc. Leading-token only, like the rest.
+    "cd", "pushd", "popd",
 })
+# G2 assignment-prefix denylist. A leading bare `VAR=value` assignment is allowed
+# ONLY when its name is benign AND the trailing command is itself allowlisted (see
+# _segment_is_read_only). These names/families are exec-injection vectors: setting
+# them turns an otherwise read-only command into arbitrary code execution. The
+# denylist is PREFIX-FAMILY + exact-name (not a flat list) to shrink the
+# completeness gap - covers the Linux (LD_*) and macOS (DYLD_*) loader-injection
+# families, the shell startup/option/IFS surface, and git/python/perl/ruby/node
+# interpreter knobs. Matched case-insensitively on the assignment NAME.
+_DANGEROUS_ENV_PREFIXES = (
+    "LD_", "DYLD_", "GIT_", "PYTHON", "PERL", "RUBY", "NODE_", "BASH_", "MALLOC_",
+)
+_DANGEROUS_ENV_EXACT = frozenset({
+    "PATH", "IFS", "ENV", "BASHOPTS", "SHELLOPTS", "CDPATH", "GLOBIGNORE",
+    "PS4", "PROMPT_COMMAND", "PAGER", "EDITOR", "VISUAL", "FPATH",
+    "GEM_PATH", "GEM_HOME", "RUBYLIB", "RUBYOPT", "PERL5LIB", "PERLLIB",
+    "NODE_PATH",
+})
+# A leading shell variable assignment token: NAME=value, NAME starts with a
+# letter/underscore (POSIX name). Value content is irrelevant here - the trailing
+# command must still be allowlisted, and $(/`/${ in the value are pre-rejected.
+_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _is_dangerous_env_var(name: str) -> bool:
+    """True iff assigning `name` could alter command execution (loader preload,
+    shell startup, interpreter options, git external commands, pager, ...)."""
+    upper = name.upper()
+    if upper in _DANGEROUS_ENV_EXACT:
+        return True
+    return any(upper.startswith(p) for p in _DANGEROUS_ENV_PREFIXES)
 # NOTE: `find` is deliberately NOT allowlisted - `find -exec`/`-delete`/`-fprintf`
 # mutate the filesystem (re-audit codex-rev-001). A leading-token allowlist cannot
 # safely admit a command whose own primaries can write/exec.
@@ -162,7 +199,24 @@ def _segment_is_read_only(segment: str) -> bool:
         return False
     if not tokens:
         return False
-    head = tokens[0]
+    # G2 (consult iteration-resolve-gate-ux-frictions-g2-and-g3, operator-ratified):
+    # strip leading bare `VAR=value` assignment prefixes. An exec-affecting
+    # assignment NAME (loader preload, shell startup, interpreter option, git
+    # external command, pager) DENIES the segment outright; a benign assignment is
+    # stripped and the REMAINING command must still be allowlisted below. A bare
+    # assignment with no trailing command is denied (it runs nothing useful and a
+    # blanket "allow" would be a needless surface). The $(/`/${ pre-rejection above
+    # already blocks a command substitution inside the value.
+    idx = 0
+    while idx < len(tokens) and _ASSIGNMENT_RE.match(tokens[idx]):
+        name = tokens[idx].split("=", 1)[0]
+        if _is_dangerous_env_var(name):
+            return False
+        idx += 1
+    cmd_tokens = tokens[idx:]
+    if not cmd_tokens:
+        return False  # bare assignment(s), no trailing command -> deny
+    head = cmd_tokens[0]
     # v1.25 (gemini): reject a segment whose COMMAND token opens/closes a subshell
     # - `(rm x)`, `cmd)` etc. Parens inside a QUOTED arg (`grep '(x)' f`) stay in a
     # LATER token, so head is clean - no false positive on legitimate regex args.
@@ -179,14 +233,14 @@ def _segment_is_read_only(segment: str) -> bool:
     if head in _CONSENSUS_TOOLING:
         return True
     if head == "git":
-        if len(tokens) < 2 or tokens[1] not in _READ_ONLY_GIT_SUBCOMMANDS:
+        if len(cmd_tokens) < 2 or cmd_tokens[1] not in _READ_ONLY_GIT_SUBCOMMANDS:
             return False
         # Reject exec / file-write injection on ANY read-only subcommand: `-c`
         # (config -> pager/alias exec), `--output`/`--exec-path` (write / exec path),
         # and v1.26 (codex BLOCKING) `--ext-diff`/`--textconv` (run a repo-configured
         # external command). Match the flag BASE so `--output=f`, `--ext-diff=...` etc.
         # are all caught.
-        for t in tokens[1:]:
+        for t in cmd_tokens[1:]:
             base_flag = t.split("=", 1)[0]
             if base_flag in ("-c", "--output", "--exec-path", "--ext-diff", "--textconv"):
                 return False
@@ -194,7 +248,7 @@ def _segment_is_read_only(segment: str) -> bool:
         # OR a bare positional appears (a NEW branch name = create). Allow read-only
         # forms - including a positional that is the VALUE of a filter flag such as
         # `--contains <sha>` / `--merged <branch>` (v1.26 kimi: do not over-deny those).
-        if tokens[1] == "branch":
+        if cmd_tokens[1] == "branch":
             _WRITE_BRANCH = {
                 "-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy",
                 "--edit-description", "--set-upstream-to", "-u", "--unset-upstream",
@@ -204,7 +258,7 @@ def _segment_is_read_only(segment: str) -> bool:
             # positional is a glob, not a new branch name - its positional is safe.
             _FILTER_FLAGS = {"--contains", "--no-contains", "--merged",
                              "--no-merged", "--points-at", "--list"}
-            args = tokens[2:]
+            args = cmd_tokens[2:]
             for t in args:
                 if t.split("=", 1)[0] in _WRITE_BRANCH:
                     return False

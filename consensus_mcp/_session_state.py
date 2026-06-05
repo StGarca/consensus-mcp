@@ -84,11 +84,16 @@ def _legacy_marker_path(repo_root: Path) -> Path:
 def write_session_marker(
     repo_root: Path,
     iteration_id: str,
-    scope_glob: str,
+    scope_glob,
     activated_by: str,
     activation_source: str = "console_script",
 ) -> Path:
     """Atomically write the session-active marker.
+
+    `scope_glob` accepts a single glob (str) or a LIST of globs (G3). It is stored
+    for operator readability / provenance only - `session_active` ignores its value
+    for activation - so a single glob writes the byte-identical `scope_glob: str`
+    field and a multi-glob list writes `scope_globs: [...]`.
 
     Refuses on invalid `activation_source`. Caller is responsible
     for ensuring the iteration_id resolves to a real iteration dir
@@ -103,17 +108,26 @@ def write_session_marker(
         )
     if not iteration_id or "/" in iteration_id or "\\" in iteration_id or ".." in iteration_id:
         raise ValueError(f"iteration_id {iteration_id!r} is missing or unsafe")
-    if not isinstance(scope_glob, str) or not scope_glob.strip():
-        raise ValueError("scope_glob must be a non-empty string")
+    if isinstance(scope_glob, str):
+        globs = [scope_glob] if scope_glob.strip() else []
+    elif isinstance(scope_glob, (list, tuple)):
+        globs = [g for g in scope_glob if isinstance(g, str) and g.strip()]
+    else:
+        globs = []
+    if not globs:
+        raise ValueError("scope_glob must be a non-empty string or list of strings")
 
     marker = {
         "schema_version": SCHEMA_VERSION,
         "iteration_id": iteration_id,
-        "scope_glob": scope_glob,
         "activated_by": activated_by,
         "activated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "activation_source": activation_source,
     }
+    if len(globs) == 1:
+        marker["scope_glob"] = globs[0]   # byte-identical single-glob provenance
+    else:
+        marker["scope_globs"] = globs
     path = _marker_path(repo_root)
     # kimi-rev-003 / gemini-rev-001: write through the SINGLE blessed symlink-safe
     # atomic writer (O_EXCL + unpredictable temp name + fsync + os.replace) rather

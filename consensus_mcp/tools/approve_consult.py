@@ -30,8 +30,9 @@ SCHEMA = {
                 "description": "Iteration name (-> consensus-state/active/<name>) or a path.",
             },
             "scope_glob": {
-                "type": "string",
-                "description": "Files the approval authorizes edits to (e.g. 'consensus_mcp/_x.py'). Must not be overbroad ('*'/'**').",
+                "type": ["string", "array"],
+                "items": {"type": "string"},
+                "description": "Files the approval authorizes edits to (e.g. 'consensus_mcp/_x.py'). Must not be overbroad ('*'/'**'). Pass a LIST to cover a multi-root change in one approval (G3); each glob is confined to the goal_packet's allowed_files independently (max 8, tight, deduped).",
             },
             "converged_plan": {
                 "type": "string",
@@ -53,6 +54,7 @@ SCHEMA = {
             "non_claude_reviewers": {"type": ["integer", "null"]},
             "converged_plan_sha256": {"type": ["string", "null"]},
             "scope_glob": {"type": ["string", "null"]},
+            "scope_globs": {"type": ["array", "null"], "items": {"type": "string"}},
             "marker_path": {"type": ["string", "null"]},
             "revalidated": {"type": ["string", "null"]},
             "error": {"type": ["string", "null"]},
@@ -62,7 +64,7 @@ SCHEMA = {
 }
 
 
-def handle(iteration: str, scope_glob: str,
+def handle(iteration: str, scope_glob,
            converged_plan: str = "converged-plan.yaml",
            repo_root: str | None = None) -> dict:
     return approve_consult(

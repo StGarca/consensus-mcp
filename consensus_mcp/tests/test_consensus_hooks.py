@@ -281,6 +281,77 @@ def test_pretooluse_bash_pipeline_or_unknown_denies(tmp_path, command):
     assert cp.returncode == 2, (command, cp.stderr)
 
 
+# ---------------------------------------------------------------------------
+# G2 (consult iteration-resolve-gate-ux-frictions-g2-and-g3): the always-on
+# read-only path now allows a leading `cd`/`pushd`/`popd` and a bare benign
+# `VAR=value` assignment prefix, while still requiring the trailing command to be
+# allowlisted and still denying every writer / exec-injection form.
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("command", [
+    # cd / pushd / popd are state-only shell builtins -> read-only leading tokens.
+    "cd docs",
+    "cd docs && grep foo src",
+    "cd src/sub && consensus-mcp-dispatch-codex --goal-packet gp.yaml --iteration-dir d",
+    "pushd docs && ls",
+    "popd",
+    "cd docs | cat",
+    # Benign assignment prefixes: name not exec-affecting, trailing cmd allowlisted.
+    "FOO=bar cat src/x.py",
+    "NO_COLOR=1 ls",
+    "FOO=bar GREETING=hi echo hello",
+    "cd docs && FOO=bar grep foo src",
+])
+def test_pretooluse_g2_cd_and_benign_assignment_allows(tmp_path, command):
+    ev = {"tool_name": "Bash", "tool_input": {"command": command},
+          "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present")
+    assert cp.returncode == 0, (command, cp.stderr)
+
+
+@pytest.mark.parametrize("command", [
+    # cd chained to a writer / with a redirect / via command substitution stays DENIED.
+    "cd /x && rm -rf y",
+    "cd docs; rm x",
+    "cd docs > out.txt",
+    "cd $(pwd) && ls",
+    "cd docs && python -c 'import os'",
+    # Exec-affecting assignment prefixes (loader / shell / git / interpreter / pager)
+    # are DENIED even though the trailing command is allowlisted.
+    "LD_PRELOAD=evil.so cat f",
+    "LD_LIBRARY_PATH=/tmp cat f",
+    "DYLD_INSERT_LIBRARIES=x.dylib cat f",
+    "PATH=/tmp/bin ls",
+    "IFS=x cat f",
+    "BASH_ENV=x cat f",
+    "ENV=x cat f",
+    "SHELLOPTS=xtrace cat f",
+    "GIT_SSH_COMMAND=x git status",
+    "GIT_PAGER=x git log",
+    "GIT_EXTERNAL_DIFF=x git diff",
+    "PYTHONSTARTUP=x cat f",
+    "PYTHONPATH=/tmp cat f",
+    "PERL5OPT=x cat f",
+    "NODE_OPTIONS=x cat f",
+    "PROMPT_COMMAND=x ls",
+    "CDPATH=/tmp cd docs",
+    "PAGER=x git log",
+    # A benign assignment in front of a NON-allowlisted command is still DENIED.
+    "FOO=bar rm x",
+    "FOO=bar python -c 'import os'",
+    # A bare assignment with no trailing allowlisted command is DENIED.
+    "FOO=bar",
+    "FOO=bar BAZ=qux",
+    # Assignment value carrying a command substitution is pre-rejected by the
+    # existing $(/`/${ marker check.
+    "FOO=$(rm x) cat f",
+])
+def test_pretooluse_g2_dangerous_prefixes_and_writers_deny(tmp_path, command):
+    ev = {"tool_name": "Bash", "tool_input": {"command": command},
+          "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present")
+    assert cp.returncode == 2, (command, cp.stderr)
+
+
 def test_pretooluse_bash_with_sealed_tight_marker_allows(tmp_path):
     # A tight-scope sealed marker is in force -> a non-allowlisted Bash command
     # is allowed (the cooperating agent has a vetted plan in scope).
