@@ -63,7 +63,7 @@ release.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.41.2
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.42.0
 
 # Install the Claude Code helper once. This is what lets you set up and run
 # consensus from chat in ANY project - including auto-initializing a new one.
@@ -159,45 +159,37 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.41.2 - stable.** *The "install it, ask for a review, and it just
-works" release* (with the re-install rough edges sanded off in .2). This line is
-all about the first ten minutes: install once, then ask for a consensus review in
-any project and consensus sets itself up for you - no per-project setup command to
-remember. v1.41.2 makes re-running setup honest about itself: the status line
-reports the *real* enforcement state (no more "run the command you just ran"), and
-re-initializing an already-configured project behaves like an idempotent upgrade
-(verify + refresh, keep your panel) instead of popping a menu.
+**Current: v1.42.0 - stable.** *The "the gate gets out of your way" release.* Keeps
+the zero-friction cold start of the v1.41.x line and sands down the two sharpest
+edges of the edit gate itself - both surfaced, designed, and hardened by
+consensus-mcp's own 4-AI panel reviewing its own gate.
 
-- **Zero-friction first run.** Ask for a review in a brand-new project and
-  consensus notices it isn't set up, asks which AIs you want on the panel, confirms
-  the handful of files it will write, then initializes and runs the review - all
-  from chat. The first consult dispatches through the shell binaries, so it starts
-  immediately (no Claude Code reload required).
-- **The helper does what you typed.** `consensus-init --install-claude-code` is now
-  honored as the global install whether you run it in a terminal or type it in
-  chat - it no longer silently substitutes the per-project bootstrap or loop back
-  to offer you the command you just ran. Flags like `--non-interactive` /
-  `--accept-defaults` are carried through verbatim.
-- **No "command not found" surprises.** Init now flags the classic
-  `pipx ensurepath` PATH trap up front, ships an offline `consensus init --verify`
-  preflight (console scripts on PATH + each reviewer CLI installed/authenticated,
-  no model calls), and detects your panel dynamically (`--detect-contributors`).
-- **One brain for "where am I."** Init and the runtime now agree on the project
-  root and on scope rules: the edit gate's path matching, the approval scope
-  containment, and the forbidden-files veto all use the gate's own `fnmatch`
-  semantics - each exhaustively brute-forced against ground truth (zero scope
-  escalations, zero missed forbidden overlaps). Approval is transactional
-  (all-or-nothing), and every marker writes through one symlink-safe atomic writer.
+- **The gate stops fighting `cd` and benign env prefixes.** While a consult is
+  armed, a leading `cd`/`pushd`/`popd` or a benign `VAR=value ` prefix no longer
+  gets a whole read-only command line denied - the trailing command still must be
+  allowlisted, and exec-affecting assignments (`LD_PRELOAD`, `PATH`,
+  `GIT_SSH_COMMAND`, the `LD_*`/`DYLD_*`/`GIT_*`/`PYTHON*` families, ...) are still
+  refused. Writers, redirects, `$()`, and subshells stay denied.
+- **One approval can cover a multi-root change.** The design-approval marker now
+  accepts a LIST of tight scope globs (`--scope-glob 'consensus_mcp/**' --scope-glob
+  'docs/**'`), so a change spanning code + docs + config no longer needs a marker
+  minted per root. Backward-compatible (a single glob is byte-identical), capped and
+  per-glob confined to what the consult authorized, with the anti-bypass bounds
+  enforced on *read*, not just at mint.
+- **A supported "run a full iteration" entrypoint.** `consensus-mcp-run-iteration`
+  runs an iteration end-to-end for non-Claude hosts, replacing hand-rolled shims;
+  and a dispatch-log field cap makes a misbehaving adapter unable to balloon the
+  append-only log (a real 702 MB-log incident in the field).
 
-Built on v1.41.0's guess-free cold start + v1.40's parallel reviewer dispatch. The
-engine still fans out independent reviewers within a phase concurrently (a ~4-8 min
-serial consult becomes ~1-2 min) with deterministic, reproducible outcomes. All
-five reviewers - Claude, Codex, Gemini, Grok, and Kimi - are MCP-surfaced, and the
-whole tree is ASCII-only (enforced by a guard test). 1,900+ regression tests, green
-on CI across Linux + Windows and Python 3.11+. Self-hosted: this release's
-cold-start fixes were converged through eight of consensus-mcp's own blind 4-AI
-review rounds (the panel caught a real scope-escalation bug mid-flight - exactly
-what it's for).
+Built on v1.41's guess-free cold start + v1.40's parallel reviewer dispatch. The
+engine fans out independent reviewers within a phase concurrently (a ~4-8 min serial
+consult becomes ~1-2 min) with deterministic, reproducible outcomes. All five
+reviewers - Claude, Codex, Gemini, Grok, and Kimi - are MCP-surfaced, and the whole
+tree is ASCII-only (enforced by a guard test). 1,970+ regression tests, green on
+Linux + Windows / Python 3.11+. Self-hosted: this release's gate changes were
+designed by a blind 4-AI open-contest consult and then hardened by a Workflow B code
+review that caught a real read-side scope-bound gap mid-flight - exactly what it's
+for.
 
 - What changed in each release -> [`CHANGELOG.md`](CHANGELOG.md)
 - Known-issue releases + which version to upgrade to ->

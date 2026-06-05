@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.42.0 - 2026-06-05
+
+**The gate gets out of your way.** Two sharp edges of the PreToolUse edit gate -
+both hit while dogfooding a consult from a Claude Code session - resolved through
+consensus-mcp's own 4-AI open-contest consult (codex/gemini/grok/kimi, deep tier),
+plus the dispatch/iteration fixes from a field codex-hosted run.
+
+- **G2 - `cd` and benign env prefixes no longer trip the gate.** The always-on
+  read-only path now allows a leading `cd`/`pushd`/`popd` (pure state-only builtins)
+  and a bare `VAR=value ` assignment prefix whose name is NOT exec-affecting, after
+  which the trailing command must still be allowlisted. Exec-injection vectors are
+  refused via a prefix-family + exact-name denylist (`LD_*`/`DYLD_*`/`GIT_*`/
+  `PYTHON*`/`PERL*`/`RUBY*`/`NODE_*`/`BASH_*`/`MALLOC_*` + `PATH`/`IFS`/`ENV`/
+  `CDPATH`/`PAGER`/...), covering Linux + macOS loader injection. Writers, redirects,
+  `$()`, subshells, and bare-assignment-only lines stay DENIED. The operator (trust
+  root) ratified the panel's allow-with-denylist majority over the host's
+  reject-all recommendation.
+- **G3 - one approval can cover a multi-root change.** The `.consensus/design-approved`
+  marker may now carry a `scope_globs` LIST: a target is authorized if it matches ANY
+  glob (Edit), while Bash authorization requires EVERY glob tight. A single glob still
+  writes the v1 `scope_glob` byte-identically; a list writes a v2 marker. Anti-bypass
+  bounds (`_MAX_SCOPE_GLOBS = 8`, per-glob overbroad rejection, dedup) are enforced at
+  mint AND on read (`verify` / `marker_is_sealed`) - so a hand-forged over-limit marker
+  is refused (caught by the Workflow B code review). `consensus-mcp-approve` and
+  `consensus-mcp-start-consult` take a repeatable `--scope-glob`; the MCP tools accept
+  `scope_glob` as string|array; each glob is confined to the goal_packet's
+  `allowed_files` independently, so a multi-glob approval grants exactly the union
+  separate single-glob mints could.
+- **F1 - dispatch-log field cap.** Every string field of a dispatch-log record is
+  capped (16 KB + truncation marker) at the single shared writer, so a misbehaving
+  adapter (e.g. a kimi copytree `shutil.Error` embedding an entire 188 MB file
+  manifest) can no longer balloon `dispatch-log.jsonl` - a real 702 MB-log incident
+  in a consuming project.
+- **F2 - convergence packet embeds the document under review.** Propose-converge
+  reviewers now receive the actual target document in `touched_files_contents`, so a
+  converge round can author line-accurate patches instead of returning
+  `patch_proposal: null`.
+- **F3 - `consensus-mcp-run-iteration` console script.** A supported entrypoint that
+  runs a full iteration end-to-end for non-Claude hosts (prints the structured outcome
+  and writes `--outcome`), replacing hand-rolled launch shims. Doc:
+  `docs/operations/hosting-a-consult.md`.
+
+Self-hosted: the G2/G3 design was converged by a blind 4-AI open-contest consult,
+operator-ratified on the security fork, implemented with TDD, and hardened by a
+Workflow B codex review (2 findings fixed). Suite: 1,974 tests, green on
+Linux + Windows / Python 3.11+.
+
 ## 1.41.2 - 2026-06-03
 
 **Re-install, re-run, no runaround.** A fast follow on v1.41.1 that sands off two
