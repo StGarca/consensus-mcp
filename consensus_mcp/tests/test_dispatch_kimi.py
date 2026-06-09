@@ -144,6 +144,63 @@ def test_extract_handles_json_markdown_fence():
     assert _dispatch_kimi._extract_json_from_text(text) == '{"findings": []}'
 
 
+# ---------- _rewrite_prompt_paths (repo-path-leak guard) ----------
+# The rewrite must cover BOTH separator forms of the real repo path (Windows
+# prompts can carry C:/Users/x AND C:\Users\x for the same path), and the
+# residual-leak check must fail closed - case-insensitively on Windows.
+
+def test_rewrite_prompt_paths_posix_rewrites_and_passes():
+    repo = Path("/home/steve/projects/realrepo")
+    workdir = Path("/tmp/kimi-workdir-abc")
+    prompt = f"Review {repo}/consensus_mcp/server.py inside {repo}."
+    out = _dispatch_kimi._rewrite_prompt_paths(prompt, repo, workdir)
+    assert str(repo) not in out
+    assert f"{workdir}/consensus_mcp/server.py" in out
+
+
+def test_rewrite_prompt_paths_windows_mixed_separators():
+    # Simulates a Windows prompt carrying BOTH separator forms of the same
+    # real repo path. PureWindowsPath gives the backslash str() form and the
+    # forward-slash as_posix() form on any host platform.
+    from pathlib import PureWindowsPath
+
+    repo = PureWindowsPath(r"C:\Users\steve\projects\realrepo")
+    workdir = PureWindowsPath(r"C:\Temp\kimi-workdir-abc")
+    prompt = (
+        r"Files: C:\Users\steve\projects\realrepo\a.py and "
+        "C:/Users/steve/projects/realrepo/b.py."
+    )
+    out = _dispatch_kimi._rewrite_prompt_paths(prompt, repo, workdir)
+    assert r"C:\Users\steve\projects\realrepo" not in out
+    assert "C:/Users/steve/projects/realrepo" not in out
+    assert r"C:\Temp\kimi-workdir-abc\a.py" in out
+    assert "C:/Temp/kimi-workdir-abc/b.py" in out
+
+
+def test_rewrite_prompt_paths_case_variant_leak_raises_when_case_insensitive():
+    # On Windows (case-insensitive paths) a drive-letter/case variant of the
+    # repo path is still the SAME directory; the rewrite cannot map it (str
+    # replace is case-sensitive) so the residual check must refuse dispatch.
+    from pathlib import PureWindowsPath
+
+    repo = PureWindowsPath(r"C:\Users\steve\projects\realrepo")
+    workdir = PureWindowsPath(r"C:\Temp\kimi-workdir-abc")
+    prompt = r"sneaky path c:\users\steve\projects\realrepo\a.py"
+    with pytest.raises(_dispatch_kimi.KimiInvocationError):
+        _dispatch_kimi._rewrite_prompt_paths(
+            prompt, repo, workdir, _case_insensitive=True,
+        )
+
+
+def test_rewrite_prompt_paths_posix_case_sensitive_leaves_distinct_path():
+    # POSIX paths are case-sensitive: a differently-cased path is a DIFFERENT
+    # directory, so it must neither be rewritten nor trip the leak check.
+    repo = Path("/home/steve/projects/realrepo")
+    workdir = Path("/tmp/kimi-workdir-abc")
+    prompt = "see /home/STEVE/projects/realrepo/a.py"
+    assert _dispatch_kimi._rewrite_prompt_paths(prompt, repo, workdir) == prompt
+
+
 # ---------- _parse_kimi_output ----------
 
 def _minimal_valid():

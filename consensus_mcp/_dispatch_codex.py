@@ -84,7 +84,23 @@ from consensus_mcp._dispatch_base import (
     _APPLY_PATCH_BEGIN_MARKER,
     _APPLY_PATCH_UPDATE_MARKER,
     _validate_patch_proposal as _base_validate_patch_proposal,
+    build_failed_event,
+    record_reader_error,
+    scrub_env_keys,
+    CODEX_SCRUBBED_ENV_KEYS,
 )
+
+
+def _codex_subprocess_env() -> dict:
+    """Environment for the codex subprocess.
+
+    Returns a COPY of the parent environment with ambient OPENAI_API_KEY
+    removed: codex CLI auth is its own login/file credential, and a stray
+    API key in the environment could hijack that auth and route the request
+    through an external key (mirrors kimi's documented scrub rationale).
+    Never mutates os.environ.
+    """
+    return scrub_env_keys(os.environ.copy(), CODEX_SCRUBBED_ENV_KEYS)
 
 
 def _validate_patch_proposal(
@@ -375,6 +391,7 @@ def _invoke_codex(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0,
+                env=_codex_subprocess_env(),
                 **popen_kwargs,
             )
         except FileNotFoundError:
@@ -423,8 +440,9 @@ def _invoke_codex(
                             "truncated": full_len > 200,
                             "seq": seq,
                         })
-            except Exception:
-                pass  # reader exits silently; main loop sees proc.poll()
+            except Exception as exc:
+                # Marker lands in the captured output so diagnosis sees it.
+                record_reader_error(stdout_buf, "stdout", exc)
 
         def stderr_reader():
             """codex-rev-001 fix: drain stderr to prevent pipe-buffer deadlock.
@@ -438,8 +456,8 @@ def _invoke_codex(
                         break
                     with state_lock:
                         stderr_buf.append(raw_line)
-            except Exception:
-                pass
+            except Exception as exc:
+                record_reader_error(stderr_buf, "stderr", exc)
 
         t_stdout = threading.Thread(target=stdout_reader, daemon=True, name="codex-stdout-reader")
         t_stderr = threading.Thread(target=stderr_reader, daemon=True, name="codex-stderr-reader")
@@ -1061,33 +1079,31 @@ def main(argv: list[str] | None = None) -> int:
     def _failed_event(error_type: str, error: str) -> dict:
         """Per v1.10.4 F3: dispatch_failed events carry every provenance field
         that was successfully computed before the failure, plus reviewer/pass ids.
-        Never logs raw prompt / output / goal_packet content."""
-        ev = {
-            "event": "dispatch_failed",
-            "error_type": error_type,
-            "error": error,
-            "reviewer_id": reviewer_id,
-            "pass_id": pass_id,
-            "iteration_id": iteration_id,
-            "timeout_seconds": ns.timeout_seconds,
-        }
-        # Include only the hashes that were actually computed.
-        for k, v in (
-            ("codex_version", codex_version),
-            ("prompt_sha256", prompt_sha),
-            ("output_sha256", output_sha),
-            ("schema_sha256", schema_sha),
-            ("goal_packet_sha256", goal_packet_sha),
-            ("scope_signature", scope_sig),
-            # v1.10.5: review-target identity so dispatch_failed events can be
-            # correlated to the target that was being reviewed when the failure
-            # fired. Path is known pre-try; hash only after the file is read.
-            ("review_target_path", review_target_path_str),
-            ("review_target_hash", review_target_hash),
-        ):
-            if v is not None:
-                ev[k] = v
-        return ev
+        Never logs raw prompt / output / goal_packet content. Thin wrapper over
+        the shared skeleton builder; extras include only the hashes actually
+        computed (None values are skipped by build_failed_event).
+        v1.10.5: review-target identity so dispatch_failed events can be
+        correlated to the target that was being reviewed when the failure
+        fired. Path is known pre-try; hash only after the file is read."""
+        return build_failed_event(
+            adapter="codex",
+            error_type=error_type,
+            error=error,
+            reviewer_id=reviewer_id,
+            pass_id=pass_id,
+            iteration_id=iteration_id,
+            timeout_seconds=ns.timeout_seconds,
+            extra_fields={
+                "codex_version": codex_version,
+                "prompt_sha256": prompt_sha,
+                "output_sha256": output_sha,
+                "schema_sha256": schema_sha,
+                "goal_packet_sha256": goal_packet_sha,
+                "scope_signature": scope_sig,
+                "review_target_path": review_target_path_str,
+                "review_target_hash": review_target_hash,
+            },
+        )
 
     try:
         # iter-0010 codex-rev-001 (medium): route goal_packet parsing through

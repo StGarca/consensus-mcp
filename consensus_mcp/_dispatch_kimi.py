@@ -9,7 +9,7 @@ inside this module.
 It reuses the generic dispatch infrastructure from _dispatch_base.py
 (repo-root resolution, path normalization, goal_packet/template loading,
 prompt building, process-tree termination, sealing, dispatch-log writing) and
-imports gemini's `_extract_json_from_text` (kimi, like gemini, lacks a native
+the shared `_extract_json_from_text` (kimi, like gemini, lacks a native
 output-schema enforcer, so its review JSON may be wrapped in free text).
 
 FIX TRACK 2 (B4/H1/H3/L3 - converged-plan 2026-05-22): the kimi reviewer is
@@ -85,6 +85,7 @@ import json
 import os
 import re
 import shutil
+import stat as stat_module
 import subprocess
 import sys
 import threading
@@ -107,11 +108,15 @@ from consensus_mcp._dispatch_base import (
     _build_sealed_packet,
     _seal_via_t6,
     _log_dispatch,
+    # kimi, like gemini, has no native output-schema enforcer; reuse the
+    # shared free-text JSON extractor (moved from gemini to base) rather
+    # than reinventing it (per task: reuse, not replicate).
+    _extract_json_from_text,
+    build_failed_event,
+    record_reader_error,
+    scrub_env_keys,
+    KIMI_SCRUBBED_ENV_KEYS,
 )
-# kimi, like gemini, has no native output-schema enforcer; reuse gemini's
-# free-text JSON extractor rather than reinventing it (per task: reuse, not
-# replicate).
-from consensus_mcp._dispatch_gemini import _extract_json_from_text
 
 
 # Adapter-specific finding patterns. kimi emits kimi-rev-N IDs; mirror the
@@ -276,8 +281,7 @@ def _kimi_subprocess_env() -> dict:
     KIMI_API_KEY (per task: OAuth file creds are authoritative).
     """
     env = os.environ.copy()
-    env.pop("KIMI_API_KEY", None)
-    env.pop("OPENAI_API_KEY", None)
+    scrub_env_keys(env, KIMI_SCRUBBED_ENV_KEYS)
     # Consult Finding B / Q5: kimi-cli is a Python app that decodes its UTF-8
     # stdin under the ambient locale (cp1252 on a default Windows console) with
     # surrogateescape, then its strict-UTF-8 JSON serializer rejects the lone
@@ -286,6 +290,58 @@ def _kimi_subprocess_env() -> dict:
     # regardless of console code page. Harmless when already UTF-8.
     env["PYTHONUTF8"] = "1"
     return env
+
+
+def _rewrite_prompt_paths(
+    prompt: str,
+    repo_root: Path,
+    workdir: Path,
+    *,
+    _case_insensitive: bool | None = None,
+) -> str:
+    """Rewrite real-repo absolute paths in `prompt` to the disposable workdir.
+
+    The old single `str(repo_root)` replace missed alternate path-separator
+    forms (C:/Users/x vs C:\\Users\\x on Windows) and drive-letter case
+    differences, so a leaked alternate form could hand kimi the REAL repo
+    path despite the isolation. Rewrites every separator variant of the repo
+    path (native str(), os.sep->'/' and as_posix()) to the corresponding
+    workdir form, then fail-closed checks that NO variant remains - the
+    residual check is case-insensitive on Windows (os.name == 'nt'), where
+    paths are case-insensitive, so e.g. a c:\\users\\... case variant is
+    caught and refused rather than silently leaked. On POSIX all forms
+    coincide, so behavior is identical to the old single replace+check.
+
+    `_case_insensitive` is a private keyword-only TEST seam (the `_sleep=`
+    precedent): defaults to None -> platform-derived (os.name == 'nt').
+
+    Raises KimiInvocationError (retryable=False) on a residual leak.
+    """
+    if _case_insensitive is None:
+        _case_insensitive = os.name == "nt"
+    rewritten = prompt
+    seen: set[str] = set()
+    sources: list[str] = []
+    for src, dst in (
+        (str(repo_root), str(workdir)),
+        (str(repo_root).replace(os.sep, "/"), str(workdir).replace(os.sep, "/")),
+        (repo_root.as_posix(), workdir.as_posix()),
+    ):
+        if src in seen:
+            continue
+        seen.add(src)
+        sources.append(src)
+        rewritten = rewritten.replace(src, dst)
+    haystack = rewritten.lower() if _case_insensitive else rewritten
+    for src in sources:
+        needle = src.lower() if _case_insensitive else src
+        if needle in haystack:
+            raise KimiInvocationError(
+                "kimi prompt still contains the real repo absolute path after "
+                "isolation rewrite; refusing dispatch",
+                retryable=False,
+            )
+    return rewritten
 
 
 def _strip_symlinks(root: Path) -> None:
@@ -455,9 +511,19 @@ def _filesystem_manifest_snapshot(repo_root: Path) -> dict[str, str]:
                 rel = str(full.relative_to(repo_root)).replace("\\", "/")
             except ValueError:
                 continue
+            # ONE lstat per path: mode answers both the symlink and the
+            # regular-file question, and st_size feeds the byte budget - the
+            # previous is_symlink()/is_file()/stat() trio re-stat'ed the same
+            # path up to three times per file. A failed lstat skips the path,
+            # exactly as the old is_symlink()/is_file() probes (which swallow
+            # OSError and return False) did.
             try:
-                is_link = full.is_symlink()
-                if not is_link and not full.is_file():
+                st = full.lstat()
+            except OSError:
+                continue
+            try:
+                is_link = stat_module.S_ISLNK(st.st_mode)
+                if not is_link and not stat_module.S_ISREG(st.st_mode):
                     continue  # special files (fifo/socket/device) -> skip, don't count
                 # Budget check is SHARED by symlinks and regular files (codex-rev-001):
                 # a symlink-only/heavy tree must trip _SNAPSHOT_MAX_FILES too, else the
@@ -465,7 +531,7 @@ def _filesystem_manifest_snapshot(repo_root: Path) -> dict[str, str]:
                 # (a symlink's own size is negligible; we hash its target string).
                 nfiles += 1
                 if not is_link:
-                    nbytes += full.stat().st_size
+                    nbytes += st.st_size
                 if nfiles > _SNAPSHOT_MAX_FILES or nbytes > _SNAPSHOT_MAX_BYTES:
                     raise _SnapshotIndexError(
                         f"integrity snapshot exceeded its budget walking {repo_root} "
@@ -855,8 +921,8 @@ def _invoke_kimi(
                         "truncated": full_len > 200,
                         "seq": seq,
                     })
-        except Exception:
-            pass
+        except Exception as exc:
+            record_reader_error(stdout_buf, "stdout", exc)
 
     def stderr_reader():
         try:
@@ -865,8 +931,8 @@ def _invoke_kimi(
                     break
                 with state_lock:
                     stderr_buf.append(raw_line)
-        except Exception:
-            pass
+        except Exception as exc:
+            record_reader_error(stderr_buf, "stderr", exc)
 
     t_stdout = threading.Thread(target=stdout_reader, daemon=True, name="kimi-stdout-reader")
     t_stderr = threading.Thread(target=stderr_reader, daemon=True, name="kimi-stderr-reader")
@@ -1456,28 +1522,26 @@ def main(argv: list[str] | None = None) -> int:
     review_target_hash: str | None = None
 
     def _failed_event(error_type: str, error: str) -> dict:
-        ev = {
-            "event": "dispatch_failed",
-            "error_type": error_type,
-            "error": error,
-            "reviewer_id": reviewer_id,
-            "pass_id": pass_id,
-            "iteration_id": iteration_id,
-            "timeout_seconds": ns.timeout_seconds,
-            "adapter": "kimi",
-        }
-        for k, v in (
-            ("kimi_version", kimi_version),
-            ("prompt_sha256", prompt_sha),
-            ("output_sha256", output_sha),
-            ("goal_packet_sha256", goal_packet_sha),
-            ("scope_signature", scope_sig),
-            ("review_target_path", review_target_path_str),
-            ("review_target_hash", review_target_hash),
-        ):
-            if v is not None:
-                ev[k] = v
-        return ev
+        # Thin wrapper over the shared skeleton builder (drift fix); the
+        # extras carry only the provenance actually computed (None skipped).
+        return build_failed_event(
+            adapter="kimi",
+            error_type=error_type,
+            error=error,
+            reviewer_id=reviewer_id,
+            pass_id=pass_id,
+            iteration_id=iteration_id,
+            timeout_seconds=ns.timeout_seconds,
+            extra_fields={
+                "kimi_version": kimi_version,
+                "prompt_sha256": prompt_sha,
+                "output_sha256": output_sha,
+                "goal_packet_sha256": goal_packet_sha,
+                "scope_signature": scope_sig,
+                "review_target_path": review_target_path_str,
+                "review_target_hash": review_target_hash,
+            },
+        )
 
     landed_seconds: float | None = None
     try:
@@ -1545,13 +1609,10 @@ def main(argv: list[str] | None = None) -> int:
                     retryable=False,
                 ) from isolate_exc
 
-            prompt_for_kimi = prompt.replace(str(repo_root), str(effective_workdir))
-            if str(repo_root) in prompt_for_kimi:
-                raise KimiInvocationError(
-                    "kimi prompt still contains the real repo absolute path after "
-                    "isolation rewrite; refusing dispatch",
-                    retryable=False,
-                )
+            # Rewrite EVERY separator/case form of the real repo path into the
+            # disposable workdir (fail-closed on residual leak) - see
+            # _rewrite_prompt_paths.
+            prompt_for_kimi = _rewrite_prompt_paths(prompt, repo_root, effective_workdir)
             prompt_sha = _sha256_str(prompt_for_kimi)
 
             _log_dispatch(log_path, {

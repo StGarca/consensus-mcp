@@ -1097,3 +1097,118 @@ def _log_dispatch(log_path: Path, event: dict) -> None:
     with _DISPATCH_LOG_LOCK:
         with log_path.open("a", encoding="utf-8") as f:
             f.write(line)
+
+
+def record_reader_error(buf_list: list, stream_name: str, exc: BaseException) -> None:
+    """Record a pipe-reader-thread crash INTO the captured output buffer.
+
+    Dispatcher reader threads previously swallowed exceptions with a bare
+    `except Exception: pass`, so a reader crash silently stopped draining the
+    pipe and the child's real error context was lost. Instead, append an ASCII
+    marker line so the failure surfaces in the captured stdout/stderr that
+    downstream logging/diagnosis already inspects. The buffers hold raw bytes
+    lines (binary pipes), so the marker is encoded; appending is GIL-atomic so
+    no extra locking is needed. Never raises (a logging failure must not take
+    down the reader's except handler).
+    """
+    try:
+        marker = (
+            f"[consensus-mcp] {stream_name} reader thread error: "
+            f"{type(exc).__name__}: {exc}\n"
+        )
+        buf_list.append(marker.encode("utf-8", errors="replace"))
+    except Exception:
+        pass
+
+
+# Ambient API-key env vars scrubbed from each adapter subprocess. Every CLI
+# authenticates via its own file/OAuth credentials; a stray API key in the
+# parent environment could hijack that auth and route the request through an
+# external key (kimi's documented rationale, now applied to every adapter).
+CODEX_SCRUBBED_ENV_KEYS = ("OPENAI_API_KEY",)
+GEMINI_SCRUBBED_ENV_KEYS = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+GROK_SCRUBBED_ENV_KEYS = ("XAI_API_KEY", "GROK_API_KEY")
+KIMI_SCRUBBED_ENV_KEYS = ("KIMI_API_KEY", "OPENAI_API_KEY")
+
+
+def scrub_env_keys(env: dict, keys: tuple[str, ...]) -> dict:
+    """Pop each key in `keys` from `env` (if present) and return `env`.
+
+    Shared primitive for removing ambient API keys from an adapter subprocess
+    environment so file/OAuth-based CLI auth cannot be hijacked. Mutates and
+    returns the passed dict (callers pass a fresh os.environ copy).
+    """
+    for key in keys:
+        env.pop(key, None)
+    return env
+
+
+def build_failed_event(
+    *,
+    adapter: str,
+    error_type: str,
+    error: str,
+    reviewer_id: str,
+    pass_id: str,
+    iteration_id: str,
+    timeout_seconds,
+    extra_fields: dict | None = None,
+) -> dict:
+    """Construct the shared dispatch_failed event skeleton.
+
+    The four adapters each defined their own `_failed_event` closure and the
+    shapes had drifted (codex lacked `adapter`; grok adds disabled_tools and
+    prompt_file_path; etc.). This builder owns the true intersection plus the
+    `adapter` discriminator; adapter-specific provenance goes in
+    `extra_fields`, whose None values are SKIPPED - matching the existing
+    "include only the hashes that were actually computed" behavior.
+    """
+    ev = {
+        "event": "dispatch_failed",
+        "error_type": error_type,
+        "error": error,
+        "reviewer_id": reviewer_id,
+        "pass_id": pass_id,
+        "iteration_id": iteration_id,
+        "timeout_seconds": timeout_seconds,
+        "adapter": adapter,
+    }
+    for k, v in (extra_fields or {}).items():
+        if v is not None:
+            ev[k] = v
+    return ev
+
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
+
+
+def _extract_json_from_text(text: str) -> str:
+    """Extract a JSON object substring from a CLI's free-form output.
+
+    gemini/grok/kimi lack codex's --output-schema enforcement, so their
+    responses may include leading prose, markdown fences, or trailing
+    commentary even when explicitly told to emit JSON only. This helper
+    applies a small ladder of recoveries:
+
+      1. Whole-string trim - if the trimmed text starts with `{` and ends
+         with `}`, return as-is.
+      2. Fenced-code-block extraction - first ```json ... ``` (or bare
+         ``` ... ```) containing a `{...}` block.
+      3. Greedy outermost-brace match - first `{` to last `}`. Fragile
+         (won't handle nested unbalanced braces), but a final fallback.
+
+    Returns the candidate JSON string. Does NOT validate that it parses;
+    the caller does. If nothing matches, returns the original text so the
+    JSONDecodeError downstream carries the actual CLI output as diagnostic.
+    """
+    stripped = text.strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        return stripped
+    fenced = _JSON_FENCE_RE.search(text)
+    if fenced:
+        return fenced.group(1)
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace > first_brace:
+        return text[first_brace:last_brace + 1]
+    return text

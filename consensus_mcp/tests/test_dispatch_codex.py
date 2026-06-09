@@ -2254,3 +2254,31 @@ def test_terminate_process_tree_uses_signal_on_posix(monkeypatch):
     # CI - this test is Windows-skipped - masked while CI was dormant.)
     assert calls[0][2] == signal.SIGTERM
 
+
+
+# ---------- record_reader_error (shared pipe-reader crash marker) ----------
+# The reader threads used to swallow crashes with a bare `except: pass`,
+# silently dropping the child's remaining output context. The shared base
+# helper now appends an ASCII marker line to the captured buffer instead.
+
+def test_record_reader_error_appends_ascii_marker_bytes():
+    from consensus_mcp._dispatch_base import record_reader_error
+
+    buf = [b"first line\n"]
+    record_reader_error(buf, "stderr", RuntimeError("boom happened"))
+    assert len(buf) == 2
+    marker = buf[-1]
+    assert isinstance(marker, bytes)  # buffers hold raw bytes lines
+    assert marker == (
+        b"[consensus-mcp] stderr reader thread error: "
+        b"RuntimeError: boom happened\n"
+    )
+    # Marker is pure ASCII so downstream decode/log paths cannot choke on it.
+    marker.decode("ascii")
+
+
+def test_codex_reader_threads_use_shared_marker_helper():
+    # The codex module must bind the SAME shared helper (class-level fix:
+    # one primitive in _dispatch_base, wired into every adapter's readers).
+    from consensus_mcp import _dispatch_base
+    assert _dispatch_codex.record_reader_error is _dispatch_base.record_reader_error
