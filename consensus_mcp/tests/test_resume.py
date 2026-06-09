@@ -459,6 +459,57 @@ def test_review_classified_superseded_when_bundle_changes(fake_repo: Path):
     assert snap["open_reviews"][0]["classification"] == "superseded"
 
 
+def test_review_discovered_from_pass_file_when_canonical_missing(fake_repo: Path):
+    """F4 regression: the seal step writes `<fam>-review-pass-NNN.yaml` and
+    copies to the canonical `<fam>-review.yaml`; if that copy failed or was
+    interrupted, resume must still see the pass file as the family's review
+    (family-set semantics, mirroring _approve_consult)."""
+    iter_dir = _write_iter(fake_repo, "iter-passonly")
+    (iter_dir / "review-packet.yaml").write_text(yaml.safe_dump(
+        {"defect_target": {"files": ["a.py"], "base_sha": "match-sha", "touched_files_contents": {"a.py": "x"}}}
+    ))
+    # ONLY the pass file exists - no canonical codex-review.yaml.
+    (iter_dir / "codex-review-pass-001.yaml").write_text(yaml.safe_dump({
+        "iteration_id": "iter-passonly",
+        "reviewer_id": "codex-iter-passonly-1",
+        "pass_id": "codex-iter-passonly-1-pass1",
+        "findings": [],
+        "goal_satisfied": True,
+        "blocking_objections": [],
+        "dispatch_provenance": {"review_target_hash": "match-sha"},
+        "sealed_at_utc": "2026-05-11T18:00:00Z",
+    }))
+    snap = _resume.snapshot(repo_root=fake_repo)
+    assert len(snap["open_reviews"]) == 1
+    assert snap["open_reviews"][0]["reviewer_id"] == "codex-iter-passonly-1"
+    assert snap["open_reviews"][0]["classification"] == "open"
+
+
+def test_review_family_deduped_when_canonical_and_pass_file_coexist(fake_repo: Path):
+    """A family with BOTH a canonical and pass files yields ONE open review,
+    sourced from the canonical file."""
+    iter_dir = _write_iter(fake_repo, "iter-dedup")
+    (iter_dir / "review-packet.yaml").write_text(yaml.safe_dump(
+        {"defect_target": {"files": ["a.py"], "base_sha": "match-sha", "touched_files_contents": {"a.py": "x"}}}
+    ))
+    review = {
+        "iteration_id": "iter-dedup",
+        "reviewer_id": "codex-iter-dedup-1",
+        "pass_id": "codex-iter-dedup-1-pass1",
+        "findings": [],
+        "goal_satisfied": True,
+        "blocking_objections": [],
+        "dispatch_provenance": {"review_target_hash": "match-sha"},
+        "sealed_at_utc": "2026-05-11T18:00:00Z",
+    }
+    (iter_dir / "codex-review.yaml").write_text(yaml.safe_dump(review))
+    stale = dict(review, pass_id="codex-iter-dedup-1-pass0", reviewer_id="codex-iter-dedup-0")
+    (iter_dir / "codex-review-pass-001.yaml").write_text(yaml.safe_dump(stale))
+    snap = _resume.snapshot(repo_root=fake_repo)
+    assert len(snap["open_reviews"]) == 1
+    assert snap["open_reviews"][0]["reviewer_id"] == "codex-iter-dedup-1"
+
+
 # ---------------------------------------------------------------------------
 # Watermark fast-path (rev-001).
 # ---------------------------------------------------------------------------

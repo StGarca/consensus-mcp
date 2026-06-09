@@ -30,7 +30,6 @@ Exit codes:
 from __future__ import annotations
 import argparse
 import hashlib
-import importlib.metadata
 import json
 import platform
 import re
@@ -38,7 +37,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+if __package__ in (None, ""):  # executed as a script: prefer the co-located source tree
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from consensus_mcp._paths import is_contained  # noqa: E402
+from consensus_mcp.validators._shared import _dependency_version, _sha256_file  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_SPEC = REPO_ROOT / "docs" / "architecture" / "orchestration-spec.md"
@@ -134,16 +136,6 @@ def _read_text(path: Path) -> str:
 
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _sha256_file(path: Path) -> str | None:
-    if not path.exists() or not path.is_file():
-        return None
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 # --------------------------------------------------------------------------
@@ -592,13 +584,6 @@ def validate_review_packet(packet_path: Path) -> dict:
 # --------------------------------------------------------------------------
 # report envelope (mirrors validate_review.py shape)
 # --------------------------------------------------------------------------
-
-def _dependency_version(dist_name: str) -> str | None:
-    try:
-        return importlib.metadata.version(dist_name)
-    except importlib.metadata.PackageNotFoundError:
-        return None
-
 
 def _build_provenance(packet_path: Path) -> dict:
     return {

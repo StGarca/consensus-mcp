@@ -53,6 +53,19 @@ alone - the review_target_path is the canonical input. If review_target_path
 is "(not specified)", note that as a finding (severity: medium, summary
 "review target not provided") and treat allowed_files as the fallback scope.
 
+## PACKET FIELDS YOU MUST USE
+
+The review packet accompanying this dispatch carries structured fields.
+Wherever they appear in your input, you MUST use them as follows:
+
+- `objective`: the goal your review evaluates the change against.
+- `open_blockers`: address EVERY listed blocker explicitly in your findings.
+- `check_results_if_any`: ground-truth test/check evidence; weigh it above
+  your own speculation about whether checks pass.
+- `gate_state`: the current gate state of the iteration; respect it.
+- `changed_sections`: scope your attention to these sections first.
+- `requested_output_schema`: your output MUST follow this schema.
+
 # Your task
 
 1. Read the diff or proposed change against the allowed_files scope.

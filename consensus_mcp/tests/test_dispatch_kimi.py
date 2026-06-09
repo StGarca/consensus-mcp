@@ -144,6 +144,63 @@ def test_extract_handles_json_markdown_fence():
     assert _dispatch_kimi._extract_json_from_text(text) == '{"findings": []}'
 
 
+# ---------- _rewrite_prompt_paths (repo-path-leak guard) ----------
+# The rewrite must cover BOTH separator forms of the real repo path (Windows
+# prompts can carry C:/Users/x AND C:\Users\x for the same path), and the
+# residual-leak check must fail closed - case-insensitively on Windows.
+
+def test_rewrite_prompt_paths_posix_rewrites_and_passes():
+    repo = Path("/home/steve/projects/realrepo")
+    workdir = Path("/tmp/kimi-workdir-abc")
+    prompt = f"Review {repo}/consensus_mcp/server.py inside {repo}."
+    out = _dispatch_kimi._rewrite_prompt_paths(prompt, repo, workdir)
+    assert str(repo) not in out
+    assert f"{workdir}/consensus_mcp/server.py" in out
+
+
+def test_rewrite_prompt_paths_windows_mixed_separators():
+    # Simulates a Windows prompt carrying BOTH separator forms of the same
+    # real repo path. PureWindowsPath gives the backslash str() form and the
+    # forward-slash as_posix() form on any host platform.
+    from pathlib import PureWindowsPath
+
+    repo = PureWindowsPath(r"C:\Users\steve\projects\realrepo")
+    workdir = PureWindowsPath(r"C:\Temp\kimi-workdir-abc")
+    prompt = (
+        r"Files: C:\Users\steve\projects\realrepo\a.py and "
+        "C:/Users/steve/projects/realrepo/b.py."
+    )
+    out = _dispatch_kimi._rewrite_prompt_paths(prompt, repo, workdir)
+    assert r"C:\Users\steve\projects\realrepo" not in out
+    assert "C:/Users/steve/projects/realrepo" not in out
+    assert r"C:\Temp\kimi-workdir-abc\a.py" in out
+    assert "C:/Temp/kimi-workdir-abc/b.py" in out
+
+
+def test_rewrite_prompt_paths_case_variant_leak_raises_when_case_insensitive():
+    # On Windows (case-insensitive paths) a drive-letter/case variant of the
+    # repo path is still the SAME directory; the rewrite cannot map it (str
+    # replace is case-sensitive) so the residual check must refuse dispatch.
+    from pathlib import PureWindowsPath
+
+    repo = PureWindowsPath(r"C:\Users\steve\projects\realrepo")
+    workdir = PureWindowsPath(r"C:\Temp\kimi-workdir-abc")
+    prompt = r"sneaky path c:\users\steve\projects\realrepo\a.py"
+    with pytest.raises(_dispatch_kimi.KimiInvocationError):
+        _dispatch_kimi._rewrite_prompt_paths(
+            prompt, repo, workdir, _case_insensitive=True,
+        )
+
+
+def test_rewrite_prompt_paths_posix_case_sensitive_leaves_distinct_path():
+    # POSIX paths are case-sensitive: a differently-cased path is a DIFFERENT
+    # directory, so it must neither be rewritten nor trip the leak check.
+    repo = Path("/home/steve/projects/realrepo")
+    workdir = Path("/tmp/kimi-workdir-abc")
+    prompt = "see /home/STEVE/projects/realrepo/a.py"
+    assert _dispatch_kimi._rewrite_prompt_paths(prompt, repo, workdir) == prompt
+
+
 # ---------- _parse_kimi_output ----------
 
 def _minimal_valid():
@@ -397,9 +454,9 @@ def _make_factory(stdout_lines, returncode, captured_cmd, captured_env, captured
 def test_invoke_kimi_builds_expected_argv():
     """FIX TRACK 2 (B4/H3): the argv is the verified kimi.yaml STDIN-transport
     profile - `kimi --quiet --thinking --work-dir <workdir>` with the prompt on
-    STDIN. NO --print (which auto-enabled --afk tool approval), NO --afk, and NO
-    -p (the prompt is not carried on argv, so the single-arg size limit can't
-    be hit). --quiet keeps the reviewer read-only."""
+    STDIN. Kimi CLI 1.46.0 documents --quiet as print mode, so containment is
+    provided by the disposable workdir and integrity checks, not by read-only
+    CLI behavior. NO --afk and NO -p."""
     review_line = b"OK final answer"
     captured_cmd: list = []
     captured_env: list = []
@@ -420,8 +477,7 @@ def test_invoke_kimi_builds_expected_argv():
     assert "--thinking" in cmd
     assert "--work-dir" in cmd
     assert str(Path("/tmp/workdir-copy")) in cmd  # OS-native sep (Windows: \tmp\...)
-    # The legacy print/-p/--afk transport (which auto-approved tool use and hit
-    # the arg-size limit) must be GONE.
+    # Do not request explicit afk/yolo behavior, and keep stdin transport.
     assert "--print" not in cmd
     assert "--afk" not in cmd
     assert "-p" not in cmd
@@ -819,6 +875,7 @@ def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
     data = _yaml.safe_load(sealed.read_text(encoding="utf-8"))
     assert data["reviewer_id"].startswith("kimi-")
     assert data["dispatch_provenance"]["adapter"] == "kimi"
+    assert data["dispatch_provenance"]["kimi_version"] == "kimi-test-1.0"
 
     # ok=True JSON line on stdout (parity with gemini/codex).
     out_lines = [l for l in captured.out.splitlines() if l.strip().startswith("{")]
@@ -828,6 +885,74 @@ def test_main_seals_kimi_review_yaml(tmp_path, monkeypatch, capsys):
 
     # Timing line emitted (parity: [kimi-timing] landed in Ns ...).
     assert "[kimi-timing]" in captured.out or "[kimi-timing]" in captured.err
+
+
+def test_main_proposal_mode_uses_disposable_workdir_and_rewrites_prompt(tmp_path, monkeypatch, capsys):
+    """Proposal mode is write-capable too: run it in the disposable workdir and
+    do not leak the original repo absolute path into the prompt sent to Kimi."""
+    repo_root = ROOT
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
+
+    iter_name = "iteration-kimi-proposal-isolated-0001"
+    iter_dir = repo_root / "consensus-state" / "archive" / "scratch-kimi-proposal" / iter_name
+    iter_dir.mkdir(parents=True, exist_ok=True)
+    rel_iter_dir = iter_dir.relative_to(repo_root)
+
+    goal_packet = iter_dir / "goal_packet.yaml"
+    _write_goal_packet(goal_packet)
+    rel_goal = goal_packet.relative_to(repo_root)
+
+    proposal = {
+        "selected_target": "isolated proposal",
+        "rationale_vs_alternatives": "test proposal",
+        "deliverable_scope": {
+            "next_iteration_id": "iter-test",
+            "files_in_scope": ["consensus_mcp/_dispatch_kimi.py"],
+            "files_out_of_scope": [],
+            "key_design_decisions": ["isolate kimi"],
+            "acceptance_gates": ["tests pass"],
+        },
+        "risks": [],
+        "estimated_complexity": "small",
+        "structural_abstention": False,
+    }
+    final_text = json.dumps(proposal)
+
+    stub_workdir = tmp_path / "kimi-workdir-stub" / "repo"
+    monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir", lambda _root: stub_workdir)
+    cleanup_calls: list = []
+    monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir", lambda wd: cleanup_calls.append(wd))
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: {})
+    monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
+
+    captured: dict = {}
+
+    def fake_invoke_with_retry(**kwargs):
+        captured["repo_root"] = kwargs.get("repo_root")
+        captured["prompt"] = kwargs.get("prompt")
+        return final_text, proposal
+
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
+
+    import uuid as _uuid
+    pass_id = f"kimi-proposal-{_uuid.uuid4().hex[:8]}"
+    rc = _dispatch_kimi.main([
+        "--goal-packet", str(rel_goal),
+        "--iteration-dir", str(rel_iter_dir),
+        "--pass-id", pass_id,
+        "--mode", "proposal",
+    ])
+    out = capsys.readouterr().out
+    assert rc == 0, f"main returned {rc}; stdout={out}"
+    assert captured["repo_root"] == stub_workdir
+    assert str(repo_root) not in captured["prompt"]
+    assert str(stub_workdir) in captured["prompt"]
+    assert cleanup_calls == [stub_workdir]
+
+    import shutil as _shutil
+    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-proposal",
+                   ignore_errors=True)
+
 
     # Cleanup scratch dir to avoid polluting the repo tree.
     import shutil as _shutil
@@ -867,9 +992,12 @@ def test_main_integrity_check_rejects_when_real_repo_dirty(monkeypatch, capsys):
     monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot",
                         lambda _root: next(_snaps))
 
+    import uuid as _uuid
+    pass_id = f"kimi-prompt-rewrite-{_uuid.uuid4().hex[:8]}"
     rc = _dispatch_kimi.main([
         "--goal-packet", str(rel_goal),
         "--iteration-dir", str(rel_iter_dir),
+        "--pass-id", pass_id,
     ])
     captured = capsys.readouterr()
     assert rc == 1, f"expected rejection rc=1; got {rc}; stdout={captured.out}"
@@ -887,106 +1015,107 @@ def test_main_integrity_check_rejects_when_real_repo_dirty(monkeypatch, capsys):
                    ignore_errors=True)
 
 
-def test_main_degrades_to_no_copy_on_enospc_and_seals(monkeypatch, capsys):
-    """v1.30.3 D4: when the disposable copy can't fit (ENOSPC -> _WorkdirTooLargeToIsolate),
-    the dispatch DEGRADES to running kimi against the REAL repo (no copy) and still seals.
-    The before/after integrity snapshot (reported CLEAN here) is the mutation control."""
+def test_main_fails_closed_on_enospc_instead_of_real_repo_fallback(monkeypatch, capsys):
+    """If Kimi cannot get a disposable workdir, refuse dispatch. Detection after
+    mutation is not containment for an operator workspace."""
     repo_root = ROOT
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
 
-    iter_name = "iteration-kimi-degrade-0001"
-    iter_dir = repo_root / "consensus-state" / "archive" / "scratch-kimi-degrade" / iter_name
+    iter_name = "iteration-kimi-isolation-fail-0001"
+    iter_dir = repo_root / "consensus-state" / "archive" / "scratch-kimi-isolation-fail" / iter_name
     iter_dir.mkdir(parents=True, exist_ok=True)
     rel_iter_dir = iter_dir.relative_to(repo_root)
 
     goal_packet = iter_dir / "goal_packet.yaml"
     _write_goal_packet(goal_packet)
     rel_goal = goal_packet.relative_to(repo_root)
-    final_text = json.dumps(_minimal_valid())
-
-    captured_workdirs: list = []
-
-    def fake_invoke_with_retry(**kwargs):
-        captured_workdirs.append(kwargs.get("repo_root"))
-        return final_text, _dispatch_kimi._parse_kimi_output(final_text)
 
     def _enospc(_root):
         raise _dispatch_kimi._WorkdirTooLargeToIsolate(
             "kimi disposable work-dir copy ran out of space")
 
+    invoked = []
     monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir", _enospc)
-    cleanup_calls: list = []
-    monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir",
-                        lambda wd: cleanup_calls.append(wd))
-    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: {})  # clean
-    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
+    monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir", lambda wd: None)
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: {})
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", lambda **kw: invoked.append(kw))
     monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
 
     import uuid as _uuid
-    pass_id = f"kimi-degrade-{_uuid.uuid4().hex[:8]}"
+    pass_id = f"kimi-prompt-rewrite-{_uuid.uuid4().hex[:8]}"
     rc = _dispatch_kimi.main([
         "--goal-packet", str(rel_goal),
         "--iteration-dir", str(rel_iter_dir),
         "--pass-id", pass_id,
     ])
     captured = capsys.readouterr()
-    assert rc == 0, f"main returned {rc}; stdout={captured.out}"
-    # DEGRADE: kimi ran against the REAL repo (no disposable copy); cleanup got None.
-    assert captured_workdirs == [repo_root]
-    assert cleanup_calls == [None]
+    assert rc == 1, f"expected fail-closed rc=1; got {rc}; stdout={captured.out}"
+    assert invoked == []
     out_lines = [l for l in captured.out.splitlines() if l.strip().startswith("{")]
-    assert json.loads(out_lines[-1])["ok"] is True
+    result = json.loads(out_lines[-1])
+    assert result["ok"] is False
+    assert result["error_type"] == "KimiInvocationError"
+    assert "refusing to run Kimi against the real repo" in result["error"]
 
     import shutil as _shutil
-    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-degrade",
+    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-isolation-fail",
                    ignore_errors=True)
 
 
-def test_main_degrade_no_copy_still_rejects_real_repo_mutation(monkeypatch, capsys):
-    """v1.30.3 D4 safety: even in the degraded no-copy path, the before/after snapshot
-    control still fires - a mutation to the real repo is DETECTED and the output REJECTED
-    (this is WHY degrading to no-copy is safe: detect + reject, never zero control)."""
+def test_prompt_rewrite_removes_real_repo_paths_before_invoke(tmp_path, monkeypatch, capsys):
+    """Every original repo absolute path in the prompt is rewritten to the
+    disposable workdir before Kimi is invoked."""
     repo_root = ROOT
     monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(repo_root))
 
-    iter_name = "iteration-kimi-degrade-reject-0001"
+    iter_name = "iteration-kimi-prompt-rewrite-0001"
     iter_dir = (repo_root / "consensus-state" / "archive"
-                / "scratch-kimi-degrade-reject" / iter_name)
+                / "scratch-kimi-prompt-rewrite" / iter_name)
     iter_dir.mkdir(parents=True, exist_ok=True)
     rel_iter_dir = iter_dir.relative_to(repo_root)
 
     goal_packet = iter_dir / "goal_packet.yaml"
     _write_goal_packet(goal_packet)
     rel_goal = goal_packet.relative_to(repo_root)
-    final_text = json.dumps(_minimal_valid())
 
-    def _enospc(_root):
-        raise _dispatch_kimi._WorkdirTooLargeToIsolate("ran out of space")
-
-    monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir", _enospc)
+    stub_workdir = tmp_path / "repo"
+    monkeypatch.setattr(_dispatch_kimi, "_make_disposable_workdir", lambda _root: stub_workdir)
     monkeypatch.setattr(_dispatch_kimi, "_cleanup_disposable_workdir", lambda _wd: None)
-    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry",
-                        lambda **kw: (final_text, _dispatch_kimi._parse_kimi_output(final_text)))
+    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: {})
     monkeypatch.setattr(_dispatch_kimi, "_get_kimi_version", lambda _b: "kimi-test-1.0")
-    # before CLEAN, after has a NEW entry (kimi mutated the real repo in the no-copy run).
-    _snaps = iter([{}, {"consensus_mcp/some_real_file.py": "mutated-hash"}])
-    monkeypatch.setattr(_dispatch_kimi, "_repo_status_snapshot", lambda _root: next(_snaps))
 
+    original_build_prompt = _dispatch_kimi._build_prompt
+
+    def _build_prompt_with_absolute_path(*args, **kwargs):
+        return original_build_prompt(*args, **kwargs) + f"\n/path-prefix{repo_root}/leak\n"
+
+    monkeypatch.setattr(_dispatch_kimi, "_build_prompt", _build_prompt_with_absolute_path)
+
+    final_text = json.dumps(_minimal_valid())
+    captured_prompt = {}
+
+    def fake_invoke_with_retry(**kwargs):
+        captured_prompt["text"] = kwargs["prompt"]
+        return final_text, _dispatch_kimi._parse_kimi_output(final_text)
+
+    monkeypatch.setattr(_dispatch_kimi, "_invoke_kimi_with_retry", fake_invoke_with_retry)
+
+    import uuid as _uuid
+    pass_id = f"kimi-prompt-rewrite-{_uuid.uuid4().hex[:8]}"
     rc = _dispatch_kimi.main([
         "--goal-packet", str(rel_goal),
         "--iteration-dir", str(rel_iter_dir),
+        "--pass-id", pass_id,
     ])
     captured = capsys.readouterr()
-    assert rc == 1, f"expected rejection rc=1; got {rc}; stdout={captured.out}"
-    out_lines = [l for l in captured.out.splitlines() if l.strip().startswith("{")]
-    result = json.loads(out_lines[-1])
-    assert result["ok"] is False
-    assert result["error_type"] == "KimiIntegrityError"
-    assert not any(p.name.startswith("kimi-review") for p in iter_dir.iterdir())
+    assert rc == 0, f"expected rc=0; got {rc}; stdout={captured.out}"
+    assert str(repo_root) not in captured_prompt["text"]
+    assert f"/path-prefix{stub_workdir}/leak" in captured_prompt["text"]
 
     import shutil as _shutil
-    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-degrade-reject",
+    _shutil.rmtree(repo_root / "consensus-state" / "archive" / "scratch-kimi-prompt-rewrite",
                    ignore_errors=True)
+
 
 
 # ---------- _strip_kimi_output_chrome (kimi.yaml strip_patterns) ----------

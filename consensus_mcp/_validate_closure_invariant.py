@@ -47,6 +47,7 @@ from consensus_mcp._closure_invariant import (  # noqa: E402
     last_mutation_from_audit,
     _parse_utc_timestamp,
 )
+from consensus_mcp._iteration_paths import canonical_review_name  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +144,7 @@ def _most_recent_closing_verdict(
     mutation_timestamp_missing = mut_ts is None or mut_dt is None
 
     candidates: list[tuple[Optional[datetime], dict]] = []
-    for fname in ("claude-review.yaml", "codex-review.yaml"):
+    for fname in (canonical_review_name("claude"), canonical_review_name("codex")):
         v = _load_review_yaml(iteration_dir / fname)
         if v is None:
             continue

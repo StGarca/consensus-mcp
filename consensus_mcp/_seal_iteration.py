@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
 import subprocess
 import sys
@@ -52,6 +51,12 @@ from pathlib import Path
 
 import yaml
 
+from consensus_mcp._iteration_paths import (
+    canonical_review_name,
+    iteration_outcome_path,
+    pass_review_family,
+    pass_review_glob,
+)
 from consensus_mcp._design_approval import (
     mint_design_approval,
     verify_design_approval,
@@ -79,8 +84,8 @@ _DEFAULT_WRITING_PLANS_SCOPE_GLOB = "docs/consensus/**"
 
 
 # ----- prepare -----
-
-_FAMILY_SUFFIX_RE = re.compile(r"^(?P<family>[a-zA-Z0-9_-]+?)-review-(?P<rest>.+)\.yaml$")
+# Pass-file matching (formerly the local _FAMILY_SUFFIX_RE) now lives in
+# _iteration_paths.pass_review_family - the single home of the naming contract.
 
 
 def _prepare(iter_dir: Path) -> dict:
@@ -99,12 +104,11 @@ def _prepare(iter_dir: Path) -> dict:
     """
     copied: list[str] = []
     skipped: list[str] = []
-    for f in sorted(iter_dir.glob("*-review-*.yaml")):
-        m = _FAMILY_SUFFIX_RE.match(f.name)
-        if not m:
+    for f in pass_review_glob(iter_dir):
+        family = pass_review_family(f.name)
+        if family is None:
             continue
-        family = m.group("family")
-        canonical = iter_dir / f"{family}-review.yaml"
+        canonical = iter_dir / canonical_review_name(family)
         if canonical.exists():
             # Don't overwrite - operator may have intentionally
             # produced a per-pass file alongside a canonical one.
@@ -115,7 +119,7 @@ def _prepare(iter_dir: Path) -> dict:
 
     # Scaffold iteration-outcome.yaml only if absent (NON-authoritative
     # closing_state placeholder; the operator must edit before mint).
-    outcome = iter_dir / "iteration-outcome.yaml"
+    outcome = iteration_outcome_path(iter_dir)
     skeleton_written = False
     if not outcome.exists():
         iter_id = iter_dir.name
@@ -214,7 +218,7 @@ def _mint(
 
     # Refuse closing_state not in the sealed set (the marker would fail
     # verify anyway; reject early with a clearer message).
-    outcome = iter_dir / "iteration-outcome.yaml"
+    outcome = iteration_outcome_path(iter_dir)
     if not outcome.exists():
         return {
             "ok": False,
