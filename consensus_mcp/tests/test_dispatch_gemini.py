@@ -71,6 +71,17 @@ def test_gemini_subprocess_env_overrides_falsey_inherited_value(monkeypatch):
     assert env["GEMINI_CLI_TRUST_WORKSPACE"] == "true"
 
 
+def test_gemini_subprocess_env_scrubs_ambient_api_keys(monkeypatch):
+    # Mirrors kimi's KIMI_API_KEY/OPENAI_API_KEY scrub: gemini CLI auth is
+    # its own file/OAuth credential, so a stray API key in the parent env
+    # must not be able to hijack it.
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-stray-gemini")
+    monkeypatch.setenv("GOOGLE_API_KEY", "sk-stray-google")
+    env = _dispatch_gemini._gemini_subprocess_env()
+    assert "GEMINI_API_KEY" not in env
+    assert "GOOGLE_API_KEY" not in env
+
+
 # ---------- _extract_json_from_text ----------
 
 def test_extract_pure_json_passes_through():
