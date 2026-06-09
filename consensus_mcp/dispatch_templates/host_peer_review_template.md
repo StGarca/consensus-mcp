@@ -42,6 +42,19 @@ review_target_hash (sha256): {review_target_hash}
 You MUST review ONLY the content at review_target_path / the embedded touched
 files. Do not infer the review surface from a dirty repository.
 
+## PACKET FIELDS YOU MUST USE
+
+The review packet accompanying this dispatch carries structured fields.
+Wherever they appear in your input, you MUST use them as follows:
+
+- `objective`: the goal your review evaluates the change against.
+- `open_blockers`: address EVERY listed blocker explicitly in your findings.
+- `check_results_if_any`: ground-truth test/check evidence; weigh it above
+  your own speculation about whether checks pass.
+- `gate_state`: the current gate state of the iteration; respect it.
+- `changed_sections`: scope your attention to these sections first.
+- `requested_output_schema`: your output MUST follow this schema.
+
 # What to look for (adversarial SWE review)
 
 1. **Correctness** - logic bugs, off-by-one, wrong conditionals, mishandled

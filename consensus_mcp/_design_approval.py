@@ -42,10 +42,10 @@ from __future__ import annotations
 
 import dataclasses
 import fnmatch
-import re
 from pathlib import Path
 
 from consensus_mcp._atomic_io import atomic_write_text
+from consensus_mcp._iteration_paths import review_family as _review_family
 
 import yaml
 
@@ -211,21 +211,9 @@ def _load_marker(repo_root: Path) -> tuple[dict | None, Result | None]:
     return data, None
 
 
-# Matches a sealed review artifact filename, capturing the reviewer family.
-# Accepts both the bare `<fam>-review.yaml` AND the round/pass-keyed
-# `<fam>-review-<N>.yaml` form an adapter writes when reviewers seal under
-# distinct pass_ids (the parallel-dispatch H3 seal-collision fix). `<fam>` is
-# non-greedy so `kimi-review-4.yaml` -> 'kimi', not 'kimi-review-4'.
-_REVIEW_FILE_RE = re.compile(r"^(?P<fam>.+?)-review(?:-.+)?\.yaml$")
-
-
-def _review_family(filename: str) -> str | None:
-    """Reviewer family from a sealed-review filename, or None if not a review
-    artifact. Handles `<fam>-review.yaml` and `<fam>-review-<N>.yaml`."""
-    m = _REVIEW_FILE_RE.match(filename)
-    if not m:
-        return None
-    return m.group("fam").strip().lower() or None
+# The sealed-review filename contract (regex + family parsing) lives in
+# _iteration_paths - the single source of truth for iteration artifact names;
+# _review_family is imported from there at the top of this module.
 
 
 def _count_non_claude_reviewers(iter_dir: Path) -> int:

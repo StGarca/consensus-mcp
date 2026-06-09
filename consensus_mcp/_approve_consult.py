@@ -42,9 +42,13 @@ from consensus_mcp._design_approval import (
     _count_non_claude_reviewers,
     _marker_path,
     _MIN_NON_CLAUDE_REVIEWERS,
-    _review_family,
     _revalidate_seal,
     mint_design_approval,
+)
+from consensus_mcp._iteration_paths import (
+    all_review_files,
+    iteration_outcome_path,
+    review_family,
 )
 from consensus_mcp._atomic_io import atomic_write_text
 from consensus_mcp._dispatch_base import (
@@ -290,8 +294,8 @@ def _sealed_reviewer_families(iter_dir: Path) -> list[str]:
     """Non-claude families from sealed reviews, matching the same `<fam>-review
     [-N].yaml` forms `_count_non_claude_reviewers` does (round-keyed names too)."""
     fams: set[str] = set()
-    for art in iter_dir.glob("*-review*.yaml"):
-        fam = _review_family(art.name)
+    for art in all_review_files(iter_dir):
+        fam = review_family(art.name)
         if fam and "claude" not in fam:
             fams.add(fam)
     return sorted(fams)
@@ -304,7 +308,7 @@ def _ensure_sealed_outcome(iter_dir: Path, closing_state: str) -> bool:
 
     Returns True iff THIS call wrote the file (so a failed approve can roll it back
     transactionally), False if a pre-existing sealed outcome was respected."""
-    op = iter_dir / "iteration-outcome.yaml"
+    op = iteration_outcome_path(iter_dir)
     if op.exists():
         try:
             existing = yaml.safe_load(op.read_text(encoding="utf-8")) or {}
@@ -482,7 +486,7 @@ def approve_consult(
     # point must undo everything THIS call created - the outcome (only if we wrote
     # it, never a pre-existing sealed one) and the design-approved marker - so a
     # failed approve leaves the repo exactly as it was found.
-    outcome_path = iter_dir / "iteration-outcome.yaml"
+    outcome_path = iteration_outcome_path(iter_dir)
     outcome_created = _ensure_sealed_outcome(iter_dir, closing_state)
 
     def _rollback(*, marker: bool) -> None:

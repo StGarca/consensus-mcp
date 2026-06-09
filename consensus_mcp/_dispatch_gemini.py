@@ -78,6 +78,13 @@ from consensus_mcp._dispatch_base import (
     _build_sealed_packet,
     _seal_via_t6,
     _log_dispatch,
+    # Shared free-text JSON extractor (moved to base; re-exported here for
+    # importers like contributors/profile_adapter.py and _dispatch_kimi.py).
+    _extract_json_from_text,
+    build_failed_event,
+    record_reader_error,
+    scrub_env_keys,
+    GEMINI_SCRUBBED_ENV_KEYS,
 )
 
 
@@ -127,6 +134,10 @@ def _gemini_subprocess_env() -> dict:
     mutates `os.environ`.
     """
     env = os.environ.copy()
+    # Scrub ambient API keys (GEMINI_API_KEY / GOOGLE_API_KEY) so a stray key
+    # in the parent environment cannot hijack gemini's file/OAuth-based CLI
+    # auth - mirrors kimi's documented KIMI_API_KEY/OPENAI_API_KEY scrub.
+    scrub_env_keys(env, GEMINI_SCRUBBED_ENV_KEYS)
     env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
     # Consult Q5 (defense-in-depth): force UTF-8 so any locale-dependent stdin
     # decode in an adapter subprocess can't hit the cp1252 surrogate class.
@@ -332,8 +343,8 @@ def _invoke_gemini(
                         "truncated": full_len > 200,
                         "seq": seq,
                     })
-        except Exception:
-            pass
+        except Exception as exc:
+            record_reader_error(stdout_buf, "stdout", exc)
 
     def stderr_reader():
         try:
@@ -342,8 +353,8 @@ def _invoke_gemini(
                     break
                 with state_lock:
                     stderr_buf.append(raw_line)
-        except Exception:
-            pass
+        except Exception as exc:
+            record_reader_error(stderr_buf, "stderr", exc)
 
     t_stdout = threading.Thread(target=stdout_reader, daemon=True, name="gemini-stdout-reader")
     t_stderr = threading.Thread(target=stderr_reader, daemon=True, name="gemini-stderr-reader")
@@ -481,39 +492,9 @@ def _invoke_gemini(
     return stdout_bytes.decode("utf-8", errors="replace")
 
 
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
-
-
-def _extract_json_from_text(text: str) -> str:
-    """Extract a JSON object substring from gemini's free-form output.
-
-    Gemini lacks codex's --output-schema enforcement, so its response may
-    include leading prose, markdown fences, or trailing commentary even
-    when explicitly told to emit JSON only. This helper applies a small
-    ladder of recoveries:
-
-      1. Whole-string trim - if the trimmed text starts with `{` and ends
-         with `}`, return as-is.
-      2. Fenced-code-block extraction - first ```json ... ``` (or bare
-         ``` ... ```) containing a `{...}` block.
-      3. Greedy outermost-brace match - first `{` to last `}`. Fragile
-         (won't handle nested unbalanced braces), but a final fallback.
-
-    Returns the candidate JSON string. Does NOT validate that it parses;
-    the caller does. If nothing matches, returns the original text so the
-    JSONDecodeError downstream carries the actual gemini output as diagnostic.
-    """
-    stripped = text.strip()
-    if stripped.startswith("{") and stripped.endswith("}"):
-        return stripped
-    fenced = _JSON_FENCE_RE.search(text)
-    if fenced:
-        return fenced.group(1)
-    first_brace = text.find("{")
-    last_brace = text.rfind("}")
-    if first_brace != -1 and last_brace > first_brace:
-        return text[first_brace:last_brace + 1]
-    return text
+# _JSON_FENCE_RE + _extract_json_from_text moved to _dispatch_base.py (the
+# grok copy had already been duplicated verbatim); imported above and kept
+# re-exported from this module for existing importers.
 
 
 def _parse_gemini_output(
@@ -968,29 +949,27 @@ def main(argv: list[str] | None = None) -> int:
     review_target_hash: str | None = None
 
     def _failed_event(error_type: str, error: str) -> dict:
-        ev = {
-            "event": "dispatch_failed",
-            "error_type": error_type,
-            "error": error,
-            "reviewer_id": reviewer_id,
-            "pass_id": pass_id,
-            "iteration_id": iteration_id,
-            "timeout_seconds": ns.timeout_seconds,
-            "adapter": "gemini",
-        }
-        for k, v in (
-            ("gemini_version", gemini_version),
-            ("model", ns.model),
-            ("prompt_sha256", prompt_sha),
-            ("output_sha256", output_sha),
-            ("goal_packet_sha256", goal_packet_sha),
-            ("scope_signature", scope_sig),
-            ("review_target_path", review_target_path_str),
-            ("review_target_hash", review_target_hash),
-        ):
-            if v is not None:
-                ev[k] = v
-        return ev
+        # Thin wrapper over the shared skeleton builder (drift fix); the
+        # extras carry only the provenance actually computed (None skipped).
+        return build_failed_event(
+            adapter="gemini",
+            error_type=error_type,
+            error=error,
+            reviewer_id=reviewer_id,
+            pass_id=pass_id,
+            iteration_id=iteration_id,
+            timeout_seconds=ns.timeout_seconds,
+            extra_fields={
+                "gemini_version": gemini_version,
+                "model": ns.model,
+                "prompt_sha256": prompt_sha,
+                "output_sha256": output_sha,
+                "goal_packet_sha256": goal_packet_sha,
+                "scope_signature": scope_sig,
+                "review_target_path": review_target_path_str,
+                "review_target_hash": review_target_hash,
+            },
+        )
 
     try:
         goal_packet_text = goal_packet_path.read_text(encoding="utf-8")

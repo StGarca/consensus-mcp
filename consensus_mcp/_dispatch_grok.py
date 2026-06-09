@@ -83,7 +83,26 @@ from consensus_mcp._dispatch_base import (
     _build_sealed_packet,
     _seal_via_t6,
     _log_dispatch,
+    # Shared free-text JSON extractor (moved to base from the gemini/grok
+    # verbatim duplicates).
+    _extract_json_from_text,
+    build_failed_event,
+    record_reader_error,
+    scrub_env_keys,
+    GROK_SCRUBBED_ENV_KEYS,
 )
+
+
+def _grok_subprocess_env() -> dict:
+    """Environment for the grok subprocess.
+
+    Returns a COPY of the parent environment with ambient XAI_API_KEY /
+    GROK_API_KEY removed: grok CLI auth is its own login/file credential,
+    and a stray API key in the environment could hijack that auth and route
+    the request through an external key (mirrors kimi's documented scrub
+    rationale). Never mutates os.environ.
+    """
+    return scrub_env_keys(os.environ.copy(), GROK_SCRUBBED_ENV_KEYS)
 
 
 # Adapter-specific finding patterns.
@@ -438,6 +457,7 @@ def _invoke_grok_in_cwd(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=grok_run_cwd,
+            env=_grok_subprocess_env(),
             **popen_kwargs,
         )
     except FileNotFoundError:
@@ -475,8 +495,8 @@ def _invoke_grok_in_cwd(
                         "truncated": full_len > 200,
                         "seq": seq,
                     })
-        except Exception:
-            pass
+        except Exception as exc:
+            record_reader_error(stdout_buf, "stdout", exc)
 
     def stderr_reader():
         try:
@@ -485,8 +505,8 @@ def _invoke_grok_in_cwd(
                     break
                 with state_lock:
                     stderr_buf.append(raw_line)
-        except Exception:
-            pass
+        except Exception as exc:
+            record_reader_error(stderr_buf, "stderr", exc)
 
     t_stdout = threading.Thread(target=stdout_reader, daemon=True, name="grok-stdout-reader")
     t_stderr = threading.Thread(target=stderr_reader, daemon=True, name="grok-stderr-reader")
@@ -605,33 +625,8 @@ def _invoke_grok_in_cwd(
     ), prompt_path
 
 
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
-
-
-def _extract_json_from_text(text: str) -> str:
-    """Extract a JSON object substring from grok's free-form output.
-
-    Like gemini, grok lacks codex's --output-schema enforcement, so its
-    response may include leading prose, markdown fences, or trailing
-    commentary even when explicitly told to emit JSON only. Mirrors
-    gemini's extractor:
-      1. Whole-string trim - if the trimmed text starts with `{` and ends
-         with `}`, return as-is.
-      2. Fenced-code-block extraction - first ```json ... ``` (or bare
-         ``` ... ```) containing a `{...}` block.
-      3. Greedy outermost-brace match - first `{` to last `}`.
-    """
-    stripped = text.strip()
-    if stripped.startswith("{") and stripped.endswith("}"):
-        return stripped
-    fenced = _JSON_FENCE_RE.search(text)
-    if fenced:
-        return fenced.group(1)
-    first_brace = text.find("{")
-    last_brace = text.rfind("}")
-    if first_brace != -1 and last_brace > first_brace:
-        return text[first_brace:last_brace + 1]
-    return text
+# _JSON_FENCE_RE + _extract_json_from_text moved to _dispatch_base.py (this
+# copy mirrored gemini's verbatim); imported above.
 
 
 def _assemble_grok_stream(raw: str) -> str:
@@ -1113,31 +1108,29 @@ def main(argv: list[str] | None = None) -> int:
     prompt_file_path_str: str | None = None
 
     def _failed_event(error_type: str, error: str) -> dict:
-        ev = {
-            "event": "dispatch_failed",
-            "error_type": error_type,
-            "error": error,
-            "reviewer_id": reviewer_id,
-            "pass_id": pass_id,
-            "iteration_id": iteration_id,
-            "timeout_seconds": ns.timeout_seconds,
-            "adapter": "grok",
-            "disabled_tools": list(_GROK_DISABLED_TOOLS),
-        }
-        for k, v in (
-            ("grok_version", grok_version),
-            ("model", ns.model),
-            ("prompt_sha256", prompt_sha),
-            ("output_sha256", output_sha),
-            ("goal_packet_sha256", goal_packet_sha),
-            ("scope_signature", scope_sig),
-            ("review_target_path", review_target_path_str),
-            ("review_target_hash", review_target_hash),
-            ("prompt_file_path", prompt_file_path_str),
-        ):
-            if v is not None:
-                ev[k] = v
-        return ev
+        # Thin wrapper over the shared skeleton builder (drift fix); the
+        # extras carry only the provenance actually computed (None skipped).
+        return build_failed_event(
+            adapter="grok",
+            error_type=error_type,
+            error=error,
+            reviewer_id=reviewer_id,
+            pass_id=pass_id,
+            iteration_id=iteration_id,
+            timeout_seconds=ns.timeout_seconds,
+            extra_fields={
+                "disabled_tools": list(_GROK_DISABLED_TOOLS),
+                "grok_version": grok_version,
+                "model": ns.model,
+                "prompt_sha256": prompt_sha,
+                "output_sha256": output_sha,
+                "goal_packet_sha256": goal_packet_sha,
+                "scope_signature": scope_sig,
+                "review_target_path": review_target_path_str,
+                "review_target_hash": review_target_hash,
+                "prompt_file_path": prompt_file_path_str,
+            },
+        )
 
     try:
         goal_packet_text = goal_packet_path.read_text(encoding="utf-8")

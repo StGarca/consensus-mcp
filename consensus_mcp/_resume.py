@@ -30,6 +30,7 @@ from typing import Any
 import yaml
 
 from consensus_mcp._closure_invariant import check_closure_invariant
+from consensus_mcp import _iteration_paths as _ipaths
 from consensus_mcp._self_drive import _scope_signature
 
 SCHEMA_VERSION = 2
@@ -831,7 +832,7 @@ def snapshot(
     warnings.extend(log_warnings)
 
     # --- rev-003: compute current bundle sha BEFORE classifying reviews ---
-    rp_path = iter_dir / "review-packet.yaml"
+    rp_path = _ipaths.review_packet_path(iter_dir)
     current_bundle_sha, _bundle_source = _compute_current_bundle_sha(events, rp_path)
     # codex-iter0003-4 rev-001 fix: surface non-OK bundle-sha sources as warnings
     # so the orchestrator knows the review classification is unverified.
@@ -865,15 +866,32 @@ def snapshot(
     closure_cert = _load_yaml(closure_cert_path)
     if closure_cert is not None:
         closure_cert["_path"] = str(closure_cert_path)
-    iteration_outcome_path = iter_dir / "iteration-outcome.yaml"
-    iteration_outcome = _load_yaml(iteration_outcome_path)
+    iteration_outcome = _load_yaml(_ipaths.iteration_outcome_path(iter_dir))
 
     # --- iteration_state ---
     iteration_state = _compute_iteration_state(goal_packet, iteration_outcome, closure_cert)
 
     # --- section 5 step 4: classify reviews (now we have current_bundle_sha) ---
+    # F4 (v1.42.x): discover reviews by FAMILY, not only by canonical
+    # `<fam>-review.yaml` names. The seal step writes pass files
+    # `<fam>-review-<pass>.yaml` and copies the first to the canonical name
+    # only when the canonical is absent; if that copy step failed or was
+    # interrupted, the canonical is missing but the pass file IS the review.
+    # Mirror _approve_consult's family-set semantics: a family counts as
+    # reviewed if EITHER form exists. Canonical is preferred; otherwise fall
+    # back to the first sorted pass file (the one the seal canonicalizer
+    # would have copied).
+    reviews_by_family: dict[str, Path] = {}
+    for candidate in _ipaths.all_review_files(iter_dir):
+        fam = _ipaths.review_family(candidate.name)
+        if fam is None:
+            continue
+        if candidate.name.lower() == _ipaths.canonical_review_name(fam):
+            reviews_by_family[fam] = candidate  # canonical always wins
+        elif fam not in reviews_by_family:
+            reviews_by_family[fam] = candidate  # first sorted pass file
     open_reviews: list[dict] = []
-    for review_path in sorted(iter_dir.glob("*-review.yaml")):
+    for review_path in sorted(reviews_by_family.values()):
         review = _parse_review(review_path)
         if review is None:
             warnings.append(f"review file {review_path.name} failed to parse")
