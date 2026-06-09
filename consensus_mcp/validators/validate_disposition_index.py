@@ -31,8 +31,6 @@ report drives operator/v1.5 decisions, validator does not gate.
 """
 from __future__ import annotations
 import argparse
-import hashlib
-import importlib.metadata
 import json
 import platform
 import re
@@ -40,6 +38,10 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+if __package__ in (None, ""):  # executed as a script: prefer the co-located source tree
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from consensus_mcp.validators._shared import _dependency_version, _sha256_file  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_SPEC = REPO_ROOT / "docs" / "architecture" / "orchestration-spec.md"
@@ -161,16 +163,6 @@ def _git_check_ignore(path: Path) -> bool:
         return False
 
 
-def _sha256_file(path: Path) -> str | None:
-    if not path.exists() or not path.is_file():
-        return None
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def _git_stdout(args: list[str]) -> str | None:
     try:
         result = subprocess.run(
@@ -199,13 +191,6 @@ def _git_dirty_summary() -> dict:
         "entries": entries[:limit],
         "truncated": len(entries) > limit,
     }
-
-
-def _dependency_version(dist_name: str) -> str | None:
-    try:
-        return importlib.metadata.version(dist_name)
-    except importlib.metadata.PackageNotFoundError:
-        return None
 
 
 def _build_provenance(spec_path: Path) -> dict:
