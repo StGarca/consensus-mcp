@@ -60,6 +60,7 @@ from consensus_mcp._dispatch_base import (
     _sha256_str,
 )
 from consensus_mcp._dispatch_gemini import _extract_json_from_text
+from consensus_mcp._iteration_paths import canonical_review_name
 from consensus_mcp.contributors.base import (
     ContributorAdapter,
     DispatchError,
@@ -116,7 +117,7 @@ class ProfileAdapter(ContributorAdapter):
 
     @property
     def _sealed_filename(self) -> str:
-        return self.profile.get("sealed_filename") or f"{self.name}-review.yaml"
+        return self.profile.get("sealed_filename") or canonical_review_name(self.name)
 
     @property
     def _bin(self) -> str:
