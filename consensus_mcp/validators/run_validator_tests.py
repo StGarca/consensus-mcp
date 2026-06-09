@@ -27,6 +27,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
+if __package__ in (None, ""):  # executed as a script: prefer the co-located source tree
+    sys.path.insert(0, str(REPO_ROOT))
+
 from consensus_mcp.validators.validate_disposition_index import validate_disposition_index  # noqa: E402
 from consensus_mcp.validators.validate_review import validate_review  # noqa: E402
 from consensus_mcp.validators.validate_consensus import validate_consensus  # noqa: E402
