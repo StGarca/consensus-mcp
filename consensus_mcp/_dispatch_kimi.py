@@ -782,8 +782,9 @@ def _invoke_kimi(
     stall_silence_seconds = _effective_stall_silence(stall_silence_seconds)
 
     # Verified kimi.yaml profile: stdin transport, --quiet --thinking, no -p.
-    # --quiet (unlike --print) does NOT auto-enable --afk, so kimi runs the
-    # review READ-ONLY. --work-dir points at a disposable temp copy.
+    # Kimi CLI 1.46.0 documents --quiet as print mode, and print mode auto-
+    # approves tool calls. Treat Kimi as write-capable; containment must come
+    # from disposable workdir isolation plus post-dispatch integrity checks.
     cmd = [
         _resolve_kimi_bin(kimi_bin),
         "--quiet",
@@ -1521,48 +1522,49 @@ def main(argv: list[str] | None = None) -> int:
         status_before = _repo_status_snapshot(repo_root)
 
         # DISPOSABLE TEMP WORKDIR (B4): run kimi against a throwaway copy of the
-        # repo (git clone --local --shared, fallback shutil.copytree) so it
-        # physically cannot touch the real tree. Cleaned up in finally.
+        # repo in EVERY mode. Kimi CLI 1.46.0 print/quiet mode can auto-approve
+        # tool calls, so proposal mode is not safe to run in the real workspace.
+        # If the copy cannot be created, fail closed rather than using the real repo.
         kimi_workdir: Path | None = None
         try:
-            if ns.mode == "proposal":
-                # Bug C fix (v1.30.2): a proposal-mode (design-consult) dispatch only
-                # READS the goal_packet - there is no mutation to isolate. Copying a
-                # large / no-`.git` repo into tmpfs is exactly what caused ENOSPC, so run
-                # against the real repo (read-only intent); the before/after integrity
-                # snapshot below remains the backstop.
-                effective_workdir = repo_root
-            else:
-                try:
-                    kimi_workdir = _make_disposable_workdir(repo_root)
-                    effective_workdir = kimi_workdir
-                except _WorkdirTooLargeToIsolate as degrade_exc:
-                    # D4 size-aware degrade: the disposable copy won't fit (ENOSPC). Run
-                    # against the REAL repo with NO copy - safe because status_before above
-                    # is a REAL control (git status / content-hash manifest), so the
-                    # post-dispatch diff below DETECTS and REJECTS any mutation kimi makes.
-                    # (If the snapshot itself couldn't be built we'd have failed loud above.)
-                    kimi_workdir = None
-                    effective_workdir = repo_root
-                    _log_dispatch(log_path, {
-                        "event": "dispatch_workdir_degraded_no_copy",
-                        "iteration_id": iteration_id,
-                        "reviewer_id": reviewer_id,
-                        "pass_id": pass_id,
-                        "reason": str(degrade_exc),
-                        "adapter": "kimi",
-                    })
+            try:
+                kimi_workdir = _make_disposable_workdir(repo_root)
+                effective_workdir = kimi_workdir
+            except _WorkdirTooLargeToIsolate as isolate_exc:
+                _log_dispatch(log_path, {
+                    "event": "dispatch_workdir_isolation_failed",
+                    "iteration_id": iteration_id,
+                    "reviewer_id": reviewer_id,
+                    "pass_id": pass_id,
+                    "reason": str(isolate_exc),
+                    "adapter": "kimi",
+                })
+                raise KimiInvocationError(
+                    "kimi disposable work-dir isolation failed; refusing to run "
+                    "Kimi against the real repo",
+                    retryable=False,
+                ) from isolate_exc
+
+            prompt_for_kimi = prompt.replace(str(repo_root), str(effective_workdir))
+            if str(repo_root) in prompt_for_kimi:
+                raise KimiInvocationError(
+                    "kimi prompt still contains the real repo absolute path after "
+                    "isolation rewrite; refusing dispatch",
+                    retryable=False,
+                )
+            prompt_sha = _sha256_str(prompt_for_kimi)
+
             _log_dispatch(log_path, {
                 "event": "dispatch_workdir_prepared",
                 "iteration_id": iteration_id,
                 "reviewer_id": reviewer_id,
                 "pass_id": pass_id,
                 "workdir": str(effective_workdir),
-                "disposable_copy": kimi_workdir is not None,
+                "disposable_copy": True,
                 "adapter": "kimi",
             })
             raw_output, extracted = _invoke_kimi_with_retry(
-                prompt=prompt,
+                prompt=prompt_for_kimi,
                 kimi_bin=ns.kimi_bin,
                 timeout_seconds=ns.timeout_seconds,
                 repo_root=effective_workdir,
