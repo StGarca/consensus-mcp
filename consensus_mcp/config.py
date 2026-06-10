@@ -390,6 +390,8 @@ def _validate_architect_build(config: dict) -> None:
             f"string disables the frozen gate); got "
             f"{loop.get('verification')!r}."
         )
+    # Full git check-ref-format hardening is owned by the lane layer; this
+    # contract check only rejects the obvious path-traversal shapes.
     prefix = loop.get("lane_branch_prefix", "")
     if (
         not isinstance(prefix, str)
