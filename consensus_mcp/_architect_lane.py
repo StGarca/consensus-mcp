@@ -125,13 +125,42 @@ def remove_lane(repo_root: Path, goal: Path) -> None:
     """Prune the lane worktree AND its branch. The branch is what makes a
     goal-id collision sticky (create_lane refuses while it exists), so
     removal must clear both or the operator-facing collision advice
-    ('clean up the old lane') would be a dead end."""
+    ('clean up the old lane') would be a dead end.
+
+    This is the one DESTRUCTIVE lane op, so it anchors containment before
+    the git op - but PATH-ONLY (lstat + resolve under the architect root),
+    never the full .git pointer check of _require_lane_contained: a
+    goal/lane symlinked onto another registered worktree must never receive
+    'worktree remove --force' / 'branch -D', while a tampered-but-delivered
+    lane must STAY removable (cleanup of a closed goal must not deadlock on
+    pointer tamper)."""
     repo_root = Path(repo_root)
+    goal = Path(goal)
     lane = ap.lane_dir(goal)
-    if not lane.exists():
-        return
-    branch = _lane_branch(repo_root, lane)
-    _git(repo_root, "worktree", "remove", "--force", str(lane))
+    for p in (goal, lane):
+        try:
+            st = os.lstat(p)
+        except FileNotFoundError:
+            return  # no goal / no lane: nothing to remove (idempotent)
+        except OSError as exc:
+            raise LaneError(f"cannot lstat {p}: {exc}") from exc
+        if stat.S_ISLNK(st.st_mode) or _is_reparse_point(st):
+            raise LaneError(
+                f"{p} is a symlink/junction - refusing destructive "
+                f"lane removal"
+            )
+    try:
+        resolved = lane.resolve()
+        architect_root = repo_root.resolve().joinpath(*ap.GOAL_ROOT_PARTS)
+    except OSError as exc:
+        raise LaneError(f"cannot resolve lane containment: {exc}") from exc
+    if architect_root not in resolved.parents:
+        raise LaneError(
+            f"lane {resolved} does not resolve under the architect root "
+            f"{architect_root} - refusing destructive removal"
+        )
+    branch = _lane_branch(repo_root, resolved)
+    _git(repo_root, "worktree", "remove", "--force", str(resolved))
     if branch:
         _git(repo_root, "branch", "-D", branch)
 

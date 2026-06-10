@@ -73,6 +73,25 @@ def test_approve_spec_refuses_double_approval(tmp_path: Path):
     assert "already" in second["error"]
 
 
+def test_approve_spec_refuses_tampered_spec_seal(tmp_path: Path):
+    # The spec seal must reproduce before approval binds spec_sha256: a body
+    # edited after sealing (stale payload_sha256) would bind spec-approval
+    # to a hash that does not match the on-disk content the human read.
+    repo = _make_repo(tmp_path)
+    goal = _goal_with_spec(repo)
+    sealed = yaml.safe_load(ap.spec_path(goal).read_text(encoding="utf-8"))
+    tampered = dict(sealed, body="build something ELSE")
+    ap.spec_path(goal).write_text(
+        yaml.safe_dump(tampered, sort_keys=False), encoding="utf-8"
+    )
+    result = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo)
+    )
+    assert result["ok"] is False
+    assert "seal" in result["error"]
+    assert not (goal / ap.SPEC_APPROVAL_FILENAME).exists()
+
+
 def test_cleanup_refuses_open_goal(tmp_path: Path):
     repo = _make_repo(tmp_path)
     goal = _goal_with_spec(repo)
