@@ -101,6 +101,14 @@ def handle_approve_spec(
     spec = ap._read_yaml_or_empty(spec_file)
     if not spec.get("payload_sha256"):
         return dict(err, error=f"no sealed spec at {spec_file}")
+    if not ap.seal_is_intact(spec):
+        # Same refusal handle_cleanup applies to outcome.yaml: approval binds
+        # spec_sha256, so a body edited after sealing (stale payload_sha256)
+        # would seal a hash that does not match the on-disk content the
+        # human read.
+        return dict(err, error=f"{spec_file.name} seal invalid: "
+                               "payload_sha256 does not reproduce - refusing "
+                               "to bind approval to a tampered spec")
     if (goal / ap.SPEC_APPROVAL_FILENAME).exists():
         return dict(err, error="spec already approved; the architect owns "
                                "spec evolution between gates (spec-rev-N)")
