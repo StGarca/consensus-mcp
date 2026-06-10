@@ -51,6 +51,7 @@ def _git(cwd: Path, *args: str) -> str:
     try:
         proc = subprocess.run(
             cmd, cwd=str(cwd), capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
             timeout=_GIT_TIMEOUT, env=_scrubbed_env(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
@@ -112,28 +113,28 @@ def lane_diff(repo_root: Path, lane: Path, base_sha: str) -> str:
 
 def scan_lane_integrity(lane: Path) -> list[str]:
     """Symlinks anywhere in the lane are violations; hardlinks whose inode
-    also lives outside the lane are violations. .git pointer file excluded."""
+    also lives outside the lane are violations (st_nlink exceeding the count
+    of lane paths sharing the same (st_dev, st_ino) - a pair living entirely
+    inside the lane is fine). .git pointer file excluded."""
     lane = Path(lane).resolve()
     violations: list[str] = []
-    lane_dev_inodes: set[tuple[int, int]] = set()
-    entries: list[Path] = []
+    lane_inode_counts: dict[tuple[int, int], int] = {}
+    files: list[tuple[Path, os.stat_result]] = []
     for p in lane.rglob("*"):
         if p.name == ".git" and p.parent == lane:
             continue
-        entries.append(p)
         if p.is_symlink():
             violations.append(f"symlink in lane: {p.relative_to(lane)}")
             continue
         if p.is_file():
             st = p.stat(follow_symlinks=False)
-            lane_dev_inodes.add((st.st_dev, st.st_ino))
-    for p in entries:
-        if p.is_symlink() or not p.is_file():
-            continue
-        st = p.stat(follow_symlinks=False)
-        if st.st_nlink > 1:
+            key = (st.st_dev, st.st_ino)
+            lane_inode_counts[key] = lane_inode_counts.get(key, 0) + 1
+            files.append((p, st))
+    for p, st in files:
+        if st.st_nlink > lane_inode_counts[(st.st_dev, st.st_ino)]:
             violations.append(
-                f"hardlink with outside-lane inode suspected: "
+                f"hardlink with outside-lane inode: "
                 f"{p.relative_to(lane)} (nlink={st.st_nlink})"
             )
     return violations
@@ -153,7 +154,9 @@ def snapshot_main_integrity(repo_root: Path) -> dict:
     the goal dir mutates during normal supervisor operation."""
     repo_root = Path(repo_root)
     status = [
-        line for line in _git(repo_root, "status", "--porcelain").splitlines()
+        line for line in _git(
+            repo_root, "status", "--porcelain", "--untracked-files=all"
+        ).splitlines()
         if ".consensus/architect/" not in line.replace("\\", "/")
     ]
     refs = _git(
