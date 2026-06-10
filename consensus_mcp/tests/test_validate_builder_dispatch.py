@@ -170,3 +170,32 @@ def test_rejects_shell_metacharacters(tmp_path: Path):
         argv[argv.index("out.json")] = bad
         violations = validate_builder_argv(argv, tmp_path)
         assert any("shell metacharacter" in v for v in violations), bad
+
+
+def test_rejects_smuggled_flag_class(tmp_path: Path):
+    # The exact-shape allowlist must reject EVERY known smuggle channel,
+    # incl. clap short forms, combined equals forms, config overrides, and
+    # sandbox-bypass flags - the quality-review finding that motivated the
+    # positional-canon rewrite. Each suffix rides ALONGSIDE the canonical
+    # pair, which the old rule-list validator accepted with zero violations.
+    lane = _lane(tmp_path)
+    for extra in (
+        ["--sandbox=danger-full-access"],
+        ["-s", "danger-full-access"],
+        ["-C", str(tmp_path)],
+        ["-c", "sandbox_mode=danger-full-access"],
+        ["--dangerously-bypass-approvals-and-sandbox"],
+        ["--full-auto"],
+        ["--profile", "danger"],
+    ):
+        argv = _good_argv(lane) + extra
+        violations = validate_builder_argv(argv, tmp_path)
+        assert violations, f"smuggle accepted: {extra}"
+
+
+def test_rejects_missing_token(tmp_path: Path):
+    # Shorter than the canon is as non-canon as longer.
+    lane = _lane(tmp_path)
+    argv = _good_argv(lane)[:-1]  # drop the trailing '-'
+    violations = validate_builder_argv(argv, tmp_path)
+    assert violations
