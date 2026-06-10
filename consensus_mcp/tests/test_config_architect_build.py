@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 import consensus_mcp.config as cfg
+from consensus_mcp import _contributor_profiles as profiles_mod
 
 
 def _abd_config(**overrides):
@@ -53,7 +54,7 @@ def test_validate_accepts_minimal_architect_build():
 def test_validate_rejects_missing_roles_block():
     c = _abd_config()
     del c["roles"]
-    with pytest.raises(cfg.ConfigValidationError, match="roles"):
+    with pytest.raises(cfg.ConfigValidationError, match="requires a top-level roles"):
         cfg.validate(cfg.normalize(c))
 
 
@@ -61,7 +62,7 @@ def test_validate_rejects_roles_block_outside_architect_build():
     c = cfg.default_config()
     c["contributors"]["enabled"] = ["claude", "codex"]
     c["roles"] = {"architect": "claude", "builder": "codex", "reviewer": "codex"}
-    with pytest.raises(cfg.ConfigValidationError, match="roles"):
+    with pytest.raises(cfg.ConfigValidationError, match="only legal when"):
         cfg.validate(cfg.normalize(c))
 
 
@@ -112,7 +113,11 @@ def test_validate_rejects_bad_lane_prefix():
         cfg.validate(cfg.normalize(c))
 
 
-from consensus_mcp import _contributor_profiles as profiles_mod
+def test_validate_rejects_unknown_role_key():
+    c = _abd_config()
+    c["roles"]["observer"] = "claude"
+    with pytest.raises(cfg.ConfigValidationError, match="unknown keys"):
+        cfg.validate(cfg.normalize(c))
 
 
 def test_codex_profile_is_builder_capable():
