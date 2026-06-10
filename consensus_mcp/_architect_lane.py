@@ -73,6 +73,11 @@ def create_lane(repo_root: Path, goal: Path, branch: str, base_sha: str) -> Path
     repo_root = Path(repo_root)
     lane = ap.lane_dir(goal)
     if lane.exists():
+        # Resume path: the builder has already touched this lane, so the
+        # containment guard must run BEFORE any supervisor git op - a
+        # rewritten gitdir: pointer must never receive a git invocation
+        # (same invariant commit_lane/lane_diff enforce).
+        lane = _require_lane_contained(repo_root, lane)
         try:
             current = _git(lane, "rev-parse", "--abbrev-ref", "HEAD").strip()
         except LaneError as exc:
@@ -287,17 +292,45 @@ def _hash_file(path: Path) -> str:
         return "absent"
 
 
+_GOAL_ROOT_PREFIX = "/".join(ap.GOAL_ROOT_PARTS) + "/"
+
+
+def _status_line_is_goal_dir(line: str) -> bool:
+    """True iff EVERY path side of a --porcelain v1 line is ROOT-ANCHORED
+    under the architect goal root.
+
+    Porcelain paths are repo-root-relative, so a bare substring match would
+    also exclude e.g. vendor/foo/.consensus/architect/evil.sh - a blind
+    spot in the L5 detector. Renames carry two sides ('orig -> dest'); a
+    rename OUT of the goal dir keeps its outside path visible because ALL
+    sides must match. Special-char paths arrive C-quoted; only the outer
+    quotes matter for the prefix test (the prefix itself has no escapes),
+    and an unparseable side fails the match - fail-closed, the line stays
+    visible."""
+    body = line[3:] if len(line) > 3 else ""
+    sides = [s.strip() for s in body.split(" -> ")]
+    if not sides or not any(sides):
+        return False
+    for side in sides:
+        if side.startswith('"') and side.endswith('"') and len(side) >= 2:
+            side = side[1:-1]
+        if not side.replace("\\", "/").startswith(_GOAL_ROOT_PREFIX):
+            return False
+    return True
+
+
 def snapshot_main_integrity(repo_root: Path) -> dict:
     """Record main working-tree status, refs, hooks + config hashes.
 
-    Paths under .consensus/architect/ are EXCLUDED from the status view -
-    the goal dir mutates during normal supervisor operation."""
+    Paths under the goal root are EXCLUDED from the status view (root-
+    anchored, per-side - see _status_line_is_goal_dir) because the goal dir
+    mutates during normal supervisor operation."""
     repo_root = Path(repo_root)
     status = [
         line for line in _git(
             repo_root, "status", "--porcelain", "--untracked-files=all"
         ).splitlines()
-        if ".consensus/architect/" not in line.replace("\\", "/")
+        if not _status_line_is_goal_dir(line)
     ]
     refs = _git(
         repo_root, "for-each-ref", "--format=%(refname) %(objectname)",
