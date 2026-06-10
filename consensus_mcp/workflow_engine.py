@@ -221,6 +221,18 @@ class WorkflowEngine:
                     "staging/validation only. See "
                     "docs/workflows/workflow-c-autonomous.md for status."
                 )
+            elif mode == cfg.WORKFLOW_ARCHITECT_BUILD:
+                # architect-build (workflow D) is SUPERVISOR-driven by
+                # design (2026-06-10 consult): the engine never owns the
+                # multi-cycle loop. Permanent and intentional - not a
+                # NotImplementedError placeholder like Workflow C.
+                raise WorkflowError(
+                    "workflow.mode architect-build is supervisor-driven; "
+                    "use the architect.loop_step tool "
+                    "(consensus_mcp.tools.architect_loop_step) instead of "
+                    "run_iteration. See "
+                    "docs/workflows/architect-build.md."
+                )
             else:
                 raise WorkflowError(f"unknown workflow.mode {mode!r}")
         except WorkflowError as exc:
