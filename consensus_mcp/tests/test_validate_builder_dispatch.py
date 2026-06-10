@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from consensus_mcp.validators.validate_builder_dispatch import (
     validate_builder_argv,
 )
@@ -65,7 +67,10 @@ def test_rejects_cd_symlink_escape(tmp_path: Path):
     outside = tmp_path.parent / "outside-lane"
     outside.mkdir(exist_ok=True)
     link = lane.parent / "lane-link"
-    link.symlink_to(outside, target_is_directory=True)
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
     argv = _good_argv(lane)
     argv[argv.index("--cd") + 1] = str(link)
     violations = validate_builder_argv(argv, tmp_path)
