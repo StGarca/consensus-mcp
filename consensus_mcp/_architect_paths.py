@@ -50,6 +50,16 @@ REVIEW_FILENAME = "review.yaml"
 RULING_FILENAME = "ruling.yaml"
 
 _GOAL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+# Windows reserved device names ('init platform consistency'): CreateFile
+# treats CON/NUL/COM1... (with or without an extension) as devices, and
+# Win32 path normalization silently strips trailing dots, so the on-disk
+# name would differ from goal_id. Reject both classes on every platform so
+# a goal dir created on Linux stays addressable from Windows.
+_WINDOWS_RESERVED = {
+    "con", "prn", "aux", "nul",
+    *(f"com{i}" for i in range(1, 10)),
+    *(f"lpt{i}" for i in range(1, 10)),
+}
 
 
 class ArchitectPathError(ValueError):
@@ -64,6 +74,11 @@ def goal_dir(repo_root: Path, goal_id: str) -> Path:
             f"illegal goal_id {goal_id!r}: must match {_GOAL_ID_RE.pattern} "
             f"(no path separators, no leading dot)"
         )
+    if goal_id.endswith(".") or goal_id.split(".")[0].lower() in _WINDOWS_RESERVED:
+        raise ArchitectPathError(
+            f"illegal goal_id {goal_id!r}: Windows-reserved device name or "
+            f"trailing dot (the on-disk name would differ across platforms)"
+        )
     return Path(repo_root).joinpath(*GOAL_ROOT_PARTS, goal_id)
 
 
@@ -72,7 +87,11 @@ def lane_dir(goal: Path) -> Path:
 
 
 def cycle_dir(goal: Path, n: int) -> Path:
-    return Path(goal) / f"cycle-{int(n)}"
+    # Fail loud like goal_dir does - silent int() coercion would turn 2.9
+    # into cycle-2 and True into cycle-1.
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ArchitectPathError(f"cycle number must be an int >= 1; got {n!r}")
+    return Path(goal) / f"cycle-{n}"
 
 
 def spec_path(goal: Path) -> Path:
@@ -110,7 +129,7 @@ def current_cycle(goal: Path) -> int:
         entries = []
     for p in entries:
         m = CYCLE_DIR_RE.match(p.name)
-        if not m:
+        if not m or not p.is_dir():
             continue
         n = int(m.group(1))
         if n > highest:

@@ -101,3 +101,54 @@ def test_spec_paths_and_latest_rev(tmp_path: Path):
     (g / "spec-rev-1.yaml").write_text("v: 1\n", encoding="utf-8")
     (g / "spec-rev-2.yaml").write_text("v: 2\n", encoding="utf-8")
     assert ap.latest_spec_path(g) == g / "spec-rev-2.yaml"
+
+
+def test_goal_id_rejects_windows_reserved_and_trailing_dot(tmp_path: Path):
+    import pytest
+    for bad in ("CON", "con", "nul.txt", "com1", "goal."):
+        with pytest.raises(ap.ArchitectPathError):
+            ap.goal_dir(tmp_path, bad)
+
+
+def test_cycle_dir_rejects_non_int(tmp_path: Path):
+    import pytest
+    g = ap.goal_dir(tmp_path, "g1")
+    for bad in (0, -1, 2.9, True, "3"):
+        with pytest.raises(ap.ArchitectPathError):
+            ap.cycle_dir(g, bad)
+
+
+def test_current_cycle_accept_ruling_stays(tmp_path: Path):
+    g = ap.goal_dir(tmp_path, "g1")
+    c1 = ap.cycle_dir(g, 1)
+    c1.mkdir(parents=True)
+    (c1 / ap.RULING_FILENAME).write_text(
+        "disposition: accept\n", encoding="utf-8"
+    )
+    assert ap.current_cycle(g) == 1
+
+
+def test_current_cycle_double_digit_ordering(tmp_path: Path):
+    g = ap.goal_dir(tmp_path, "g1")
+    for n in (2, 10):
+        ap.cycle_dir(g, n).mkdir(parents=True)
+    (ap.cycle_dir(g, 2) / ap.RULING_FILENAME).write_text(
+        "disposition: revise\n", encoding="utf-8"
+    )
+    # cycle-10 is highest (int compare, not lexicographic) and open
+    assert ap.current_cycle(g) == 10
+
+
+def test_current_cycle_ignores_stray_file(tmp_path: Path):
+    g = ap.goal_dir(tmp_path, "g1")
+    g.mkdir(parents=True)
+    (g / "cycle-5").write_text("not a dir\n", encoding="utf-8")
+    assert ap.current_cycle(g) == 1
+
+
+def test_latest_spec_double_digit_ordering(tmp_path: Path):
+    g = ap.goal_dir(tmp_path, "g1")
+    g.mkdir(parents=True)
+    for n in (2, 10):
+        (g / f"spec-rev-{n}.yaml").write_text(f"v: {n}\n", encoding="utf-8")
+    assert ap.latest_spec_path(g) == g / "spec-rev-10.yaml"
