@@ -57,7 +57,9 @@ class ArchitectPathError(ValueError):
 
 
 def goal_dir(repo_root: Path, goal_id: str) -> Path:
-    if not isinstance(goal_id, str) or not _GOAL_ID_RE.match(goal_id or ""):
+    # fullmatch, not match: a $ anchor accepts a trailing newline, which
+    # would embed a newline in the directory name (mkdir-fatal on Windows).
+    if not isinstance(goal_id, str) or not _GOAL_ID_RE.fullmatch(goal_id or ""):
         raise ArchitectPathError(
             f"illegal goal_id {goal_id!r}: must match {_GOAL_ID_RE.pattern} "
             f"(no path separators, no leading dot)"
@@ -132,19 +134,41 @@ def _utcnow() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Volatile seal-provenance stamps stripped before hashing, mirroring
+# _VOLATILE_SEAL_FIELDS in tools/review_write_and_seal.py (which uses
+# packet_sha256 for review packets; workflow-D seals use payload_sha256).
+_VOLATILE_SEAL_FIELDS = ("sealed_at_utc", "payload_sha256")
+
+
+# canonical_yaml_sha256 formula (see also: tools/review_write_and_seal.py,
+# tools/state_read_decision_ledger.py, tools/audit_append_event.py).
+# Double round-trip: yaml.safe_dump -> yaml.safe_load -> yaml.safe_dump ensures
+# any Python-object quirks (ordered vs unordered dicts, aliases) are normalized
+# before hashing. sort_keys=True makes hash order-independent. Keep the
+# spelling byte-identical across the four sites so later architect-gate
+# verification that reuses the established formula hashes identically.
+def _canonical_yaml_sha256(obj) -> str:
+    """Canonical SHA-256 of a Python object per spec section 7."""
+    canonical = yaml.safe_dump(yaml.safe_load(yaml.safe_dump(obj)), sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def seal_artifact(path: Path, payload: dict) -> dict:
     """Stamp sealed_at_utc + payload_sha256 onto payload, atomic-write YAML.
 
-    The sha is computed over the canonical (sorted-keys) YAML of the payload
-    BEFORE stamping, so re-reading and re-hashing the payload fields (minus
-    the two stamps) reproduces it. Returns the stamped dict.
+    Any pre-existing seal stamps on the input (the normal load-sealed-file ->
+    revise -> re-seal flow for spec-rev-N.yaml) are stripped first; the sha is
+    then computed over the canonical (sorted-keys) YAML of the payload BEFORE
+    stamping, so re-reading and re-hashing the payload fields (minus the two
+    stamps) reproduces it. Returns the stamped dict.
     """
     body = dict(payload)
-    canonical = yaml.safe_dump(body, sort_keys=True, default_flow_style=False)
+    for f in _VOLATILE_SEAL_FIELDS:
+        body.pop(f, None)
     stamped = dict(
         body,
         sealed_at_utc=_utcnow(),
-        payload_sha256=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        payload_sha256=_canonical_yaml_sha256(body),
     )
     atomic_write_text(
         Path(path),
