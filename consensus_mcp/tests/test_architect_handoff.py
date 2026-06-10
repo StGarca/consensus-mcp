@@ -116,6 +116,36 @@ def test_handoff_multiline_summary_cannot_forge_structure(tmp_path: Path):
     assert "ok / ### cycle-9" in text
 
 
+def test_handoff_renders_verification_and_review_lines(tmp_path: Path):
+    """Legitimate verification/review render branches: a sealed passing
+    check renders '- verification: GREEN', a sealed failing check renders
+    '- verification: RED', and a sealed review renders its verdict. GREEN
+    vs RED is load-bearing input to the architect's ruling, so the real
+    branch (not just the forging-injection assertion) must be covered."""
+    goal = _goal_with_cycles(tmp_path, 2)
+    ap.seal_artifact(
+        ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME, {"passed": True}
+    )
+    ap.seal_artifact(
+        ap.cycle_dir(goal, 1) / ap.REVIEW_FILENAME, {"verdict": "approve"}
+    )
+    ap.seal_artifact(
+        ap.cycle_dir(goal, 2) / ap.VERIFICATION_FILENAME, {"passed": False}
+    )
+    text = hf.render_handoff(
+        goal, roles={"architect": "claude", "builder": "codex", "reviewer": "codex"}
+    )
+    lines = text.splitlines()
+    c1, c2 = lines.index("### cycle-1"), lines.index("### cycle-2")
+    assert "- verification: GREEN" in lines[c1:c2]
+    assert "- review: approve" in lines[c1:c2]
+    assert "- verification: RED" in lines[c2:]
+    # The failed check must not also render GREEN, and cycle-2 sealed no
+    # review, so no review line may appear for it.
+    assert "- verification: GREEN" not in lines[c2:]
+    assert not any(l.startswith("- review:") for l in lines[c2:])
+
+
 def test_handoff_foreign_fields_length_capped(tmp_path: Path):
     goal = _goal_with_cycles(tmp_path, 1)
     c = ap.cycle_dir(goal, 1)
