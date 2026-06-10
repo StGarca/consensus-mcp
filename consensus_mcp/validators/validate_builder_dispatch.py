@@ -6,22 +6,39 @@ workspace-write into review dispatches. This module is the ONLY authority on
 what a builder argv may look like, and the builder dispatcher MUST call it
 before Popen (fail-closed: any violation aborts the dispatch).
 
-v1 canon (codex only):
-  codex exec --skip-git-repo-check --cd <lane> --sandbox workspace-write ...
+Canon model: an EXACT POSITIONAL ALLOWLIST, not a rule list. The converged
+plan's Q6 resolution prescribes "exact argv shape per builder_capable CLI";
+the quality review of the first cut proved why - a rule list (one --sandbox,
+one --cd, no 'git' token) is smuggle-able through clap's alternate spellings
+(-s/-C shorts, --sandbox=X/--cd=X equals forms) and through OTHER flags that
+promote sandbox posture without touching --sandbox at all
+(-c sandbox_mode=..., --dangerously-bypass-approvals-and-sandbox,
+--full-auto, --profile). An exact-shape allowlist kills the whole class
+structurally: there are no extra token positions for anything to hide in.
 
-Rules (consult Q1/Q6 union):
-  R1 binary basename is the builder CLI: stem exactly 'codex' with an
-     extension in the set _dispatch_codex._resolve_codex_bin can emit
-     (none/.exe/.cmd/.bat/.ps1 - v1.10.3 Windows hardening resolves a
-     bare 'codex' to the npm codex.cmd shim, preferring .cmd over .ps1)
-  R2 'exec' subcommand present
-  R3 exactly one --sandbox flag, value exactly 'workspace-write'
-  R4 exactly one --cd flag whose RESOLVED path (symlinks followed) is a
-     lane directory under the goal root (layout imported from
-     _architect_paths, the single source of truth)
-  R5 no argv token is 'git' (supervisor-owned git, consult Q1)
-  R6 no shell metacharacters in any token (argv is exec'd, never shell'd,
-     but defense-in-depth against future wrapper drift)
+v1 canon (codex only) - exactly 12 tokens:
+
+  [0] <codex binary>          variable: stem 'codex', ext per Windows set
+  [1] exec                    fixed
+  [2] --skip-git-repo-check   fixed
+  [3] --cd                    fixed
+  [4] <lane path>             variable: must RESOLVE (symlinks followed)
+                              to a lane dir under the goal root
+                              (layout from _architect_paths, the single
+                              source of truth)
+  [5] --sandbox               fixed
+  [6] workspace-write         fixed
+  [7] --output-schema         fixed
+  [8] <schema path>           variable
+  [9] -o                      fixed
+  [10] <output path>          variable
+  [11] -                      fixed (prompt via stdin)
+
+Anything longer, shorter, or positionally different is rejected. Variable
+slots are additionally screened for shell metacharacters and the token
+'git' (supervisor-owned git, consult Q1) as defense-in-depth - argv is
+exec'd, never shell'd, but wrapper drift is exactly what this module exists
+to refuse.
 """
 from __future__ import annotations
 
@@ -38,13 +55,22 @@ _BUILDER_CLI_STEM = "codex"
 _ALLOWED_BINARY_SUFFIXES = {"", ".exe", ".cmd", ".bat", ".ps1"}
 _SHELL_META_RE = re.compile(r"[;&|`$<>\n]")
 
-
-def _flag_values(argv: list[str], flag: str) -> list[str]:
-    vals = []
-    for i, tok in enumerate(argv):
-        if tok == flag and i + 1 < len(argv):
-            vals.append(argv[i + 1])
-    return vals
+# index -> required literal token. Indices 0, 4, 8, 10 are variable slots.
+_FIXED_TOKENS = {
+    1: "exec",
+    2: "--skip-git-repo-check",
+    3: "--cd",
+    5: "--sandbox",
+    6: "workspace-write",
+    7: "--output-schema",
+    9: "-o",
+    11: "-",
+}
+_CANON_LEN = 12
+_CANON_TEMPLATE = (
+    "[<codex-bin>, exec, --skip-git-repo-check, --cd, <lane>, --sandbox, "
+    "workspace-write, --output-schema, <schema>, -o, <out>, -]"
+)
 
 
 def validate_builder_argv(argv: list[str], repo_root: Path) -> list[str]:
@@ -53,6 +79,20 @@ def validate_builder_argv(argv: list[str], repo_root: Path) -> list[str]:
     violations: list[str] = []
     if not argv:
         return ["empty argv"]
+
+    if len(argv) != _CANON_LEN:
+        # One message carries the whole template so the caller (and the
+        # pin tests) see exactly which canon was violated and by what.
+        return [
+            f"argv must be exactly the {_CANON_LEN}-token canon "
+            f"{_CANON_TEMPLATE}; got {len(argv)} tokens: {argv!r}"
+        ]
+
+    for i, expected in _FIXED_TOKENS.items():
+        if argv[i] != expected:
+            violations.append(
+                f"argv[{i}] must be {expected!r}; got {argv[i]!r}"
+            )
 
     binary = Path(Path(argv[0]).name.lower())
     if not (
@@ -64,35 +104,22 @@ def validate_builder_argv(argv: list[str], repo_root: Path) -> list[str]:
             f"(allowed: {_BUILDER_CLI_STEM!r} with extension in "
             f"{sorted(_ALLOWED_BINARY_SUFFIXES)})"
         )
-    if "exec" not in argv[1:2]:
-        violations.append("second token must be the 'exec' subcommand")
 
-    sandboxes = _flag_values(argv, "--sandbox")
-    if sandboxes != ["workspace-write"]:
+    try:
+        resolved = Path(argv[4]).resolve(strict=True)
+    except OSError:
+        resolved = None
+    root = Path(repo_root).resolve().joinpath(*GOAL_ROOT_PARTS)
+    ok = (
+        resolved is not None
+        and resolved.name == LANE_DIRNAME
+        and resolved.parent.parent == root
+    )
+    if not ok:
         violations.append(
-            f"--sandbox must appear exactly once with value "
-            f"'workspace-write'; got {sandboxes!r}"
+            f"--cd {argv[4]!r} does not resolve to a lane directory "
+            f"under {root} (symlinks are resolved before the check)"
         )
-
-    cds = _flag_values(argv, "--cd")
-    if len(cds) != 1:
-        violations.append(f"--cd must appear exactly once; got {len(cds)}")
-    else:
-        try:
-            resolved = Path(cds[0]).resolve(strict=True)
-        except OSError:
-            resolved = None
-        root = Path(repo_root).resolve().joinpath(*GOAL_ROOT_PARTS)
-        ok = (
-            resolved is not None
-            and resolved.name == LANE_DIRNAME
-            and resolved.parent.parent == root
-        )
-        if not ok:
-            violations.append(
-                f"--cd {cds[0]!r} does not resolve to a lane directory "
-                f"under {root} (symlinks are resolved before the check)"
-            )
 
     for tok in argv:
         if tok.lower() == "git":
