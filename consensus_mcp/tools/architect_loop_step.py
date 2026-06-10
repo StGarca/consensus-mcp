@@ -91,8 +91,8 @@ _NEXT_ACTION = {
         "build-result.yaml"
     ),
     "cycle_advance": (
-        "a revise ruling closed this cycle; call loop_step again to start "
-        "the next cycle's build"
+        "a revise/overrule ruling closed this cycle; call loop_step again "
+        "to start the next cycle's build"
     ),
     "built": "builder ran and the lane committed; call loop_step again",
     "needs_verification": "call loop_step again to run the frozen gate",
@@ -140,10 +140,19 @@ def _result(state: str, *, cycle: int | None = None, actions=None,
     }
 
 
-def _load_config(goal: Path, config_path: str | None):
+def _derive_root(goal: Path) -> Path | None:
+    """The VALIDATED inversion of the L1 layout, mirroring
+    architect_gates._repo_root: never trust blind parent-hopping - a
+    mis-shaped goal_dir would anchor git at a garbage root and rev-parse
+    would walk UP to whatever repo encloses it. loop_step runs rev-parse
+    AND supervisor-owned commits against this root, so it is the
+    highest-stakes caller of the derivation."""
+    return lane_mod._derive_repo_root(ap.lane_dir(goal))
+
+
+def _load_config(root: Path, config_path: str | None):
     if config_path:
         return cfg.load(config_path)
-    root = goal.parent.parent.parent
     return cfg.load(root / ".consensus" / "config.yaml")
 
 
@@ -166,9 +175,15 @@ def _check_stop_rules(goal: Path, config: dict, cycle: int) -> list[dict]:
     if breach:
         stops.append({"rule": breach.get("rule", "builder_containment_breach"),
                       "violations": breach.get("violations", [])})
-    # repeated RED with identical signature across the last 3 cycles
+    # repeated RED with identical signature across the last 3 CLOSED
+    # cycles. `cycle` is the next OPEN cycle: a RED verification seals a
+    # mechanical revise in the SAME step, which closes its cycle and
+    # advances current_cycle before this rule ever runs - so the open
+    # slot's verification.yaml never exists and including it (cycle + 1
+    # upper bound) would leave at most 2 scannable signatures, making the
+    # rule unreachable.
     sigs = []
-    for n in range(max(1, cycle - 2), cycle + 1):
+    for n in range(max(1, cycle - 3), cycle):
         v = ap._read_yaml_or_empty(ap.cycle_dir(goal, n) / ap.VERIFICATION_FILENAME)
         if v and not v.get("passed"):
             sigs.append(v.get("signature"))
@@ -312,6 +327,20 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path) -> dict:
     import hashlib
     cmd = config["architect_loop"].get("verification", "")
     lane = ap.lane_dir(goal)
+    # The frozen gate executes builder-authored lane content UNSANDBOXED
+    # (operator command, shell=True, cwd=lane) - the one window where lane
+    # code could forge the supervisor-owned cycle artifacts (review.yaml /
+    # ruling.yaml are content-hash seals, not authenticity signatures) or
+    # escape into the main tree. Sandboxing an arbitrary operator shell
+    # command is not portable ('init platform consistency'), so apply the
+    # root-cause-independent L5 doctrine instead: snapshot the goal
+    # artifacts + main-repo integrity before the run, re-check after, and
+    # treat ANY delta as a containment breach (no lane_branch exemption -
+    # verification must not commit). Residual: a background process that
+    # outlives the command and writes later evades the window; the human
+    # delivery gate remains the backstop for that.
+    main_before = lane_mod.snapshot_main_integrity(root)
+    goal_before = lane_mod.snapshot_goal_artifacts(goal)
     try:
         proc = subprocess.run(
             cmd, shell=True, cwd=str(lane), capture_output=True,
@@ -321,6 +350,15 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path) -> dict:
         tail = (proc.stdout + proc.stderr)[-2000:]
     except (OSError, subprocess.SubprocessError) as exc:
         passed, tail = False, f"verification command failed to run: {exc}"
+    violations = lane_mod.check_main_integrity(root, main_before)
+    violations += lane_mod.check_goal_artifacts(goal, goal_before)
+    if violations:
+        ap.seal_artifact(goal / "containment-breach.yaml",
+                         {"rule": "verification_containment_breach",
+                          "violations": violations})
+        return _result("blocked_stop_rule", cycle=cycle,
+                       stops=[{"rule": "verification_containment_breach",
+                               "violations": violations}])
     cdir = ap.cycle_dir(goal, cycle)
     cdir.mkdir(parents=True, exist_ok=True)
     ap.seal_artifact(
@@ -348,8 +386,15 @@ def handle(goal_dir: str, config_path: str | None = None,
            auto_dispatch: bool | None = None) -> dict:
     goal = Path(goal_dir)
     do_dispatch = True if auto_dispatch is None else bool(auto_dispatch)
+    root = _derive_root(goal)
+    if root is None:
+        return _result(
+            "goal_invalid", ok=False,
+            error=f"cannot derive repo root: goal_dir {goal} is not shaped "
+                  f"<root>/{'/'.join(ap.GOAL_ROOT_PARTS)}/<goal-id>",
+        )
     try:
-        config = _load_config(goal, config_path)
+        config = _load_config(root, config_path)
     except Exception as exc:  # noqa: BLE001 - tool boundary: handle() never raises
         return _result("goal_invalid", ok=False,
                        error=f"config load failed: {exc}")
@@ -360,7 +405,6 @@ def handle(goal_dir: str, config_path: str | None = None,
     if not (goal / ap.PROBLEM_FILENAME).exists():
         return _result("goal_invalid", ok=False,
                        error=f"no {ap.PROBLEM_FILENAME} in {goal}")
-    root = goal.parent.parent.parent
     roles = config["roles"]
 
     outcome = ap._read_yaml_or_empty(goal / ap.OUTCOME_FILENAME)
@@ -422,9 +466,15 @@ def handle(goal_dir: str, config_path: str | None = None,
     if not ruling:
         return _result("needs_ruling", cycle=cycle)
     disposition = ruling.get("disposition")
-    if disposition == "revise":
-        # current_cycle() advances past a revise-closed cycle, so this
-        # branch is normally unreachable; defensive total-cascade fallback.
+    if disposition in ap.CYCLE_ADVANCING_DISPOSITIONS:
+        # revise AND overrule (the architect rejecting builder pushback)
+        # close the cycle: the next step re-dispatches the builder, whose
+        # prompt carries the ruling's reason/feedback. The overruled
+        # pushback build itself is never verified or reviewed - it gets
+        # superseded by the next cycle's build, so the pushback-skips-
+        # verification guard above stays correct. current_cycle() advances
+        # past both, so this branch is normally unreachable; defensive
+        # total-cascade fallback.
         return _result("cycle_advance", cycle=cycle)  # pragma: no cover
     if disposition == "kill":
         ap.seal_artifact(goal / ap.OUTCOME_FILENAME,
