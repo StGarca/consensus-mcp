@@ -196,6 +196,28 @@ def test_dispatch_builder_invalid_output_raises(tmp_path: Path, monkeypatch):
     assert list(tempdir.iterdir()) == []
 
 
+def test_dispatch_builder_nonstring_notes_raises(tmp_path: Path, monkeypatch):
+    """Quality finding: 'notes' is required+string per builder_build_schema
+    and is the reviewer pointer consumed by the handoff renderer; a missing
+    or non-string notes must fail closed like summary/pushback, not be
+    silently coerced to ''."""
+    lane = _lane(tmp_path)
+    tempdir = _patch_tempdir(tmp_path, monkeypatch)
+    _identity_resolver(monkeypatch)
+    for payload in (
+        {"summary": "ok", "pushback": None, "notes": ["not", "a", "string"]},
+        {"summary": "ok", "pushback": None},  # notes missing entirely
+    ):
+        fake_popen, _ = _fake_popen_factory(payload)
+        monkeypatch.setattr(db.subprocess, "Popen", fake_popen)
+        with pytest.raises(db.BuilderDispatchError, match="notes"):
+            db.dispatch_builder(
+                repo_root=tmp_path, lane=lane,
+                prompt="x", codex_bin="codex", timeout_seconds=60,
+            )
+        assert list(tempdir.iterdir()) == []
+
+
 def test_timeout_terminates_process_tree_and_cleans_temp(
     tmp_path: Path, monkeypatch
 ):
