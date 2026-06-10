@@ -42,11 +42,13 @@ WORKFLOW_ADVISORY = "advisory"
 # ships the contract (alias, validators, scope_check helper, schema);
 # multi-iteration engine path is named-blocker for v1.15.0.
 WORKFLOW_AUTONOMOUS_EXECUTE = "autonomous-execute"
+WORKFLOW_ARCHITECT_BUILD = "architect-build"
 VALID_WORKFLOWS = {
     WORKFLOW_POST_REVIEW,
     WORKFLOW_PROPOSE_CONVERGE,
     WORKFLOW_ADVISORY,
     WORKFLOW_AUTONOMOUS_EXECUTE,
+    WORKFLOW_ARCHITECT_BUILD,
 }
 
 # Operator-facing aliases. iter-workflow-abc-introduce: letter aliases
@@ -58,9 +60,11 @@ WORKFLOW_ALIASES = {
     "A": WORKFLOW_PROPOSE_CONVERGE,
     "B": WORKFLOW_POST_REVIEW,
     "C": WORKFLOW_AUTONOMOUS_EXECUTE,
+    "D": WORKFLOW_ARCHITECT_BUILD,
     "a": WORKFLOW_PROPOSE_CONVERGE,
     "b": WORKFLOW_POST_REVIEW,
     "c": WORKFLOW_AUTONOMOUS_EXECUTE,
+    "d": WORKFLOW_ARCHITECT_BUILD,
     # Numeric aliases (deprecated; emit DeprecationWarning when resolved)
     "3": WORKFLOW_POST_REVIEW,
     "4": WORKFLOW_PROPOSE_CONVERGE,
@@ -243,6 +247,12 @@ def default_config() -> dict:
             "iteration_timeout_seconds": 600,
             "stall_silence_seconds": 180,
             "pre_first_byte_silence_seconds": 600,
+        },
+        "architect_loop": {
+            "max_cycles": 8,
+            "verification": "",
+            "lane_branch_prefix": "arch-lane/",
+            "max_wall_clock_minutes": 0,
         },
     }
 
