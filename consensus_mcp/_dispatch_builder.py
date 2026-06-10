@@ -166,8 +166,14 @@ def dispatch_builder(
     pushback = data.get("pushback")
     if pushback is not None and not isinstance(pushback, str):
         raise BuilderDispatchError("builder 'pushback' must be string or null")
+    # 'notes' is required+string per builder_build_schema.json and is the
+    # reviewer pointer the handoff renderer consumes - fail closed like
+    # summary/pushback rather than silently coercing a shape violation to "".
+    notes = data.get("notes")
+    if not isinstance(notes, str):
+        raise BuilderDispatchError("builder 'notes' must be a string")
     return {
         "summary": data["summary"],
         "pushback": pushback,
-        "notes": data.get("notes", "") if isinstance(data.get("notes"), str) else "",
+        "notes": notes,
     }
