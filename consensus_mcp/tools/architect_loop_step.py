@@ -15,6 +15,7 @@ from pathlib import Path
 import consensus_mcp.config as cfg
 from consensus_mcp import _architect_lane as lane_mod
 from consensus_mcp import _architect_paths as ap
+from consensus_mcp import _contributor_profiles as _profiles
 from consensus_mcp import _dispatch_builder as _db
 from consensus_mcp._architect_handoff import write_handoff
 
@@ -156,6 +157,16 @@ def _load_config(root: Path, config_path: str | None):
     return cfg.load(root / ".consensus" / "config.yaml")
 
 
+def _merged_profiles(config: dict) -> dict:
+    """Builtin profiles overlaid with the config's contributors.profiles -
+    the same merge config._validate_architect_build and render_handoff use,
+    so family resolution can never drift between the three sites."""
+    return _profiles.merge_profiles(
+        _profiles.load_builtin_profiles(),
+        config.get("contributors", {}).get("profiles", {}) or {},
+    )
+
+
 def _check_stop_rules(goal: Path, config: dict, cycle: int) -> list[dict]:
     stops: list[dict] = []
     loop = config.get("architect_loop", {})
@@ -171,7 +182,7 @@ def _check_stop_rules(goal: Path, config: dict, cycle: int) -> list[dict]:
         ):
             stops.append({"rule": "stale_dispatch_in_flight",
                           "started_at_utc": inflight.get("started_at_utc")})
-    breach = ap._read_yaml_or_empty(goal / "containment-breach.yaml")
+    breach = ap._read_yaml_or_empty(goal / ap.CONTAINMENT_BREACH_FILENAME)
     if breach:
         stops.append({"rule": breach.get("rule", "builder_containment_breach"),
                       "violations": breach.get("violations", [])})
@@ -225,22 +236,30 @@ def _check_stop_rules(goal: Path, config: dict, cycle: int) -> list[dict]:
     return stops
 
 
-def _signer_violations(goal: Path, cycle: int, roles: dict) -> list[str]:
+def _signer_violations(goal: Path, cycle: int, roles: dict,
+                       profiles: dict) -> list[str]:
     """GateEligibleCrossFamilySigner (consult Q2): cross-family + hash
-    binding + freshness. Families are contributor names for the builtin set
-    (profile-aware family equivalence was enforced at config time)."""
+    binding + freshness. Families resolve via cfg._contributor_family over
+    the MERGED profiles, never by contributor name: config validation
+    guarantees at least one cross-family role EXISTS, NOT that
+    name-inequality implies family-inequality - a family: overlay can give
+    a differently-named reviewer the builder's family, in which case the
+    architect's ruling is the only true cross-family attestation and must
+    be the hash-bound, freshness-checked signer."""
     c = ap.cycle_dir(goal, cycle)
     build = ap._read_yaml_or_empty(c / ap.BUILD_RESULT_FILENAME)
     review = ap._read_yaml_or_empty(c / ap.REVIEW_FILENAME)
     ruling = ap._read_yaml_or_empty(c / ap.RULING_FILENAME)
-    builder = roles.get("builder", "")
+    builder_fam = cfg._contributor_family(roles.get("builder", ""), profiles)
+    reviewer_fam = cfg._contributor_family(roles.get("reviewer", ""), profiles)
+    architect_fam = cfg._contributor_family(roles.get("architect", ""), profiles)
     violations: list[str] = []
-    signer_name, signer = (
-        (roles.get("reviewer", ""), review)
-        if roles.get("reviewer", "") != builder
-        else (roles.get("architect", ""), ruling)
+    signer_fam, signer = (
+        (reviewer_fam, review)
+        if reviewer_fam != builder_fam
+        else (architect_fam, ruling)
     )
-    if signer_name == builder:
+    if signer_fam == builder_fam:
         violations.append("no cross-family signer available")
     lane_sha = build.get("lane_head_sha")
     if not lane_sha or signer.get("lane_head_sha") != lane_sha:
@@ -255,7 +274,8 @@ def _signer_violations(goal: Path, cycle: int, roles: dict) -> list[str]:
     return violations
 
 
-def _run_build(goal: Path, config: dict, cycle: int, root: Path) -> dict:
+def _run_build(goal: Path, config: dict, cycle: int, root: Path,
+               profiles: dict) -> dict:
     roles = config["roles"]
     loop = config["architect_loop"]
     approval = ap._read_yaml_or_empty(goal / ap.SPEC_APPROVAL_FILENAME)
@@ -293,7 +313,7 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path) -> dict:
 
     lane_violations = lane_mod.scan_lane_integrity(lane)
     if lane_violations:
-        ap.seal_artifact(goal / "containment-breach.yaml",
+        ap.seal_artifact(goal / ap.CONTAINMENT_BREACH_FILENAME,
                          {"rule": "lane_integrity_violation",
                           "violations": lane_violations})
         return _result("blocked_stop_rule", cycle=cycle,
@@ -305,7 +325,7 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path) -> dict:
         root, before, lane_branch=branch
     )
     if main_violations:
-        ap.seal_artifact(goal / "containment-breach.yaml",
+        ap.seal_artifact(goal / ap.CONTAINMENT_BREACH_FILENAME,
                          {"rule": "builder_containment_breach",
                           "violations": main_violations})
         return _result("blocked_stop_rule", cycle=cycle,
@@ -318,12 +338,13 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path) -> dict:
         {"summary": result["summary"], "pushback": result["pushback"],
          "notes": result["notes"], "lane_head_sha": head, "cycle": cycle},
     )
-    write_handoff(goal, roles=roles)
+    write_handoff(goal, roles=roles, profiles=profiles)
     return _result("built", cycle=cycle,
                    actions=[{"action": "builder_dispatched", "lane_head_sha": head}])
 
 
-def _run_verification(goal: Path, config: dict, cycle: int, root: Path) -> dict:
+def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
+                      profiles: dict) -> dict:
     import hashlib
     cmd = config["architect_loop"].get("verification", "")
     lane = ap.lane_dir(goal)
@@ -353,7 +374,7 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path) -> dict:
     violations = lane_mod.check_main_integrity(root, main_before)
     violations += lane_mod.check_goal_artifacts(goal, goal_before)
     if violations:
-        ap.seal_artifact(goal / "containment-breach.yaml",
+        ap.seal_artifact(goal / ap.CONTAINMENT_BREACH_FILENAME,
                          {"rule": "verification_containment_breach",
                           "violations": violations})
         return _result("blocked_stop_rule", cycle=cycle,
@@ -368,7 +389,7 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path) -> dict:
          "output_tail": tail},
     )
     if passed:
-        write_handoff(goal, roles=config["roles"])
+        write_handoff(goal, roles=config["roles"], profiles=profiles)
         return _result("needs_review", cycle=cycle,
                        actions=[{"action": "verification_green"}])
     # consult Q3: mechanical revise ruling, regular artifact shape
@@ -377,7 +398,7 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path) -> dict:
         {"disposition": "revise", "reason": "verification_failed",
          "mechanical": True, "feedback": tail},
     )
-    write_handoff(goal, roles=config["roles"])
+    write_handoff(goal, roles=config["roles"], profiles=profiles)
     return _result("verification_red", cycle=cycle,
                    actions=[{"action": "mechanical_revise_sealed"}])
 
@@ -406,6 +427,11 @@ def handle(goal_dir: str, config_path: str | None = None,
         return _result("goal_invalid", ok=False,
                        error=f"no {ap.PROBLEM_FILENAME} in {goal}")
     roles = config["roles"]
+    # Resolved ONCE per step and threaded everywhere a family or a handoff
+    # is computed (quality findings 1+3): signer selection and the
+    # consult-Q2 transparency NOTE must both see the operator's family:
+    # overlays, never builtin-only data.
+    profiles = _merged_profiles(config)
 
     outcome = ap._read_yaml_or_empty(goal / ap.OUTCOME_FILENAME)
     if outcome.get("closing_state"):
@@ -450,7 +476,7 @@ def handle(goal_dir: str, config_path: str | None = None,
         if not do_dispatch:
             return _result("needs_build", cycle=cycle)
         try:
-            return _run_build(goal, config, cycle, root)
+            return _run_build(goal, config, cycle, root, profiles)
         except (lane_mod.LaneError, _db.BuilderDispatchError) as exc:
             return _result("blocked_stop_rule", cycle=cycle, ok=False,
                            stops=[{"rule": "builder_dispatch_failed",
@@ -459,7 +485,7 @@ def handle(goal_dir: str, config_path: str | None = None,
     verification = ap._read_yaml_or_empty(cdir / ap.VERIFICATION_FILENAME)
     needs_gate = bool(config["architect_loop"].get("verification", "")) and not build.get("pushback")
     if needs_gate and not verification:
-        return _run_verification(goal, config, cycle, root)
+        return _run_verification(goal, config, cycle, root, profiles)
     review = ap._read_yaml_or_empty(cdir / ap.REVIEW_FILENAME)
     if not review and not ruling:
         return _result("needs_review", cycle=cycle)
@@ -480,15 +506,15 @@ def handle(goal_dir: str, config_path: str | None = None,
         ap.seal_artifact(goal / ap.OUTCOME_FILENAME,
                          {"closing_state": ap.KILLED_CLOSING_STATE,
                           "cycle": cycle, "reason": ruling.get("reason", "")})
-        write_handoff(goal, roles=roles)
+        write_handoff(goal, roles=roles, profiles=profiles)
         return _result("killed", cycle=cycle)
     if disposition == "accept":
-        violations = _signer_violations(goal, cycle, roles)
+        violations = _signer_violations(goal, cycle, roles, profiles)
         if violations:
             return _result("blocked_stop_rule", cycle=cycle,
                            stops=[{"rule": "signer_invariant_violated",
                                    "violations": violations}])
-        write_handoff(goal, roles=roles)
+        write_handoff(goal, roles=roles, profiles=profiles)
         return _result("awaiting_delivery_approval", cycle=cycle)
     return _result("needs_ruling", cycle=cycle)
 
