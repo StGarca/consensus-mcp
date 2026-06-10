@@ -788,6 +788,17 @@ git commit -m "feat(architect): _architect_paths - goal-dir layout, artifact nam
 
 ### Task 6: `validate_builder_dispatch` - the separate write-enabled canon
 
+> **AS-LANDED AMENDMENT (2026-06-10, commit f69cf50):** quality review proved
+> the rule-list canon below smuggle-able (clap -s/-C short forms, combined
+> --sandbox=/--cd= equals forms riding alongside the canonical pair, and
+> sandbox-promoting flags that never touch --sandbox: -c sandbox_mode=...,
+> --dangerously-bypass-approvals-and-sandbox, --full-auto, --profile). The
+> landed implementation upgrades R1-R6 to an EXACT 12-TOKEN POSITIONAL
+> ALLOWLIST (variable slots only at binary/lane/schema/out) per the converged
+> plan's literal Q6 wording "exact argv shape". The plan's tests all still
+> hold; smuggle-class pin tests were added. Read the module docstring as the
+> authoritative contract.
+
 **Files:**
 - Create: `consensus_mcp/validators/validate_builder_dispatch.py`
 - Test: `consensus_mcp/tests/test_validate_builder_dispatch.py`
