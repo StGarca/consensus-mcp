@@ -17,7 +17,10 @@ def test_goal_dir_layout(tmp_path: Path):
 
 def test_goal_id_rejects_path_tricks(tmp_path: Path):
     import pytest
-    for bad in ("", "a/b", "..", "a\\b", ".hidden"):
+    # "abc\n": re.match with a $ anchor accepts a trailing newline, which
+    # embeds a newline in the directory name (mkdir-fatal on Windows);
+    # fullmatch must reject it.
+    for bad in ("", "a/b", "..", "a\\b", ".hidden", "abc\n", "a\nb"):
         with pytest.raises(ap.ArchitectPathError):
             ap.goal_dir(tmp_path, bad)
 
@@ -52,6 +55,41 @@ def test_seal_artifact_roundtrip(tmp_path: Path):
     assert on_disk["sealed_at_utc"].endswith("Z")
     assert on_disk["payload_sha256"] == sealed["payload_sha256"]
     assert len(sealed["payload_sha256"]) == 64
+
+
+def test_seal_artifact_strip_and_rehash_invariant(tmp_path: Path):
+    """Stripping the two stamp fields and re-hashing with the established
+    spec-section-7 formula (tools/review_write_and_seal._canonical_yaml_sha256)
+    must reproduce payload_sha256 -- including for the normal
+    load-sealed-file -> revise -> re-seal flow for spec-rev-N.yaml, where the
+    input payload already carries stale sealed_at_utc/payload_sha256 stamps.
+    """
+    from consensus_mcp.tools.review_write_and_seal import _canonical_yaml_sha256
+
+    first = ap.seal_artifact(tmp_path / "spec.yaml", {"kind": "spec", "v": 1})
+    body = {
+        k: v
+        for k, v in first.items()
+        if k not in ("sealed_at_utc", "payload_sha256")
+    }
+    assert _canonical_yaml_sha256(body) == first["payload_sha256"]
+
+    # re-seal flow: the already-sealed dict (stamps and all) is revised and
+    # sealed again; stale stamps must NOT be hashed into the new seal.
+    revised = dict(first, v=2)
+    resealed = ap.seal_artifact(tmp_path / "spec-rev-1.yaml", revised)
+    assert "sealed_at_utc" in resealed and "payload_sha256" in resealed
+    body = {
+        k: v
+        for k, v in resealed.items()
+        if k not in ("sealed_at_utc", "payload_sha256")
+    }
+    assert _canonical_yaml_sha256(body) == resealed["payload_sha256"]
+
+    # content identity: re-sealing the SAME substantive payload (carrying the
+    # old stamps) reproduces the same payload_sha256 as the first seal.
+    resealed_same = ap.seal_artifact(tmp_path / "spec-rev-2.yaml", dict(first))
+    assert resealed_same["payload_sha256"] == first["payload_sha256"]
 
 
 def test_spec_paths_and_latest_rev(tmp_path: Path):
