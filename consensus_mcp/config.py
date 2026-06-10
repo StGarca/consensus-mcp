@@ -303,6 +303,109 @@ def normalize(config: dict) -> dict:
     return normalized
 
 
+def _contributor_family(name: str, profiles: dict) -> str:
+    prof = profiles.get(name) or {}
+    fam = prof.get("family")
+    return str(fam) if fam else str(name)
+
+
+def _validate_architect_build(config: dict) -> None:
+    """Mode-conditional rules for workflow.mode=architect-build (workflow D).
+
+    Enforced at CONFIG time per the 2026-06-10 consult (Q2): a roles map with
+    no cross-family signer vs the builder is rejected at start, never at
+    delivery.
+    """
+    from consensus_mcp import _contributor_profiles as _profiles
+
+    roles = config.get("roles")
+    if not isinstance(roles, dict):
+        raise ConfigValidationError(
+            "workflow.mode=architect-build requires a top-level roles: block "
+            "mapping architect/builder/reviewer to enabled contributors; "
+            "got none. Add roles: {architect: <name>, builder: <name>, "
+            "reviewer: <name>}."
+        )
+    required = ("architect", "builder", "reviewer")
+    for key in required:
+        if not isinstance(roles.get(key), str) or not roles[key].strip():
+            raise ConfigValidationError(
+                f"roles.{key} is required for architect-build (reviewer is "
+                f"REQUIRED in v1 per the 2026-06-10 consult Q4); got "
+                f"{roles.get(key)!r}."
+            )
+    extra = sorted(set(roles) - set(required))
+    if extra:
+        raise ConfigValidationError(
+            f"roles: block has unknown keys {extra}; only "
+            f"architect/builder/reviewer are recognized in v1."
+        )
+    enabled = config.get("contributors", {}).get("enabled", [])
+    for key in required:
+        if roles[key] not in enabled:
+            raise ConfigValidationError(
+                f"roles.{key}={roles[key]!r} is not in contributors.enabled "
+                f"{enabled}; every role must name an enabled contributor."
+            )
+
+    merged = _profiles.merge_profiles(
+        _profiles.load_builtin_profiles(),
+        config.get("contributors", {}).get("profiles", {}) or {},
+    )
+    if not _profiles.resolve_builder_capable(roles["builder"], merged):
+        raise ConfigValidationError(
+            f"roles.builder={roles['builder']!r} is not builder_capable: the "
+            f"profile must declare builder_capable: true (v1: only codex). "
+            f"Write-enabled dispatch is never granted implicitly."
+        )
+    builder_fam = _contributor_family(roles["builder"], merged)
+    signer_fams = {
+        _contributor_family(roles["architect"], merged),
+        _contributor_family(roles["reviewer"], merged),
+    }
+    if not (signer_fams - {builder_fam}):
+        raise ConfigValidationError(
+            f"architect-build requires at least one of roles.architect/"
+            f"roles.reviewer to be a DIFFERENT model family than the builder "
+            f"(cross-family floor, consult Q2); all three resolve to family "
+            f"{builder_fam!r}. Map the architect or reviewer to another "
+            f"family."
+        )
+
+    loop = config.get("architect_loop", {})
+    mc = loop.get("max_cycles")
+    if not isinstance(mc, int) or isinstance(mc, bool) or mc < 1:
+        raise ConfigValidationError(
+            f"architect_loop.max_cycles must be an integer >= 1; got {mc!r}."
+        )
+    wc = loop.get("max_wall_clock_minutes", 0)
+    if not isinstance(wc, int) or isinstance(wc, bool) or wc < 0:
+        raise ConfigValidationError(
+            f"architect_loop.max_wall_clock_minutes must be an integer >= 0 "
+            f"(0 disables); got {wc!r}."
+        )
+    if not isinstance(loop.get("verification", ""), str):
+        raise ConfigValidationError(
+            f"architect_loop.verification must be a string command (empty "
+            f"string disables the frozen gate); got "
+            f"{loop.get('verification')!r}."
+        )
+    prefix = loop.get("lane_branch_prefix", "")
+    if (
+        not isinstance(prefix, str)
+        or not prefix.strip()
+        or "\\" in prefix
+        or ".." in prefix
+        or prefix.count("/") > 1
+        or ("/" in prefix and not prefix.endswith("/"))
+    ):
+        raise ConfigValidationError(
+            f"architect_loop.lane_branch_prefix must be a non-empty branch "
+            f"prefix with at most one trailing '/' (e.g. 'arch-lane/'); got "
+            f"{prefix!r}."
+        )
+
+
 def validate(config: dict) -> None:
     """Validate a (preferably normalized) config dict. Raises ConfigValidationError.
 
@@ -474,6 +577,15 @@ def validate(config: dict) -> None:
             f"for the wide cross-AI safety net "
             f"required by autonomous runs; got {n_independent} independent ({enabled!r}). "
             f"Use propose-converge for 2-AI setups."
+        )
+
+    if mode == WORKFLOW_ARCHITECT_BUILD:
+        _validate_architect_build(config)
+    elif "roles" in config:
+        raise ConfigValidationError(
+            f"a top-level roles: block is only legal when workflow.mode="
+            f"architect-build; current mode is {mode!r}. Remove roles: or "
+            f"switch the mode."
         )
 
     # Rule: workflow.mode=propose-converge accepts the two plan-shaped

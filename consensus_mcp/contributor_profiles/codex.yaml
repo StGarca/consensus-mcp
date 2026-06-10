@@ -40,3 +40,7 @@ auth:
 instructions:
   filename: AGENTS.md
 timeout_seconds: 1800
+# architect-build (workflow D): codex is the only v1 builder-capable CLI.
+# Write-enabled dispatch (--sandbox workspace-write confined to a lane
+# worktree) is granted ONLY when this field is true; absence means false.
+builder_capable: true

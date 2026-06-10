@@ -254,6 +254,18 @@ def resolve_kind(name: str, profiles: dict) -> str | None:
     return p.get("kind") if isinstance(p, dict) else None
 
 
+def resolve_builder_capable(name: str, profiles: dict) -> bool:
+    """True iff the named profile declares builder_capable: true.
+
+    architect-build (workflow D) gate: write-enabled builder dispatch is
+    never granted implicitly - absence of the field means False.
+    """
+    d = profiles.get(name)
+    if not isinstance(d, dict):
+        return False
+    return d.get("builder_capable") is True
+
+
 def independent_count(enabled: list[str], profiles: dict) -> int:
     """Count INDEPENDENT contributors: everything except a known host_peer.
     Unknown names (no profile) count as independent - config.py keeps its open
