@@ -10,11 +10,15 @@ v1 canon (codex only):
   codex exec --skip-git-repo-check --cd <lane> --sandbox workspace-write ...
 
 Rules (consult Q1/Q6 union):
-  R1 binary basename is exactly the builder CLI ('codex' / 'codex.exe')
+  R1 binary basename is the builder CLI: stem exactly 'codex' with an
+     extension in the set _dispatch_codex._resolve_codex_bin can emit
+     (none/.exe/.cmd/.bat/.ps1 - v1.10.3 Windows hardening resolves a
+     bare 'codex' to the npm codex.cmd shim, preferring .cmd over .ps1)
   R2 'exec' subcommand present
   R3 exactly one --sandbox flag, value exactly 'workspace-write'
   R4 exactly one --cd flag whose RESOLVED path (symlinks followed) is a
-     'lane' directory under <repo>/.consensus/architect/<goal-id>/
+     lane directory under the goal root (layout imported from
+     _architect_paths, the single source of truth)
   R5 no argv token is 'git' (supervisor-owned git, consult Q1)
   R6 no shell metacharacters in any token (argv is exec'd, never shell'd,
      but defense-in-depth against future wrapper drift)
@@ -24,7 +28,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_ALLOWED_BINARIES = {"codex", "codex.exe"}
+from consensus_mcp._architect_paths import GOAL_ROOT_PARTS, LANE_DIRNAME
+
+_BUILDER_CLI_STEM = "codex"
+# Must match the extension set _resolve_codex_bin emits ('init platform
+# consistency'): on Windows it tries .exe/.cmd/.bat/.ps1 for a bare name,
+# so rejecting any of them would fail-close every legitimate Windows
+# builder dispatch.
+_ALLOWED_BINARY_SUFFIXES = {"", ".exe", ".cmd", ".bat", ".ps1"}
 _SHELL_META_RE = re.compile(r"[;&|`$<>\n]")
 
 
@@ -43,11 +54,15 @@ def validate_builder_argv(argv: list[str], repo_root: Path) -> list[str]:
     if not argv:
         return ["empty argv"]
 
-    binary = Path(argv[0]).name.lower()
-    if binary not in _ALLOWED_BINARIES:
+    binary = Path(Path(argv[0]).name.lower())
+    if not (
+        binary.stem == _BUILDER_CLI_STEM
+        and binary.suffix in _ALLOWED_BINARY_SUFFIXES
+    ):
         violations.append(
             f"binary {argv[0]!r} is not a builder_capable CLI "
-            f"(allowed: {sorted(_ALLOWED_BINARIES)})"
+            f"(allowed: {_BUILDER_CLI_STEM!r} with extension in "
+            f"{sorted(_ALLOWED_BINARY_SUFFIXES)})"
         )
     if "exec" not in argv[1:2]:
         violations.append("second token must be the 'exec' subcommand")
@@ -67,10 +82,10 @@ def validate_builder_argv(argv: list[str], repo_root: Path) -> list[str]:
             resolved = Path(cds[0]).resolve(strict=True)
         except OSError:
             resolved = None
-        root = Path(repo_root).resolve() / ".consensus" / "architect"
+        root = Path(repo_root).resolve().joinpath(*GOAL_ROOT_PARTS)
         ok = (
             resolved is not None
-            and resolved.name == "lane"
+            and resolved.name == LANE_DIRNAME
             and resolved.parent.parent == root
         )
         if not ok:
