@@ -98,7 +98,10 @@ def test_scan_lane_integrity_flags_symlink(tmp_path: Path):
     repo = _make_repo(tmp_path)
     goal = ap.goal_dir(repo, "g1")
     lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
-    (lane / "escape").symlink_to(tmp_path)
+    try:
+        (lane / "escape").symlink_to(tmp_path)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
     violations = lane_mod.scan_lane_integrity(lane)
     assert any("symlink" in v for v in violations)
 
@@ -115,6 +118,21 @@ def test_scan_lane_integrity_flags_outside_hardlink(tmp_path: Path):
         pytest.skip("hardlinks unsupported on this filesystem")
     violations = lane_mod.scan_lane_integrity(lane)
     assert any("hardlink" in v for v in violations)
+
+
+def test_scan_lane_integrity_allows_intra_lane_hardlink(tmp_path: Path):
+    # A hardlink pair living ENTIRELY inside the lane is not an escape:
+    # st_nlink equals the number of lane paths sharing the inode.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    inside = lane / "a.txt"
+    inside.write_text("a\n", encoding="utf-8")
+    try:
+        os.link(inside, lane / "b.txt")
+    except OSError:
+        pytest.skip("hardlinks unsupported on this filesystem")
+    assert lane_mod.scan_lane_integrity(lane) == []
 
 
 def test_clean_lane_scan_is_empty(tmp_path: Path):
@@ -134,6 +152,20 @@ def test_integrity_snapshot_detects_main_mutation(tmp_path: Path):
     assert any("working tree" in v for v in violations)
 
 
+def test_integrity_snapshot_detects_file_in_untracked_dir(tmp_path: Path):
+    # Plain `git status --porcelain` collapses an untracked dir to one
+    # `?? dir/` line, so a NEW file inside a pre-existing untracked dir
+    # would produce zero delta; --untracked-files=all itemizes paths.
+    repo = _make_repo(tmp_path)
+    (repo / "scratch").mkdir()
+    (repo / "scratch" / "a.txt").write_text("a\n", encoding="utf-8")
+    before = lane_mod.snapshot_main_integrity(repo)
+    assert lane_mod.check_main_integrity(repo, before) == []
+    (repo / "scratch" / "b.txt").write_text("b\n", encoding="utf-8")
+    violations = lane_mod.check_main_integrity(repo, before)
+    assert any("working tree" in v for v in violations)
+
+
 def test_integrity_snapshot_detects_ref_change(tmp_path: Path):
     repo = _make_repo(tmp_path)
     before = lane_mod.snapshot_main_integrity(repo)
@@ -145,6 +177,38 @@ def test_integrity_snapshot_detects_ref_change(tmp_path: Path):
     )
     violations = lane_mod.check_main_integrity(repo, before)
     assert any("ref" in v.lower() or "HEAD" in v for v in violations)
+
+
+def test_check_main_integrity_lane_branch_carveout(tmp_path: Path):
+    # The lane worktree shares the main ref store, so commit_lane moves
+    # refs/heads/<lane-branch>: with the carve-out that EXPECTED delta is
+    # clean; without it the same cycle reports a ref violation.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    before = lane_mod.snapshot_main_integrity(repo)
+    (lane / "new.py").write_text("x = 1\n", encoding="utf-8")
+    lane_mod.commit_lane(repo, lane, "builder cycle 1")
+    assert lane_mod.check_main_integrity(
+        repo, before, lane_branch="arch-lane/g1"
+    ) == []
+    violations = lane_mod.check_main_integrity(repo, before)
+    assert any("ref changed: refs/heads/arch-lane/g1" in v for v in violations)
+
+
+def test_check_main_integrity_detects_hooks_and_config_change(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    before = lane_mod.snapshot_main_integrity(repo)
+    hooks_dir = repo / ".git" / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+    (hooks_dir / "pre-commit").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "config", "core.fileMode", "false"], cwd=repo, check=True,
+        capture_output=True,
+    )
+    violations = lane_mod.check_main_integrity(repo, before)
+    assert any("hooks changed" in v for v in violations)
+    assert any("repo config changed" in v for v in violations)
 
 
 def test_lane_diff_shows_builder_change(tmp_path: Path):
