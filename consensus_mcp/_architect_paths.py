@@ -15,6 +15,9 @@ Goal directory layout (per ratified spec section 7):
     HANDOFF.md            rolling-window digest the architect reads
     outcome.yaml          closing_state terminal seal
     integrity-before.yaml main-repo snapshot (latest builder dispatch)
+    containment-breach.yaml  sealed breach record (lane/main/verification
+                          containment violations; its presence is a
+                          persistent stop rule)
     lane/                 git worktree (builder writes here, ONLY here)
     cycle-<N>/
       build-result.yaml   sealed builder output
@@ -42,6 +45,7 @@ IN_FLIGHT_FILENAME = "dispatch-in-flight.yaml"
 HANDOFF_FILENAME = "HANDOFF.md"
 OUTCOME_FILENAME = "outcome.yaml"
 INTEGRITY_BEFORE_FILENAME = "integrity-before.yaml"
+CONTAINMENT_BREACH_FILENAME = "containment-breach.yaml"
 LANE_DIRNAME = "lane"
 CYCLE_DIR_RE = re.compile(r"^cycle-(\d+)$")
 BUILD_RESULT_FILENAME = "build-result.yaml"
