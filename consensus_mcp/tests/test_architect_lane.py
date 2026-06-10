@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
 from pathlib import Path
 
@@ -228,3 +229,113 @@ def test_remove_lane(tmp_path: Path):
     lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
     lane_mod.remove_lane(repo, goal)
     assert not lane.exists()
+
+
+def test_scan_lane_integrity_flags_symlinked_git_pointer(tmp_path: Path):
+    # The .git pointer is the ONE path that redirects all supervisor-owned
+    # (L3) git; it gets no scan exemption (design spec: any symlink in the
+    # lane fires lane_integrity_violation).
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    pointer = lane / ".git"
+    stash = goal / "stash-git-pointer"
+    stash.write_text(pointer.read_text(encoding="utf-8"), encoding="utf-8")
+    pointer.unlink()
+    try:
+        pointer.symlink_to(stash)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    violations = lane_mod.scan_lane_integrity(lane)
+    assert any(".git pointer" in v for v in violations)
+
+
+def test_scan_lane_integrity_flags_rewritten_gitdir_line(tmp_path: Path):
+    # A rewritten gitdir: line redirects commit_lane's add/commit to an
+    # attacker-chosen repo. Mimic the legitimate .../worktrees/<name> shape
+    # so a format-only check would pass; containment must anchor on the
+    # REAL main gitdir.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    evil = tmp_path / "evil"
+    subprocess.run(
+        ["git", "init", "-b", "main", str(evil)], check=True, capture_output=True
+    )
+    fake = evil / ".git" / "worktrees" / "lane"
+    fake.mkdir(parents=True)
+    (lane / ".git").write_text(f"gitdir: {fake}\n", encoding="utf-8")
+    violations = lane_mod.scan_lane_integrity(lane)
+    assert any(".git pointer" in v for v in violations)
+
+
+class _ReparseStat:
+    """Wrap a real lstat result, adding the Windows reparse attribute."""
+
+    def __init__(self, real):
+        self._real = real
+        self.st_file_attributes = stat.FILE_ATTRIBUTE_REPARSE_POINT
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def test_scan_lane_integrity_flags_reparse_point_and_prunes(
+    tmp_path: Path, monkeypatch
+):
+    # NTFS junctions are reparse points that Path.is_symlink() misses and
+    # rglob descends through; the scan must flag them AND not descend into
+    # them (simulated via lstat - the scan's only OS-specific input).
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    junction = lane / "junction"
+    junction.mkdir()
+    (junction / "inside-the-junction.txt").write_text("m\n", encoding="utf-8")
+    junction_resolved = junction.resolve()
+    real_lstat = os.lstat
+    seen: list[str] = []
+
+    def fake_lstat(path, *args, **kwargs):
+        seen.append(os.fspath(path))
+        st = real_lstat(path, *args, **kwargs)
+        if Path(os.fspath(path)) == junction_resolved:
+            return _ReparseStat(st)
+        return st
+
+    monkeypatch.setattr(lane_mod.os, "lstat", fake_lstat)
+    violations = lane_mod.scan_lane_integrity(lane)
+    assert any("reparse" in v or "junction" in v for v in violations)
+    # pruned, not descended: the junction's contents are never scanned
+    assert not any(s.endswith("inside-the-junction.txt") for s in seen)
+
+
+def test_commit_lane_and_lane_diff_reject_foreign_lane(tmp_path: Path):
+    # repo_root anchors containment: a lane that does not resolve under
+    # repo_root's architect root is refused BEFORE any git op runs.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    other = tmp_path / "other-root"
+    other.mkdir()
+    with pytest.raises(lane_mod.LaneError, match="architect root"):
+        lane_mod.commit_lane(other, lane, "msg")
+    with pytest.raises(lane_mod.LaneError, match="architect root"):
+        lane_mod.lane_diff(other, lane, "HEAD")
+
+
+def test_commit_lane_and_lane_diff_refuse_redirected_git_pointer(tmp_path: Path):
+    # Even if a scan were skipped, supervisor git must never run against an
+    # attacker-chosen gitdir.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    evil = tmp_path / "evil"
+    subprocess.run(
+        ["git", "init", "-b", "main", str(evil)], check=True, capture_output=True
+    )
+    (lane / ".git").write_text(f"gitdir: {evil / '.git'}\n", encoding="utf-8")
+    with pytest.raises(lane_mod.LaneError, match="git pointer"):
+        lane_mod.commit_lane(repo, lane, "msg")
+    with pytest.raises(lane_mod.LaneError, match="git pointer"):
+        lane_mod.lane_diff(repo, lane, "HEAD")
