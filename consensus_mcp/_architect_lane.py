@@ -411,6 +411,51 @@ def snapshot_main_integrity(repo_root: Path) -> dict:
     }
 
 
+def snapshot_goal_artifacts(goal: Path) -> dict[str, str]:
+    """sha256 of every file under the goal dir EXCEPT the lane/ subtree
+    (builder-writable by design).
+
+    The frozen verification gate executes builder-authored lane content
+    UNSANDBOXED (operator command, shell=True, cwd=lane), and the cycle-N
+    approval artifacts (review.yaml / ruling.yaml) are content-hash seals,
+    not authenticity signatures - mere filesystem access can forge them.
+    This snapshot/check pair is the L5-style root-cause-independent guard
+    for that window: snapshot before the command runs, compare after, and
+    ANY goal-artifact delta is a containment breach. Symlinked
+    subdirectories are not followed (os.walk default), so a link planted
+    during the run surfaces as a created path, never as a traversal."""
+    goal = Path(goal)
+    hashes: dict[str, str] = {}
+    for dirpath, dirnames, filenames in os.walk(goal):
+        base = Path(dirpath)
+        if base == goal and ap.LANE_DIRNAME in dirnames:
+            dirnames.remove(ap.LANE_DIRNAME)
+        for name in filenames:
+            p = base / name
+            hashes[p.relative_to(goal).as_posix()] = _hash_file(p)
+    return hashes
+
+
+def check_goal_artifacts(goal: Path, before: dict[str, str]) -> list[str]:
+    """Compare a fresh snapshot_goal_artifacts to `before`; every created,
+    deleted, or modified non-lane goal artifact is a violation (the
+    supervisor writes its own artifacts strictly OUTSIDE the guarded
+    window, so there is no expected delta)."""
+    after = snapshot_goal_artifacts(goal)
+    violations: list[str] = []
+    for rel in sorted(set(before) | set(after)):
+        b, a = before.get(rel), after.get(rel)
+        if b == a:
+            continue
+        if b is None:
+            violations.append(f"goal artifact created: {rel}")
+        elif a is None:
+            violations.append(f"goal artifact deleted: {rel}")
+        else:
+            violations.append(f"goal artifact modified: {rel}")
+    return violations
+
+
 def check_main_integrity(repo_root: Path, before: dict, *, lane_branch: str | None = None) -> list[str]:
     """Compare a fresh snapshot to `before`; lane branch ref churn is the one
     EXPECTED delta (the supervisor itself commits there)."""

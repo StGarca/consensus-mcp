@@ -59,6 +59,15 @@ RULING_FILENAME = "ruling.yaml"
 KILLED_CLOSING_STATE = "killed"
 PRUNE_ELIGIBLE_CLOSING_STATES = frozenset({"delivered"})
 
+# ruling.yaml dispositions that CLOSE a cycle and advance the loop to the
+# next build: "revise" (architect feedback or the mechanical RED revise)
+# and "overrule" (architect rejecting builder pushback - the spec stands
+# and the next cycle re-dispatches the builder with the ruling's rationale
+# as feedback). accept/kill terminate the loop elsewhere and never advance
+# the counter. Shared by current_cycle and the loop-step cascade - inline
+# disposition strings are forbidden like artifact names are.
+CYCLE_ADVANCING_DISPOSITIONS = frozenset({"revise", "overrule"})
+
 _GOAL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 # Windows reserved device names ('init platform consistency'): CreateFile
 # treats CON/NUL/COM1... (with or without an extension) as devices, and
@@ -126,9 +135,10 @@ def latest_spec_path(goal: Path) -> Path:
 def current_cycle(goal: Path) -> int:
     """Highest cycle-N whose ruling is sealed, plus one; else that N.
 
-    A cycle is CLOSED when its ruling.yaml exists with disposition=revise
-    (advance) - accept/kill terminate the loop elsewhere, so they do not
-    advance the counter. No cycle dirs at all -> cycle 1.
+    A cycle is CLOSED when its ruling.yaml exists with a disposition in
+    CYCLE_ADVANCING_DISPOSITIONS (revise/overrule) - accept/kill terminate
+    the loop elsewhere, so they do not advance the counter. No cycle dirs
+    at all -> cycle 1.
     """
     goal = Path(goal)
     highest = 0
@@ -145,7 +155,9 @@ def current_cycle(goal: Path) -> int:
         if n > highest:
             highest = n
             ruling = _read_yaml_or_empty(p / RULING_FILENAME)
-            closed_highest = ruling.get("disposition") == "revise"
+            closed_highest = (
+                ruling.get("disposition") in CYCLE_ADVANCING_DISPOSITIONS
+            )
     if highest == 0:
         return 1
     return highest + 1 if closed_highest else highest

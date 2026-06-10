@@ -47,6 +47,18 @@ def test_current_cycle_advances_with_rulings(tmp_path: Path):
     assert ap.current_cycle(g) == 2
 
 
+def test_current_cycle_overrule_ruling_advances(tmp_path: Path):
+    # overrule (architect rejecting builder pushback) closes the cycle the
+    # same way revise does - the next step re-dispatches the builder.
+    g = ap.goal_dir(tmp_path, "g1")
+    c1 = ap.cycle_dir(g, 1)
+    c1.mkdir(parents=True)
+    (c1 / ap.RULING_FILENAME).write_text(
+        "disposition: overrule\n", encoding="utf-8"
+    )
+    assert ap.current_cycle(g) == 2
+
+
 def test_seal_artifact_roundtrip(tmp_path: Path):
     out = tmp_path / "spec.yaml"
     sealed = ap.seal_artifact(out, {"kind": "spec", "body": "hello"})
