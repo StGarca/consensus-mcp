@@ -339,3 +339,38 @@ def test_commit_lane_and_lane_diff_refuse_redirected_git_pointer(tmp_path: Path)
         lane_mod.commit_lane(repo, lane, "msg")
     with pytest.raises(lane_mod.LaneError, match="git pointer"):
         lane_mod.lane_diff(repo, lane, "HEAD")
+
+
+def test_create_lane_resume_rejects_tampered_git_pointer(tmp_path: Path):
+    # Resume-path containment (quality review): an existing lane whose .git
+    # pointer was rewritten must be refused BEFORE any supervisor git op
+    # runs against it.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    evil = tmp_path / "evil-gitdir"
+    evil.mkdir()
+    (lane / ".git").write_text(f"gitdir: {evil}\n", encoding="utf-8")
+    with pytest.raises(lane_mod.LaneError):
+        lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+
+
+def test_integrity_filter_is_root_anchored(tmp_path: Path):
+    # A write under vendor/.../.consensus/architect/ in the MAIN tree must
+    # remain visible to the L5 detector (the old substring filter hid it).
+    repo = _make_repo(tmp_path)
+    before = lane_mod.snapshot_main_integrity(repo)
+    nested = repo / "vendor" / "foo" / ".consensus" / "architect"
+    nested.mkdir(parents=True)
+    (nested / "evil.sh").write_text("boom\n", encoding="utf-8")
+    violations = lane_mod.check_main_integrity(repo, before)
+    assert any("working tree" in v for v in violations)
+
+
+def test_integrity_filter_still_excludes_goal_dir(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    before = lane_mod.snapshot_main_integrity(repo)
+    goal = ap.goal_dir(repo, "g1")
+    goal.mkdir(parents=True)
+    (goal / "spec.yaml").write_text("kind: spec\n", encoding="utf-8")
+    assert lane_mod.check_main_integrity(repo, before) == []
