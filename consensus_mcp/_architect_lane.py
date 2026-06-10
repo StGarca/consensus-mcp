@@ -98,10 +98,42 @@ def create_lane(repo_root: Path, goal: Path, branch: str, base_sha: str) -> Path
     return lane
 
 
+def _lane_branch(repo_root: Path, lane: Path) -> str | None:
+    """The branch checked out in the lane worktree, read from the MAIN
+    repo's worktree list - never by invoking git inside the lane (the
+    create_lane/commit_lane invariant: a rewritten gitdir: pointer must
+    not receive a git invocation). None for detached/unlisted lanes."""
+    try:
+        resolved = lane.resolve()
+    except OSError:
+        return None
+    current: Path | None = None
+    for line in _git(repo_root, "worktree", "list", "--porcelain").splitlines():
+        if line.startswith("worktree "):
+            current = Path(line[len("worktree "):].strip())
+        elif line.startswith("branch ") and current is not None:
+            try:
+                matches = current.resolve() == resolved
+            except OSError:
+                matches = False
+            if matches:
+                return line[len("branch "):].strip().removeprefix("refs/heads/")
+    return None
+
+
 def remove_lane(repo_root: Path, goal: Path) -> None:
+    """Prune the lane worktree AND its branch. The branch is what makes a
+    goal-id collision sticky (create_lane refuses while it exists), so
+    removal must clear both or the operator-facing collision advice
+    ('clean up the old lane') would be a dead end."""
+    repo_root = Path(repo_root)
     lane = ap.lane_dir(goal)
-    if lane.exists():
-        _git(Path(repo_root), "worktree", "remove", "--force", str(lane))
+    if not lane.exists():
+        return
+    branch = _lane_branch(repo_root, lane)
+    _git(repo_root, "worktree", "remove", "--force", str(lane))
+    if branch:
+        _git(repo_root, "branch", "-D", branch)
 
 
 def _main_gitdir(repo_root: Path) -> Path:
