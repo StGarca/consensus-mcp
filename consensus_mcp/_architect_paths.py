@@ -49,6 +49,16 @@ VERIFICATION_FILENAME = "verification.yaml"
 REVIEW_FILENAME = "review.yaml"
 RULING_FILENAME = "ruling.yaml"
 
+# outcome.yaml closing states. Fail-closed allowlist doctrine (mirrors
+# SEALED_CLOSING_STATES in _delivery_readiness): architect.cleanup's
+# DESTRUCTIVE lane prune is permitted ONLY for states in
+# PRUNE_ELIGIBLE_CLOSING_STATES; KILLED_CLOSING_STATE retains the lane for
+# forensics (consult Q7) and any unknown state is refused, never pruned.
+# The loop-step outcome writer shares these constants - inline state-name
+# strings are forbidden like artifact names are.
+KILLED_CLOSING_STATE = "killed"
+PRUNE_ELIGIBLE_CLOSING_STATES = frozenset({"delivered"})
+
 _GOAL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 # Windows reserved device names ('init platform consistency'): CreateFile
 # treats CON/NUL/COM1... (with or without an extension) as devices, and
@@ -194,3 +204,16 @@ def seal_artifact(path: Path, payload: dict) -> dict:
         yaml.safe_dump(stamped, sort_keys=False, default_flow_style=False),
     )
     return stamped
+
+
+def seal_is_intact(sealed: dict) -> bool:
+    """True iff `sealed` carries a payload_sha256 that reproduces over the
+    payload minus the volatile seal stamps - the verification inverse of
+    seal_artifact. Anything unsealed or edited-after-sealing is False."""
+    if not isinstance(sealed, dict):
+        return False
+    declared = sealed.get("payload_sha256")
+    if not declared:
+        return False
+    body = {k: v for k, v in sealed.items() if k not in _VOLATILE_SEAL_FIELDS}
+    return declared == _canonical_yaml_sha256(body)

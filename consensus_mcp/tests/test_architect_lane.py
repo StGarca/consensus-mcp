@@ -231,6 +231,80 @@ def test_remove_lane(tmp_path: Path):
     assert not lane.exists()
 
 
+def test_remove_lane_refuses_symlinked_goal_or_lane(tmp_path: Path):
+    # remove_lane is the one DESTRUCTIVE lane op: a goal/lane that is itself
+    # a symlink would land 'worktree remove --force' + 'branch -D' on
+    # whatever registered worktree it points at (the symlink-cousin-at-a-
+    # destructive-site class).
+    repo = _make_repo(tmp_path)
+    victim_goal = ap.goal_dir(repo, "victim")
+    victim_lane = lane_mod.create_lane(
+        repo, victim_goal, "arch-lane/victim", _head(repo)
+    )
+    lane_goal = ap.goal_dir(repo, "g1")
+    lane_goal.mkdir(parents=True)
+    try:
+        ap.lane_dir(lane_goal).symlink_to(victim_lane, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    with pytest.raises(lane_mod.LaneError, match="symlink"):
+        lane_mod.remove_lane(repo, lane_goal)
+    goal_goal = ap.goal_dir(repo, "g2")
+    goal_goal.symlink_to(victim_goal, target_is_directory=True)
+    with pytest.raises(lane_mod.LaneError, match="symlink"):
+        lane_mod.remove_lane(repo, goal_goal)
+    assert victim_lane.exists()
+    branches = subprocess.run(
+        ["git", "branch", "--list", "arch-lane/victim"], cwd=repo, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+    assert branches != ""
+
+
+def test_remove_lane_refuses_lane_resolving_outside_architect_root(tmp_path: Path):
+    # A symlinked path COMPONENT (here: the architect dir itself) lands the
+    # resolved lane outside repo_root's architect root; the prune must anchor
+    # on the RESOLVED path, never the unresolved argument handed to git.
+    repo = _make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    (outside / "g1" / ap.LANE_DIRNAME).mkdir(parents=True)
+    architect_parent = repo / ap.GOAL_ROOT_PARTS[0]
+    architect_parent.mkdir()
+    try:
+        (architect_parent / ap.GOAL_ROOT_PARTS[1]).symlink_to(
+            outside, target_is_directory=True
+        )
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    goal = repo.joinpath(*ap.GOAL_ROOT_PARTS, "g1")
+    with pytest.raises(lane_mod.LaneError, match="architect root"):
+        lane_mod.remove_lane(repo, goal)
+    assert (outside / "g1" / ap.LANE_DIRNAME).exists()
+
+
+def test_remove_lane_path_only_check_keeps_tampered_lane_removable(tmp_path: Path):
+    # By DESIGN the removal anchor is path-only (lstat + resolve), NOT the
+    # full .git pointer check: a tampered-but-delivered lane must STAY
+    # removable or cleanup of a closed goal would deadlock. A symlinked
+    # pointer with intact content is exactly the tamper the full check
+    # refuses but git itself removes.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    pointer = lane / ".git"
+    stash = goal / "stash-git-pointer"
+    stash.write_text(pointer.read_text(encoding="utf-8"), encoding="utf-8")
+    pointer.unlink()
+    try:
+        pointer.symlink_to(stash)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    with pytest.raises(lane_mod.LaneError, match="git pointer"):
+        lane_mod._require_lane_contained(repo, lane)
+    lane_mod.remove_lane(repo, goal)
+    assert not lane.exists()
+
+
 def test_scan_lane_integrity_flags_symlinked_git_pointer(tmp_path: Path):
     # The .git pointer is the ONE path that redirects all supervisor-owned
     # (L3) git; it gets no scan exemption (design spec: any symlink in the

@@ -98,10 +98,71 @@ def create_lane(repo_root: Path, goal: Path, branch: str, base_sha: str) -> Path
     return lane
 
 
+def _lane_branch(repo_root: Path, lane: Path) -> str | None:
+    """The branch checked out in the lane worktree, read from the MAIN
+    repo's worktree list - never by invoking git inside the lane (the
+    create_lane/commit_lane invariant: a rewritten gitdir: pointer must
+    not receive a git invocation). None for detached/unlisted lanes."""
+    try:
+        resolved = lane.resolve()
+    except OSError:
+        return None
+    current: Path | None = None
+    for line in _git(repo_root, "worktree", "list", "--porcelain").splitlines():
+        if line.startswith("worktree "):
+            current = Path(line[len("worktree "):].strip())
+        elif line.startswith("branch ") and current is not None:
+            try:
+                matches = current.resolve() == resolved
+            except OSError:
+                matches = False
+            if matches:
+                return line[len("branch "):].strip().removeprefix("refs/heads/")
+    return None
+
+
 def remove_lane(repo_root: Path, goal: Path) -> None:
+    """Prune the lane worktree AND its branch. The branch is what makes a
+    goal-id collision sticky (create_lane refuses while it exists), so
+    removal must clear both or the operator-facing collision advice
+    ('clean up the old lane') would be a dead end.
+
+    This is the one DESTRUCTIVE lane op, so it anchors containment before
+    the git op - but PATH-ONLY (lstat + resolve under the architect root),
+    never the full .git pointer check of _require_lane_contained: a
+    goal/lane symlinked onto another registered worktree must never receive
+    'worktree remove --force' / 'branch -D', while a tampered-but-delivered
+    lane must STAY removable (cleanup of a closed goal must not deadlock on
+    pointer tamper)."""
+    repo_root = Path(repo_root)
+    goal = Path(goal)
     lane = ap.lane_dir(goal)
-    if lane.exists():
-        _git(Path(repo_root), "worktree", "remove", "--force", str(lane))
+    for p in (goal, lane):
+        try:
+            st = os.lstat(p)
+        except FileNotFoundError:
+            return  # no goal / no lane: nothing to remove (idempotent)
+        except OSError as exc:
+            raise LaneError(f"cannot lstat {p}: {exc}") from exc
+        if stat.S_ISLNK(st.st_mode) or _is_reparse_point(st):
+            raise LaneError(
+                f"{p} is a symlink/junction - refusing destructive "
+                f"lane removal"
+            )
+    try:
+        resolved = lane.resolve()
+        architect_root = repo_root.resolve().joinpath(*ap.GOAL_ROOT_PARTS)
+    except OSError as exc:
+        raise LaneError(f"cannot resolve lane containment: {exc}") from exc
+    if architect_root not in resolved.parents:
+        raise LaneError(
+            f"lane {resolved} does not resolve under the architect root "
+            f"{architect_root} - refusing destructive removal"
+        )
+    branch = _lane_branch(repo_root, resolved)
+    _git(repo_root, "worktree", "remove", "--force", str(resolved))
+    if branch:
+        _git(repo_root, "branch", "-D", branch)
 
 
 def _main_gitdir(repo_root: Path) -> Path:
