@@ -1130,6 +1130,18 @@ GEMINI_SCRUBBED_ENV_KEYS = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
 GROK_SCRUBBED_ENV_KEYS = ("XAI_API_KEY", "GROK_API_KEY")
 KIMI_SCRUBBED_ENV_KEYS = ("KIMI_API_KEY", "OPENAI_API_KEY")
 
+# Union of every provider's keys - the scrub set for any subprocess that
+# runs builder-authored or otherwise-untrusted code (architect-build's
+# write-enabled builder dispatch + the frozen verification gate). The
+# decisive experiment (2026-06-10) proved that subprocess is effectively
+# unsandboxed with network access, so it must not inherit ANY provider
+# credential it could exfiltrate; codex's own auth is token-based (~/.codex),
+# not these env keys, so scrubbing them does not break the builder.
+ALL_PROVIDER_SCRUBBED_ENV_KEYS = tuple(dict.fromkeys(
+    CODEX_SCRUBBED_ENV_KEYS + GEMINI_SCRUBBED_ENV_KEYS
+    + GROK_SCRUBBED_ENV_KEYS + KIMI_SCRUBBED_ENV_KEYS
+))
+
 
 def scrub_env_keys(env: dict, keys: tuple[str, ...]) -> dict:
     """Pop each key in `keys` from `env` (if present) and return `env`.

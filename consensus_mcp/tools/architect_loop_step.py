@@ -21,10 +21,7 @@ from consensus_mcp import _contributor_profiles as _profiles
 from consensus_mcp import _dispatch_builder as _db
 from consensus_mcp._architect_handoff import write_handoff
 from consensus_mcp._dispatch_base import (
-    CODEX_SCRUBBED_ENV_KEYS,
-    GEMINI_SCRUBBED_ENV_KEYS,
-    GROK_SCRUBBED_ENV_KEYS,
-    KIMI_SCRUBBED_ENV_KEYS,
+    ALL_PROVIDER_SCRUBBED_ENV_KEYS,
     _terminate_process_tree,
     scrub_env_keys,
 )
@@ -483,10 +480,7 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
 # the L5 snapshot catches filesystem deltas but cannot catch network
 # exfiltration of secrets read from env. Scrub the union of every
 # dispatcher's key set (the builder dispatch itself scrubs the codex set).
-_VERIFICATION_SCRUBBED_ENV_KEYS = tuple(dict.fromkeys(
-    CODEX_SCRUBBED_ENV_KEYS + GEMINI_SCRUBBED_ENV_KEYS
-    + GROK_SCRUBBED_ENV_KEYS + KIMI_SCRUBBED_ENV_KEYS
-))
+_VERIFICATION_SCRUBBED_ENV_KEYS = ALL_PROVIDER_SCRUBBED_ENV_KEYS
 
 
 def _run_verification(goal: Path, config: dict, cycle: int, root: Path,

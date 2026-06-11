@@ -15,7 +15,7 @@ timeout. It DOES reuse the codex dispatcher's containment primitives:
   builder an orphaned descendant is not litter but a containment/TOCTOU
   hazard - it could keep WRITING in the lane after the supervisor times out
   and moves on to the integrity snapshot and supervisor-owned git commit.
-- Env scrubbing uses the shared scrub_env_keys + CODEX_SCRUBBED_ENV_KEYS from
+- Env scrubbing uses the shared scrub_env_keys + ALL_PROVIDER_SCRUBBED_ENV_KEYS from
   _dispatch_base (the same primitive all four read-only dispatchers route
   through) so the scrub list cannot drift.
 """
@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 
 from consensus_mcp._dispatch_base import (
-    CODEX_SCRUBBED_ENV_KEYS,
+    ALL_PROVIDER_SCRUBBED_ENV_KEYS,
     _terminate_process_tree,
     scrub_env_keys,
 )
@@ -119,7 +119,9 @@ def dispatch_builder(
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env=scrub_env_keys(os.environ.copy(), CODEX_SCRUBBED_ENV_KEYS),
+                env=scrub_env_keys(
+                    os.environ.copy(), ALL_PROVIDER_SCRUBBED_ENV_KEYS
+                ),
                 **popen_kwargs,
             )
         except (OSError, subprocess.SubprocessError) as exc:
