@@ -3166,6 +3166,29 @@ def test_server_registry_has_apply_codex_patch() -> bool:
         return _expect(False, "server registry inspection for apply.codex_patch")
 
 
+def test_server_registry_has_architect_tools() -> bool:
+    """Verify the installed server's registry exposes the architect tools.
+
+    Probes the wheel-installed package for the architect-build (workflow D)
+    tool surface (Task #12): architect.loop_step, architect.approve_spec,
+    architect.cleanup. If absent the wheel pre-dates the architect-build
+    landing.
+    """
+    print("test_server_registry_has_architect_tools")
+    try:
+        from consensus_mcp.server import registry
+        names = [t["name"] for t in registry.list_tools()]
+        wanted = {"architect.loop_step", "architect.approve_spec",
+                  "architect.cleanup"}
+        return _expect(
+            wanted <= set(names),
+            f"architect tools present in registry (got {names})",
+        )
+    except Exception as exc:
+        print(f"  raised: {exc}")
+        return _expect(False, "server registry inspection for architect tools")
+
+
 def test_author_review_packet_helper_works() -> bool:
     """iter-0021 - _author_review_packet helper writes review-packet.yaml with embedded contents.
 
@@ -3301,6 +3324,7 @@ def main() -> int:
         test_server_registry_has_loop_run_goal,
         test_server_registry_has_loop_verify_codex_patch,
         test_server_registry_has_apply_codex_patch,
+        test_server_registry_has_architect_tools,
         test_author_review_packet_helper_works,
         test_archive_section_24_synced,
     ]

@@ -574,3 +574,46 @@ def handle(goal_dir: str, config_path: str | None = None,
 
 def register(registry) -> None:
     registry.register(SCHEMA["name"], SCHEMA, handle)
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        prog="consensus-mcp-architect",
+        description="architect-build (workflow D) supervisor CLI.",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    step = sub.add_parser("step", help="run one loop_step")
+    step.add_argument("--goal-dir", required=True)
+    step.add_argument("--config", default=None)
+    step.add_argument("--no-dispatch", action="store_true")
+    approve = sub.add_parser("approve-spec", help="human spec gate")
+    approve.add_argument("--goal-dir", required=True)
+    approve.add_argument("--approver", required=True)
+    approve.add_argument("--repo-root", default=None)
+    clean = sub.add_parser("cleanup", help="lane lifecycle for a closed goal")
+    clean.add_argument("--goal-dir", required=True)
+    clean.add_argument("--repo-root", default=None)
+    clean.add_argument("--prune-lane", action="store_true")
+    args = parser.parse_args(argv)
+    if args.cmd == "step":
+        out = handle(goal_dir=args.goal_dir, config_path=args.config,
+                     auto_dispatch=not args.no_dispatch)
+    elif args.cmd == "approve-spec":
+        from consensus_mcp.tools.architect_gates import handle_approve_spec
+        out = handle_approve_spec(goal_dir=args.goal_dir,
+                                  approver=args.approver,
+                                  repo_root=args.repo_root)
+    else:
+        from consensus_mcp.tools.architect_gates import handle_cleanup
+        out = handle_cleanup(goal_dir=args.goal_dir,
+                             repo_root=args.repo_root,
+                             prune_lane=args.prune_lane)
+    print(json.dumps(out, indent=2, default=str))
+    return 0 if out.get("ok") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
