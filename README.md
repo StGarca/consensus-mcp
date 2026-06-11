@@ -108,7 +108,7 @@ Full guide: [docs/workflows/architect-build.md](docs/workflows/architect-build.m
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v1.42.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.0.0
 
 # Install the Claude Code helper once. This is what lets you set up and run
 # consensus from chat in ANY project - including auto-initializing a new one.
@@ -204,37 +204,32 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v1.42.0 - stable.** *The "the gate gets out of your way" release.* Keeps
-the zero-friction cold start of the v1.41.x line and sands down the two sharpest
-edges of the edit gate itself - both surfaced, designed, and hardened by
-consensus-mcp's own 4-AI panel reviewing its own gate.
+**Current: v2.0.0 - the two-modes release.** consensus-mcp now has two
+operating modes that compose:
 
-- **The gate stops fighting `cd` and benign env prefixes.** While a consult is
-  armed, a leading `cd`/`pushd`/`popd` or a benign `VAR=value ` prefix no longer
-  gets a whole read-only command line denied - the trailing command still must be
-  allowlisted, and exec-affecting assignments (`LD_PRELOAD`, `PATH`,
-  `GIT_SSH_COMMAND`, the `LD_*`/`DYLD_*`/`GIT_*`/`PYTHON*` families, ...) are still
-  refused. Writers, redirects, `$()`, and subshells stay denied.
-- **One approval can cover a multi-root change.** The design-approval marker now
-  accepts a LIST of tight scope globs (`--scope-glob 'consensus_mcp/**' --scope-glob
-  'docs/**'`), so a change spanning code + docs + config no longer needs a marker
-  minted per root. Backward-compatible (a single glob is byte-identical), capped and
-  per-glob confined to what the consult authorized, with the anti-bypass bounds
-  enforced on *read*, not just at mint.
-- **A supported "run a full iteration" entrypoint.** `consensus-mcp-run-iteration`
-  runs an iteration end-to-end for non-Claude hosts, replacing hand-rolled shims;
-  and a dispatch-log field cap makes a misbehaving adapter unable to balloon the
-  append-only log (a real 702 MB-log incident in the field).
+- **Consensus Consult (GA, stable).** The cross-AI review panel that has
+  been the product since v1: propose, converge, weighted-synthesis of the
+  best ideas, sealed provenance. Unchanged and battle-tested across 40+
+  releases.
+- **Consensus Build (preview).** The architect loop - an expensive AI plans
+  and rules while a cheap AI builds inside an isolated git worktree, driven
+  by a supervisor state machine to completion with two human gates (spec +
+  merge). New in v2.0.0 and labeled **preview**: it grants a model real
+  write access, so use it on work you can review and on repos you can roll
+  back. Its containment is the supervisor's job, not the CLI sandbox's - a
+  real-codex experiment proved `workspace-write` does NOT confine to its
+  working directory, so the mode never trusts it; a root-cause-independent
+  integrity snapshot blocks delivery on any change outside the builder's
+  lane, and that guard is what the experiment verifies. Builder-owned git
+  commits stay deferred to a future release as a direct consequence.
 
-Built on v1.41's guess-free cold start + v1.40's parallel reviewer dispatch. The
-engine fans out independent reviewers within a phase concurrently (a ~4-8 min serial
-consult becomes ~1-2 min) with deterministic, reproducible outcomes. All five
-reviewers - Claude, Codex, Gemini, Grok, and Kimi - are MCP-surfaced, and the whole
-tree is ASCII-only (enforced by a guard test). 1,970+ regression tests, green on
-Linux + Windows / Python 3.11+. Self-hosted: this release's gate changes were
-designed by a blind 4-AI open-contest consult and then hardened by a Workflow B code
-review that caught a real read-side scope-bound gap mid-flight - exactly what it's
-for.
+The modes compose: a Consult can ratify the spec a Build executes - which
+is how this very feature was made (a 4-AI Consult ratified the design, then
+the build ran as review-gated cycles). Both modes share the same sealed-
+provenance machinery, the five built-in reviewers (Claude, Codex, Gemini,
+Grok, Kimi), and the add-an-AI-by-profile extensibility. ASCII-only tree
+(guard-tested), 2,150+ regression tests green on Linux + Windows /
+Python 3.11+.
 
 - What changed in each release -> [`CHANGELOG.md`](CHANGELOG.md)
 - Known-issue releases + which version to upgrade to ->
