@@ -192,6 +192,12 @@ def test_rewrite_prompt_paths_case_variant_leak_raises_when_case_insensitive():
         )
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX case-sensitive path semantics; the Windows filesystem is "
+    "case-insensitive so the rewrite correctly matches a differently-cased "
+    "path (pre-existing Windows-only skip, unrelated to architect-build).",
+)
 def test_rewrite_prompt_paths_posix_case_sensitive_leaves_distinct_path():
     # POSIX paths are case-sensitive: a differently-cased path is a DIFFERENT
     # directory, so it must neither be rewritten nor trip the leak check.
