@@ -412,15 +412,16 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
             )
             feedback = f"{prev.get('reason', '')}\n{prev.get('feedback', '')}".strip()
         prompt = _db.build_prompt(str(spec.get("body", "")), feedback)
-        # Goal-artifact snapshot/check pair around the dispatch, mirroring
-        # the verification window (L5 doctrine, root-cause-independent):
-        # the main-integrity status view excludes the whole architect tree
-        # (and consensus-init gitignores .consensus/), so WITHOUT this pair
-        # a builder escaping the lane could forge THIS goal's seals (spec,
-        # approval, cycle review/ruling - content hashes, not authenticity
-        # signatures) invisibly. Every supervisor write happens OUTSIDE the
-        # bracket, so there is ZERO expected delta - no exemptions.
-        goal_before = lane_mod.snapshot_goal_artifacts(goal)
+        # Architect-TREE snapshot/check pair around the dispatch (L5
+        # doctrine, root-cause-independent). The DECISIVE EXPERIMENT
+        # (2026-06-10) proved codex --sandbox workspace-write does NOT
+        # confine to --cd: a builder can write a SIBLING goal's seals or the
+        # architect root, paths the main-integrity view blanket-excludes and
+        # a goal-only snapshot misses. This whole-tree snapshot (everything
+        # under .consensus/architect EXCEPT the active lane) is the superset
+        # guard. Every supervisor write happens OUTSIDE the bracket, so there
+        # is ZERO expected delta anywhere but the lane - no exemptions.
+        goal_before = lane_mod.snapshot_architect_tree(root, lane)
         try:
             result = _dispatch_builder_fn(
                 repo_root=root, lane=lane, prompt=prompt,
@@ -430,7 +431,7 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
             # Runs on the failure paths too: a builder that tampers AND
             # then times out / crashes must still seal the breach so the
             # next step blocks persistently.
-            goal_violations = lane_mod.check_goal_artifacts(goal, goal_before)
+            goal_violations = lane_mod.check_architect_tree(root, goal_before, lane)
             if goal_violations:
                 ap.seal_artifact(goal / ap.CONTAINMENT_BREACH_FILENAME,
                                  {"rule": "builder_containment_breach",
@@ -535,7 +536,11 @@ def _run_verification_locked(goal: Path, config: dict, cycle: int,
                              root: Path, profiles: dict, cmd: str,
                              lane: Path) -> dict:
     main_before = lane_mod.snapshot_main_integrity(root)
-    goal_before = lane_mod.snapshot_goal_artifacts(goal)
+    # Architect-TREE snapshot (not goal-only): the frozen gate runs builder
+    # code unsandboxed, and the decisive experiment proved that code can
+    # write a sibling goal's seals or the architect root. Exclude only the
+    # active lane (the command's legitimate workspace).
+    goal_before = lane_mod.snapshot_architect_tree(root, lane)
     # Process-GROUP spawn + tree termination (mirrors _dispatch_builder):
     # a bare subprocess.run timeout kills only the direct shell, leaving
     # descendants (pytest workers etc.) WRITING in the lane while the
@@ -571,7 +576,7 @@ def _run_verification_locked(goal: Path, config: dict, cycle: int,
     except (OSError, subprocess.SubprocessError) as exc:
         passed, tail = False, f"verification command failed to run: {exc}"
     violations = lane_mod.check_main_integrity(root, main_before)
-    violations += lane_mod.check_goal_artifacts(goal, goal_before)
+    violations += lane_mod.check_architect_tree(root, goal_before, lane)
     if violations:
         ap.seal_artifact(goal / ap.CONTAINMENT_BREACH_FILENAME,
                          {"rule": "verification_containment_breach",

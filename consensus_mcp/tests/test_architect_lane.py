@@ -448,3 +448,35 @@ def test_integrity_filter_still_excludes_goal_dir(tmp_path: Path):
     goal.mkdir(parents=True)
     (goal / "spec.yaml").write_text("kind: spec\n", encoding="utf-8")
     assert lane_mod.check_main_integrity(repo, before) == []
+
+
+def test_architect_tree_catches_sibling_goal_and_root_writes(tmp_path: Path):
+    # Decisive-experiment regression (no real codex needed): a write into a
+    # SIBLING goal's dir or the architect root - which snapshot_main_integrity
+    # blanket-excludes and snapshot_goal_artifacts misses - must be caught by
+    # the architect-tree guard. Only the active lane is exempt.
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    before = lane_mod.snapshot_architect_tree(repo, lane)
+    # legitimate lane write: exempt
+    (lane / "work.py").write_text("x = 1\n", encoding="utf-8")
+    # escapes the experiment proved possible:
+    (goal / "escape1.txt").write_text("e1\n", encoding="utf-8")          # goal dir
+    sibling = ap.goal_dir(repo, "g2"); sibling.mkdir(parents=True)
+    (sibling / "stolen.yaml").write_text("forged\n", encoding="utf-8")   # sibling goal
+    (goal.parent / "escape2.txt").write_text("e2\n", encoding="utf-8")   # architect root
+    violations = lane_mod.check_architect_tree(repo, before, lane)
+    assert any("escape1.txt" in v for v in violations)
+    assert any("stolen.yaml" in v for v in violations)
+    assert any("escape2.txt" in v for v in violations)
+    assert not any("work.py" in v for v in violations)  # lane is exempt
+
+
+def test_architect_tree_clean_window_is_empty(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    before = lane_mod.snapshot_architect_tree(repo, lane)
+    (lane / "only-lane.py").write_text("y = 2\n", encoding="utf-8")
+    assert lane_mod.check_architect_tree(repo, before, lane) == []

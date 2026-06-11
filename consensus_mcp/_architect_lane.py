@@ -442,18 +442,74 @@ def check_goal_artifacts(goal: Path, before: dict[str, str]) -> list[str]:
     supervisor writes its own artifacts strictly OUTSIDE the guarded
     window, so there is no expected delta)."""
     after = snapshot_goal_artifacts(goal)
+    return _diff_hashes(before, after, "goal artifact")
+
+
+def _diff_hashes(before: dict[str, str], after: dict[str, str],
+                 label: str) -> list[str]:
     violations: list[str] = []
     for rel in sorted(set(before) | set(after)):
         b, a = before.get(rel), after.get(rel)
         if b == a:
             continue
         if b is None:
-            violations.append(f"goal artifact created: {rel}")
+            violations.append(f"{label} created: {rel}")
         elif a is None:
-            violations.append(f"goal artifact deleted: {rel}")
+            violations.append(f"{label} deleted: {rel}")
         else:
-            violations.append(f"goal artifact modified: {rel}")
+            violations.append(f"{label} modified: {rel}")
     return violations
+
+
+def snapshot_architect_tree(repo_root: Path, exclude_lane: Path) -> dict[str, str]:
+    """sha256 of every file under <repo_root>/.consensus/architect EXCEPT
+    the active lane subtree.
+
+    The DECISIVE-EXPERIMENT finding (2026-06-10): codex --sandbox
+    workspace-write does NOT confine writes to --cd; a builder/verification
+    subprocess can write anywhere, including a SIBLING goal's sealed
+    artifacts or the architect root - paths that snapshot_main_integrity
+    blanket-excludes (the whole .consensus/architect subtree) and
+    snapshot_goal_artifacts misses (only the ACTIVE goal). This whole-tree
+    snapshot is the superset guard: the only path legitimately written
+    during a guarded build/verification window is the active lane, so ANY
+    delta elsewhere under the architect root is a containment breach. The
+    lane is keyed by resolved path so a symlinked lane cannot smuggle an
+    exclusion."""
+    arch_root = Path(repo_root).joinpath(*ap.GOAL_ROOT_PARTS)
+    try:
+        excl = exclude_lane.resolve()
+    except OSError:
+        excl = exclude_lane
+    hashes: dict[str, str] = {}
+    if not arch_root.is_dir():
+        return hashes
+    for dirpath, dirnames, filenames in os.walk(arch_root):
+        base = Path(dirpath)
+        # prune the active lane subtree (resolved compare, not name match)
+        kept = []
+        for d in dirnames:
+            try:
+                resolved = (base / d).resolve()
+            except OSError:
+                resolved = base / d
+            if resolved != excl:
+                kept.append(d)
+        dirnames[:] = kept
+        for name in filenames:
+            p = base / name
+            hashes[p.relative_to(arch_root).as_posix()] = _hash_file(p)
+    return hashes
+
+
+def check_architect_tree(repo_root: Path, before: dict[str, str],
+                         exclude_lane: Path) -> list[str]:
+    """Compare a fresh snapshot_architect_tree to `before`; any delta
+    outside the active lane is a containment breach (the supervisor writes
+    its own artifacts OUTSIDE the guarded window, so zero delta is
+    expected)."""
+    after = snapshot_architect_tree(repo_root, exclude_lane)
+    return _diff_hashes(before, after, "architect-tree artifact")
 
 
 def check_main_integrity(repo_root: Path, before: dict, *, lane_branch: str | None = None) -> list[str]:
