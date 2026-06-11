@@ -1460,3 +1460,63 @@ def test_verification_env_denies_unknown_names_by_default(tmp_path: Path,
     v = yaml.safe_load((ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME)
                        .read_text(encoding="utf-8"))
     assert v["output_tail"] == "DENIED/DENIED"
+
+
+# ---- Workflow B post-review fixes (codex-ahpr, 2026-06-11) ----
+
+
+def test_planted_spec_rev_in_delivery_window_blocks(tmp_path: Path,
+                                                    monkeypatch):
+    """codex-rev-001: a file planted after the post-bracket baseline must
+    not escape the delivery tree recheck just because its NAME matches a
+    known artifact pattern. Planted with the approved spec's exact body so
+    the binding check passes - isolating the tree guard."""
+    repo = _make_repo(tmp_path); _write_config(repo, verification="true")
+    goal = _approved_goal(repo)
+    _green_cycle_to_accept(repo, goal, monkeypatch)
+    ap.seal_artifact(goal / "spec-rev-999.yaml",
+                     {"kind": "spec", "body": "do it"})
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    stops = [s for s in r["stop_rules_fired"]
+             if s["rule"] == "delivery_architect_tree_recheck_failed"]
+    assert stops
+    assert any("spec-rev-999.yaml" in v for v in stops[0]["violations"])
+
+
+def test_planted_superseded_approval_blocks_delivery(tmp_path: Path,
+                                                     monkeypatch):
+    """codex-rev-001: same class - a planted superseded-approval archive in
+    the window is tamper, not an expected post-bracket write."""
+    repo = _make_repo(tmp_path); _write_config(repo, verification="true")
+    goal = _approved_goal(repo)
+    _green_cycle_to_accept(repo, goal, monkeypatch)
+    ap.seal_artifact(goal / "spec-approval-superseded-9.yaml",
+                     {"spec_file": "spec.yaml", "spec_sha256": "0" * 64,
+                      "base_sha": "0" * 40, "approver": "forged"})
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    stops = [s for s in r["stop_rules_fired"]
+             if s["rule"] == "delivery_architect_tree_recheck_failed"]
+    assert stops
+    assert any("spec-approval-superseded-9.yaml" in v
+               for v in stops[0]["violations"])
+
+
+def test_run_build_checks_approval_seal_point_of_use(tmp_path: Path,
+                                                     monkeypatch):
+    """codex-rev-002: _run_build consumes the approval directly (base_sha)
+    and must verify its seal itself - handle()'s routing check leaves a
+    read-to-read TOCTOU window. Called directly to bypass handle()."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _approved_goal(repo)
+    # Tamper that PRESERVES spec_sha256 so the binding check alone passes.
+    _tamper_field(goal / ap.SPEC_APPROVAL_FILENAME, "approver", "evil")
+    _fake_builder(monkeypatch)
+    config = als._load_config(repo, str(repo / ".consensus" / "config.yaml"))
+    profiles = als._merged_profiles(config)
+    r = als._run_build(goal, config, 1, repo, profiles)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "spec_approval_seal_invalid"
+               for s in r["stop_rules_fired"])
+    assert not ap.lane_dir(goal).exists()

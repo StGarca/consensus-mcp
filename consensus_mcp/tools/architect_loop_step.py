@@ -357,39 +357,34 @@ def _signer_violations(goal: Path, cycle: int, roles: dict,
     return violations
 
 
-_SPEC_APPROVAL_SUPERSEDED_RE = re.compile(
-    r"^spec-approval-superseded-\d+\.yaml$"
-)
-_ACTIVE_GOAL_ROOT_ARTIFACTS = frozenset({
-    ap.PROBLEM_FILENAME, ap.SPEC_FILENAME, ap.SPEC_APPROVAL_FILENAME,
-    ap.IN_FLIGHT_FILENAME, ap.HANDOFF_FILENAME, ap.OUTCOME_FILENAME,
-    ap.INTEGRITY_BEFORE_FILENAME, ap.TREE_BASELINE_FILENAME,
-    ap.CONTAINMENT_BREACH_FILENAME,
-})
 _CYCLE_ARTIFACTS = frozenset({
     ap.BUILD_RESULT_FILENAME, ap.VERIFICATION_FILENAME,
     ap.REVIEW_FILENAME, ap.RULING_FILENAME,
 })
 
 
-def _active_goal_known_artifact(rel: str, goal_name: str) -> bool:
-    """True iff `rel` (arch_root-relative) is a KNOWN supervisor/host
-    artifact of the active goal - the only writes legitimate between the
-    last guarded bracket and the human delivery approval (consult Q4,
-    codex): a blanket active-goal exclusion would recreate a goal-scoped
-    blind spot in the exact window the M4 recheck guards, so anything
-    NOT in this set participates in the delivery tree diff."""
+def _active_goal_expected_post_bracket(rel: str, goal_name: str,
+                                       cycle: int) -> bool:
+    """True iff `rel` (arch_root-relative) is a write EXPECTED in the
+    active goal between the post-bracket baseline and the human delivery
+    approval: the CURRENT cycle's artifacts (sealed after the baseline
+    snapshot inside the same step), HANDOFF regeneration, the baseline
+    file itself, and the transient in-flight lock. NOTHING ELSE - not
+    spec revs, not approvals, not prior cycles, not outcome (codex
+    post-review rev-001: a filename-pattern exemption would let a file
+    planted after the baseline slip the M4 guard just by matching a known
+    name; everything outside this window-expected set participates in the
+    delivery tree diff, and the sealed baseline pins every pre-existing
+    path)."""
     prefix = goal_name + "/"
     if not rel.startswith(prefix):
         return False
     tail = rel[len(prefix):]
-    if tail in _ACTIVE_GOAL_ROOT_ARTIFACTS:
-        return True
-    if ap.SPEC_REV_RE.match(tail) or _SPEC_APPROVAL_SUPERSEDED_RE.match(tail):
+    if tail in (ap.HANDOFF_FILENAME, ap.TREE_BASELINE_FILENAME,
+                ap.IN_FLIGHT_FILENAME):
         return True
     head, _, fname = tail.rpartition("/")
-    return bool(head and ap.CYCLE_DIR_RE.match(head)
-                and fname in _CYCLE_ARTIFACTS)
+    return head == f"cycle-{cycle}" and fname in _CYCLE_ARTIFACTS
 
 
 def _binding_stop(approval: dict, spec: dict, cycle: int) -> dict | None:
@@ -447,7 +442,12 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
                         f"reproduce - refusing to build from a tampered spec"
                     )}])
     approval = ap._read_yaml_or_empty(goal / ap.SPEC_APPROVAL_FILENAME)
-    stop = _binding_stop(approval, spec, cycle)
+    # Re-verify the approval at THIS point of use, not only in handle()'s
+    # routing: _run_build re-reads the file, so a write between the two
+    # reads is a real (if narrow) TOCTOU window (codex post-review
+    # rev-002), and the seal check must precede consuming base_sha below.
+    stop = (_seal_stop(approval, "spec_approval_seal_invalid", cycle)
+            or _binding_stop(approval, spec, cycle))
     if stop:
         return stop
     # PRIOR cycle's ruling feeds the builder prompt - verify it at point of
@@ -1008,10 +1008,14 @@ def handle(goal_dir: str, config_path: str | None = None,
                 f"{ap.TREE_BASELINE_FILENAME} malformed: no tree map")
         else:
             fresh = lane_mod.snapshot_architect_tree(root, lane)
-            base_t = {k: v for k, v in baseline["tree"].items()
-                      if not _active_goal_known_artifact(k, goal.name)}
-            fresh_t = {k: v for k, v in fresh.items()
-                       if not _active_goal_known_artifact(k, goal.name)}
+            base_t = {
+                k: v for k, v in baseline["tree"].items()
+                if not _active_goal_expected_post_bracket(k, goal.name, cycle)
+            }
+            fresh_t = {
+                k: v for k, v in fresh.items()
+                if not _active_goal_expected_post_bracket(k, goal.name, cycle)
+            }
             tree_recheck += lane_mod._diff_hashes(
                 base_t, fresh_t, "architect tree")
         found_stops = []
