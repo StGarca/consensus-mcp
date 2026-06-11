@@ -1155,6 +1155,80 @@ def scrub_env_keys(env: dict, keys: tuple[str, ...]) -> dict:
     return env
 
 
+# ---- Default-deny env isolation (consult iteration-architect-hardening-
+# 2026-06-11, Q2 - unanimous panel dissent from a denylist floor) ----
+#
+# Both the write-enabled builder dispatch AND the frozen verification gate
+# execute builder-authored code with network access; a denylist's
+# false-negative surface is unbounded (KUBECONFIG, NETRC, CUSTOM_CORP_SECRET,
+# future provider names), so both get default-deny composition:
+#   env = (BASE allowlist [+ Windows set on nt] [+ verification toolchain
+#          preset] [+ operator CONSENSUS_MCP_<ROLE>_ENV_ALLOW])
+#         minus the HARD-FLOOR credential set, which explicit allows can
+#         NEVER override (exact names only - suffix-pattern names like a
+#         dummy FOO_TOKEN a suite needs CAN pass via explicit allow, so the
+#         escape hatch stays usable for false positives).
+
+SUBPROCESS_ENV_ALLOW_EXACT = (
+    "HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR", "TEMP", "TMP",
+    "TERM", "LANG", "TZ", "PYTHONUTF8", "PYTHONIOENCODING", "NO_COLOR",
+    "CODEX_HOME",
+)
+SUBPROCESS_ENV_ALLOW_PREFIXES = ("LC_",)
+WINDOWS_ENV_ALLOW_EXACT = (
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "PATHEXT", "WINDIR",
+    "USERPROFILE", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "OS",
+    "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+)
+# Non-credential toolchain roots real test suites commonly need; anything
+# beyond these is an explicit, auditable operator ALLOW.
+VERIFICATION_TOOLCHAIN_ALLOW_EXACT = (
+    "VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "JAVA_HOME", "GOPATH",
+    "GOROOT", "CARGO_HOME", "RUSTUP_HOME", "NODE_PATH", "NVM_DIR",
+    "GRADLE_USER_HOME", "M2_HOME", "CI",
+)
+# Exact-name hard floor: known-real credentials and credential-file/path
+# vectors (grok). Uppercase-compared; an explicit allow cannot readmit them.
+CREDENTIAL_ENV_HARD_SCRUB = tuple(dict.fromkeys(
+    ALL_PROVIDER_SCRUBBED_ENV_KEYS + (
+        "GITHUB_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY",
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+        "SSH_AUTH_SOCK", "NPM_TOKEN", "NODE_AUTH_TOKEN", "PYPI_TOKEN",
+        "TWINE_USERNAME", "TWINE_PASSWORD", "HF_TOKEN",
+        "OPENROUTER_API_KEY", "CLOUDFLARE_API_TOKEN", "VERCEL_TOKEN",
+        "GOOGLE_APPLICATION_CREDENTIALS", "KUBECONFIG", "DOCKER_HOST",
+        "DOCKER_CONFIG", "NETRC", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
+    )
+))
+
+
+def build_isolated_env(role: str) -> dict:
+    """Default-deny subprocess environment for `role` ('builder' or
+    'verification'). See the composition note above. Key matching is
+    case-insensitive (Windows env semantics); original key case is kept."""
+    allow = set(SUBPROCESS_ENV_ALLOW_EXACT)
+    if os.name == "nt":
+        allow.update(WINDOWS_ENV_ALLOW_EXACT)
+    if role == "verification":
+        allow.update(VERIFICATION_TOOLCHAIN_ALLOW_EXACT)
+        extra = os.environ.get("CONSENSUS_MCP_VERIFICATION_ENV_ALLOW", "")
+    else:
+        extra = os.environ.get("CONSENSUS_MCP_BUILDER_ENV_ALLOW", "")
+    allow.update(k.strip() for k in extra.split(",") if k.strip())
+    allow_upper = {k.upper() for k in allow}
+    hard_upper = {k.upper() for k in CREDENTIAL_ENV_HARD_SCRUB}
+    env: dict = {}
+    for key, value in os.environ.items():
+        upper = key.upper()
+        if upper in hard_upper:
+            continue
+        if upper in allow_upper or any(
+            upper.startswith(p) for p in SUBPROCESS_ENV_ALLOW_PREFIXES
+        ):
+            env[key] = value
+    return env
+
+
 def build_failed_event(
     *,
     adapter: str,

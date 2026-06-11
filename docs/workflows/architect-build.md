@@ -226,6 +226,52 @@ operator decision), or to kill/restart the goal. The main working tree is
 never touched by any dispatched process, and the lane branch is never
 auto-merged.
 
+## Hardening pass (post-v2.0.0, consult 2026-06-11)
+
+Ratified by the 3-AI anchored consult
+`iteration-architect-hardening-2026-06-11` (codex+gemini+grok, zero
+blocking objections); design doc:
+`docs/superpowers/specs/2026-06-11-architect-hardening-design.md`.
+
+1. **Point-of-use seal verification.** Every sealed artifact is
+   re-verified where its content grants state progression - spec
+   approval, build result, verification, review, ruling, outcome, the
+   integrity baseline - each with its own stop rule
+   (`*_seal_invalid`). A body edited after sealing blocks the loop
+   instead of steering it.
+2. **Spec-approval binding is enforced.** `loop_step` refuses to build
+   when the latest sealed spec is not the approved one
+   (`spec_approval_binding_mismatch`). Re-approval is legal exactly
+   when the spec evolved: `approve-spec` archives the prior approval to
+   `spec-approval-superseded-<n>.yaml` and re-binds; a true duplicate
+   is still refused; re-approval is refused while a dispatch is in
+   flight; and when the lane already exists the original `base_sha` is
+   carried forward (re-approval never un-sticks the head-moved stop).
+3. **Symlinks are recorded snapshot entries.** Tree snapshots record
+   every symlink (file or directory) by its literal target and never
+   follow it - a planted or retargeted symlink-dir now surfaces in the
+   diff, and a symlink resolving to the lane is recorded, not silently
+   pruned.
+4. **Delivery-gate architect-tree recheck.** The human delivery gate
+   re-checks the whole architect tree against a sealed post-bracket
+   baseline (`architect-tree-baseline.yaml`, format-versioned), so
+   sibling-goal or architect-root tamper during review/ruling/approval
+   time blocks delivery (`delivery_architect_tree_recheck_failed`).
+   Only the KNOWN supervisor artifact set in the active goal is exempt.
+5. **Default-deny subprocess environments.** Builder AND verification
+   subprocesses get an allowlist-composed env (base operational vars +
+   a small toolchain preset for verification + the operator extension
+   `CONSENSUS_MCP_BUILDER_ENV_ALLOW` /
+   `CONSENSUS_MCP_VERIFICATION_ENV_ALLOW`), then a hard-floor
+   credential scrub that explicit allows can NEVER override
+   (GITHUB_TOKEN, AWS keys, SSH_AUTH_SOCK, KUBECONFIG, etc.). An
+   env-dependent test suite declares its variables explicitly - visible
+   configuration instead of silent credential exposure.
+6. **Discoverability.** `consensus results` lists architect goals with
+   advisory derived states, and `consensus-init --workflow D` /
+   `architect-build` is accepted (preview-labeled), with the
+   interactive wizard prompting the role mapping.
+
 ## v1 boundaries (documented simplifications)
 
 - **The supervisor auto-runs only two things:** the builder dispatch and

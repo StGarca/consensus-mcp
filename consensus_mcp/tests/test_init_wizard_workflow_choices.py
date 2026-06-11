@@ -87,3 +87,34 @@ def test_workflow_resolves_letter_via_alias_map():
     args = _build_test_parser().parse_args(["--workflow", "C"])
     resolved = cfg.WORKFLOW_ALIASES.get(args.workflow, args.workflow)
     assert resolved == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+
+
+# ---- Consult Q3 (iteration-architect-hardening-2026-06-11): workflow D ----
+
+
+def test_real_main_accepts_workflow_d(tmp_path, monkeypatch, capsys):
+    """Against the REAL main(), not the mirror parser - the v1.14.4 defect
+    class this file documents is exactly 'alias in WORKFLOW_ALIASES but not
+    in choices', and it recurred with D at v2.0.0. Without a roles block
+    the run must end in the actionable config refusal, never an argparse
+    parse-time rejection."""
+    import pytest
+    from consensus_mcp import _init_wizard as wiz
+    monkeypatch.chdir(tmp_path)
+    try:
+        rc = wiz.main([
+            "--non-interactive", "--accept-defaults",
+            "--contributors", "claude,codex",
+            "--workflow", "D",
+        ])
+    except SystemExit:
+        pytest.fail("argparse rejected --workflow D at parse time")
+    assert rc != 0
+    captured = capsys.readouterr()
+    assert "roles" in (captured.out + captured.err).lower()
+
+
+def test_workflow_d_resolves_via_alias_map():
+    from consensus_mcp import config as cfg
+    assert cfg.WORKFLOW_ALIASES.get("D") == cfg.WORKFLOW_ARCHITECT_BUILD
+    assert cfg.WORKFLOW_ALIASES.get("d") == cfg.WORKFLOW_ARCHITECT_BUILD

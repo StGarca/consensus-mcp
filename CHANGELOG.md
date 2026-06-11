@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+**Consensus Build hardening pass** - six verified gaps closed, ratified by
+the 3-AI anchored consult `iteration-architect-hardening-2026-06-11`
+(codex+gemini+grok, zero blocking objections):
+
+- Point-of-use seal verification for every progression-granting artifact
+  (spec approval / build / verification / review / ruling / outcome /
+  integrity baseline), each with a named `*_seal_invalid` stop rule.
+- Spec-approval binding enforced at build time
+  (`spec_approval_binding_mismatch`); re-approval legalized exactly when
+  the spec evolved (archive-then-reseal, in-flight refusal, base_sha
+  carry-forward when the lane exists).
+- Tree snapshots record symlinks (incl. symlink-to-directory, previously
+  invisible) by literal target; symlinks resolving to the lane are
+  recorded, not silently pruned.
+- Delivery gate re-checks the architect tree against a sealed,
+  format-versioned post-bracket baseline; only the known supervisor
+  artifact set in the active goal is exempt
+  (`delivery_architect_tree_recheck_failed`).
+- Builder AND verification subprocess envs are default-deny allowlists
+  with operator extensions (`CONSENSUS_MCP_BUILDER_ENV_ALLOW`,
+  `CONSENSUS_MCP_VERIFICATION_ENV_ALLOW`) and a hard-floor credential
+  scrub explicit allows cannot override.
+- `consensus results` gains a read-only `architect_goals` section;
+  `--workflow D`/`architect-build` accepted by init (preview-labeled),
+  interactive wizard prompts the role mapping.
+
 ## 2.0.0 - 2026-06-10
 
 **The two-modes release.** consensus-mcp now officially operates in two

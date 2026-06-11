@@ -15,9 +15,10 @@ timeout. It DOES reuse the codex dispatcher's containment primitives:
   builder an orphaned descendant is not litter but a containment/TOCTOU
   hazard - it could keep WRITING in the lane after the supervisor times out
   and moves on to the integrity snapshot and supervisor-owned git commit.
-- Env scrubbing uses the shared scrub_env_keys + ALL_PROVIDER_SCRUBBED_ENV_KEYS from
-  _dispatch_base (the same primitive all four read-only dispatchers route
-  through) so the scrub list cannot drift.
+- Env isolation is the shared default-deny build_isolated_env('builder')
+  from _dispatch_base (consult Q2, 2026-06-11): allowlist composition plus
+  a hard-floor credential scrub that explicit allows cannot override - the
+  same construction the verification gate uses, so the posture cannot drift.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ from pathlib import Path
 from consensus_mcp._dispatch_base import (
     ALL_PROVIDER_SCRUBBED_ENV_KEYS,
     _terminate_process_tree,
-    scrub_env_keys,
+    build_isolated_env,
 )
 from consensus_mcp._dispatch_codex import (
     CodexInvocationError,
@@ -119,9 +120,10 @@ def dispatch_builder(
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env=scrub_env_keys(
-                    os.environ.copy(), ALL_PROVIDER_SCRUBBED_ENV_KEYS
-                ),
+                # Default-deny (consult Q2, 2026-06-11): allowlist
+                # composition + hard-floor credential scrub; codex auth is
+                # file-based under HOME/CODEX_HOME, so this cannot break it.
+                env=build_isolated_env("builder"),
                 **popen_kwargs,
             )
         except (OSError, subprocess.SubprocessError) as exc:

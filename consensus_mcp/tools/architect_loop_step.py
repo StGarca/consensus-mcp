@@ -21,9 +21,8 @@ from consensus_mcp import _contributor_profiles as _profiles
 from consensus_mcp import _dispatch_builder as _db
 from consensus_mcp._architect_handoff import write_handoff
 from consensus_mcp._dispatch_base import (
-    ALL_PROVIDER_SCRUBBED_ENV_KEYS,
     _terminate_process_tree,
-    scrub_env_keys,
+    build_isolated_env,
 )
 
 # Indirection point so tests monkeypatch the supervisor's view of the
@@ -358,6 +357,77 @@ def _signer_violations(goal: Path, cycle: int, roles: dict,
     return violations
 
 
+_SPEC_APPROVAL_SUPERSEDED_RE = re.compile(
+    r"^spec-approval-superseded-\d+\.yaml$"
+)
+_ACTIVE_GOAL_ROOT_ARTIFACTS = frozenset({
+    ap.PROBLEM_FILENAME, ap.SPEC_FILENAME, ap.SPEC_APPROVAL_FILENAME,
+    ap.IN_FLIGHT_FILENAME, ap.HANDOFF_FILENAME, ap.OUTCOME_FILENAME,
+    ap.INTEGRITY_BEFORE_FILENAME, ap.TREE_BASELINE_FILENAME,
+    ap.CONTAINMENT_BREACH_FILENAME,
+})
+_CYCLE_ARTIFACTS = frozenset({
+    ap.BUILD_RESULT_FILENAME, ap.VERIFICATION_FILENAME,
+    ap.REVIEW_FILENAME, ap.RULING_FILENAME,
+})
+
+
+def _active_goal_known_artifact(rel: str, goal_name: str) -> bool:
+    """True iff `rel` (arch_root-relative) is a KNOWN supervisor/host
+    artifact of the active goal - the only writes legitimate between the
+    last guarded bracket and the human delivery approval (consult Q4,
+    codex): a blanket active-goal exclusion would recreate a goal-scoped
+    blind spot in the exact window the M4 recheck guards, so anything
+    NOT in this set participates in the delivery tree diff."""
+    prefix = goal_name + "/"
+    if not rel.startswith(prefix):
+        return False
+    tail = rel[len(prefix):]
+    if tail in _ACTIVE_GOAL_ROOT_ARTIFACTS:
+        return True
+    if ap.SPEC_REV_RE.match(tail) or _SPEC_APPROVAL_SUPERSEDED_RE.match(tail):
+        return True
+    head, _, fname = tail.rpartition("/")
+    return bool(head and ap.CYCLE_DIR_RE.match(head)
+                and fname in _CYCLE_ARTIFACTS)
+
+
+def _binding_stop(approval: dict, spec: dict, cycle: int) -> dict | None:
+    """Consult Q1: the approval binds spec_sha256, and the point of use
+    must ENFORCE it - a post-approval spec rev would otherwise build
+    unapproved. Fires in handle() routing (deterministic, pre-dispatch)
+    and again in _run_build (defense in depth)."""
+    if approval.get("spec_sha256") == spec.get("payload_sha256"):
+        return None
+    return _result(
+        "blocked_stop_rule", cycle=cycle,
+        stops=[{"rule": "spec_approval_binding_mismatch",
+                "approved_spec_sha256": approval.get("spec_sha256"),
+                "latest_spec_sha256": spec.get("payload_sha256"),
+                "detail": (
+                    "the latest sealed spec is not the approved one - "
+                    "re-run `consensus-mcp-architect approve-spec` to "
+                    "re-bind (the prior approval is archived "
+                    "automatically)"
+                )}])
+
+
+def _seal_stop(artifact: dict, rule: str, cycle: int | None) -> dict | None:
+    """blocked_stop_rule when a non-empty sealed artifact fails
+    seal_is_intact at its POINT OF USE - the generalized form of the
+    spec_seal_invalid refusal (M1 hardening, 2026-06-11). Missing artifacts
+    ({}) are the normal not-yet-written case and pass through; a non-empty
+    artifact whose payload_sha256 does not reproduce is tamper/corruption
+    and must never grant state progression."""
+    if not artifact or ap.seal_is_intact(artifact):
+        return None
+    return _result(
+        "blocked_stop_rule", cycle=cycle,
+        stops=[{"rule": rule,
+                "detail": "payload_sha256 does not reproduce - refusing to "
+                          "act on a tampered artifact"}])
+
+
 def _run_build(goal: Path, config: dict, cycle: int, root: Path,
                profiles: dict) -> dict:
     roles = config["roles"]
@@ -377,6 +447,20 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
                         f"reproduce - refusing to build from a tampered spec"
                     )}])
     approval = ap._read_yaml_or_empty(goal / ap.SPEC_APPROVAL_FILENAME)
+    stop = _binding_stop(approval, spec, cycle)
+    if stop:
+        return stop
+    # PRIOR cycle's ruling feeds the builder prompt - verify it at point of
+    # use BEFORE any lane work or lock, mirroring the spec check above.
+    feedback = ""
+    if cycle > 1:
+        prev = ap._read_yaml_or_empty(
+            ap.cycle_dir(goal, cycle - 1) / ap.RULING_FILENAME
+        )
+        stop = _seal_stop(prev, "ruling_seal_invalid", cycle)
+        if stop:
+            return stop
+        feedback = f"{prev.get('reason', '')}\n{prev.get('feedback', '')}".strip()
     branch = _lane_branch_name(loop, goal)
     # TEST-AND-SET the in-flight lock BEFORE any lane work. The read check
     # in handle() is only the polite wait state; this O_EXCL create is the
@@ -402,12 +486,6 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
         before = lane_mod.snapshot_main_integrity(root)
         ap.seal_artifact(goal / ap.INTEGRITY_BEFORE_FILENAME, before)
 
-        feedback = ""
-        if cycle > 1:
-            prev = ap._read_yaml_or_empty(
-                ap.cycle_dir(goal, cycle - 1) / ap.RULING_FILENAME
-            )
-            feedback = f"{prev.get('reason', '')}\n{prev.get('feedback', '')}".strip()
         prompt = _db.build_prompt(str(spec.get("body", "")), feedback)
         # Architect-TREE snapshot/check pair around the dispatch (L5
         # doctrine, root-cause-independent). The DECISIVE EXPERIMENT
@@ -463,6 +541,16 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
         return _result("blocked_stop_rule", cycle=cycle,
                        stops=[{"rule": "builder_containment_breach",
                                "violations": main_violations}])
+    # Post-bracket tree baseline (M4): the delivery gate rechecks the
+    # architect tree against the LAST guarded-bracket close; review/ruling/
+    # human-approval time is otherwise an unguarded window for sibling-goal
+    # + architect-root tamper. Sealed AFTER the bracket checks pass, so it
+    # records a verified-clean tree.
+    ap.seal_artifact(
+        goal / ap.TREE_BASELINE_FILENAME,
+        {"tree": lane_mod.snapshot_architect_tree(root, lane), "cycle": cycle,
+         "snapshot_format_version": lane_mod.TREE_SNAPSHOT_FORMAT_VERSION},
+    )
     cdir = ap.cycle_dir(goal, cycle)
     cdir.mkdir(parents=True, exist_ok=True)
     ap.seal_artifact(
@@ -473,14 +561,6 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
     write_handoff(goal, roles=roles, profiles=profiles)
     return _result("built", cycle=cycle,
                    actions=[{"action": "builder_dispatched", "lane_head_sha": head}])
-
-
-# The frozen gate executes builder-authored lane code (conftest.py, test
-# modules), so it must not inherit the supervisor's AI-provider credentials:
-# the L5 snapshot catches filesystem deltas but cannot catch network
-# exfiltration of secrets read from env. Scrub the union of every
-# dispatcher's key set (the builder dispatch itself scrubs the codex set).
-_VERIFICATION_SCRUBBED_ENV_KEYS = ALL_PROVIDER_SCRUBBED_ENV_KEYS
 
 
 def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
@@ -551,9 +631,13 @@ def _run_verification_locked(goal: Path, config: dict, cycle: int,
             cmd, shell=True, cwd=str(lane),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace",
-            env=scrub_env_keys(
-                os.environ.copy(), _VERIFICATION_SCRUBBED_ENV_KEYS
-            ),
+            # Default-deny (consult Q2, 2026-06-11): the frozen gate
+            # executes builder-authored lane code, so it gets the same
+            # allowlist posture as the builder - the L5 snapshot catches
+            # filesystem deltas but cannot catch network exfiltration of
+            # secrets read from env, and a denylist's false-negative
+            # surface is unbounded.
+            env=build_isolated_env("verification"),
             **popen_kwargs,
         )
         try:
@@ -578,6 +662,14 @@ def _run_verification_locked(goal: Path, config: dict, cycle: int,
         return _result("blocked_stop_rule", cycle=cycle,
                        stops=[{"rule": "verification_containment_breach",
                                "violations": violations}])
+    # Refresh the post-bracket tree baseline (M4): verification is the last
+    # guarded bracket before the delivery gate; rechecking against ITS close
+    # narrows the unguarded window to review/ruling/approval time only.
+    ap.seal_artifact(
+        goal / ap.TREE_BASELINE_FILENAME,
+        {"tree": lane_mod.snapshot_architect_tree(root, lane), "cycle": cycle,
+         "snapshot_format_version": lane_mod.TREE_SNAPSHOT_FORMAT_VERSION},
+    )
     cdir = ap.cycle_dir(goal, cycle)
     cdir.mkdir(parents=True, exist_ok=True)
     ap.seal_artifact(
@@ -595,6 +687,88 @@ def _run_verification_locked(goal: Path, config: dict, cycle: int,
     write_handoff(goal, roles=config["roles"], profiles=profiles)
     return _result("verification_red", cycle=cycle,
                    actions=[{"action": "mechanical_revise_sealed"}])
+
+
+def derive_goal_public_state(goal_dir, verification_configured: bool = False
+                             ) -> dict:
+    """Read-only ADVISORY goal-state derivation for presentation surfaces
+    (consult Q3: `consensus results` architect_goals; single shared helper
+    so presentation can never drift from loop_step's vocabulary). Mirrors
+    handle()'s routing order over the same artifact primitives but NEVER
+    dispatches, runs git, or snapshots - handle() remains the enforcement
+    truth (its git-backed checks, e.g. base drift and the delivery
+    rechecks, are deliberately out of scope here)."""
+    goal = Path(goal_dir)
+    cycle = ap.current_cycle(goal)
+    info: dict = {"goal_id": goal.name, "cycle": cycle, "state": "open",
+                  "last_handoff_utc": None}
+    handoff = goal / ap.HANDOFF_FILENAME
+    if handoff.exists():
+        try:
+            info["last_handoff_utc"] = _dt.datetime.fromtimestamp(
+                handoff.stat().st_mtime, _dt.timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except OSError:
+            pass
+    outcome = ap._read_yaml_or_empty(goal / ap.OUTCOME_FILENAME)
+    if outcome.get("closing_state"):
+        if not ap.seal_is_intact(outcome):
+            info["state"] = "blocked:outcome_seal_invalid"
+        elif outcome["closing_state"] == ap.KILLED_CLOSING_STATE:
+            info["state"] = "killed"
+        else:
+            info["state"] = f"closed:{outcome['closing_state']}"
+        return info
+    breach = ap._read_yaml_or_empty(goal / ap.CONTAINMENT_BREACH_FILENAME)
+    if breach:
+        info["state"] = f"blocked:{breach.get('rule', 'containment_breach')}"
+        return info
+    spec = ap._read_yaml_or_empty(ap.latest_spec_path(goal))
+    if not spec.get("payload_sha256"):
+        info["state"] = "needs_spec"
+        return info
+    approval = ap._read_yaml_or_empty(goal / ap.SPEC_APPROVAL_FILENAME)
+    if not approval:
+        info["state"] = "awaiting_spec_approval"
+        return info
+    if not ap.seal_is_intact(approval):
+        info["state"] = "blocked:spec_approval_seal_invalid"
+        return info
+    if approval.get("spec_sha256") != spec.get("payload_sha256"):
+        info["state"] = "blocked:spec_approval_binding_mismatch"
+        return info
+    if ap._read_yaml_or_empty(goal / ap.IN_FLIGHT_FILENAME):
+        info["state"] = "dispatch_in_flight"
+        return info
+    cdir = ap.cycle_dir(goal, cycle)
+    build = ap._read_yaml_or_empty(cdir / ap.BUILD_RESULT_FILENAME)
+    ruling = ap._read_yaml_or_empty(cdir / ap.RULING_FILENAME)
+    if build.get("pushback") and not ruling:
+        info["state"] = "pushback_raised"
+        return info
+    if not build:
+        info["state"] = "needs_build"
+        return info
+    verification = ap._read_yaml_or_empty(cdir / ap.VERIFICATION_FILENAME)
+    if (verification_configured and not build.get("pushback")
+            and not verification):
+        info["state"] = "needs_verification"
+        return info
+    if verification and not verification.get("passed") and not ruling:
+        info["state"] = "verification_red"
+        return info
+    review = ap._read_yaml_or_empty(cdir / ap.REVIEW_FILENAME)
+    if not review and not ruling:
+        info["state"] = "needs_review"
+        return info
+    if not ruling:
+        info["state"] = "needs_ruling"
+        return info
+    if ruling.get("disposition") == "accept":
+        info["state"] = "awaiting_delivery_approval"
+        return info
+    info["state"] = "needs_ruling"
+    return info
 
 
 def handle(goal_dir: str, config_path: str | None = None,
@@ -628,6 +802,9 @@ def handle(goal_dir: str, config_path: str | None = None,
     profiles = _merged_profiles(config)
 
     outcome = ap._read_yaml_or_empty(goal / ap.OUTCOME_FILENAME)
+    stop = _seal_stop(outcome, "outcome_seal_invalid", None)
+    if stop:
+        return stop
     if outcome.get("closing_state"):
         state = (
             "killed"
@@ -649,6 +826,10 @@ def handle(goal_dir: str, config_path: str | None = None,
     approval = ap._read_yaml_or_empty(goal / ap.SPEC_APPROVAL_FILENAME)
     if not approval:
         return _result("awaiting_spec_approval", cycle=cycle)
+    stop = (_seal_stop(approval, "spec_approval_seal_invalid", cycle)
+            or _binding_stop(approval, spec, cycle))
+    if stop:
+        return stop
 
     # The hardened lane git, not a raw subprocess (mirrors approve_spec):
     # a GIT_DIR leaked from a hook context would make rev-parse ignore cwd
@@ -665,6 +846,10 @@ def handle(goal_dir: str, config_path: str | None = None,
     cdir = ap.cycle_dir(goal, cycle)
     build = ap._read_yaml_or_empty(cdir / ap.BUILD_RESULT_FILENAME)
     ruling = ap._read_yaml_or_empty(cdir / ap.RULING_FILENAME)
+    stop = (_seal_stop(build, "build_seal_invalid", cycle)
+            or _seal_stop(ruling, "ruling_seal_invalid", cycle))
+    if stop:
+        return stop
     if build.get("pushback") and not ruling:
         return _result("pushback_raised", cycle=cycle)
     if not build:
@@ -678,6 +863,9 @@ def handle(goal_dir: str, config_path: str | None = None,
                                    "detail": str(exc)}],
                            error=str(exc))
     verification = ap._read_yaml_or_empty(cdir / ap.VERIFICATION_FILENAME)
+    stop = _seal_stop(verification, "verification_seal_invalid", cycle)
+    if stop:
+        return stop
     needs_gate = bool(config["architect_loop"].get("verification", "")) and not build.get("pushback")
     if needs_gate and not verification:
         try:
@@ -700,6 +888,9 @@ def handle(goal_dir: str, config_path: str | None = None,
         return _result("verification_red", cycle=cycle,
                        actions=[{"action": "mechanical_revise_resealed"}])
     review = ap._read_yaml_or_empty(cdir / ap.REVIEW_FILENAME)
+    stop = _seal_stop(review, "review_seal_invalid", cycle)
+    if stop:
+        return stop
     if not review and not ruling:
         return _result("needs_review", cycle=cycle)
     if not ruling:
@@ -755,6 +946,14 @@ def handle(goal_dir: str, config_path: str | None = None,
             recheck.append(
                 f"{ap.INTEGRITY_BEFORE_FILENAME} missing or malformed"
             )
+        elif not ap.seal_is_intact(before_snap):
+            # Content keys can all be present AND match the live state while
+            # the seal no longer reproduces - corruption or a sloppy rewrite
+            # of the baseline. The recheck must not trust such a baseline.
+            recheck.append(
+                f"{ap.INTEGRITY_BEFORE_FILENAME} seal invalid: "
+                "payload_sha256 does not reproduce"
+            )
         else:
             try:
                 recheck += lane_mod.check_main_integrity(
@@ -782,11 +981,50 @@ def handle(goal_dir: str, config_path: str | None = None,
                         f"lane HEAD moved after the build seal: "
                         f"{build.get('lane_head_sha')!r} -> {lane_head!r}"
                     )
+        # M4: architect-TREE recheck against the last guarded-bracket
+        # baseline. The active goal dir is excluded - review/ruling/handoff/
+        # baseline writes there are legitimate supervisor activity between
+        # the bracket close and the human approval; ANY other delta
+        # (sibling goal, architect root) is a containment breach.
+        tree_recheck: list[str] = []
+        baseline = ap._read_yaml_or_empty(goal / ap.TREE_BASELINE_FILENAME)
+        if not baseline:
+            tree_recheck.append(
+                f"{ap.TREE_BASELINE_FILENAME} missing: no post-bracket "
+                "baseline to recheck the architect tree against")
+        elif not ap.seal_is_intact(baseline):
+            tree_recheck.append(
+                f"{ap.TREE_BASELINE_FILENAME} seal invalid: payload_sha256 "
+                "does not reproduce")
+        elif (baseline.get("snapshot_format_version")
+              != lane_mod.TREE_SNAPSHOT_FORMAT_VERSION):
+            tree_recheck.append(
+                f"{ap.TREE_BASELINE_FILENAME} snapshot format version "
+                f"{baseline.get('snapshot_format_version')!r} does not "
+                f"match expected {lane_mod.TREE_SNAPSHOT_FORMAT_VERSION} - "
+                "refusing a cross-format compare")
+        elif not isinstance(baseline.get("tree"), dict):
+            tree_recheck.append(
+                f"{ap.TREE_BASELINE_FILENAME} malformed: no tree map")
+        else:
+            fresh = lane_mod.snapshot_architect_tree(root, lane)
+            base_t = {k: v for k, v in baseline["tree"].items()
+                      if not _active_goal_known_artifact(k, goal.name)}
+            fresh_t = {k: v for k, v in fresh.items()
+                       if not _active_goal_known_artifact(k, goal.name)}
+            tree_recheck += lane_mod._diff_hashes(
+                base_t, fresh_t, "architect tree")
+        found_stops = []
         if recheck:
-            return _result(
-                "blocked_stop_rule", cycle=cycle,
-                stops=[{"rule": "delivery_integrity_recheck_failed",
-                        "violations": recheck}])
+            found_stops.append({"rule": "delivery_integrity_recheck_failed",
+                                "violations": recheck})
+        if tree_recheck:
+            found_stops.append(
+                {"rule": "delivery_architect_tree_recheck_failed",
+                 "violations": tree_recheck})
+        if found_stops:
+            return _result("blocked_stop_rule", cycle=cycle,
+                           stops=found_stops)
         write_handoff(goal, roles=roles, profiles=profiles)
         return _result(
             "awaiting_delivery_approval", cycle=cycle,

@@ -43,6 +43,7 @@ SCHEMA = {
             "backfilled": {"type": "object"},
             "skipped_unknown_schema": {"type": "integer"},
             "ledger_path": {"type": "string"},
+            "architect_goals": {"type": "array"},
         },
         "required": ["authoritative", "backfilled", "skipped_unknown_schema"],
     },

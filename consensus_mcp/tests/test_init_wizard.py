@@ -1169,3 +1169,32 @@ def test_panel_summary_no_supplemental(capsys):
     wiz._print_panel_summary(["claude", "codex"], profiles)
     out = capsys.readouterr().out
     assert "2 independent reviewers" in out
+
+
+# ---- Consult Q3 (iteration-architect-hardening-2026-06-11): workflow D ----
+
+
+def test_workflow_prompt_valid_includes_d(monkeypatch):
+    """The interactive picker's valid set is a module constant consumed by
+    the call site, and it must offer D (Consensus Build, preview)."""
+    import builtins
+    assert "D" in wiz.WORKFLOW_PROMPT_VALID
+    assert "d" in wiz.WORKFLOW_PROMPT_VALID
+    assert cfg.WORKFLOW_ARCHITECT_BUILD in wiz.WORKFLOW_PROMPT_VALID
+    monkeypatch.setattr(builtins, "input", lambda *a, **k: "D")
+    choice = wiz._prompt("Workflow mode", "propose-converge",
+                         valid=list(wiz.WORKFLOW_PROMPT_VALID))
+    assert cfg.WORKFLOW_ALIASES.get(choice, choice) == cfg.WORKFLOW_ARCHITECT_BUILD
+
+
+def test_prompt_architect_roles_scripted(monkeypatch):
+    """Choosing D interactively prompts the architect/builder/reviewer
+    mapping (architect-build requires a roles block)."""
+    import builtins
+    answers = iter(["claude", "codex", "codex"])
+    monkeypatch.setattr(builtins, "input", lambda *a, **k: next(answers))
+    base = {"workflow": {"mode": cfg.WORKFLOW_ARCHITECT_BUILD}}
+    wiz._prompt_architect_roles(base)
+    assert base["roles"] == {
+        "architect": "claude", "builder": "codex", "reviewer": "codex"
+    }

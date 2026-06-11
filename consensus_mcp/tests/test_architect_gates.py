@@ -283,3 +283,104 @@ def test_cleanup_retains_lane_on_killed(tmp_path: Path):
     assert result["ok"] is False
     assert "killed" in result["error"]
     assert ap.lane_dir(goal).exists()
+
+
+# ---- Q1 hardening (consult iteration-architect-hardening-2026-06-11) ----
+# Re-approval is legal EXACTLY when the binding would fail: true duplicate
+# refused; evolved spec archives the prior approval and re-binds; base_sha
+# carried forward when a lane exists; refused while a dispatch is in flight.
+
+from consensus_mcp import _architect_lane as lane_mod
+
+
+def _commit(repo: Path, name: str) -> None:
+    (repo / name).write_text("x\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True,
+                   capture_output=True)
+    subprocess.run(["git", "commit", "-m", name], cwd=repo, check=True,
+                   capture_output=True)
+
+
+def test_reapprove_evolved_spec_supersedes_and_rebinds(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = _goal_with_spec(repo)
+    first = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    assert first["ok"]
+    ap.seal_artifact(goal / "spec-rev-2.yaml",
+                     {"kind": "spec", "body": "build it, revised"})
+    second = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    assert second["ok"] is True
+    archived = goal / "spec-approval-superseded-1.yaml"
+    assert archived.exists()
+    old = yaml.safe_load(archived.read_text(encoding="utf-8"))
+    assert ap.seal_is_intact(old)
+    assert old["spec_sha256"] == first["spec_sha256"]
+    fresh = yaml.safe_load(
+        (goal / ap.SPEC_APPROVAL_FILENAME).read_text(encoding="utf-8"))
+    rev = yaml.safe_load((goal / "spec-rev-2.yaml").read_text(encoding="utf-8"))
+    assert fresh["spec_sha256"] == rev["payload_sha256"]
+
+
+def test_reapprove_carries_base_sha_when_lane_exists(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = _goal_with_spec(repo)
+    first = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    lane_mod.create_lane(repo, goal, "arch-lane/g1", first["base_sha"])
+    _commit(repo, "advance.txt")   # main HEAD moves past the approved base
+    ap.seal_artifact(goal / "spec-rev-2.yaml",
+                     {"kind": "spec", "body": "revised"})
+    second = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    assert second["ok"] is True
+    # lane exists: carry forward - re-approval must NOT un-stick the
+    # head-moved stop rule through a side door
+    assert second["base_sha"] == first["base_sha"]
+
+
+def test_reapprove_fresh_head_when_no_lane(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = _goal_with_spec(repo)
+    first = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    _commit(repo, "advance.txt")
+    ap.seal_artifact(goal / "spec-rev-2.yaml",
+                     {"kind": "spec", "body": "revised"})
+    second = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    assert second["ok"] is True
+    assert second["base_sha"] != first["base_sha"]
+
+
+def test_approve_refused_while_dispatch_in_flight(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = _goal_with_spec(repo)
+    assert gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))["ok"]
+    ap.seal_artifact(goal / "spec-rev-2.yaml",
+                     {"kind": "spec", "body": "revised"})
+    ap.acquire_lock_artifact(goal / ap.IN_FLIGHT_FILENAME,
+                             {"role": "builder", "cycle": 1})
+    result = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    assert result["ok"] is False
+    assert "in flight" in result["error"]
+
+
+def test_reapprove_refused_when_existing_approval_tampered(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = _goal_with_spec(repo)
+    assert gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))["ok"]
+    path = goal / ap.SPEC_APPROVAL_FILENAME
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data["approver"] = "evil"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    ap.seal_artifact(goal / "spec-rev-2.yaml",
+                     {"kind": "spec", "body": "revised"})
+    result = gates.handle_approve_spec(
+        goal_dir=str(goal), approver="operator", repo_root=str(repo))
+    assert result["ok"] is False
+    assert "tamper" in result["error"]

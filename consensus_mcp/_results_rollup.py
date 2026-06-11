@@ -261,6 +261,52 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     return section
 
 
+def _architect_goals() -> List[Dict[str, Any]]:
+    """Read-only architect-build goal listing (consult Q3,
+    iteration-architect-hardening-2026-06-11). Empty list when the project
+    has no `.consensus/architect/` tree. Derivation is the SHARED loop_step
+    helper - never a duplicated state map. Repo root honors
+    CONSENSUS_MCP_REPO_ROOT (the same env-first convention as the state
+    root), falling back to cwd."""
+    import os
+
+    from consensus_mcp import _architect_paths as ap
+
+    root = Path(os.environ.get("CONSENSUS_MCP_REPO_ROOT") or os.getcwd())
+    arch = root.joinpath(*ap.GOAL_ROOT_PARTS)
+    if not arch.is_dir():
+        return []
+    # architect-build verification gate configured? (advisory distinction
+    # between needs_verification and needs_review; degrade on any failure)
+    verification_configured = False
+    try:
+        import yaml
+
+        raw = yaml.safe_load(
+            (root / ".consensus" / "config.yaml").read_text(encoding="utf-8")
+        ) or {}
+        verification_configured = bool(
+            (raw.get("architect_loop") or {}).get("verification") or ""
+        )
+    except Exception:
+        pass
+    from consensus_mcp.tools.architect_loop_step import (
+        derive_goal_public_state,
+    )
+
+    goals: List[Dict[str, Any]] = []
+    for entry in sorted(p for p in arch.iterdir() if p.is_dir()):
+        try:
+            goals.append(
+                derive_goal_public_state(entry, verification_configured)
+            )
+        except Exception as exc:  # never let one bad goal dir kill results
+            goals.append({"goal_id": entry.name, "cycle": None,
+                          "state": f"unreadable:{exc}",
+                          "last_handoff_utc": None})
+    return goals
+
+
 def build_scorecard(state_root: Optional[Path] = None) -> Dict[str, Any]:
     """Read the ledger and build the full project scorecard dict.
 
@@ -283,6 +329,7 @@ def build_scorecard(state_root: Optional[Path] = None) -> Dict[str, Any]:
         "backfilled": _aggregate(loaded["backfilled"]),
         "skipped_unknown_schema": loaded["skipped_unknown"],
         "ledger_path": str(ledger),
+        "architect_goals": _architect_goals(),
     }
 
 
@@ -342,6 +389,19 @@ def render_table(scorecard: Dict[str, Any]) -> str:
 
     backfilled = scorecard["backfilled"]
     lines.extend(_render_section("BACKFILLED (best-effort, NOT in totals)", backfilled))
+
+    arch_goals = scorecard.get("architect_goals") or []
+    if arch_goals:
+        lines.append("")
+        title = "ARCHITECT GOALS (Consensus Build, workflow D - preview)"
+        lines.append(title)
+        lines.append("-" * len(title))
+        for g in arch_goals:
+            handoff = g.get("last_handoff_utc") or "-"
+            lines.append(
+                f"  {g.get('goal_id')}: {g.get('state')} "
+                f"(cycle {g.get('cycle')}, last handoff {handoff})"
+            )
 
     skipped = scorecard.get("skipped_unknown_schema", 0)
     if skipped:
