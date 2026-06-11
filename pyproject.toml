@@ -7,7 +7,7 @@ name = "consensus-mcp"
 # version is derived from consensus_mcp.__version__ (single source of truth) -
 # see [project].dynamic + [tool.setuptools.dynamic] below.
 dynamic = ["version"]
-description = "Cross-AI consensus code review: a panel of different AI models you choose (Claude, Codex, Gemini, Kimi, or add your own) review each change independently, and it ships only when they agree. An MCP server for AI coding tools."
+description = "Two ways to put multiple AIs on your code. Consult: a panel of different models you choose (Claude, Codex, Gemini, Kimi, or add your own) reviews each change independently and it ships only when they agree. Build: a top-tier model plans and oversees while a cheaper one writes the code in a contained git worktree - capable-model guidance at a fraction of the cost. An MCP server for AI coding tools."
 authors = [{name = "stgarca"}]
 requires-python = ">=3.11"
 license = {text = "MIT"}
