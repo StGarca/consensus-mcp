@@ -287,15 +287,21 @@ def test_env_is_scrubbed(tmp_path: Path, monkeypatch):
     assert "OPENAI_API_KEY" not in calls["kwargs"]["env"]
 
 
-def test_scrub_uses_shared_codex_keys(tmp_path: Path, monkeypatch):
-    """Finding 4: the scrub list is the SHARED CODEX_SCRUBBED_ENV_KEYS from
-    _dispatch_base (no local copy to drift); every key in it is scrubbed."""
-    from consensus_mcp._dispatch_base import CODEX_SCRUBBED_ENV_KEYS
+def test_scrub_uses_shared_all_provider_keys(tmp_path: Path, monkeypatch):
+    """v2 hardening: the builder runs effectively unsandboxed with network
+    access (decisive experiment), so it must scrub EVERY provider's keys -
+    the shared ALL_PROVIDER_SCRUBBED_ENV_KEYS from _dispatch_base, the same
+    union the verification gate uses (no local copy to drift)."""
+    from consensus_mcp._dispatch_base import ALL_PROVIDER_SCRUBBED_ENV_KEYS
 
-    assert db.CODEX_SCRUBBED_ENV_KEYS is CODEX_SCRUBBED_ENV_KEYS
+    assert db.ALL_PROVIDER_SCRUBBED_ENV_KEYS is ALL_PROVIDER_SCRUBBED_ENV_KEYS
+    # the union must cover all four providers, not just codex's OPENAI key
+    for key in ("OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
+                "XAI_API_KEY", "GROK_API_KEY", "KIMI_API_KEY"):
+        assert key in ALL_PROVIDER_SCRUBBED_ENV_KEYS
     lane = _lane(tmp_path)
     _identity_resolver(monkeypatch)
-    for key in CODEX_SCRUBBED_ENV_KEYS:
+    for key in ALL_PROVIDER_SCRUBBED_ENV_KEYS:
         monkeypatch.setenv(key, "leak-" + key)
     fake_popen, calls = _fake_popen_factory(
         {"summary": "ok", "pushback": None, "notes": ""}
@@ -305,5 +311,5 @@ def test_scrub_uses_shared_codex_keys(tmp_path: Path, monkeypatch):
         repo_root=tmp_path, lane=lane,
         prompt="x", codex_bin="codex", timeout_seconds=60,
     )
-    for key in CODEX_SCRUBBED_ENV_KEYS:
+    for key in ALL_PROVIDER_SCRUBBED_ENV_KEYS:
         assert key not in calls["kwargs"]["env"]
