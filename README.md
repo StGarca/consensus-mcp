@@ -7,11 +7,21 @@ review it independently, and only lets the change through when they
 agree. Built-in support for Claude, Codex, Gemini, Grok, and Kimi, and
 you can add any other AI just by writing a short config profile (no code).
 
-As of v2, consensus-mcp operates in **two modes that compose**:
-**Consensus Consult** (the cross-AI review panel) and **Consensus Build**
-(an expensive AI plans and rules while a cheap AI does the building,
-contained in an isolated git worktree). Use either alone, or let them
-drive each other - a Consult ratifies the plan a Build executes.
+As of **v2.0.0**, consensus-mcp runs in **two modes that compose**:
+
+- **Consensus Consult** - the cross-AI review panel above: independent
+  reviews, ships on agreement.
+- **Consensus Build** *(preview)* - you assign the roles. A top-tier
+  reasoning model (Fable 5, say) is your *architect* - it writes the spec,
+  rules on each cycle, and overrules mistakes - while a cheaper model does
+  the actual building inside an isolated, contained git worktree. You get
+  expensive-model judgment steering the whole project, but you only pay
+  expensive-model rates for the thinking, not the typing. A capable
+  architect guiding a budget builder turns out to be both better-directed
+  and far cheaper than putting the premium model on every keystroke.
+
+Use either mode alone, or let them compose: a Consult can ratify the very
+spec a Build then executes (which is how this release was built).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
