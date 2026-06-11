@@ -52,3 +52,34 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 def atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
     """Atomically write `text` (encoded) to `path` via `atomic_write_bytes`."""
     atomic_write_bytes(path, text.encode(encoding))
+
+
+def exclusive_create_text(path: Path, text: str, encoding: str = "utf-8") -> bool:
+    """O_EXCL TEST-AND-SET create of `path` with `text`; False iff the path
+    already exists.
+
+    The lock-file primitive: atomic_write_bytes' os.replace would silently
+    clobber a concurrent winner's lock, so mutual-exclusion markers must
+    never go through it - creation itself is the atomic claim (no temp +
+    rename involved). Contents are flushed + fsync'd like atomic_write_bytes;
+    a failure mid-write unlinks the partially-created file so no corrupt
+    lock survives. Any OSError other than FileExistsError propagates.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(text.encode(encoding))
+            fh.flush()
+            os.fsync(fh.fileno())
+    except BaseException:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise
+    return True

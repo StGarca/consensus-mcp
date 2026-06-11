@@ -13,6 +13,17 @@
   `consensus-mcp-architect` CLI. Design ratified by 4-AI consult
   iteration-architect-build-design-2026-06-10. Engine `run_iteration`
   permanently refuses the mode (supervisor-driven by design).
+- architect-build final-review hardening: build-window goal-artifact
+  snapshot (an escaped builder forging this goal's seals is now a
+  containment breach), runtime reviewer-required invariant on accept,
+  delivery-gate integrity re-check binding the exact lane HEAD + base sha,
+  spec seal verified at point of use, O_EXCL test-and-set in-flight lock
+  (no double-dispatch TOCTOU), RED-verification resume re-seals the
+  mechanical revise (content-gated, not file-existence-gated), scrubbed
+  env for the base-drift HEAD read and AI-credential scrub for the frozen
+  gate, normalized (duration/address-stable) verification failure
+  signatures, cross-document-drift mtime tie fails open, honest
+  blocked_base_drift guidance.
 
 ## 1.42.0 - 2026-06-05
 

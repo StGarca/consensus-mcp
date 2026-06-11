@@ -164,3 +164,27 @@ def test_latest_spec_double_digit_ordering(tmp_path: Path):
     for n in (2, 10):
         (g / f"spec-rev-{n}.yaml").write_text(f"v: {n}\n", encoding="utf-8")
     assert ap.latest_spec_path(g) == g / "spec-rev-10.yaml"
+
+
+def test_acquire_lock_artifact_is_test_and_set(tmp_path: Path):
+    """Final-review finding: the in-flight lock must be claimed O_EXCL
+    (test-and-set), never via seal_artifact whose os.replace silently
+    clobbers a concurrent winner."""
+    import pytest
+
+    p = tmp_path / "dispatch-in-flight.yaml"
+    stamped = ap.acquire_lock_artifact(
+        p, {"role": "builder", "cycle": 1, "started_at_utc": "2026-06-10T00:00:00Z"}
+    )
+    assert stamped is not None and p.exists()
+    on_disk = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert ap.seal_is_intact(on_disk)
+    assert on_disk["role"] == "builder"
+    # the loser: returns None and the winner's content is untouched
+    assert ap.acquire_lock_artifact(p, {"role": "builder", "cycle": 2}) is None
+    assert yaml.safe_load(p.read_text(encoding="utf-8")) == on_disk
+    # an EMPTY pre-existing file (defeats any YAML read check) still refuses
+    p2 = tmp_path / "empty-lock.yaml"
+    p2.write_text("", encoding="utf-8")
+    assert ap.acquire_lock_artifact(p2, {"role": "builder", "cycle": 1}) is None
+    assert p2.read_text(encoding="utf-8") == ""
