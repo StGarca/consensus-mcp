@@ -27,6 +27,12 @@ the 3-AI anchored consult `iteration-architect-hardening-2026-06-11`
 - `consensus results` gains a read-only `architect_goals` section;
   `--workflow D`/`architect-build` accepted by init (preview-labeled),
   interactive wizard prompts the role mapping.
+- Workflow B post-review (codex) fixes: the delivery tree recheck exempts
+  only writes EXPECTED in the post-bracket window (current cycle
+  artifacts / HANDOFF / baseline / in-flight lock), never
+  filename-pattern matches (codex-rev-001); `_run_build` re-verifies the
+  approval seal at its own point of use, closing a read-to-read TOCTOU
+  window (codex-rev-002).
 
 ## 2.0.0 - 2026-06-10
 
