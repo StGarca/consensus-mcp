@@ -1,6 +1,31 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 - 2026-06-10
+
+**The two-modes release.** consensus-mcp now officially operates in two
+composable modes:
+
+- **Consensus Consult (GA, stable)** - the classic cross-AI review panel
+  (propose-converge / post-review / advisory), unchanged and battle-tested.
+- **Consensus Build (preview)** - the new architect loop: an expensive AI
+  plans and rules while a cheap AI builds inside an isolated git worktree,
+  driven to completion by a supervisor state machine with two human gates.
+  Shipped as **preview** because it grants a model real write access and is
+  new this release; use it on reviewable work and rollback-able repos.
+
+The modes compose - a Consult can ratify the spec a Build executes (which
+is how this feature was itself built and ratified).
+
+### Containment finding (decisive experiment, codex-cli 0.137.0)
+The Consensus Build containment hypothesis - "`--sandbox workspace-write
+--cd <lane>` confines the builder to the lane" - was **empirically
+REFUTED**: a real codex builder wrote files to the goal dir, the architect
+root, AND the repo root, all "exit 0". `--cd` is a working directory, not a
+jail. The design never depended on that hypothesis: containment is the
+supervisor's root-cause-independent integrity snapshot, and the experiment
+**verifies** it catches every escape and blocks delivery. Consequence:
+builder-owned git commits remain deferred to a future release; the
+supervisor keeps owning git and treats all lane content as untrusted.
 
 ### Added
 - architect-build workflow mode (alias D): asymmetric expensive-plans /
@@ -24,6 +49,15 @@
   gate, normalized (duration/address-stable) verification failure
   signatures, cross-document-drift mtime tie fails open, honest
   blocked_base_drift guidance.
+- architect-build post-experiment hardening (v2.0.0): build- and
+  verification-window integrity brackets widened from the active goal to
+  the whole architect tree (`snapshot_architect_tree`, excluding only the
+  active lane) so a builder escaping into a SIBLING goal's seals or the
+  architect root is caught - the gap the decisive experiment exposed; the
+  builder subprocess now scrubs ALL provider credentials
+  (`ALL_PROVIDER_SCRUBBED_ENV_KEYS`, shared with the verification gate), not
+  just `OPENAI_API_KEY`, since the experiment proved it runs unsandboxed
+  with network access.
 
 ## 1.42.0 - 2026-06-05
 
