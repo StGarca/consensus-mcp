@@ -118,7 +118,7 @@ Full guide: [docs/workflows/architect-build.md](docs/workflows/architect-build.m
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.0.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.0.1
 
 # Install the Claude Code helper once. This is what lets you set up and run
 # consensus from chat in ANY project - including auto-initializing a new one.
@@ -214,8 +214,14 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v2.0.0 - the two-modes release.** consensus-mcp now has two
-operating modes that compose:
+**Current: v2.0.1 - the Build hardening patch** on the two-modes release
+(v2.0.0). Closes six verified Consensus Build gaps, ratified by a 3-AI
+anchored consult plus a codex post-review: point-of-use seal verification,
+spec-approval binding enforcement (with legal re-approval), symlink-aware
+tree snapshots, a delivery-gate architect-tree recheck, default-deny
+builder/verification environments (`CONSENSUS_MCP_BUILDER_ENV_ALLOW` /
+`CONSENSUS_MCP_VERIFICATION_ENV_ALLOW`), and Build discoverability in
+`consensus results` + `consensus-init --workflow D`. The two modes:
 
 - **Consensus Consult (GA, stable).** The cross-AI review panel that has
   been the product since v1: propose, converge, weighted-synthesis of the

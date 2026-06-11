@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.1 - 2026-06-11
 
 **Consensus Build hardening pass** - six verified gaps closed, ratified by
 the 3-AI anchored consult `iteration-architect-hardening-2026-06-11`
