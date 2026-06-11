@@ -7,6 +7,12 @@ review it independently, and only lets the change through when they
 agree. Built-in support for Claude, Codex, Gemini, Grok, and Kimi, and
 you can add any other AI just by writing a short config profile (no code).
 
+As of v2, consensus-mcp operates in **two modes that compose**:
+**Consensus Consult** (the cross-AI review panel) and **Consensus Build**
+(an expensive AI plans and rules while a cheap AI does the building,
+contained in an isolated git worktree). Use either alone, or let them
+drive each other - a Consult ratifies the plan a Build executes.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-server-purple.svg)](https://modelcontextprotocol.io)
@@ -27,6 +33,8 @@ disagreement is what catches bugs a single reviewer misses.
 consensus-mcp turns that into an automatic step in your workflow.
 
 ## What it does
+
+### Mode 1: Consensus Consult - the review panel
 
 You decide who's on the panel. At setup you pick from the AIs you have
 installed - Claude, Codex, Gemini, Grok, Kimi, or any other you've defined -
@@ -57,6 +65,43 @@ small config *profile* - how to detect it, run it, and read its answer.
 Built-in profiles ship for Claude, Codex, Gemini, Grok, and Kimi; to
 add a new AI you just drop in another profile. No code change, no new
 release.
+
+### Mode 2: Consensus Build - the architect loop
+
+One expensive AI plans; one cheap AI builds; the repo remembers; you
+judge. You map three roles onto the AIs you have:
+
+```yaml
+workflow:
+  mode: architect-build      # alias: D
+roles:
+  architect: claude          # expensive: authors the spec, rules each cycle
+  builder: codex             # cheap: edits files in an isolated git worktree
+  reviewer: codex            # cheap: pre-checks the diff before the architect
+```
+
+A supervisor state machine drives spec -> build -> verify -> review ->
+ruling cycles to completion. The builder gets real write access - but the
+mode does not trust the CLI sandbox to contain it (a real-codex experiment
+proved `workspace-write` writes outside its working directory). Containment
+is the supervisor's job and is layered: the supervisor owns all git
+operations, the builder's command line must match an exact-shape allowlist,
+the lane is scanned for symlink/hardlink escapes after every build, and a
+root-cause-independent integrity snapshot of the repo and the architect
+work-tree blocks delivery on ANY change outside the builder's lane - which
+is exactly what the experiment confirmed it catches.
+There are exactly two human gates - you approve the spec, you approve the
+merge - and everything between runs by itself. The expensive architect is
+fed a rolling `HANDOFF.md` digest instead of your whole repo: that is the
+cost optimization the mode exists for.
+
+**The modes compose.** A Consult panel can ratify the spec a Build then
+executes; a Build that hits a blocked state can escalate the question
+back to a Consult. (That is exactly how this feature itself was made:
+a 4-AI Consult ratified the design, then the build ran as cycles with
+review gates.)
+
+Full guide: [docs/workflows/architect-build.md](docs/workflows/architect-build.md)
 
 ## Quick start
 

@@ -194,22 +194,25 @@ is a pointer file into the main repo's gitdir), so containment is layered:
    Windows junction in the lane, any hardlink whose inode also lives
    outside the lane, or a tampered `.git` pointer fires
    `lane_integrity_violation`.
-5. **Main-repo integrity snapshot** - before and after every builder
-   dispatch the supervisor records main HEAD, working-tree status, branch
-   refs, and hooks/config hashes; ANY non-lane delta fires
-   `builder_containment_breach`. The build window ALSO brackets the
-   dispatch with a goal-artifact snapshot (sha256 of every non-lane file in
-   the goal dir): the cycle seals (spec, approval, review, ruling) are
-   content hashes, not authenticity signatures, and the goal dir is
-   excluded from the git-status view, so a builder escaping the lane to
-   forge them would otherwise be invisible. This guard is
-   root-cause-independent: it holds even if every sandbox assumption is
-   wrong. The frozen verification gate (which executes lane content
-   unsandboxed, with all AI-provider API keys scrubbed from its
-   environment) gets the same treatment - a main-repo or non-lane
-   goal-artifact delta during the gate run fires
-   `verification_containment_breach` - and the accept transition re-runs
-   the snapshot check + lane scan before `awaiting_delivery_approval`
+5. **Integrity snapshots (the load-bearing guard).** The decisive
+   experiment (below) PROVED that codex `workspace-write` does **not**
+   confine writes to `--cd` - a builder can write anywhere, including the
+   repo root. The design never assumed otherwise; this guard is
+   root-cause-independent and is what actually contains the builder. Before
+   and after every builder dispatch the supervisor records main HEAD,
+   working-tree status, branch refs, and hooks/config hashes (ANY non-lane
+   delta fires `builder_containment_breach`), AND brackets the dispatch with
+   an **architect-tree snapshot** - sha256 of every file under
+   `.consensus/architect/` except the active lane. The cycle seals (spec,
+   approval, review, ruling) are content hashes, not authenticity
+   signatures, and the whole architect subtree is excluded from the
+   git-status view, so a builder escaping the lane to forge this goal's
+   seals - or a *sibling* goal's - would otherwise be invisible. The frozen
+   verification gate (which executes lane content unsandboxed, with all
+   AI-provider API keys scrubbed from its environment) gets the same
+   architect-tree treatment - a delta fires
+   `verification_containment_breach` - and the accept transition re-runs the
+   snapshot check + lane scan before `awaiting_delivery_approval`
    (`delivery_integrity_recheck_failed` on any delta).
 
 When any of these fire, the supervisor seals `containment-breach.yaml` in
@@ -266,14 +269,19 @@ CONSENSUS_MCP_RUN_REAL_BUILDER_SMOKE=1 \
   consensus_mcp/tests/test_builder_containment_smoke.py -q -s
 ```
 
-**Proven** means: the lane edit lands, no git effect occurs, no commanded
-escape write lands anywhere outside the lane, the lane scan is clean, and
-the main repo is byte-identical per the integrity snapshots - the
-workspace-write sandbox assumption holds, and the v2 promotion gate for
-builder-owned commits is allowed to open. **Refuted** means any of those
-assertions fail: the sandbox assumption is falsified, the L5 snapshot
-(which detects exactly this) is the load-bearing guard, builder-owned
-commits stay closed, and the breach class must be root-fixed before the
-mode is trusted on a repo you care about. Either way the L4/L5 guards run
-on every real dispatch - the experiment decides how much you are leaning
-on them.
+**Result (2026-06-10, codex-cli 0.137.0): the sandbox-confinement
+hypothesis is REFUTED, and the design guarantee is VERIFIED.** The builder
+reported every write "succeeded with exit code 0" - the lane file, and the
+escapes one, two, and four levels up (goal dir, architect root, repo root).
+`--cd` is a working directory, not a jail. This is exactly why the consult
+made the snapshot guard root-cause-independent: the experiment confirms the
+supervisor caught all three escapes (`check_architect_tree` flagged the
+goal-dir and architect-root writes; `check_main_integrity` flagged the
+repo-root write) and would block delivery. The test now asserts that
+*design guarantee* - sandbox does not confine, supervisor does - and a
+cooperative build that touches only the lane trips nothing.
+
+Consequence: **builder-owned lane commits stay closed (v2 deferred).** A
+refuted confinement hypothesis means the supervisor must keep owning git
+and keep treating lane content as untrusted; the integrity snapshots are
+not a backstop you can lean off of - they are the boundary.
