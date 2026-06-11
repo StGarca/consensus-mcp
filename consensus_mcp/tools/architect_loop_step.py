@@ -8,7 +8,9 @@ host. Never calls an LLM API. See docs/workflows/architect-build.md.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -18,7 +20,14 @@ from consensus_mcp import _architect_paths as ap
 from consensus_mcp import _contributor_profiles as _profiles
 from consensus_mcp import _dispatch_builder as _db
 from consensus_mcp._architect_handoff import write_handoff
-from consensus_mcp._dispatch_base import _terminate_process_tree
+from consensus_mcp._dispatch_base import (
+    CODEX_SCRUBBED_ENV_KEYS,
+    GEMINI_SCRUBBED_ENV_KEYS,
+    GROK_SCRUBBED_ENV_KEYS,
+    KIMI_SCRUBBED_ENV_KEYS,
+    _terminate_process_tree,
+    scrub_env_keys,
+)
 
 # Indirection point so tests monkeypatch the supervisor's view of the
 # builder dispatch without touching _dispatch_builder itself.
@@ -74,8 +83,10 @@ _NEXT_ACTION = {
     "killed": "architect killed the goal; lane retained for forensics",
     "blocked_stop_rule": "a stop rule fired; operator decision required",
     "blocked_base_drift": (
-        "main HEAD moved past the approved base_sha; operator decides: "
-        "rebase the lane, restart the goal, or accept the risk explicitly"
+        "main HEAD moved past the approved base_sha and the supervisor has "
+        "no drift override (the approval binds the exact base): restart the "
+        "goal from the new HEAD, or take over manually - inspect the lane "
+        "branch and rebase/merge it yourself outside the loop"
     ),
     "dispatch_in_flight": "a dispatch is running; call loop_step again later",
     "needs_spec": (
@@ -146,6 +157,49 @@ def _result(state: str, *, cycle: int | None = None, actions=None,
         "cycle": cycle, "actions_taken": actions or [],
         "stop_rules_fired": stops or [], "error": error,
     }
+
+
+def _lane_branch_name(loop: dict, goal: Path) -> str:
+    """The ONE spelling of the lane branch (shared by the build dispatch and
+    the delivery-gate integrity re-check, so the lane-ref exemption can
+    never drift between the two sites)."""
+    return f"{loop['lane_branch_prefix'].rstrip('/')}/{goal.name}".replace(
+        "//", "/"
+    )
+
+
+# Volatile tokens normalized out of the verification output before hashing:
+# the repeated-RED stop rule keys on signature EQUALITY across cycles, and a
+# raw stdout+stderr hash is unreachable for the flagship 'pytest -q' command
+# (its tail ends with the wall-clock '... failed in 1.23s' line, different
+# every run). Spec section 4 wants a STABLE failure signature.
+_SIGNATURE_VOLATILE_RES = (
+    # memory addresses / object ids: '<Foo object at 0x7f8b...>'
+    re.compile(r"0[xX][0-9A-Fa-f]+"),
+    # wall-clock durations: pytest '1 failed in 1.23s', unittest 'in 0.001s'
+    re.compile(r"\b\d+(?:\.\d+)?\s*(?:s|ms|us|ns|secs?|seconds?|mins?|minutes?)\b"),
+    # clock times: '12:34:56.789'
+    re.compile(r"\b\d{1,2}:\d{2}:\d{2}(?:\.\d+)?\b"),
+)
+
+
+def _verification_signature(tail: str) -> str:
+    norm = tail
+    for rx in _SIGNATURE_VOLATILE_RES:
+        norm = rx.sub("<volatile>", norm)
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()
+
+
+def _seal_mechanical_revise(cdir: Path, tail: str) -> None:
+    """consult Q3: the RED-gate mechanical revise ruling, regular artifact
+    shape. ONE writer for both the in-step seal and the resume re-seal so
+    the two can never diverge."""
+    cdir.mkdir(parents=True, exist_ok=True)
+    ap.seal_artifact(
+        cdir / ap.RULING_FILENAME,
+        {"disposition": "revise", "reason": "verification_failed",
+         "mechanical": True, "feedback": tail},
+    )
 
 
 def _derive_root(goal: Path) -> Path | None:
@@ -220,12 +274,16 @@ def _check_stop_rules(goal: Path, config: dict, cycle: int) -> list[dict]:
     # spec seal. An OLDER HANDOFF is just pending regeneration (e.g. the
     # host sealed spec-rev-N a moment ago) - that is not drift. A NEWER
     # HANDOFF with the wrong sha means tampering or a renderer bug: stop.
+    # STRICTLY newer: on coarse-timestamp filesystems (FAT 2s, ext3 1s) a
+    # HANDOFF legitimately written moments before the spec seal can TIE the
+    # spec mtime, and a tie cannot distinguish stale-pending-regeneration
+    # from tamper - so it fails open, per the pending-regeneration rationale.
     handoff_file = goal / ap.HANDOFF_FILENAME
     spec_file = ap.latest_spec_path(goal)
     if handoff_file.exists() and spec_file.exists():
         try:
             handoff_newer = (
-                handoff_file.stat().st_mtime_ns >= spec_file.stat().st_mtime_ns
+                handoff_file.stat().st_mtime_ns > spec_file.stat().st_mtime_ns
             )
             text = handoff_file.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -261,6 +319,30 @@ def _signer_violations(goal: Path, cycle: int, roles: dict,
     reviewer_fam = cfg._contributor_family(roles.get("reviewer", ""), profiles)
     architect_fam = cfg._contributor_family(roles.get("architect", ""), profiles)
     violations: list[str] = []
+    lane_sha = build.get("lane_head_sha")
+    b_t = _parse_utc(build.get("sealed_at_utc", ""))
+    # The reviewer is REQUIRED in v1 (consult Q4) - and that is a RUNTIME
+    # invariant, not just a config-time one: in the canonical cheap config
+    # (reviewer shares the builder's family) the architect's ruling is the
+    # cross-family signer below, which would otherwise let an accept with
+    # NO sealed review reach the delivery gate. A fresh, hash-bound
+    # review.yaml must exist before any accept can deliver.
+    if not review:
+        violations.append(
+            "review.yaml missing: the v1-required reviewer has not "
+            "reviewed this cycle"
+        )
+    else:
+        if not lane_sha or review.get("lane_head_sha") != lane_sha:
+            violations.append(
+                f"review hash binding failed: review binds "
+                f"{review.get('lane_head_sha')!r}, build is {lane_sha!r}"
+            )
+        r_t = _parse_utc(review.get("sealed_at_utc", ""))
+        if not b_t or not r_t or r_t < b_t:
+            violations.append(
+                "review freshness failed: review predates the build seal"
+            )
     signer_fam, signer = (
         (reviewer_fam, review)
         if reviewer_fam != builder_fam
@@ -268,13 +350,11 @@ def _signer_violations(goal: Path, cycle: int, roles: dict,
     )
     if signer_fam == builder_fam:
         violations.append("no cross-family signer available")
-    lane_sha = build.get("lane_head_sha")
     if not lane_sha or signer.get("lane_head_sha") != lane_sha:
         violations.append(
             f"hash binding failed: signer binds "
             f"{signer.get('lane_head_sha')!r}, build is {lane_sha!r}"
         )
-    b_t = _parse_utc(build.get("sealed_at_utc", ""))
     s_t = _parse_utc(signer.get("sealed_at_utc", ""))
     if not b_t or not s_t or s_t < b_t:
         violations.append("freshness failed: signer predates the build seal")
@@ -285,38 +365,85 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
                profiles: dict) -> dict:
     roles = config["roles"]
     loop = config["architect_loop"]
+    # The spec drives the builder at POINT OF USE, so its seal is verified
+    # here, not only at the approval gate: spec-rev-N.yaml is legitimately
+    # ungated between human gates, and a body edited after sealing
+    # (payload_sha256 no longer reproduces) must never reach the prompt.
+    spec_file = ap.latest_spec_path(goal)
+    spec = ap._read_yaml_or_empty(spec_file)
+    if not ap.seal_is_intact(spec):
+        return _result(
+            "blocked_stop_rule", cycle=cycle,
+            stops=[{"rule": "spec_seal_invalid",
+                    "detail": (
+                        f"{spec_file.name}: payload_sha256 does not "
+                        f"reproduce - refusing to build from a tampered spec"
+                    )}])
     approval = ap._read_yaml_or_empty(goal / ap.SPEC_APPROVAL_FILENAME)
-    branch = f"{loop['lane_branch_prefix'].rstrip('/')}/{goal.name}".replace(
-        "//", "/"
-    )
-    lane = lane_mod.create_lane(root, goal, branch, approval["base_sha"])
-    before = lane_mod.snapshot_main_integrity(root)
-    ap.seal_artifact(goal / ap.INTEGRITY_BEFORE_FILENAME, before)
-
-    spec = ap._read_yaml_or_empty(ap.latest_spec_path(goal))
-    feedback = ""
-    if cycle > 1:
-        prev = ap._read_yaml_or_empty(
-            ap.cycle_dir(goal, cycle - 1) / ap.RULING_FILENAME
-        )
-        feedback = f"{prev.get('reason', '')}\n{prev.get('feedback', '')}".strip()
-    prompt = _db.build_prompt(str(spec.get("body", "")), feedback)
-
-    ap.seal_artifact(
-        goal / ap.IN_FLIGHT_FILENAME,
-        {"role": "builder", "cycle": cycle,
-         "started_at_utc": _utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")},
-    )
+    branch = _lane_branch_name(loop, goal)
+    # TEST-AND-SET the in-flight lock BEFORE any lane work. The read check
+    # in handle() is only the polite wait state; this O_EXCL create is the
+    # actual mutex (spec section 4: 'never double-dispatches') - two
+    # concurrent loop_steps must never both send a write-enabled builder
+    # into the SAME lane worktree, and seal_artifact's os.replace would
+    # silently clobber the winner's lock.
     try:
-        result = _dispatch_builder_fn(
-            repo_root=root, lane=lane, prompt=prompt,
-            timeout_seconds=1800,
+        acquired = ap.acquire_lock_artifact(
+            goal / ap.IN_FLIGHT_FILENAME,
+            {"role": "builder", "cycle": cycle,
+             "started_at_utc": _utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")},
         )
+    except OSError as exc:
+        raise lane_mod.LaneError(
+            f"in-flight lock creation failed: {exc}"
+        ) from exc
+    if acquired is None:
+        return _result("dispatch_in_flight", cycle=cycle)
+    goal_violations: list[str] = []
+    try:
+        lane = lane_mod.create_lane(root, goal, branch, approval["base_sha"])
+        before = lane_mod.snapshot_main_integrity(root)
+        ap.seal_artifact(goal / ap.INTEGRITY_BEFORE_FILENAME, before)
+
+        feedback = ""
+        if cycle > 1:
+            prev = ap._read_yaml_or_empty(
+                ap.cycle_dir(goal, cycle - 1) / ap.RULING_FILENAME
+            )
+            feedback = f"{prev.get('reason', '')}\n{prev.get('feedback', '')}".strip()
+        prompt = _db.build_prompt(str(spec.get("body", "")), feedback)
+        # Goal-artifact snapshot/check pair around the dispatch, mirroring
+        # the verification window (L5 doctrine, root-cause-independent):
+        # the main-integrity status view excludes the whole architect tree
+        # (and consensus-init gitignores .consensus/), so WITHOUT this pair
+        # a builder escaping the lane could forge THIS goal's seals (spec,
+        # approval, cycle review/ruling - content hashes, not authenticity
+        # signatures) invisibly. Every supervisor write happens OUTSIDE the
+        # bracket, so there is ZERO expected delta - no exemptions.
+        goal_before = lane_mod.snapshot_goal_artifacts(goal)
+        try:
+            result = _dispatch_builder_fn(
+                repo_root=root, lane=lane, prompt=prompt,
+                timeout_seconds=1800,
+            )
+        finally:
+            # Runs on the failure paths too: a builder that tampers AND
+            # then times out / crashes must still seal the breach so the
+            # next step blocks persistently.
+            goal_violations = lane_mod.check_goal_artifacts(goal, goal_before)
+            if goal_violations:
+                ap.seal_artifact(goal / ap.CONTAINMENT_BREACH_FILENAME,
+                                 {"rule": "builder_containment_breach",
+                                  "violations": goal_violations})
     finally:
         try:
             (goal / ap.IN_FLIGHT_FILENAME).unlink()
         except OSError:
             pass
+    if goal_violations:
+        return _result("blocked_stop_rule", cycle=cycle,
+                       stops=[{"rule": "builder_containment_breach",
+                               "violations": goal_violations}])
 
     lane_violations = lane_mod.scan_lane_integrity(lane)
     if lane_violations:
@@ -350,9 +477,19 @@ def _run_build(goal: Path, config: dict, cycle: int, root: Path,
                    actions=[{"action": "builder_dispatched", "lane_head_sha": head}])
 
 
+# The frozen gate executes builder-authored lane code (conftest.py, test
+# modules), so it must not inherit the supervisor's AI-provider credentials:
+# the L5 snapshot catches filesystem deltas but cannot catch network
+# exfiltration of secrets read from env. Scrub the union of every
+# dispatcher's key set (the builder dispatch itself scrubs the codex set).
+_VERIFICATION_SCRUBBED_ENV_KEYS = tuple(dict.fromkeys(
+    CODEX_SCRUBBED_ENV_KEYS + GEMINI_SCRUBBED_ENV_KEYS
+    + GROK_SCRUBBED_ENV_KEYS + KIMI_SCRUBBED_ENV_KEYS
+))
+
+
 def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
                       profiles: dict) -> dict:
-    import hashlib
     cmd = config["architect_loop"].get("verification", "")
     lane = ap.lane_dir(goal)
     # The frozen gate executes builder-authored lane content UNSANDBOXED
@@ -367,6 +504,36 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
     # verification must not commit). Residual: a background process that
     # outlives the command and writes later evades the window; the human
     # delivery gate remains the backstop for that.
+    #
+    # Same O_EXCL test-and-set lock as the builder dispatch: the gate is a
+    # long-running lane subprocess, and a concurrent loop_step would
+    # double-run the command AND seal goal artifacts inside this window
+    # (false verification_containment_breach).
+    try:
+        acquired = ap.acquire_lock_artifact(
+            goal / ap.IN_FLIGHT_FILENAME,
+            {"role": "verification", "cycle": cycle,
+             "started_at_utc": _utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")},
+        )
+    except OSError as exc:
+        raise lane_mod.LaneError(
+            f"in-flight lock creation failed: {exc}"
+        ) from exc
+    if acquired is None:
+        return _result("dispatch_in_flight", cycle=cycle)
+    try:
+        return _run_verification_locked(goal, config, cycle, root, profiles,
+                                        cmd, lane)
+    finally:
+        try:
+            (goal / ap.IN_FLIGHT_FILENAME).unlink()
+        except OSError:
+            pass
+
+
+def _run_verification_locked(goal: Path, config: dict, cycle: int,
+                             root: Path, profiles: dict, cmd: str,
+                             lane: Path) -> dict:
     main_before = lane_mod.snapshot_main_integrity(root)
     goal_before = lane_mod.snapshot_goal_artifacts(goal)
     # Process-GROUP spawn + tree termination (mirrors _dispatch_builder):
@@ -385,6 +552,9 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
             cmd, shell=True, cwd=str(lane),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace",
+            env=scrub_env_keys(
+                os.environ.copy(), _VERIFICATION_SCRUBBED_ENV_KEYS
+            ),
             **popen_kwargs,
         )
         try:
@@ -414,7 +584,7 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
     ap.seal_artifact(
         cdir / ap.VERIFICATION_FILENAME,
         {"command": cmd, "passed": passed,
-         "signature": hashlib.sha256(tail.encode("utf-8")).hexdigest(),
+         "signature": _verification_signature(tail),
          "output_tail": tail},
     )
     if passed:
@@ -422,11 +592,7 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
         return _result("needs_review", cycle=cycle,
                        actions=[{"action": "verification_green"}])
     # consult Q3: mechanical revise ruling, regular artifact shape
-    ap.seal_artifact(
-        cdir / ap.RULING_FILENAME,
-        {"disposition": "revise", "reason": "verification_failed",
-         "mechanical": True, "feedback": tail},
-    )
+    _seal_mechanical_revise(cdir, tail)
     write_handoff(goal, roles=config["roles"], profiles=profiles)
     return _result("verification_red", cycle=cycle,
                    actions=[{"action": "mechanical_revise_sealed"}])
@@ -485,12 +651,13 @@ def handle(goal_dir: str, config_path: str | None = None,
     if not approval:
         return _result("awaiting_spec_approval", cycle=cycle)
 
+    # The hardened lane git, not a raw subprocess (mirrors approve_spec):
+    # a GIT_DIR leaked from a hook context would make rev-parse ignore cwd
+    # and read a DIFFERENT repository's HEAD - which would defeat or
+    # permanently mis-fire this very base-drift guard.
     try:
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=str(root), check=True,
-            capture_output=True, text=True, timeout=30,
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError) as exc:
+        head = lane_mod._git(root, "rev-parse", "HEAD").strip()
+    except lane_mod.LaneError as exc:
         return _result("goal_invalid", ok=False,
                        error=f"cannot read main HEAD: {exc}")
     if head != approval.get("base_sha"):
@@ -523,6 +690,16 @@ def handle(goal_dir: str, config_path: str | None = None,
                            stops=[{"rule": "verification_machinery_failed",
                                    "detail": str(exc)}],
                            error=str(exc))
+    if needs_gate and verification and not verification.get("passed") and not ruling:
+        # RED resume hole: verification.yaml and the mechanical revise are
+        # two separate seals - an interrupt between them must not let mere
+        # file-existence routing send a RED build to the reviewer ('red
+        # builds never reach the reviewer', spec state 10). The transition
+        # is gated on verification CONTENT; re-seal the revise idempotently.
+        _seal_mechanical_revise(cdir, verification.get("output_tail", ""))
+        write_handoff(goal, roles=roles, profiles=profiles)
+        return _result("verification_red", cycle=cycle,
+                       actions=[{"action": "mechanical_revise_resealed"}])
     review = ap._read_yaml_or_empty(cdir / ap.REVIEW_FILENAME)
     if not review and not ruling:
         return _result("needs_review", cycle=cycle)
@@ -567,8 +744,56 @@ def handle(goal_dir: str, config_path: str | None = None,
             return _result("blocked_stop_rule", cycle=cycle,
                            stops=[{"rule": "signer_invariant_violated",
                                    "violations": violations}])
+        # Spec 6.5: the delivery gate INDEPENDENTLY re-checks the integrity
+        # snapshot before awaiting_delivery_approval - the build-time check
+        # can be stale by the time the human approves (review + ruling
+        # steps, possibly multiple cycles, intervene). State 14 then binds
+        # the exact lane HEAD + base sha for the downstream delivery mint.
+        recheck: list[str] = []
+        before_snap = ap._read_yaml_or_empty(goal / ap.INTEGRITY_BEFORE_FILENAME)
+        if not all(k in before_snap for k in
+                   ("head", "status", "refs", "hooks", "config_sha")):
+            recheck.append(
+                f"{ap.INTEGRITY_BEFORE_FILENAME} missing or malformed"
+            )
+        else:
+            try:
+                recheck += lane_mod.check_main_integrity(
+                    root, before_snap,
+                    lane_branch=_lane_branch_name(
+                        config["architect_loop"], goal
+                    ),
+                )
+            except lane_mod.LaneError as exc:
+                recheck.append(f"main integrity recheck failed to run: {exc}")
+        lane = ap.lane_dir(goal)
+        lane_scan = lane_mod.scan_lane_integrity(lane)
+        recheck += lane_scan
+        lane_head = None
+        if not lane_scan:
+            # The scan just verified the .git pointer, so the lane may
+            # receive a supervisor git op (the commit_lane invariant).
+            try:
+                lane_head = lane_mod._git(lane, "rev-parse", "HEAD").strip()
+            except lane_mod.LaneError as exc:
+                recheck.append(f"cannot read lane HEAD: {exc}")
+            else:
+                if lane_head != build.get("lane_head_sha"):
+                    recheck.append(
+                        f"lane HEAD moved after the build seal: "
+                        f"{build.get('lane_head_sha')!r} -> {lane_head!r}"
+                    )
+        if recheck:
+            return _result(
+                "blocked_stop_rule", cycle=cycle,
+                stops=[{"rule": "delivery_integrity_recheck_failed",
+                        "violations": recheck}])
         write_handoff(goal, roles=roles, profiles=profiles)
-        return _result("awaiting_delivery_approval", cycle=cycle)
+        return _result(
+            "awaiting_delivery_approval", cycle=cycle,
+            actions=[{"action": "delivery_integrity_recheck",
+                      "lane_head_sha": lane_head,
+                      "base_sha": approval.get("base_sha")}])
     return _result("needs_ruling", cycle=cycle)
 
 

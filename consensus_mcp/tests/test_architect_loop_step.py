@@ -33,6 +33,8 @@ def test_run_iteration_refuses_architect_build(tmp_path: Path):
     assert "loop_step" in outcome.error
 
 
+import json
+import os
 import subprocess
 import sys
 
@@ -70,7 +72,7 @@ def _make_repo(tmp_path: Path) -> Path:
 
 def _write_config(repo: Path, verification: str = "", max_cycles: int = 3,
                   enabled: list | None = None, roles: dict | None = None,
-                  profiles: dict | None = None) -> Path:
+                  profiles: dict | None = None, wall: int = 0) -> Path:
     cdir = repo / ".consensus"
     cdir.mkdir(exist_ok=True)
     cfg_path = cdir / "config.yaml"
@@ -87,7 +89,7 @@ def _write_config(repo: Path, verification: str = "", max_cycles: int = 3,
             "max_cycles": max_cycles,
             "verification": verification,
             "lane_branch_prefix": "arch-lane/",
-            "max_wall_clock_minutes": 0,
+            "max_wall_clock_minutes": wall,
         },
     }), encoding="utf-8")
     return cfg_path
@@ -162,6 +164,15 @@ def test_full_green_cycle_to_delivery_gate(tmp_path: Path, monkeypatch):
     r = _step(goal, repo)
     assert r["state"] == "awaiting_delivery_approval"
     assert (goal / ap.HANDOFF_FILENAME).exists()
+    # state 14 binds the exact lane HEAD + base sha for the delivery mint
+    recheck = [a for a in r["actions_taken"]
+               if a["action"] == "delivery_integrity_recheck"]
+    assert recheck
+    assert recheck[0]["lane_head_sha"] == build["lane_head_sha"]
+    approval = yaml.safe_load(
+        (goal / ap.SPEC_APPROVAL_FILENAME).read_text(encoding="utf-8")
+    )
+    assert recheck[0]["base_sha"] == approval["base_sha"]
 
 
 def test_red_verification_seals_mechanical_revise(tmp_path: Path, monkeypatch):
@@ -555,9 +566,16 @@ def test_verification_timeout_is_red_not_raise(tmp_path: Path, monkeypatch):
 
 def test_verification_undecodable_output_is_replaced(tmp_path: Path, monkeypatch):
     # cp1252/utf-8 hostile bytes in verification output must not raise
-    # UnicodeDecodeError through the never-raises boundary.
+    # UnicodeDecodeError through the never-raises boundary. Driven through
+    # the test interpreter, NOT printf+';' (shell=True is cmd.exe on Windows
+    # CI, where ';' is no separator and Git-for-Windows printf.exe would
+    # swallow 'exit 1' as arguments and exit 0 - the forge tests' precedent).
     repo = _make_repo(tmp_path)
-    _write_config(repo, verification="printf '\\377\\376 bad bytes'; exit 1")
+    bad_code = (
+        "import os, sys; "
+        "os.write(sys.stdout.fileno(), b'\\xff\\xfe bad bytes'); sys.exit(1)"
+    )
+    _write_config(repo, verification=f'"{sys.executable}" -c "{bad_code}"')
     goal = _new_goal(repo)
     ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
     gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
@@ -565,6 +583,11 @@ def test_verification_undecodable_output_is_replaced(tmp_path: Path, monkeypatch
     _step(goal, repo)  # build
     r = _step(goal, repo)
     assert r["state"] == "verification_red"  # exit 1 -> RED, decoded with replacement
+    v = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME).read_text(encoding="utf-8")
+    )
+    assert v["passed"] is False
+    assert "\ufffd" in v["output_tail"]  # the hostile bytes really arrived
 
 
 def test_verification_machinery_failure_blocks(tmp_path: Path, monkeypatch):
@@ -587,3 +610,467 @@ def test_verification_machinery_failure_blocks(tmp_path: Path, monkeypatch):
     assert any(
         s["rule"] == "verification_machinery_failed" for s in r["stop_rules_fired"]
     )
+
+
+# --- final-review findings (2026-06-10) ---
+
+
+def test_tampered_spec_blocks_build(tmp_path: Path, monkeypatch):
+    """Finding: the build consumes the latest spec at point of use - a
+    spec whose body was edited after sealing (payload_sha256 no longer
+    reproduces) must never drive the builder."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    spec = yaml.safe_load(ap.spec_path(goal).read_text(encoding="utf-8"))
+    spec["body"] = "EVIL: do something else entirely"
+    ap.spec_path(goal).write_text(yaml.safe_dump(spec), encoding="utf-8")
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "spec_seal_invalid" for s in r["stop_rules_fired"])
+    # refused BEFORE any lane work or lock litter
+    assert not ap.lane_dir(goal).exists()
+    assert not (goal / ap.IN_FLIGHT_FILENAME).exists()
+
+
+def test_accept_without_review_blocks(tmp_path: Path, monkeypatch):
+    """Finding: in the canonical cheap config (reviewer==builder family) the
+    architect's ruling is the cross-family signer, but the v1-REQUIRED
+    reviewer must still have reviewed: an accept with NO review.yaml must
+    never reach awaiting_delivery_approval."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)
+    build = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.BUILD_RESULT_FILENAME).read_text(encoding="utf-8")
+    )
+    # a perfectly bound accept ruling, but NO review.yaml was ever sealed
+    ap.seal_artifact(
+        ap.cycle_dir(goal, 1) / ap.RULING_FILENAME,
+        {"disposition": "accept", "lane_head_sha": build["lane_head_sha"]},
+    )
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    stops = [s for s in r["stop_rules_fired"]
+             if s["rule"] == "signer_invariant_violated"]
+    assert stops
+    assert any("review.yaml missing" in v for v in stops[0]["violations"])
+
+
+def test_loop_step_ignores_git_dir_env(tmp_path: Path, monkeypatch):
+    """Finding: the base-drift HEAD read must go through the scrubbed lane
+    git - a GIT_DIR leaked from a hook context would make rev-parse read a
+    DIFFERENT repository's HEAD and mis-fire blocked_base_drift."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    other = tmp_path / "other"
+    other.mkdir()
+    for args in (["init", "-b", "main"], ["config", "user.email", "t@t"],
+                 ["config", "user.name", "t"]):
+        subprocess.run(["git", *args], cwd=other, check=True, capture_output=True)
+    (other / "y.txt").write_text("y\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=other, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "other"], cwd=other, check=True,
+                   capture_output=True)
+    repo_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+        capture_output=True, text=True).stdout.strip()
+    other_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=other, check=True,
+        capture_output=True, text=True).stdout.strip()
+    assert repo_head != other_head
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(other))
+    r = _step(goal, repo, auto_dispatch=False)
+    assert r["state"] == "needs_build"  # NOT a false blocked_base_drift
+
+
+def test_verification_env_scrubs_credentials(tmp_path: Path, monkeypatch):
+    """Finding: the frozen gate executes builder-authored lane code; it must
+    not inherit the supervisor's AI-provider credentials (the builder
+    dispatch scrubs them - the verification run must too)."""
+    repo = _make_repo(tmp_path)
+    leak_code = (
+        "import os, sys; "
+        "sys.stdout.write(os.environ.get('OPENAI_API_KEY', 'SCRUBBED') + '/' "
+        "+ os.environ.get('GEMINI_API_KEY', 'SCRUBBED'))"
+    )
+    _write_config(repo, verification=f'"{sys.executable}" -c "{leak_code}"')
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    monkeypatch.setenv("OPENAI_API_KEY", "sekret-codex")
+    monkeypatch.setenv("GEMINI_API_KEY", "sekret-gemini")
+    _step(goal, repo)  # build
+    r = _step(goal, repo)
+    assert r["state"] == "needs_review"  # gate ran green
+    v = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME).read_text(encoding="utf-8")
+    )
+    assert v["output_tail"] == "SCRUBBED/SCRUBBED"
+
+
+def test_accept_recheck_blocks_on_main_drift(tmp_path: Path, monkeypatch):
+    """Finding: spec 6.5 - the delivery gate independently re-checks the
+    integrity snapshot; a main-tree delta between build and accept must
+    block instead of reaching awaiting_delivery_approval on stale data."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)
+    build = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.BUILD_RESULT_FILENAME).read_text(encoding="utf-8")
+    )
+    ap.seal_artifact(ap.cycle_dir(goal, 1) / ap.REVIEW_FILENAME,
+                     {"verdict": "lgtm", "lane_head_sha": build["lane_head_sha"]})
+    ap.seal_artifact(ap.cycle_dir(goal, 1) / ap.RULING_FILENAME,
+                     {"disposition": "accept", "lane_head_sha": build["lane_head_sha"]})
+    (repo / "drift.txt").write_text("appeared after the build\n", encoding="utf-8")
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    stops = [s for s in r["stop_rules_fired"]
+             if s["rule"] == "delivery_integrity_recheck_failed"]
+    assert stops
+    assert any("main working tree changed" in v for v in stops[0]["violations"])
+
+
+def test_accept_recheck_blocks_on_lane_head_move(tmp_path: Path, monkeypatch):
+    """Finding: state 14 binds the exact lane HEAD - a lane commit landing
+    AFTER the build seal (what the signer judged) must block delivery."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)
+    build = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.BUILD_RESULT_FILENAME).read_text(encoding="utf-8")
+    )
+    ap.seal_artifact(ap.cycle_dir(goal, 1) / ap.REVIEW_FILENAME,
+                     {"verdict": "lgtm", "lane_head_sha": build["lane_head_sha"]})
+    ap.seal_artifact(ap.cycle_dir(goal, 1) / ap.RULING_FILENAME,
+                     {"disposition": "accept", "lane_head_sha": build["lane_head_sha"]})
+    lane = ap.lane_dir(goal)
+    (lane / "sneak.txt").write_text("post-review change\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=lane, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "sneak"], cwd=lane, check=True,
+                   capture_output=True)
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    stops = [s for s in r["stop_rules_fired"]
+             if s["rule"] == "delivery_integrity_recheck_failed"]
+    assert stops
+    assert any("lane HEAD moved" in v for v in stops[0]["violations"])
+
+
+def test_red_verification_resume_reseals_lost_mechanical_revise(
+    tmp_path: Path, monkeypatch
+):
+    """Finding (CONFIRMED repro): verification.yaml and the mechanical revise
+    ruling are two separate seals - an interrupt between them must not make
+    the next step route the RED build to review. The transition is gated on
+    verification CONTENT (passed), not file existence."""
+    repo = _make_repo(tmp_path)
+    _write_config(repo, verification="false")
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)                       # build
+    r = _step(goal, repo)                   # verification RED + revise sealed
+    assert r["state"] == "verification_red"
+    # simulate the interrupt between the two seals: the ruling write is lost
+    (ap.cycle_dir(goal, 1) / ap.RULING_FILENAME).unlink()
+    r = _step(goal, repo)
+    assert r["state"] == "verification_red"  # NOT needs_review
+    ruling = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.RULING_FILENAME).read_text(encoding="utf-8")
+    )
+    assert ruling["disposition"] == "revise"
+    assert ruling["reason"] == "verification_failed"
+    assert ruling["mechanical"] is True
+    # the loop then advances to cycle 2 like any RED cycle
+    r = _step(goal, repo)
+    assert r["state"] == "built" and r["cycle"] == 2
+
+
+def test_in_flight_lock_is_test_and_set(tmp_path: Path, monkeypatch):
+    """Finding: the in-flight lock must be an O_EXCL test-and-set, not
+    read-then-act - a lock file that defeats the read check (empty YAML)
+    must still refuse the dispatch instead of double-dispatching."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    # an EMPTY lock file: _read_yaml_or_empty -> {} passes the read check,
+    # only the O_EXCL create can refuse it
+    (goal / ap.IN_FLIGHT_FILENAME).write_text("", encoding="utf-8")
+    r = _step(goal, repo)
+    assert r["state"] == "dispatch_in_flight"
+    assert not ap.lane_dir(goal).exists()           # no lane work happened
+    assert not (ap.cycle_dir(goal, 1) / ap.BUILD_RESULT_FILENAME).exists()
+    # the loser must NOT have clobbered the existing lock
+    assert (goal / ap.IN_FLIGHT_FILENAME).read_text(encoding="utf-8") == ""
+
+
+def test_fresh_in_flight_lock_reports_dispatch_in_flight(tmp_path: Path):
+    """Docs state table: a FRESH lock (within TTL) is the wait state, not a
+    stop rule (only the stale path had coverage)."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    ap.seal_artifact(
+        goal / ap.IN_FLIGHT_FILENAME,
+        {"role": "builder", "cycle": 1,
+         "started_at_utc": als._utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")},
+    )
+    r = _step(goal, repo)
+    assert r["state"] == "dispatch_in_flight"
+    assert r["stop_rules_fired"] == []
+    assert "again later" in r["next_action"]
+
+
+def test_wall_clock_budget_exceeded(tmp_path: Path):
+    """Docs stop-rule table: wall_clock_budget_exceeded had no coverage."""
+    repo = _make_repo(tmp_path); _write_config(repo, wall=5)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    approval = yaml.safe_load(
+        (goal / ap.SPEC_APPROVAL_FILENAME).read_text(encoding="utf-8")
+    )
+    approval["sealed_at_utc"] = "2020-01-01T00:00:00Z"
+    (goal / ap.SPEC_APPROVAL_FILENAME).write_text(
+        yaml.safe_dump(approval), encoding="utf-8"
+    )
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "wall_clock_budget_exceeded"
+               for s in r["stop_rules_fired"])
+
+
+def test_delivered_outcome_reports_closed(tmp_path: Path):
+    """Docs state table: a delivered outcome.yaml is the terminal 'closed'
+    state (only 'killed' had coverage)."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(goal / ap.OUTCOME_FILENAME,
+                     {"closing_state": "delivered", "cycle": 1})
+    r = _step(goal, repo)
+    assert r["ok"] and r["state"] == "closed"
+    assert "nothing to do" in r["next_action"]
+
+
+def test_builder_symlink_in_lane_blocks_persistently(tmp_path: Path, monkeypatch):
+    """Docs containment table: the supervisor-level lane_integrity_violation
+    branch seals containment-breach.yaml and blocks persistently."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+
+    def plant(lane: Path):
+        try:
+            (lane / "escape").symlink_to(repo)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks unsupported on this platform")
+
+    _fake_builder(monkeypatch, lane_effect=plant)
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "lane_integrity_violation"
+               for s in r["stop_rules_fired"])
+    breach = yaml.safe_load(
+        (goal / ap.CONTAINMENT_BREACH_FILENAME).read_text(encoding="utf-8")
+    )
+    assert breach["rule"] == "lane_integrity_violation"
+    r = _step(goal, repo)  # the sealed record is a persistent stop
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "lane_integrity_violation"
+               for s in r["stop_rules_fired"])
+
+
+def test_builder_main_escape_blocks_persistently(tmp_path: Path, monkeypatch):
+    """Docs containment table: the supervisor-level builder_containment_breach
+    branch (main-repo delta during the build) seals the breach record."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(
+        monkeypatch,
+        lane_effect=lambda lane: (repo / "evil.txt").write_text("hacked\n", encoding="utf-8"),
+    )
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    stops = [s for s in r["stop_rules_fired"]
+             if s["rule"] == "builder_containment_breach"]
+    assert stops
+    assert (goal / ap.CONTAINMENT_BREACH_FILENAME).exists()
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "builder_containment_breach"
+               for s in r["stop_rules_fired"])
+
+
+def test_builder_goal_artifact_tamper_is_containment_breach(
+    tmp_path: Path, monkeypatch
+):
+    """Findings 1+10: the build window gets the same goal-artifact
+    snapshot/check pair as the verification window - a builder escaping the
+    lane to forge THIS goal's seals (here: spec.yaml) must trip
+    builder_containment_breach, not silently drive subsequent cycles."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+
+    def tamper(lane: Path):
+        (lane.parent / ap.SPEC_FILENAME).write_text(
+            "kind: spec\nbody: EVIL\n", encoding="utf-8"
+        )
+        (lane.parent / "cycle-1").mkdir(exist_ok=True)
+        (lane.parent / "cycle-1" / ap.RULING_FILENAME).write_text(
+            "disposition: accept\n", encoding="utf-8"
+        )
+
+    _fake_builder(monkeypatch, lane_effect=tamper)
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    stops = [s for s in r["stop_rules_fired"]
+             if s["rule"] == "builder_containment_breach"]
+    assert stops
+    joined = " ".join(stops[0]["violations"])
+    assert "spec.yaml" in joined and "ruling.yaml" in joined
+    # the forged artifacts never became a sealed build: no build-result
+    assert not (ap.cycle_dir(goal, 1) / ap.BUILD_RESULT_FILENAME).exists()
+    # persistent: the sealed breach blocks every subsequent step
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "builder_containment_breach"
+               for s in r["stop_rules_fired"])
+
+
+def test_cross_document_drift_newer_handoff_wrong_sha_blocks(tmp_path: Path):
+    """Docs stop-rule table: cross_document_drift had no coverage. A HANDOFF
+    strictly NEWER than the spec seal claiming a different sha is drift."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    spec_file = ap.latest_spec_path(goal)
+    handoff = goal / ap.HANDOFF_FILENAME
+    handoff.write_text("spec payload_sha256: " + "b" * 64 + "\n", encoding="utf-8")
+    t = spec_file.stat().st_mtime_ns
+    os.utime(handoff, ns=(t + 2_000_000_000, t + 2_000_000_000))
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "cross_document_drift"
+               for s in r["stop_rules_fired"])
+
+
+def test_cross_document_drift_mtime_tie_fails_open(tmp_path: Path):
+    """Finding: on coarse-timestamp filesystems a HANDOFF written moments
+    BEFORE the spec seal can TIE the spec mtime; a tie cannot distinguish
+    pending-regeneration from tamper, so it must fail open (strict >)."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    spec_file = ap.latest_spec_path(goal)
+    handoff = goal / ap.HANDOFF_FILENAME
+    handoff.write_text("spec payload_sha256: " + "b" * 64 + "\n", encoding="utf-8")
+    t = spec_file.stat().st_mtime_ns
+    os.utime(handoff, ns=(t, t))
+    r = _step(goal, repo)
+    assert r["state"] == "awaiting_spec_approval"
+    assert r["stop_rules_fired"] == []
+
+
+def test_verification_signature_stable_across_volatile_output(
+    tmp_path: Path, monkeypatch
+):
+    """Finding: the repeated-RED stop rule keys on signature EQUALITY, but a
+    raw stdout+stderr hash differs every run for e.g. pytest's wall-clock
+    line. Two REAL runs of a failing command with volatile output (hex id +
+    duration) must produce the SAME signature over DIFFERENT tails."""
+    repo = _make_repo(tmp_path)
+    noisy_code = (
+        "import random, sys; "
+        "sys.stdout.write('1 failed at 0x' + format(random.getrandbits(64), 'x')"
+        " + ' in 0.' + str(random.randint(0, 99)) + 's'); sys.exit(1)"
+    )
+    _write_config(repo, verification=f'"{sys.executable}" -c "{noisy_code}"',
+                  max_cycles=8)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)                                   # build cycle 1
+    assert _step(goal, repo)["state"] == "verification_red"
+    _step(goal, repo)                                   # build cycle 2
+    assert _step(goal, repo)["state"] == "verification_red"
+    v1 = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME).read_text(encoding="utf-8")
+    )
+    v2 = yaml.safe_load(
+        (ap.cycle_dir(goal, 2) / ap.VERIFICATION_FILENAME).read_text(encoding="utf-8")
+    )
+    assert v1["output_tail"] != v2["output_tail"]       # genuinely volatile
+    assert v1["signature"] == v2["signature"]           # normalized stable
+
+
+def test_cli_main_step_and_exit_codes(tmp_path: Path, capsys):
+    """Docs/pyproject surface: consensus-mcp-architect main() - arg parsing,
+    --no-dispatch wiring, approve-spec wiring, ok -> exit-code mapping."""
+    repo = _make_repo(tmp_path); _write_config(repo)
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    rc = als.main(["approve-spec", "--goal-dir", str(goal),
+                   "--approver", "op", "--repo-root", str(repo)])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0 and out["ok"] is True
+    assert (goal / ap.SPEC_APPROVAL_FILENAME).exists()
+    rc = als.main(["step", "--goal-dir", str(goal),
+                   "--config", str(repo / ".consensus" / "config.yaml"),
+                   "--no-dispatch"])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert out["state"] == "needs_build"  # --no-dispatch reported, not dispatched
+    rogue = tmp_path / "rogue"
+    rogue.mkdir()
+    (rogue / ap.PROBLEM_FILENAME).write_text("p\n", encoding="utf-8")
+    rc = als.main(["step", "--goal-dir", str(rogue)])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert out["ok"] is False and out["state"] == "goal_invalid"
+
+
+def test_verification_window_holds_in_flight_lock(tmp_path: Path, monkeypatch):
+    """Findings 8+12 (verification half): the frozen gate is the other
+    long-running lane subprocess - a held lock must refuse a concurrent
+    gate run via the same O_EXCL test-and-set, not double-run the command."""
+    repo = _make_repo(tmp_path)
+    _write_config(repo, verification="false")
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)  # build (acquires + releases the lock)
+    # a concurrent step's lock, shaped to defeat the YAML read check
+    (goal / ap.IN_FLIGHT_FILENAME).write_text("", encoding="utf-8")
+    r = _step(goal, repo)
+    assert r["state"] == "dispatch_in_flight"
+    assert not (ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME).exists()
+    (goal / ap.IN_FLIGHT_FILENAME).unlink()
+    r = _step(goal, repo)  # lock released: the gate runs normally
+    assert r["state"] == "verification_red"

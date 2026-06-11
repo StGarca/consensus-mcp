@@ -34,7 +34,7 @@ from pathlib import Path
 
 import yaml
 
-from consensus_mcp._atomic_io import atomic_write_text
+from consensus_mcp._atomic_io import atomic_write_text, exclusive_create_text
 
 GOAL_ROOT_PARTS = (".consensus", "architect")
 PROBLEM_FILENAME = "problem.md"
@@ -219,6 +219,27 @@ def seal_artifact(path: Path, payload: dict) -> dict:
         Path(path),
         yaml.safe_dump(stamped, sort_keys=False, default_flow_style=False),
     )
+    return stamped
+
+
+def acquire_lock_artifact(path: Path, payload: dict) -> dict | None:
+    """seal_artifact's TEST-AND-SET sibling for lock files: O_EXCL-creates
+    `path` with the stamped payload; None when the path already exists (the
+    lock is held by a concurrent winner and is never clobbered, unlike
+    seal_artifact's os.replace). Stamps match seal_artifact exactly so lock
+    readers (_check_stop_rules' TTL scan) cannot tell the writers apart.
+    """
+    body = dict(payload)
+    for f in _VOLATILE_SEAL_FIELDS:
+        body.pop(f, None)
+    stamped = dict(
+        body,
+        sealed_at_utc=_utcnow(),
+        payload_sha256=_canonical_yaml_sha256(body),
+    )
+    text = yaml.safe_dump(stamped, sort_keys=False, default_flow_style=False)
+    if not exclusive_create_text(Path(path), text):
+        return None
     return stamped
 
 

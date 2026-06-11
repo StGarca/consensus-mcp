@@ -89,31 +89,39 @@ Every state the supervisor can report, and what it asks of you:
 | `closed` | `outcome.yaml` has a closing_state | nothing to do |
 | `killed` | architect ruled `kill`; outcome sealed | nothing; lane retained for forensics |
 | `blocked_stop_rule` | a stop rule fired (see list below) | operator decision required |
-| `dispatch_in_flight` | an atomic in-flight lock exists for a running dispatch | call `step` again later; never double-dispatches |
+| `dispatch_in_flight` | the in-flight lock is held for a running dispatch (claimed O_EXCL test-and-set before any lane work, so concurrent steps can never double-dispatch into the same lane) | call `step` again later |
 | `needs_spec` | no sealed spec.yaml | ARCHITECT action: author the spec and seal it to `<goal>/spec.yaml` via `_architect_paths.seal_artifact` (host callback when architect=claude; otherwise dispatch the architect CLI with `architect_spec_template.md`) |
 | `awaiting_spec_approval` | spec sealed, no spec-approval.yaml | HUMAN gate: `consensus-mcp-architect approve-spec` (below) |
-| `blocked_base_drift` | main HEAD no longer matches the approved base_sha | operator decides: rebase the lane, restart the goal, or accept the risk explicitly |
+| `blocked_base_drift` | main HEAD no longer matches the approved base_sha | the supervisor has no drift override (the approval binds the exact base): restart the goal from the new HEAD, or take over manually - inspect the lane branch and rebase/merge it yourself outside the loop |
 | `pushback_raised` | newest build-result.yaml carries builder pushback | ARCHITECT action: seal a ruling (disposition `revise` or `overrule`; `kill` also legal; `accept` is FORBIDDEN on a pushback cycle); a spec revision seals as `spec-rev-N.yaml`; the human spec gate does NOT re-fire |
 | `needs_build` | cycle has no build-result (reported with `--no-dispatch`) | re-run `step` with dispatch enabled, or dispatch the builder manually and seal `build-result.yaml` |
 | `built` | builder ran; supervisor committed the lane | call `step` again |
 | `needs_verification` | build sealed, frozen gate not yet run | call `step` again - the supervisor runs the gate itself; skipped entirely when `verification` is empty (no phantom green gate) |
-| `verification_red` | frozen gate RED; a MECHANICAL revise ruling was sealed (regular artifact shape, consult Q3) | call `step` again to start the next cycle; red builds never reach the reviewer or the architect (cost guard) |
+| `verification_red` | frozen gate RED; a MECHANICAL revise ruling was sealed (regular artifact shape, consult Q3; re-sealed idempotently on resume if the ruling write was lost to an interrupt - a RED build can never fall through to review) | call `step` again to start the next cycle; red builds never reach the reviewer or the architect (cost guard) |
 | `needs_review` | verification green (or disabled), no review.yaml | REVIEWER action: review the lane diff (`git -C <lane> diff <base>..HEAD`) and seal `review.yaml` `{verdict, lane_head_sha}` into the cycle dir |
 | `needs_ruling` | review sealed, no ruling.yaml | ARCHITECT action: read HANDOFF.md + the cycle review, seal `ruling.yaml` `{disposition: accept|revise|kill, lane_head_sha, reason?}` |
 | `cycle_advance` | a revise/overrule ruling closed the cycle | call `step` again; the next step starts cycle N+1's build with the ruling's feedback |
-| `awaiting_delivery_approval` | ruling=accept, gate green (or disabled), signer invariant holds | HUMAN gate: delivery approval, then merge the lane branch yourself - the supervisor never merges |
+| `awaiting_delivery_approval` | ruling=accept, gate green (or disabled), signer invariant holds, and the delivery integrity re-check is clean (main snapshot re-verified, lane re-scanned, lane HEAD still the sha the signer judged); `actions_taken` carries the bound `lane_head_sha` + `base_sha` for the delivery mint | HUMAN gate: delivery approval, then merge the lane branch yourself - the supervisor never merges |
 
 Stop rules (the `blocked_stop_rule` set is MODE-SPECIFIC, consult Q3):
 `max_cycle_count_reached`, `repeated_verification_failure_same_signature`
-(3 consecutive RED cycles with the same output signature),
+(3 consecutive RED cycles with the same output signature; volatile tokens -
+durations, hex addresses, clock times - are normalized out before hashing
+so e.g. pytest's wall-clock line cannot make identical failures look
+distinct),
 `stale_dispatch_in_flight` (in-flight lock older than the TTL, default
 3600s via `CONSENSUS_MCP_ARCHITECT_IN_FLIGHT_TTL`),
 `wall_clock_budget_exceeded`, `cross_document_drift` (a HANDOFF.md newer
 than the latest spec seal that claims a different spec sha),
 `lane_integrity_violation` / `builder_containment_breach` /
 `verification_containment_breach` (containment section below),
-`pushback_accept_forbidden`, `signer_invariant_violated`,
-`builder_dispatch_failed`, and `verification_machinery_failed`.
+`spec_seal_invalid` (the spec/spec-rev driving a build no longer reproduces
+its payload_sha256 - edited after sealing), `pushback_accept_forbidden`,
+`signer_invariant_violated` (includes a missing/unbound/stale review.yaml:
+the v1-required reviewer is enforced at runtime, not just config time),
+`delivery_integrity_recheck_failed` (the accept-time re-check found a
+main-tree delta, a lane scan violation, or a lane HEAD that moved after the
+build seal), `builder_dispatch_failed`, and `verification_machinery_failed`.
 
 ## The two human gates
 
@@ -131,7 +139,9 @@ lane will branch from. It refuses a second approval: the architect owns
 spec evolution between gates (`spec-rev-N.yaml` after pushback), and the
 human gate fires once per goal. If main HEAD later moves past `base_sha`,
 the loop blocks on `blocked_base_drift` rather than building on a stale
-base.
+base. There is no drift override: the approval binds the exact base, so
+either restart the goal from the new HEAD or finish the lane manually
+(inspect the lane branch, rebase/merge it yourself outside the loop).
 
 ### Gate 2: delivery approval + manual merge
 
@@ -139,8 +149,12 @@ When the loop reaches `awaiting_delivery_approval`, the supervisor has
 verified the GateEligibleCrossFamilySigner invariant (consult Q2): the
 delivery-authorizing artifact (cross-family reviewer's review, else the
 architect's accept ruling) is cross-family vs the builder, binds the exact
-`lane_head_sha` it judged, and was sealed after the final build. From here
-everything is yours:
+`lane_head_sha` it judged, and was sealed after the final build - plus a
+fresh, hash-bound `review.yaml` exists (the v1-required reviewer, enforced
+at runtime). It has also independently re-checked the integrity snapshot
+and re-scanned the lane at the accept transition, and its `actions_taken`
+carries the bound `lane_head_sha` + `base_sha`. From here everything is
+yours:
 
 1. Inspect the lane branch (`<lane_branch_prefix><goal-id>`) and its diff.
 2. Approve delivery (the existing `delivery_request` / `delivery_mint`
@@ -183,11 +197,20 @@ is a pointer file into the main repo's gitdir), so containment is layered:
 5. **Main-repo integrity snapshot** - before and after every builder
    dispatch the supervisor records main HEAD, working-tree status, branch
    refs, and hooks/config hashes; ANY non-lane delta fires
-   `builder_containment_breach`. This guard is root-cause-independent: it
-   holds even if every sandbox assumption is wrong. The frozen verification
-   gate (which executes lane content unsandboxed) gets the same treatment -
-   a main-repo or non-lane goal-artifact delta during the gate run fires
-   `verification_containment_breach`.
+   `builder_containment_breach`. The build window ALSO brackets the
+   dispatch with a goal-artifact snapshot (sha256 of every non-lane file in
+   the goal dir): the cycle seals (spec, approval, review, ruling) are
+   content hashes, not authenticity signatures, and the goal dir is
+   excluded from the git-status view, so a builder escaping the lane to
+   forge them would otherwise be invisible. This guard is
+   root-cause-independent: it holds even if every sandbox assumption is
+   wrong. The frozen verification gate (which executes lane content
+   unsandboxed, with all AI-provider API keys scrubbed from its
+   environment) gets the same treatment - a main-repo or non-lane
+   goal-artifact delta during the gate run fires
+   `verification_containment_breach` - and the accept transition re-runs
+   the snapshot check + lane scan before `awaiting_delivery_approval`
+   (`delivery_integrity_recheck_failed` on any delta).
 
 When any of these fire, the supervisor seals `containment-breach.yaml` in
 the goal dir and the loop stops; the record's presence is a PERSISTENT stop
