@@ -18,6 +18,7 @@ from consensus_mcp import _architect_paths as ap
 from consensus_mcp import _contributor_profiles as _profiles
 from consensus_mcp import _dispatch_builder as _db
 from consensus_mcp._architect_handoff import write_handoff
+from consensus_mcp._dispatch_base import _terminate_process_tree
 
 # Indirection point so tests monkeypatch the supervisor's view of the
 # builder dispatch without touching _dispatch_builder itself.
@@ -25,6 +26,12 @@ _dispatch_builder_fn = _db.dispatch_builder
 
 IN_FLIGHT_TTL_SECONDS = int(
     os.environ.get("CONSENSUS_MCP_ARCHITECT_IN_FLIGHT_TTL", "3600")
+)
+
+# Operator-overridable frozen-gate ceiling (also the unit tests' injection
+# point for the timeout path).
+_VERIFICATION_TIMEOUT_SECONDS = int(
+    os.environ.get("CONSENSUS_MCP_VERIFICATION_TIMEOUT_SECONDS", "1800")
 )
 
 SCHEMA = {
@@ -362,13 +369,35 @@ def _run_verification(goal: Path, config: dict, cycle: int, root: Path,
     # delivery gate remains the backstop for that.
     main_before = lane_mod.snapshot_main_integrity(root)
     goal_before = lane_mod.snapshot_goal_artifacts(goal)
+    # Process-GROUP spawn + tree termination (mirrors _dispatch_builder):
+    # a bare subprocess.run timeout kills only the direct shell, leaving
+    # descendants (pytest workers etc.) WRITING in the lane while the
+    # integrity re-check below runs - a TOCTOU on the very safeguard this
+    # function enforces. utf-8/replace decoding matches _architect_lane._git
+    # ('init platform consistency': no cp1252-dependent UnicodeDecodeError
+    # through the never-raises tool boundary).
     try:
-        proc = subprocess.run(
-            cmd, shell=True, cwd=str(lane), capture_output=True,
-            text=True, timeout=1800,
+        if os.name == "nt":
+            popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        else:
+            popen_kwargs = {"start_new_session": True}
+        proc = subprocess.Popen(
+            cmd, shell=True, cwd=str(lane),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
+            **popen_kwargs,
         )
-        passed = proc.returncode == 0
-        tail = (proc.stdout + proc.stderr)[-2000:]
+        try:
+            out, err = proc.communicate(timeout=_VERIFICATION_TIMEOUT_SECONDS)
+            passed = proc.returncode == 0
+            tail = ((out or "") + (err or ""))[-2000:]
+        except subprocess.TimeoutExpired:
+            _terminate_process_tree(proc)
+            passed = False
+            tail = (
+                f"verification timed out after "
+                f"{_VERIFICATION_TIMEOUT_SECONDS}s; process tree terminated"
+            )
     except (OSError, subprocess.SubprocessError) as exc:
         passed, tail = False, f"verification command failed to run: {exc}"
     violations = lane_mod.check_main_integrity(root, main_before)
@@ -485,7 +514,15 @@ def handle(goal_dir: str, config_path: str | None = None,
     verification = ap._read_yaml_or_empty(cdir / ap.VERIFICATION_FILENAME)
     needs_gate = bool(config["architect_loop"].get("verification", "")) and not build.get("pushback")
     if needs_gate and not verification:
-        return _run_verification(goal, config, cycle, root, profiles)
+        try:
+            return _run_verification(goal, config, cycle, root, profiles)
+        except lane_mod.LaneError as exc:
+            # Transient git/snapshot failure mid-verification must surface
+            # as a blocked result, not escape the never-raises boundary.
+            return _result("blocked_stop_rule", cycle=cycle, ok=False,
+                           stops=[{"rule": "verification_machinery_failed",
+                                   "detail": str(exc)}],
+                           error=str(exc))
     review = ap._read_yaml_or_empty(cdir / ap.REVIEW_FILENAME)
     if not review and not ruling:
         return _result("needs_review", cycle=cycle)
@@ -509,6 +546,22 @@ def handle(goal_dir: str, config_path: str | None = None,
         write_handoff(goal, roles=roles, profiles=profiles)
         return _result("killed", cycle=cycle)
     if disposition == "accept":
+        if build.get("pushback"):
+            # A pushback cycle has NO verification and NO review (its build
+            # is a refusal, not work) - accepting it would route an
+            # unverified, unreviewed cycle straight to delivery. The
+            # documented disposition set for pushback rulings is
+            # revise|overrule (kill also remains legal); accept is
+            # structurally forbidden here.
+            return _result(
+                "blocked_stop_rule", cycle=cycle,
+                stops=[{
+                    "rule": "pushback_accept_forbidden",
+                    "detail": (
+                        "ruling disposition 'accept' is not legal on a "
+                        "pushback cycle; allowed: revise, overrule, kill"
+                    ),
+                }])
         violations = _signer_violations(goal, cycle, roles, profiles)
         if violations:
             return _result("blocked_stop_rule", cycle=cycle,

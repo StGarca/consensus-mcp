@@ -505,3 +505,85 @@ def test_kill_seals_outcome(tmp_path: Path, monkeypatch):
     outcome = yaml.safe_load((goal / ap.OUTCOME_FILENAME).read_text(encoding="utf-8"))
     assert outcome["closing_state"] == "killed"
     assert ap.lane_dir(goal).exists()  # forensics
+
+
+def test_pushback_accept_ruling_is_blocked(tmp_path: Path, monkeypatch):
+    # Final-quality finding: an accept ruling on a PUSHBACK cycle must never
+    # reach delivery - the cycle has no verification and no review.
+    repo = _make_repo(tmp_path)
+    _write_config(repo, verification="false")  # would be RED if it ever ran
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, pushback="spec is contradictory")
+    _step(goal, repo)  # build returns pushback
+    assert _step(goal, repo)["state"] == "pushback_raised"
+    build = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.BUILD_RESULT_FILENAME).read_text(encoding="utf-8")
+    )
+    ap.seal_artifact(
+        ap.cycle_dir(goal, 1) / ap.RULING_FILENAME,
+        {"disposition": "accept", "lane_head_sha": build["lane_head_sha"]},
+    )
+    r = _step(goal, repo)
+    assert r["state"] == "blocked_stop_rule"
+    assert any(s["rule"] == "pushback_accept_forbidden" for s in r["stop_rules_fired"])
+    # neither gate artifact exists - the bypass would have been real
+    assert not (ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME).exists()
+    assert not (ap.cycle_dir(goal, 1) / ap.REVIEW_FILENAME).exists()
+
+
+def test_verification_timeout_is_red_not_raise(tmp_path: Path, monkeypatch):
+    # Timeout must terminate the PROCESS TREE, seal a RED verification +
+    # mechanical revise, and never raise.
+    repo = _make_repo(tmp_path)
+    _write_config(repo, verification="sleep 30")
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)  # build
+    monkeypatch.setattr(als, "_VERIFICATION_TIMEOUT_SECONDS", 1)
+    r = _step(goal, repo)
+    assert r["state"] == "verification_red"
+    v = yaml.safe_load(
+        (ap.cycle_dir(goal, 1) / ap.VERIFICATION_FILENAME).read_text(encoding="utf-8")
+    )
+    assert v["passed"] is False
+    assert "timed out" in v["output_tail"]
+
+
+def test_verification_undecodable_output_is_replaced(tmp_path: Path, monkeypatch):
+    # cp1252/utf-8 hostile bytes in verification output must not raise
+    # UnicodeDecodeError through the never-raises boundary.
+    repo = _make_repo(tmp_path)
+    _write_config(repo, verification="printf '\\377\\376 bad bytes'; exit 1")
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)  # build
+    r = _step(goal, repo)
+    assert r["state"] == "verification_red"  # exit 1 -> RED, decoded with replacement
+
+
+def test_verification_machinery_failure_blocks(tmp_path: Path, monkeypatch):
+    # A LaneError from the snapshot machinery mid-verification surfaces as
+    # blocked_stop_rule, never as an unhandled exception.
+    repo = _make_repo(tmp_path)
+    _write_config(repo, verification="true")
+    goal = _new_goal(repo)
+    ap.seal_artifact(ap.spec_path(goal), {"kind": "spec", "body": "do it"})
+    gates.handle_approve_spec(goal_dir=str(goal), approver="op", repo_root=str(repo))
+    _fake_builder(monkeypatch, lane_effect=lambda lane: (lane / "f.py").write_text("a=1\n", encoding="utf-8"))
+    _step(goal, repo)  # build (uses the real snapshot machinery)
+
+    def boom(*a, **k):
+        raise lane_mod.LaneError("git exploded mid-verification")
+    monkeypatch.setattr(als.lane_mod, "snapshot_main_integrity", boom)
+    r = _step(goal, repo)
+    assert r["ok"] is False
+    assert r["state"] == "blocked_stop_rule"
+    assert any(
+        s["rule"] == "verification_machinery_failed" for s in r["stop_rules_fired"]
+    )
