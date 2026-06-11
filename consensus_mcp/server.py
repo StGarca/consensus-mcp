@@ -184,6 +184,11 @@ reviewer_dispatch_grok.register(registry)
 from consensus_mcp.tools import loop_run_goal  # noqa: E402
 loop_run_goal.register(registry)
 
+from consensus_mcp.tools import architect_loop_step  # noqa: E402
+architect_loop_step.register(registry)
+from consensus_mcp.tools import architect_gates  # noqa: E402
+architect_gates.register(registry)
+
 from consensus_mcp.tools import loop_verify_codex_patch  # noqa: E402
 loop_verify_codex_patch.register(registry)
 
