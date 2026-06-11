@@ -35,6 +35,25 @@ def _head(repo: Path) -> str:
     ).stdout.strip()
 
 
+def _rewrite_lane_git_pointer(lane: Path, content: str) -> None:
+    """Replace a worktree's .git pointer file cross-platform.
+
+    Git for Windows creates the linked-worktree .git pointer file read-only,
+    so a plain write_text() onto it raises PermissionError [Errno 13]
+    (Windows reports a read-only-file write as EACCES). Clear the attribute
+    and unlink before writing; harmless on POSIX."""
+    pointer = lane / ".git"
+    try:
+        os.chmod(pointer, stat.S_IWRITE | stat.S_IREAD)
+    except OSError:
+        pass
+    try:
+        pointer.unlink()
+    except OSError:
+        pass
+    pointer.write_text(content, encoding="utf-8")
+
+
 def test_create_lane_makes_worktree_on_branch(tmp_path: Path):
     repo = _make_repo(tmp_path)
     goal = ap.goal_dir(repo, "g1")
@@ -338,7 +357,7 @@ def test_scan_lane_integrity_flags_rewritten_gitdir_line(tmp_path: Path):
     )
     fake = evil / ".git" / "worktrees" / "lane"
     fake.mkdir(parents=True)
-    (lane / ".git").write_text(f"gitdir: {fake}\n", encoding="utf-8")
+    _rewrite_lane_git_pointer(lane, f"gitdir: {fake}\n")
     violations = lane_mod.scan_lane_integrity(lane)
     assert any(".git pointer" in v for v in violations)
 
@@ -408,7 +427,7 @@ def test_commit_lane_and_lane_diff_refuse_redirected_git_pointer(tmp_path: Path)
     subprocess.run(
         ["git", "init", "-b", "main", str(evil)], check=True, capture_output=True
     )
-    (lane / ".git").write_text(f"gitdir: {evil / '.git'}\n", encoding="utf-8")
+    _rewrite_lane_git_pointer(lane, f"gitdir: {evil / '.git'}\n")
     with pytest.raises(lane_mod.LaneError, match="git pointer"):
         lane_mod.commit_lane(repo, lane, "msg")
     with pytest.raises(lane_mod.LaneError, match="git pointer"):
@@ -424,7 +443,7 @@ def test_create_lane_resume_rejects_tampered_git_pointer(tmp_path: Path):
     lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
     evil = tmp_path / "evil-gitdir"
     evil.mkdir()
-    (lane / ".git").write_text(f"gitdir: {evil}\n", encoding="utf-8")
+    _rewrite_lane_git_pointer(lane, f"gitdir: {evil}\n")
     with pytest.raises(lane_mod.LaneError):
         lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
 
