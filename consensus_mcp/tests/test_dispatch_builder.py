@@ -313,3 +313,52 @@ def test_scrub_uses_shared_all_provider_keys(tmp_path: Path, monkeypatch):
     )
     for key in ALL_PROVIDER_SCRUBBED_ENV_KEYS:
         assert key not in calls["kwargs"]["env"]
+
+
+# ---- Q2 hardening (consult iteration-architect-hardening-2026-06-11) ----
+
+
+def test_builder_env_default_deny(tmp_path: Path, monkeypatch):
+    """Default-deny: unknown and credential names are absent without any
+    pattern knowledge; baseline operational vars survive."""
+    lane = _lane(tmp_path)
+    _identity_resolver(monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_leak")
+    monkeypatch.setenv("CUSTOM_CORP_SECRET", "leak")
+    monkeypatch.setenv("NEW_VENDOR_TOKEN", "leak")
+    fake_popen, calls = _fake_popen_factory(
+        {"summary": "ok", "pushback": None, "notes": ""}
+    )
+    monkeypatch.setattr(db.subprocess, "Popen", fake_popen)
+    db.dispatch_builder(
+        repo_root=tmp_path, lane=lane,
+        prompt="x", codex_bin="codex", timeout_seconds=60,
+    )
+    env = calls["kwargs"]["env"]
+    assert "GITHUB_TOKEN" not in env
+    assert "CUSTOM_CORP_SECRET" not in env
+    assert "NEW_VENDOR_TOKEN" not in env
+    assert "PATH" in env
+
+
+def test_builder_env_allow_extension_and_hard_floor(tmp_path: Path,
+                                                    monkeypatch):
+    """CONSENSUS_MCP_BUILDER_ENV_ALLOW admits project vars; the hard-floor
+    credential set can never be allowed through it."""
+    lane = _lane(tmp_path)
+    _identity_resolver(monkeypatch)
+    monkeypatch.setenv("FOO_PROJECT_VAR", "v")
+    monkeypatch.setenv("GH_TOKEN", "ghp_leak")
+    monkeypatch.setenv("CONSENSUS_MCP_BUILDER_ENV_ALLOW",
+                       "FOO_PROJECT_VAR,GH_TOKEN")
+    fake_popen, calls = _fake_popen_factory(
+        {"summary": "ok", "pushback": None, "notes": ""}
+    )
+    monkeypatch.setattr(db.subprocess, "Popen", fake_popen)
+    db.dispatch_builder(
+        repo_root=tmp_path, lane=lane,
+        prompt="x", codex_bin="codex", timeout_seconds=60,
+    )
+    env = calls["kwargs"]["env"]
+    assert env.get("FOO_PROJECT_VAR") == "v"
+    assert "GH_TOKEN" not in env

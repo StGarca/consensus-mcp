@@ -45,6 +45,7 @@ IN_FLIGHT_FILENAME = "dispatch-in-flight.yaml"
 HANDOFF_FILENAME = "HANDOFF.md"
 OUTCOME_FILENAME = "outcome.yaml"
 INTEGRITY_BEFORE_FILENAME = "integrity-before.yaml"
+TREE_BASELINE_FILENAME = "architect-tree-baseline.yaml"
 CONTAINMENT_BREACH_FILENAME = "containment-breach.yaml"
 LANE_DIRNAME = "lane"
 CYCLE_DIR_RE = re.compile(r"^cycle-(\d+)$")

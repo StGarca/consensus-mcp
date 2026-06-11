@@ -1449,6 +1449,33 @@ def _provision_instruction_files(
     return written
 
 
+# Interactive workflow picker's valid set (consult Q3, 2026-06-11): a module
+# constant consumed by the call site so tests assert the REAL offering - the
+# v1.14.4 defect class was 'alias in WORKFLOW_ALIASES but not in the picker'.
+WORKFLOW_PROMPT_VALID = (
+    "post-review", "propose-converge", "advisory", "autonomous-execute",
+    "architect-build",
+    "A", "B", "C", "D", "a", "b", "c", "d",
+)
+
+
+def _prompt_architect_roles(base: dict) -> None:
+    """architect-build (workflow D, Consensus Build - preview) requires a
+    roles: block (config validation); prompt the mapping when D is chosen
+    interactively."""
+    roles = dict(base.get("roles") or {})
+    roles["architect"] = _prompt(
+        "Architect role contributor (expensive model: authors the spec, "
+        "rules accept/revise/kill)", roles.get("architect", "claude"))
+    roles["builder"] = _prompt(
+        "Builder role contributor (cheap model: writes code in the lane)",
+        roles.get("builder", "codex"))
+    roles["reviewer"] = _prompt(
+        "Reviewer role contributor (pre-checks the builder's diff)",
+        roles.get("reviewer", "codex"))
+    base["roles"] = roles
+
+
 def _prompt(label: str, default: str, valid: list[str] | None = None) -> str:
     """Single-line prompt with default. Raises KeyboardInterrupt on Ctrl+C/EOF."""
     suffix = f" [{default}]"
@@ -1560,22 +1587,22 @@ def interactive_overrides(args, repo_root: Path, base: dict, fresh: bool) -> Non
         # Letter aliases A/B/C accepted by WORKFLOW_ALIASES; semantic strings
         # remain canonical for the underlying value.
         choice = _prompt(
-            "Workflow mode (A=propose-converge, B=post-review, C=autonomous-execute, advisory)",
+            "Workflow mode (A=propose-converge, B=post-review, "
+            "C=autonomous-execute, D=architect-build [Consensus Build, "
+            "preview], advisory)",
             default_workflow,
-            # codex-rev-002: the prompt advertises the A/B/C letter aliases, so
+            # codex-rev-002: the prompt advertises the letter aliases, so
             # `valid` MUST accept them too - otherwise _prompt rejects the very
             # input it told the user to type. The alias -> semantic resolution
             # below (WORKFLOW_ALIASES.get) then normalizes the stored value.
-            valid=[
-                cfg.WORKFLOW_POST_REVIEW,
-                cfg.WORKFLOW_PROPOSE_CONVERGE,
-                cfg.WORKFLOW_ADVISORY,
-                cfg.WORKFLOW_AUTONOMOUS_EXECUTE,
-                "A", "B", "C", "a", "b", "c",
-            ],
+            valid=list(WORKFLOW_PROMPT_VALID),
         )
-        # Resolve letter alias (A/B/C) to semantic string before storing.
+        # Resolve letter alias (A/B/C/D) to semantic string before storing.
         base["workflow"]["mode"] = cfg.WORKFLOW_ALIASES.get(choice, choice)
+        if base["workflow"]["mode"] == cfg.WORKFLOW_ARCHITECT_BUILD:
+            # Consult Q3: D needs the roles mapping; prompt it here so the
+            # interactive path round-trips to a VALID architect-build config.
+            _prompt_architect_roles(base)
 
     # Convergence rule.
     if "convergence" not in set_flags:
@@ -2780,18 +2807,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workflow", default=None,
                         choices=[
                             # Letter aliases (canonical operator vocabulary as of v1.14.4)
-                            "A", "B", "C", "a", "b", "c",
+                            "A", "B", "C", "D", "a", "b", "c", "d",
                             # Numeric aliases (deprecated; emit DeprecationWarning)
                             "3", "4",
                             # Semantic strings (canonical internal values)
-                            "post-review", "propose-converge", "advisory", "autonomous-execute",
+                            "post-review", "propose-converge", "advisory",
+                            "autonomous-execute", "architect-build",
                         ],
                         help=("workflow mode. A=propose-converge (default; "
                               "all contributors propose blindly then converge), "
                               "B=post-review (lightweight; one AI implements, "
                               "others review), C=autonomous-execute (overnight; "
-                              "v1.14.4 contract, v1.15.0 engine). Numeric "
-                              "aliases 3/4 deprecated."))
+                              "v1.14.4 contract, v1.15.0 engine), "
+                              "D=architect-build (Consensus Build, preview; "
+                              "requires a roles: block - architect/builder/"
+                              "reviewer). Numeric aliases 3/4 deprecated."))
     parser.add_argument("--contributors", default=None,
                         help="comma-separated list of enabled contributors")
     parser.add_argument("--independence", default=None,

@@ -499,3 +499,100 @@ def test_architect_tree_clean_window_is_empty(tmp_path: Path):
     before = lane_mod.snapshot_architect_tree(repo, lane)
     (lane / "only-lane.py").write_text("y = 2\n", encoding="utf-8")
     assert lane_mod.check_architect_tree(repo, before, lane) == []
+
+
+# ---- M3 hardening (2026-06-11): symlinks are RECORDED snapshot entries ----
+# os.walk(followlinks=False) lists symlinks-to-directories in dirnames and
+# never hashes them - a planted symlink-dir was invisible to the diff, and
+# the resolve-compare lane prune silently swallowed any symlink resolving
+# to the lane.
+
+
+def _symlink_or_skip(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks unsupported on this platform")
+
+
+def test_architect_tree_catches_planted_symlink_dir(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    sibling = ap.goal_dir(repo, "g2"); sibling.mkdir(parents=True)
+    outside = tmp_path / "outside"; outside.mkdir()
+    before = lane_mod.snapshot_architect_tree(repo, lane)
+    _symlink_or_skip(sibling / "planted", outside)
+    violations = lane_mod.check_architect_tree(repo, before, lane)
+    assert any("planted" in v and "created" in v for v in violations)
+
+
+def test_architect_tree_catches_symlink_dir_retarget(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    sibling = ap.goal_dir(repo, "g2"); sibling.mkdir(parents=True)
+    a = tmp_path / "a"; a.mkdir()
+    b = tmp_path / "b"; b.mkdir()
+    _symlink_or_skip(sibling / "ln", a)
+    before = lane_mod.snapshot_architect_tree(repo, lane)
+    (sibling / "ln").unlink()
+    (sibling / "ln").symlink_to(b)
+    violations = lane_mod.check_architect_tree(repo, before, lane)
+    assert any("ln" in v and "modified" in v for v in violations)
+
+
+def test_architect_tree_catches_symlink_to_lane(tmp_path: Path):
+    """A symlink that RESOLVES to the lane must be a recorded entry, not a
+    silently-pruned exclusion - resolve-pruning was the smuggle hole."""
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    sibling = ap.goal_dir(repo, "g2"); sibling.mkdir(parents=True)
+    before = lane_mod.snapshot_architect_tree(repo, lane)
+    _symlink_or_skip(sibling / "lane-alias", lane)
+    violations = lane_mod.check_architect_tree(repo, before, lane)
+    assert any("lane-alias" in v for v in violations)
+
+
+def test_architect_tree_file_symlink_retarget_same_content(tmp_path: Path):
+    """A file symlink retargeted to a different file with IDENTICAL content
+    must still surface: the snapshot records the link target, never hashes
+    through the link."""
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    sibling = ap.goal_dir(repo, "g2"); sibling.mkdir(parents=True)
+    f1 = sibling / "f1.txt"; f1.write_text("same\n", encoding="utf-8")
+    f2 = sibling / "f2.txt"; f2.write_text("same\n", encoding="utf-8")
+    _symlink_or_skip(sibling / "ln.txt", f1)
+    before = lane_mod.snapshot_architect_tree(repo, lane)
+    (sibling / "ln.txt").unlink()
+    (sibling / "ln.txt").symlink_to(f2)
+    violations = lane_mod.check_architect_tree(repo, before, lane)
+    assert any("ln.txt" in v and "modified" in v for v in violations)
+
+
+def test_goal_artifacts_catch_planted_symlink_dir(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    goal.mkdir(parents=True)
+    (goal / "spec.yaml").write_text("kind: spec\n", encoding="utf-8")
+    outside = tmp_path / "outside"; outside.mkdir()
+    before = lane_mod.snapshot_goal_artifacts(goal)
+    _symlink_or_skip(goal / "planted", outside)
+    violations = lane_mod.check_goal_artifacts(goal, before)
+    assert any("planted" in v and "created" in v for v in violations)
+
+
+def test_architect_tree_real_lane_still_excluded(tmp_path: Path):
+    """Regression guard: the REAL lane dir stays exempt after the symlink
+    hardening (literal-path exclusion)."""
+    repo = _make_repo(tmp_path)
+    goal = ap.goal_dir(repo, "g1")
+    lane = lane_mod.create_lane(repo, goal, "arch-lane/g1", _head(repo))
+    before = lane_mod.snapshot_architect_tree(repo, lane)
+    (lane / "work.py").write_text("x = 1\n", encoding="utf-8")
+    (lane / "sub").mkdir()
+    (lane / "sub" / "deep.py").write_text("y = 2\n", encoding="utf-8")
+    assert lane_mod.check_architect_tree(repo, before, lane) == []

@@ -109,16 +109,53 @@ def handle_approve_spec(
         return dict(err, error=f"{spec_file.name} seal invalid: "
                                "payload_sha256 does not reproduce - refusing "
                                "to bind approval to a tampered spec")
-    if (goal / ap.SPEC_APPROVAL_FILENAME).exists():
-        return dict(err, error="spec already approved; the architect owns "
-                               "spec evolution between gates (spec-rev-N)")
-    # The hardened lane git, not a raw subprocess: scrubbed env (a GIT_DIR
-    # leaked from a hook context would make rev-parse ignore cwd and seal a
-    # DIFFERENT repository's HEAD), hooks neutralized, utf-8 decoding.
-    try:
-        base_sha = lane_mod._git(root, "rev-parse", "HEAD").strip()
-    except lane_mod.LaneError as exc:
-        return dict(err, error=f"cannot resolve base_sha: {exc}")
+    # Consult Q1 (2026-06-11, unanimous panel add): NO approval change may
+    # race an active builder/verification window - a build started under
+    # one approval must never complete under another.
+    if (goal / ap.IN_FLIGHT_FILENAME).exists():
+        return dict(err, error="a builder/verification dispatch is in "
+                               "flight; approval changes are refused "
+                               "mid-window - re-run after it completes")
+    existing = ap._read_yaml_or_empty(goal / ap.SPEC_APPROVAL_FILENAME)
+    prior_base = None
+    if existing:
+        if not ap.seal_is_intact(existing):
+            # Fail-loud forensics path: superseding a tampered approval
+            # would launder the tamper into the archive chain, and its
+            # base_sha cannot be trusted for carry-forward.
+            return dict(err, error=f"{ap.SPEC_APPROVAL_FILENAME} seal "
+                                   "invalid: tamper evidence retained - "
+                                   "investigate before re-approving")
+        if existing.get("spec_sha256") == spec["payload_sha256"]:
+            return dict(err, error="spec already approved; the architect "
+                                   "owns spec evolution between gates "
+                                   "(spec-rev-N) - re-approval is only "
+                                   "legal once the spec actually evolved")
+        # Spec evolved: archive-then-reseal (consult Q1). rename() keeps the
+        # archived bytes identical, so the old seal stays verifiable.
+        n = 1
+        while (goal / f"spec-approval-superseded-{n}.yaml").exists():
+            n += 1
+        (goal / ap.SPEC_APPROVAL_FILENAME).rename(
+            goal / f"spec-approval-superseded-{n}.yaml"
+        )
+        prior_base = existing.get("base_sha")
+    # base_sha contract (consult Q1): with a lane already branched, carry
+    # the original base forward - a fresh HEAD stamp would un-stick the
+    # head-moved stop rule through a side door. The carry-forward
+    # deliberately does NOT resolve base drift; that remains operator
+    # friction, not gate deadlock.
+    if prior_base and ap.lane_dir(goal).exists():
+        base_sha = prior_base
+    else:
+        # The hardened lane git, not a raw subprocess: scrubbed env (a
+        # GIT_DIR leaked from a hook context would make rev-parse ignore
+        # cwd and seal a DIFFERENT repository's HEAD), hooks neutralized,
+        # utf-8 decoding.
+        try:
+            base_sha = lane_mod._git(root, "rev-parse", "HEAD").strip()
+        except lane_mod.LaneError as exc:
+            return dict(err, error=f"cannot resolve base_sha: {exc}")
     ap.seal_artifact(
         goal / ap.SPEC_APPROVAL_FILENAME,
         {

@@ -353,6 +353,38 @@ def _hash_file(path: Path) -> str:
         return "absent"
 
 
+# Format version of persisted tree snapshots (the M4 delivery baseline).
+# v2 = symlink entries recorded as "symlink:<target>". A recheck refuses a
+# cross-version compare rather than silently diffing foreign formats.
+TREE_SNAPSHOT_FORMAT_VERSION = 2
+
+
+def _snapshot_value(path: Path) -> str:
+    """Snapshot entry for one path: content hash for regular files, the
+    LITERAL link target for symlinks (file OR directory - never followed).
+    Recording the target string makes plant/retarget/delete of ANY symlink
+    visible to _diff_hashes; hashing through a link would miss a retarget
+    to identical content and read bytes from outside the guarded tree."""
+    if path.is_symlink():
+        try:
+            return "symlink:" + os.readlink(str(path))
+        except OSError:
+            return "symlink:unreadable"
+    return _hash_file(path)
+
+
+def _record_symlink_dirs(base: Path, dirnames: list[str], root: Path,
+                         hashes: dict[str, str]) -> None:
+    """Pull symlinks-to-directories OUT of the walk and record them as
+    entries. os.walk(followlinks=False) lists them in dirnames but never
+    descends NOR hashes them - without this, a planted symlink-dir is
+    invisible to the snapshot diff (M3 hardening, 2026-06-11)."""
+    for d in [d for d in dirnames if (base / d).is_symlink()]:
+        dirnames.remove(d)
+        p = base / d
+        hashes[p.relative_to(root).as_posix()] = _snapshot_value(p)
+
+
 _GOAL_ROOT_PREFIX = "/".join(ap.GOAL_ROOT_PARTS) + "/"
 
 
@@ -421,18 +453,21 @@ def snapshot_goal_artifacts(goal: Path) -> dict[str, str]:
     not authenticity signatures - mere filesystem access can forge them.
     This snapshot/check pair is the L5-style root-cause-independent guard
     for that window: snapshot before the command runs, compare after, and
-    ANY goal-artifact delta is a containment breach. Symlinked
-    subdirectories are not followed (os.walk default), so a link planted
-    during the run surfaces as a created path, never as a traversal."""
+    ANY goal-artifact delta is a containment breach. Symlinks (file or
+    directory) are RECORDED entries keyed by their literal link target and
+    never followed, so a link planted, retargeted, or deleted during the
+    run surfaces in the diff - never as a traversal."""
     goal = Path(goal)
     hashes: dict[str, str] = {}
     for dirpath, dirnames, filenames in os.walk(goal):
         base = Path(dirpath)
-        if base == goal and ap.LANE_DIRNAME in dirnames:
+        if base == goal and ap.LANE_DIRNAME in dirnames \
+                and not (goal / ap.LANE_DIRNAME).is_symlink():
             dirnames.remove(ap.LANE_DIRNAME)
+        _record_symlink_dirs(base, dirnames, goal, hashes)
         for name in filenames:
             p = base / name
-            hashes[p.relative_to(goal).as_posix()] = _hash_file(p)
+            hashes[p.relative_to(goal).as_posix()] = _snapshot_value(p)
     return hashes
 
 
@@ -473,10 +508,17 @@ def snapshot_architect_tree(repo_root: Path, exclude_lane: Path) -> dict[str, st
     snapshot_goal_artifacts misses (only the ACTIVE goal). This whole-tree
     snapshot is the superset guard: the only path legitimately written
     during a guarded build/verification window is the active lane, so ANY
-    delta elsewhere under the architect root is a containment breach. The
-    lane is keyed by resolved path so a symlinked lane cannot smuggle an
-    exclusion."""
+    delta elsewhere under the architect root is a containment breach.
+
+    Symlinks (file or directory) are RECORDED entries keyed by their
+    literal link target and never followed - and they are NEVER pruned as
+    the lane, even when they resolve to it: the old resolve-compare prune
+    let a planted symlink-to-the-lane vanish from the snapshot entirely
+    (M3 hardening, 2026-06-11). Only a REAL directory that is the lane
+    (literal path match, with a resolve fallback for path-form differences
+    like macOS /tmp vs /private/tmp) is excluded."""
     arch_root = Path(repo_root).joinpath(*ap.GOAL_ROOT_PARTS)
+    excl_literal = Path(exclude_lane)
     try:
         excl = exclude_lane.resolve()
     except OSError:
@@ -486,19 +528,25 @@ def snapshot_architect_tree(repo_root: Path, exclude_lane: Path) -> dict[str, st
         return hashes
     for dirpath, dirnames, filenames in os.walk(arch_root):
         base = Path(dirpath)
-        # prune the active lane subtree (resolved compare, not name match)
+        _record_symlink_dirs(base, dirnames, arch_root, hashes)
+        # prune the active lane subtree (real directories only - symlinks
+        # were already pulled out and recorded above)
         kept = []
         for d in dirnames:
+            p = base / d
+            if p == excl_literal:
+                continue
             try:
-                resolved = (base / d).resolve()
+                resolved = p.resolve()
             except OSError:
-                resolved = base / d
-            if resolved != excl:
-                kept.append(d)
+                resolved = p
+            if resolved == excl:
+                continue
+            kept.append(d)
         dirnames[:] = kept
         for name in filenames:
             p = base / name
-            hashes[p.relative_to(arch_root).as_posix()] = _hash_file(p)
+            hashes[p.relative_to(arch_root).as_posix()] = _snapshot_value(p)
     return hashes
 
 
