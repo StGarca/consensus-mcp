@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- architect-build workflow mode (alias D): asymmetric expensive-plans /
+  cheap-builds orchestration. New `roles:` + `architect_loop:` config
+  contract, `architect.loop_step` supervisor (state machine + mode-specific
+  stop rules), write-enabled codex builder confined to a git worktree lane
+  (supervisor-owned git, separate builder dispatch canon, containment scans,
+  main-repo integrity safeguard), HANDOFF.md rolling-window repo memory,
+  `architect.approve_spec`/`architect.cleanup` human gates,
+  `consensus-mcp-architect` CLI. Design ratified by 4-AI consult
+  iteration-architect-build-design-2026-06-10. Engine `run_iteration`
+  permanently refuses the mode (supervisor-driven by design).
+
 ## 1.42.0 - 2026-06-05
 
 **The gate gets out of your way.** Two sharp edges of the PreToolUse edit gate -
