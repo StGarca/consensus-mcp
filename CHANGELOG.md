@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.1 - 2026-06-23
+
+**Install hot-patch: `--install-claude-code` now ships the Looper plan skill.**
+
+- The v2.1.0 installer manifest (`_CLAUDE_EXTENSION_FILES`) was hardcoded and
+  omitted the new `consensus-looper-plan` wizard skill, so
+  `consensus-init --install-claude-code` shipped it in the package but never
+  copied it into `~/.claude` - the Looper plan wizard was unreachable via the
+  supported install path on v2.1.0. Fixed by adding the manifest entry.
+- Added a REVERSE packaging guard: every `skills/*/SKILL.md` on disk must be in
+  the install manifest, so a future skill cannot be silently dropped (the prior
+  forward-only test could not catch this class).
+
+**Upgrade:** v2.1.0 users should upgrade to v2.1.1 to get the Looper plan wizard
+via `--install-claude-code`.
+
 ## 2.1.0 - 2026-06-23
 
 **Consensus Build is now GA (no longer preview), and gains an opt-in Looper plan
