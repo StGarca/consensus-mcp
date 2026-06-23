@@ -6,7 +6,7 @@
 see `consensus-state/active/iteration-looper-plan-design-2026-06-23/converged-plan.yaml`.
 **Date:** 2026-06-23
 **Branch:** feat/looper-plan (off the v2.0.1 HEAD that carries Consensus Build / workflow D)
-**Upstream dissected:** https://github.com/ksimback/looper (MIT, (c) Kevin Simback)
+**Upstream dissected:** the Looper plan source (MIT; attribution in consensus_mcp/looper_plan/NOTICE)
 
 ---
 
@@ -93,7 +93,7 @@ The data shapes already line up:
 
 ### 4.1 Vendored coaching slice - `consensus_mcp/looper_plan/`
 
-MIT, attributed to Kevin Simback (`ksimback/looper`).
+MIT, attributed to the upstream author (`the Looper plan source`).
 
 ```
 consensus_mcp/looper_plan/
@@ -340,7 +340,7 @@ baseline-inclusion guard (8).
 
 ## 9. Licensing / attribution / packaging
 
-Upstream is MIT (c) Kevin Simback. We vendor a slice verbatim (rubrics, schemas)
+Upstream is MIT (see NOTICE). We vendor a slice verbatim (rubrics, schemas)
 and a trimmed derivative (`compile.py`). `VENDORED.md` records the upstream URL,
 the **pinned source commit**, the MIT notice, and the exact kept-vs-trimmed
 list; a `NOTICE` file carries the MIT notice (Superpowers vendoring pattern);

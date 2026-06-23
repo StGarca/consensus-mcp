@@ -4,10 +4,11 @@ description: >
   Design-coach front-door for Consensus Build (workflow D). Use when the
   operator chooses to launch Build WITH a Looper plan - i.e. coach a sharp goal,
   typed verification, and termination caps BEFORE the architect writes a spec,
-  then SEED the Build goal from the coached plan. Vendored, trimmed slice of
-  ksimback/looper (MIT). This is the DESIGN layer; Consensus Build is the
-  EXECUTOR. It does NOT run the loop - it writes problem.md + suggestions into
-  the goal dir and hands off to `consensus-mcp-architect step`.
+  then SEED the Build goal from the coached plan. This is the DESIGN layer;
+  Consensus Build is the EXECUTOR. It does NOT run the loop - it writes
+  problem.md + suggestions into the goal dir and hands off to
+  `consensus-mcp-architect step`. (Built on a vendored MIT-licensed loop-design
+  slice; attribution in consensus_mcp/looper_plan/NOTICE.)
 disable-model-invocation: true
 argument-hint: "<goal-id>"
 allowed-tools: Read, Write, Bash(python3 *), Bash(python *)

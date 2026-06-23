@@ -30,9 +30,44 @@ def test_vendored_md_pins_an_upstream_commit():
     assert "Pinned commit:" in vend and "ksimback/looper" in vend
 
 
-def test_notice_carries_mit_and_upstream():
+def test_notice_carries_full_mit_attestation():
+    """MIT compliance: the copyright line AND the full permission notice must be
+    retained in the shipped copy, plus the source for provenance."""
     notice = (PKG / "NOTICE").read_text(encoding="utf-8")
-    assert "MIT" in notice and "ksimback/looper" in notice
+    assert "MIT License" in notice
+    assert "Copyright (c) 2026 Kevin Simback" in notice
+    assert "Permission is hereby granted" in notice
+    assert "The above copyright notice and this permission notice" in notice
+    assert "https://github.com/ksimback/looper" in notice
+
+
+def test_external_project_identifiers_confined_to_attestation():
+    """Operator policy: the external project's handle/author/URL may appear ONLY
+    in the NOTICE / VENDORED.md attestation files - never in the package code,
+    rubrics, schemas, the skill, or the looper-plan docs. Guards against a
+    promotional external credit/link regressing back into code or marketing."""
+    import re
+    attest = {PKG / "NOTICE", PKG / "VENDORED.md"}
+    scan_roots = [
+        PKG,
+        _REPO / "consensus_mcp" / "claude_extensions" / "skills" / "consensus-looper-plan",
+        _REPO / "docs" / "superpowers" / "specs" / "2026-06-23-consensus-build-looper-plan-design.md",
+        _REPO / "docs" / "consensus" / "plans" / "2026-06-23-consensus-build-looper-plan.md",
+    ]
+    needle = re.compile(r"ksimback|Kevin Simback", re.I)
+    offenders = []
+    for root in scan_roots:
+        files = [root] if root.is_file() else [p for p in root.rglob("*") if p.is_file()]
+        for f in files:
+            if f in attest or "__pycache__" in f.parts:
+                continue
+            try:
+                text = f.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            if needle.search(text):
+                offenders.append(str(f.relative_to(_REPO)))
+    assert not offenders, f"external project identifier outside NOTICE/VENDORED: {offenders}"
 
 
 def test_looper_plan_is_a_declared_package():

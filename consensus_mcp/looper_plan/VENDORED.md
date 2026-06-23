@@ -10,8 +10,13 @@
 - references/verification-rubric.md -> rubrics/verification-rubric.md
 - references/council-rubric.md      -> rubrics/council-rubric.md
 - references/control-rubric.md      -> rubrics/control-rubric.md
+
+## Vendored with minimal localization
 - schemas/loop.v1.schema.json       -> schemas/loop.v1.schema.json
 - schemas/loop.resolved.v1.schema.json -> schemas/loop.resolved.v1.schema.json
+  (ONLY change: the `$id` URL localized to `consensus-mcp/looper-plan/*` so the
+  package carries no external link outside this attestation; schema body
+  unchanged.)
 
 ## Trimmed derivative
 - scripts/looper.py -> compile.py: kept load_yaml, to_jsonable, normalize_argv,

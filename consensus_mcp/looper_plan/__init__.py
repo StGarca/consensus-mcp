@@ -1,4 +1,4 @@
-"""Vendored Looper design-coach slice (MIT, (c) Kevin Simback). See VENDORED.md.
+"""Looper-plan design-coach slice. Third-party attribution: NOTICE / VENDORED.md.
 
 This package coaches a Build goal (goal + typed verification + caps) and seeds
 Consensus Build. It is imported ONLY on the with-looper-plan goal-setup path -
