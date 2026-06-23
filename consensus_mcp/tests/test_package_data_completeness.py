@@ -49,6 +49,24 @@ def test_every_claude_extension_file_is_packaged():
     )
 
 
+def test_every_skill_on_disk_is_in_the_install_manifest():
+    """Reverse guard (v2.1.0): the install manifest (_CLAUDE_EXTENSION_FILES) is
+    hardcoded, so a NEW skill dir present on disk + covered by package-data still
+    ships in the wheel but `--install-claude-code` never copies it. The forward
+    test (manifest -> packaged) cannot catch that. Assert every skills/*/SKILL.md
+    on disk is named in the install manifest."""
+    manifest_srcs = {rel_src for rel_src, _ in wiz._CLAUDE_EXTENSION_FILES}
+    missing = [
+        skill_md.relative_to(_EXT_ROOT).as_posix()
+        for skill_md in sorted((_EXT_ROOT / "skills").glob("*/SKILL.md"))
+        if skill_md.relative_to(_EXT_ROOT).as_posix() not in manifest_srcs
+    ]
+    assert not missing, (
+        f"skill SKILL.md on disk but NOT in _CLAUDE_EXTENSION_FILES install manifest "
+        f"(--install-claude-code would skip it): {missing}"
+    )
+
+
 def test_every_enforcement_hook_script_is_packaged():
     packaged = _packaged_paths()
     for _event, _matcher, script in wiz._CONSENSUS_HOOK_SPECS:
