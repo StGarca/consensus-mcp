@@ -32,10 +32,18 @@ Call it `LP_DIR`. Use `LP_DIR/rubrics/<stage>-rubric.md` for coaching.
 
 ## Workflow
 
-1. **Resolve the goal dir.** From the `<goal-id>` argument:
-   `.consensus/architect/<goal-id>/`. Create it if absent. Goal ids must match
-   Build's rule (`[A-Za-z0-9][A-Za-z0-9._-]*`, no Windows-reserved name, no
-   trailing dot).
+1. **Resolve + VALIDATE the goal dir BEFORE any mkdir/write.** Do not build the
+   path from the raw `<goal-id>` string - validate it through Build's own rule:
+
+   ```bash
+   python3 -c "from consensus_mcp.looper_plan import seed; print(seed.resolve_goal_dir('.', '<goal-id>'))"
+   ```
+
+   This reuses `_architect_paths.goal_dir`, returns the path under
+   `.consensus/architect/`, and raises `ArchitectPathError` on a malformed id
+   (path separators, traversal, Windows-reserved name, leading/trailing dot). If
+   it raises, STOP and tell the operator the goal id is invalid. Use the RETURNED
+   path for every subsequent read/write; create it if absent.
 
 2. **Refuse if Build has already begun (write-once guard).** Before any
    coaching, run:
