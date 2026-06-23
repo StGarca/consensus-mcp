@@ -1,0 +1,6 @@
+Looper (design-coach slice) vendored into consensus-mcp.
+Upstream: https://github.com/ksimback/looper
+Copyright (c) Kevin Simback. Licensed under the MIT License.
+
+This product includes a verbatim copy of Looper's rubrics and JSON schemas,
+and a trimmed derivative of scripts/looper.py (see consensus_mcp/looper_plan/VENDORED.md).
