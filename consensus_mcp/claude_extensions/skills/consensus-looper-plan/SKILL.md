@@ -56,16 +56,18 @@ Call it `LP_DIR`. Use `LP_DIR/rubrics/<stage>-rubric.md` for coaching.
    on.
 
 4. **Interview in stages, coaching against the rubric (progressive disclosure).**
-   Load only the relevant rubric per stage:
-   - Goal: `LP_DIR/rubrics/goal-rubric.md` - push toward a concrete outcome,
-     definition-of-done, scope boundaries, context sources.
-   - Verification: `LP_DIR/rubrics/verification-rubric.md` - force typed criteria
-     (`programmatic` / `judge` / `human`); push hard toward programmatic; warn if
-     everything is vibe. (This is the highest-leverage stage.)
-   - Gates/control: `LP_DIR/rubrics/control-rubric.md` - require termination
-     guards: `max_iterations` (-> Build `max_cycles`), a wall-clock or budget cap
-     (-> `max_wall_clock_minutes`). `LP_DIR/rubrics/council-rubric.md` is context
-     only (Build's cross-AI panel supersedes Looper's single judge).
+   The rubrics live in the installed package's rubrics directory - `LP_DIR` +
+   `/rubrics/` (NOT in this skill dir). Read only the relevant one per stage:
+   - Goal stage - read the goal rubric (`goal-rubric.md`): push toward a concrete
+     outcome, definition-of-done, scope boundaries, context sources.
+   - Verification stage - read the verification rubric (`verification-rubric.md`,
+     the highest-leverage one): force typed criteria (`programmatic` / `judge` /
+     `human`); push hard toward programmatic; warn if everything is vibe.
+   - Gates/control stage - read the control rubric (`control-rubric.md`): require
+     termination guards: `max_iterations` (-> Build `max_cycles`), a wall-clock or
+     budget cap (-> `max_wall_clock_minutes`). The council rubric
+     (`council-rubric.md`) is context only - Build's cross-AI panel supersedes
+     Looper's single judge.
 
 5. **Build the coached dict and stub-synthesize the unused schema fields.**
    Assemble `{version: 1, meta, goal: {statement, definition_of_done,
