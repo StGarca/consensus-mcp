@@ -124,7 +124,7 @@ Full guide: [docs/workflows/architect-build.md](docs/workflows/architect-build.m
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.1.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.1.1
 
 # Install the Claude Code helper once. This is what lets you set up and run
 # consensus from chat in ANY project - including auto-initializing a new one.
@@ -220,7 +220,9 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v2.1.0 - Consensus Build goes GA + the Looper plan front-door.**
+**Current: v2.1.1 - install hot-patch: `--install-claude-code` now ships the
+Looper plan wizard skill (Consensus Build went GA and gained the Looper plan
+front-door in v2.1.0).**
 On the two-modes release line (v2.0.0 introduced the modes; v2.0.1 hardened
 Build with six verified gap closures). v2.1.0 promotes Consensus Build from
 preview to **GA** and adds an opt-in **Looper plan** at goal-setup: a
