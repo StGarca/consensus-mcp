@@ -50,6 +50,7 @@ version = {attr = "consensus_mcp.__version__"}
 packages = [
   "consensus_mcp",
   "consensus_mcp.contributors",
+  "consensus_mcp.looper_plan",
   "consensus_mcp.tools",
   "consensus_mcp.validators",
 ]
@@ -93,4 +94,13 @@ consensus_mcp = [
   # wheel install ships them missing and the per-project bootstrap silently
   # skips the subagents.
   "claude_extensions/agents/*.md",
+  # v2.x looper-plan (consult iteration-looper-plan-design-2026-06-23): the
+  # vendored Looper design-coach slice. The .py modules ship via the
+  # consensus_mcp.looper_plan package entry above; these globs ship the verbatim
+  # rubrics/schemas + MIT attribution. The consensus-looper-plan wizard skill is
+  # already covered by the claude_extensions/skills/*/*.md glob.
+  "looper_plan/rubrics/*.md",
+  "looper_plan/schemas/*.json",
+  "looper_plan/VENDORED.md",
+  "looper_plan/NOTICE",
 ]
