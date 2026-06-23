@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ksimback/looper/schema/loop.v1.json",
+  "$id": "consensus-mcp/looper-plan/loop.v1",
   "title": "Looper authoring spec v1",
   "type": "object",
   "required": ["version", "goal", "host", "gates", "loop_control", "workspace"],

@@ -11,7 +11,7 @@ As of **v2.0.0**, consensus-mcp runs in **two modes that compose**:
 
 - **Consensus Consult** - the cross-AI review panel above: independent
   reviews, ships on agreement.
-- **Consensus Build** *(preview)* - you assign the roles. A top-tier
+- **Consensus Build** - you assign the roles. A top-tier
   reasoning model (Fable 5, say) is your *architect* - it writes the spec,
   rules on each cycle, and overrules mistakes - while a cheaper model does
   the actual building inside an isolated, contained git worktree. You get
@@ -22,6 +22,12 @@ As of **v2.0.0**, consensus-mcp runs in **two modes that compose**:
 
 Use either mode alone, or let them compose: a Consult can ratify the very
 spec a Build then executes (which is how this release was built).
+
+New in **v2.1.0**: Consensus Build is now **GA** (no longer preview), and you
+can launch it **with an optional Looper plan** - a design-coach front-door that
+helps you shape a sharp goal and *checkable* verification (a typed taxonomy:
+programmatic / judge / human) before the architect ever starts, then seeds the
+build from it. Design the loop first, then run it.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
@@ -118,7 +124,7 @@ Full guide: [docs/workflows/architect-build.md](docs/workflows/architect-build.m
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.0.1
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.1.0
 
 # Install the Claude Code helper once. This is what lets you set up and run
 # consensus from chat in ANY project - including auto-initializing a new one.
@@ -214,25 +220,26 @@ repo's sealed artifacts.
 
 ## Status
 
-**Current: v2.0.1 - the Build hardening patch** on the two-modes release
-(v2.0.0). Closes six verified Consensus Build gaps, ratified by a 3-AI
-anchored consult plus a codex post-review: point-of-use seal verification,
-spec-approval binding enforcement (with legal re-approval), symlink-aware
-tree snapshots, a delivery-gate architect-tree recheck, default-deny
-builder/verification environments (`CONSENSUS_MCP_BUILDER_ENV_ALLOW` /
-`CONSENSUS_MCP_VERIFICATION_ENV_ALLOW`), and Build discoverability in
-`consensus results` + `consensus-init --workflow D`. The two modes:
+**Current: v2.1.0 - Consensus Build goes GA + the Looper plan front-door.**
+On the two-modes release line (v2.0.0 introduced the modes; v2.0.1 hardened
+Build with six verified gap closures). v2.1.0 promotes Consensus Build from
+preview to **GA** and adds an opt-in **Looper plan** at goal-setup: a
+design-coach that coaches a sharp goal + typed, checkable verification +
+termination caps, then seeds the build - with a **zero diff** to the Build
+supervisor/invariants/gates. Ratified by an anchored 3-AI consult (codex + grok
++ kimi, zero blocking) plus a codex Workflow B post-review. The two modes:
 
 - **Consensus Consult (GA, stable).** The cross-AI review panel that has
   been the product since v1: propose, converge, weighted-synthesis of the
   best ideas, sealed provenance. Unchanged and battle-tested across 40+
   releases.
-- **Consensus Build (preview).** The architect loop - an expensive AI plans
+- **Consensus Build (GA).** The architect loop - an expensive AI plans
   and rules while a cheap AI builds inside an isolated git worktree, driven
   by a supervisor state machine to completion with two human gates (spec +
-  merge). New in v2.0.0 and labeled **preview**: it grants a model real
-  write access, so use it on work you can review and on repos you can roll
-  back. Its containment is the supervisor's job, not the CLI sandbox's - a
+  merge). GA as of v2.1.0 (shipped preview in v2.0.0, hardened in v2.0.1),
+  and optionally launched with a **Looper plan** design coach. It still grants
+  a model real write access, so use it on work you can review and on repos you
+  can roll back. Its containment is the supervisor's job, not the CLI sandbox's - a
   real-codex experiment proved `workspace-write` does NOT confine to its
   working directory, so the mode never trusts it; a root-cause-independent
   integrity snapshot blocks delivery on any change outside the builder's
@@ -244,7 +251,7 @@ is how this very feature was made (a 4-AI Consult ratified the design, then
 the build ran as review-gated cycles). Both modes share the same sealed-
 provenance machinery, the five built-in reviewers (Claude, Codex, Gemini,
 Grok, Kimi), and the add-an-AI-by-profile extensibility. ASCII-only tree
-(guard-tested), 2,150+ regression tests green on Linux + Windows /
+(guard-tested), 2,225+ regression tests green on Linux + Windows /
 Python 3.11+.
 
 - What changed in each release -> [`CHANGELOG.md`](CHANGELOG.md)

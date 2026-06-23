@@ -72,9 +72,10 @@ direct (Build execution loop)?"*
 
 - **Without** (default): write `problem.md` yourself, as above. Nothing changes.
 - **With**: invoke the `consensus-looper-plan` skill against the goal id. It is a
-  vendored, trimmed slice of `ksimback/looper` (MIT) that **coaches** a sharp
-  goal, typed verification (programmatic / judge / human), and termination caps
-  against built-in rubrics, then **seeds** this goal: it writes a synthesized
+  design coach (built on a vendored MIT-licensed loop-design slice; attribution
+  in `consensus_mcp/looper_plan/NOTICE`) that **coaches** a sharp goal, typed
+  verification (programmatic / judge / human), and termination caps against
+  built-in rubrics, then **seeds** this goal: it writes a synthesized
   `problem.md` (the architect's context), a `looper-plan/` directory
   (`loop.yaml` + `loop.resolved.json` + `LOOP.md` design preview), a
   `looper-suggestions.yaml`, and a `looper-plan-manifest.yaml`. It then presents

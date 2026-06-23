@@ -1,9 +1,12 @@
-"""Trimmed derivative of ksimback/looper scripts/looper.py (MIT, (c) Kevin
-Simback). Validator + renderer ONLY; model detection/registry, the external
-run-loop runner, and session-prompt emission are intentionally omitted.
-See consensus_mcp/looper_plan/VENDORED.md.
+"""Looper-plan compiler: validator + renderer for a loop spec.
 
-New code (ours, not upstream): synthesize_stub_fields, compile_plan."""
+Trimmed derivative of an MIT-licensed loop-design tool; model detection/registry,
+the external run-loop runner, and session-prompt emission are intentionally
+omitted. Full third-party attribution is retained in
+consensus_mcp/looper_plan/NOTICE (with the kept-vs-trimmed manifest in
+VENDORED.md).
+
+New code (ours): synthesize_stub_fields, compile_plan."""
 from __future__ import annotations
 
 import datetime as _dt
@@ -274,7 +277,7 @@ def normalize_spec(spec: dict[str, Any], source_path: Path) -> dict[str, Any]:
         entry.setdefault("consent", "required")
 
     resolved = {
-        "$schema": "https://github.com/ksimback/looper/schema/loop.resolved.v1.json",
+        "$schema": "consensus-mcp/looper-plan/loop.resolved.v1",
         "compiled_at": _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
         "source": str(source_path),
         **spec,

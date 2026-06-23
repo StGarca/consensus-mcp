@@ -1,4 +1,4 @@
-"""Build adapter for the vendored Looper slice (ours, NOT upstream).
+"""Build adapter for the Looper plan (ours - not part of the vendored slice).
 
 Maps a validated loop.resolved.json into Consensus Build inputs:
   - problem.md             (the seam: a Build input the architect already reads)

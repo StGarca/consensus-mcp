@@ -6,7 +6,7 @@
 
 **Architecture:** A self-contained `consensus_mcp/looper_plan/` package (verbatim rubrics + schemas, a trimmed `compile.py` derivative, a new `seed.py` adapter) plus a vendored `consensus-looper-plan` wizard skill and a goal-setup launch toggle. The without-looper path never imports `looper_plan` (lazy boundary). Looper artifacts live inside the goal dir, written pre-baseline and write-once-immutable; the existing architect-tree recheck protects them and a module-level re-coach refusal prevents post-baseline rewrites.
 
-**Tech Stack:** Python 3.13 stdlib + PyYAML (already a dep), pytest, Claude Code skill markdown. Source to port: upstream `ksimback/looper` `scripts/looper.py` (staged at `consensus-state/active/iteration-looper-plan-design-2026-06-23/evidence/looper/`).
+**Tech Stack:** Python 3.13 stdlib + PyYAML (already a dep), pytest, Claude Code skill markdown. Source to port: upstream `the Looper plan source` `scripts/looper.py` (staged at `consensus-state/active/iteration-looper-plan-design-2026-06-23/evidence/looper/`).
 
 **Spec:** `docs/superpowers/specs/2026-06-23-consensus-build-looper-plan-design.md`. **Ratified by:** consult `iteration-looper-plan-design-2026-06-23`.
 
@@ -66,8 +66,8 @@ Run: `git -C /tmp/claude-1000/-home-steve-projects-consensus-mcp/d68f1be9-1556-4
 
 ```
 Looper (design-coach slice) vendored into consensus-mcp.
-Upstream: https://github.com/ksimback/looper
-Copyright (c) Kevin Simback. Licensed under the MIT License.
+Upstream: the Looper plan source
+MIT-licensed (attribution in consensus_mcp/looper_plan/NOTICE).
 
 This product includes a verbatim copy of Looper's rubrics and JSON schemas,
 and a trimmed derivative of scripts/looper.py (see consensus_mcp/looper_plan/VENDORED.md).
@@ -76,10 +76,10 @@ and a trimmed derivative of scripts/looper.py (see consensus_mcp/looper_plan/VEN
 - [ ] **Step 4: Write `VENDORED.md`**
 
 ```markdown
-# Vendored: ksimback/looper (design-coach slice)
+# Vendored: the Looper plan source (design-coach slice)
 
-- Upstream: https://github.com/ksimback/looper
-- License: MIT (c) Kevin Simback
+- Upstream: the Looper plan source
+- License: MIT (see consensus_mcp/looper_plan/NOTICE)
 - Pinned commit: <COMMIT-FROM-STEP-2>
 - Vendored: 2026-06-23 (consult iteration-looper-plan-design-2026-06-23)
 
@@ -106,7 +106,7 @@ and a trimmed derivative of scripts/looper.py (see consensus_mcp/looper_plan/VEN
 - [ ] **Step 5: Write `__init__.py`**
 
 ```python
-"""Vendored Looper design-coach slice (MIT, (c) Kevin Simback). See VENDORED.md.
+"""Vendored Looper design-coach slice (MIT; attribution in consensus_mcp/looper_plan/NOTICE). See VENDORED.md.
 
 This package coaches a Build goal (goal + typed verification + caps) and seeds
 Consensus Build. It is imported ONLY on the with-looper-plan goal-setup path.
@@ -141,7 +141,7 @@ def test_vendored_md_lists_every_shipped_rubric_and_schema():
 
 def test_notice_carries_mit_and_upstream():
     notice = (PKG / "NOTICE").read_text(encoding="utf-8")
-    assert "MIT" in notice and "ksimback/looper" in notice
+    assert "MIT" in notice and "the Looper plan source" in notice
 ```
 
 - [ ] **Step 7: Run the test**
@@ -233,7 +233,7 @@ Then add the public entry at the bottom:
 def compile_plan(loop_yaml_path) -> tuple[dict, str]:
     """Validate+normalize a loop.yaml and render LOOP.md. Returns (resolved, md).
 
-    Trimmed derivative of ksimback/looper scripts/looper.py (MIT). See VENDORED.md.
+    Trimmed derivative of the Looper plan source scripts/looper.py (MIT). See VENDORED.md.
     """
     from pathlib import Path
     source = Path(loop_yaml_path).resolve()
@@ -245,7 +245,7 @@ def compile_plan(loop_yaml_path) -> tuple[dict, str]:
 File header:
 
 ```python
-"""Trimmed derivative of ksimback/looper scripts/looper.py (MIT, (c) Kevin
+"""Trimmed derivative of the Looper plan source scripts/looper.py (MIT, (c) Kevin
 Simback). Validator + renderer only; model detection, the external runner, and
 session-prompt emission are intentionally omitted. See looper_plan/VENDORED.md."""
 from __future__ import annotations

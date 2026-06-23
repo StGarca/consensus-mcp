@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ksimback/looper/schema/loop.resolved.v1.json",
+  "$id": "consensus-mcp/looper-plan/loop.resolved.v1",
   "title": "Looper resolved spec v1",
   "allOf": [
     { "$ref": "./loop.v1.schema.json" },

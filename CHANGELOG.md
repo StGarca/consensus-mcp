@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.1.0 - 2026-06-23
+
+**Consensus Build is now GA (no longer preview), and gains an opt-in Looper plan
+design-coach front-door.**
+
+- **Consensus Build promoted from preview to GA.** The architect-build loop
+  (workflow D) shipped in v2.0.0 (preview) and was hardened in v2.0.1; it has
+  carried real write-enabled builds under supervisor containment with two human
+  gates since. It is now a supported, stable mode. (The write-access caution
+  still applies - use it on reviewable work and roll-back-able repos; the
+  containment guarantee is the supervisor's integrity snapshot, not the CLI
+  sandbox, exactly as documented.)
+- **Looper plan front-door (opt-in, new).** At Build goal-setup you may now
+  launch **with or without a Looper plan**. *With* runs a design coach: it
+  interviews you against best-practice rubrics, forces a typed, checkable
+  verification taxonomy (programmatic / judge / human) and termination caps,
+  then **seeds** the Build goal (a synthesized `problem.md` + suggested frozen
+  gate / acceptance gates / caps, applied only on explicit confirmation). The
+  plan is the *design* layer; Consensus Build is the *executor*.
+  - Surgical by construction: **zero diff** to the Build supervisor, invariants,
+    gates, seals, and schemas. The plan only writes inputs Build already
+    consumes; its artifacts ride Build's existing architect-tree integrity
+    snapshot. Goal-id validation reuses Build's exact path rule.
+  - The Looper plan vendors an MIT-licensed loop-design coach; full attribution
+    is retained in `consensus_mcp/looper_plan/NOTICE` and `VENDORED.md`.
+  - Ratified by an anchored 3-AI consult (codex + grok + kimi, zero blocking
+    objections) and a codex Workflow B post-review.
+
 ## 2.0.1 - 2026-06-11
 
 **Consensus Build hardening pass** - six verified gaps closed, ratified by
