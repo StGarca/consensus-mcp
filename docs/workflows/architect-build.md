@@ -64,6 +64,34 @@ Goal ids must match `[A-Za-z0-9][A-Za-z0-9._-]*` and may not be a Windows
 reserved device name (CON, NUL, COM1...) or end with a dot - the layout has
 to stay addressable on every platform.
 
+#### Optional: design with a Looper plan (design coach)
+
+At goal setup you may launch Build **with or without a Looper plan**. The host
+should offer the choice: *"Design with a Looper plan first (design coach), or go
+direct (Build execution loop)?"*
+
+- **Without** (default): write `problem.md` yourself, as above. Nothing changes.
+- **With**: invoke the `consensus-looper-plan` skill against the goal id. It is a
+  vendored, trimmed slice of `ksimback/looper` (MIT) that **coaches** a sharp
+  goal, typed verification (programmatic / judge / human), and termination caps
+  against built-in rubrics, then **seeds** this goal: it writes a synthesized
+  `problem.md` (the architect's context), a `looper-plan/` directory
+  (`loop.yaml` + `loop.resolved.json` + `LOOP.md` design preview), a
+  `looper-suggestions.yaml`, and a `looper-plan-manifest.yaml`. It then presents
+  the suggested frozen `verification` command + `acceptance_gates` + cycle/budget
+  caps for explicit confirmation (suggest+confirm - nothing lands in
+  `.consensus/config.yaml` silently). After that you run `step` exactly as below.
+
+Looper is the **design layer**; Consensus Build is the **executor** (Looper's own
+docs defer durable orchestration to a tool like Build). The integration is
+surgical by construction: the supervisor, invariants, gates, seals, and schemas
+get a **zero diff** - Looper only produces inputs Build already consumes
+(`problem.md` + goal-dir context). The looper artifacts are written once at
+goal-setup, before the first builder dispatch, and are write-once-immutable: the
+existing architect-tree integrity recheck covers them for free, and the wizard
+refuses to re-coach a goal Build has already begun. See
+`docs/superpowers/specs/2026-06-23-consensus-build-looper-plan-design.md`.
+
 ### 3. Run the loop
 
 ```bash
