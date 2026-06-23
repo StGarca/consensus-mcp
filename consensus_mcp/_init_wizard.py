@@ -160,6 +160,8 @@ _CLAUDE_EXTENSION_FILES = (
     # transferable consensus-mcp memories forward into any project that
     # runs `consensus-init --install-claude-code`.
     ("skills/consensus-workflow/SKILL.md", "skills/consensus-workflow/SKILL.md"),
+    # v2.1.0: the Looper plan design-coach wizard (opt-in Build front-door).
+    ("skills/consensus-looper-plan/SKILL.md", "skills/consensus-looper-plan/SKILL.md"),
     # v1.21: vendored Superpowers skills (MIT, obra/superpowers v5.1.0 @ f2cbfbe),
     # adapted to hand off to consensus. Ship the attribution alongside. The 4 spine
     # skills (brainstorming, requesting/receiving-code-review,
