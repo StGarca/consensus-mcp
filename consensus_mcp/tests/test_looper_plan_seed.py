@@ -76,6 +76,22 @@ def test_assert_safe_to_coach_refuses_when_cycle_dir_exists(tmp_path):
         seed.assert_safe_to_coach(tmp_path)
 
 
+# --- Post-review rev-001: goal-id validation reuses Build's exact rule --------
+
+def test_resolve_goal_dir_rejects_malicious_ids(tmp_path):
+    from consensus_mcp._architect_paths import ArchitectPathError
+    for bad in ("../evil", "a/b", "..", "CON", "x.", ".hidden"):
+        with pytest.raises(ArchitectPathError):
+            seed.resolve_goal_dir(tmp_path, bad)
+
+
+def test_resolve_goal_dir_accepts_valid_and_stays_under_architect(tmp_path):
+    g = seed.resolve_goal_dir(tmp_path, "my-goal.1")
+    assert g.name == "my-goal.1"
+    assert "architect" in g.parts
+    assert str(g).startswith(str(tmp_path))
+
+
 # --- Task 7: orchestration ----------------------------------------------------
 
 def test_seed_build_inputs_writes_all_artifacts(tmp_path):

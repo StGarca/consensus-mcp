@@ -21,6 +21,20 @@ import subprocess
 from pathlib import Path
 
 
+def resolve_goal_dir(repo_root, goal_id: str):
+    """Validated goal-dir resolver (post-review rev-001). Delegates to Build's
+    OWN _architect_paths.goal_dir so the looper front-door uses the EXACT goal-id
+    rule (no path separators / traversal / Windows-reserved name / leading dot /
+    trailing dot) and can only resolve under <repo>/.consensus/architect/.
+    Raises _architect_paths.ArchitectPathError on a bad id. The wizard MUST call
+    this before any mkdir/write so a malformed goal id can never escape the goal
+    tree. Importing _architect_paths here is read-only reuse (single source of
+    truth), not a Build modification - the Build path still never imports
+    looper_plan."""
+    from consensus_mcp import _architect_paths as ap
+    return ap.goal_dir(repo_root, goal_id)
+
+
 def _criteria(resolved: dict) -> list:
     return resolved.get("goal", {}).get("verification", [])
 
