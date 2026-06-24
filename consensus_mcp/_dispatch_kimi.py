@@ -733,9 +733,20 @@ def _is_kimi_code_cli(resolved_bin: str) -> bool:
     The legacy Python/Typer kimi-cli uses --quiet/--thinking/--work-dir with
     prompt on stdin. The new Kimi Code native CLI uses `-p/--prompt`, has no
     --quiet or --work-dir flags, and takes cwd from subprocess cwd.
+
+    When the binary can't be resolved to a real path (e.g. kimi not installed
+    on CI), default to True — the Kimi Code CLI is the current default; the
+    legacy kimi-cli is the superseded path.
     """
     p = Path(resolved_bin)
-    return p.name == "kimi" and ".kimi-code" in str(p)
+    if ".kimi-code" in str(p):
+        return True
+    # Unresolved bare "kimi" (not found on PATH or under ~/.kimi-code):
+    # default to the new CLI. A resolved legacy install would have a real
+    # directory prefix (e.g. /usr/bin/kimi) and no ".kimi-code" segment.
+    if p.name == "kimi" and str(p) == "kimi":
+        return True
+    return False
 
 
 def _get_kimi_version(kimi_bin: str) -> str:
