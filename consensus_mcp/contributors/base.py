@@ -133,7 +133,7 @@ class DispatchPacket:
     reviewer_id: str | None     # if None, contributor adapter derives
     pass_id: str | None         # if None, contributor adapter derives
     timeout_seconds: int = 600
-    # Phase-specific extras (e.g., {model: 'gemini-2.5-pro'} for gemini)
+    # Phase-specific extras (e.g., {model: 'Gemini 3.1 Pro (High)'} for gemini)
     adapter_options: dict | None = None
 
 

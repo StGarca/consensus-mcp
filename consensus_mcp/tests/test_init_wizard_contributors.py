@@ -95,8 +95,8 @@ def test_select_contributors_interactive_min2_ok_first_try(monkeypatch):
 def test_select_contributors_interactive_empty_accepts_prechecked(monkeypatch):
     """Empty input accepts the pre-checked (installed) default set when >=2."""
     profiles = wiz._load_merged_profiles(None)
-    # codex + gemini installed -> pre-checked; claude host always available too.
-    installed = {"codex", "gemini"}
+    # codex + Antigravity/Gemini installed -> pre-checked; claude host always available too.
+    installed = {"codex", "agy"}
     monkeypatch.setattr(
         wiz.shutil, "which",
         lambda name: f"/usr/bin/{name}" if name in installed else None,
@@ -188,7 +188,7 @@ def test_detect_guide_uses_linux_install_on_linux(monkeypatch, capsys):
     monkeypatch.setattr(wiz.shutil, "which", lambda name: None)
     wiz._detect_and_guide(["gemini"], profiles)
     out = capsys.readouterr().out
-    assert "npm install -g @google/gemini-cli" in out
+    assert "Install Google Antigravity CLI (agy)" in out
 
 
 def test_detect_guide_darwin_falls_back_to_linux_when_absent(monkeypatch, capsys):
@@ -198,7 +198,7 @@ def test_detect_guide_darwin_falls_back_to_linux_when_absent(monkeypatch, capsys
     monkeypatch.setattr(wiz.shutil, "which", lambda name: None)
     wiz._detect_and_guide(["kimi"], profiles)  # kimi has no darwin install key
     out = capsys.readouterr().out
-    assert "pipx install kimi-cli" in out  # linux fallback
+    assert "pipx install kimi" in out  # linux fallback
 
 
 def test_detect_guide_present_cli_prints_nothing(monkeypatch, capsys):

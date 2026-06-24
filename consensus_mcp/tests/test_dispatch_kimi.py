@@ -458,11 +458,12 @@ def _make_factory(stdout_lines, returncode, captured_cmd, captured_env, captured
 
 
 def test_invoke_kimi_builds_expected_argv():
-    """FIX TRACK 2 (B4/H3): the argv is the verified kimi.yaml STDIN-transport
-    profile - `kimi --quiet --thinking --work-dir <workdir>` with the prompt on
-    STDIN. Kimi CLI 1.46.0 documents --quiet as print mode, so containment is
-    provided by the disposable workdir and integrity checks, not by read-only
-    CLI behavior. NO --afk and NO -p."""
+    """New Kimi Code CLI uses prompt mode: `kimi -p <prompt> --output-format text`.
+
+    The binary lives at ~/.kimi-code/bin/kimi (resolved by the dispatcher when
+    PATH is stale). It has no --quiet/--thinking/--work-dir flags; project
+    context comes from subprocess cwd=repo_root.
+    """
     review_line = b"OK final answer"
     captured_cmd: list = []
     captured_env: list = []
@@ -478,46 +479,37 @@ def test_invoke_kimi_builds_expected_argv():
     )
     assert out == "OK final answer"
     cmd = captured_cmd[0]
-    # Verified kimi.yaml profile: --quiet --thinking --work-dir, stdin prompt.
-    assert "--quiet" in cmd
-    assert "--thinking" in cmd
-    assert "--work-dir" in cmd
-    assert str(Path("/tmp/workdir-copy")) in cmd  # OS-native sep (Windows: \tmp\...)
-    # Do not request explicit afk/yolo behavior, and keep stdin transport.
-    assert "--print" not in cmd
-    assert "--afk" not in cmd
-    assert "-p" not in cmd
-    assert "--output-format" not in cmd
-    assert "stream-json" not in cmd
-    assert "--final-message-only" not in cmd
-    assert "--max-steps-per-turn" not in cmd
-    # The FULL prompt is NOT on argv (no -p); it flows through stdin.
-    assert "REVIEW PROMPT BODY" not in cmd
-    assert captured_procs[0].stdin.written == b"REVIEW PROMPT BODY"
+    assert cmd[0].endswith("/kimi") or cmd[0] == "kimi"
+    assert "-p" in cmd
+    assert cmd[cmd.index("-p") + 1] == "REVIEW PROMPT BODY"
+    assert "--output-format" in cmd
+    assert cmd[cmd.index("--output-format") + 1] == "text"
+    assert "--quiet" not in cmd
+    assert "--thinking" not in cmd
+    assert "--work-dir" not in cmd
+    assert captured_procs[0].stdin.written == b""
 
 
-def test_invoke_kimi_writes_large_prompt_to_stdin():
-    """H3: a >128KB prompt (over the POSIX single-arg limit) must flow through
-    STDIN, not argv. Confirms the full payload is written to the subprocess
-    stdin and never appears on the command line."""
-    big_prompt = "X" * (200 * 1024)  # 200 KB, well over the ~128KB POSIX arg cap
-    review_line = b"OK"
+def test_invoke_kimi_large_prompt_fails_closed_for_kimi_code_cli():
+    """New Kimi Code CLI has no documented stdin/prompt-file transport.
+
+    A prompt over the safe inline argv ceiling must fail before subprocess rather
+    than crashing opaquely with E2BIG.
+    """
+    big_prompt = "X" * (200 * 1024)
     captured_cmd: list = []
     captured_env: list = []
-    captured_procs: list = []
-    factory = _make_factory([review_line], 0, captured_cmd, captured_env, captured_procs)
-    _dispatch_kimi._invoke_kimi(
-        prompt=big_prompt,
-        kimi_bin="kimi",
-        timeout_seconds=1800,
-        repo_root=Path("/tmp/workdir-copy"),
-        poll_interval=0.0,
-        popen_factory=factory,
-    )
-    cmd = captured_cmd[0]
-    assert big_prompt not in cmd  # not on argv (would blow the arg-size limit)
-    assert captured_procs[0].stdin.written == big_prompt.encode("utf-8")
-
+    factory = _make_factory([b"OK"], 0, captured_cmd, captured_env)
+    with pytest.raises(_dispatch_kimi.KimiInvocationError, match="inline argv size"):
+        _dispatch_kimi._invoke_kimi(
+            prompt=big_prompt,
+            kimi_bin="kimi",
+            timeout_seconds=1800,
+            repo_root=Path("/tmp/workdir-copy"),
+            poll_interval=0.0,
+            popen_factory=factory,
+        )
+    assert captured_cmd == []
 
 def test_invoke_kimi_scrubs_keys_in_subprocess_env(monkeypatch):
     monkeypatch.setenv("KIMI_API_KEY", "sk-stray-kimi")

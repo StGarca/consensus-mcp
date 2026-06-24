@@ -26,7 +26,7 @@
 #   ~/.grok/auth.json (mode 600).
 name: grok
 kind: cli_reviewer
-model: ""  # empty -> let grok CLI default; operator can override via config
+model: "Grok Build"  # normalized to CLI id grok-build when invoking grok
 detect:
   command: grok
 invoke:

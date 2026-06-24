@@ -51,6 +51,14 @@ SCHEMA = {
                 "type": ["string", "null"],
                 "description": "Pass identifier; defaults to '<reviewer_id>-pass1'.",
             },
+            "kimi_bin": {
+                "type": ["string", "null"],
+                "description": "Kimi CLI binary; default kimi-cli.",
+            },
+            "model": {
+                "type": ["string", "null"],
+                "description": "Kimi model passed via --model; default K2.7 Code High Speed.",
+            },
             "timeout_seconds": {
                 "type": ["integer", "null"],
                 "description": (
@@ -134,6 +142,8 @@ def _build_argv(
     iteration_dir: str,
     reviewer_id: str | None,
     pass_id: str | None,
+    kimi_bin: str | None,
+    model: str | None,
     timeout_seconds: int | None,
     review_target_path: str | None,
     smoke: bool | None,
@@ -148,6 +158,10 @@ def _build_argv(
         argv += ["--reviewer-id", reviewer_id]
     if pass_id is not None:
         argv += ["--pass-id", pass_id]
+    if kimi_bin is not None:
+        argv += ["--kimi-bin", kimi_bin]
+    if model is not None:
+        argv += ["--model", model]
     if timeout_seconds is not None:
         argv += ["--timeout-seconds", str(timeout_seconds)]
     if review_target_path is not None:
@@ -165,6 +179,8 @@ def handle(
     iteration_dir: str,
     reviewer_id: str | None = None,
     pass_id: str | None = None,
+    kimi_bin: str | None = None,
+    model: str | None = None,
     timeout_seconds: int | None = None,
     review_target_path: str | None = None,
     smoke: bool | None = None,
@@ -183,6 +199,8 @@ def handle(
         iteration_dir=iteration_dir,
         reviewer_id=reviewer_id,
         pass_id=pass_id,
+        kimi_bin=kimi_bin,
+        model=model,
         timeout_seconds=timeout_seconds,
         review_target_path=review_target_path,
         smoke=smoke,

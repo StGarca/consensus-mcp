@@ -360,3 +360,20 @@ Consequence: **builder-owned lane commits stay closed (v2 deferred).** A
 refuted confinement hypothesis means the supervisor must keep owning git
 and keep treating lane content as untrusted; the integrity snapshots are
 not a backstop you can lean off of - they are the boundary.
+
+
+## Loop-4 harness-improvement proposals
+
+`harness.propose` / `consensus-mcp-harness-propose` is a proposal-only trace
+analyzer. It reads consensus trace ledgers such as
+`consensus-state/state/results-v1.jsonl`, `outcome-ledger.jsonl`, and
+`dispatch-log.jsonl`, then writes a `harness-proposal.yaml` with evidence-backed
+recommendations for prompts, rubrics, validators, workflow docs, or tests.
+
+Safety boundary: the proposal tool never edits source, config, rubrics, prompts,
+or workflow files. A harness proposal is only input to a later human-approved
+consensus consult/build cycle; it does not approve or apply any change by itself.
+
+Looper judge/human criteria are likewise advisory. Consensus Build surfaces them
+in `HANDOFF.md` and reviewer/architect prompts for accountability, but they are
+not deterministic gates and must not replace frozen programmatic verification.

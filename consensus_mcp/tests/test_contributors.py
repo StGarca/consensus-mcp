@@ -346,13 +346,13 @@ def test_gemini_adapter_packet_options_override_config(tmp_path):
         timeout_seconds=60,
         adapter_options={"model": "gemini-2.5-flash"},  # per-packet override
     )
-    adapter = GeminiAdapter(adapter_config={"model": "gemini-2.5-pro"})  # static config
+    adapter = GeminiAdapter(adapter_config={"model": "Gemini 3.1 Pro (High)"})  # static config
     with patch("consensus_mcp._dispatch_gemini.main", side_effect=fake_main):
         adapter.dispatch(packet)
     # packet's option wins.
     assert "--model" in captured_argv
     assert "gemini-2.5-flash" in captured_argv
-    assert "gemini-2.5-pro" not in captured_argv
+    assert "Gemini 3.1 Pro (High)" not in captured_argv
 
 
 def test_codex_adapter_raises_on_missing_sealed_path(tmp_path):
@@ -423,11 +423,11 @@ def test_gemini_adapter_includes_model_when_configured(tmp_path):
         review_target_path=None, reviewer_id=None, pass_id=None,
         timeout_seconds=60, adapter_options=None,
     )
-    adapter = GeminiAdapter(adapter_config={"model": "gemini-2.5-pro"})
+    adapter = GeminiAdapter(adapter_config={"model": "Gemini 3.1 Pro (High)"})
     with patch("consensus_mcp._dispatch_gemini.main", side_effect=fake_main):
         art = adapter.dispatch(packet)
     assert "--model" in captured_argv
-    assert "gemini-2.5-pro" in captured_argv
+    assert "Gemini 3.1 Pro (High)" in captured_argv
     assert art.contributor == "gemini"
 
 

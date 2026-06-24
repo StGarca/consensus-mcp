@@ -55,6 +55,9 @@ class GeminiAdapter(ContributorAdapter):
         merged_options = {}
         merged_options.update(self.adapter_config or {})
         merged_options.update(packet.adapter_options or {})
+        command = merged_options.get("command") or merged_options.get("gemini_bin")
+        if command:
+            argv += ["--gemini-bin", command]
         model = merged_options.get("model")
         if model:
             argv += ["--model", model]

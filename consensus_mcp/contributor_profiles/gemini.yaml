@@ -1,4 +1,4 @@
-# Built-in contributor profile: gemini (Google Gemini CLI).
+# Built-in contributor profile: gemini (Google Antigravity / agy CLI).
 #
 # METADATA-ONLY in v1.18.0: gemini is dispatched by the EXISTING GeminiAdapter via
 # B-routing. This profile supplies the wizard list, detect+guide install/auth, the
@@ -6,18 +6,18 @@
 # ProfileAdapter. Full metadata is authored for the wizard + forward-compat.
 #
 # install/auth strings VERIFIED 2026-05-22 (do NOT invent):
-#   npm package: @google/gemini-cli ; auth: run `gemini` -> OAuth in browser.
+#   Google Antigravity CLI; auth: run `agy` -> OAuth / Antigravity login flow.
 #   env GEMINI_CLI_TRUST_WORKSPACE=true is REQUIRED for headless empty-output
 #   runs on gemini CLI >=0.43 (see reference_gemini_trust_workspace).
 name: gemini
 kind: cli_reviewer
-model: "gemini-2.5-pro"
+model: "Gemini 3.1 Pro (High)"
 detect:
-  command: gemini
+  command: agy
 invoke:
   # METADATA-ONLY: gemini is dispatched by GeminiAdapter, not ProfileAdapter.
-  # transport=flag with prompt_flag=-p reflects the real gemini CLI invocation
-  # (gemini -p "<prompt>") and validates clean.
+  # transport=flag with prompt_flag=-p reflects the real Antigravity CLI invocation
+  # (agy -p "<prompt>") and validates clean.
   transport: flag
   base_args: []
   prompt_flag: "-p"
@@ -31,12 +31,12 @@ output:
 sealed_filename: gemini-review.yaml
 id_prefix: gemini-rev
 install:
-  windows: "npm install -g @google/gemini-cli"
-  linux: "npm install -g @google/gemini-cli"
+  windows: "Install Google Antigravity CLI (agy) from Google Antigravity distribution"
+  linux: "Install Google Antigravity CLI (agy) from Google Antigravity distribution"
 auth:
-  command: "gemini"
+  command: "agy"
   env_vars: []
-  note: "OAuth on first run (browser)"
+  note: "OAuth / Antigravity login on first run"
 instructions:
   filename: GEMINI.md
 timeout_seconds: 1800

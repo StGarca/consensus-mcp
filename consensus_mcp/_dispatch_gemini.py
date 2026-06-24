@@ -1,4 +1,4 @@
-"""Phase 4 v1.14.0 - auto-gemini-dispatch helper (gemini adapter).
+"""Phase 4 v1.14.0 - auto-gemini-dispatch helper (Gemini/Antigravity adapter).
 
 Sibling of _dispatch_codex.py. Reuses generic dispatch infrastructure from
 _dispatch_base.py (extracted in iter-0010); supplies gemini-specific code:
@@ -26,8 +26,8 @@ USAGE
       [--prompt-template <path>] \\
       [--mode {review,proposal}] \\
       [--schema <path>]                    # proposal-mode only \\
-      [--gemini-bin <path>] \\
-      [--model gemini-2.5-pro] \\
+      [--gemini-bin <path>]                    # default: agy \\
+      [--model Gemini 3.1 Pro (High)] \\
       [--timeout-seconds 600] \\
       [--review-target <path>] \\
       [--smoke]
@@ -103,8 +103,9 @@ _ALLOWED_FINDING_KEYS = set(_REQUIRED_FINDING_FIELDS) | {"patch_proposal", "patc
 _ALLOWED_TOP_LEVEL_KEYS = {"findings", "goal_satisfied", "blocking_objections", "goal_satisfied_rationale"}
 _BLOCKING_SEVERITIES = {"blocking", "critical"}
 
-# Default gemini model. Operator can override via --model.
-_DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
+# Default Antigravity/Gemini CLI binary and model. Operator can override via flags/config.
+_DEFAULT_GEMINI_BIN = "agy"
+_DEFAULT_GEMINI_MODEL = "Gemini 3.1 Pro (High)"
 
 
 class GeminiInvocationError(RuntimeError):
@@ -147,7 +148,7 @@ def _gemini_subprocess_env() -> dict:
 
 
 def _resolve_gemini_bin(gemini_bin: str) -> str:
-    """Resolve a gemini binary spec to an actual executable file path.
+    """Resolve an Antigravity/Gemini binary spec to an actual executable file path.
 
     Mirrors _resolve_codex_bin's Windows hardening: PATHEXT-aware lookup,
     .cmd preference over .ps1, App Execution Alias rejection, MSYS-path
@@ -283,13 +284,28 @@ def _invoke_gemini(
         popen_factory = subprocess.Popen
     can_log = log_path is not None and anchors is not None
 
-    cmd = [
-        _resolve_gemini_bin(gemini_bin),
-        "-p", "Now respond. Output ONLY the JSON described above; no prose, no markdown fences.",
-        "-m", model,
-        "--approval-mode", "plan",
-        "--skip-trust",
-    ]
+    resolved_bin = _resolve_gemini_bin(gemini_bin)
+    bin_name = Path(resolved_bin).name.lower()
+    if bin_name in {"agy", "agy.exe"}:
+        # Google Antigravity (`agy`) supersedes the old gemini CLI for this
+        # adapter in current operator environments. Its print-mode flag is still
+        # `-p`, but model selection is `--model` (not `-m`) and it does not
+        # support gemini-cli's `--approval-mode` / `--skip-trust` flags.
+        cmd = [
+            resolved_bin,
+            "-p", "Now respond. Output ONLY the JSON described above; no prose, no markdown fences.",
+            "--model", model,
+            "--sandbox",
+            "--print-timeout", f"{max(1, int(timeout_seconds))}s",
+        ]
+    else:
+        cmd = [
+            resolved_bin,
+            "-p", "Now respond. Output ONLY the JSON described above; no prose, no markdown fences.",
+            "-m", model,
+            "--approval-mode", "plan",
+            "--skip-trust",
+        ]
     if sys.platform == "win32":
         popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     else:
@@ -306,7 +322,7 @@ def _invoke_gemini(
             **popen_kwargs,
         )
     except FileNotFoundError:
-        raise GeminiInvocationError(f"gemini binary not found: {gemini_bin}") from None
+        raise GeminiInvocationError(f"Antigravity/Gemini binary not found: {gemini_bin}") from None
 
     # codex-rev-001 round-1 fix: start readers + watchdog BEFORE writing stdin.
     # Gemini may emit output (or refuse to drain its stdin) before we finish
@@ -829,7 +845,7 @@ def main(argv: list[str] | None = None) -> int:
                          "mode (review-mode validation is template-embedded per the "
                          "existing gemini contract). When unset in proposal mode, "
                          "defaults to dispatch_templates/gemini_proposal_schema.json."))
-    p.add_argument("--gemini-bin", default="gemini")
+    p.add_argument("--gemini-bin", default=_DEFAULT_GEMINI_BIN)
     p.add_argument("--model", default=_DEFAULT_GEMINI_MODEL)
     p.add_argument("--timeout-seconds", type=int, default=600)
     p.add_argument("--review-target", default=None)

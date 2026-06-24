@@ -8,6 +8,12 @@ calls (exact files, behaviors, acceptance checks).
 ## PROBLEM
 {problem_statement}
 
+## DESIGN CRITERIA POLICY
+If the problem includes a "Design criteria (NON-AUTOMATION)" section, carry
+those judge/human criteria into the spec as advisory acceptance/accountability
+notes. Do NOT convert them into deterministic pass/fail gates; programmatic
+verification remains the only auto-gate material.
+
 ## OUTPUT
 Respond ONLY with JSON: {"body": "<the full spec text>",
 "kill_criteria": "<when the goal should be abandoned>"}
