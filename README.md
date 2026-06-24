@@ -88,10 +88,12 @@ thing size changes is the default agreement rule (2 AIs: both must agree;
 
 ## Maturity
 
-Both modes are stable and in daily use. **2,309 tests green** on Linux +
-Windows / Python 3.11+, ASCII-only tree, every reviewer pluggable by config,
-no Claude required. This project reviews itself through its own cross-AI
-cycle.
+Both modes are stable and in daily use. In **134 review iterations on its own
+code**, the panel logged **548 findings — 156 of them blocking or critical** —
+each addressed before the change merged (fixed, or dismissed with the evidence
+that disproved it). **2,309 tests green** on Linux + Windows / Python 3.11+,
+ASCII-only tree, every reviewer pluggable by config, no Claude required. This
+project reviews itself through its own cross-AI cycle.
 
 - [Releases](https://github.com/StGarca/consensus-mcp/releases) /
   [CHANGELOG.md](CHANGELOG.md)
