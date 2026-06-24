@@ -1,6 +1,6 @@
-"""Zero-diff / byte-identity guards (Task 9): the Build path must never reference
-or import the looper_plan package. The looper front-door lives only at
-goal-setup; the supervisor is untouched."""
+"""Zero-diff / byte-identity guards (Task 9): execution supervisors must never
+reference or import the looper_plan package. Handoff may surface Looper-origin
+advisory criteria, but the supervisor/routing path stays untouched."""
 import importlib
 import sys
 from pathlib import Path
@@ -9,7 +9,6 @@ import pytest
 
 _SUPERVISOR_SOURCES = [
     "consensus_mcp/_architect_lane.py",
-    "consensus_mcp/_architect_handoff.py",
     "consensus_mcp/_architect_paths.py",
     "consensus_mcp/_dispatch_builder.py",
     "consensus_mcp/tools/architect_loop_step.py",

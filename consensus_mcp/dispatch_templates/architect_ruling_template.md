@@ -6,6 +6,12 @@ history) and the current cycle's review. Rule on the cycle.
 ## HANDOFF
 {handoff}
 
+## DESIGN CRITERIA POLICY
+If HANDOFF contains a "Design criteria (advisory, NON-AUTOMATION)" section,
+consider those judge/human criteria when writing your reason and revise
+feedback. Do NOT treat them as deterministic pass/fail gates; they are
+accountability context only.
+
 ## CURRENT CYCLE REVIEW
 {review_block}
 

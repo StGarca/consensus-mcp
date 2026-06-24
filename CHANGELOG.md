@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.0 - 2026-06-24
+
+**Consensus loop-optimization pass: trace-derived harness proposals and
+advisory Looper criteria propagation.**
+
+- Added `harness.propose` / `consensus-mcp-harness-propose`, a read-only
+  proposal generator that scans existing trace ledgers and emits schema-valid
+  harness-improvement proposals. It records evidence and candidate scopes, but
+  explicitly requires human approval and a later consensus-gated build before
+  any source/config mutation.
+- Preserved Looper judge/human criteria as NON-AUTOMATION advisory design
+  criteria and surfaced them through Build handoff, architect prompts, reviewer
+  prompts, and workflow docs without making them deterministic gates.
+- Updated the Gemini reviewer path for Antigravity: the dispatch binary is now
+  `agy`, and the default consensus model is `Gemini 3.1 Pro (High)`.
+- Updated Grok and Kimi reviewer dispatch normalization so user-facing model
+  labels (`Grok Build`, `K2.7 Code High Speed`) are preserved while subprocess
+  invocations use the provider CLI IDs they accept.
+- Added regression coverage for harness proposal generation, advisory criteria
+  propagation, Antigravity/Gemini dispatch, Kimi dispatch, contributor profiles,
+  and related config adapters.
+
 ## 2.1.1 - 2026-06-23
 
 **Install hot-patch: `--install-claude-code` now ships the Looper plan skill.**

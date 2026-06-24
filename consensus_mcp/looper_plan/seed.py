@@ -92,9 +92,16 @@ def map_verification(resolved: dict) -> dict:
             frozen = cmd
         acceptance.append({"id": c["id"], "description": f"{c['id']} ({c.get('expect')})",
                            "check": cmd, "needs_operator_edit": not clean})
+    # Judge/human criteria are deliberately NOT executable Build gates. They
+    # remain advisory design criteria, but preserve their rubric/prompt text so
+    # HANDOFF/reviewer/ruling surfaces can hold humans and judges accountable to
+    # them without turning subjective judgement into an unsafe auto-pass gate.
     return {"frozen_verification": frozen,
             "acceptance_gates": acceptance,
-            "design_criteria": [{"id": c["id"], "type": c["type"]} for c in design]}
+            "design_criteria": [
+                {k: c[k] for k in ("id", "type", "rubric", "prompt") if k in c}
+                for c in design
+            ]}
 
 
 class ReCoachRefused(RuntimeError):

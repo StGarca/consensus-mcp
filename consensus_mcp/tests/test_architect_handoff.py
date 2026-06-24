@@ -178,3 +178,34 @@ def test_handoff_window_correct_with_pruned_cycles(tmp_path: Path):
     assert "cycle 3 work" not in text and "cycle 5 work" not in text
     assert "older cycles 3..5" in text
     assert "older cycles 1.." not in text
+
+
+
+def test_handoff_renders_problem_design_criteria_advisory(tmp_path: Path):
+    goal = _goal_with_cycles(tmp_path, 1)
+    (goal / ap.PROBLEM_FILENAME).write_text(
+        "# g\n\n## Design criteria (NON-AUTOMATION - architect/reviewer/human judgment, NOT executable gates)\n\n"
+        "- `covers` (judge rubric): every step has an owner\n\n## Other\nignore\n",
+        encoding="utf-8",
+    )
+    text = hf.render_handoff(
+        goal, roles={"architect": "claude", "builder": "codex", "reviewer": "gemini"}
+    )
+    assert "Design criteria (advisory, NON-AUTOMATION)" in text
+    assert "every step has an owner" in text
+    assert "not deterministic gates" in text
+    assert "ignore" not in text
+
+
+def test_handoff_design_criteria_block_is_capped(tmp_path: Path):
+    goal = _goal_with_cycles(tmp_path, 1)
+    (goal / ap.PROBLEM_FILENAME).write_text(
+        "# g\n\n## Design criteria (NON-AUTOMATION - architect/reviewer/human judgment, NOT executable gates)\n\n"
+        + ("x" * 5000),
+        encoding="utf-8",
+    )
+    text = hf.render_handoff(
+        goal, roles={"architect": "claude", "builder": "codex", "reviewer": "gemini"}
+    )
+    assert "...[truncated]" in text
+    assert len(text) < 5000

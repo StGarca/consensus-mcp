@@ -9,11 +9,11 @@
 # so the label below must be accurate (see converged-plan provenance gate).
 #
 # install/auth strings VERIFIED 2026-05-22 (do NOT invent):
-#   pipx package: kimi-cli ; auth: `kimi login` (OAuth/subscription, interactive).
+#   pipx package: kimi ; auth: `kimi login` (OAuth/subscription, interactive).
 #   stdin transport (NOT -p), --quiet --thinking, -w sets workdir for project ctx.
 name: kimi
 kind: cli_reviewer
-model: "kimi-code/kimi-for-coding (managed, +thinking)"
+model: "K2.7 Code High Speed"
 detect:
   command: kimi
 invoke:
@@ -23,7 +23,7 @@ invoke:
     - "--thinking"
   prompt_flag: null        # stdin transport -> no prompt flag
   workdir_flag: "-w"       # sets cwd so the CLI loads project context
-  model_flag: null
+  model_flag: "--model"
 env: {}
 output:
   strip_patterns:
@@ -32,8 +32,8 @@ output:
 sealed_filename: kimi-review.yaml
 id_prefix: kimi-rev
 install:
-  windows: "pipx install kimi-cli"
-  linux: "pipx install kimi-cli"
+  windows: "pipx install kimi"
+  linux: "pipx install kimi"
 auth:
   command: "kimi login"
   env_vars: []

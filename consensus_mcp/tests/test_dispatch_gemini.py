@@ -292,7 +292,7 @@ def test_retry_succeeds_on_first_attempt(monkeypatch):
     raw, parsed = _dispatch_gemini._invoke_gemini_with_retry(
         prompt="initial",
         gemini_bin="gemini",
-        model="gemini-2.5-pro",
+        model="Gemini 3.1 Pro (High)",
         timeout_seconds=60,
         repo_root=Path("."),
     )
@@ -311,7 +311,7 @@ def test_retry_succeeds_on_second_attempt(monkeypatch):
     raw, parsed = _dispatch_gemini._invoke_gemini_with_retry(
         prompt="initial",
         gemini_bin="gemini",
-        model="gemini-2.5-pro",
+        model="Gemini 3.1 Pro (High)",
         timeout_seconds=60,
         repo_root=Path("."),
     )
@@ -329,7 +329,7 @@ def test_retry_fails_when_both_attempts_invalid(monkeypatch):
         _dispatch_gemini._invoke_gemini_with_retry(
             prompt="initial",
             gemini_bin="gemini",
-            model="gemini-2.5-pro",
+            model="Gemini 3.1 Pro (High)",
             timeout_seconds=60,
             repo_root=Path("."),
         )
@@ -381,14 +381,14 @@ def test_wrapper_argv_all_args():
         pass_id="gemini-x-1-pass1",
         timeout_seconds=600,
         review_target_path="rp.yaml",
-        model="gemini-2.5-pro",
+        model="Gemini 3.1 Pro (High)",
         smoke=True,
     )
     assert "--reviewer-id" in argv and "gemini-x-1" in argv
     assert "--pass-id" in argv and "gemini-x-1-pass1" in argv
     assert "--timeout-seconds" in argv and "600" in argv
     assert "--review-target" in argv and "rp.yaml" in argv
-    assert "--model" in argv and "gemini-2.5-pro" in argv
+    assert "--model" in argv and "Gemini 3.1 Pro (High)" in argv
     assert "--smoke" in argv
 
 
@@ -529,3 +529,55 @@ def test_server_registers_gemini():
     from consensus_mcp.server import registry
     names = [t["name"] for t in registry.list_tools()]
     assert "reviewer.dispatch_gemini" in names
+
+
+
+def test_default_antigravity_binary_name_is_agy():
+    assert _dispatch_gemini._DEFAULT_GEMINI_BIN == "agy"
+
+
+
+def test_invoke_antigravity_uses_agy_flags(monkeypatch, tmp_path):
+    captured = {}
+
+    class _BytesPipe:
+        def __init__(self, lines=None):
+            self._lines = list(lines or [])
+            self.written = b""
+        def readline(self):
+            return self._lines.pop(0) if self._lines else b""
+        def write(self, data):
+            self.written += data
+            return len(data)
+        def close(self):
+            pass
+
+    class _Proc:
+        def __init__(self, cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["kwargs"] = kwargs
+            self.stdin = _BytesPipe()
+            self.stdout = _BytesPipe([b'{"findings": [], "goal_satisfied": true, "goal_satisfied_rationale": "ok", "blocking_objections": []}\n'])
+            self.stderr = _BytesPipe([])
+            self.returncode = 0
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(_dispatch_gemini, "_resolve_gemini_bin", lambda _bin: "agy")
+    out = _dispatch_gemini._invoke_gemini(
+        prompt="body",
+        gemini_bin="agy",
+        model="Gemini 3.1 Pro (High)",
+        timeout_seconds=60,
+        repo_root=tmp_path,
+        popen_factory=lambda cmd, **kwargs: _Proc(cmd, **kwargs),
+    )
+    assert '"goal_satisfied": true' in out
+    cmd = captured["cmd"]
+    assert cmd[0] == "agy"
+    assert "--model" in cmd and "Gemini 3.1 Pro (High)" in cmd
+    assert "--sandbox" in cmd
+    assert "--print-timeout" in cmd and "60s" in cmd
+    assert "-m" not in cmd
+    assert "--approval-mode" not in cmd
+    assert "--skip-trust" not in cmd

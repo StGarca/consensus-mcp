@@ -19,6 +19,7 @@ WINDOW = 5
 # Foreign-model text rendered into HANDOFF.md is capped to this many chars
 # so a single field cannot blow up the digest the flat-cost cap protects.
 _FOREIGN_FIELD_MAX = 1000
+_DESIGN_CRITERIA_MAX = 2000
 
 
 def _inline(value: object) -> str:
@@ -34,6 +35,34 @@ def _inline(value: object) -> str:
     text = " / ".join(str(value).splitlines())
     if len(text) > _FOREIGN_FIELD_MAX:
         text = text[:_FOREIGN_FIELD_MAX] + " ...[truncated]"
+    return text
+
+
+def _extract_problem_design_criteria(goal: Path) -> str:
+    """Return the Looper NON-AUTOMATION design-criteria block, if present.
+
+    Looper writes judge/human criteria into problem.md as advisory context. Build
+    surfaces that context to the architect/reviewer loop without making it a
+    deterministic gate, so HANDOFF renders a bounded copy for accountability.
+    """
+    problem = Path(goal) / ap.PROBLEM_FILENAME
+    try:
+        lines = problem.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return ""
+    out: list[str] = []
+    in_section = False
+    for line in lines:
+        if line.startswith("## Design criteria"):
+            in_section = True
+            continue
+        if in_section and line.startswith("## "):
+            break
+        if in_section:
+            out.append(line)
+    text = "\n".join(out).strip()
+    if len(text) > _DESIGN_CRITERIA_MAX:
+        text = text[:_DESIGN_CRITERIA_MAX] + "\n...[truncated]"
     return text
 
 
@@ -73,6 +102,16 @@ def render_handoff(goal: Path, *, roles: dict, profiles: dict | None = None) -> 
     lines.append("")
     lines.append(str(body))
     lines.append("")
+    design_criteria = _extract_problem_design_criteria(goal)
+    if design_criteria:
+        lines.append("## Design criteria (advisory, NON-AUTOMATION)")
+        lines.append(
+            "These Looper judge/human criteria are for architect/reviewer "
+            "accountability only; they are not deterministic gates."
+        )
+        lines.append("")
+        lines.append(design_criteria)
+        lines.append("")
     lines.append("## Cycle history")
     cycles = sorted(
         (

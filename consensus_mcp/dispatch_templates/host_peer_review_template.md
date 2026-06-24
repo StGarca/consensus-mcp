@@ -33,6 +33,13 @@ disk. Use ONLY the embedded contents below as your authoritative source.
 
 {acceptance_gates}
 
+# Design criteria (advisory, NON-AUTOMATION)
+
+If the embedded goal/problem/HANDOFF content contains a "Design criteria"
+section, consider those judge/human criteria when deciding whether the goal is
+satisfied. They are accountability context only: do NOT convert them into
+deterministic pass/fail gates and do NOT mark them as machine-verified.
+
 # Review target
 
 iteration_dir: {iteration_dir}

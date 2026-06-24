@@ -212,6 +212,10 @@ delivery_gate.register(registry)
 from consensus_mcp.tools import results  # noqa: E402
 results.register(registry)
 
+# Loop-4 harness improvement: proposal-only trace analyzer.
+from consensus_mcp.tools import harness_propose  # noqa: E402
+harness_propose.register(registry)
+
 
 # ---------------------------------------------------------------------------
 # Boot-time disposition check

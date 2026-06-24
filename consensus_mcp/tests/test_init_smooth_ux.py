@@ -63,7 +63,7 @@ def test_status_summary_lists_present_and_missing_clis(tmp_path, capsys, monkeyp
             return "/usr/bin/codex"
         if cmd == "consensus-mcp":
             return "/usr/bin/consensus-mcp"
-        if cmd in ("gemini",):
+        if cmd in ("gemini", "agy"):
             return None
         return real_which(cmd, *a, **k)
 

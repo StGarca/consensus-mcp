@@ -103,3 +103,12 @@ def test_seed_build_inputs_writes_all_artifacts(tmp_path):
     man = yaml.safe_load((tmp_path / "looper-plan-manifest.yaml").read_text())
     assert "problem.md" in man["files"]
     assert out["problem_md"].endswith("problem.md")
+
+
+
+def test_map_verification_preserves_design_criteria_text():
+    m = seed.map_verification(RESOLVED)
+    by_id = {d["id"]: d for d in m["design_criteria"]}
+    assert by_id["covers"]["rubric"] == "every step has an owner"
+    assert by_id["signoff"]["prompt"] == "client confirms"
+    assert not any(d["id"] == "covers" for d in m["acceptance_gates"])

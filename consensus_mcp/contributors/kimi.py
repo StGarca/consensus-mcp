@@ -47,6 +47,18 @@ class KimiAdapter(ContributorAdapter):
         if packet.review_target_path is not None:
             argv += ["--review-target", str(packet.review_target_path)]
 
+        # Merge precedence: adapter_config < packet.adapter_options, matching
+        # Gemini/Grok adapters. Lets project config pin kimi + K2.7 Code High Speed.
+        merged_options = {}
+        merged_options.update(self.adapter_config or {})
+        merged_options.update(packet.adapter_options or {})
+        command = merged_options.get("command") or merged_options.get("kimi_bin")
+        if command:
+            argv += ["--kimi-bin", command]
+        model = merged_options.get("model")
+        if model:
+            argv += ["--model", model]
+
         from consensus_mcp import _dispatch_kimi
 
         rc = 0

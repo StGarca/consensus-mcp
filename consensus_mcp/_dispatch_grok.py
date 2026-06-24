@@ -113,11 +113,17 @@ _ALLOWED_FINDING_KEYS = set(_REQUIRED_FINDING_FIELDS) | {"patch_proposal", "patc
 _ALLOWED_TOP_LEVEL_KEYS = {"findings", "goal_satisfied", "blocking_objections", "goal_satisfied_rationale"}
 _BLOCKING_SEVERITIES = {"blocking", "critical"}
 
-# Grok's CLI default model resolves to whatever `grok` itself picks; we
-# pass --model only when the operator overrides via --model on this
-# dispatcher (per converged plan D3 - let grok roll forward without
-# dispatcher releases). `None` here means "do not pass --model".
-_DEFAULT_GROK_MODEL: str | None = None
+# Default Grok model for this consensus workflow. `grok models` displays
+# this as "Grok Build" and exposes the CLI id as `grok-build`; dispatch
+# preserves the display label in config/provenance and normalizes for argv.
+_DEFAULT_GROK_MODEL: str | None = "Grok Build"
+_GROK_MODEL_ID_BY_DISPLAY = {"Grok Build": "grok-build"}
+
+
+def _resolve_grok_model(model: str | None) -> str | None:
+    if model is None:
+        return None
+    return _GROK_MODEL_ID_BY_DISPLAY.get(model, model)
 
 # Independence flag set passed on every invocation. Codified to the
 # operator-verified 2026-05-27 working shape (iter-0045 panel: codex
@@ -337,7 +343,7 @@ def _build_grok_cmd(
     cmd.extend(_GROK_DISABLED_TOOLS)
     cmd.extend(["--cwd", run_cwd])
     if model:
-        cmd.extend(["--model", model])
+        cmd.extend(["--model", _resolve_grok_model(model)])
     return cmd
 
 
@@ -998,9 +1004,8 @@ def main(argv: list[str] | None = None) -> int:
                          "dispatch_templates/grok_proposal_schema.json."))
     p.add_argument("--grok-bin", default="grok")
     p.add_argument("--model", default=_DEFAULT_GROK_MODEL,
-                   help=("Optional model id passed via grok --model. When unset, grok "
-                         "uses its own default - letting it roll forward without "
-                         "dispatcher releases."))
+                   help=("Grok model; default 'Grok Build' (normalized to CLI id "
+                         "grok-build when invoking grok)."))
     p.add_argument("--timeout-seconds", type=int, default=600)
     p.add_argument("--review-target", default=None)
     p.add_argument("--smoke", action="store_true",

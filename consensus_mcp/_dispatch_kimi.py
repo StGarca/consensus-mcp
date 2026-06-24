@@ -139,6 +139,17 @@ _DEFAULT_TIMEOUT_SECONDS = 1800
 # non-retryable EXCEPT this code.
 _KIMI_RETRYABLE_EXIT = 75
 
+_DEFAULT_KIMI_BIN = "kimi"
+_DEFAULT_KIMI_MODEL = "K2.7 Code High Speed"
+_KIMI_MODEL_ID_BY_DISPLAY = {"K2.7 Code High Speed": "kimi-code/kimi-for-coding"}
+_KIMI_CODE_INLINE_PROMPT_MAX_BYTES = (28 * 1024) if sys.platform == "win32" else (96 * 1024)
+
+
+def _resolve_kimi_model(model: str | None) -> str | None:
+    if model is None:
+        return None
+    return _KIMI_MODEL_ID_BY_DISPLAY.get(model, model)
+
 # Output chrome to strip before _extract_json_from_text. Sourced from the
 # verified kimi.yaml profile (output.strip_patterns). --quiet emits the final
 # answer text followed by a "To resume this session: kimi -r <id>" trailer;
@@ -685,6 +696,10 @@ def _resolve_kimi_bin(kimi_bin: str) -> str:
                 return _resolve_kimi_bin(cand)
 
     resolved = shutil.which(kimi_bin)
+    if resolved is None and kimi_bin == "kimi":
+        kimi_code_bin = Path.home() / ".kimi-code" / "bin" / "kimi"
+        if kimi_code_bin.exists():
+            return str(kimi_code_bin)
     if resolved is None:
         return kimi_bin
     if sys.platform == "win32" and resolved.lower().endswith(".ps1"):
@@ -710,6 +725,17 @@ def _resolve_kimi_bin(kimi_bin: str) -> str:
         except OSError:
             pass
     return resolved
+
+
+def _is_kimi_code_cli(resolved_bin: str) -> bool:
+    """True for the new Kimi Code CLI installed under ~/.kimi-code/bin/kimi.
+
+    The legacy Python/Typer kimi-cli uses --quiet/--thinking/--work-dir with
+    prompt on stdin. The new Kimi Code native CLI uses `-p/--prompt`, has no
+    --quiet or --work-dir flags, and takes cwd from subprocess cwd.
+    """
+    p = Path(resolved_bin)
+    return p.name == "kimi" and ".kimi-code" in str(p)
 
 
 def _get_kimi_version(kimi_bin: str) -> str:
@@ -801,6 +827,7 @@ def _invoke_kimi(
     kimi_bin: str,
     timeout_seconds: int,
     repo_root: Path,
+    model: str | None = None,
     log_path=None,
     anchors=None,
     heartbeat_interval: float = 30.0,
@@ -847,16 +874,32 @@ def _invoke_kimi(
 
     stall_silence_seconds = _effective_stall_silence(stall_silence_seconds)
 
-    # Verified kimi.yaml profile: stdin transport, --quiet --thinking, no -p.
-    # Kimi CLI 1.46.0 documents --quiet as print mode, and print mode auto-
-    # approves tool calls. Treat Kimi as write-capable; containment must come
-    # from disposable workdir isolation plus post-dispatch integrity checks.
-    cmd = [
-        _resolve_kimi_bin(kimi_bin),
-        "--quiet",
-        "--thinking",
-        "--work-dir", str(repo_root),
-    ]
+    resolved_kimi_bin = _resolve_kimi_bin(kimi_bin)
+    use_kimi_code = _is_kimi_code_cli(resolved_kimi_bin)
+    if use_kimi_code:
+        # New native Kimi Code CLI (0.x): no --quiet/--thinking/--work-dir.
+        # Use prompt mode and run with cwd=repo_root for project context.
+        # It currently has no documented stdin or prompt-file mode; fail closed
+        # before subprocess on prompts likely to exceed OS argv limits.
+        if len(prompt.encode("utf-8")) > _KIMI_CODE_INLINE_PROMPT_MAX_BYTES:
+            raise KimiInvocationError(
+                "Kimi Code CLI prompt exceeds safe inline argv size and this CLI "
+                "does not expose a stdin/prompt-file transport",
+                retryable=False,
+            )
+        cmd = [resolved_kimi_bin, "-p", prompt, "--output-format", "text"]
+        if model:
+            cmd += ["--model", _resolve_kimi_model(model)]
+    else:
+        # Legacy kimi-cli (1.x): stdin transport, --quiet --thinking, no -p.
+        cmd = [
+            resolved_kimi_bin,
+            "--quiet",
+            "--thinking",
+        ]
+        if model:
+            cmd += ["--model", _resolve_kimi_model(model)]
+        cmd += ["--work-dir", str(repo_root)]
     if sys.platform == "win32":
         popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     else:
@@ -864,7 +907,7 @@ def _invoke_kimi(
     try:
         proc = popen_factory(
             cmd,
-            stdin=subprocess.PIPE,
+            stdin=subprocess.DEVNULL if use_kimi_code else subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
@@ -875,19 +918,18 @@ def _invoke_kimi(
     except FileNotFoundError:
         raise KimiInvocationError(f"kimi binary not found: {kimi_bin}", retryable=False) from None
 
-    # STDIN TRANSPORT: write the FULL PROMPT to kimi's stdin, then close it so
-    # kimi sees EOF and begins the turn (no -p; no arg-size limit). A large
-    # (>128KB) prompt flows through here, not through argv (H3 fix). Writing to
-    # a 0-buffered binary pipe needs bytes; tolerate a closed pipe (kimi may
-    # exit early on a hard error).
-    try:
-        proc.stdin.write(prompt.encode("utf-8"))
-    except (BrokenPipeError, OSError, AttributeError):
-        pass
-    try:
-        proc.stdin.close()
-    except (BrokenPipeError, OSError, AttributeError):
-        pass
+    if not use_kimi_code:
+        # LEGACY STDIN TRANSPORT: write the FULL PROMPT to kimi's stdin, then
+        # close it so kimi sees EOF and begins the turn (no -p; no arg-size
+        # limit). New Kimi Code uses `-p <prompt>` and gets DEVNULL stdin.
+        try:
+            proc.stdin.write(prompt.encode("utf-8"))
+        except (BrokenPipeError, OSError, AttributeError):
+            pass
+        try:
+            proc.stdin.close()
+        except (BrokenPipeError, OSError, AttributeError):
+            pass
 
     state_lock = threading.Lock()
     stdout_buf: list = []
@@ -1298,6 +1340,7 @@ def _invoke_kimi_with_retry(
     kimi_bin: str,
     timeout_seconds: int,
     repo_root: Path,
+    model: str | None = None,
     log_path=None,
     anchors=None,
     mode: str = "review",
@@ -1319,6 +1362,7 @@ def _invoke_kimi_with_retry(
             kimi_bin=kimi_bin,
             timeout_seconds=timeout_seconds,
             repo_root=repo_root,
+            model=model,
             log_path=log_path,
             anchors=anchors,
         )
@@ -1417,7 +1461,10 @@ def main(argv: list[str] | None = None) -> int:
                          "unset in proposal mode, defaults to "
                          "dispatch_templates/gemini_proposal_schema.json "
                          "(shared proposal schema)."))
-    p.add_argument("--kimi-bin", default="kimi")
+    p.add_argument("--kimi-bin", default=_DEFAULT_KIMI_BIN)
+    p.add_argument("--model", default=_DEFAULT_KIMI_MODEL,
+                   help=("Kimi model; default 'K2.7 Code High Speed' "
+                        "(normalized to configured CLI key kimi-code/kimi-for-coding)."))
     p.add_argument("--timeout-seconds", type=int, default=_DEFAULT_TIMEOUT_SECONDS)
     p.add_argument("--review-target", default=None)
     p.add_argument("--smoke", action="store_true",
@@ -1510,6 +1557,7 @@ def main(argv: list[str] | None = None) -> int:
         "smoke": ns.smoke,
         "timeout_seconds": ns.timeout_seconds,
         "kimi_bin": ns.kimi_bin,
+        "model": ns.model,
         "review_target_path": review_target_path_str,
         "adapter": "kimi",
     })
@@ -1534,6 +1582,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=ns.timeout_seconds,
             extra_fields={
                 "kimi_version": kimi_version,
+                "model": ns.model,
                 "prompt_sha256": prompt_sha,
                 "output_sha256": output_sha,
                 "goal_packet_sha256": goal_packet_sha,
@@ -1629,6 +1678,7 @@ def main(argv: list[str] | None = None) -> int:
                 kimi_bin=ns.kimi_bin,
                 timeout_seconds=ns.timeout_seconds,
                 repo_root=effective_workdir,
+                model=ns.model,
                 log_path=log_path,
                 anchors={
                     "iteration_id": iteration_id,
