@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-
-
+import json
 
 def test_gemini_adapter_threads_configured_command_to_dispatch(monkeypatch, tmp_path):
     from consensus_mcp.contributors.base import DispatchPacket
@@ -13,7 +12,7 @@ def test_gemini_adapter_threads_configured_command_to_dispatch(monkeypatch, tmp_
         captured["argv"] = list(argv)
         sealed = tmp_path / "gemini-review.yaml"
         sealed.write_text("reviewer_id: gemini\npass_id: p1\nfindings: []\n", encoding="utf-8")
-        print('{"ok": true, "pass_id": "p1", "sealed_path": "' + str(sealed) + '", "archive_sealed_path": "", "packet_sha256": "abc"}')
+        print(json.dumps({"ok": True, "pass_id": "p1", "sealed_path": str(sealed), "archive_sealed_path": "", "packet_sha256": "abc"}))
         return 0
 
     from consensus_mcp import _dispatch_gemini
