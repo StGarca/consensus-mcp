@@ -735,7 +735,7 @@ def _is_kimi_code_cli(resolved_bin: str) -> bool:
     --quiet or --work-dir flags, and takes cwd from subprocess cwd.
 
     When the binary can't be resolved to a real path (e.g. kimi not installed
-    on CI), default to True — the Kimi Code CLI is the current default; the
+    on CI), default to True -- the Kimi Code CLI is the current default; the
     legacy kimi-cli is the superseded path.
     """
     p = Path(resolved_bin)
