@@ -944,7 +944,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         repo_root = _resolve_repo_root()
     except RepoRootResolutionError as exc:
-        # We don't have a valid log_path yet; print error to stderr-equivalent JSON.
         print(json.dumps({"ok": False, "error": str(exc), "error_type": "RepoRootResolutionError"}))
         return 4
 
@@ -1063,6 +1062,20 @@ def main(argv: list[str] | None = None) -> int:
         # hasn't been read); it lands in dispatch_done / dispatch_failed.
         "review_target_path": review_target_path_str,
     })
+
+    # Preflight guard (Loop 4 harness-rec-002): refuse dispatch from a
+    # non-git directory or the user's home directory. 7 _SnapshotIndexError
+    # failures occurred from running against /home/steve (non-git).
+    _home = Path.home().resolve()
+    _resolved = repo_root.resolve()
+    if _resolved == _home:
+        _log_dispatch(log_path, {"event": "dispatch_failed", "iteration_id": iteration_id, "reviewer_id": reviewer_id, "pass_id": pass_id, "error_type": "DispatchPreflightError", "error": f"repo root {_resolved} is the user's home directory; dispatch from a proper git repository instead."})
+        print(json.dumps({"ok": False, "error": f"repo root {_resolved} is the user's home directory; dispatch from a proper git repository instead. Create one with 'git init' in a scoped project folder.", "error_type": "DispatchPreflightError"}))
+        return 4
+    if not (_resolved / ".git").is_dir():
+        _log_dispatch(log_path, {"event": "dispatch_failed", "iteration_id": iteration_id, "reviewer_id": reviewer_id, "pass_id": pass_id, "error_type": "DispatchPreflightError", "error": f"repo root {_resolved} has no .git directory."})
+        print(json.dumps({"ok": False, "error": f"repo root {_resolved} has no .git directory; dispatch from a proper git repository. Create one with 'git init'.", "error_type": "DispatchPreflightError"}))
+        return 4
 
     # Per v1.10.4 F3: initialize provenance vars to None BEFORE try block so
     # dispatch_failed paths can include whatever was computed before failure.

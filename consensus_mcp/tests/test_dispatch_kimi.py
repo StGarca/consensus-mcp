@@ -1382,3 +1382,39 @@ def test_real_kimi_smoke():  # pragma: no cover
     # Intentionally minimal: presence proves the gate exists. A full smoke
     # run would invoke the real binary, which we never do in unit tests.
     assert os.environ.get("CONSENSUS_MCP_RUN_REAL_KIMI_SMOKE") == "1"
+
+
+
+
+# ---------- preflight guard tests (Loop 4 harness-rec-002) ----------
+
+def test_preflight_rejects_non_git_directory(tmp_path, monkeypatch):
+    """Dispatch refuses when repo root has no .git directory."""
+    fake_repo = tmp_path / "fake-repo"
+    fake_repo.mkdir()
+    (fake_repo / ".consensus").mkdir()
+    (fake_repo / ".consensus" / "config.yaml").write_text("schema_version: 1\n")
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(fake_repo))
+    monkeypatch.chdir(fake_repo)
+
+    from consensus_mcp._dispatch_kimi import main
+    rc = main(["--goal-packet", "nonexistent.yaml",
+               "--iteration-dir", "test-iter",
+               "--reviewer-id", "kimi",
+               "--mode", "proposal"])
+    assert rc == 4
+
+
+def test_preflight_rejects_home_directory(monkeypatch, tmp_path):
+    """Dispatch refuses when repo root is the user's home directory."""
+    import pathlib
+    home = pathlib.Path.home().resolve()
+    monkeypatch.setenv("CONSENSUS_MCP_REPO_ROOT", str(home))
+    monkeypatch.chdir(home)
+
+    from consensus_mcp._dispatch_kimi import main
+    rc = main(["--goal-packet", "nonexistent.yaml",
+               "--iteration-dir", "test-iter",
+               "--reviewer-id", "kimi",
+               "--mode", "proposal"])
+    assert rc == 4
