@@ -1489,6 +1489,18 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"ok": False, "error": str(exc), "error_type": "RepoRootResolutionError"}))
         return 4
 
+    # Preflight guard (Loop 4 harness-rec-002): refuse dispatch from a
+    # non-git directory or the user's home directory. 7 _SnapshotIndexError
+    # failures occurred from running against /home/user (non-git).
+    _home = Path.home().resolve()
+    _resolved = repo_root.resolve()
+    if _resolved == _home:
+        print(json.dumps({"ok": False, "error": f"repo root {_resolved} is the user's home directory; dispatch from a proper git repository instead. Create one with 'git init' in a scoped project folder.", "error_type": "DispatchPreflightError"}))
+        return 4
+    if not (_resolved / ".git").is_dir():
+        print(json.dumps({"ok": False, "error": f"repo root {_resolved} has no .git directory; dispatch from a proper git repository. Create one with 'git init'.", "error_type": "DispatchPreflightError"}))
+        return 4
+
     log_path = repo_root / "consensus-state" / "state" / "dispatch-log.jsonl"
     _pre_iter_id = Path(ns.iteration_dir).name or "unknown-iteration"
     _pre_reviewer_id = ns.reviewer_id or f"kimi-{_pre_iter_id}-1"

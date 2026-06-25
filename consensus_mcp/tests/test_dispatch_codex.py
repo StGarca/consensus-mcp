@@ -237,6 +237,7 @@ def _scaffold_repo_markers(tmp_path):
     (tmp_path / "consensus-state").mkdir(parents=True, exist_ok=True)
     (tmp_path / "consensus_mcp").mkdir(parents=True, exist_ok=True)
     (tmp_path / "consensus_mcp" / "validators").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".git").mkdir(parents=True, exist_ok=True)
     return tmp_path
 
 
