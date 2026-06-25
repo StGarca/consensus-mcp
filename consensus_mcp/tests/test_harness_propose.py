@@ -47,6 +47,36 @@ def test_harness_propose_generates_proposal_from_results_trace(tmp_path, monkeyp
     )
 
 
+def test_harness_propose_detects_dispatch_failed_events(tmp_path, monkeypatch):
+    """dispatch_failed events without ok=False should still be counted."""
+    state_root = tmp_path / "consensus-state"
+    trace_dir = state_root / "state"
+    trace_dir.mkdir(parents=True)
+    row = {
+        "timestamp_utc": "2026-06-25T03:23:44Z",
+        "event": "dispatch_failed",
+        "reviewer_id": "kimi",
+        "iteration_id": "iteration-test",
+        "error_type": "_SnapshotIndexError",
+        "error": "integrity snapshot exceeded its budget",
+    }
+    (trace_dir / "dispatch-log.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(state_root))
+
+    out = tmp_path / "proposal.yaml"
+    result = harness_propose.handle(output_path=str(out), max_records=10)
+
+    assert result["ok"] is True
+    proposal = yaml.safe_load(out.read_text(encoding="utf-8"))
+    recs = proposal["recommendations"]
+    # Should have the dispatch failure recommendation (rec-002)
+    dispatch_rec = [r for r in recs if r["id"] == "harness-rec-002"]
+    assert dispatch_rec, "expected harness-rec-002 for dispatch_failed event"
+    assert "1 failed dispatch" in dispatch_rec[0]["rationale"]
+    assert "_SnapshotIndexError" in dispatch_rec[0]["rationale"]
+    assert "kimi" in dispatch_rec[0]["rationale"]
+
+
 def test_harness_propose_registers_mcp_tool():
     reg = ToolRegistry()
     harness_propose.register(reg)
