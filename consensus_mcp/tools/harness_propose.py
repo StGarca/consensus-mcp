@@ -125,6 +125,8 @@ def _recommendations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     dispatch_failures = 0
     malformed = 0
     useful_false = 0
+    error_types: Counter[str] = Counter()
+    failed_reviewers: Counter[str] = Counter()
     for row in rows:
         if row.get("kind") == "malformed_jsonl":
             malformed += 1
@@ -133,8 +135,13 @@ def _recommendations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for f in findings:
                 if isinstance(f, dict):
                     severities[str(f.get("severity", "unknown"))] += 1
-        if row.get("_source") == "dispatch-log.jsonl" and row.get("ok") is False:
-            dispatch_failures += 1
+        if row.get("_source") == "dispatch-log.jsonl":
+            if row.get("ok") is False or row.get("event") == "dispatch_failed":
+                dispatch_failures += 1
+                et = str(row.get("error_type", "unknown"))
+                error_types[et] += 1
+                rv = str(row.get("reviewer_id", "unknown"))
+                failed_reviewers[rv] += 1
         if row.get("_source") == "outcome-ledger.jsonl" and row.get("useful") is False:
             useful_false += 1
 
@@ -150,10 +157,15 @@ def _recommendations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ],
         })
     if dispatch_failures:
+        detail_parts = [f"{dispatch_failures} failed dispatch trace row(s)"]
+        if error_types:
+            detail_parts.append(f"error types: {dict(error_types)}")
+        if failed_reviewers:
+            detail_parts.append(f"failed reviewers: {dict(failed_reviewers)}")
         recs.append({
             "id": "harness-rec-002",
             "summary": "Add or improve dispatch preflight diagnostics for recurring reviewer CLI failures.",
-            "rationale": f"Observed {dispatch_failures} failed dispatch trace row(s).",
+            "rationale": "Observed " + ". ".join(detail_parts) + ".",
             "candidate_files": [
                 "docs/workflows/**",
                 "consensus_mcp/tests/**",
