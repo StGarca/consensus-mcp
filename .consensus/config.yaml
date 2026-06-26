@@ -1,0 +1,73 @@
+schema_version: 1
+project:
+  name: consensus-mcp
+  config_created_at_utc: null
+workflow:
+  mode: propose-converge
+  independence: blind-first-reveal
+  max_convergence_rounds: 3
+  timeout_policy: treat-as-no-vote
+contributors:
+  enabled:
+  - codex
+  - gemini
+  - kimi
+  - grok
+  adapters:
+    claude:
+      role: orchestrator
+      can_propose: true
+      can_review: true
+      can_converge: true
+    codex:
+      command: codex
+      model: gpt-5.5
+      sandbox_mode: read-only
+      can_propose: true
+      can_review: true
+      can_converge: true
+    gemini:
+      command: agy
+      model: Gemini 3.1 Pro (High)
+      approval_mode: plan
+      can_propose: true
+      can_review: true
+      can_converge: true
+    grok:
+      command: grok
+      model: Grok Build
+      can_propose: true
+      can_review: true
+      can_converge: true
+    kimi:
+      command: kimi
+      model: K2.7 Code High Speed
+      can_propose: true
+      can_review: true
+      can_converge: true
+convergence:
+  rule: strict-majority
+  finding_disposition: weighted-synthesis
+  converged_plan_enforcement: graduated
+patches:
+  authoring: claude-only
+  max_patch_lines: 600
+snapshots:
+  trigger: on-iteration-close
+  periodic:
+    every_iterations: null
+    every_minutes: null
+  branch: consensus-state-snapshots
+  retention: unbounded
+artifacts:
+  root: consensus-state
+  seal_outputs: true
+defaults:
+  iteration_timeout_seconds: 600
+  stall_silence_seconds: 180
+  pre_first_byte_silence_seconds: 600
+architect_loop:
+  max_cycles: 8
+  verification: ''
+  lane_branch_prefix: arch-lane/
+  max_wall_clock_minutes: 0
