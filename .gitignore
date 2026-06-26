@@ -69,3 +69,8 @@ consensus-state/archive/review-passes/*.yaml
 /debrief-*.md
 /debrief-*.txt
 
+# >>> consensus-mcp managed <<<
+.consensus/tmp/
+.consensus/cache/
+.consensus/logs/
+# <<< consensus-mcp managed >>>
