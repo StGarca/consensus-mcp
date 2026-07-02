@@ -1,0 +1,24 @@
+[Unit]
+Description=DGX1 Coordinator - SQLite-backed HTTP lease queue
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStartPre=%h/src/consensus-mcp/deploy/bootstrap-dirs.sh
+ExecStart=/usr/bin/python3 %h/src/consensus-mcp/dgx1_coordinator.py
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
+Environment=COORDINATOR_DB=%h/coordinator.db
+Environment=WORK_QUEUE=%h/work-queue
+Environment=WORK_DONE=%h/work-done
+Environment=WORK_FAILED=%h/work-failed
+Environment=LEASE_TIMEOUT=600
+Environment=MAX_IN_FLIGHT=2
+
+[Install]
+WantedBy=default.target

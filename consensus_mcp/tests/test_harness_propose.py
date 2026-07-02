@@ -77,6 +77,41 @@ def test_harness_propose_detects_dispatch_failed_events(tmp_path, monkeypatch):
     assert "kimi" in dispatch_rec[0]["rationale"]
 
 
+def test_harness_propose_rejects_unsafe_recommendation_scope_with_rec_id(tmp_path, monkeypatch):
+    """Loop-4 proposals must validate candidate scopes at generation time.
+
+    If a recommendation tries to scope direct source mutation, the proposal must
+    fail before writing YAML and name the offending recommendation so an
+    operator can fix the generator rather than rubber-stamping unsafe scope.
+    """
+    state_root = tmp_path / "consensus-state"
+    trace_dir = state_root / "state"
+    trace_dir.mkdir(parents=True)
+    (trace_dir / "dispatch-log.jsonl").write_text(
+        json.dumps({"event": "dispatch_start", "reviewer_id": "codex"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(state_root))
+    monkeypatch.setattr(
+        harness_propose,
+        "_recommendations",
+        lambda _rows: [{
+            "id": "harness-rec-unsafe",
+            "summary": "unsafe",
+            "rationale": "tries to mutate source directly",
+            "candidate_files": ["consensus_mcp/tools/harness_propose.py"],
+        }],
+    )
+
+    out = tmp_path / "proposal.yaml"
+    result = harness_propose.handle(output_path=str(out), max_records=10)
+
+    assert result["ok"] is False
+    assert "harness-rec-unsafe" in result["error"]
+    assert "consensus_mcp/tools/harness_propose.py" in result["error"]
+    assert not out.exists()
+
+
 def test_harness_propose_registers_mcp_tool():
     reg = ToolRegistry()
     harness_propose.register(reg)

@@ -2,7 +2,7 @@
 """DGX1 Coordinator - SQLite-backed HTTP lease queue."""
 import os, json, sqlite3, time, hashlib, uuid
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 DB_PATH = os.environ.get("COORDINATOR_DB", "/home/steve/coordinator.db")
@@ -48,7 +48,7 @@ def scan_queue():
 def reclaim_expired():
     """Re-queue tasks with expired leases."""
     conn = sqlite3.connect(DB_PATH)
-    cutoff = (datetime.utcnow() - timedelta(seconds=LEASE_TIMEOUT)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=LEASE_TIMEOUT)).isoformat()
     conn.execute(
         "UPDATE tasks SET status='pending', worker_id=NULL, leased_at=NULL, retry_count=retry_count+1 WHERE status='leased' AND leased_at < ? AND retry_count < 3",
         (cutoff,)
@@ -81,7 +81,7 @@ def get_pending(worker_id, capacity):
         conn.close()
         return None, "empty"
     
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     out = []
     for row in rows:
         pid, path, sha, retries = row
@@ -121,7 +121,7 @@ def submit_result(pid, status):
 
 def heartbeat(pid):
     conn = sqlite3.connect(DB_PATH)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn.execute("UPDATE tasks SET leased_at=? WHERE id=? AND status='leased'", (now, pid))
     conn.commit()
     conn.close()
@@ -136,7 +136,20 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(body).encode())
     
     def do_GET(self):
-        if self.path.startswith("/v1/work/download/"):
+        if self.path == "/v1/health":
+            conn = sqlite3.connect(DB_PATH)
+            queue_depth = conn.execute("SELECT COUNT(*) FROM tasks WHERE status='pending'").fetchone()[0]
+            in_flight = conn.execute("SELECT COUNT(*) FROM tasks WHERE status='leased'").fetchone()[0]
+            done_count = conn.execute("SELECT COUNT(*) FROM tasks WHERE status='done'").fetchone()[0]
+            conn.close()
+            self._json(200, {
+                "status": "ok",
+                "queue_depth": queue_depth,
+                "in_flight": in_flight,
+                "done": done_count,
+                "db_ok": True,
+            })
+        elif self.path.startswith("/v1/work/download/"):
             pid = self.path.split("/")[-1]
             conn = sqlite3.connect(DB_PATH)
             row = conn.execute("SELECT path FROM tasks WHERE id=?", (pid,)).fetchone()
@@ -156,7 +169,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(n) if n else b"{}"
-        req = json.loads(body) if body else {}
+        try:
+            req = json.loads(body) if body.strip() else {}
+        except json.JSONDecodeError:
+            self._json(400, {"error": "invalid json"})
+            return
         
         if self.path == "/v1/work/request":
             scan_queue()

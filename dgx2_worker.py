@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """DGX2 Worker - demand-driven work consumer with local AEON vLLM endpoint."""
-import os, sys, json, time, hashlib, shutil
+import os, sys, json, time, hashlib, shutil, signal
 from pathlib import Path
 import requests
 
@@ -15,6 +15,16 @@ MAX_BATCH = int(os.environ.get("MAX_BATCH", "100"))
 
 for d in (INBOX, OUTBOX, ARCHIVE):
     d.mkdir(parents=True, exist_ok=True)
+
+_shutdown_requested = False
+
+def _handle_sigterm(signum, frame):
+    global _shutdown_requested
+    _shutdown_requested = True
+    print("Shutdown signal received, finishing current work...")
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
+signal.signal(signal.SIGINT, _handle_sigterm)
 
 
 def fetch_work():
@@ -192,14 +202,9 @@ def process_package(pkg):
 
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true", help="Process one batch and exit")
-    args = parser.parse_args()
-
     print(f"DGX2 Worker starting. Coordinator: {COORDINATOR_URL}, AEON: {AEON_URL}")
 
-    while True:
+    while not _shutdown_requested:
         # Check if we need more work
         inbox_count = len(list(INBOX.glob("*.jsonl")))
         if inbox_count == 0:
@@ -208,15 +213,14 @@ def main():
             if packages:
                 print(f"Received {len(packages)} packages")
             else:
-                if args.once:
-                    print("No work available, exiting")
-                    break
                 print("No work available, sleeping 10s...")
                 time.sleep(10)
                 continue
 
         # Process available work
         for pkg_file in sorted(INBOX.glob("*.jsonl")):
+            if _shutdown_requested:
+                break
             pid = pkg_file.stem
             pkg = {
                 "package_id": pid,
@@ -226,15 +230,14 @@ def main():
             if not success:
                 print(f"Failed to process {pid}, will retry")
 
-        if args.once:
-            break
-
         # If inbox is now empty, loop back to fetch more
         if not list(INBOX.glob("*.jsonl")):
             continue
 
         # Otherwise sleep briefly before checking again
         time.sleep(1)
+
+    print("DGX2 Worker shutting down gracefully.")
 
 
 if __name__ == "__main__":

@@ -662,6 +662,7 @@ def _assemble_grok_stream(raw: str) -> str:
     so the downstream extractor still runs.
     """
     text_parts: list[str] = []
+    thought_parts: list[str] = []
     saw_event = False
     saw_text = False
     stop_reason: str | None = None
@@ -677,7 +678,13 @@ def _assemble_grok_stream(raw: str) -> str:
             continue
         saw_event = True
         etype = evt.get("type")
-        if etype == "text":
+        if etype == "thought":
+            payload = evt.get("data")
+            if payload is None:
+                payload = evt.get("text")
+            if isinstance(payload, str):
+                thought_parts.append(payload)
+        elif etype == "text":
             payload = evt.get("data")
             if payload is None:
                 payload = evt.get("text")
@@ -690,6 +697,21 @@ def _assemble_grok_stream(raw: str) -> str:
     if not saw_event:
         return raw
     if stop_reason == "Cancelled" and not saw_text:
+        # Grok Build sometimes emits the schema-shaped JSON in `thought`
+        # chunks and then terminates with stopReason=Cancelled, leaving zero
+        # `text` chunks. Do not seal raw thought prose; only recover a
+        # syntactically valid JSON object substring. If no JSON object is
+        # present, keep the invocation-failure behavior so proposal mode can
+        # retry with the compact prompt.
+        thought_text = "".join(thought_parts)
+        candidate = _extract_json_from_text(thought_text)
+        if candidate != thought_text or candidate.strip().startswith("{"):
+            try:
+                parsed_candidate = json.loads(candidate)
+            except Exception:
+                parsed_candidate = None
+            if isinstance(parsed_candidate, dict):
+                return candidate
         raise GrokStreamCancelledError(
             "grok self-cancelled (stopReason=Cancelled) with zero text "
             "events - no answer produced (agentic self-cancel; see "
@@ -697,6 +719,94 @@ def _assemble_grok_stream(raw: str) -> str:
             "with a shorter, single-focus prompt."
         )
     return "".join(text_parts)
+
+
+def _truncate_middle(text: str, max_bytes: int) -> str:
+    """Return ``text`` capped to roughly ``max_bytes`` UTF-8 bytes."""
+    if max_bytes <= 0:
+        return ""
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    marker = "\n\n[... truncated for Grok cancel-retry ...]\n\n"
+    marker_b = marker.encode("utf-8")
+    keep = max(0, max_bytes - len(marker_b))
+    head_b = encoded[: keep // 2]
+    tail_b = encoded[-(keep - keep // 2):] if keep else b""
+    return (
+        head_b.decode("utf-8", errors="ignore")
+        + marker
+        + tail_b.decode("utf-8", errors="ignore")
+    )
+
+
+def _build_grok_cancel_retry_prompt(
+    *,
+    goal_packet: dict | None,
+    review_target_text: str | None,
+    review_target_path: str | None,
+    review_target_hash: str | None,
+    schema_text: str | None,
+) -> str:
+    """Build a short single-focus proposal prompt after Grok self-cancels.
+
+    The full proposal template is intentionally rich, but Grok Build can
+    self-cancel with zero text on large/open-ended prompts.  The recovery path
+    keeps the same goal and review target, strips nonessential mandates, and
+    asks for the exact proposal JSON only.  Keep this under the smallest inline
+    ceiling so the retry uses the proven ``-p`` path rather than ``--prompt-file``.
+    """
+    goal_packet = goal_packet or {}
+    goal = goal_packet.get("goal", {}) or {}
+    auth = goal_packet.get("authorization", {}) or {}
+    compact = {
+        "goal_summary": goal.get("summary", ""),
+        "desired_end_state": goal.get("desired_end_state", ""),
+        "allowed_files": goal_packet.get("allowed_files", []) or [],
+        "acceptance_gates": goal_packet.get("acceptance_gates", []) or [],
+        "scope_signature": auth.get("scope_signature", ""),
+        "review_target_path": review_target_path,
+        "review_target_hash": review_target_hash,
+    }
+    schema = schema_text or (
+        '{"selected_target": str|null, "rationale_vs_alternatives": str, '
+        '"deliverable_scope": object|null, "risks": [str], '
+        '"estimated_complexity": "small|medium|large", '
+        '"structural_abstention": bool}'
+    )
+
+    target_budget = min(
+        18 * 1024,
+        max(4 * 1024, _GROK_INLINE_PROMPT_MAX_BYTES - 8 * 1024),
+    )
+    target_excerpt = _truncate_middle(review_target_text or "(not provided)", target_budget)
+    prompt = f"""You are Grok Build acting as one independent contributor in a consensus-mcp design consult.
+Your previous full proposal prompt self-cancelled before producing text. Retry with this shorter single-focus prompt.
+
+Task: produce ONE design proposal. This is not a code review.
+Return ONLY valid JSON. No markdown. No prose outside JSON.
+
+Goal packet summary:
+{json.dumps(compact, indent=2, ensure_ascii=False)}
+
+Required JSON schema/shape:
+{schema}
+
+Rules:
+- Pick exactly one selected_target unless structural_abstention is true.
+- deliverable_scope must include next_iteration_id, files_in_scope, files_out_of_scope, key_design_decisions, acceptance_gates unless abstaining.
+- Be concrete and concise. Prefer completion in the next iteration when scope is small and gates are clear.
+- If context is insufficient, set structural_abstention true and explain why.
+
+Review target content, truncated if needed:
+```yaml
+{target_excerpt}
+```
+"""
+    return _truncate_middle(
+        prompt,
+        min(24 * 1024, _GROK_INLINE_PROMPT_MAX_BYTES - 1024),
+    )
 
 
 def _parse_grok_output(text: str, goal_packet: dict | None = None) -> dict:
@@ -927,22 +1037,50 @@ def _invoke_grok_with_retry(
     anchors=None,
     mode: str = "review",
     proposal_schema_path: Path | None = None,
+    cancel_retry_prompt: str | None = None,
 ) -> tuple[str, dict, Path]:
     """Validator-retry on parse fail. Mirrors gemini's pattern.
 
+    Proposal mode has one extra recovery: if Grok self-cancels before emitting
+    any text, retry once with a compact single-focus prompt so required Grok
+    reviewers are not silently dropped from the consult.
+
     Returns (raw_output, parsed_dict, prompt_path).
     """
-    raw, prompt_path = _invoke_grok(
-        prompt=prompt,
-        grok_bin=grok_bin,
-        model=model,
-        timeout_seconds=timeout_seconds,
-        iter_dir=iter_dir,
-        pass_id=pass_id,
-        repo_root=repo_root,
-        log_path=log_path,
-        anchors=anchors,
-    )
+    try:
+        raw, prompt_path = _invoke_grok(
+            prompt=prompt,
+            grok_bin=grok_bin,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            iter_dir=iter_dir,
+            pass_id=pass_id,
+            repo_root=repo_root,
+            log_path=log_path,
+            anchors=anchors,
+        )
+    except GrokStreamCancelledError as first_cancel:
+        if mode != "proposal" or not cancel_retry_prompt:
+            raise
+        if log_path is not None and anchors is not None:
+            _log_dispatch(log_path, {
+                "event": "dispatch_retry_for_grok_cancel",
+                **anchors,
+                "first_error": str(first_cancel)[:1000],
+                "retry_prompt_bytes": len(cancel_retry_prompt.encode("utf-8")),
+            })
+        retry_pass_id = f"{pass_id}-cancel-retry"
+        raw, prompt_path = _invoke_grok(
+            prompt=cancel_retry_prompt,
+            grok_bin=grok_bin,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            iter_dir=iter_dir,
+            pass_id=retry_pass_id,
+            repo_root=repo_root,
+            log_path=log_path,
+            anchors=anchors,
+        )
     try:
         if mode == "proposal":
             parsed = _parse_grok_proposal_output(raw, schema_path=proposal_schema_path)
@@ -1170,6 +1308,21 @@ def main(argv: list[str] | None = None) -> int:
         scope_sig = ((goal_packet or {}).get("authorization", {}) or {}).get("scope_signature", "")
 
         grok_version = _get_grok_version(ns.grok_bin)
+        cancel_retry_prompt = None
+        if ns.mode == "proposal":
+            schema_text = None
+            if proposal_schema_path is not None:
+                try:
+                    schema_text = Path(proposal_schema_path).read_text(encoding="utf-8")
+                except FileNotFoundError:
+                    schema_text = None
+            cancel_retry_prompt = _build_grok_cancel_retry_prompt(
+                goal_packet=goal_packet,
+                review_target_text=review_target_text,
+                review_target_path=review_target_path_str,
+                review_target_hash=review_target_hash,
+                schema_text=schema_text,
+            )
         raw_output, extracted, prompt_file_path = _invoke_grok_with_retry(
             prompt=prompt,
             grok_bin=ns.grok_bin,
@@ -1187,6 +1340,7 @@ def main(argv: list[str] | None = None) -> int:
             },
             mode=ns.mode,
             proposal_schema_path=proposal_schema_path,
+            cancel_retry_prompt=cancel_retry_prompt,
         )
         output_sha = _sha256_str(raw_output)
         try:

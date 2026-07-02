@@ -824,6 +824,7 @@ def _peel_assistant_content(raw_output: str) -> str:
         stripped.startswith("{")
         or stripped.startswith("[")
         or stripped.startswith("```")
+        or ("{" in stripped and "}" in stripped)
     ):
         return stripped
 
