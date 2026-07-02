@@ -296,7 +296,7 @@ blocking objections); design doc:
    (GITHUB_TOKEN, AWS keys, SSH_AUTH_SOCK, KUBECONFIG, etc.). An
    env-dependent test suite declares its variables explicitly - visible
    configuration instead of silent credential exposure.
-6. **Discoverability.** `consensus results` lists architect goals with
+6. **Discoverability.** `consensus-results` lists architect goals with
    advisory derived states, and `consensus-init --workflow D` /
    `architect-build` is accepted (preview-labeled), with the
    interactive wizard prompting the role mapping.

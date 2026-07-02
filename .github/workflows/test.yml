@@ -28,10 +28,13 @@ jobs:
         # Must match pyproject `requires-python`. v1.18.0 raised the floor to
         # >=3.11, so `pip install -e .` (and its deps) refuses py3.10 - testing
         # 3.10 here only fails at install. Keep this list == the supported range.
-        python: ["3.11", "3.12"]
-    env:
-      # Skip codex-cli-dependent tests; CI does not install the real codex binary.
-      CONSENSUS_MCP_SKIP_CODEX_CLI_TESTS: "1"
+        # v2.2.1 audit QW7: 3.13 added - it is the interpreter the tool is
+        # actually dogfooded on (pipx venv), and it previously had zero CI legs.
+        python: ["3.11", "3.12", "3.13"]
+    # NOTE (v2.2.1 audit QW5): codex-cli-dependent tests skip automatically when
+    # the codex binary is not on PATH (tests/test_dispatch_codex.py probes
+    # shutil.which); the CONSENSUS_MCP_SKIP_CODEX_CLI_TESTS env var formerly set
+    # here was never read by any code in the repo's history.
     steps:
       - uses: actions/checkout@v4
 
@@ -41,10 +44,12 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: Install package
+        # v2.2.1 audit QW6: the test toolchain now comes from the [dev] extra
+        # (single source of truth, bounded pins) instead of an unpinned inline
+        # `pip install pytest pytest-timeout`.
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest pytest-timeout
+          pip install -e ".[dev]"
 
       - name: Run pytest
         # --timeout converts a hung test (e.g. a real-subprocess test

@@ -17,6 +17,17 @@ dependencies = [
   "jsonschema>=4.0",
 ]
 
+# v2.2.1 audit QW6: the test toolchain, installable as `pip install -e ".[dev]"`.
+# Previously pytest + pytest-timeout existed only as an unpinned line inside
+# .github/workflows/test.yml, so a fresh clone (or a rebuilt pipx/dev venv)
+# could not run the ~41k-LOC suite from project metadata alone. Bounded pins so
+# an upstream major release cannot silently change CI behavior.
+[project.optional-dependencies]
+dev = [
+  "pytest>=9,<10",
+  "pytest-timeout>=2.3,<3",
+]
+
 [project.scripts]
 consensus-mcp = "consensus_mcp.server:main"
 consensus-mcp-dispatch-codex = "consensus_mcp._dispatch_codex:main"
@@ -39,6 +50,10 @@ consensus-results = "consensus_mcp._results_rollup:main"
 consensus-mcp-run-iteration = "consensus_mcp._run_iteration_cli:main"
 # architect-build (workflow D) supervisor CLI: step / approve-spec / cleanup.
 consensus-mcp-architect = "consensus_mcp.tools.architect_loop_step:main"
+# v2.2.1 audit QW8: the harness-propose CLI documented in the v2.2.1 CHANGELOG
+# and Build guide - the script entry was omitted at release time, so pipx/pip
+# installs never created the command the release notes advertised.
+consensus-mcp-harness-propose = "consensus_mcp.tools.harness_propose:main"
 # iter-0040 bonus per iter-0039 converged plan Q6: alias so `consensus init`
 # (with a SPACE) also works at the shell, matching the natural mental model.
 consensus = "consensus_mcp._init_wizard:main"
@@ -69,6 +84,10 @@ consensus_mcp = [
   # v1.32.0: packaged first-consult quickstart (consult iteration-debrief-2026-05-26).
   "docs/operations/*.md",
   "spec_template.md",
+  # v2.2.1 audit QW4: the Workflow C goal-packet canonical example, cited twice
+  # by the PACKAGED spec_template.md - previously the single data file under
+  # consensus_mcp/ not covered by any glob (a dangling reference in every wheel).
+  "goal_packet_schema.yaml",
   # v1.15.1: converged-plan convention machine-enforcement contract.
   "schemas/*.json",
   "tests/fixtures/dispatch_codex/*",

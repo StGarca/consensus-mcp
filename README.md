@@ -67,7 +67,7 @@ every model plays by the same guidelines.
 
 Claude is optional -- you can run Codex + Gemini + Kimi with no Claude at all.
 
-**See your track record:** `consensus results` prints a project scorecard --
+**See your track record:** `consensus-results` prints a project scorecard --
 findings by severity, how each was resolved, and convergence rate across runs.
 
 ---
@@ -108,7 +108,8 @@ project reviews itself through its own cross-AI cycle.
 - [`pipx`](https://pipx.pypa.io/) recommended
 - At least two AI CLIs on your PATH. Built-in support for:
   [`codex`](https://github.com/openai/codex),
-  [`gemini-cli`](https://github.com/google-gemini/gemini-cli),
+  Gemini (dispatched via the Antigravity `agy` binary by default),
+  [`grok`](https://docs.x.ai/grok-cli),
   [`kimi-cli`](https://github.com/MoonshotAI/kimi-cli),
   and Claude (when running inside Claude Code) -- all optional.
 

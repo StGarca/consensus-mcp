@@ -140,6 +140,9 @@ _CONSENSUS_TOOLING = frozenset({
     "consensus-mcp-seal-iteration", "consensus-mcp-approve",
     "consensus-mcp-deliver", "consensus-mcp-start-consult",
     "consensus-mcp-run-iteration", "consensus-mcp-architect",
+    # v2.2.1 audit QW8: proposal-only harness-improvement rollup (read-only over
+    # trace ledgers; writes only its own YAML proposal artifact).
+    "consensus-mcp-harness-propose",
 })
 
 
