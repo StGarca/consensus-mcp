@@ -19,11 +19,14 @@ Sealing contract:
 CONCURRENCY - M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: the
 whole index read -> idempotency/collision guard -> packet write -> index
 replace window is serialized ACROSS PROCESSES via
-`_atomic_io.locked_mutation(index_path)` (mkdir lock dir + stale takeover),
-and the index tmp file carries a unique per-writer name
-(index.yaml.tmp.<pid>.<rand8>) so concurrent sealers can no longer lose an
-index entry, bypass the pass_id-uniqueness guard on a stale snapshot, or
-crash on a shared-tmp os.replace race. An unacquirable lock is a structured
+`_atomic_io.locked_mutation(index_path)` (mkdir lock dir + stale takeover).
+M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q2: both
+the sealed-packet write and the index replace now route through the blessed
+`_atomic_io.atomic_write_text` (O_EXCL unpredictable-temp + fsync + os.replace),
+so its per-writer temp name defeats the shared-tmp os.replace race and this
+tool can no longer drift from the one atomic-write primitive; concurrent
+sealers still cannot lose an index entry or bypass the pass_id-uniqueness
+guard on a stale snapshot. An unacquirable lock is a structured
 `{"error": "state_lock_timeout", ...}` refusal carrying the holder's
 owner.json fields. Stale-takeover events go to the dispatch log ONLY (the
 lock-free sink; see audit_append_event._emit_state_lock_takeover).
@@ -32,19 +35,76 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
-from consensus_mcp._atomic_io import LockTimeout, locked_mutation
+from consensus_mcp._atomic_io import LockTimeout, atomic_write_text, locked_mutation
 from consensus_mcp._paths import project_root, archive_dir, index_path, active_dir
 
 # M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: lock-acquisition
 # budget for the index mutation window. Module-level (a real attribute, not
 # __getattr__-synthesized) so tests may shrink it via monkeypatch.setattr.
-_STATE_LOCK_TIMEOUT_S = 30.0
+#
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q2+Q11:
+# this is now the SINGLE definition site of the lock-timeout budget and the
+# structured-refusal builder for BOTH seal-pipeline writers -
+# audit_append_event imports `_STATE_LOCK_TIMEOUT_S` and
+# `_state_lock_timeout_refusal` from here, so the constant + refusal shape can
+# never drift between the two tools. Q11: the budget is env-overridable via
+# CONSENSUS_MCP_STATE_LOCK_TIMEOUT_SECONDS (parsed ONCE at import; a positive
+# finite float wins, anything else falls back to the 30s default).
+_STATE_LOCK_TIMEOUT_ENV = "CONSENSUS_MCP_STATE_LOCK_TIMEOUT_SECONDS"
+_DEFAULT_STATE_LOCK_TIMEOUT_S = 30.0
+
+
+def _resolve_state_lock_timeout() -> float:
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q11:
+    resolve the lock-acquisition budget from
+    CONSENSUS_MCP_STATE_LOCK_TIMEOUT_SECONDS. A positive, finite float wins;
+    anything else (unset, non-numeric, <= 0, NaN, +/-inf) falls back to the
+    30s default. Called ONCE at import to set `_STATE_LOCK_TIMEOUT_S`."""
+    raw = os.environ.get(_STATE_LOCK_TIMEOUT_ENV)
+    if raw is None:
+        return _DEFAULT_STATE_LOCK_TIMEOUT_S
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_STATE_LOCK_TIMEOUT_S
+    if not math.isfinite(val) or val <= 0:
+        return _DEFAULT_STATE_LOCK_TIMEOUT_S
+    return val
+
+
+_STATE_LOCK_TIMEOUT_S = _resolve_state_lock_timeout()
+
+
+def _state_lock_timeout_refusal(exc: LockTimeout, lock_target) -> dict:
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q2+Q11:
+    the ONE shared builder for the structured `state_lock_timeout` refusal,
+    used by BOTH this tool and audit_append_event. Carries the M1 owner.json
+    fields (gemini-rev-001: owner_pid/host/claimed_at_epoch) AND a Q11
+    remedy-naming detail - that the operation was NOT performed (nothing
+    written), WHO holds the lock, and that the wait budget can be extended via
+    the CONSENSUS_MCP_STATE_LOCK_TIMEOUT_SECONDS environment variable."""
+    detail = (
+        f"{exc}. The operation was NOT performed - nothing was written. "
+        f"The lock is currently held by pid={exc.owner_pid} "
+        f"host={exc.owner_host} (claimed_at_epoch={exc.owner_claimed_at_epoch}). "
+        f"Retry after the holder releases, or extend the {exc.timeout_s}s wait "
+        f"budget via the {_STATE_LOCK_TIMEOUT_ENV} environment variable."
+    )
+    return {
+        "error": "state_lock_timeout",
+        "detail": detail,
+        "lock_target": str(lock_target),
+        "owner_pid": exc.owner_pid,
+        "owner_host": exc.owner_host,
+        "owner_claimed_at_epoch": exc.owner_claimed_at_epoch,
+    }
 
 # iter-0037 (Phase B step 10 per iter-0024 plan, HIGHEST-impact seal-pipeline
 # tool): migrated from cached REPO_ROOT/ARCHIVE_DIR/INDEX_PATH module-level
@@ -588,16 +648,17 @@ def handle(
             # M1 S5: even with the filename cap, a filesystem can still refuse
             # the write (exotic mounts, path-length totals) - that is a
             # structured refusal now, never a raw OSError out of handle().
+            # M1-remediation (consult iteration-path-to-a-remediation-260caad1)
+            # Q2: route through the blessed `_atomic_io.atomic_write_text`
+            # (O_EXCL unpredictable-temp + fsync + os.replace, self-cleaning on
+            # error) instead of a hand-rolled write_text + os.replace, so this
+            # writer can never drift from the one atomic-write primitive. The
+            # OSError -> packet_write_failed structured refusal is preserved;
+            # the writer unlinks its own temp on failure (no manual cleanup).
             sealed_yaml = yaml.safe_dump(packet, sort_keys=False)
-            tmp_packet = sealed_path.with_suffix(".yaml.tmp")
             try:
-                tmp_packet.write_text(sealed_yaml, encoding="utf-8")
-                os.replace(str(tmp_packet), str(sealed_path))
+                atomic_write_text(sealed_path, sealed_yaml)
             except OSError as exc:
-                try:
-                    tmp_packet.unlink()
-                except OSError:
-                    pass
                 return {
                     "error": "packet_write_failed",
                     "detail": (
@@ -620,29 +681,22 @@ def handle(
             index_data["passes"] = passes_list
             index_data["last_updated_utc"] = sealed_at
 
+            # M1-remediation (consult iteration-path-to-a-remediation-260caad1)
+            # Q2: route through the blessed `_atomic_io.atomic_write_text`. It
+            # already uses an UNPREDICTABLE per-writer temp name (os.urandom),
+            # so the M1 Q1 unique-tmp guard against the shared index.yaml.tmp
+            # FileNotFoundError race is preserved by the primitive itself - no
+            # hand-rolled tmp name needed, and the writer can no longer drift.
             index_yaml = yaml.safe_dump(index_data, sort_keys=False)
-            # M1 Q1: unique per-writer tmp name. The old shared index.yaml.tmp
-            # meant the loser of a concurrent tmp race got an UNCAUGHT
-            # FileNotFoundError out of os.replace; unique names kill that
-            # failure mode independently of the locking above.
-            tmp_index = _index.with_name(
-                f"index.yaml.tmp.{os.getpid()}.{os.urandom(4).hex()}"
-            )
-            tmp_index.write_text(index_yaml, encoding="utf-8")
-            os.replace(str(tmp_index), str(_index))
+            atomic_write_text(_index, index_yaml)
     except LockTimeout as exc:
-        # Structured refusal (fail loud, never proceed unlocked) carrying the
-        # holder's owner.json fields (gemini-rev-001). Nothing was written:
-        # the packet write sits INSIDE the hold, so a timed-out seal leaves
-        # no orphan archive file.
-        return {
-            "error": "state_lock_timeout",
-            "detail": str(exc),
-            "lock_target": str(_index),
-            "owner_pid": exc.owner_pid,
-            "owner_host": exc.owner_host,
-            "owner_claimed_at_epoch": exc.owner_claimed_at_epoch,
-        }
+        # M1-remediation (consult iteration-path-to-a-remediation-260caad1)
+        # Q2+Q11: structured refusal via the ONE shared builder (fail loud,
+        # never proceed unlocked) - the holder's owner.json fields
+        # (gemini-rev-001) plus the remedy-naming detail. Nothing was written:
+        # the packet write sits INSIDE the hold, so a timed-out seal leaves no
+        # orphan archive file.
+        return _state_lock_timeout_refusal(exc, _index)
 
     # --- Step 10: audit event ---
     # Use review_returned_and_sealed (closest semantic match in CANONICAL_EVENT_TYPES).

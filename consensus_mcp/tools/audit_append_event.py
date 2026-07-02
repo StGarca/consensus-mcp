@@ -43,9 +43,23 @@ from consensus_mcp._atomic_io import LockTimeout, atomic_write_text, locked_muta
 from consensus_mcp._paths import project_root, active_dir
 
 # M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: lock-acquisition
-# budget for the audit-file mutation window. Module-level (a real attribute,
-# not __getattr__-synthesized) so tests may shrink it via monkeypatch.setattr.
-_STATE_LOCK_TIMEOUT_S = 30.0
+# budget for the audit-file mutation window.
+#
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q2+Q11:
+# the timeout budget and the structured `state_lock_timeout` refusal builder
+# have ONE definition site (review_write_and_seal) - imported here so the 30s
+# constant (now Q11 env-overridable via CONSENSUS_MCP_STATE_LOCK_TIMEOUT_SECONDS)
+# and the refusal shape can never drift between the two seal-pipeline writers.
+# `_STATE_LOCK_TIMEOUT_S` re-binds into this module's namespace as a real
+# attribute, so existing tests may still shrink it via
+# `monkeypatch.setattr(audit_tool, "_STATE_LOCK_TIMEOUT_S", ...)` and handle()
+# reads this module's own binding. (No top-level import cycle:
+# review_write_and_seal imports audit_append_event only lazily, inside its
+# handle().)
+from consensus_mcp.tools.review_write_and_seal import (
+    _STATE_LOCK_TIMEOUT_S,
+    _state_lock_timeout_refusal,
+)
 
 # iter-0036 (Phase B step 9 per iter-0024 plan, HIGH-impact audit trail
 # tool): migrated from module-level REPO_ROOT/ACTIVE_DIR captures to lazy
@@ -507,16 +521,11 @@ def handle(
             atomic_write_text(audit_path, yaml.safe_dump(data, sort_keys=False))
             post_sha = _canonical_sha256(audit_path)
     except LockTimeout as exc:
-        # Structured refusal (fail loud, never proceed unlocked) carrying the
-        # holder's owner.json fields (gemini-rev-001).
-        return {
-            "error": "state_lock_timeout",
-            "detail": str(exc),
-            "lock_target": str(audit_path),
-            "owner_pid": exc.owner_pid,
-            "owner_host": exc.owner_host,
-            "owner_claimed_at_epoch": exc.owner_claimed_at_epoch,
-        }
+        # M1-remediation (consult iteration-path-to-a-remediation-260caad1)
+        # Q2+Q11: structured refusal via the ONE shared builder (fail loud,
+        # never proceed unlocked) - the holder's owner.json fields
+        # (gemini-rev-001) plus the remedy-naming detail. Nothing was written.
+        return _state_lock_timeout_refusal(exc, audit_path)
 
     # --- Task #28: author closure-certificate.yaml on PASS for iteration_closed ---
     if event_type == "iteration_closed" and invariant_result is not None and invariant_result["ok"]:

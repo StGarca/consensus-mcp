@@ -441,6 +441,95 @@ def test_prefix_mode_segment_boundary_matrix(
 
 
 # ---------------------------------------------------------------------------
+# Q3 (M1-remediation): '.'/'..' path-segment traversal guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", ["exact", "prefix"])
+@pytest.mark.parametrize(
+    ("cons_target", "appr_target", "bad_side"),
+    [
+        ("a/../evil", "a", "consensus"),
+        ("a", "a/../evil", "approval"),
+        (".", "a", "consensus"),
+        ("a/./b", "a", "consensus"),
+        ("a\\..\\evil", "a", "consensus"),
+        ("a/..", "a", "consensus"),
+        ("../a", "a", "consensus"),
+        ("a/./b", "a/../b", "consensus"),
+    ],
+    ids=[
+        "consensus-dotdot-escape",
+        "approval-dotdot",
+        "consensus-single-dot",
+        "consensus-embedded-dot",
+        "consensus-backslash-dotdot-mixed-sep",
+        "consensus-trailing-dotdot",
+        "consensus-leading-dotdot",
+        "both-sides-dot-segments",
+    ],
+)
+def test_scope_target_traversal_segment_refuses(
+    tmp_path, mode, cons_target, appr_target, bad_side
+):
+    """Q3 (M1-remediation, consult iteration-path-to-a-remediation-260caad1): a
+    '.' or '..' path segment on EITHER side is a fail-closed scope_target_traversal
+    refusal under ALL match modes.
+
+    The load-bearing case is consensus 'a/../evil' vs approval 'a': the pre-Q3
+    prefix normalize+startswith would MATCH ('a/../evil' startswith 'a/'), letting
+    a traversal escape the approved boundary. The guard makes such a target unable
+    to match at all -- and it refuses outright rather than silently non-matching
+    even under exact mode. Mixed separators ('a\\..\\evil') normalize before the
+    check, so backslash traversal is caught too. The consensus side is inspected
+    first, so a consensus traversal names 'consensus'."""
+    consensus = _consensus_doc(
+        production_scope={
+            "type": "deploy",
+            "target": cons_target,
+            "scope_match_mode": mode,
+        }
+    )
+    cpath, vpath, apath = _ready_state(
+        tmp_path,
+        consensus=consensus,
+        approval_overrides={
+            "production_scope": {"type": "deploy", "target": appr_target}
+        },
+    )
+    result = _call(cpath, vpath, apath)
+    assert result["error"] == "scope_target_traversal"
+    assert bad_side in result["detail"]
+    assert "path segment" in result["detail"]
+
+
+def test_traversal_escape_never_matches_approved_parent(tmp_path):
+    """Q3 headline invariant: consensus target 'a/../evil' can NEVER be treated
+    as an approved child of 'a' -- it refuses instead of (pre-Q3) prefix-matching."""
+    consensus = _consensus_doc(
+        production_scope={
+            "type": "deploy",
+            "target": "a/../evil",
+            "scope_match_mode": "prefix",
+        }
+    )
+    cpath, vpath, apath = _ready_state(
+        tmp_path,
+        consensus=consensus,
+        approval_overrides={"production_scope": {"type": "deploy", "target": "a"}},
+    )
+    result = _call(cpath, vpath, apath)
+    assert result == {
+        "error": "scope_target_traversal",
+        "detail": (
+            "consensus.production_scope.target='a/../evil' contains a '.' or '..' "
+            "path segment; traversal/dot segments are refused on both sides under "
+            "all match modes"
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # not_ready: technical-readiness failures (fail-closed derivations)
 # ---------------------------------------------------------------------------
 

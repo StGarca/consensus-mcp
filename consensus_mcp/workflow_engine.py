@@ -421,16 +421,34 @@ class WorkflowEngine:
         consumes the outcome and makes the final call externally.
         """
         enabled = self.config["contributors"]["enabled"]
+        # M1-remediation (consult iteration-path-to-a-remediation-260caad1):
+        # advisory joins the parallel fan-out. Contributors' recommendations are
+        # independent of each other, so they dispatch CONCURRENTLY via
+        # _dispatch_phase_parallel with the SAME H1/H2 thread-safety pattern as
+        # _run_workflow_3: worker threads only run the (I/O-bound) dispatch and
+        # never mutate shared engine state; results come back in `enabled` order
+        # and the outcome mutation + timeout recording happen in THIS (main)
+        # thread. Collect-all error semantics: a DispatchError is recorded as a
+        # timeout, any other exception is re-raised (a real bug, never swallowed)
+        # so one bad dispatch never silently aborts the panel. Advisory semantics
+        # are unchanged - every enabled contributor (incl. claude) still produces
+        # a recommendation and the vote stays non-load-bearing (claude decides).
         artifacts: list[SealedArtifact] = []
-        for c in enabled:
-            adapter = self.adapters[c]
-            try:
-                art = adapter.review(iteration_dir, goal_packet_path, target_path)
-            except DispatchError as exc:
-                self._record_timed_out(c, exc, outcome)
-                continue
-            artifacts.append(art)
-            outcome.contributor_artifacts.setdefault(c, []).append(art)
+        results = _dispatch_phase_parallel(
+            enabled,
+            lambda c: self.adapters[c].review(
+                iteration_dir, goal_packet_path, target_path
+            ),
+            max_workers=_max_dispatch_workers(),
+        )
+        for c, (status, val) in zip(enabled, results):
+            if status == "err":
+                if isinstance(val, DispatchError):
+                    self._record_timed_out(c, val, outcome)
+                    continue
+                raise val  # non-DispatchError = a real bug; do not swallow
+            artifacts.append(val)
+            outcome.contributor_artifacts.setdefault(c, []).append(val)
         # codex-rev-002 round-1 fix: use _artifact_contributor_key for
         # advisory reporting too (prior version used adapter.name which
         # breaks for fake adapters or any wrapper with mismatched names).

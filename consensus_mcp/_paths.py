@@ -19,7 +19,9 @@ of that split.
 Environment variable precedence (per resolver):
   - `resolve_repo_root()` - M1: THE blessed repo-root resolver (env keys ->
                             cwd-ancestor containment-marker walk -> RepoRootError)
-  - `repo_root()`         - legacy/lenient: `CONSENSUS_MCP_REPO_ROOT` -> walked-up `__file__` -> cwd
+  - `repo_root()`         - legacy/lenient shim: delegates to
+                            resolve_repo_root(require_markers=False) - NO
+                            `__file__` fallback (M1-remediation Q5)
   - `spec_path()`         - `CONSENSUS_MCP_SPEC_PATH` -> legacy under repo_root -> walked-up -> packaged template
   - `state_root()`        - `CONSENSUS_MCP_STATE_ROOT` -> legacy under repo_root -> cwd
   - `project_root()`      - `CONSENSUS_MCP_PROJECT_ROOT` -> legacy repo_root -> cwd
@@ -130,27 +132,23 @@ def resolve_repo_root(
 
 
 def repo_root() -> Path:
-    """Resolve repo root.
+    """Resolve repo root (legacy/lenient shim; retained for back-compat).
 
-    Precedence:
-      1. `CONSENSUS_MCP_REPO_ROOT` env var (operator override)
-      2. Walked-up `__file__` (dev checkout layout: this file's parent.parent
-         is the repo root)
-      3. Current working directory (installed wheel / unusual layouts)
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q5: this
+    function is now a thin shim over the ONE blessed resolver. Its prior
+    ``Path(__file__).resolve().parent.parent`` fallback is GONE - that was the
+    site-packages-anchoring class the resolver census bans (under a pipx/wheel
+    install the walk-up lands in site-packages). Delegating here means a stray
+    ``from _paths import repo_root`` can never silently reintroduce that class.
+
+    Precedence (inherited from resolve_repo_root):
+      1. `CONSENSUS_MCP_REPO_ROOT` / `CONSENSUS_MCP_PROJECT_ROOT` env override
+      2. cwd-ancestor walk to the nearest containment marker
+         (`.consensus/` or `consensus-state/`)
+      3. Current working directory (``require_markers=False`` keeps this
+         lenient shim from raising) - NEVER a `__file__`-derived root.
     """
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override).resolve()
-    walked = Path(__file__).resolve().parent.parent
-    # Dev checkout: walked-up parent contains repo markers (pyproject.toml
-    # or .git). In an installed wheel, walked = site-packages/ which has
-    # `consensus_mcp/` as a sibling but neither pyproject.toml nor .git, so
-    # we must NOT return site-packages as the repo root.
-    if (walked / "pyproject.toml").exists() or (walked / ".git").exists():
-        return walked
-    # Installed wheel / unusual layouts: cwd is the right fallback so the
-    # orchestrator can still locate consensus-state/.
-    return Path.cwd().resolve()
+    return resolve_repo_root(require_markers=False)
 
 
 def spec_path() -> Path:

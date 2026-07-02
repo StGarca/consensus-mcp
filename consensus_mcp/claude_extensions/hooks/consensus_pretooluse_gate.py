@@ -428,6 +428,61 @@ def _bash_is_read_only(command: str) -> bool:
     return all(_segment_is_read_only(s) for s in segments)
 
 
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q4: the
+# harness-improvement CLI (consensus-mcp-harness-propose) is on the tooling
+# allowlist AND takes an --output-path. Left unchecked, the tooling exemption
+# would wave through a Bash-invoked write of ~/.claude/settings.json or a hook
+# via that flag - a global gate self-disable. We extract every --output-path a
+# consensus-tooling segment carries and route each resolved target through the
+# SAME _is_protected_install_path guard the EDIT_TOOLS branch uses.
+_OUTPUT_PATH_FLAG = "--output-path"
+
+
+def _is_output_path_flag(token_name: str) -> bool:
+    """True iff `token_name` is `--output-path` or an unambiguous argparse
+    abbreviation of it. The harness CLI's only other long option is
+    `--max-records`, so any '--o...'-prefixed abbreviation resolves to
+    --output-path (argparse allow_abbrev defaults on)."""
+    return token_name.startswith("--o") and _OUTPUT_PATH_FLAG.startswith(token_name)
+
+
+def _tooling_output_path_targets(command: str) -> list[str]:
+    """Return every --output-path VALUE (or --output-path=VALUE) carried by a
+    consensus-tooling segment of `command`. Tilde/$VAR forms are expanded so
+    '~/.claude/settings.json' and '$HOME/.claude/...' resolve like the shell
+    would. Segments are split QUOTE-AWARE (same splitter the allowlist uses) and
+    a leading benign VAR=value assignment prefix is skipped to find the real
+    head. Non-tooling segments contribute nothing."""
+    import shlex
+    targets: list[str] = []
+    for segment in _split_segments(command):
+        try:
+            tokens = shlex.split(segment.strip())
+        except ValueError:
+            continue
+        idx = 0
+        while idx < len(tokens) and _ASSIGNMENT_RE.match(tokens[idx]):
+            idx += 1
+        cmd_tokens = tokens[idx:]
+        if not cmd_tokens or cmd_tokens[0] not in _CONSENSUS_TOOLING:
+            continue
+        i = 1
+        while i < len(cmd_tokens):
+            name, sep, val = cmd_tokens[i].partition("=")
+            if _is_output_path_flag(name):
+                if sep:
+                    raw = val
+                elif i + 1 < len(cmd_tokens):
+                    raw = cmd_tokens[i + 1]
+                    i += 1
+                else:
+                    raw = ""
+                if raw:
+                    targets.append(os.path.expanduser(os.path.expandvars(raw)))
+            i += 1
+    return targets
+
+
 def _deny(reason: str) -> int:
     print(f"[consensus-design-gate] BLOCKED: {reason}\n"
           f"Seal a Workflow A converged plan (>=2 non-claude reviewers) covering "
@@ -595,6 +650,24 @@ def main(argv=None) -> int:
                   "refused - it would disable the design gate globally. (To legitimately "
                   "update the install, run `consensus-init` or reinstall.)", file=sys.stderr)
             return 2
+
+    # M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q4:
+    # SAME always-on protected-install floor, extended to the Bash surface. An
+    # allowlisted consensus tool (esp. consensus-mcp-harness-propose) can carry
+    # --output-path; a Bash-invoked write onto the enforcement surface via that
+    # flag would disable the gate globally, so it is refused BEFORE the opt-in /
+    # activation check - the tooling allowlist must never open a self-disable
+    # hole. (A legitimate proposal path points at consensus-state/ or scratch.)
+    if tool == "Bash":
+        _cmd = tool_input.get("command") or ""
+        for _target in _tooling_output_path_targets(_cmd):
+            if _is_protected_install_path(Path(_target), repo_root):
+                print("[consensus-design-gate] BLOCKED: a consensus tool --output-path "
+                      "resolving onto the enforcement surface (~/.claude/settings.json or "
+                      "~/.claude/hooks/consensus_*.py) is refused - it would disable the "
+                      "design gate globally. (Point --output-path at consensus-state/ or a "
+                      "scratch path.)", file=sys.stderr)
+                return 2
 
     # Finding 1 (opt-in): enforce ONLY in repos that opted into consensus (a
     # `.consensus/` dir present). A repo that never enabled consensus - including

@@ -5,6 +5,8 @@ without spawning real codex/gemini subprocesses.
 """
 from __future__ import annotations
 
+import hashlib
+import threading
 from copy import deepcopy
 from pathlib import Path
 
@@ -14,9 +16,12 @@ import yaml
 from consensus_mcp import config as cfg
 from consensus_mcp.contributors import DispatchError
 from consensus_mcp.contributors.base import (
+    ContributorAdapter,
+    DispatchPacket,
     FakeAlwaysApprove,
     FakeAlwaysBlock,
     FakeRaisesDispatchError,
+    SealedArtifact,
 )
 from consensus_mcp.workflow_engine import (
     ConvergenceOutcome,
@@ -231,6 +236,76 @@ def test_advisory_always_converges(tmp_path):
     # Advisory always converges (claude decides regardless).
     assert outcome.convergence.converged is True
     assert outcome.convergence.rule == cfg.CONVERGE_ADVISORY
+
+
+class _BarrierAdapter(ContributorAdapter):
+    """Advisory concurrency probe (mirrors
+    test_dispatch_phase_parallel.test_phase_parallel_runs_concurrently): every
+    dispatch must rendezvous at a shared N-party barrier before it returns. A
+    SERIAL dispatch loop can never release the barrier -- the first waiter blocks
+    to the timeout and raises BrokenBarrierError -- so only a true parallel
+    fan-out crosses it and lets all contributors complete."""
+
+    def __init__(self, name: str, barrier: threading.Barrier):
+        super().__init__()
+        self.name = name
+        self._barrier = barrier
+
+    def dispatch(self, packet: DispatchPacket) -> SealedArtifact:
+        # BrokenBarrierError (propagates) if peers never arrive => serial.
+        self._barrier.wait()
+        out_path = packet.iteration_dir / f"{self.name}-advisory-{packet.phase}.yaml"
+        parsed = {
+            "iteration_id": packet.iteration_dir.name,
+            "reviewer_id": f"{self.name}-{packet.contributor}-1",
+            "pass_id": f"{self.name}-{packet.contributor}-1-pass1",
+            "findings": [],
+            "goal_satisfied": True,
+            "goal_satisfied_rationale": "barrier-crossed",
+            "blocking_objections": [],
+        }
+        out_path.write_text(
+            yaml.safe_dump(parsed, sort_keys=False, default_flow_style=False),
+            encoding="utf-8",
+        )
+        return SealedArtifact(
+            contributor=self.name,
+            phase=packet.phase,
+            pass_id=parsed["pass_id"],
+            sealed_path=out_path,
+            archive_sealed_path=None,
+            packet_sha256=hashlib.sha256(out_path.read_bytes()).hexdigest(),
+            parsed=parsed,
+        )
+
+
+def test_advisory_dispatches_in_parallel(tmp_path):
+    """Q8 (consult iteration-path-to-a-remediation-260caad1): advisory mode fans
+    reviewers out CONCURRENTLY via _dispatch_phase_parallel, exactly like
+    workflow #3. An N-party barrier that every dispatch must reach proves it: a
+    serial for-loop would block the first waiter to the barrier timeout
+    (BrokenBarrierError -> the run raises), while concurrent dispatch releases the
+    barrier so all N complete and are recorded responsive."""
+    config = _three_contributor_config(mode=cfg.WORKFLOW_ADVISORY, rule=cfg.CONVERGE_ADVISORY)
+    config["workflow"]["independence"] = cfg.INDEPENDENCE_VISIBLE
+    cfg.validate(config)
+    names = ["claude", "codex", "gemini"]
+    barrier = threading.Barrier(len(names), timeout=5)
+    adapters = {n: _BarrierAdapter(n, barrier) for n in names}
+    engine = WorkflowEngine(config, adapters, tmp_path)
+    iter_dir, goal, target = _make_iter_dir(tmp_path)
+    outcome = engine.run_iteration(iter_dir, goal, target)
+    # If dispatch were serial the barrier would never release and the run would
+    # surface an error instead of a clean advisory convergence.
+    assert outcome.error is None
+    assert outcome.convergence is not None
+    assert outcome.convergence.converged is True
+    assert outcome.convergence.rule == cfg.CONVERGE_ADVISORY
+    assert sorted(outcome.convergence.contributors_responsive) == sorted(names)
+    assert not outcome.convergence.contributors_timed_out
+    # Every contributor produced exactly one advisory artifact.
+    for n in names:
+        assert len(outcome.contributor_artifacts[n]) == 1
 
 
 # ---------- convergence rule evaluation ----------

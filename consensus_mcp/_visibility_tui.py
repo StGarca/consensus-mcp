@@ -316,15 +316,21 @@ def _render(dispatch_events: list[dict], audit_events: list[dict], warn_after: f
 # --- CLI --------------------------------------------------------------------
 
 def _default_repo_root() -> Path:
-    """Locate repo_root via the same env-var override as _dispatch_codex.
-    Falls back to a __file__-relative walk; if that fails the TUI exits with
-    a clear diagnostic rather than tailing nothing.
+    """Locate repo_root via the ONE blessed resolver (_paths.resolve_repo_root).
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q5: the
+    old ``Path(__file__).resolve().parent.parent`` fallback silently anchored
+    the TUI to site-packages under a pipx/wheel install (the divergence class
+    the resolver census bans). Delegate to the shared resolver instead - NO
+    __file__-derived root. It honors the env overrides
+    (CONSENSUS_MCP_REPO_ROOT / CONSENSUS_MCP_PROJECT_ROOT) first, then walks
+    cwd-ancestors to a containment marker. ``require_markers=False`` keeps the
+    TUI's lenient default (fall back to cwd rather than raise) so main()'s
+    existing "state dir not found" check still prints the clear diagnostic
+    rather than tailing nothing.
     """
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override).resolve()
-    # Walk up from this file: consensus_mcp/_visibility_tui.py -> repo root
-    return Path(__file__).resolve().parent.parent
+    from consensus_mcp import _paths
+    return _paths.resolve_repo_root(require_markers=False)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -334,7 +340,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--warn-after", type=float, default=300.0,
                         help="Seconds before an active dispatch is flagged STALL (default 300 = 5min).")
     parser.add_argument("--repo-root", default=None,
-                        help="Override repo root (default: CONSENSUS_MCP_REPO_ROOT or __file__ walk).")
+                        help="Override repo root (default: CONSENSUS_MCP_REPO_ROOT / "
+                             "CONSENSUS_MCP_PROJECT_ROOT env, else cwd-ancestor marker walk).")
     ns = parser.parse_args(argv)
 
     repo_root = Path(ns.repo_root).resolve() if ns.repo_root else _default_repo_root()

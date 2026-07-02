@@ -413,3 +413,132 @@ def test_serve_stdio_smoke(monkeypatch):
         "code": -32601,
         "message": "tool not found: no.such.tool",
     }
+
+
+# ---------------------------------------------------------------------------
+# Q9 - handler-exception observability under CONSENSUS_MCP_DEBUG
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1)
+# ---------------------------------------------------------------------------
+
+def test_tools_call_debug_flag_surfaces_traceback_without_leaking_wire(monkeypatch, capsys):
+    """With CONSENSUS_MCP_DEBUG set, a raising handler's full traceback (file +
+    line) is emitted to stderr AND appended to the server audit log for
+    diagnosis, but the -32000 wire message stays exactly str(exc) -- the
+    traceback never reaches the client."""
+    fresh = _install_registry(monkeypatch)
+    audited: list[tuple] = []
+    monkeypatch.setattr(
+        server, "_append_audit_event",
+        lambda event, extra=None: audited.append((event, extra)),
+    )
+    monkeypatch.setenv("CONSENSUS_MCP_DEBUG", "1")
+
+    def exploding():
+        raise ValueError("goal packet rejected: allowed_files empty")
+
+    fresh.register("stub.debugboom", {"name": "stub.debugboom"}, exploding)
+    resp = server._handle_request(
+        {"jsonrpc": "2.0", "id": 40, "method": "tools/call",
+         "params": {"name": "stub.debugboom"}}
+    )
+
+    # Wire contract unchanged: message is exactly str(exc); NO traceback leaks.
+    assert resp == {
+        "jsonrpc": "2.0",
+        "id": 40,
+        "error": {
+            "code": -32000,
+            "message": "goal packet rejected: allowed_files empty",
+        },
+    }
+    assert "Traceback" not in json.dumps(resp)
+
+    # stderr carries the diagnostic traceback with file + line info.
+    err = capsys.readouterr().err
+    assert "Traceback (most recent call last)" in err
+    assert "test_server_protocol.py" in err          # file
+    assert "line " in err                             # line-number frames
+    assert "in exploding" in err                      # raising frame
+    assert "goal packet rejected: allowed_files empty" in err
+
+    # ... and the audit log received the structured diagnostic event.
+    assert audited, "debug flag set but no audit event appended"
+    event, extra = audited[-1]
+    assert event == "mcp_tool_handler_exception"
+    assert extra["tool"] == "stub.debugboom"
+    assert extra["error"] == "goal packet rejected: allowed_files empty"
+    assert "Traceback (most recent call last)" in extra["traceback"]
+
+
+def test_tools_call_without_debug_flag_no_traceback(monkeypatch, capsys):
+    """Without CONSENSUS_MCP_DEBUG a raising handler yields ONLY the -32000
+    str(exc) envelope: no traceback on the wire, on stderr, or in the audit
+    log."""
+    fresh = _install_registry(monkeypatch)
+    audited: list[tuple] = []
+    monkeypatch.setattr(
+        server, "_append_audit_event",
+        lambda event, extra=None: audited.append((event, extra)),
+    )
+    monkeypatch.delenv("CONSENSUS_MCP_DEBUG", raising=False)
+
+    def exploding():
+        raise ValueError("quiet boom")
+
+    fresh.register("stub.quietboom", {"name": "stub.quietboom"}, exploding)
+    resp = server._handle_request(
+        {"jsonrpc": "2.0", "id": 41, "method": "tools/call",
+         "params": {"name": "stub.quietboom"}}
+    )
+
+    assert resp["error"] == {"code": -32000, "message": "quiet boom"}
+    assert "Traceback" not in json.dumps(resp)
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
+    assert audited == []
+
+
+def test_tools_call_systemexit_traceback_surfaces_under_debug(monkeypatch, capsys):
+    """Q9 covers the M1 S1 SystemExit-containment branch too: under the debug
+    flag its traceback surfaces, but the wire message stays str(exc)."""
+    fresh = _install_registry(monkeypatch)
+    monkeypatch.setattr(server, "_append_audit_event", lambda *a, **k: None)
+    monkeypatch.setenv("CONSENSUS_MCP_DEBUG", "1")
+
+    def exiting():
+        raise SystemExit("spec not found: /nowhere/orchestration-spec.md")
+
+    fresh.register("stub.debugexit", {"name": "stub.debugexit"}, exiting)
+    resp = server._handle_request(
+        {"jsonrpc": "2.0", "id": 42, "method": "tools/call",
+         "params": {"name": "stub.debugexit"}}
+    )
+    assert resp["error"] == {
+        "code": -32000,
+        "message": "spec not found: /nowhere/orchestration-spec.md",
+    }
+    assert "Traceback" not in json.dumps(resp)
+    err = capsys.readouterr().err
+    assert "Traceback (most recent call last)" in err
+    assert "in exiting" in err
+
+
+# ---------------------------------------------------------------------------
+# Q10 - server main() hardens stdout/stderr for UTF-8 before any print()
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1)
+# ---------------------------------------------------------------------------
+
+def test_server_main_calls_force_utf8_streams_first(monkeypatch):
+    """server.main() invokes the shared UTF-8 bootstrap before touching the
+    boot gate, so a cp1252 console cannot crash on a diagnostic line."""
+    calls: list[str] = []
+    monkeypatch.setattr(server, "force_utf8_streams", lambda: calls.append("utf8"))
+    # Fail the boot gate fast so main() returns without serving stdio.
+    monkeypatch.setattr(
+        server, "_run_disposition_check",
+        lambda: calls.append("check") or 1,
+    )
+    rc = server.main([])
+    assert rc == 2
+    # UTF-8 hardening happened, and it happened before the disposition check.
+    assert calls == ["utf8", "check"]

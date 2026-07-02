@@ -59,6 +59,10 @@ from pathlib import Path
 
 import yaml
 
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q10:
+# shared UTF-8 stream bootstrap, called at the top of main().
+from consensus_mcp._console import force_utf8_streams
+
 from consensus_mcp._dispatch_base import (
     derive_pass_id,
     _REPO_ROOT_MARKERS,
@@ -824,6 +828,10 @@ def _invoke_gemini_with_retry(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # M1-remediation Q10 (consult iteration-path-to-a-remediation-260caad1):
+    # harden stdout/stderr for UTF-8 before any print() so a cp1252 Windows
+    # console cannot crash the dispatch on a non-ASCII glyph.
+    force_utf8_streams()
     p = argparse.ArgumentParser(
         prog="consensus_mcp._dispatch_gemini",
         description="Auto-dispatch gemini CLI as a reviewer; auto-seal via T6.",

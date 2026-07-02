@@ -170,6 +170,10 @@ def test_create_new_ledger_returns_exact_success_shape(env):
         "ledger_canonical_sha256_post_write": _canonical_sha(PROPOSED_V1),
         "audit_event_id": None,
     }
+    # M1-remediation (consult iteration-path-to-a-remediation-260caad1) W2:
+    # the ledger_path result contract is posix-normalized (forward slashes) even
+    # on Windows, where relative_to() would otherwise emit backslashes.
+    assert "\\" not in result["ledger_path"]
     # The proposed text lands verbatim -- no re-serialization on disk.
     assert env.ledger.read_text(encoding="utf-8") == PROPOSED_V1
     _assert_no_staging_litter(env)

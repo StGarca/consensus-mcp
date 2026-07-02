@@ -130,6 +130,21 @@ def _normalize_scope_target(target: str) -> str:
     return target.replace("\\", "/").rstrip("/")
 
 
+def _has_traversal_segment(target: str) -> bool:
+    """True iff the target's normalized posix form contains a '.' or '..' path
+    segment.
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q3: a
+    '..'/'.' segment lets a consensus target escape (or obfuscate) the approved
+    scope. Under prefix mode 'a/../evil' normalizes to 'a/../evil' which
+    startswith 'a/' -- so the segment-bounded prefix check would MATCH an escape
+    past the approved boundary 'a'; 'a/./b' could likewise disguise the compared
+    path. Backslashes are normalized first so 'a\\..\\evil' is caught too.
+    """
+    posix = target.replace("\\", "/")
+    return any(seg in ("..", ".") for seg in posix.split("/"))
+
+
 def _canonical_yaml_sha256_text(text: str) -> str:
     """Canonical sha256 of YAML text (re-dump with sort_keys=True before hashing)."""
     loaded = yaml.safe_load(text)
@@ -215,7 +230,8 @@ SCHEMA = {
             "consensus_yaml_not_found | verification_yaml_not_found | "
             "approval_yaml_not_found | invalid_yaml | missing_production_scope | "
             "missing_consensus_field | missing_approval_field | invalid_scope_type | "
-            "scope_type_mismatch | invalid_scope_match_mode | scope_target_empty."
+            "scope_type_mismatch | invalid_scope_match_mode | scope_target_empty | "
+            "scope_target_traversal."
         ),
         "oneOf": [
             {
@@ -269,6 +285,10 @@ SCHEMA = {
                             "scope_type_mismatch",
                             "invalid_scope_match_mode",
                             "scope_target_empty",
+                            # M1-remediation (consult
+                            # iteration-path-to-a-remediation-260caad1) Q3:
+                            # '.'/'..' path-segment refusal.
+                            "scope_target_traversal",
                         ],
                     },
                     "detail": {"type": ["string", "null"]},
@@ -405,6 +425,23 @@ def handle(
                 f"approval target={appr_target!r}"
             ),
         }
+    # M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q3: a
+    # '.'/'..' path segment on EITHER side is a fail-closed refusal under ALL
+    # match modes. Without it, prefix normalize+startswith would let a consensus
+    # target like 'a/../evil' (which startswith 'a/') escape the approved scope
+    # 'a', and 'a/./b' could obfuscate the compared path. A traversal/dot target
+    # can therefore never match -- and it refuses outright rather than silently
+    # non-matching under exact mode.
+    for _side, _side_target in (("consensus", cons_target), ("approval", appr_target)):
+        if _has_traversal_segment(_side_target):
+            return {
+                "error": "scope_target_traversal",
+                "detail": (
+                    f"{_side}.production_scope.target={_side_target!r} contains a "
+                    "'.' or '..' path segment; traversal/dot segments are refused "
+                    "on both sides under all match modes"
+                ),
+            }
     if cons_match_mode == "exact":
         scope_match_strict = (cons_target == appr_target)
     else:  # prefix

@@ -466,13 +466,21 @@ def _make_factory(stdout_lines, returncode, captured_cmd, captured_env, captured
     return factory
 
 
-def test_invoke_kimi_builds_expected_argv():
+def test_invoke_kimi_builds_expected_argv(monkeypatch):
     """New Kimi Code CLI uses prompt mode: `kimi -p <prompt> --output-format text`.
 
     The binary lives at ~/.kimi-code/bin/kimi (resolved by the dispatcher when
     PATH is stale). It has no --quiet/--thinking/--work-dir flags; project
     context comes from subprocess cwd=repo_root.
     """
+    # M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q1:
+    # PIN the Kimi Code CLI variant under test instead of resolving it through
+    # ambient shutil.which. Simulate a LEGACY kimi present on PATH (the
+    # maintainer's machine): without the pin, _resolve_kimi_bin("kimi") ->
+    # "/usr/bin/kimi" and _is_kimi_code_cli() -> False build the legacy --quiet
+    # argv and RED this test. The pin makes the test hermetic against ambient.
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _n: "/usr/bin/kimi")
+    monkeypatch.setattr(_dispatch_kimi, "_is_kimi_code_cli", lambda _b: True)
     review_line = b"OK final answer"
     captured_cmd: list = []
     captured_env: list = []
@@ -499,12 +507,17 @@ def test_invoke_kimi_builds_expected_argv():
     assert captured_procs[0].stdin.written == b""
 
 
-def test_invoke_kimi_large_prompt_fails_closed_for_kimi_code_cli():
+def test_invoke_kimi_large_prompt_fails_closed_for_kimi_code_cli(monkeypatch):
     """New Kimi Code CLI has no documented stdin/prompt-file transport.
 
     A prompt over the safe inline argv ceiling must fail before subprocess rather
     than crashing opaquely with E2BIG.
     """
+    # M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q1:
+    # pin the Kimi Code variant (simulating a legacy kimi on PATH) so the inline
+    # argv ceiling guard is exercised regardless of ambient which resolution.
+    monkeypatch.setattr(_dispatch_kimi.shutil, "which", lambda _n: "/usr/bin/kimi")
+    monkeypatch.setattr(_dispatch_kimi, "_is_kimi_code_cli", lambda _b: True)
     big_prompt = "X" * (200 * 1024)
     captured_cmd: list = []
     captured_env: list = []

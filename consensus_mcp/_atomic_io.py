@@ -134,10 +134,31 @@ def exclusive_create_text(path: Path, text: str, encoding: str = "utf-8") -> boo
 # capped at 250ms.
 _LOCK_RETRY_BASE_S = 0.010
 _LOCK_RETRY_CAP_S = 0.250
-# Absence of owner.json in a lock dir older than this = the holder crashed
-# between mkdir and the owner write (design Q1 mechanism step 2); a live
-# holder writes owner.json immediately after claiming.
-_MISSING_OWNER_GRACE_S = 5.0
+
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2
+# refinement: a lock dir observed CONTINUOUSLY owner-less by THIS waiter for
+# longer than this generous window is a crashed pre-write holder (mkdir landed,
+# the owner.json write never did) and may be reaped. This is a PER-WAITER
+# observation duration tracked in the acquire loop's local state - NEVER the
+# directory's mtime. Windows directory mtime is coarse/lagged, and keying the
+# missing-owner case on it (the removed _MISSING_OWNER_GRACE_S branch) let a
+# waiter steal a takeover winner's just-re-mkdir'd, still-owner-less claim,
+# producing the double takeover. A live holder writes owner.json within
+# microseconds of mkdir, so this window is orders of magnitude of headroom over
+# the normal owner-record latency.
+_ORPHAN_REAP_OBSERVED_S = 5.0
+
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) D1: release
+# removal budget. On Windows, deletion is DEFERRED while any transient handle
+# (AV, indexer, a sibling thread mid-read) lingers, so os.unlink/os.rmdir raise
+# OSError transiently; the pre-remediation swallow-and-orphan release then left
+# a still-fresh-owner lock dir behind (the fresh-holder LockTimeout + the
+# audit-append hammer hang). A short jittered bounded retry makes release
+# reliable without changing the primitive; POSIX unlinks synchronously so the
+# loop returns on its first pass on Linux/WSL.
+_RELEASE_RETRY_BASE_S = 0.005
+_RELEASE_RETRY_CAP_S = 0.050
+_RELEASE_BUDGET_S = 1.5
 
 
 class LockTimeout(TimeoutError):
@@ -189,22 +210,24 @@ def _read_lock_owner(owner_path: Path) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _lock_is_stale(lock_dir: Path, owner: dict | None, stale_after_s: float) -> bool:
-    """Age-only staleness: owner.json claimed_at_epoch older than
-    stale_after_s, or no parseable owner record in a lock dir older than the
-    missing-owner grace window (crashed pre-write holder)."""
-    now = time.time()
-    if owner is not None:
-        epoch = owner.get("claimed_at_epoch")
-        if isinstance(epoch, (int, float)) and not isinstance(epoch, bool):
-            return (now - float(epoch)) > stale_after_s
-    try:
-        dir_mtime = os.stat(lock_dir).st_mtime
-    except OSError:
-        # Lock dir vanished between the failed mkdir and this stat - the
-        # holder released; the next mkdir retry claims it. Not stale.
+def _lock_is_stale(owner: dict | None, stale_after_s: float) -> bool:
+    """Age-only staleness of a PARSEABLE owner record: True iff owner.json's
+    claimed_at_epoch is older than stale_after_s.
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2: an
+    owner-LESS lock dir is NEVER stale by this predicate (returns False). The
+    pre-remediation missing-owner directory-mtime grace branch is REMOVED -
+    Windows directory mtime is coarse/lagged, so keying the missing-owner case
+    on it let a waiter steal a takeover winner's just-re-mkdir'd (still
+    owner-less) claim, producing the double takeover. Owner-less dirs are now
+    handled entirely by (a) the robust D1 release and (b) the caller's
+    per-waiter observation-time orphan reap - never directory mtime."""
+    if owner is None:
         return False
-    return (now - dir_mtime) > _MISSING_OWNER_GRACE_S
+    epoch = owner.get("claimed_at_epoch")
+    if isinstance(epoch, (int, float)) and not isinstance(epoch, bool):
+        return (time.time() - float(epoch)) > stale_after_s
+    return False
 
 
 def _takeover_stale_lock(
@@ -225,10 +248,18 @@ def _takeover_stale_lock(
     waiter whose earlier observation was overtaken by a sibling's
     takeover-and-reclaim would otherwise rename the sibling's LIVE claim
     away. Re-verifying shrinks that observe->rename TOCTOU window to two
-    adjacent syscalls (a re-claimed dir has a fresh owner record / fresh
-    mtime, so the overtaken waiter aborts here and rejoins the wait loop).
+    adjacent syscalls (a re-claimed dir has a fresh owner record, so the
+    overtaken waiter aborts here and rejoins the wait loop).
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2: the
+    re-verification now requires a PARSEABLE owner record older than
+    stale_after_s. A lock dir with NO owner record is never taken over by this
+    path (`_lock_is_stale(None, ...)` is False), which removes the empty-window
+    steal where a slower waiter renamed a takeover winner's just-re-mkdir'd,
+    not-yet-owner-written claim away. Owner-less dirs are reclaimed only by the
+    caller's per-waiter observation-time orphan reap (`_reap_ownerless_orphan`).
     """
-    if not _lock_is_stale(lock_dir, _read_lock_owner(owner_path), stale_after_s):
+    if not _lock_is_stale(_read_lock_owner(owner_path), stale_after_s):
         return False
     stale_name = lock_dir.with_name(lock_dir.name + ".stale." + uuid.uuid4().hex)
     try:
@@ -241,12 +272,105 @@ def _takeover_stale_lock(
     return True
 
 
+def _reap_ownerless_orphan(lock_dir: Path, owner_path: Path) -> bool:
+    """Rename-then-claim reap of a dir THIS waiter has observed continuously
+    owner-less past the orphan-reap threshold.
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2
+    refinement: this is the ONLY path that reclaims an owner-less lock dir (a
+    holder that crashed between mkdir and its owner.json write), and it is
+    gated by the CALLER's per-waiter observed-ownerless duration - NEVER
+    directory mtime. Re-verify the dir is STILL owner-less immediately before
+    the rename (a holder that wrote owner.json in the interim must not be
+    stolen), then rename-aside - the same atomic 'delete' as the stale-owner
+    takeover: exactly one waiter can rename a given dir, and the loser gets an
+    OSError -> False and resets its observation so it re-observes the
+    replacement dir from scratch (closing the empty-window double-reap)."""
+    if _read_lock_owner(owner_path) is not None:
+        return False
+    stale_name = lock_dir.with_name(lock_dir.name + ".stale." + uuid.uuid4().hex)
+    try:
+        os.rename(lock_dir, stale_name)
+    except OSError:
+        return False
+    shutil.rmtree(stale_name, ignore_errors=True)
+    return True
+
+
+def _emit_release_failure(lock_dir: Path) -> None:
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) D1: a
+    release that ultimately cannot remove the lock dir is a real fault - never
+    silently orphan it. Emit a diagnostic to the LOCK-FREE dispatch-log sink
+    (never to a locked file, and via no locked_mutation), preserving the SINK
+    INVARIANT. Best effort: a logging failure must never propagate out of
+    release (the context manager's finally must not raise)."""
+    try:
+        from consensus_mcp._dispatch_base import _log_dispatch
+        from consensus_mcp._paths import dispatch_log_path
+
+        _log_dispatch(
+            dispatch_log_path(),
+            {
+                "event": "state_lock_release_failed",
+                "lock_dir": str(lock_dir),
+                "pid": os.getpid(),
+            },
+        )
+    except Exception:
+        pass
+
+
+def _release_lock(lock_dir: Path, owner_path: Path) -> None:
+    """Robustly remove the owner record then the claim dir.
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) D1: the
+    pre-remediation release swallowed os.unlink/os.rmdir OSErrors and orphaned
+    the dir. On Windows, deletion is deferred while a transient handle lingers,
+    so a swallowed rmdir left a still-fresh-owner lock dir behind - every
+    subsequent waiter then read a fresh (non-stale) owner and blocked to its
+    deadline (the fresh-holder LockTimeout and the audit-append hammer hang).
+    Retry the unlink+rmdir with jittered bounded backoff to a small total
+    budget (the transient handle clears within milliseconds), then fall back to
+    shutil.rmtree; if the dir STILL cannot be removed, log to the lock-free
+    dispatch-log sink rather than silently orphan. POSIX unlinks synchronously,
+    so this returns on the first pass on Linux/WSL."""
+    deadline = time.monotonic() + _RELEASE_BUDGET_S
+    delay = _RELEASE_RETRY_BASE_S
+    while True:
+        try:
+            os.unlink(owner_path)
+        except OSError:
+            # Transient (deferred deletion) or already gone; the rmdir attempt
+            # below decides success and drives the retry.
+            pass
+        try:
+            os.rmdir(lock_dir)
+            return
+        except FileNotFoundError:
+            # Already gone (e.g. a stale takeover renamed it away).
+            return
+        except OSError:
+            pass
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(random.uniform(delay * 0.5, delay))
+        delay = min(delay * 2.0, _RELEASE_RETRY_CAP_S)
+    shutil.rmtree(lock_dir, ignore_errors=True)
+    try:
+        still_there = lock_dir.exists()
+    except OSError:
+        still_there = True
+    if still_there:
+        _emit_release_failure(lock_dir)
+
+
 @contextmanager
 def locked_mutation(
     target: Path,
     *,
     timeout_s: float = 30.0,
     stale_after_s: float = 120.0,
+    orphan_reap_after_s: float = _ORPHAN_REAP_OBSERVED_S,
 ) -> Iterator[LockStatus]:
     """Cross-process mutual exclusion for a read-modify-replace of `target`.
 
@@ -255,6 +379,13 @@ def locked_mutation(
     over stale claims (age > stale_after_s) via rename-then-claim. Raises
     LockTimeout (carrying the holder's owner.json fields) on timeout. Yields
     a LockStatus; NEVER emits events - see the SINK INVARIANT block above.
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2: only
+    a lock dir with a PARSEABLE, aged owner record is taken over by the rename
+    path. A lock dir this waiter has observed continuously owner-less for longer
+    than orphan_reap_after_s (a crashed pre-write holder) is reaped separately
+    (`_reap_ownerless_orphan`), keyed on that per-waiter observation - never on
+    directory mtime.
     """
     target = Path(target)
     lock_dir = target.with_name(target.name + ".lock")
@@ -266,6 +397,13 @@ def locked_mutation(
     deadline = start + timeout_s
     delay = _LOCK_RETRY_BASE_S
     last_owner: dict | None = None
+    # M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2
+    # refinement: the monotonic time at which THIS waiter first saw the lock dir
+    # owner-less in its current continuous owner-less streak. Reset to None
+    # whenever an owner record reappears or a reap-rename is lost, so a coarse
+    # directory mtime is never consulted and the streak can never span a
+    # takeover winner's re-mkdir empty window.
+    observed_ownerless_since: float | None = None
     while True:
         try:
             os.mkdir(lock_dir)
@@ -274,19 +412,43 @@ def locked_mutation(
             pass
         status.contended = True
         last_owner = _read_lock_owner(owner_path)
-        if _lock_is_stale(lock_dir, last_owner, stale_after_s):
-            if _takeover_stale_lock(lock_dir, owner_path, stale_after_s):
-                status.takeover = True
-                status.takeover_owner = last_owner
-                continue  # immediately retry the mkdir claim
-            # Rename failed: another waiter won the takeover or the
-            # filesystem refused - keep waiting (kimi-rev-006).
+        if last_owner is not None:
+            # A parseable owner record is present: any owner-less streak is
+            # broken, and only a STALE owner record is taken over (rename-based).
+            observed_ownerless_since = None
+            if _lock_is_stale(last_owner, stale_after_s):
+                if _takeover_stale_lock(lock_dir, owner_path, stale_after_s):
+                    status.takeover = True
+                    status.takeover_owner = last_owner
+                    continue  # immediately retry the mkdir claim
+                # Rename failed: another waiter won the takeover or the
+                # filesystem refused - keep waiting (kimi-rev-006).
+        else:
+            # Owner-LESS dir: NEVER stolen by the stale-owner rename path (D2).
+            # Reap ONLY after this waiter has itself observed the dir
+            # continuously owner-less past the generous threshold (a crashed
+            # pre-write holder) - never on directory mtime.
+            now = time.monotonic()
+            if observed_ownerless_since is None:
+                observed_ownerless_since = now
+            elif (now - observed_ownerless_since) > orphan_reap_after_s:
+                if _reap_ownerless_orphan(lock_dir, owner_path):
+                    status.takeover = True
+                    status.takeover_owner = None
+                    observed_ownerless_since = None
+                    continue  # immediately retry the mkdir claim
+                # Lost the reap race (another waiter reaped, the holder just
+                # wrote owner.json, or the dir was recreated): restart this
+                # waiter's observation so it must re-observe the replacement dir
+                # owner-less from scratch, closing the empty-window double-reap.
+                observed_ownerless_since = None
         if time.monotonic() >= deadline:
             raise LockTimeout(target, timeout_s, _read_lock_owner(owner_path) or last_owner)
         time.sleep(random.uniform(delay * 0.5, delay))
         delay = min(delay * 2.0, _LOCK_RETRY_CAP_S)
-    # Claimed. Record the owner (best effort; absence is handled by the
-    # missing-owner grace window on the waiter side).
+    # Claimed. Record the owner (best effort; a crash before this write leaves
+    # an owner-less dir a waiter reclaims only via the observation-time orphan
+    # reap above - never a directory-mtime grace).
     try:
         owner_path.write_text(
             json.dumps(
@@ -304,15 +466,10 @@ def locked_mutation(
     try:
         yield status
     finally:
-        # Release: remove the owner record then the claim dir. Tolerate a
-        # vanished dir (a stale takeover renamed it away - only possible when
-        # a hold outlived stale_after_s, which the hold-window discipline
-        # makes pathological).
-        try:
-            os.unlink(owner_path)
-        except OSError:
-            pass
-        try:
-            os.rmdir(lock_dir)
-        except OSError:
-            pass
+        # M1-remediation (consult iteration-path-to-a-remediation-260caad1) D1:
+        # robust bounded-retry removal of the owner record then the claim dir -
+        # never the pre-remediation swallow-and-orphan. A dir a stale takeover
+        # renamed away is already gone and _release_lock returns immediately on
+        # the FileNotFoundError. A dir that ultimately cannot be removed is
+        # logged to the lock-free dispatch-log sink, never silently orphaned.
+        _release_lock(lock_dir, owner_path)

@@ -451,12 +451,16 @@ def handle(
             }
         audit_event_id = audit_result.get("event_id")
 
+    # M1-remediation (consult iteration-path-to-a-remediation-260caad1) W2:
+    # posix-normalize the ledger_path so the success-shape contract carries
+    # forward slashes on Windows too (relative_to() otherwise yields
+    # backslashes), matching :289 and review_write_and_seal.py:613.
     try:
-        ledger_rel = str(_ledger_path().relative_to(project_root()))
+        ledger_rel = str(_ledger_path().relative_to(project_root())).replace("\\", "/")
     except ValueError:
         # state_root may resolve outside project_root in tests or operator
         # configuration; fall back to the absolute path string.
-        ledger_rel = str(_ledger_path())
+        ledger_rel = str(_ledger_path()).replace("\\", "/")
 
     return {
         "written": True,

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
+import pytest
 import yaml
 
 from consensus_mcp.tool_registry import ToolRegistry
@@ -118,3 +120,85 @@ def test_harness_propose_registers_mcp_tool():
     [entry] = reg.list_tools()
     assert entry["name"] == "harness.propose"
     assert entry["inputSchema"]["type"] == "object"
+
+
+# ---------------------------------------------------------------------------
+# Q4 (M1-remediation, consult iteration-path-to-a-remediation-260caad1):
+# output_path containment - a proposal-only tool must never be usable to
+# overwrite the consensus enforcement surface and disable the design gate.
+# ---------------------------------------------------------------------------
+
+
+def _fake_home(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    (fake_home / ".claude" / "hooks").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))  # Windows Path.home()
+    return fake_home
+
+
+def test_harness_propose_refuses_output_path_onto_settings_json(tmp_path, monkeypatch):
+    """An output_path resolving onto ~/.claude/settings.json is refused BEFORE
+    any trace read or write, so the enforcement surface is never touched."""
+    fake_home = _fake_home(tmp_path, monkeypatch)
+    target = fake_home / ".claude" / "settings.json"
+    result = harness_propose.handle(output_path=str(target))
+    assert result["ok"] is False
+    assert "enforcement surface" in result["error"]
+    assert not target.exists()
+
+
+def test_harness_propose_refuses_output_path_onto_consensus_hook(tmp_path, monkeypatch):
+    fake_home = _fake_home(tmp_path, monkeypatch)
+    target = fake_home / ".claude" / "hooks" / "consensus_pretooluse_gate.py"
+    result = harness_propose.handle(output_path=str(target))
+    assert result["ok"] is False
+    assert "enforcement surface" in result["error"]
+    assert not target.exists()
+
+
+def test_harness_propose_refuses_tilde_output_path_onto_settings(tmp_path, monkeypatch):
+    """The tilde form is expanded before the containment check, so
+    '~/.claude/settings.json' is refused just like the absolute path."""
+    fake_home = _fake_home(tmp_path, monkeypatch)
+    result = harness_propose.handle(output_path="~/.claude/settings.json")
+    assert result["ok"] is False
+    assert "enforcement surface" in result["error"]
+    assert not (fake_home / ".claude" / "settings.json").exists()
+
+
+def test_harness_propose_refuses_hardlink_alias_to_settings(tmp_path, monkeypatch):
+    """A hardlink alias to an existing settings.json resolves to its own path,
+    so the pathname guard misses it; the inode-identity check catches it."""
+    fake_home = _fake_home(tmp_path, monkeypatch)
+    settings = fake_home / ".claude" / "settings.json"
+    settings.write_text("{}", encoding="utf-8")
+    alias = tmp_path / "alias.yaml"
+    try:
+        os.link(settings, alias)
+    except (OSError, NotImplementedError, AttributeError):
+        pytest.skip("hardlinks unsupported on this platform")
+    result = harness_propose.handle(output_path=str(alias))
+    assert result["ok"] is False
+    assert "enforcement surface" in result["error"]
+    # The alias content is untouched (still the original settings bytes).
+    assert settings.read_text(encoding="utf-8") == "{}"
+
+
+def test_harness_propose_safe_output_path_still_writes(tmp_path, monkeypatch):
+    """NO REGRESSION: a normal output_path (not the enforcement surface) still
+    produces a proposal even with a fake HOME set."""
+    _fake_home(tmp_path, monkeypatch)
+    state_root = tmp_path / "consensus-state"
+    trace_dir = state_root / "state"
+    trace_dir.mkdir(parents=True)
+    (trace_dir / "results-v1.jsonl").write_text(
+        json.dumps({"iteration_id": "iter-x",
+                    "findings": [{"id": "codex-rev-001", "severity": "high"}]}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(state_root))
+    out = tmp_path / "safe-proposal.yaml"
+    result = harness_propose.handle(output_path=str(out), max_records=10)
+    assert result["ok"] is True, result
+    assert out.exists()

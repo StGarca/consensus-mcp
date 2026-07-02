@@ -67,6 +67,72 @@ def test_every_skill_on_disk_is_in_the_install_manifest():
     )
 
 
+def _installed_skill_dirs() -> list[Path]:
+    """The skill directories `--install-claude-code` actually installs - derived
+    STRUCTURALLY as the parent of every skills/*/SKILL.md named in the install
+    manifest (`_CLAUDE_EXTENSION_FILES`). Scoping to installed skills matches what
+    the installer copies (an un-installed skill dir's companions are irrelevant)."""
+    return sorted(
+        {
+            (_EXT_ROOT / rel_src).parent
+            for rel_src, _ in wiz._CLAUDE_EXTENSION_FILES
+            if rel_src.startswith("skills/") and rel_src.endswith("/SKILL.md")
+        }
+    )
+
+
+def test_every_installed_skill_companion_md_is_in_the_install_manifest():
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) - Q7
+    companion-file reverse guard.
+
+    The wheel ships every skills/*/*.md via the package-data glob, but
+    `--install-claude-code` copies ONLY the files named in _CLAUDE_EXTENSION_FILES.
+    The existing reverse guard (test_every_skill_on_disk_is_in_the_install_manifest)
+    checks the SKILL.md itself, NOT its companions. So a NEW companion .md added
+    into an installed skill dir (e.g. a prompt the SKILL.md hands off to) ships in
+    the wheel yet is silently never copied by the installer, leaving a dangling
+    reference in the installed location - the twice-shipped v1.22 / v2.1.1
+    dangling-companion class.
+
+    Derive the required install set STRUCTURALLY from what is physically shipped:
+    for every installed skill dir, every companion .md present in it on disk MUST
+    also be named in the manifest. (We key off physical presence, NOT SKILL.md
+    prose references - prose cites many non-companion .md files: project files like
+    CLAUDE.md/README.md, docs paths, and rubric files vendored elsewhere - which
+    would make a reference-scraping guard fragile and false-positive.)
+    """
+    manifest_srcs = {rel_src for rel_src, _ in wiz._CLAUDE_EXTENSION_FILES}
+    skill_dirs = _installed_skill_dirs()
+    assert skill_dirs, (
+        "no installed skill dirs derived from _CLAUDE_EXTENSION_FILES - the guard "
+        "would be vacuous; check the manifest / skills layout"
+    )
+
+    checked = 0
+    omitted: list[str] = []
+    for skill_dir in skill_dirs:
+        for companion in sorted(skill_dir.glob("*.md")):
+            rel = companion.relative_to(_EXT_ROOT).as_posix()
+            if rel.endswith("/SKILL.md"):
+                continue  # the SKILL.md itself is guarded by the sibling test
+            checked += 1
+            if rel not in manifest_srcs:
+                omitted.append(rel)
+
+    # Non-vacuous tripwire: this class only exists because installed skills DO
+    # carry companion .md files (4 today). If that ever drops to zero the guard has
+    # silently stopped protecting anything - fail loud so it is re-examined.
+    assert checked, (
+        "no companion .md files found in any installed skill dir - the reverse "
+        "guard is vacuous; verify _EXT_ROOT and the skills/*/ layout"
+    )
+    assert not omitted, (
+        f"companion .md ships in the wheel (skills/*/*.md glob) but is NOT in "
+        f"_CLAUDE_EXTENSION_FILES, so `--install-claude-code` would skip it and "
+        f"leave a dangling reference: {omitted}"
+    )
+
+
 def test_every_enforcement_hook_script_is_packaged():
     packaged = _packaged_paths()
     for _event, _matcher, script in wiz._CONSENSUS_HOOK_SPECS:

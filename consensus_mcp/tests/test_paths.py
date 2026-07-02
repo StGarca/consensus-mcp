@@ -72,18 +72,29 @@ def test_repo_root_wheel_layout_fallback(tmp_path, monkeypatch):
         "repo_root must NOT mistake site-packages for repo root"
 
 
-def test_repo_root_uses_pyproject_marker(tmp_path, monkeypatch):
-    """codex-rev-001 (iter-0025): explicitly verify the pyproject.toml marker
-    is what discriminates dev-checkout from installed-wheel. Setup mimics a
-    dev checkout: site-packages-like layout BUT with pyproject.toml present."""
+def test_repo_root_ignores_file_no_site_packages_anchoring(tmp_path, monkeypatch):
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q5:
+    repo_root() is now a lenient shim over the blessed resolve_repo_root and
+    NEVER anchors to Path(__file__) (the site-packages-anchoring class the
+    resolver census bans). Even with __file__ pointed at a fake checkout that
+    carries the OLD discriminating pyproject.toml marker, resolution ignores it
+    entirely and uses the cwd-ancestor containment-marker walk instead."""
     fake_module_path = tmp_path / "checkout" / "consensus_mcp" / "_paths.py"
     fake_module_path.parent.mkdir(parents=True)
     fake_module_path.write_text("# fake module", encoding="utf-8")
     (tmp_path / "checkout" / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
-    monkeypatch.delenv("CONSENSUS_MCP_REPO_ROOT", raising=False)
     monkeypatch.setattr(_paths, "__file__", str(fake_module_path))
+    monkeypatch.delenv("CONSENSUS_MCP_REPO_ROOT", raising=False)
+    monkeypatch.delenv("CONSENSUS_MCP_PROJECT_ROOT", raising=False)
+    # A governed project on the cwd-ancestor path (has a containment marker).
+    project = tmp_path / "governed"
+    (project / "consensus-state").mkdir(parents=True)
+    monkeypatch.chdir(project)
     result = _paths.repo_root()
-    assert result == (tmp_path / "checkout").resolve()
+    assert result == project.resolve()
+    assert result != (tmp_path / "checkout").resolve(), (
+        "repo_root must ignore the __file__ tree - no site-packages anchoring"
+    )
 
 
 # ---------- state_root ----------

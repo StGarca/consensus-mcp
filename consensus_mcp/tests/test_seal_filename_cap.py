@@ -18,7 +18,6 @@ filesystem that still refuses the write yields a structured
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -125,21 +124,23 @@ def test_filesystem_refusal_is_a_structured_error_never_raw_oserror(repo, monkey
     """Even with the cap, a filesystem can still refuse the packet write
     (exotic mounts, total-path limits): handle() must return
     {'error': 'packet_write_failed'} and release the lock - never leak the
-    raw OSError."""
+    raw OSError.
 
-    class _PacketReplaceRefusingOs:
-        """Proxy for the module's `os` binding: os.replace fails for the
-        sealed packet only (index replaces pass through)."""
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q2: the
+    packet write now routes through `_atomic_io.atomic_write_text` (not a
+    hand-rolled os.replace), so the failure is injected at that seam - the
+    sealed-packet write is refused, the index write is let through so the lock
+    release is observable."""
+    real_atomic_write_text = seal_tool.atomic_write_text
 
-        def __getattr__(self, name):
-            return getattr(os, name)
+    def _refuse_packet_write(path, text, encoding="utf-8"):
+        # The packet write targets a *-pass.yaml file; the index write targets
+        # index.yaml. Refuse only the packet write, let the index write pass.
+        if Path(path).name != "index.yaml":
+            raise OSError(36, "File name too long (simulated)")
+        return real_atomic_write_text(path, text, encoding)
 
-        def replace(self, src, dst):
-            if Path(dst).name != "index.yaml":
-                raise OSError(36, "File name too long (simulated)")
-            return os.replace(src, dst)
-
-    monkeypatch.setattr(seal_tool, "os", _PacketReplaceRefusingOs())
+    monkeypatch.setattr(seal_tool, "atomic_write_text", _refuse_packet_write)
     r = seal_tool.handle(
         "iteration-0002", "codex", "pass-x", _packet("iteration-0002", "codex", "pass-x")
     )
@@ -152,8 +153,8 @@ def test_filesystem_refusal_is_a_structured_error_never_raw_oserror(repo, monkey
         assert all(e["id"] != "pass-x" for e in idx.get("passes", []))
 
     # The index lock was RELEASED on the structured-refusal path: a normal
-    # seal (real os restored) succeeds immediately.
-    monkeypatch.setattr(seal_tool, "os", os)
+    # seal (real writer restored) succeeds immediately.
+    monkeypatch.setattr(seal_tool, "atomic_write_text", real_atomic_write_text)
     r2 = seal_tool.handle(
         "iteration-0002", "codex", "pass-y", _packet("iteration-0002", "codex", "pass-y")
     )

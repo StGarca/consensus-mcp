@@ -41,8 +41,14 @@ import importlib.metadata
 import json
 import os
 import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q10:
+# shared UTF-8 stream bootstrap, called at the top of main() so a cp1252
+# Windows console cannot crash the server on the first non-ASCII byte.
+from consensus_mcp._console import force_utf8_streams
 
 
 def _package_version() -> str:
@@ -279,6 +285,46 @@ def _append_audit_event(event: str, extra: dict | None = None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Handler-exception observability (Q9)
+# ---------------------------------------------------------------------------
+
+def _debug_enabled() -> bool:
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q9:
+    CONSENSUS_MCP_DEBUG is a truthy toggle (any non-empty value), matching the
+    repo's other operator env switches (e.g. CONSENSUS_MCP_GATE_DISABLE)."""
+    return bool(os.environ.get("CONSENSUS_MCP_DEBUG"))
+
+
+def _report_handler_exception(name: str, exc: BaseException) -> None:
+    """Q9: surface a raising tool handler's full traceback for diagnosis WITHOUT
+    ever putting it on the wire.
+
+    When CONSENSUS_MCP_DEBUG is set, the active exception's
+    traceback.format_exc() (file + line) is written to stderr AND appended to
+    the server audit log. The -32000 wire message the caller returns stays
+    str(exc) -- the traceback can carry internal filesystem paths and must not
+    leak to the client. Best-effort: a failure to emit the diagnostic never
+    masks the original error. Must be called from inside the active `except`
+    block so format_exc() captures the right traceback.
+    """
+    if not _debug_enabled():
+        return
+    tb = traceback.format_exc()
+    try:
+        print(f"consensus-mcp tool handler '{name}' raised:\n{tb}", file=sys.stderr)
+        sys.stderr.flush()
+    except Exception:
+        pass
+    try:
+        _append_audit_event(
+            "mcp_tool_handler_exception",
+            {"tool": name, "error": str(exc), "traceback": tb},
+        )
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Stdio JSON-RPC 2.0 server (MCP wire format)
 # ---------------------------------------------------------------------------
 
@@ -344,12 +390,18 @@ def _handle_request(req: dict) -> dict | None:
             # tools/call try block, wrapping only handler invocation + result
             # encoding -- signal-driven process termination outside handler
             # execution is NOT swallowed.
+            # M1-remediation Q9 (consult iteration-path-to-a-remediation-260caad1):
+            # surface the traceback under CONSENSUS_MCP_DEBUG; wire stays str(exc).
+            _report_handler_exception(name, exc)
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "error": {"code": -32000, "message": str(exc)},
             }
         except Exception as exc:
+            # M1-remediation Q9 (consult iteration-path-to-a-remediation-260caad1):
+            # surface the traceback under CONSENSUS_MCP_DEBUG; wire stays str(exc).
+            _report_handler_exception(name, exc)
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -392,6 +444,10 @@ def _serve_stdio() -> None:
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    # M1-remediation Q10 (consult iteration-path-to-a-remediation-260caad1):
+    # harden stdout/stderr for UTF-8 before any print() so a cp1252 Windows
+    # console cannot crash the server on a non-ASCII diagnostic line.
+    force_utf8_streams()
     parser = argparse.ArgumentParser(description="consensus-mcp MCP server (Phase 1 skeleton)")
     parser.add_argument(
         "--boot-and-exit",

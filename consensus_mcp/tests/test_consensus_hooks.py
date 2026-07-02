@@ -1045,6 +1045,85 @@ def test_gatescope_bash_redirect_to_settings_still_denied(tmp_path, monkeypatch)
 
 
 # --------------------------------------------------------------------------- #
+# Q4 (M1-remediation, consult iteration-path-to-a-remediation-260caad1):
+# a Bash-invoked consensus tool --output-path onto the enforcement surface is
+# denied even though the tool is on the tooling allowlist (the exemption must
+# not open a self-disable hole). ALWAYS-ON, like the EDIT_TOOLS guard above.
+# --------------------------------------------------------------------------- #
+
+def _bash_ev(command, repo_root):
+    return {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(repo_root)}
+
+
+@pytest.mark.parametrize("template", [
+    "consensus-mcp-harness-propose --output-path {settings}",
+    "consensus-mcp-harness-propose --output-path={settings}",
+    "consensus-mcp-harness-propose --max-records 50 --output-path {settings}",
+    # argparse abbreviation of --output-path (allow_abbrev) still resolves to it.
+    "consensus-mcp-harness-propose --output {settings}",
+])
+def test_gatescope_bash_harness_output_path_to_settings_denied(tmp_path, monkeypatch, template):
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    command = template.format(settings=claude / "settings.json")
+    cp = _run_hook(PRETOOLUSE, _bash_ev(command, repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+    assert "output-path" in cp.stderr
+
+
+def test_gatescope_bash_harness_output_path_to_hook_denied(tmp_path, monkeypatch):
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    hook = claude / "hooks" / "consensus_pretooluse_gate.py"
+    cp = _run_hook(PRETOOLUSE, _bash_ev(f"consensus-mcp-harness-propose --output-path {hook}", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_bash_harness_output_path_denied_NON_opted_in(tmp_path, monkeypatch):
+    # ALWAYS-ON: the Bash --output-path floor fires BEFORE the opt-in/activation
+    # early-return, exactly like the EDIT_TOOLS protected-install guard (the
+    # self-disable threat is global, not scoped to opted-in projects).
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    command = f"consensus-mcp-harness-propose --output-path {claude / 'settings.json'}"
+    cp = _run_hook(PRETOOLUSE, _bash_ev(command, repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=False)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_bash_harness_output_path_symlink_escape_denied(tmp_path, monkeypatch):
+    # A repo-local symlink whose target is settings.json is resolved through -> denied.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    link = repo_root / "innocent.yaml"
+    try:
+        link.symlink_to(claude / "settings.json")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unsupported on this platform")
+    cp = _run_hook(PRETOOLUSE, _bash_ev(f"consensus-mcp-harness-propose --output-path {link}", repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 2, cp.stderr
+
+
+def test_gatescope_bash_harness_output_path_safe_still_allowed(tmp_path, monkeypatch):
+    # NO REGRESSION: a safe --output-path (under consensus-state/) keeps the
+    # tooling allowlist exemption -> allowed. Only the enforcement surface is denied.
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    command = "consensus-mcp-harness-propose --output-path consensus-state/state/harness-proposal.yaml"
+    cp = _run_hook(PRETOOLUSE, _bash_ev(command, repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_gatescope_bash_consensus_tooling_without_output_path_unaffected(tmp_path, monkeypatch):
+    # NO REGRESSION: consensus tooling that carries no --output-path is untouched
+    # by the new guard (it only inspects --output-path values).
+    repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
+    command = "consensus-mcp-dispatch-codex --goal-packet gp.yaml --iteration-dir d"
+    cp = _run_hook(PRETOOLUSE, _bash_ev(command, repo_root),
+                   repo_root=repo_root, runtime="present", opted_in=True)
+    assert cp.returncode == 0, cp.stderr
+
+
+# --------------------------------------------------------------------------- #
 # v1.33 gate-consistency fix - dormant-by-default parity across ALL three hooks.
 # The Stop gate and the SessionStart/UserPromptSubmit injector previously fired
 # in EVERY repo (gated only on `consensus-init` being on PATH), nagging everyday

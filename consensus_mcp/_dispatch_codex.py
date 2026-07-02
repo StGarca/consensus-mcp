@@ -50,6 +50,10 @@ from pathlib import Path
 
 import yaml
 
+# M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q10:
+# shared UTF-8 stream bootstrap, called at the top of main().
+from consensus_mcp._console import force_utf8_streams
+
 # iter-0010: generic dispatch helpers extracted to _dispatch_base.py per
 # iter-0009 verdict Q1: F1b. Re-imported into this module's namespace so
 # (a) existing call sites in _invoke_codex / _validate_patch_proposal /
@@ -913,6 +917,10 @@ def _parse_codex_proposal_output(text: str, schema_path: Path | None = None) -> 
 
 
 def main(argv: list[str] | None = None) -> int:
+    # M1-remediation Q10 (consult iteration-path-to-a-remediation-260caad1):
+    # harden stdout/stderr for UTF-8 before any print() so a cp1252 Windows
+    # console cannot crash the dispatch on a non-ASCII glyph.
+    force_utf8_streams()
     p = argparse.ArgumentParser(
         prog="consensus_mcp._dispatch_codex",
         description="Auto-dispatch codex CLI as the second reviewer; auto-seal via T6.",

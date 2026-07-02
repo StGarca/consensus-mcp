@@ -6,10 +6,14 @@ Covers the designed mechanism directly, at the primitive:
   - contention serializes read-modify-write (threaded counter);
   - LockTimeout carries the holder's parsed owner.json fields
     (gemini-rev-001);
-  - age-based stale takeover: aged owner.json AND missing-owner orphan dir
-    (crashed pre-write holder) both claimable, reported on the yielded
-    LockStatus (never emitted - the sink invariant is pinned at the callers
-    in test_seal_index_concurrency.py);
+  - age-based stale takeover of an aged owner.json record, reported on the
+    yielded LockStatus (never emitted - the sink invariant is pinned at the
+    callers in test_seal_index_concurrency.py);
+  - M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2
+    refinement: an owner-less orphan dir (crashed pre-write holder) is reaped
+    ONLY after THIS waiter observes it continuously owner-less past the
+    orphan-reap threshold, keyed on that per-waiter observation - NEVER on
+    directory mtime (a coarse/stale mtime must not trigger a premature reap);
   - kimi-rev-006: pre-existing <target>.lock.stale.* debris is tolerated,
     and a takeover-rename failure falls back to continued bounded waiting
     (LockTimeout), never an uncaught OSError.
@@ -141,9 +145,9 @@ def test_lock_timeout_carries_owner_fields(tmp_path):
 
 
 def test_lock_timeout_with_unreadable_owner_has_none_fields(tmp_path):
-    """A fresh lock dir with no owner.json (young orphan, inside the
-    missing-owner grace window) times out with None owner fields rather
-    than crashing on the absent record."""
+    """A lock dir with no owner.json (owner-less, observed below the
+    orphan-reap threshold) times out with None owner fields rather than
+    crashing on the absent record."""
     target = tmp_path / "state.yaml"
     _lock_dir(target).mkdir()
 
@@ -180,20 +184,49 @@ def test_stale_owner_takeover_claims_and_reports(tmp_path):
     assert not lock_dir.exists()
 
 
-def test_missing_owner_orphan_dir_is_taken_over(tmp_path):
-    """A lock dir with NO owner.json older than the missing-owner grace
-    window = a holder that crashed between mkdir and the owner write
-    (design Q1 mechanism step 2) - eligible for takeover."""
+def test_ownerless_orphan_reaped_after_observed_ownerless_threshold(tmp_path):
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2
+    refinement: a lock dir a waiter observes CONTINUOUSLY owner-less past the
+    per-waiter orphan-reap threshold (a holder that crashed between mkdir and
+    its owner.json write) is reaped via rename-then-claim - reported on the
+    yielded LockStatus, takeover_owner None (nothing to parse for a pre-write
+    crash). This replaces the old missing-owner directory-mtime grace test."""
     target = tmp_path / "state.yaml"
     lock_dir = _lock_dir(target)
-    lock_dir.mkdir()
-    aged = time.time() - 3600
-    os.utime(lock_dir, (aged, aged))
+    lock_dir.mkdir()  # owner-less: crashed before the owner.json write
 
-    with locked_mutation(target, timeout_s=5.0) as status:
+    with locked_mutation(target, timeout_s=5.0, orphan_reap_after_s=0.2) as status:
         assert status.takeover is True
         assert status.takeover_owner is None  # nothing to parse for a pre-write crash
     assert not lock_dir.exists()
+
+
+def test_coarse_dir_mtime_does_not_trigger_premature_reap(tmp_path):
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) D2
+    refinement: the orphan reap is keyed on THIS waiter's observed-ownerless
+    duration, NEVER directory mtime. An owner-less dir whose mtime is hours old
+    (as coarse/lagged Windows dir mtime can report) is NOT reaped when the reap
+    threshold exceeds the acquisition timeout: the waiter cannot accumulate the
+    observation window in time and raises a bounded LockTimeout instead of
+    stealing the dir. Under the removed mtime-grace model this 1h-old dir would
+    have been taken over - so a LockTimeout here proves mtime is not consulted."""
+    target = tmp_path / "state.yaml"
+    lock_dir = _lock_dir(target)
+    lock_dir.mkdir()  # owner-less
+    aged = time.time() - 3600
+    os.utime(lock_dir, (aged, aged))  # coarse/stale mtime, as Windows can report
+
+    t0 = time.monotonic()
+    with pytest.raises(LockTimeout) as excinfo:
+        with locked_mutation(target, timeout_s=0.3, orphan_reap_after_s=10.0):
+            pass
+    elapsed = time.monotonic() - t0
+    assert elapsed < 5.0, "timeout not bounded"
+    # Untouched: still present and still owner-less - mtime did NOT reap it.
+    assert lock_dir.is_dir()
+    assert not (lock_dir / "owner.json").exists()
+    exc = excinfo.value
+    assert exc.owner_pid is None  # owner-less: no fields to carry
 
 
 def test_fresh_lock_is_never_taken_over(tmp_path):

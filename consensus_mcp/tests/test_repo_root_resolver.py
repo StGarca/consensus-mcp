@@ -283,11 +283,72 @@ def _uses_dunder_file(fn_node: ast.FunctionDef) -> bool:
     )
 
 
+def _derives_root_from_file(fn_node: ast.FunctionDef) -> bool:
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1): True
+    iff the function derives a repo/project root by walking up TWO or more
+    levels from ``__file__`` (a ``Path(__file__)...parent.parent`` chain) whose
+    result is used as a bare root - i.e. NOT immediately extended by a ``/``
+    join. This is the site-packages-anchoring class the census must flag
+    regardless of the function's NAME (Q5 widening).
+
+    Deliberately NOT flagged (legitimate, not root-derivation):
+      - a single ``Path(__file__).resolve().parent`` (the package dir itself,
+        e.g. locating a bundled ``spec_template.md`` / ``dispatch_templates/``);
+      - a marker-validated ``__file__`` walk that fails loud rather than
+        returning a bare parent (``_visibility_watchdog._default_repo_root``
+        starts its walk from a single ``.parent``, then loops - never a bare
+        ``.parent.parent``);
+      - a walk-up immediately joined to a subpath
+        (``... .parent.parent / "schemas"``), which is a packaged-resource
+        lookup, not a root the caller anchors state on.
+    """
+    # Inner links: nodes consumed as the ``.value`` of a ``.parent`` access.
+    # The TIP of a ``.parent`` chain is a ``.parent`` Attribute that is NOT
+    # itself some other ``.parent``'s ``.value``.
+    inner = {
+        id(node.value)
+        for node in ast.walk(fn_node)
+        if isinstance(node, ast.Attribute) and node.attr == "parent"
+    }
+    # Left operands of every ``/`` (Div) BinOp: ``<walk-up> / "sub"`` is a
+    # packaged-resource lookup, so a tip consumed as a Div-left is allowed.
+    div_left = {
+        id(node.left)
+        for node in ast.walk(fn_node)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)
+    }
+    for node in ast.walk(fn_node):
+        if not (isinstance(node, ast.Attribute) and node.attr == "parent"):
+            continue
+        if id(node) in inner:
+            continue  # not the tip of the chain
+        if not (isinstance(node.value, ast.Attribute) and node.value.attr == "parent"):
+            continue  # single `.parent` (package dir) is not a repo-root walk-up
+        if not _uses_dunder_file(node):
+            continue  # the walk-up must root at __file__
+        if id(node) in div_left:
+            continue  # `<walk-up> / "sub"` -> packaged resource, allowed
+        return True
+    return False
+
+
 def test_census_exactly_one_non_shim_implementation():
     """Every `_resolve_repo_root`/`resolve_repo_root` definition in the package
     (tests and the vendored hook copies excluded - the drift test below owns
     the hooks) must be a delegating shim of _paths.resolve_repo_root and must
-    never touch __file__. Exactly ONE real implementation exists: _paths.py."""
+    never touch __file__. Exactly ONE real implementation exists: _paths.py.
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q5: the
+    census also closes the NAME-scoped hole. It no longer inspects only the
+    `resolve_repo_root` name family - it now flags ANY non-test package
+    function that derives a repo/project root from a `Path(__file__)...
+    parent.parent` walk-up (`_derives_root_from_file`), whatever its name.
+    That is the site-packages-anchoring class: a function named
+    `_default_repo_root` (or anything else) that returns a bare `__file__`
+    walk-up silently anchors to site-packages under a pipx/wheel install.
+    Packaged-resource lookups (`... .parent / "spec_template.md"`,
+    `... .parent.parent / "schemas"`) and marker-validated fail-loud walks
+    (`_visibility_watchdog`) are deliberately NOT flagged."""
     implementations: list[str] = []
     offenders: list[str] = []
     for py in sorted(PACKAGE_ROOT.rglob("*.py")):
@@ -297,12 +358,25 @@ def test_census_exactly_one_non_shim_implementation():
         if rel.startswith("claude_extensions/hooks/"):
             continue  # byte-identical vendored copies; guarded below
         text = py.read_text(encoding="utf-8")
-        if "resolve_repo_root" not in text:
+        # Widened pre-filter: scan every file that either references the
+        # resolver name family OR touches __file__ (the walk-up class is a
+        # __file__ derivation - the old `resolve_repo_root`-only filter skipped
+        # e.g. _visibility_tui.py entirely, which is the hole Q5 closes).
+        if "resolve_repo_root" not in text and "__file__" not in text:
             continue
         tree = ast.parse(text)
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef):
                 continue
+            # M1-remediation Q5: universal guard - NO package function may
+            # derive a repo root by walking up from __file__, regardless of
+            # name. Use _paths.resolve_repo_root (or fail loud) instead.
+            if _derives_root_from_file(node):
+                offenders.append(
+                    f"{rel}:{node.name} derives a repo root from a "
+                    f"Path(__file__)...parent.parent walk-up "
+                    f"(use _paths.resolve_repo_root instead)"
+                )
             if node.name == "resolve_repo_root":
                 implementations.append(rel)
                 continue
@@ -316,6 +390,49 @@ def test_census_exactly_one_non_shim_implementation():
         f"expected the ONE implementation in _paths.py; found {implementations}"
     )
     assert offenders == [], offenders
+
+
+def _only_func(src: str) -> ast.FunctionDef:
+    """Parse a one-function snippet and return its FunctionDef node."""
+    fn = ast.parse(src).body[0]
+    assert isinstance(fn, ast.FunctionDef)
+    return fn
+
+
+def test_walk_up_detector_precision():
+    """M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q5:
+    lock in the census detector's precision so a future edit cannot silently
+    re-narrow it. A bare `Path(__file__)...parent.parent` walk-up (the
+    site-packages-anchoring class) is flagged regardless of function name; a
+    single `.parent` (package dir), a walk-up joined to a subpath (packaged
+    resource), a non-__file__ walk-up, and a marker-validated single-parent
+    fail-loud walk are NOT flagged."""
+    flagged = {
+        "bare_double_parent": "def f():\n return Path(__file__).resolve().parent.parent\n",
+        "bare_triple_parent": "def f():\n return Path(__file__).resolve().parent.parent.parent\n",
+        "assigned_then_used": (
+            "def f():\n walked = Path(__file__).resolve().parent.parent\n"
+            " return walked / 'x' if walked else walked\n"
+        ),
+        "misleading_name_ok": "def project_dir():\n return Path(__file__).parent.parent\n",
+    }
+    allowed = {
+        "single_parent_pkg_dir": "def f():\n return Path(__file__).resolve().parent / 'spec_template.md'\n",
+        "walk_up_joined_resource": "def f():\n return Path(__file__).resolve().parent.parent / 'schemas'\n",
+        "triple_parent_joined": "def f():\n return Path(__file__).resolve().parent.parent.parent / 'x'\n",
+        "non_file_walk_up": "def f():\n base = Path.cwd()\n return base.parent.parent\n",
+        "fail_loud_single_then_walk": (
+            "def f():\n start = Path(__file__).resolve().parent\n"
+            " node = start\n"
+            " while node.parent != node:\n"
+            "  node = node.parent\n"
+            " return node\n"
+        ),
+    }
+    for label, src in flagged.items():
+        assert _derives_root_from_file(_only_func(src)) is True, f"should flag: {label}"
+    for label, src in allowed.items():
+        assert _derives_root_from_file(_only_func(src)) is False, f"should allow: {label}"
 
 
 # ---------------------------------------------------------------------------

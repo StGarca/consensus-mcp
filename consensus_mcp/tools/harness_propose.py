@@ -8,6 +8,7 @@ must go through the normal consensus consult/build/delivery-token lifecycle.
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,6 +75,65 @@ _TRACE_FILES = (
 
 def _now_utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _output_path_is_protected(candidate: Path) -> bool:
+    """True iff `candidate` resolves onto the consensus ENFORCEMENT surface
+    (~/.claude/settings.json or ~/.claude/hooks/consensus_*.py).
+
+    M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q4:
+    harness.propose accepts an arbitrary output_path; writing it onto the
+    enforcement surface would disable the design gate globally. This is a
+    self-contained EQUIVALENT of the gate's own _is_protected_install_path
+    (source of truth: consensus_mcp/claude_extensions/hooks/
+    consensus_pretooluse_gate.py). It is duplicated rather than imported because
+    that hook ships as package DATA, not an importable package (see
+    pyproject [tool.setuptools] packages), so a wheel install cannot import it -
+    the same self-containment constraint the detached ~/.claude hook copies
+    carry. Mirrors the gate's pathname + symlink-resolve + hardlink-inode checks.
+    Fail-SAFE to False on any resolution error (mirrors the gate)."""
+    try:
+        claude = Path.home() / ".claude"
+        # A relative candidate is written relative to the process cwd (see
+        # handle()); resolve it the same way so the check matches the write.
+        raw = candidate if candidate.is_absolute() else (Path.cwd() / candidate)
+        p = raw.resolve()
+        settings = claude / "settings.json"
+        hooks_dir_raw = claude / "hooks"
+        # Pathname checks: canonical target (incl. a not-yet-existing file) and
+        # symlink escapes (resolve() follows symlinks).
+        try:
+            if p == settings.resolve():
+                return True
+        except OSError:
+            pass
+        try:
+            hooks_dir = hooks_dir_raw.resolve()
+        except OSError:
+            hooks_dir = hooks_dir_raw
+        if p.parent == hooks_dir and p.name.startswith("consensus_") and p.suffix == ".py":
+            return True
+        # Hardlink-alias identity: an alias to an EXISTING protected file resolves
+        # to its own path, so the pathname guard misses it; compare inodes.
+        try:
+            tstat = os.stat(p)
+        except OSError:
+            return False
+        protected = [settings]
+        try:
+            protected += sorted(hooks_dir_raw.glob("consensus_*.py"))
+        except OSError:
+            pass
+        for prot in protected:
+            try:
+                ps = os.stat(prot)
+            except OSError:
+                continue
+            if tstat.st_ino == ps.st_ino and tstat.st_dev == ps.st_dev:
+                return True
+    except Exception:
+        return False
+    return False
 
 
 def _read_jsonl(path: Path, *, max_records: int) -> list[dict[str, Any]]:
@@ -270,8 +330,27 @@ def build_proposal(*, max_records: int = 200) -> dict[str, Any]:
 
 def handle(output_path: str | None = None, max_records: int = 200) -> dict:
     try:
-        proposal = build_proposal(max_records=max_records)
         out = Path(output_path) if output_path else _paths.state_root() / "state" / "harness-proposal.yaml"
+        # M1-remediation (consult iteration-path-to-a-remediation-260caad1) Q4:
+        # refuse (before reading traces or writing anything) an output_path that
+        # resolves onto the consensus enforcement surface -- a proposal-only tool
+        # must never be usable to overwrite ~/.claude/settings.json or a
+        # consensus hook and thereby disable the design gate. Tilde/$VAR forms are
+        # expanded so '~/.claude/settings.json' is caught as well as an absolute
+        # path. QW8 put this tool on the Bash tooling allowlist; the pretooluse
+        # gate applies the SAME guard to its --output-path (defense in depth).
+        candidate = Path(os.path.expanduser(os.path.expandvars(str(out))))
+        if _output_path_is_protected(candidate):
+            return {
+                "ok": False,
+                "error": (
+                    "output_path resolves onto the consensus enforcement surface "
+                    "(~/.claude/settings.json or ~/.claude/hooks/consensus_*.py); "
+                    "refused - writing it would disable the design gate. Point "
+                    "--output-path at consensus-state/ or a scratch path."
+                ),
+            }
+        proposal = build_proposal(max_records=max_records)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(yaml.safe_dump(proposal, sort_keys=False), encoding="utf-8")
         return {
