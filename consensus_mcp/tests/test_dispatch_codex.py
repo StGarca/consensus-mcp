@@ -1,6 +1,7 @@
 """Unit tests for _dispatch_codex.py. Codex subprocess is mocked; no real codex calls."""
 from __future__ import annotations
 import json as _json
+import os as _os
 import shutil as _shutil
 import signal
 import sys
@@ -10,27 +11,31 @@ from pathlib import Path
 import pytest
 import yaml
 
-# v1.15.7 CI fix. These four "smoke" tests predate the iter-0037
-# refactor that moved the codex invocation from `subprocess.run` to
-# `subprocess.Popen` (streaming + reader threads). They still mock only
-# `subprocess.run` (which now just covers the `codex --version` probe),
-# so the actual dispatch executes the REAL codex binary via Popen. They
-# pass on dev machines purely because a real `codex` happens to be on
-# PATH; on CI runners with none they failed `CodexInvocationError:
-# codex binary not found` (windows legs, exit 1) or reached a
-# process-group kill that SIGTERM'd the runner (ubuntu legs, exit 143).
-# This stayed hidden because CI was dormant v1.13.0->v1.15.3 (main-only
-# trigger) until v1.15.4 re-enabled it. Honest interim: skip when no
-# real codex (these are de-facto integration tests as written). Named
-# follow-up (v1.15.x): rewrite them to mock the Popen path via the
-# existing `make_fake_codex_popen_factory` / `popen_factory=` kwarg
-# (the pattern the genuinely-hermetic main()-tests already use) and
-# drop the skip.
+# v1.15.7 CI fix; v2.2.1 audit M0.4 (docs/audits/2026-07-01-v2.2.1-repo-audit.md)
+# converted the gate from opt-OUT to opt-IN. These four "smoke" tests
+# predate the iter-0037 refactor that moved the codex invocation from
+# `subprocess.run` to `subprocess.Popen` (streaming + reader threads).
+# They still mock only `subprocess.run` (which now just covers the
+# `codex --version` probe), so the actual dispatch executes the REAL
+# codex binary via Popen. The old gate skipped them only when no
+# `codex` was on PATH, which meant any dev machine WITH codex on PATH
+# silently ran four real LLM CLI invocations during a plain pytest
+# run. They are now env-gated opt-IN, mirroring
+# test_dispatch_grok_smoke.py / test_builder_containment_smoke.py:
+# skipped UNLESS CONSENSUS_MCP_RUN_REAL_CODEX_SMOKE=1 is set in the
+# environment (the same env var that gates the dispatcher's own
+# --smoke mode), and still skipped when no real `codex` binary is on
+# PATH, so opting in without the binary skips cleanly rather than
+# failing. Named follow-up (v1.15.x): rewrite them to mock the Popen
+# path via the existing `make_fake_codex_popen_factory` /
+# `popen_factory=` kwarg (the pattern the genuinely-hermetic
+# main()-tests already use) and drop the gate entirely.
+_REAL_CODEX_GATE = "CONSENSUS_MCP_RUN_REAL_CODEX_SMOKE"
 _REQUIRES_REAL_CODEX = pytest.mark.skipif(
-    _shutil.which("codex") is None,
-    reason="needs a real `codex` binary: this test mocks subprocess.run "
-    "but not the iter-0037 Popen dispatch path (tracked rewrite "
-    "follow-up); CI runners have no codex.",
+    _os.environ.get(_REAL_CODEX_GATE) != "1" or _shutil.which("codex") is None,
+    reason=f"opt-in real-codex smoke: set {_REAL_CODEX_GATE}=1 to run "
+    "(also requires a real `codex` binary on PATH; this test mocks "
+    "subprocess.run but not the iter-0037 Popen dispatch path).",
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
