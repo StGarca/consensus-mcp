@@ -215,9 +215,13 @@ def _validate_allowed_files(proposal: dict[str, Any]) -> None:
         if item not in allowed_set:
             raise ValueError(f"proposal allowed_files entry is outside harness scope: {item!r}")
     for rec in proposal.get("recommendations", []):
-        for item in rec.get("candidate_files", []):
+        rec_id = rec.get("id", "<unknown-recommendation>") if isinstance(rec, dict) else "<non-object-recommendation>"
+        for item in rec.get("candidate_files", []) if isinstance(rec, dict) else []:
             if item not in allowed_set:
-                raise ValueError(f"recommendation candidate file is outside harness scope: {item!r}")
+                raise ValueError(
+                    f"recommendation {rec_id!r} candidate file is outside "
+                    f"harness scope: {item!r}"
+                )
 
 
 def build_proposal(*, max_records: int = 200) -> dict[str, Any]:

@@ -438,6 +438,20 @@ def test_assemble_stream_cancel_before_text_raises_invocation_error():
     )
 
 
+def test_assemble_stream_cancel_with_json_in_thought_recovers_json():
+    """Grok Build can put the final schema JSON in thought chunks, then cancel.
+    Recover only a syntactically valid JSON object; do not seal arbitrary prose.
+    """
+    raw = _stream(
+        {"type": "thought", "data": "reasoning... "},
+        {"type": "thought", "data": '{"selected_target": "x", '},
+        {"type": "thought", "data": '"structural_abstention": false}'},
+        {"type": "end", "stopReason": "Cancelled"},
+    )
+    out = _dispatch_grok._assemble_grok_stream(raw)
+    assert json.loads(out) == {"selected_target": "x", "structural_abstention": False}
+
+
 def test_assemble_stream_cancel_after_text_returns_text():
     """A Cancelled stopReason AFTER some text was emitted is NOT the error
     case - only cancel-BEFORE-any-text raises. We keep what grok produced."""
@@ -446,6 +460,77 @@ def test_assemble_stream_cancel_after_text_returns_text():
         {"type": "end", "stopReason": "Cancelled"},
     )
     assert _dispatch_grok._assemble_grok_stream(raw) == "partial answer"
+
+
+def test_proposal_cancel_retries_with_compact_prompt(monkeypatch, tmp_path):
+    """Grok proposal dispatch recovers from zero-text self-cancel once."""
+    calls = []
+    proposal = {
+        "selected_target": "fix grok retry",
+        "rationale_vs_alternatives": "Retrying with a compact prompt preserves the intended Grok panel member instead of degrading quorum.",
+        "deliverable_scope": {
+            "next_iteration_id": "iteration-grok-cancel-retry",
+            "files_in_scope": ["consensus_mcp/_dispatch_grok.py"],
+            "files_out_of_scope": [],
+            "key_design_decisions": ["retry only proposal self-cancel with compact prompt"],
+            "acceptance_gates": ["unit test covers cancel then success"],
+        },
+        "risks": [],
+        "estimated_complexity": "small",
+        "structural_abstention": False,
+    }
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise _dispatch_grok.GrokStreamCancelledError("cancelled before text")
+        prompt_path = tmp_path / "retry-prompt.txt"
+        prompt_path.write_text(kwargs["prompt"], encoding="utf-8")
+        return json.dumps(proposal), prompt_path
+
+    monkeypatch.setattr(_dispatch_grok, "_invoke_grok", fake_invoke)
+    log_path = tmp_path / "dispatch-log.jsonl"
+
+    raw, parsed, prompt_path = _dispatch_grok._invoke_grok_with_retry(
+        prompt="large open-ended prompt" * 1000,
+        grok_bin="grok",
+        model="Grok Build",
+        timeout_seconds=30,
+        iter_dir=tmp_path,
+        pass_id="grok-pass1",
+        repo_root=tmp_path,
+        log_path=log_path,
+        anchors={"iteration_id": "iter", "reviewer_id": "grok", "pass_id": "grok-pass1"},
+        mode="proposal",
+        cancel_retry_prompt="short proposal retry prompt",
+    )
+
+    assert parsed["selected_target"] == "fix grok retry"
+    assert json.loads(raw)["estimated_complexity"] == "small"
+    assert prompt_path.read_text(encoding="utf-8") == "short proposal retry prompt"
+    assert calls[1]["pass_id"] == "grok-pass1-cancel-retry"
+    events = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert any(e["event"] == "dispatch_retry_for_grok_cancel" for e in events)
+
+
+def test_review_cancel_without_retry_prompt_still_fails(monkeypatch, tmp_path):
+    """The compact retry is proposal-specific; review-mode cancel remains fatal."""
+
+    def fake_invoke(**_kwargs):
+        raise _dispatch_grok.GrokStreamCancelledError("cancelled before text")
+
+    monkeypatch.setattr(_dispatch_grok, "_invoke_grok", fake_invoke)
+    with pytest.raises(_dispatch_grok.GrokStreamCancelledError):
+        _dispatch_grok._invoke_grok_with_retry(
+            prompt="review prompt",
+            grok_bin="grok",
+            model="Grok Build",
+            timeout_seconds=30,
+            iter_dir=tmp_path,
+            pass_id="grok-pass1",
+            repo_root=tmp_path,
+            mode="review",
+        )
 
 
 def test_assemble_stream_skips_malformed_and_typeless_lines():

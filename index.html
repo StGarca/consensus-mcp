@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>unrelated-project - High Fidelity Physics</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #050505; color: #eee; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .hud-panel { position: absolute; padding: 20px; pointer-events: auto; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); border: 1px solid #444; border-radius: 8px; }
+        #stats-panel { top: 20px; left: 20px; width: 220px; }
+        #controls-panel { bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; align-items: center; }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 16px; }
+        .stat-value { color: #ffcc00; font-weight: bold; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 11px; text-transform: uppercase; color: #aaa; letter-spacing: 1px; }
+        input[type=range] { width: 120px; accent-color: #8b0000; }
+        button { padding: 12px 24px; background: #600; color: white; border: 1px solid #800; border-radius: 4px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.2s; }
+        button:hover { background: #a00; }
+        #loading-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; transition: opacity 0.5s; }
+        #msg-overlay { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 64px; font-weight: bold; color: #ffcc00; text-align: center; display: none; pointer-events: none; text-shadow: 0 0 20px #000; }
+        .ammo-select { display: flex; gap: 5px; margin-bottom: 10px; }
+        .ammo-btn { padding: 5px 10px; font-size: 12px; background: #333; border: 1px solid #555; color: #ccc; cursor: pointer; border-radius: 3px; }
+        .ammo-btn.active { background: #8b0000; border-color: #f00; color: #fff; }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <h1 style="letter-spacing: 5px;">unrelated-project</h1>
+        <p id="load-status">Initializing Physics Engine...</p>
+    </div>
+
+    <div id="ui-layer">
+        <div id="stats-panel" class="hud-panel">
+            <div class="stat-row"><span>Ammo:</span> <span id="val-ammo" class="stat-value">10</span></div>
+            <div class="stat-row"><span>Population:</span> <span id="val-pop" class="stat-value">12</span></div>
+            <div class="stat-row"><span>Integrity:</span> <span id="val-integrity" class="stat-value">100%</span></div>
+            <div class="stat-row"><span>Score:</span> <span id="val-score" class="stat-value">0</span></div>
+            <hr style="border: 0; border-top: 1px solid #444; margin: 15px 0;">
+            <label>Projectile Type</label>
+            <div class="ammo-select" id="ammo-selector">
+                <button class="ammo-btn active" data-type="STONE">Stone</button>
+                <button class="ammo-btn" data-type="BOULDER">Boulder</button>
+                <button class="ammo-btn" data-type="FIRE">Fire</button>
+                <button class="ammo-btn" data-type="SCATTER">Scatter</button>
+                <button class="ammo-btn" data-type="IRON">Iron</button>
+            </div>
+        </div>
+
+        <div id="controls-panel" class="hud-panel">
+            <div class="control-group">
+                <label>Bearing</label>
+                <input type="range" id="ctrl-bearing" min="-45" max="45" value="0">
+            </div>
+            <div class="control-group">
+                <label>Angle</label>
+                <input type="range" id="ctrl-angle" min="15" max="85" value="45">
+            </div>
+            <div class="control-group">
+                <label>Power</label>
+                <input type="range" id="ctrl-power" min="10" max="100" value="50">
+            </div>
+            <button id="btn-fire">FIRE!</button>
+        </div>
+
+        <div id="msg-overlay">CASTLE FALLEN!</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@dimforge/rapier3d@0.11.2/rapier.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- CONFIGURATION ---
+        const AMMO_TYPES = {
+            STONE:   { mass: 5, radius: 0.6, damage: 1.0, color: 0x666666, name: 'Stone Ball' },
+            BOULDER:  { mass: 15, radius: 0.9, damage: 2.5, color: 0x444444, name: 'Boulder' },
+            FIRE:     { mass: 3, radius: 0.5, damage: 0.5, color: 0xff4400, name: 'Fire Pot' },
+            SCATTER:  { mass: 2, radius: 0.4, damage: 0.3, color: 0x888888, name: 'Scatter Shot' },
+            IRON:     { mass: 8, radius: 0.5, damage: 1.8, color: 0x222222, name: 'Iron Shot' }
+        };
+
+        const SETTINGS = {
+            castlePos: { x: 0, z: -40 },
+            launchPos: { x: 0, y: 2, z: 15 },
+            gravity: -9.81,
+            blockSize: 1.0
+        };
+
+        // --- CORE CLASSES ---
+
+        class GameState {
+            constructor() {
+                this.ammo = { STONE: 10, BOULDER: 5, FIRE: 5, SCATTER: 5, IRON: 3 };
+                this.selectedAmmo = 'STONE';
+                this.score = 0;
+                this.population = 12;
+                this.totalBlocks = 0;
+                this.destroyedBlocks = 0;
+                this.gameActive = true;
+            }
+
+            updateUI() {
+                document.getElementById('val-ammo').innerText = this.ammo[this.selectedAmmo];
+                document.getElementById('val-pop').innerText = this.population;
+                document.getElementById('val-score').innerText = this.score;
+                const integrity = Math.max(0, 100 - Math.floor((this.destroyedBlocks / this.totalBlocks) * 100));
+                document.getElementById('val-integrity').innerText = integrity + '%';
+                
+                if (integrity <= 0 || this.population <= 0) {
+                    document.getElementById('msg-overlay').style.display = 'block';
+                    this.gameActive = false;
+                }
+            }
+        }
+
+        class PhysicsWorld {
+            constructor(scene) {
+                this.scene = scene;
+                this.world = null;
+                this.bodies = []; 
+            }
+
+            async init() {
+                await RAPIER.init();
+                this.world = new RAPIER.World({ x: 0.0, y: SETTINGS.gravity, z: 0.0 });
+            }
+
+            createFixedBox(x, y, z, w, h, d, mesh) {
+                let bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z);
+                let body = this.world.createRigidBody(bodyDesc);
+                let colliderDesc = RAPIER.ColliderDesc.cuboid(w/2, h/2, d/2);
+                this.world.createCollider(colliderDesc, body);
+                return body;
+            }
+
+            createDynamicBox(x, y, z, w, h, d, mass, mesh) {
+                let bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+                    .setTranslation(x, y, z)
+                    .setCanSleep(true);
+                let body = this.world.createRigidBody(bodyDesc);
+                let colliderDesc = RAPIER.ColliderDesc.cuboid(w/2, h/2, d/2);
+                colliderDesc.setDensity(mass / (w * h * d));
+                this.world.createCollider(colliderDesc, body);
+                this.bodies.push({ body, mesh });
+                return body;
+            }
+
+            createBall(x, y, z, radius, mass, mesh) {
+                let bodyDesc = RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, z);
+                let body = this.world.createRigidBody(bodyDesc);
+                let colliderDesc = RAPIER.ColliderDesc.ball(radius);
+                colliderDesc.setDensity(mass / (4/3 * Math.PI * Math.pow(radius, 3)));
+                this.world.createCollider(colliderDesc, body);
+                this.bodies.push({ body, mesh });
+                return body;
+            }
+
+            step() {
+                this.world.step();
+                for (let i = this.bodies.length - 1; i >= 0; i--) {
+                    const { body, mesh } = this.bodies[i];
+                    const pos = body.translation();
+                    const rot = body.rotation();
+                    mesh.position.set(pos.x, pos.y, pos.z);
+                    mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                    
+                    if (pos.y < -10) {
+                        this.world.removeRigidBody(body);
+                        this.scene.remove(mesh);
+                        this.bodies.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        class Castle {
+            constructor(physics, scene, state) {
+                this.physics = physics;
+                this.scene = scene;
+                this.state = state;
+                this.pieces = [];
+            }
+
+            build() {
+                const { x, z } = SETTINGS.castlePos;
+                
+                // Construct modular sections
+                this.addBox(x - 10, 0, z, 20, 6, 2, 'stone'); // North Wall
+                this.addBox(x - 10, 0, z + 15, 20, 6, 2, 'stone'); // South Wall
+                this.addBox(x - 10, 0, z, 2, 6, 17, 'stone'); // West Wall
+                this.addBox(x + 8, 0, z, 2, 6, 17, 'stone'); // East Wall
+                
+                // Towers
+                this.addBox(x - 11, 0, z - 1, 3, 10, 3, 'stone');
+                this.addBox(x + 9, 0, z - 1, 3, 10, 3, 'stone');
+                this.addBox(x - 11, 0, z + 15, 3, 10, 3, 'stone');
+                this.addBox(x + 9, 0, z + 15, 3, 10, 3, 'stone');
+                
+                // Keep
+                this.addBox(x - 4, 0, z + 5, 8, 12, 8, 'stone');
+                this.addBox(x - 4, 12, z + 5, 8, 2, 8, 'wood');
+                
+                // Gatehouse
+                this.addBox(x + 4, 0, z, 4, 7, 2, 'stone');
+
+                // Population
+                for(let i=0; i<this.state.population; i++) {
+                    this.addInhabitant(x - 2 + Math.random()*4, 1, z + 6 + Math.random()*4);
+                }
+                
+                this.state.totalBlocks = this.pieces.length;
+            }
+
+            addBox(x, y, z, w, h, d, matType) {
+                const color = matType === 'stone' ? 0x555555 : 0x4a3728;
+                const geo = new THREE.BoxGeometry(w, h, d);
+                const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                
+                // Center the mesh correctly for Rapier
+                mesh.position.set(x + w/2, y + h/2, z + d/2);
+                this.scene.add(mesh);
+                
+                // Start as fixed, we will switch to dynamic on impact
+                const body = this.physics.createFixedBox(x + w/2, y + h/2, z + d/2, w, h, d, mesh);
+                this.pieces.push({ mesh, body, isDynamic: false, health: 100, mass: 10 });
+            }
+
+            addInhabitant(x, y, z) {
+                const geo = new THREE.CapsuleGeometry(0.2, 0.4, 4, 8);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xcc0000 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y, z);
+                this.scene.add(mesh);
+                
+                const body = this.physics.createDynamicBox(x, y, z, 0.4, 0.8, 0.4, 1, mesh);
+                this.pieces.push({ mesh, body, isDynamic: true, isPop: true });
+            }
+
+            applyImpact(position, force) {
+                this.pieces.forEach(p => {
+                    if (p.body) {
+                        const pPos = p.body.translation();
+                        const dist = Math.sqrt((pPos.x - position.x)**2 + (pPos.y - position.y)**2 + (pPos.z - position.z)**2);
+                        
+                        if (dist < 3.0) {
+                            if (!p.isDynamic) {
+                                this.detach(p);
+                            }
+                            if (p.isPop && dist < 1.5) {
+                                this.killInhabitant(p);
+                            }
+                        }
+                    }
+                });
+            }
+
+            detach(p) {
+                // Switch from fixed to dynamic
+                const pos = p.body.translation();
+                this.physics.world.removeRigidBody(p.body);
+                
+                const size = 1.0; // Simplified for MVP
+                p.body = this.physics.createDynamicBox(pos.x, pos.y, pos.z, size, size, size, p.mass, p.mesh);
+                p.isDynamic = true;
+                this.state.destroyedBlocks++;
+            }
+
+            killInhabitant(p) {
+                p.mesh.visible = false;
+                this.physics.world.removeRigidBody(p.body);
+                this.state.population--;
+                this.state.score += 500;
+            }
+        }
+
+        // --- MAIN GAME ENGINE ---
+
+        class Game {
+            constructor() {
+                this.state = new GameState();
+                this.physics = new PhysicsWorld(null);
+                this.castle = null;
+                this.initGraphics();
+            }
+
+            initGraphics() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1a1a2a);
+                this.scene.fog = new THREE.Fog(0x1a1a2a, 20, 150);
+
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(30, 30, 40);
+
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.body.appendChild(this.renderer.domElement);
+
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.target.set(0, 5, -30);
+
+                const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+                sun.position.set(50, 100, 50);
+                sun.castShadow = true;
+                sun.shadow.mapSize.set(2048, 2048);
+                this.scene.add(sun);
+                this.scene.add(new THREE.AmbientLight(0x404060, 0.8));
+
+                this.physics = new PhysicsWorld(this.scene);
+                this.createGround();
+            }
+
+            createGround() {
+                const geo = new THREE.PlaneGeometry(200, 200);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x223311, roughness: 0.9 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.receiveShadow = true;
+                this.scene.add(mesh);
+                
+                this.physics.createFixedBox(0, -0.1, 0, 200, 0.2, 200, mesh);
+            }
+
+            async start() {
+                await this.physics.init();
+                
+                this.castle = new Castle(this.physics, this.scene, this.state);
+                this.castle.build();
+                
+                this.setupUI();
+                
+                document.getElementById('loading-screen').style.opacity = '0';
+                setTimeout(() => document.getElementById('loading-screen').remove(), 500);
+                
+                this.animate();
+            }
+
+            setupUI() {
+                document.getElementById('btn-fire').onclick = () => this.fire();
+                
+                document.getElementById('ammo-selector').onclick = (e) => {
+                    if (e.target.classList.contains('ammo-btn')) {
+                        document.querySelectorAll('.ammo-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        this.state.selectedAmmo = e.target.dataset.type;
+                        this.state.updateUI();
+                    }
+                };
+
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+
+            fire() {
+                if (!this.state.gameActive) return;
+                const type = this.state.selectedAmmo;
+                if (this.state.ammo[type] <= 0) return;
+
+                this.state.ammo[type]--;
+                
+                const config = AMMO_TYPES[type];
+                const angle = document.getElementById('ctrl-angle').value * (Math.PI / 180);
+                const power = document.getElementById('ctrl-power').value;
+                const bearing = document.getElementById('ctrl-bearing').value * (Math.PI / 180);
+
+                const geo = new THREE.SphereGeometry(config.radius);
+                const mat = new THREE.MeshStandardMaterial({ color: config.color, metalness: 0.4 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                this.scene.add(mesh);
+
+                const body = this.physics.createBall(
+                    SETTINGS.launchPos.x, 
+                    SETTINGS.launchPos.y, 
+                    SETTINGS.launchPos.z, 
+                    config.radius, 
+                    config.mass, 
+                    mesh
+                );
+
+                const vx = Math.sin(bearing) * power * Math.cos(angle);
+                const vy = power * Math.sin(angle);
+                const vz = -Math.cos(bearing) * power * Math.cos(angle);
+                
+                body.setLinvel({ x: vx, y: vy, z: vz }, true);
+
+                // Impact Detection
+                const checkImpact = setInterval(() => {
+                    const pos = body.translation();
+                    // If it hits the castle area
+                    if (pos.z < SETTINGS.castlePos.z + 20) {
+                        this.castle.applyImpact(pos, power);
+                        this.state.score += 100;
+                    }
+                    if (pos.y < -1 || Math.abs(pos.x) > 100) {
+                        clearInterval(checkImpact);
+                    }
+                }, 100);
+
+                this.state.updateUI();
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.physics.step();
+                this.state.updateUI();
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        const game = new Game();
+        game.start();
+    </script>
+</body>
+</html>

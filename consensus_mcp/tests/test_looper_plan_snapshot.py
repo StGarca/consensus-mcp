@@ -37,3 +37,32 @@ def test_goal_artifact_snapshot_also_covers_looper_files(tmp_path):
     snap = lane.snapshot_goal_artifacts(g)
     assert any("looper-plan/loop.yaml" in k for k in snap)
     assert "problem.md" in snap
+
+
+def test_design_criteria_do_not_enter_supervisor_or_lane_code():
+    """Judge/human criteria are advisory context, never Build control inputs.
+
+    This is the machine-enforced version of the consensus safety boundary: the
+    supervisor, lane, and path modules must not import/reference criteria or ack
+    symbols that could later become routing, transition, or delivery gates.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    forbidden_tokens = (
+        "design_criteria",
+        "criteria_ack",
+        "design_criteria_ack",
+    )
+    guarded = [
+        root / "tools" / "architect_loop_step.py",
+        root / "_architect_lane.py",
+        root / "_architect_paths.py",
+    ]
+    offenders = []
+    for path in guarded:
+        text = path.read_text(encoding="utf-8")
+        for token in forbidden_tokens:
+            if token in text:
+                offenders.append(f"{path.name}:{token}")
+    assert offenders == []
