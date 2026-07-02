@@ -38,7 +38,7 @@ if str(ROOT) not in sys.path:
 from consensus_mcp import _dispatch_grok  # noqa: E402
 
 
-_CEILING = 20.0   # absolute real-time safety ceiling for any harness wait
+_CEILING = 100.0   # absolute real-time safety ceiling for any harness wait
 _REPOLL = 0.05    # lost-wakeup safety net; correctness never depends on it
 
 

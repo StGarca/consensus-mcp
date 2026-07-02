@@ -129,10 +129,10 @@ def test_peel_falls_back_to_markdown_fenced_json_when_no_envelope():
 
 def test_peel_falls_back_to_bullet_prefixed_json_when_no_envelope():
     # Kimi Code 0.19.x prompt mode can prefix the final JSON with its TUI bullet
-    # marker ("• {") and append a resume trailer. That is still recoverable
+    # marker ("- {") and append a resume trailer. That is still recoverable
     # free-form JSON: peel must pass it through so _extract_json_from_text can
     # take the first outer brace through the last outer brace.
-    raw = '• {"selected_target":"borrow graph layer","estimated_complexity":"small"}\n\nTo resume this session: kimi -r session_abc'
+    raw = '- {"selected_target":"borrow graph layer","estimated_complexity":"small"}\n\nTo resume this session: kimi -r session_abc'
     assert _dispatch_kimi._peel_assistant_content(raw) == raw.strip()
 
 
