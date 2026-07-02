@@ -123,10 +123,15 @@ REQUIRED_GOAL_PACKET_FIELDS = {
 
 
 def _resolve_repo_root() -> Path:
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 pinned fix: the
+    prior fallback `Path(__file__).resolve().parent.parent` anchored a pipx
+    install at site-packages - the exact unsafe class _dispatch_base's own
+    comments document. Now a shim over the ONE blessed resolver: env override
+    (CONSENSUS_MCP_REPO_ROOT then CONSENSUS_MCP_PROJECT_ROOT) > cwd-ancestor
+    containment-marker walk > RepoRootError (fail closed - never a
+    site-packages path)."""
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root()
 
 
 def _scope_signature(goal_packet: dict) -> str:

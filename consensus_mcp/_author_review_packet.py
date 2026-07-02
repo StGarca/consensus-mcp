@@ -75,20 +75,18 @@ def _is_contained(resolved: Path, repo_root_resolved: Path) -> bool:
 
 
 def _resolve_repo_root(override: str | None) -> Path:
-    """Resolve repo root from --repo-root override or CONSENSUS_MCP_REPO_ROOT.
+    """Resolve repo root from --repo-root override, env, or cwd (lenient).
 
-    Falls back to walking the source tree to find the repo root markers,
-    matching the approach used by ``_dispatch_codex._resolve_repo_root``.
-    Kept simple here because the helper is run from the operator's cwd at
-    iteration-author time; if the override is omitted we use cwd.
+    M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 shim over the ONE
+    blessed resolver (_paths.resolve_repo_root). Documented intent kept: the
+    helper runs from the operator's cwd at iteration-author time, so with no
+    override and no env key set it stays LENIENT (require_markers=False:
+    nearest containment-marker ancestor, else cwd) instead of failing closed.
     """
     if override:
         return Path(override).resolve()
-    import os
-    env_override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if env_override:
-        return Path(env_override).resolve()
-    return Path.cwd().resolve()
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root(require_markers=False)
 
 
 def _read_file_text(repo_root: Path, rel: str) -> str:

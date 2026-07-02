@@ -669,7 +669,11 @@ def test_register_exposes_wire_tool_name_and_handler():
 
 
 # ---------------------------------------------------------------------------
-# Duplicate-heading corruption (parser roundtrip bug surfaced through T10).
+# Duplicate-heading refusal (M1 S3, consult iteration-m1-hardening-design-
+# 4d7d2469): the M0 xfail proved an authorized write to an UNRELATED section
+# silently corrupted a duplicate-numbered file (first '## 2.' block deleted,
+# second doubled). parse() now refuses duplicates, so set_section refuses
+# BEFORE any write and the file survives byte-identical.
 # ---------------------------------------------------------------------------
 
 DUP_TEXT = (
@@ -684,21 +688,13 @@ DUP_TEXT = (
 )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PRODUCTION BUG (v2.2.1 audit M0.1a): on a file with duplicate "
-        "'## N.' heading numbers, _md_sections keys sections by number "
-        "(last occurrence wins), so an authorized write to an UNRELATED "
-        "section silently deletes the first duplicate block and doubles "
-        "the second - while reporting it in sections_unchanged_verified. "
-        "The round-trip safety gate cannot see it because pre- and "
-        "post-parse maps are identical."
-    ),
-)
 def test_duplicate_heading_file_survives_write_to_other_section(tmp_path, monkeypatch):
+    """Flipped M0 strict-xfail (v2.2.1 audit M0.1a): the corruption can no
+    longer happen because the write is REFUSED with a structured error and
+    the file is proven byte-identical after the refusal."""
     repo = _make_repo(tmp_path, monkeypatch)
     spec = _write_spec(repo, text=DUP_TEXT)
+    original_bytes = spec.read_bytes()
     cpath, csha = _write_consensus(
         repo, {"allowed_sections": ["spec.md/section_1"]}
     )
@@ -709,8 +705,67 @@ def test_duplicate_heading_file_survives_write_to_other_section(tmp_path, monkey
         consensus_yaml_sha256=csha,
         consensus_yaml_path=cpath,
     )
-    assert result["written"] is True
-    text = spec.read_text(encoding="utf-8")
-    # The untouched duplicate blocks must both survive the write.
-    assert "## 2. First\nfirst body\n" in text
-    assert text.count("## 2. Second\nsecond body\n") == 1
+    assert result["error"] == "duplicate_section_id"
+    assert result["duplicate_section_ids"] == ["section_2"]
+    assert "section_2" in result["detail"]
+    # Refusal happens BEFORE any write: byte-identical, no staged tmp either.
+    assert spec.read_bytes() == original_bytes
+    assert not Path(str(spec) + ".tmp").exists()
+
+
+def test_new_text_introducing_duplicate_heading_is_refused_before_write(
+    tmp_path, monkeypatch
+):
+    """M1 S3 staged-text guard: a clean file plus a new_section_text that
+    injects a heading DUPLICATING an existing section id is refused at the
+    post-reconstruct parse - still before any write."""
+    repo = _make_repo(tmp_path, monkeypatch)
+    spec = _write_spec(repo)
+    original_bytes = spec.read_bytes()
+    cpath, csha = _write_consensus(
+        repo, {"allowed_sections": ["spec.md/section_2"]}
+    )
+    result = tool.handle(
+        file="spec.md",
+        section_id="section_2",
+        new_section_text=(
+            "## 2. Goals\n\nGoals body.\n\n## 3. Non-Goals\n\nShadow copy.\n"
+        ),
+        consensus_yaml_sha256=csha,
+        consensus_yaml_path=cpath,
+    )
+    assert result["error"] == "duplicate_section_id"
+    assert result["duplicate_section_ids"] == ["section_3"]
+    assert spec.read_bytes() == original_bytes
+    assert not Path(str(spec) + ".tmp").exists()
+
+
+# ---------------------------------------------------------------------------
+# Output-schema failure contract (M1 S4, consult iteration-m1-hardening-
+# design-4d7d2469): the M0 audit found 'file_required' and 'invalid_utf8'
+# returned by the handler but missing from the schema enum; S3 adds
+# 'duplicate_section_id'. Pin the corrected enum exactly.
+# ---------------------------------------------------------------------------
+
+
+def test_output_schema_failure_enum_is_the_corrected_contract():
+    enum = tool.SCHEMA["output_schema"]["oneOf"][1]["properties"]["error"]["enum"]
+    assert enum == [
+        "file_not_found",
+        "file_required",
+        "path_outside_repo",
+        "invalid_utf8",
+        "section_not_found",
+        "duplicate_section_id",
+        "consensus_yaml_path_required",
+        "invalid_consensus_yaml",
+        "consensus_sha_mismatch",
+        "section_not_in_implementation_scope",
+        "unintended_section_change",
+        "audit_write_failed",
+    ]
+    failure_props = tool.SCHEMA["output_schema"]["oneOf"][1]["properties"]
+    assert failure_props["duplicate_section_ids"] == {
+        "type": ["array", "null"],
+        "items": {"type": "string"},
+    }

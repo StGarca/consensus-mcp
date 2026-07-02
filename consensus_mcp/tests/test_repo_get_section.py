@@ -152,6 +152,64 @@ def test_non_utf8_file_is_invalid_utf8(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Duplicate '## N.' headings (M1 S3, consult iteration-m1-hardening-design-
+# 4d7d2469): parse() refuses duplicate section ids, so a read of ANY section
+# of such a file surfaces the structured error instead of a last-wins text
+# that misrepresents the file.
+# ---------------------------------------------------------------------------
+
+DUP_TEXT = (
+    "## 1. Alpha\n"
+    "alpha body\n"
+    "## 2. First\n"
+    "first body\n"
+    "## 2. Second\n"
+    "second body\n"
+    "## 3. Omega\n"
+    "omega body\n"
+)
+
+
+def test_duplicate_heading_file_is_refused_with_duplicate_ids(tmp_path, monkeypatch):
+    repo = _make_repo(tmp_path, monkeypatch)
+    _write_spec(repo, text=DUP_TEXT)
+    # Reading the duplicated section itself is refused...
+    result = tool.handle(file="spec.md", section_id="section_2")
+    assert result["error"] == "duplicate_section_id"
+    assert result["duplicate_section_ids"] == ["section_2"]
+    assert "section_2" in result["detail"]
+    # ...and so is reading an unrelated section of the same file (the parse
+    # refusal is file-level; there is no trustworthy SectionMap to serve).
+    other = tool.handle(file="spec.md", section_id="section_1")
+    assert other["error"] == "duplicate_section_id"
+    assert other["duplicate_section_ids"] == ["section_2"]
+
+
+# ---------------------------------------------------------------------------
+# Output-schema failure contract (M1 S4): the M0 audit found 'file_required'
+# returned by the handler but missing from the schema enum; S3 adds
+# 'duplicate_section_id'. Pin the corrected enum exactly.
+# ---------------------------------------------------------------------------
+
+
+def test_output_schema_failure_enum_is_the_corrected_contract():
+    enum = tool.SCHEMA["output_schema"]["oneOf"][1]["properties"]["error"]["enum"]
+    assert enum == [
+        "file_not_found",
+        "file_required",
+        "path_outside_repo",
+        "invalid_utf8",
+        "duplicate_section_id",
+        "section_not_found",
+    ]
+    failure_props = tool.SCHEMA["output_schema"]["oneOf"][1]["properties"]
+    assert failure_props["duplicate_section_ids"] == {
+        "type": ["array", "null"],
+        "items": {"type": "string"},
+    }
+
+
+# ---------------------------------------------------------------------------
 # Path-traversal / containment refusals.
 # ---------------------------------------------------------------------------
 

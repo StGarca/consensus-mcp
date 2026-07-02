@@ -358,42 +358,61 @@ def test_audit_write_failed_when_iteration_dir_missing(env):
 
 
 # ---------------------------------------------------------------------------
-# Documented current behavior + known divergences
+# M1 hardened refusal paths (S1/S2)
 # ---------------------------------------------------------------------------
 
 
-def test_missing_spec_fails_loud_with_systemexit(env):
-    """Current contract: a missing spec makes the validator raise SystemExit
-    ('spec not found: ...') straight through handle(). NOTE: through the live
-    MCP server this escapes tools/call, whose except clause only catches
-    Exception -- recorded as an audit observation, asserted here as-is."""
+def test_missing_spec_returns_structured_refusal(env):
+    """M1 S1 (consult iteration-m1-hardening-design-4d7d2469): the validator's
+    SystemExit('spec not found: ...') is converted to the tool's structured
+    refusal shape at source. Old contract (M0): the SystemExit escaped
+    handle() -- and through the live MCP server it escaped tools/call too,
+    whose except clause only caught Exception, killing the whole server."""
     env.spec.unlink()
-    with pytest.raises(SystemExit, match="spec not found"):
-        tool.handle(PROPOSED_V1, CONSENSUS_SHA)
+
+    result = tool.handle(PROPOSED_V1, CONSENSUS_SHA)
+
+    assert result["error"] == "spec_validation_failed"
+    assert result["detail"].startswith("validate_disposition_index could not run:")
+    assert "spec not found" in result["detail"]
     assert not env.ledger.exists()
 
 
-@pytest.mark.xfail(
-    raises=ValueError,
-    reason=(
-        "BUG: handle() lines 386-390 claim state_root outside project_root is "
-        "a supported operator configuration (and the reader tool supports it), "
-        "but _run_validator_with_findings crashes first with an uncaught "
-        "ValueError at sibling_ledger.relative_to(project_root()); no "
-        "structured result is ever returned in that configuration."
-    ),
-)
+def test_missing_spec_refusal_leaves_prior_ledger_byte_identical(env):
+    """The S1 refusal fires before staging/write: prior bytes survive."""
+    assert tool.handle(PROPOSED_V1, CONSENSUS_SHA)["written"] is True
+    before = env.ledger.read_bytes()
+
+    env.spec.unlink()
+    result = tool.handle(PROPOSED_V2, CONSENSUS_SHA)
+
+    assert result["error"] == "spec_validation_failed"
+    assert env.ledger.read_bytes() == before
+    _assert_no_staging_litter(env)
+
+
 def test_state_root_outside_project_root_returns_structured_result(
     env, tmp_path, monkeypatch
 ):
+    """M1 S2 (consult iteration-m1-hardening-design-4d7d2469): a state_root
+    outside project_root is a structured refusal -- the staged-ledger
+    validation redirect requires a project-root-relative path, so the write
+    is refused. Old contract (M0 xfail): an uncaught ValueError escaped from
+    sibling_ledger.relative_to(project_root())."""
     outside = (tmp_path / "outside-state").resolve()
     monkeypatch.setenv("CONSENSUS_MCP_STATE_ROOT", str(outside))
 
     result = tool.handle(PROPOSED_V1, CONSENSUS_SHA)
 
-    # Desired behavior per the module's own fallback comment: a structured
-    # result (absolute ledger_path fallback) rather than an exception.
-    assert result.get("written") is True or "error" in result
+    assert result["error"] == "state_root_outside_project_root"
+    assert str(outside) in result["detail"]
+    assert "ledger was NOT written" in result["detail"]
+    # Fail-closed with zero side effects: the refusal fires before the old
+    # code path's mkdir, so nothing is created at the outside root and no
+    # ledger is written anywhere.
+    assert not outside.exists()
+    assert not env.ledger.exists()
+    _assert_no_staging_litter(env)
 
 
 # ---------------------------------------------------------------------------

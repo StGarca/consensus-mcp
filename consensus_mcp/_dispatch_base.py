@@ -110,6 +110,12 @@ _APPLY_PATCH_BEGIN_MARKER = "*** Begin Patch"
 _APPLY_PATCH_UPDATE_MARKER = "*** Update File"
 
 
+# M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: the blessed shared
+# resolver + error class. Imported at module level (no cycle: _paths imports
+# only stdlib).
+from consensus_mcp._paths import RepoRootError as _SharedRepoRootError
+from consensus_mcp._paths import resolve_repo_root as _shared_resolve_repo_root
+
 # Per v1.10.4 F1 (codex review on 0ae7b80d): repo_root resolution must fail-closed.
 # Repo markers: directories that MUST exist at the resolved root for it to be a valid
 # consensus-mcp / consensus-mcp repo. site-packages doesn't have these; cwd in a
@@ -117,8 +123,14 @@ _APPLY_PATCH_UPDATE_MARKER = "*** Update File"
 _REPO_ROOT_MARKERS = ("consensus-state", "consensus_mcp", "consensus_mcp/validators")
 
 
-class RepoRootResolutionError(RuntimeError):
-    """Raised when repo_root cannot be resolved to a valid repo (no markers found)."""
+class RepoRootResolutionError(_SharedRepoRootError):
+    """Raised when repo_root cannot be resolved to a valid repo (no markers found).
+
+    M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: now subclasses the
+    shared _paths.RepoRootError (itself a RuntimeError, preserving the pinned
+    issubclass(RepoRootResolutionError, RuntimeError) contract) so callers can
+    treat the whole resolver family with one except clause.
+    """
 
 
 def _has_repo_markers(candidate: Path) -> bool:
@@ -169,19 +181,20 @@ def _resolve_repo_root() -> Path:
     landed at python_env/Lib (NOT the repo root), causing codex --cd, T6 archive
     writes, and dispatch-log writes to all target the wrong tree.
 
-    Resolution order (first candidate with all repo markers wins):
-      1. CONSENSUS_MCP_REPO_ROOT env var (must validate)
-      2. Path.cwd() (operator usually invokes from repo root)
-      3. Walk parents of Path(__file__) (only succeeds when running in-tree;
-         the in-tree __file__ is consensus_mcp/_dispatch_codex.py so
-         3-up = repo root with markers)
+    M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: now a shim over
+    the ONE blessed resolver (_paths.resolve_repo_root). This site's
+    DOCUMENTED extras are preserved: it keeps BOTH env keys AND additionally
+    VALIDATES the operator env override against repo markers (authoritative
+    raise, pinned by test_dispatch_codex's F5 tests), which the shared
+    resolver deliberately does not do. The old marker-validated
+    Path(__file__)-parent walk is GONE (never __file__-derived roots in
+    package code); discovery is the shared cwd-ancestor containment-marker
+    walk.
 
     If no candidate validates, raise RepoRootResolutionError with a clear
     operator-facing message naming the env var to set. Never silently fall
     back to site-packages.
     """
-    candidates_tried: list[tuple[str, Path]] = []
-
     # CONSENSUS_MCP_PROJECT_ROOT is what `consensus init` writes into a consuming
     # project's .mcp.json (the consensus-mcp server is launched with it); honor it
     # alongside the legacy CONSENSUS_MCP_REPO_ROOT so consuming-project tools
@@ -190,7 +203,6 @@ def _resolve_repo_root() -> Path:
                 or os.environ.get("CONSENSUS_MCP_PROJECT_ROOT"))
     if override:
         candidate = Path(override).resolve()
-        candidates_tried.append(("CONSENSUS_MCP_REPO_ROOT/PROJECT_ROOT", candidate))
         if _has_repo_markers(candidate):
             return candidate
         # iter-0028 F5 (codex-rev-004): operator-supplied env var is
@@ -211,31 +223,16 @@ def _resolve_repo_root() -> Path:
             f"to use automatic discovery."
         )
 
-    cwd = Path.cwd().resolve()
-    candidates_tried.append(("Path.cwd()", cwd))
-    if _has_repo_markers(cwd):
-        return cwd
+    # M1 Q2: env keys were consumed (and validated) above, so the shared walk
+    # runs with env_keys=(). Nearest cwd-ancestor with `.consensus/` or
+    # `consensus-state/` wins - the same walk every other entry point uses.
+    try:
+        return _shared_resolve_repo_root(env_keys=())
+    except _SharedRepoRootError as exc:
+        shared_diag = str(exc)
 
-    # Walk UP from cwd for a project marker - so running a consensus command from
-    # a SUBDIRECTORY of a consuming project still resolves the project root. This
-    # is checked BEFORE the __file__ walk so a consuming project never falls
-    # through to consensus-mcp's own install tree.
-    for parent in cwd.parents:
-        candidates_tried.append((f"cwd ancestor ({parent.name})", parent))
-        if _has_repo_markers(parent):
-            return parent
-
-    # __file__-parent walk: only finds repo root when source-tree-installed.
-    here = Path(__file__).resolve()
-    for parent in (here.parent, here.parent.parent, here.parent.parent.parent):
-        candidates_tried.append((f"parent of __file__ ({parent.name})", parent))
-        if _has_repo_markers(parent):
-            return parent
-
-    tried_msg = "; ".join(f"{name}={path}" for name, path in candidates_tried)
     raise RepoRootResolutionError(
-        f"Cannot resolve consensus-mcp repo root. None of the candidates contain "
-        f"all required markers {_REPO_ROOT_MARKERS}. Candidates tried: {tried_msg}\n"
+        f"Cannot resolve consensus-mcp repo root. {shared_diag}\n"
         f"\n"
         f"-- BOOTSTRAP A CONSUMER PROJECT (v1.32.0 - Section 3.1 friction fix) --\n"
         f"If you installed consensus-mcp via pipx and want to use it ON another\n"

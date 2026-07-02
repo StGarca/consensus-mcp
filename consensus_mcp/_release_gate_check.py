@@ -105,12 +105,16 @@ def _smoke_gate_pass(returncode: int, stdout: str, floor: int) -> bool:
 
 
 def _resolve_repo_root(cli_override: str | None) -> Path:
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 shim: explicit
+    --repo-root wins, then the ONE blessed resolver (_paths.resolve_repo_root:
+    env override(s) > cwd-ancestor containment-marker walk > RepoRootError).
+    The old `Path(__file__).resolve().parent.parent` default anchored an
+    installed run at site-packages; release gates run from the source repo,
+    whose `consensus-state/` dir is a walk marker."""
     if cli_override:
         return Path(cli_override).resolve()
-    env = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if env:
-        return Path(env).resolve()
-    return Path(__file__).resolve().parent.parent
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root()
 
 
 # Paths (relative to REPO_ROOT) that the wheel ships.

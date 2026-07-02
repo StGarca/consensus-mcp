@@ -2337,10 +2337,16 @@ def test_repo_get_section_frontmatter_returns_text_and_sha() -> bool:
     print("test_repo_get_section_frontmatter_returns_text_and_sha")
     try:
         import hashlib
-        from consensus_mcp.tools.repo_get_section import handle, REPO_ROOT
+        # M1 (consult iteration-m1-hardening-design-4d7d2469) fold-in: this
+        # import previously named REPO_ROOT, which repo_get_section never
+        # defined (latent ImportError - the smoke suite is not CI-run, so it
+        # went unnoticed; audit H4). Resolve the root via the tool's own
+        # per-call resolver instead.
+        from consensus_mcp.tools.repo_get_section import handle
+        from consensus_mcp._paths import project_root
 
         spec_rel = "docs/architecture/orchestration-spec.md"
-        spec_abs = REPO_ROOT / spec_rel
+        spec_abs = project_root() / spec_rel
 
         # Snapshot pre-call sha to verify no mutation.
         pre_bytes = spec_abs.read_bytes()
@@ -2793,7 +2799,13 @@ def test_gate_evaluate_exact_match_approved() -> bool:
 
 
 def test_gate_evaluate_prefix_match_approved() -> bool:
-    """Prefix mode: consensus.target='ssb-ch1-final' starts with approval.target='ssb-ch1' -> approved."""
+    """Prefix mode: consensus.target='ssb-ch1/final' is a path-segment child
+    of approval.target='ssb-ch1' -> approved.
+
+    M1 (consult iteration-m1-hardening-design-4d7d2469): prefix matching is
+    segment-bounded, so the pre-M1 raw-prefix example 'ssb-ch1-final' would
+    now be a rejected sibling string-prefix.
+    """
     print("test_gate_evaluate_prefix_match_approved")
     import tempfile
 
@@ -2804,7 +2816,7 @@ def test_gate_evaluate_prefix_match_approved() -> bool:
             tmp = Path(raw_tmp).resolve()
             cons_p, ver_p, app_p, target_sha = _t11_build_yaml_triple(
                 tmp,
-                cons_target="ssb-ch1-final",
+                cons_target="ssb-ch1/final",
                 appr_target="ssb-ch1",
                 scope_match_mode="prefix",
             )

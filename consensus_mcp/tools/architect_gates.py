@@ -78,6 +78,13 @@ def _repo_root(repo_root: str | None, goal: Path) -> Path | None:
     # trust blind parent-hopping - a mis-shaped goal_dir would anchor git at a
     # garbage root and rev-parse would walk UP to whatever repo encloses it.
     # _derive_repo_root is the VALIDATED inversion of that layout.
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 census note:
+    # deliberately NOT a _paths.resolve_repo_root shim. This site's documented
+    # contract derives the root from the goal-dir LAYOUT (explicit param >
+    # validated lane derivation) and never consults env/cwd - the shared
+    # env-first precedence cannot express that without silently re-anchoring
+    # a goal at whatever CONSENSUS_MCP_REPO_ROOT happens to be set. It carries
+    # no __file__/cwd fallback (the defect class Q2 removes).
     return lane_mod._derive_repo_root(ap.lane_dir(goal))
 
 

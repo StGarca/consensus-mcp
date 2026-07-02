@@ -67,12 +67,12 @@ def _detect_repo_root(start: Path | None = None) -> Path:
 
     v1.24 (fix 10): this is the wizard's single, reusable repo-root detector -
     `cmd_init` calls it instead of inlining its own walk, so a future shared
-    util is a trivial lift. NOTE: the PreToolUse gate currently has its OWN copy
-    of root detection in
+    util is a trivial lift. NOTE: the PreToolUse gate has its OWN root
+    detection in
     consensus_mcp/claude_extensions/hooks/consensus_pretooluse_gate.py:_repo_root
-    (which defers to consensus_mcp._self_drive._resolve_repo_root). Unifying the
-    two onto one shared helper is pending; this function is the intended landing
-    spot for that. The gate is intentionally NOT edited here.
+    (env/git-toplevel/event-cwd, deferring last to the M1 vendored
+    _paths.resolve_repo_root block - the detached hook copy cannot import the
+    package). The gate is intentionally NOT edited here.
 
     iter-0031 (per iter-0030 converged plan Q3): use marker-based detection
     instead of .git-only walking. Precedence:
@@ -190,6 +190,20 @@ _CLAUDE_EXTENSION_FILES = (
     # files. Without this, _installed_hook_script_path fell back to the in-package
     # source dir, which is absent in a wheel -> hooks activated but scripts missing
     # -> enforcement silently dead. (Names mirror _CONSENSUS_HOOK_SPECS.)
+    #
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: this copy step is
+    # ALSO the vendored repo-root-resolver STAMP. The detached ~/.claude/hooks/
+    # copies cannot import consensus_mcp, so each hook source carries a
+    # byte-identical copy of the resolver block from consensus_mcp/_paths.py,
+    # delimited by the EXACT marker lines
+    #   "# === BEGIN CONSENSUS REPO-ROOT RESOLVER (vendored block; source of
+    #    truth: consensus_mcp/_paths.py) ==="
+    #   "# === END CONSENSUS REPO-ROOT RESOLVER ==="
+    # RE-STAMP PROCEDURE (kimi-rev-005): edit the block in _paths.py, mirror it
+    # verbatim between the markers in the three hook sources (the pytest drift
+    # guard consensus_mcp/tests/test_repo_root_resolver.py fails the suite on
+    # any byte divergence), then re-run `consensus-init --install-claude-code
+    # --force` so the installed ~/.claude/hooks/ copies refresh.
     ("hooks/consensus_sessionstart.py", "hooks/consensus_sessionstart.py"),
     ("hooks/consensus_pretooluse_gate.py", "hooks/consensus_pretooluse_gate.py"),
     ("hooks/consensus_stop_gate.py", "hooks/consensus_stop_gate.py"),

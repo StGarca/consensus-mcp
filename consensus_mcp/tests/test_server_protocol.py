@@ -8,8 +8,10 @@ no server process is spawned -- and cover: the initialize handshake shape,
 tools/list wire translation (snake_case internal schema -> camelCase
 inputSchema, per tool_registry.ToolRegistry.list_tools), the tools/call
 happy path result wrapping, refusal paths (-32601 unknown tool / unknown
-method, -32000 handler exception with message == str(exc)), notification
-suppression semantics, and one `_serve_stdio` smoke over StringIO pipes.
+method, -32000 handler exception with message == str(exc), -32000 handler
+SystemExit containment per M1 S1 -- consult
+iteration-m1-hardening-design-4d7d2469), notification suppression
+semantics, and one `_serve_stdio` smoke over StringIO pipes.
 
 Hermetic: tools/call tests swap in a fresh ToolRegistry via
 monkeypatch.setattr(server, "registry", ...) so no real tool handler runs.
@@ -259,6 +261,58 @@ def test_tools_call_argument_mismatch_maps_to_32000(monkeypatch):
     )
     assert resp["error"]["code"] == -32000
     assert "unexpected keyword argument 'bogus'" in resp["error"]["message"]
+
+
+def test_tools_call_handler_systemexit_maps_to_32000_and_server_survives(monkeypatch):
+    """M1 S1 (consult iteration-m1-hardening-design-4d7d2469): SystemExit is a
+    BaseException subclass the except-Exception net never saw, so a handler
+    raising it (proven: the ledger tool's validator on a missing spec) used to
+    kill the whole stdio MCP server. Now it maps to the -32000 envelope
+    carrying the message, and the SAME registry answers the next request."""
+    fresh = _install_registry(monkeypatch)
+
+    def exiting():
+        raise SystemExit("spec not found: /nowhere/orchestration-spec.md")
+
+    fresh.register("stub.exit", {"name": "stub.exit"}, exiting)
+    fresh.register("stub.after", {"name": "stub.after"}, lambda: {"alive": True})
+
+    resp = server._handle_request(
+        {"jsonrpc": "2.0", "id": 17, "method": "tools/call",
+         "params": {"name": "stub.exit"}}
+    )
+    assert resp == {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "error": {
+            "code": -32000,
+            "message": "spec not found: /nowhere/orchestration-spec.md",
+        },
+    }
+
+    # Server survives: a subsequent tools/call on the same registry works.
+    follow_up = server._handle_request(
+        {"jsonrpc": "2.0", "id": 18, "method": "tools/call",
+         "params": {"name": "stub.after"}}
+    )
+    assert "error" not in follow_up
+    assert json.loads(follow_up["result"]["content"][0]["text"]) == {"alive": True}
+
+
+def test_tools_call_handler_sys_exit_code_maps_to_32000(monkeypatch):
+    """sys.exit(2)-style handlers (SystemExit with an int code) are contained
+    by the same M1 S1 catch; str(exc) renders the code as the message."""
+    fresh = _install_registry(monkeypatch)
+
+    def exiting():
+        sys.exit(2)
+
+    fresh.register("stub.exit2", {"name": "stub.exit2"}, exiting)
+    resp = server._handle_request(
+        {"jsonrpc": "2.0", "id": 19, "method": "tools/call",
+         "params": {"name": "stub.exit2"}}
+    )
+    assert resp["error"] == {"code": -32000, "message": "2"}
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,9 @@ scope. Parser is pure / deterministic / round-trip safe:
     parse(text) -> SectionMap
     reconstruct(SectionMap) == text   (byte-identical)
 
+Files whose numbered headings collide (two '## N.' headings with the same N)
+are REFUSED by parse() with DuplicateSectionError - see "Parser invariants".
+
 Section ID namespace
 --------------------
   - "frontmatter"  : YAML between the leading "---" line and the next "---" line
@@ -31,6 +34,13 @@ Parser invariants
     and is NOT writable via set_section.
   - The "---" delimiters themselves are stored as "_frontmatter_open" and
     "_frontmatter_close" so reconstruction is byte-exact.
+  - Duplicate '## N.' section ids REFUSE: parse() raises DuplicateSectionError
+    (carrying the duplicated ids) instead of keying by number with last-wins.
+    M1 (consult iteration-m1-hardening-design-4d7d2469) S3: last-wins made
+    reconstruct() drop the first duplicate block and emit the survivor once
+    per order entry, so repo.set_section writes to UNRELATED sections
+    silently corrupted such files. Duplicate numbering is always an authoring
+    error; refuse-loud beats silent corruption.
 
 Why round-trip safety matters
 -----------------------------
@@ -52,6 +62,30 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 from typing import Dict, List, Tuple
+
+
+class DuplicateSectionError(ValueError):
+    """Raised by parse() when the same '## N.' section id appears twice.
+
+    M1 (consult iteration-m1-hardening-design-4d7d2469) S3: parse() used to
+    key sections by number, so the LAST duplicate silently overwrote the
+    first and reconstruct() emitted the survivor once per order entry -
+    repo.set_section then corrupted the file on writes to unrelated sections
+    (first duplicate block deleted, second doubled) while reporting success.
+    Refuse-loud replaces last-wins; callers surface the structured error
+    {'error': 'duplicate_section_id', ...}.
+
+    Attributes:
+        duplicate_section_ids: sorted list of section ids that appear more
+            than once in the file (e.g. ["section_2"]).
+    """
+
+    def __init__(self, duplicate_section_ids: List[str]):
+        self.duplicate_section_ids = sorted(duplicate_section_ids)
+        super().__init__(
+            "duplicate '## N.' section ids: "
+            + ", ".join(self.duplicate_section_ids)
+        )
 
 
 # ## N. ...  (top-level numbered heading; N is one or more digits)
@@ -119,7 +153,12 @@ class SectionMap:
 
 
 def parse(text: str) -> SectionMap:
-    """Parse spec md text into SectionMap. See module docstring for semantics."""
+    """Parse spec md text into SectionMap. See module docstring for semantics.
+
+    Raises:
+        DuplicateSectionError: if any '## N.' section id appears more than
+            once (M1 S3 refusal; last-wins keying corrupted such files).
+    """
     lines = text.splitlines(keepends=True)
     i = 0
     n = len(lines)
@@ -212,6 +251,17 @@ def parse(text: str) -> SectionMap:
                     in_fence = False
                     fence_marker = ""
             k += 1
+
+        # M1 (consult iteration-m1-hardening-design-4d7d2469) S3: refuse
+        # duplicate section ids BEFORE building the map. Keying by number
+        # with last-wins broke the byte-identical roundtrip invariant and
+        # let set_section silently corrupt duplicate-numbered files.
+        seen_counts: Dict[str, int] = {}
+        for _, sec_id in section_starts:
+            seen_counts[sec_id] = seen_counts.get(sec_id, 0) + 1
+        duplicate_ids = [sid for sid, cnt in seen_counts.items() if cnt > 1]
+        if duplicate_ids:
+            raise DuplicateSectionError(duplicate_ids)
 
         # Slice each section's text from start (inclusive) to next section start (exclusive).
         for idx, (start_line, sec_id) in enumerate(section_starts):

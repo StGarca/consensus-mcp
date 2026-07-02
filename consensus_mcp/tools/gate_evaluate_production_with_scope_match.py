@@ -28,23 +28,42 @@ iteration (set in consensus.yaml at synthesis time):
 
   exact   : approval.production_scope.target == consensus.production_scope.target
             (byte-equality)
-  prefix  : consensus.production_scope.target.startswith(approval.production_scope.target)
-            i.e., the operator approves a parent scope, and consensus narrows
-            to a child. Example:
+  prefix  : segment-bounded narrowing. Both targets are normalized (posix
+            separators: backslashes become '/', trailing '/' stripped), then
+            match iff consensus.target == approval.target OR
+            consensus.target.startswith(approval.target + '/'). The operator
+            approves a parent scope and consensus may only narrow to a
+            path-segment CHILD of it. Example:
               approval.target  = "ssb-ch1"
-              consensus.target = "ssb-ch1-final"
-              -> match (consensus.target startswith approval.target)
+              consensus.target = "ssb-ch1/final"  -> match (segment child)
+              consensus.target = "ssb-ch1-final"  -> NO match (a sibling whose
+                                 name merely shares the string prefix)
 
 If consensus does not specify scope_match_mode, default is "exact" (the
 strict default; loosening to prefix is opt-in only).
+
+Fail-closed refusals -- M1 (consult iteration-m1-hardening-design-4d7d2469)
+---------------------------------------------------------------------------
+- Empty or whitespace-only production_scope.target on EITHER side (consensus
+  or approval) is a structured refusal {"error": "scope_target_empty"} under
+  ALL match modes (exact AND prefix; kimi-rev-003 widening). A malformed
+  approval must never widen scope: str.startswith("") is always True, so the
+  pre-M1 raw-prefix code let an empty approval target approve every scope.
+- production_scope.type outside VALID_SCOPE_TYPES on EITHER side is a
+  structured refusal {"error": "invalid_scope_type", "detail": <value>}.
+  The enum is the single authority; extending it is a one-line, reviewed
+  change.
 
 State-machine evaluation order (per spec section 17)
 ----------------------------------------------------
 1. Parse all three YAML files; refuse on missing/invalid.
 2. Extract consensus.production_scope (refuse if absent: spec section 13 v1.9.2 added it).
 3. Extract approval.production_scope (refuse if absent).
-4. Compare types: refuse if mismatch (different scope kinds cannot match).
-5. Compute scope-match per scope_match_mode (refuse on invalid mode).
+4. Enforce VALID_SCOPE_TYPES membership on both sides (refuse
+   invalid_scope_type), then compare types: refuse if mismatch (different
+   scope kinds cannot match).
+5. Compute scope-match per scope_match_mode (refuse on invalid mode; refuse
+   scope_target_empty on empty/whitespace targets under ANY mode).
 6. Compute technical-readiness (production_ready_if conditions).
 7. Compute three-way hash binds (target / consensus / verification).
 8. Synthesize production_state:
@@ -99,6 +118,16 @@ def __getattr__(name: str):
 
 VALID_SCOPE_TYPES = {"render", "merge", "deploy", "data-mutation"}
 VALID_SCOPE_MATCH_MODES = {"exact", "prefix"}
+
+
+def _normalize_scope_target(target: str) -> str:
+    """Normalize a scope target for segment-bounded prefix matching.
+
+    M1 (consult iteration-m1-hardening-design-4d7d2469): posix separators
+    (backslashes become '/') and trailing '/' stripped, so 'app\\mod\\' and
+    'app/mod' compare equal and the prefix check can append exactly one '/'.
+    """
+    return target.replace("\\", "/").rstrip("/")
 
 
 def _canonical_yaml_sha256_text(text: str) -> str:
@@ -185,8 +214,8 @@ SCHEMA = {
             "Failure: {error, detail} where error is one of "
             "consensus_yaml_not_found | verification_yaml_not_found | "
             "approval_yaml_not_found | invalid_yaml | missing_production_scope | "
-            "missing_consensus_field | missing_approval_field | scope_type_mismatch | "
-            "invalid_scope_match_mode."
+            "missing_consensus_field | missing_approval_field | invalid_scope_type | "
+            "scope_type_mismatch | invalid_scope_match_mode | scope_target_empty."
         ),
         "oneOf": [
             {
@@ -234,8 +263,12 @@ SCHEMA = {
                             "missing_production_scope",
                             "missing_consensus_field",
                             "missing_approval_field",
+                            # M1 (consult iteration-m1-hardening-design-4d7d2469):
+                            # fail-closed scope-match refusal codes.
+                            "invalid_scope_type",
                             "scope_type_mismatch",
                             "invalid_scope_match_mode",
+                            "scope_target_empty",
                         ],
                     },
                     "detail": {"type": ["string", "null"]},
@@ -324,7 +357,21 @@ def handle(
             ),
         }
 
-    # ---- Step 4: type match ----
+    # ---- Step 4: scope-type enum + type match ----
+    # M1 (consult iteration-m1-hardening-design-4d7d2469): VALID_SCOPE_TYPES
+    # membership is enforced on BOTH sides. The enum was previously declared
+    # but never consulted (dead), so an unknown type evaluated normally
+    # despite the module docstring claiming it replaced the lenient Phase 0
+    # check; it now refuses with a structured invalid_scope_type error.
+    for side, side_type in (("consensus", cons_type), ("approval", appr_type)):
+        if side_type not in VALID_SCOPE_TYPES:
+            return {
+                "error": "invalid_scope_type",
+                "detail": (
+                    f"{side}.production_scope.type={side_type!r}; must be one "
+                    f"of {sorted(VALID_SCOPE_TYPES)}"
+                ),
+            }
     if cons_type != appr_type:
         return {
             "error": "scope_type_mismatch",
@@ -343,10 +390,46 @@ def handle(
                 f"must be one of {sorted(VALID_SCOPE_MATCH_MODES)}"
             ),
         }
+    # M1 (consult iteration-m1-hardening-design-4d7d2469, kimi-rev-003
+    # widening): an empty/whitespace target on EITHER side refuses under ALL
+    # match modes (exact AND prefix). Fail closed: str.startswith("") is
+    # always True, so the pre-M1 raw-prefix match let a degenerate approval
+    # target approve every scope; the same invariant is applied to exact mode
+    # for cross-mode consistency.
+    if not cons_target.strip() or not appr_target.strip():
+        return {
+            "error": "scope_target_empty",
+            "detail": (
+                "production_scope.target must be non-empty on both sides "
+                f"(all match modes): consensus target={cons_target!r}, "
+                f"approval target={appr_target!r}"
+            ),
+        }
     if cons_match_mode == "exact":
         scope_match_strict = (cons_target == appr_target)
     else:  # prefix
-        scope_match_strict = cons_target.startswith(appr_target)
+        # M1 (consult iteration-m1-hardening-design-4d7d2469): segment-bounded
+        # prefix. Normalize both targets (posix separators, strip trailing
+        # '/'); match iff equal OR consensus is a path-segment CHILD of the
+        # approval. The old raw startswith let approval 'app/mod' match
+        # consensus 'app/module_evil' -- scope WIDENING past the approved
+        # boundary.
+        cons_norm = _normalize_scope_target(cons_target)
+        appr_norm = _normalize_scope_target(appr_target)
+        if not cons_norm or not appr_norm:
+            # A separator-only target (e.g. '/') normalizes to '' and would
+            # degenerate back to match-everything; same fail-closed refusal.
+            return {
+                "error": "scope_target_empty",
+                "detail": (
+                    "production_scope.target normalizes to empty (separator-"
+                    f"only): consensus target={cons_target!r}, "
+                    f"approval target={appr_target!r}"
+                ),
+            }
+        scope_match_strict = (
+            cons_norm == appr_norm or cons_norm.startswith(appr_norm + "/")
+        )
 
     # ---- Step 6: technical-readiness (mirrors consensus_gate.py logic) ----
     findings: list = []

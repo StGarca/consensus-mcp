@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -45,23 +44,42 @@ import yaml
 
 
 def _resolve_repo_root() -> Path:
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override).resolve()
-    return Path(__file__).resolve().parent.parent
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 shim over the
+    ONE blessed resolver (_paths.resolve_repo_root): env override(s) >
+    cwd-ancestor containment-marker walk > RepoRootError. The old
+    `Path(__file__).resolve().parent.parent` fallback anchored an installed
+    wheel/pipx run at site-packages; this maintenance CLI is run from the
+    source repo (whose `consensus-state/` dir is a walk marker) or with the
+    env override the release gate already sets."""
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root()
 
 
-REPO_ROOT = _resolve_repo_root()
-ARCHIVE_INDEX_PATH = REPO_ROOT / "consensus-state" / "archive" / "review-passes" / "index.yaml"
-SPEC_MD_PATH = (
-    REPO_ROOT / "docs" / "architecture"
-    / "orchestration-spec.md"
-)
+def _archive_index_path() -> Path:
+    return _resolve_repo_root() / "consensus-state" / "archive" / "review-passes" / "index.yaml"
+
+
+def _spec_md_path() -> Path:
+    return _resolve_repo_root() / "docs" / "architecture" / "orchestration-spec.md"
+
+
+def __getattr__(name: str):
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: lazy module
+    attributes (PEP 562, pattern: tools/patch_stage_and_dry_run.py) replacing
+    the import-time REPO_ROOT/ARCHIVE_INDEX_PATH/SPEC_MD_PATH captures so
+    resolution is per-call and env changes after import take effect."""
+    if name == "REPO_ROOT":
+        return _resolve_repo_root()
+    if name == "ARCHIVE_INDEX_PATH":
+        return _archive_index_path()
+    if name == "SPEC_MD_PATH":
+        return _spec_md_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _archive_pass_ids() -> list[str]:
     """Return list of pass ids from consensus-state/archive/review-passes/index.yaml."""
-    data = yaml.safe_load(ARCHIVE_INDEX_PATH.read_text(encoding="utf-8")) or {}
+    data = yaml.safe_load(_archive_index_path().read_text(encoding="utf-8")) or {}
     return [p.get("id", "") for p in data.get("passes", []) if p.get("id")]
 
 
@@ -129,7 +147,7 @@ def detect_drift() -> dict:
     }
     """
     index_ids = _archive_pass_ids()
-    spec_text = SPEC_MD_PATH.read_text(encoding="utf-8")
+    spec_text = _spec_md_path().read_text(encoding="utf-8")
     section_ids = _section_24_pass_ids(spec_text)
     spec_count = _archived_count_in_spec(spec_text)
     in_index_only = [i for i in index_ids if i not in section_ids]
@@ -152,7 +170,7 @@ def _archive_path_for(pass_id: str) -> str | None:
       - real-codex (post-iter-0009): `path: <path>`
     Try both.
     """
-    data = yaml.safe_load(ARCHIVE_INDEX_PATH.read_text(encoding="utf-8")) or {}
+    data = yaml.safe_load(_archive_index_path().read_text(encoding="utf-8")) or {}
     for p in data.get("passes", []):
         if p.get("id") == pass_id:
             return p.get("archived_at") or p.get("path")
@@ -169,7 +187,7 @@ def apply_drift_fix(report: dict) -> dict:
     if not report["in_index_only"]:
         return {"applied": False, "reason": "no in_index_only drift; nothing to do"}
 
-    spec_text = SPEC_MD_PATH.read_text(encoding="utf-8")
+    spec_text = _spec_md_path().read_text(encoding="utf-8")
     lines = spec_text.splitlines(keepends=False)
 
     # Locate end of archived: block (closing fence after the first `archived:` list).
@@ -223,7 +241,7 @@ def apply_drift_fix(report: dict) -> dict:
                     bumped = True
         out_lines.append(line)
 
-    SPEC_MD_PATH.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    _spec_md_path().write_text("\n".join(out_lines) + "\n", encoding="utf-8")
 
     new_report = detect_drift()
     return {

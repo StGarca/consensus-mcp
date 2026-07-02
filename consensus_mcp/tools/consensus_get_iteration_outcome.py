@@ -8,7 +8,6 @@ without re-running.
 """
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
@@ -16,12 +15,15 @@ import yaml
 
 
 def _resolve_repo_root(override: str | None) -> Path:
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 shim over the
+    ONE blessed resolver (_paths.resolve_repo_root). This tool's schema
+    documents a LENIENT default (env override else cwd), so
+    require_markers=False keeps the cwd fallback (nearest containment-marker
+    ancestor first) instead of failing closed."""
     if override:
         return Path(override).resolve()
-    env = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if env:
-        return Path(env).resolve()
-    return Path.cwd().resolve()
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root(require_markers=False)
 
 
 def _resolve_path(p: str | Path, repo_root: Path) -> Path:
@@ -52,9 +54,11 @@ SCHEMA = {
             "repo_root": {
                 "type": ["string", "null"],
                 "description": (
-                    "Override repo root. Defaults to CONSENSUS_MCP_REPO_ROOT "
-                    "env var or current working directory. Relative iteration_dir "
-                    "paths are resolved against this root."
+                    "Override repo root. Defaults to the CONSENSUS_MCP_REPO_ROOT / "
+                    "CONSENSUS_MCP_PROJECT_ROOT env vars, then the nearest "
+                    "ancestor with a consensus containment marker (.consensus/ "
+                    "or consensus-state/), then the current working directory. "
+                    "Relative iteration_dir paths are resolved against this root."
                 ),
             },
         },

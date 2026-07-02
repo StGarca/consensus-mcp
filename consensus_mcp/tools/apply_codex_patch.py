@@ -84,15 +84,20 @@ _PATCH_ID_PATTERN = re.compile(r"^codex-rev-\d+-patch$")
 
 
 def _resolve_repo_root() -> Path:
-    """CONSENSUS_MCP_REPO_ROOT env-var override -> source-tree-relative discovery.
-
-    Mirrors the resolver used by audit_append_event + patch_stage_and_dry_run
-    so this tool, T4, and T6 always agree on REPO_ROOT.
-    """
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parent.parent.parent
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 pinned fix: the
+    prior source-tree-relative fallback
+    (`Path(__file__).resolve().parent.parent.parent`) broke under the
+    standard pipx bootstrap - with no env override the resolved "repo root"
+    was the INSTALL tree (site-packages parent), not the governed project,
+    failing patch application closed. Now a shim over the ONE blessed
+    resolver (_paths.resolve_repo_root): env override (CONSENSUS_MCP_REPO_ROOT
+    then CONSENSUS_MCP_PROJECT_ROOT - what `consensus init` writes into
+    .mcp.json) > cwd-ancestor containment-marker walk > RepoRootError
+    (handle() maps it to the structured `repo_root_unresolvable` refusal).
+    T4 + T6 anchor via the same _paths module, so the tools keep agreeing on
+    the project root."""
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root()
 
 
 def _now_utc() -> str:
@@ -159,7 +164,15 @@ def handle(
 ) -> dict:
     """Apply a verified codex patch under operator authorization."""
     iter_dir = Path(iteration_dir)
-    repo_root = _resolve_repo_root()
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: an unresolvable
+    # repo root is a structured refusal, not an escaping exception - the tool
+    # contract is refuse-with-reason, and the message tells the operator
+    # exactly which env vars / markers were searched.
+    from consensus_mcp._paths import RepoRootError
+    try:
+        repo_root = _resolve_repo_root()
+    except RepoRootError as exc:
+        return _refuse(f"repo_root_unresolvable: {exc}")
 
     # --- CR-5 (2026-05-22 security review): iteration_dir trust boundary ------
     # iteration_dir is caller-supplied and authorization is read FROM it

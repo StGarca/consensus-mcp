@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -93,20 +92,16 @@ def _resolve_repo_root(override: Path | None = None) -> Path:
         if _has_repo_markers(cand):
             return cand
         raise RuntimeError(f"override repo_root {cand} missing markers {_REPO_ROOT_MARKERS}")
-    env = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if env:
-        cand = Path(env).resolve()
-        if _has_repo_markers(cand):
-            return cand
-    cand = Path.cwd().resolve()
-    if _has_repo_markers(cand):
-        return cand
-    for p in Path(__file__).resolve().parents:
-        if _has_repo_markers(p):
-            return p
-    raise RuntimeError(
-        "could not resolve repo_root; set CONSENSUS_MCP_REPO_ROOT or run from repo root"
-    )
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: env + discovery
+    # now delegate to the ONE blessed resolver (_paths.resolve_repo_root);
+    # the old Path(__file__).parents marker walk is gone (never
+    # __file__-derived roots in package code). RepoRootError subclasses
+    # RuntimeError, preserving this function's documented "raises
+    # RuntimeError" contract. The explicit `override` parameter keeps its
+    # stricter source-marker validation above (pinned by test_resume's
+    # fake-repo fixture).
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root()
 
 
 def _utc_now_iso() -> str:

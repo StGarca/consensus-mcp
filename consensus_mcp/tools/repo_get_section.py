@@ -20,8 +20,14 @@ lines 287-302):
 FAILURE MODES
 -------------
   - file_not_found:        file path does not exist on disk.
+  - file_required:         file argument is empty/None, or resolves to a
+                           directory instead of a file (Round 6 F8 guard).
   - path_outside_repo:     resolved path is not under project_root() (path-traversal guard).
   - invalid_utf8:          file is not valid utf-8.
+  - duplicate_section_id:  file contains duplicate '## N.' headings; parse()
+                           refuses rather than key-by-number last-wins.
+                           Returns duplicate_section_ids list. M1 (consult
+                           iteration-m1-hardening-design-4d7d2469) S3.
   - section_not_found:     section_id does not appear in parsed file. Returns
                            available_section_ids list to aid caller diagnosis.
 
@@ -43,7 +49,7 @@ import hashlib
 from pathlib import Path
 
 from consensus_mcp._paths import project_root
-from consensus_mcp.tools._md_sections import parse  # noqa: E402
+from consensus_mcp.tools._md_sections import DuplicateSectionError, parse  # noqa: E402
 
 # iter-0034 (Phase B step 2 per iter-0024 plan): migrated from module-level
 # REPO_ROOT capture to lazy `_paths.project_root()` resolution. Each call
@@ -81,7 +87,8 @@ SCHEMA = {
         "description": (
             "Success: {section_text, section_sha256, file}. "
             "Failure: {error, ...} where error is one of: "
-            "file_not_found | path_outside_repo | invalid_utf8 | section_not_found."
+            "file_not_found | file_required | path_outside_repo | "
+            "invalid_utf8 | duplicate_section_id | section_not_found."
         ),
         "oneOf": [
             {
@@ -100,15 +107,25 @@ SCHEMA = {
                 "properties": {
                     "error": {
                         "type": "string",
+                        # M1 (consult iteration-m1-hardening-design-4d7d2469)
+                        # S4: 'file_required' was returned by the handler but
+                        # missing from this enum (M0 audit contract mismatch);
+                        # S3 adds 'duplicate_section_id'.
                         "enum": [
                             "file_not_found",
+                            "file_required",
                             "path_outside_repo",
                             "invalid_utf8",
+                            "duplicate_section_id",
                             "section_not_found",
                         ],
                     },
                     "detail": {"type": ["string", "null"]},
                     "available_section_ids": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                    },
+                    "duplicate_section_ids": {
                         "type": ["array", "null"],
                         "items": {"type": "string"},
                     },
@@ -167,7 +184,20 @@ def handle(file: str, section_id: str) -> dict:
     except UnicodeDecodeError as exc:
         return {"error": "invalid_utf8", "detail": str(exc)}
 
-    smap = parse(text)
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) S3: parse() refuses
+    # duplicate '## N.' ids; surface the structured error instead of serving
+    # a last-wins section text that misrepresents the file.
+    try:
+        smap = parse(text)
+    except DuplicateSectionError as exc:
+        return {
+            "error": "duplicate_section_id",
+            "detail": (
+                "duplicate '## N.' section ids in file: "
+                + ", ".join(exc.duplicate_section_ids)
+            ),
+            "duplicate_section_ids": exc.duplicate_section_ids,
+        }
     if section_id not in smap.sections:
         return {
             "error": "section_not_found",

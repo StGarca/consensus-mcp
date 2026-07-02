@@ -36,12 +36,17 @@ from consensus_mcp.contributors.host_peer_adapter import HostPeerAdapter
 
 
 def _fake_t6_factory(tmp_path: Path):
-    """Mock T6 (review.write_and_seal) the way the ClaudeAdapter tests do: write
-    a 4-token (date, iteration_id, reviewer_id, pass_id) archive file so the
-    adapter's confinement check passes. Keeps the adapter unit test focused on
-    the adapter, not the real seal pipeline."""
+    """Mock T6 (review.write_and_seal) the way the ClaudeAdapter tests do:
+    write an archive file named EXACTLY as the real seal pipeline names it
+    (M1 S5: via _bounded_seal_filename, which caps long names - the adapter's
+    confinement check recomputes and requires an exact match), so the fixture
+    mirrors the real T6 contract. Keeps the adapter unit test focused on the
+    adapter, not the real seal pipeline."""
+    from consensus_mcp.tools.review_write_and_seal import _bounded_seal_filename
+
     def fake_t6(iteration_id, reviewer_id, pass_id, packet):
-        archive_path = tmp_path / f"2026-05-22-{iteration_id}-{reviewer_id}-{pass_id}-pass.yaml"
+        fname = _bounded_seal_filename("2026-05-22", iteration_id, reviewer_id, pass_id)
+        archive_path = tmp_path / fname
         archive_path.write_text(yaml.safe_dump(packet), encoding="utf-8")
         return {"sealed_path": str(archive_path), "packet_sha256": "fakehash"}
     return fake_t6

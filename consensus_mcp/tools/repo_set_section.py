@@ -45,14 +45,22 @@ INTRA-FILE SCOPE ENFORCEMENT
      "unintended_section_change" + the unintended-changes list. This catches
      the "new_section_text contains a '## N.' line that the parser interprets
      as a new heading" attack/bug.
-  6. Atomic write (tempfile + os.replace).
+  6. Atomic write: stage the full new text in a sibling "<file>.tmp" path
+     next to the target, then os.replace() it over the target. (M1 S4
+     docstring fix: this was previously misdescribed as "tempfile +
+     os.replace"; no tempfile module is involved.)
   7. Optional audit event (apply_step_landed) when iteration_id is supplied.
 
 FAILURE MODES
 -------------
   - file_not_found
+  - file_required                       (empty/None path, or path resolves to a directory)
   - path_outside_repo
+  - invalid_utf8                        (target file is not valid utf-8)
   - section_not_found
+  - duplicate_section_id                (duplicate '## N.' headings, in the file or
+                                         introduced by new_section_text; REFUSED
+                                         before any write. M1 S3.)
   - consensus_yaml_path_required        (set_section without consensus is forbidden)
   - invalid_consensus_yaml              (file does not parse as YAML mapping)
   - consensus_sha_mismatch              (consensus_yaml_sha256 doesn't match the file)
@@ -79,13 +87,16 @@ from __future__ import annotations
 
 import hashlib
 import os
-import tempfile
 from pathlib import Path
 
 import yaml
 
 from consensus_mcp._paths import project_root
-from consensus_mcp.tools._md_sections import parse, reconstruct  # noqa: E402
+from consensus_mcp.tools._md_sections import (  # noqa: E402
+    DuplicateSectionError,
+    parse,
+    reconstruct,
+)
 from consensus_mcp.tools.audit_append_event import handle as audit_handle  # noqa: E402
 
 # iter-0035 (Phase B step 3 per iter-0024 plan): migrated from module-level
@@ -188,10 +199,17 @@ SCHEMA = {
                 "properties": {
                     "error": {
                         "type": "string",
+                        # M1 (consult iteration-m1-hardening-design-4d7d2469)
+                        # S4: 'file_required' and 'invalid_utf8' were returned
+                        # by the handler but missing from this enum (M0 audit
+                        # contract mismatch); S3 adds 'duplicate_section_id'.
                         "enum": [
                             "file_not_found",
+                            "file_required",
                             "path_outside_repo",
+                            "invalid_utf8",
                             "section_not_found",
+                            "duplicate_section_id",
                             "consensus_yaml_path_required",
                             "invalid_consensus_yaml",
                             "consensus_sha_mismatch",
@@ -202,6 +220,10 @@ SCHEMA = {
                     },
                     "detail": {"type": ["string", "null"]},
                     "available_section_ids": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                    },
+                    "duplicate_section_ids": {
                         "type": ["array", "null"],
                         "items": {"type": "string"},
                     },
@@ -362,7 +384,22 @@ def handle(
         current_text = target_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         return {"error": "invalid_utf8", "detail": str(exc)}
-    pre_smap = parse(current_text)
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) S3: parse() refuses
+    # duplicate '## N.' ids. Refusing HERE - before the consensus gate and
+    # long before Step 8 - guarantees a duplicate-numbered file is never
+    # written to (previously an authorized write to an UNRELATED section
+    # silently deleted the first duplicate block and doubled the second).
+    try:
+        pre_smap = parse(current_text)
+    except DuplicateSectionError as exc:
+        return {
+            "error": "duplicate_section_id",
+            "detail": (
+                "duplicate '## N.' section ids in file (write refused, "
+                "file untouched): " + ", ".join(exc.duplicate_section_ids)
+            ),
+            "duplicate_section_ids": exc.duplicate_section_ids,
+        }
 
     if section_id not in pre_smap.sections:
         return {
@@ -434,7 +471,22 @@ def handle(
     new_text = reconstruct(new_smap)
 
     # ---- Step 7: round-trip safety check ----
-    post_smap = parse(new_text)
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) S3: new_section_text
+    # can itself introduce a heading that DUPLICATES an existing section id
+    # (the pre-parse above only vets the file on disk). parse() raises on the
+    # staged text; refuse before any write, same structured shape.
+    try:
+        post_smap = parse(new_text)
+    except DuplicateSectionError as exc:
+        return {
+            "error": "duplicate_section_id",
+            "detail": (
+                "new_section_text would introduce duplicate '## N.' section "
+                "ids (write refused, file untouched): "
+                + ", ".join(exc.duplicate_section_ids)
+            ),
+            "duplicate_section_ids": exc.duplicate_section_ids,
+        }
 
     pre_ids = set(pre_smap.sections.keys())
     post_ids = set(post_smap.sections.keys())

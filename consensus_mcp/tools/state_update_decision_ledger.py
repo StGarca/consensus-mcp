@@ -36,6 +36,17 @@ FAILURE MODES
     No file written; no audit event.
   - validate_post_findings_nonzero: validator returned >0 findings against staged
     state. No file written; no audit event. Returns findings list for caller diagnosis.
+  - spec_validation_failed: the validator could not RUN at all -- it fails loud
+    via SystemExit (e.g. _read_spec on a missing spec). Converted to this
+    structured refusal at source; no file written; no audit event.
+    M1 (consult iteration-m1-hardening-design-4d7d2469) S1: previously the
+    SystemExit escaped handle() and killed the caller (the live MCP server's
+    tools/call net caught only Exception).
+  - state_root_outside_project_root: CONSENSUS_MCP_STATE_ROOT resolves outside
+    project_root, so the staged-ledger validation redirect (which needs a
+    project-root-relative path) is impossible. No file written; no audit event.
+    M1 (consult iteration-m1-hardening-design-4d7d2469) S2: previously an
+    uncaught ValueError out of _run_validator_with_findings.
   - audit_write_failed: ledger HAS been written atomically, but audit.append_event
     failed (e.g., iteration dir missing). Operator must reconcile manually; the
     ledger update is on disk and not rolled back. Includes ledger_canonical_sha256_post_write
@@ -175,6 +186,8 @@ SCHEMA = {
                             "invalid_yaml",
                             "no_consensus_sha_provided",
                             "validate_post_findings_nonzero",
+                            "spec_validation_failed",
+                            "state_root_outside_project_root",
                             "audit_write_failed",
                         ],
                     },
@@ -189,6 +202,16 @@ SCHEMA = {
         ],
     },
 }
+
+
+class _StateRootOutsideProjectRootError(ValueError):
+    """CONSENSUS_MCP_STATE_ROOT resolved outside project_root.
+
+    M1 (consult iteration-m1-hardening-design-4d7d2469) S2: typed signal so
+    handle() can convert this specific configuration error into the
+    state_root_outside_project_root structured refusal without a bare
+    except-ValueError masking unrelated bugs.
+    """
 
 
 def _canonical_sha256_from_text(yaml_text: str) -> str:
@@ -241,7 +264,9 @@ def _run_validator_with_findings(staged_ledger_path: Path) -> tuple[int, list]:
     consensus-state/state/disposition-ledger.yaml. Uses a sibling temp file in the
     same state dir and a temp spec under wiki/.
 
-    Returns (total_findings, findings_list).
+    Returns (total_findings, findings_list). Raises
+    _StateRootOutsideProjectRootError when state_root is not under
+    project_root (M1 S2 -- handle() converts it to a structured refusal).
     """
     from consensus_mcp.validators.validate_disposition_index import validate_disposition_index
 
@@ -251,14 +276,28 @@ def _run_validator_with_findings(staged_ledger_path: Path) -> tuple[int, list]:
     # ledger is reachable via repo-relative path. We deliberately do NOT use
     # LEDGER_PATH.parent because LEDGER_PATH may be monkeypatched in tests to a
     # path outside REPO_ROOT.
-    state_dir = state_root() / "state"
-    state_dir.mkdir(parents=True, exist_ok=True)
+    _state_root = state_root()
+    state_dir = _state_root / "state"
     sibling_ledger = state_dir / f".staged-ledger-{os.getpid()}.yaml"
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) S2: the redirect
+    # below requires a PROJECT-ROOT-RELATIVE path for the staged ledger, so a
+    # state_root outside project_root cannot be validated by this mechanism.
+    # Convert relative_to's ValueError into the typed refusal signal BEFORE
+    # any side effect (the old order mkdir'd the outside state dir first,
+    # then let the ValueError escape handle() uncaught).
+    try:
+        staged_relpath = str(sibling_ledger.relative_to(project_root())).replace("\\", "/")
+    except ValueError as exc:
+        raise _StateRootOutsideProjectRootError(
+            f"CONSENSUS_MCP_STATE_ROOT resolves to {_state_root}, outside "
+            f"project_root {project_root()}; staged-ledger validation needs "
+            "a project-root-relative path, so the ledger was NOT written."
+        ) from exc
+    state_dir.mkdir(parents=True, exist_ok=True)
     _spec = spec_path()
     sibling_spec = _spec.parent / f".staged-spec-{os.getpid()}.md"
 
     spec_text = _spec.read_text(encoding="utf-8")
-    staged_relpath = str(sibling_ledger.relative_to(project_root())).replace("\\", "/")
     redirected_spec = _build_redirected_spec(spec_text, staged_relpath)
 
     try:
@@ -314,7 +353,19 @@ def handle(
 
     # ---- Step 1: pre-state findings (real disk) ----
     from consensus_mcp.validators.validate_disposition_index import validate_disposition_index
-    pre_report = validate_disposition_index(spec_path())
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) S1: the validator
+    # fails loud via SystemExit -- a BaseException subclass (proven trigger:
+    # _read_spec raises SystemExit('spec not found: ...') when the spec file
+    # is missing). Uncaught, it escaped handle() and killed the live stdio
+    # MCP server, whose tools/call net caught only Exception. Convert it to
+    # this tool's structured refusal shape at source.
+    try:
+        pre_report = validate_disposition_index(spec_path())
+    except SystemExit as exc:
+        return {
+            "error": "spec_validation_failed",
+            "detail": f"validate_disposition_index could not run: {exc}",
+        }
     pre_findings_count = pre_report["stats"]["total_findings"]
 
     # ---- Step 2: stage + validate against hypothetical post-write state ----
@@ -324,6 +375,24 @@ def handle(
 
     try:
         post_count, post_findings = _run_validator_with_findings(staged_path)
+    except _StateRootOutsideProjectRootError as exc:
+        # M1 (consult iteration-m1-hardening-design-4d7d2469) S2: structured
+        # refusal instead of the uncaught ValueError; prior ledger bytes are
+        # untouched (the refusal fires before any write).
+        return {
+            "error": "state_root_outside_project_root",
+            "detail": str(exc),
+        }
+    except SystemExit as exc:
+        # M1 (consult iteration-m1-hardening-design-4d7d2469) S1: same
+        # deliberate BaseException-subclass containment as the pre-state
+        # validator call above -- defense in depth for the staged-state run
+        # (reachable if the spec mutates between steps 1 and 2, e.g. its
+        # frontmatter breaks; _split_frontmatter also fails via SystemExit).
+        return {
+            "error": "spec_validation_failed",
+            "detail": f"validate_disposition_index could not run: {exc}",
+        }
     finally:
         try:
             staged_path.unlink()

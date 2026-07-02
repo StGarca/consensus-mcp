@@ -13,6 +13,13 @@ First coverage for consensus_mcp/tools/gate_evaluate_production_with_scope_match
 - relative-vs-absolute path resolution and register(registry) wiring.
 
 Provenance: v2.2.1 audit M0.1b (docs/audits/2026-07-01-v2.2.1-repo-audit.md)
+
+M1 (consult iteration-m1-hardening-design-4d7d2469): the three documented-flaw
+tests from M0 (raw prefix matching across segment boundaries, empty approval
+target matching everything, dead VALID_SCOPE_TYPES enum) are FLIPPED to assert
+the fixed fail-closed semantics; segment-boundary matrix, enum-refusal (both
+sides), and empty/whitespace-target refusal coverage added (kimi-rev-003
+widening: the scope_target_empty refusal applies under ALL match modes).
 """
 from __future__ import annotations
 
@@ -142,10 +149,11 @@ def test_list_valued_implementation_scope_is_accepted(tmp_path):
     assert result["technical_readiness"]["production_scope_verified"] is True
 
 
-def test_unknown_scope_type_is_not_validated_against_enum(tmp_path):
-    """VALID_SCOPE_TYPES exists in the module but is never enforced: a scope
-    type outside {render, merge, deploy, data-mutation} evaluates normally as
-    long as both sides agree. Documents actual behavior (see bugs_found)."""
+def test_unknown_scope_type_refuses_with_invalid_scope_type(tmp_path):
+    """M1 (consult iteration-m1-hardening-design-4d7d2469), flipped from the
+    M0 documented-flaw test: VALID_SCOPE_TYPES membership is now ENFORCED. A
+    scope type outside {render, merge, deploy, data-mutation} refuses with a
+    structured invalid_scope_type error even when both sides agree on it."""
     consensus = _consensus_doc(
         production_scope={
             "type": "banana",
@@ -161,8 +169,40 @@ def test_unknown_scope_type_is_not_validated_against_enum(tmp_path):
     )
     cpath, vpath, apath = _write_state(tmp_path, consensus, verification, approval)
     result = _call(cpath, vpath, apath)
-    assert "error" not in result
-    assert result["production_state"] == "approved"
+    assert result["error"] == "invalid_scope_type"
+    assert "'banana'" in result["detail"]
+    assert "['data-mutation', 'deploy', 'merge', 'render']" in result["detail"]
+
+
+def test_invalid_consensus_scope_type_refuses(tmp_path):
+    """Consensus-side enum enforcement: an unknown consensus type refuses
+    with invalid_scope_type naming the consensus side."""
+    consensus = _consensus_doc(
+        production_scope={
+            "type": "banana",
+            "target": "ssb-ch1",
+            "scope_match_mode": "exact",
+        }
+    )
+    cpath, vpath, apath = _ready_state(tmp_path, consensus=consensus)
+    result = _call(cpath, vpath, apath)
+    assert result["error"] == "invalid_scope_type"
+    assert "consensus.production_scope.type='banana'" in result["detail"]
+
+
+def test_invalid_approval_scope_type_refuses_before_type_mismatch(tmp_path):
+    """Approval-side enum enforcement: an unknown approval type refuses with
+    invalid_scope_type (the enum check runs BEFORE the step-4 type-compare,
+    so it does not surface as scope_type_mismatch)."""
+    cpath, vpath, apath = _ready_state(
+        tmp_path,
+        approval_overrides={
+            "production_scope": {"type": "banana", "target": "ssb-ch1"}
+        },
+    )
+    result = _call(cpath, vpath, apath)
+    assert result["error"] == "invalid_scope_type"
+    assert "approval.production_scope.type='banana'" in result["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -191,11 +231,14 @@ def test_default_scope_match_mode_is_exact_and_rejects_prefix_shape(tmp_path):
 
 def test_prefix_mode_parent_approval_matches_child_consensus(tmp_path):
     """The documented prefix semantics: operator approves parent 'ssb-ch1',
-    consensus narrows to child 'ssb-ch1-final' -> match -> approved."""
+    consensus narrows to the path-segment child 'ssb-ch1/final' -> match ->
+    approved. M1 (consult iteration-m1-hardening-design-4d7d2469): prefix is
+    segment-bounded, so the child must sit past a '/' boundary (the pre-M1
+    example 'ssb-ch1-final' is now a rejected sibling string-prefix)."""
     consensus = _consensus_doc(
         production_scope={
             "type": "deploy",
-            "target": "ssb-ch1-final",
+            "target": "ssb-ch1/final",
             "scope_match_mode": "prefix",
         }
     )
@@ -204,7 +247,7 @@ def test_prefix_mode_parent_approval_matches_child_consensus(tmp_path):
     assert result["production_state"] == "approved"
     assert result["operator_production_scope_match_strict_check"] is True
     assert result["scope_match_mode_used"] == "prefix"
-    assert result["consensus_target"] == "ssb-ch1-final"
+    assert result["consensus_target"] == "ssb-ch1/final"
     assert result["approval_target"] == "ssb-ch1"
     assert result["gate_findings"] == []
 
@@ -232,11 +275,12 @@ def test_prefix_mode_is_directional_wider_consensus_rejected(tmp_path):
     assert _finding_ids(result) == ["OPERATOR_SCOPE_MISMATCH"]
 
 
-def test_prefix_mode_matches_across_segment_boundaries(tmp_path):
-    """ACTUAL behavior: prefix is a raw string prefix, not segment-bounded.
-    Approval 'app/mod' also matches consensus 'app/module_evil'. Flagged in
-    bugs_found as a scope-widening edge vs the docstring's parent/child
-    narrative."""
+def test_prefix_mode_sibling_string_prefix_is_rejected(tmp_path):
+    """M1 (consult iteration-m1-hardening-design-4d7d2469), flipped from the
+    M0 documented-flaw test: prefix matching is segment-bounded. Approval
+    'app/mod' no longer matches consensus 'app/module_evil' (a sibling whose
+    name merely shares the string prefix) -- approval can only NARROW along
+    path-segment boundaries."""
     consensus = _consensus_doc(
         production_scope={
             "type": "deploy",
@@ -252,15 +296,16 @@ def test_prefix_mode_matches_across_segment_boundaries(tmp_path):
         },
     )
     result = _call(cpath, vpath, apath)
-    assert result["operator_production_scope_match_strict_check"] is True
-    assert result["production_state"] == "approved"
+    assert result["operator_production_scope_match_strict_check"] is False
+    assert result["production_state"] == "ready_pending_operator_approval"
+    assert _finding_ids(result) == ["OPERATOR_SCOPE_MISMATCH"]
 
 
-def test_prefix_mode_empty_approval_target_matches_everything(tmp_path):
-    """ACTUAL behavior: an empty-string approval target under prefix mode
-    matches ANY consensus target (str.startswith('') is always True) -- the
-    scope-match layer fails OPEN for this degenerate operator input. Flagged
-    in bugs_found."""
+def test_prefix_mode_empty_approval_target_refuses(tmp_path):
+    """M1 (consult iteration-m1-hardening-design-4d7d2469), flipped from the
+    M0 documented-flaw test: an empty-string approval target under prefix
+    mode is a structured scope_target_empty refusal (fail closed), not a
+    match-everything approval (str.startswith('') is always True)."""
     consensus = _consensus_doc(
         production_scope={
             "type": "deploy",
@@ -274,26 +319,125 @@ def test_prefix_mode_empty_approval_target_matches_everything(tmp_path):
         approval_overrides={"production_scope": {"type": "deploy", "target": ""}},
     )
     result = _call(cpath, vpath, apath)
-    assert result["operator_production_scope_match_strict_check"] is True
-    assert result["production_state"] == "approved"
+    assert result["error"] == "scope_target_empty"
+    assert "approval target=''" in result["detail"]
 
 
-def test_exact_mode_empty_targets_only_match_each_other(tmp_path):
+@pytest.mark.parametrize(
+    ("cons_target", "appr_target"),
+    [
+        ("ssb-ch1", ""),
+        ("", "ssb-ch1"),
+        ("ssb-ch1", "   "),
+        (" \t ", "ssb-ch1"),
+        ("", ""),
+    ],
+    ids=[
+        "empty-approval",
+        "empty-consensus",
+        "whitespace-approval",
+        "whitespace-consensus",
+        "both-empty",
+    ],
+)
+def test_exact_mode_empty_or_whitespace_target_refuses(
+    tmp_path, cons_target, appr_target
+):
+    """M1 (consult iteration-m1-hardening-design-4d7d2469, kimi-rev-003
+    widening): the scope_target_empty refusal applies under ALL match modes.
+    Under exact mode an empty/whitespace target on either side refuses --
+    even the degenerate '' == '' byte-equality no longer approves."""
     consensus = _consensus_doc(
         production_scope={
             "type": "deploy",
-            "target": "ssb-ch1",
+            "target": cons_target,
             "scope_match_mode": "exact",
         }
     )
     cpath, vpath, apath = _ready_state(
         tmp_path,
         consensus=consensus,
-        approval_overrides={"production_scope": {"type": "deploy", "target": ""}},
+        approval_overrides={
+            "production_scope": {"type": "deploy", "target": appr_target}
+        },
     )
     result = _call(cpath, vpath, apath)
-    assert result["operator_production_scope_match_strict_check"] is False
-    assert result["production_state"] == "ready_pending_operator_approval"
+    assert result["error"] == "scope_target_empty"
+
+
+@pytest.mark.parametrize(
+    ("cons_target", "appr_target", "expected"),
+    [
+        ("app/mod", "app/mod", "match"),
+        ("app/mod/sub", "app/mod", "match"),
+        ("app/mod/sub/deep", "app/mod", "match"),
+        ("app/module_evil", "app/mod", "mismatch"),
+        ("app/mod2", "app/mod", "mismatch"),
+        ("app/mod", "app/mod/sub", "mismatch"),
+        ("app/mod/", "app/mod", "match"),
+        ("app/mod/sub", "app/mod/", "match"),
+        ("app\\mod\\sub", "app/mod", "match"),
+        ("app/mod/sub", "app\\mod", "match"),
+        ("", "app/mod", "refuse"),
+        ("app/mod", "", "refuse"),
+        ("   ", "app/mod", "refuse"),
+        ("app/mod", " \t ", "refuse"),
+        ("app/mod", "/", "refuse"),
+    ],
+    ids=[
+        "equal",
+        "parent-child",
+        "parent-deep-child",
+        "sibling-string-prefix",
+        "sibling-suffix-digit",
+        "child-approval-widening-rejected",
+        "trailing-slash-consensus-equal",
+        "trailing-slash-approval-parent",
+        "backslash-consensus-child",
+        "backslash-approval-parent",
+        "empty-consensus",
+        "empty-approval",
+        "whitespace-consensus",
+        "whitespace-approval",
+        "separator-only-approval",
+    ],
+)
+def test_prefix_mode_segment_boundary_matrix(
+    tmp_path, cons_target, appr_target, expected
+):
+    """M1 (consult iteration-m1-hardening-design-4d7d2469): the segment-
+    boundary matrix from the Q3 acceptance gates -- equal, parent/child,
+    sibling-prefix, empty, whitespace, trailing-slash, and mixed-separator
+    shapes under prefix mode. Targets normalize (posix separators, trailing
+    '/' stripped) and match only equal-or-segment-child; degenerate targets
+    refuse with scope_target_empty."""
+    consensus = _consensus_doc(
+        production_scope={
+            "type": "deploy",
+            "target": cons_target,
+            "scope_match_mode": "prefix",
+        }
+    )
+    cpath, vpath, apath = _ready_state(
+        tmp_path,
+        consensus=consensus,
+        approval_overrides={
+            "production_scope": {"type": "deploy", "target": appr_target}
+        },
+    )
+    result = _call(cpath, vpath, apath)
+    if expected == "refuse":
+        assert result["error"] == "scope_target_empty"
+    elif expected == "match":
+        assert "error" not in result
+        assert result["operator_production_scope_match_strict_check"] is True
+        assert result["production_state"] == "approved"
+        assert result["gate_findings"] == []
+    else:  # mismatch
+        assert "error" not in result
+        assert result["operator_production_scope_match_strict_check"] is False
+        assert result["production_state"] == "ready_pending_operator_approval"
+        assert _finding_ids(result) == ["OPERATOR_SCOPE_MISMATCH"]
 
 
 # ---------------------------------------------------------------------------

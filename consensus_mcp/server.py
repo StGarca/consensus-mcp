@@ -56,15 +56,31 @@ def _package_version() -> str:
         return "unknown"
 
 def _resolve_repo_root() -> Path:
-    """Legacy REPO_ROOT resolver. Kept for back-compat.
+    """Server BOOT root resolver - deliberately LENIENT (declared exception).
 
-    v1.13.0: no longer load-bearing for spec/state/project-root. Use
-    _resolve_spec_path / _resolve_state_root / _resolve_project_root instead.
+    M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: delegates to the
+    ONE blessed resolver (_paths.resolve_repo_root: env keys > cwd-ancestor
+    containment-marker walk). BOOT leniency is the design's declared, narrow
+    exception: the stdio server must be able to boot for tools/list in an
+    ungoverned directory, so an unresolvable root falls back to cwd WITH a
+    logged warning. The leniency is boot-only and cannot leak into tool
+    behavior - every path-anchored TOOL resolves per-call through its own
+    strict resolver. (v1.13.0: REPO_ROOT is not load-bearing for spec/state/
+    project roots - use _resolve_spec_path / _resolve_state_root /
+    _resolve_project_root. The old Path(__file__).parent.parent fallback
+    anchored a pipx install at site-packages; it is gone.)
     """
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override).resolve()
-    return Path(__file__).resolve().parent.parent
+    from consensus_mcp._paths import RepoRootError, resolve_repo_root
+    try:
+        return resolve_repo_root()
+    except RepoRootError as exc:
+        print(
+            f"WARNING: consensus-mcp server booting without a resolvable repo "
+            f"root; falling back to cwd (boot leniency - path-anchored tools "
+            f"still resolve strictly per-call). {exc}",
+            file=sys.stderr,
+        )
+        return Path.cwd().resolve()
 
 
 def _resolve_spec_path() -> Path:
@@ -316,6 +332,22 @@ def _handle_request(req: dict) -> dict | None:
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(result)}]},
+            }
+        except SystemExit as exc:
+            # M1 (consult iteration-m1-hardening-design-4d7d2469) S1: catching
+            # a BaseException subclass is DELIBERATE. SystemExit does not
+            # inherit from Exception, so the net below never sees it; a tool
+            # handler whose internals call sys.exit()/raise SystemExit (proven:
+            # state_update_decision_ledger -> validate_disposition_index
+            # _read_spec on a missing spec) killed the whole stdio MCP server.
+            # Scope note (kimi round-1, binding): this catch lives INSIDE the
+            # tools/call try block, wrapping only handler invocation + result
+            # encoding -- signal-driven process termination outside handler
+            # execution is NOT swallowed.
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32000, "message": str(exc)},
             }
         except Exception as exc:
             return {

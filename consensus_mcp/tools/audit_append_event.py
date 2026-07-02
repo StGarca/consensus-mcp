@@ -17,28 +17,35 @@ properties (sealed_inputs, staging_dir, validator, effect, closing_state).
 Pass them as top-level arguments - not via extra_fields.
 extra_fields is a catch-all for unspecified extensions only.
 
-CONCURRENCY (v1.0 limitation): the implementation is **read-modify-write**,
-not true atomic append. Each call:
-  1. yaml.safe_load() the entire independence-audit.yaml
-  2. append an event to the in-memory audit_log list
-  3. write the full file back via write_text() (which is os.replace-atomic
-     for the file write step itself, but the read+write across calls is
-     not serialized).
-Concurrent invocations on the same iteration_id can race and drop events.
-The consensus pipeline is single-writer by design (one orchestrator at a time);
-concurrent invocations are a programming error, not a supported case.
-**Do not invoke concurrently for the same iteration_id.** Per-iteration
-filelock is deferred to Phase 1.x.
+CONCURRENCY - M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: the
+read-modify-write is serialized ACROSS PROCESSES via
+`_atomic_io.locked_mutation(audit_path)` (mkdir lock dir + stale takeover),
+and the write-back is the blessed unique-tmp + os.replace atomic writer
+(`_atomic_io.atomic_write_text`) - a crash mid-write can no longer truncate
+independence-audit.yaml (the pre-M1 docstring claimed os.replace atomicity
+while the code used a plain truncating write_text; both halves are now true).
+Concurrent appends for the same iteration_id serialize; an unacquirable lock
+is a structured `{"error": "state_lock_timeout", ...}` refusal carrying the
+holder's owner.json fields. Stale-takeover events for the audit file go to
+the DISPATCH LOG ONLY (never the audit file itself - that would recurse into
+the very lock being held; see _emit_state_lock_takeover).
 """
 from __future__ import annotations
 import hashlib
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
+from consensus_mcp._atomic_io import LockTimeout, atomic_write_text, locked_mutation
 from consensus_mcp._paths import project_root, active_dir
+
+# M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: lock-acquisition
+# budget for the audit-file mutation window. Module-level (a real attribute,
+# not __getattr__-synthesized) so tests may shrink it via monkeypatch.setattr.
+_STATE_LOCK_TIMEOUT_S = 30.0
 
 # iter-0036 (Phase B step 9 per iter-0024 plan, HIGH-impact audit trail
 # tool): migrated from module-level REPO_ROOT/ACTIVE_DIR captures to lazy
@@ -213,6 +220,48 @@ def _canonical_sha256(path: Path) -> str:
     ).hexdigest()
 
 
+def _read_audit_data(audit_path: Path) -> dict:
+    """Load the audit YAML mapping ({} when the file does not exist yet)."""
+    if audit_path.exists():
+        raw = audit_path.read_bytes()
+        return yaml.safe_load(raw) or {}
+    return {}
+
+
+def _emit_state_lock_takeover(target: Path, status) -> None:
+    """Report a stale-lock takeover to the dispatch log ONLY.
+
+    M1 (consult iteration-m1-hardening-design-4d7d2469, gemini-rev-002 +
+    kimi-rev-001): locked_mutation never emits events; the CALLER reports the
+    takeover here. The sink is dispatch-log.jsonl via
+    _dispatch_base._log_dispatch, which is LOCK-FREE by invariant (it takes
+    no locked_mutation), so emitting from inside a hold can never recurse or
+    deadlock - regardless of which file is locked. For the audit file
+    specifically, the event must NEVER be appended to independence-audit.yaml
+    itself: that append would re-enter the very lock being held. Best effort:
+    a reporting failure must never fail the caller's mutation.
+    """
+    try:
+        from consensus_mcp._dispatch_base import _log_dispatch
+        from consensus_mcp._paths import dispatch_log_path
+
+        owner = status.takeover_owner if isinstance(status.takeover_owner, dict) else {}
+        _log_dispatch(
+            dispatch_log_path(),
+            {
+                "event": "state_lock_stale_takeover",
+                "target": str(target),
+                "stale_owner_pid": owner.get("pid"),
+                "stale_owner_host": owner.get("host"),
+                "stale_owner_claimed_at_epoch": owner.get("claimed_at_epoch"),
+                "waited_s": round(status.waited_s, 3),
+                "taker_pid": os.getpid(),
+            },
+        )
+    except Exception:
+        pass
+
+
 def handle(
     iteration_id: str,
     event_type: str,
@@ -261,6 +310,10 @@ def handle(
       - per-agent-prefixed event_type (with hint)
       - missing required field for the given event_type
       - iteration directory does not exist
+      - state_lock_timeout: the audit-file mutation lock could not be
+        acquired within _STATE_LOCK_TIMEOUT_S; the refusal carries the
+        holder's owner.json fields (owner_pid, owner_host,
+        owner_claimed_at_epoch) - M1 Q1
     """
     # --- validate event_type ---
     if event_type in FORBIDDEN_PER_AGENT_PREFIXED:
@@ -322,14 +375,16 @@ def handle(
             )
         }
 
-    # --- load existing audit or start fresh ---
-    if audit_path.exists():
-        raw = audit_path.read_bytes()
-        data = yaml.safe_load(raw) or {}
-    else:
-        data = {}
-
-    audit_log: list = data.get("audit_log", [])
+    # --- pre-lock audit snapshot for the iteration_closed gate ---
+    # M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: the close gate
+    # below runs git subprocesses (_detect_unaudited_mutation, 15s timeouts)
+    # and the hold-window discipline forbids subprocess work inside the lock,
+    # so the gate evaluates on this PRE-LOCK snapshot. iteration_closed is
+    # single-writer by design (one orchestrator closes an iteration); the
+    # locked re-read at append time below is what guarantees no concurrent
+    # APPEND is ever lost.
+    # (Ordinary appends skip this read entirely - they read once, under the
+    # lock, at append time.)
 
     # --- Task #28: closure-cross-verification-and-freshness invariant ---
     # T6 is the LAST gate; refuse to record `iteration_closed` when invariant
@@ -337,6 +392,7 @@ def handle(
     # loop.run_goal transition guard.
     invariant_result = None
     if event_type == "iteration_closed":
+        audit_log: list = _read_audit_data(audit_path).get("audit_log", [])
         # iter-0018 Finding 3: mutation-completeness check. If the working tree
         # has paths that are NOT in any apply_step_landed event's files_touched
         # set, refuse. Conservative-fail-closed for manual edits.
@@ -430,11 +486,37 @@ def handle(
     if extra_fields:
         record.update(extra_fields)
 
-    audit_log.append(record)
-    data["audit_log"] = audit_log
-
-    # --- write back (read-modify-write; single-writer per iteration) ---
-    audit_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    # --- locked read-append-write (M1 Q1) ---
+    # M1 (consult iteration-m1-hardening-design-4d7d2469): the audit-file
+    # read-modify-write races were deterministically reproduced (two
+    # concurrent appends -> one event lost; crash mid-write_text -> truncated
+    # file). The whole window is now serialized cross-process via
+    # locked_mutation(audit_path) with a FRESH read under the lock, and the
+    # write-back is the blessed unique-tmp + os.replace atomic writer. The
+    # post-write canonical hash is computed inside the hold so it describes
+    # exactly the state this append left behind.
+    try:
+        with locked_mutation(audit_path, timeout_s=_STATE_LOCK_TIMEOUT_S) as _lock_status:
+            if _lock_status.takeover:
+                # Dispatch log ONLY - never the audit file being locked.
+                _emit_state_lock_takeover(audit_path, _lock_status)
+            data = _read_audit_data(audit_path)
+            locked_audit_log: list = data.get("audit_log", [])
+            locked_audit_log.append(record)
+            data["audit_log"] = locked_audit_log
+            atomic_write_text(audit_path, yaml.safe_dump(data, sort_keys=False))
+            post_sha = _canonical_sha256(audit_path)
+    except LockTimeout as exc:
+        # Structured refusal (fail loud, never proceed unlocked) carrying the
+        # holder's owner.json fields (gemini-rev-001).
+        return {
+            "error": "state_lock_timeout",
+            "detail": str(exc),
+            "lock_target": str(audit_path),
+            "owner_pid": exc.owner_pid,
+            "owner_host": exc.owner_host,
+            "owner_claimed_at_epoch": exc.owner_claimed_at_epoch,
+        }
 
     # --- Task #28: author closure-certificate.yaml on PASS for iteration_closed ---
     if event_type == "iteration_closed" and invariant_result is not None and invariant_result["ok"]:
@@ -457,7 +539,9 @@ def handle(
                 file=sys.stderr,
             )
 
-    post_sha = _canonical_sha256(audit_path)
+    # post_sha was computed inside the locked hold above (M1 Q1) so it
+    # reflects exactly this append's resulting file state, not a later
+    # concurrent writer's.
     result: dict = {"event_id": event_id, "audit_yaml_post_sha256": post_sha}
 
     # --- v1.19.0: author the per-iteration results record on iteration_closed ---

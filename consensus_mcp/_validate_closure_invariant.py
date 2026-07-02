@@ -27,19 +27,30 @@ from typing import Optional
 import yaml
 
 def _resolve_repo_root() -> Path:
-    """Resolve repo root via CONSENSUS_MCP_REPO_ROOT env override (installed-wheel
-    case where __file__ lands inside python_env/Lib/site-packages) -> fallback to
-    in-tree __file__ walk (source-tree case).
-    """
-    import os
-    override = os.environ.get("CONSENSUS_MCP_REPO_ROOT")
-    if override:
-        return Path(override).resolve()
-    return Path(__file__).resolve().parent.parent
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2 shim over the
+    ONE blessed resolver (_paths.resolve_repo_root): env override(s) >
+    cwd-ancestor containment-marker walk > RepoRootError. The old
+    `Path(__file__).resolve().parent.parent` fallback anchored an
+    installed-wheel run at site-packages (the exact class Q2 removes)."""
+    from consensus_mcp._paths import resolve_repo_root
+    return resolve_repo_root()
 
 
-_REPO_ROOT = _resolve_repo_root()
-_DEFAULT_ACTIVE_DIR = _REPO_ROOT / "consensus-state" / "active"
+def _default_active_dir() -> Path:
+    return _resolve_repo_root() / "consensus-state" / "active"
+
+
+def __getattr__(name: str):
+    """M1 (consult iteration-m1-hardening-design-4d7d2469) Q2: lazy module
+    attributes (PEP 562, pattern: tools/patch_stage_and_dry_run.py) replacing
+    the import-time _REPO_ROOT/_DEFAULT_ACTIVE_DIR captures - resolution is
+    per-call, and importing this module no longer resolves (or mis-resolves)
+    a repo root as a side effect."""
+    if name == "_REPO_ROOT":
+        return _resolve_repo_root()
+    if name == "_DEFAULT_ACTIVE_DIR":
+        return _default_active_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Import from sibling module (no relative import so CLI -m works).
 from consensus_mcp._closure_invariant import (  # noqa: E402
@@ -286,12 +297,14 @@ def main() -> None:
     parser.add_argument(
         "--active-dir",
         metavar="PATH",
-        default=str(_DEFAULT_ACTIVE_DIR),
-        help="Directory containing iteration-* subdirs (default: consensus-state/active/).",
+        # M1 Q2: default resolved LAZILY below (not at import/parse time) so
+        # `--active-dir <path>` runs never need a resolvable repo root.
+        default=None,
+        help="Directory containing iteration-* subdirs (default: <repo-root>/consensus-state/active/).",
     )
     args = parser.parse_args()
 
-    active_dir = Path(args.active_dir)
+    active_dir = Path(args.active_dir) if args.active_dir else _default_active_dir()
 
     if args.iteration:
         dirs = [active_dir / args.iteration]

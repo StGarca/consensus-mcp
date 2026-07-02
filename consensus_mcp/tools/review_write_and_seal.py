@@ -16,10 +16,17 @@ Sealing contract:
   7. Atomic read-modify-write of index.yaml (append new entry).
   8. Append review_returned_and_sealed audit event.
 
-CONCURRENCY (v1.0 limitation): This tool is single-writer for both the packet
-file and index.yaml. Concurrent invocations can race on index.yaml
-read-modify-write -- the audit_log read-modify-write is also non-locked.
-Do not invoke concurrently. Phase 1.x will add per-file filelock.
+CONCURRENCY - M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: the
+whole index read -> idempotency/collision guard -> packet write -> index
+replace window is serialized ACROSS PROCESSES via
+`_atomic_io.locked_mutation(index_path)` (mkdir lock dir + stale takeover),
+and the index tmp file carries a unique per-writer name
+(index.yaml.tmp.<pid>.<rand8>) so concurrent sealers can no longer lose an
+index entry, bypass the pass_id-uniqueness guard on a stale snapshot, or
+crash on a shared-tmp os.replace race. An unacquirable lock is a structured
+`{"error": "state_lock_timeout", ...}` refusal carrying the holder's
+owner.json fields. Stale-takeover events go to the dispatch log ONLY (the
+lock-free sink; see audit_append_event._emit_state_lock_takeover).
 """
 from __future__ import annotations
 
@@ -31,7 +38,13 @@ from pathlib import Path
 
 import yaml
 
+from consensus_mcp._atomic_io import LockTimeout, locked_mutation
 from consensus_mcp._paths import project_root, archive_dir, index_path, active_dir
+
+# M1 (consult iteration-m1-hardening-design-4d7d2469) Q1: lock-acquisition
+# budget for the index mutation window. Module-level (a real attribute, not
+# __getattr__-synthesized) so tests may shrink it via monkeypatch.setattr.
+_STATE_LOCK_TIMEOUT_S = 30.0
 
 # iter-0037 (Phase B step 10 per iter-0024 plan, HIGHEST-impact seal-pipeline
 # tool): migrated from cached REPO_ROOT/ARCHIVE_DIR/INDEX_PATH module-level
@@ -136,6 +149,45 @@ def _sanitize_for_filename(value: str) -> str:
     return cleaned or "pass"
 
 
+# M1 S5 (consult iteration-m1-hardening-design-4d7d2469, synthesis
+# S5_seal_filename_length): the archive filename embeds the iteration name up
+# to three times (reviewer_id and pass_id conventionally contain it), so any
+# iteration slug over ~65 chars made EVERY seal fail on Linux (NAME_MAX 255)
+# with OSError 36 - AFTER the reviewer had done its full work. Evidence:
+# three dispatch_failed events (codex, gemini, kimi adapters) in
+# consensus-state/state/dispatch-log.jsonl, 2026-06-30. Names at or under the
+# cap keep the exact legacy 4-token form (the adapter confinement checks and
+# test_contributors.py's filename contract depend on it); longer names switch
+# to bounded truncated components + a 12-hex sha256 suffix computed over the
+# FULL identity tuple, so uniqueness/determinism survive truncation. Full
+# identifiers always stay INSIDE the sealed YAML and the index entry.
+_MAX_SEAL_FILENAME_CHARS = 160
+# Per-component budgets for the bounded form. Worst case:
+# 10 (date) + 48 (iter) + 16 (reviewer) + 48 (pass) + 12 (hash)
+# + 5 separators + len("-pass.yaml") = 149 <= 160, and the sibling
+# "<name>.tmp" stays far under NAME_MAX.
+_BOUNDED_ITER_CHARS = 48
+_BOUNDED_REVIEWER_CHARS = 16
+_BOUNDED_PASS_CHARS = 48
+
+
+def _bounded_seal_filename(
+    date_str: str, iteration_id: str, reviewer_id: str, pass_id: str
+) -> str:
+    """Deterministic archive filename, capped at _MAX_SEAL_FILENAME_CHARS."""
+    safe_pass_id = _sanitize_for_filename(pass_id)
+    natural = f"{date_str}-{iteration_id}-{reviewer_id}-{safe_pass_id}-pass.yaml"
+    if len(natural) <= _MAX_SEAL_FILENAME_CHARS:
+        return natural
+    digest = hashlib.sha256(
+        f"{date_str}|{iteration_id}|{reviewer_id}|{pass_id}".encode("utf-8")
+    ).hexdigest()[:12]
+    safe_iter = _sanitize_for_filename(iteration_id)[:_BOUNDED_ITER_CHARS].rstrip("-.")
+    safe_rev = _sanitize_for_filename(reviewer_id)[:_BOUNDED_REVIEWER_CHARS].rstrip("-.")
+    safe_pass = safe_pass_id[:_BOUNDED_PASS_CHARS].rstrip("-.")
+    return f"{date_str}-{safe_iter}-{safe_rev}-{safe_pass}-{digest}-pass.yaml"
+
+
 SCHEMA = {
     "name": "review.write_and_seal",
     "description": (
@@ -145,7 +197,9 @@ SCHEMA = {
         "consensus-state/archive/review-passes/<date>-<iter>-<reviewer>-<pass_id>-pass.yaml "
         "(iteration-seal-archive-collision-fix: pass_id added so multi-pass "
         "same-reviewer seals do not collide; pass_id sanitized for the "
-        "filename, raw value preserved in index/body), "
+        "filename, raw value preserved in index/body; M1 S5: filename capped "
+        "at 160 chars via truncated components + 12-hex sha256 suffix - full "
+        "identifiers stay inside the sealed YAML), "
         "updates index.yaml, and appends a review_returned_and_sealed audit event. "
         "An exact re-seal (same pass_id + same packet_sha256) is an idempotent "
         "success ({idempotent: true, index_updated: false}) with an on-disk "
@@ -185,7 +239,8 @@ SCHEMA = {
             "Failure: {error, ...} where error is one of: "
             "packet_path_collision | index_collision | missing_required_field | "
             "invalid_yaml | audit_write_failed | idempotent_target_missing | "
-            "idempotent_target_unreadable | idempotent_target_integrity_mismatch."
+            "idempotent_target_unreadable | idempotent_target_integrity_mismatch | "
+            "state_lock_timeout | packet_write_failed."
         ),
         "oneOf": [
             {
@@ -219,6 +274,12 @@ SCHEMA = {
                             "idempotent_target_missing",
                             "idempotent_target_unreadable",
                             "idempotent_target_integrity_mismatch",
+                            # M1 (consult iteration-m1-hardening-design-4d7d2469):
+                            # Q1 lock refusal (carries owner_pid/owner_host/
+                            # owner_claimed_at_epoch) + S5 structured wrapper
+                            # for a packet write the filesystem still refuses.
+                            "state_lock_timeout",
+                            "packet_write_failed",
                         ],
                     },
                     "field": {"type": ["string", "null"]},
@@ -264,6 +325,11 @@ def handle(
       idempotent_target_integrity_mismatch: index sha matches the new
         packet but the on-disk archive hashes differently - the sealed
         file may be tampered (iteration-seal-archive-collision-fix)
+      state_lock_timeout: the index mutation lock could not be acquired
+        within _STATE_LOCK_TIMEOUT_S; carries the holder's owner.json
+        fields (owner_pid, owner_host, owner_claimed_at_epoch) - M1 Q1
+      packet_write_failed: the filesystem refused the sealed-packet write
+        even after the S5 filename cap; detail carries the OSError - M1 S5
     """
     # --- Step 1: validate YAML serializability ---
     try:
@@ -366,159 +432,217 @@ def handle(
     # characters in the FILENAME only; the raw pass_id is preserved
     # verbatim in the index entry and packet body.
     date_str = _now_utc_date()
-    safe_pass_id = _sanitize_for_filename(pass_id)
-    filename = f"{date_str}-{iteration_id}-{reviewer_id}-{safe_pass_id}-pass.yaml"
+    # M1 S5 (consult iteration-m1-hardening-design-4d7d2469): filename is
+    # capped - see _bounded_seal_filename's provenance block. Short names
+    # keep the exact legacy 4-token form.
+    filename = _bounded_seal_filename(date_str, iteration_id, reviewer_id, pass_id)
     _archive = archive_dir()
     _index = index_path()
     sealed_path = _archive / filename
     _repo = project_root()
 
-    # --- Step 6: index lookup FIRST (reordered ahead of the path guard) ---
-    # Per the converged plan: the pass_id-aware idempotency check must
-    # run BEFORE the path-exists guard so an exact re-seal (same pass_id,
-    # same content hash) is an idempotent SUCCESS rather than a hard
-    # packet_path_collision. This is what the prior line-272 comment
-    # always intended ("Same hash -- idempotent") but the old ordering
-    # defeated it.
+    # --- Steps 6-9 under the cross-process index lock (M1 Q1) ---
+    # M1 (consult iteration-m1-hardening-design-4d7d2469): two concurrent
+    # sealers used to read the same index snapshot and the last os.replace
+    # won - one sealed pass silently unregistered, and the idempotency/
+    # index_collision guard evaluated a stale snapshot so pass_id uniqueness
+    # was bypassed too. The ENTIRE read -> guard -> packet write -> index
+    # replace window now holds locked_mutation(index_path); the guard runs
+    # INSIDE the lock so uniqueness is actually enforced. The audit event
+    # (Step 10) stays OUTSIDE the hold per the hold-window discipline (it
+    # takes its own audit-file lock).
     _archive.mkdir(parents=True, exist_ok=True)
-    if _index.exists():
-        index_raw = _index.read_bytes()
-        index_data = yaml.safe_load(index_raw) or {}
-    else:
-        index_data = {}
+    try:
+        with locked_mutation(_index, timeout_s=_STATE_LOCK_TIMEOUT_S) as _lock_status:
+            if _lock_status.takeover:
+                # Takeover report goes to the lock-free dispatch-log sink
+                # ONLY (gemini-rev-002 + kimi-rev-001; the emit helper's
+                # docstring carries the no-recursion invariant).
+                from consensus_mcp.tools.audit_append_event import (
+                    _emit_state_lock_takeover,
+                )
 
-    # iteration-seal-archive-collision-fix (codex-sealfix-audit-4 HIGH
-    # finding): idempotency is judged on CONTENT IDENTITY, not on the
-    # timestamped packet_sha256. A re-dispatch builds a fresh packet
-    # with no sealed_at_utc; Step 3 stamps a new timestamp, so its
-    # packet_sha256 necessarily differs from the originally-sealed one
-    # even when the substantive content is identical. Comparing
-    # content-identity (volatile seal-provenance stripped) of the
-    # INCOMING packet against the actual ON-DISK archived packet makes
-    # an exact re-seal an idempotent success regardless of seal time,
-    # and a genuine different-content reuse of the pass_id a real
-    # index_collision. We read the on-disk file (not the possibly-stale
-    # index sha) so the decision reflects the true archived artifact.
-    incoming_identity = _content_identity_sha256(packet)
-    passes_list: list = index_data.get("passes", [])
-    for entry in passes_list:
-        if entry.get("id") == pass_id:
-            existing_rel = entry.get("path")
-            existing_abs = (_repo / existing_rel) if existing_rel else None
-            if existing_abs is None or not existing_abs.exists():
-                return {
-                    "error": "idempotent_target_missing",
-                    "detail": (
-                        f"pass_id={pass_id!r} is in the index but its recorded "
-                        f"archive file is missing: {existing_rel!r}"
-                    ),
-                }
-            try:
-                on_disk = yaml.safe_load(existing_abs.read_text(encoding="utf-8"))
-            except Exception as exc:
-                return {
-                    "error": "idempotent_target_unreadable",
-                    "detail": f"{existing_rel!r}: {type(exc).__name__}: {exc}",
-                }
-            # _content_identity_sha256 handles a non-mapping on_disk
-            # (tampered archive that still parses as valid YAML) via a
-            # sentinel that cannot equal a real packet's identity -
-            # so this neither crashes (codex-sealfix-audit-4 medium
-            # finding) nor falsely reports idempotent success.
-            on_disk_identity = _content_identity_sha256(on_disk)
-            if on_disk_identity != incoming_identity:
-                # Same pass_id, substantively different content. If the
-                # on-disk archive is a non-mapping it is corrupt/tampered
-                # rather than a legitimate prior pass - report that
-                # distinctly so an operator can tell a re-use conflict
-                # from a damaged archive.
-                if not isinstance(on_disk, dict):
+                _emit_state_lock_takeover(_index, _lock_status)
+
+            # --- Step 6: index lookup FIRST (reordered ahead of the path guard) ---
+            # Per the converged plan: the pass_id-aware idempotency check must
+            # run BEFORE the path-exists guard so an exact re-seal (same pass_id,
+            # same content hash) is an idempotent SUCCESS rather than a hard
+            # packet_path_collision. This is what the prior line-272 comment
+            # always intended ("Same hash -- idempotent") but the old ordering
+            # defeated it.
+            if _index.exists():
+                index_raw = _index.read_bytes()
+                index_data = yaml.safe_load(index_raw) or {}
+            else:
+                index_data = {}
+
+            # iteration-seal-archive-collision-fix (codex-sealfix-audit-4 HIGH
+            # finding): idempotency is judged on CONTENT IDENTITY, not on the
+            # timestamped packet_sha256. A re-dispatch builds a fresh packet
+            # with no sealed_at_utc; Step 3 stamps a new timestamp, so its
+            # packet_sha256 necessarily differs from the originally-sealed one
+            # even when the substantive content is identical. Comparing
+            # content-identity (volatile seal-provenance stripped) of the
+            # INCOMING packet against the actual ON-DISK archived packet makes
+            # an exact re-seal an idempotent success regardless of seal time,
+            # and a genuine different-content reuse of the pass_id a real
+            # index_collision. We read the on-disk file (not the possibly-stale
+            # index sha) so the decision reflects the true archived artifact.
+            incoming_identity = _content_identity_sha256(packet)
+            passes_list: list = index_data.get("passes", [])
+            for entry in passes_list:
+                if entry.get("id") == pass_id:
+                    existing_rel = entry.get("path")
+                    existing_abs = (_repo / existing_rel) if existing_rel else None
+                    if existing_abs is None or not existing_abs.exists():
+                        return {
+                            "error": "idempotent_target_missing",
+                            "detail": (
+                                f"pass_id={pass_id!r} is in the index but its recorded "
+                                f"archive file is missing: {existing_rel!r}"
+                            ),
+                        }
+                    try:
+                        on_disk = yaml.safe_load(existing_abs.read_text(encoding="utf-8"))
+                    except Exception as exc:
+                        return {
+                            "error": "idempotent_target_unreadable",
+                            "detail": f"{existing_rel!r}: {type(exc).__name__}: {exc}",
+                        }
+                    # _content_identity_sha256 handles a non-mapping on_disk
+                    # (tampered archive that still parses as valid YAML) via a
+                    # sentinel that cannot equal a real packet's identity -
+                    # so this neither crashes (codex-sealfix-audit-4 medium
+                    # finding) nor falsely reports idempotent success.
+                    on_disk_identity = _content_identity_sha256(on_disk)
+                    if on_disk_identity != incoming_identity:
+                        # Same pass_id, substantively different content. If the
+                        # on-disk archive is a non-mapping it is corrupt/tampered
+                        # rather than a legitimate prior pass - report that
+                        # distinctly so an operator can tell a re-use conflict
+                        # from a damaged archive.
+                        if not isinstance(on_disk, dict):
+                            return {
+                                "error": "idempotent_target_integrity_mismatch",
+                                "detail": (
+                                    f"pass_id={pass_id!r}: the recorded archive "
+                                    f"{existing_rel!r} is not a YAML mapping "
+                                    f"({type(on_disk).__name__}) - the sealed file "
+                                    f"may be tampered or truncated."
+                                ),
+                            }
+                        return {
+                            "error": "index_collision",
+                            "detail": (
+                                f"pass_id={pass_id!r} already sealed with substantively "
+                                f"different content (content-identity "
+                                f"{on_disk_identity[:12]}... vs incoming "
+                                f"{incoming_identity[:12]}...) at {existing_rel!r}"
+                            ),
+                        }
+                    # Content-identical -> idempotent re-seal. Return SUCCESS
+                    # describing the ACTUAL archived artifact. codex-sealfix-
+                    # audit-5 medium finding: do NOT trust the index entry's
+                    # packet_sha256 verbatim (it can be absent or stale relative
+                    # to the file). Derive the authoritative hash from the
+                    # on-disk artifact itself: prefer its own recorded
+                    # packet_sha256 field, else reconstruct it the same way
+                    # Step 4 does (canonical hash sans the self-hash field).
+                    # This guarantees sealed_path + packet_sha256 always
+                    # describe the same real bytes and packet_sha256 is never
+                    # empty/stale on the idempotent path.
+                    recorded_sha = ""
+                    if isinstance(on_disk, dict):
+                        recorded_sha = on_disk.get("packet_sha256") or ""
+                    if not recorded_sha:
+                        _od_for_hash = copy.deepcopy(on_disk)
+                        if isinstance(_od_for_hash, dict):
+                            _od_for_hash.pop("packet_sha256", None)
+                        recorded_sha = _canonical_yaml_sha256(_od_for_hash)
                     return {
-                        "error": "idempotent_target_integrity_mismatch",
-                        "detail": (
-                            f"pass_id={pass_id!r}: the recorded archive "
-                            f"{existing_rel!r} is not a YAML mapping "
-                            f"({type(on_disk).__name__}) - the sealed file "
-                            f"may be tampered or truncated."
-                        ),
+                        "sealed_path": str(existing_abs),
+                        "packet_sha256": recorded_sha,
+                        "index_updated": False,
+                        "audit_event_id": "skipped_idempotent_reseal",
+                        "idempotent": True,
                     }
+
+            # --- Step 7: path collision guard (defense-in-depth backstop) ---
+            # With the pass_id now in the filename AND the index check above,
+            # this should be unreachable for legitimate flows. It remains as a
+            # last-resort guard against a genuine filename collision (e.g. a
+            # hand-placed file or a pass_id that sanitizes to a name already
+            # present without a matching index entry). Distinct detail string
+            # so this case is diagnosable separately from the old behavior.
+            if sealed_path.exists():
                 return {
-                    "error": "index_collision",
+                    "error": "packet_path_collision",
                     "detail": (
-                        f"pass_id={pass_id!r} already sealed with substantively "
-                        f"different content (content-identity "
-                        f"{on_disk_identity[:12]}... vs incoming "
-                        f"{incoming_identity[:12]}...) at {existing_rel!r}"
+                        f"{sealed_path} exists but no matching pass_id in the index - "
+                        f"likely a hand-placed file or a sanitized-pass_id name clash."
                     ),
                 }
-            # Content-identical -> idempotent re-seal. Return SUCCESS
-            # describing the ACTUAL archived artifact. codex-sealfix-
-            # audit-5 medium finding: do NOT trust the index entry's
-            # packet_sha256 verbatim (it can be absent or stale relative
-            # to the file). Derive the authoritative hash from the
-            # on-disk artifact itself: prefer its own recorded
-            # packet_sha256 field, else reconstruct it the same way
-            # Step 4 does (canonical hash sans the self-hash field).
-            # This guarantees sealed_path + packet_sha256 always
-            # describe the same real bytes and packet_sha256 is never
-            # empty/stale on the idempotent path.
-            recorded_sha = ""
-            if isinstance(on_disk, dict):
-                recorded_sha = on_disk.get("packet_sha256") or ""
-            if not recorded_sha:
-                _od_for_hash = copy.deepcopy(on_disk)
-                if isinstance(_od_for_hash, dict):
-                    _od_for_hash.pop("packet_sha256", None)
-                recorded_sha = _canonical_yaml_sha256(_od_for_hash)
-            return {
-                "sealed_path": str(existing_abs),
-                "packet_sha256": recorded_sha,
-                "index_updated": False,
-                "audit_event_id": "skipped_idempotent_reseal",
-                "idempotent": True,
+
+            # --- Step 8: atomic write of the sealed packet ---
+            # M1 S5: even with the filename cap, a filesystem can still refuse
+            # the write (exotic mounts, path-length totals) - that is a
+            # structured refusal now, never a raw OSError out of handle().
+            sealed_yaml = yaml.safe_dump(packet, sort_keys=False)
+            tmp_packet = sealed_path.with_suffix(".yaml.tmp")
+            try:
+                tmp_packet.write_text(sealed_yaml, encoding="utf-8")
+                os.replace(str(tmp_packet), str(sealed_path))
+            except OSError as exc:
+                try:
+                    tmp_packet.unlink()
+                except OSError:
+                    pass
+                return {
+                    "error": "packet_write_failed",
+                    "detail": (
+                        f"{sealed_path.name!r}: {type(exc).__name__}: {exc}"
+                    ),
+                }
+
+            # --- Step 9: atomic update of index.yaml ---
+            sealed_at = _now_utc()
+            # _repo already resolved in Step 6.
+            new_entry = {
+                "id": pass_id,
+                "path": str(sealed_path.relative_to(_repo)).replace("\\", "/"),
+                "sealed_at": sealed_at,
+                "packet_sha256": packet_sha256,
+                "iteration_id": iteration_id,
+                "reviewer_id": reviewer_id,
             }
+            passes_list.append(new_entry)
+            index_data["passes"] = passes_list
+            index_data["last_updated_utc"] = sealed_at
 
-    # --- Step 7: path collision guard (defense-in-depth backstop) ---
-    # With the pass_id now in the filename AND the index check above,
-    # this should be unreachable for legitimate flows. It remains as a
-    # last-resort guard against a genuine filename collision (e.g. a
-    # hand-placed file or a pass_id that sanitizes to a name already
-    # present without a matching index entry). Distinct detail string
-    # so this case is diagnosable separately from the old behavior.
-    if sealed_path.exists():
+            index_yaml = yaml.safe_dump(index_data, sort_keys=False)
+            # M1 Q1: unique per-writer tmp name. The old shared index.yaml.tmp
+            # meant the loser of a concurrent tmp race got an UNCAUGHT
+            # FileNotFoundError out of os.replace; unique names kill that
+            # failure mode independently of the locking above.
+            tmp_index = _index.with_name(
+                f"index.yaml.tmp.{os.getpid()}.{os.urandom(4).hex()}"
+            )
+            tmp_index.write_text(index_yaml, encoding="utf-8")
+            os.replace(str(tmp_index), str(_index))
+    except LockTimeout as exc:
+        # Structured refusal (fail loud, never proceed unlocked) carrying the
+        # holder's owner.json fields (gemini-rev-001). Nothing was written:
+        # the packet write sits INSIDE the hold, so a timed-out seal leaves
+        # no orphan archive file.
         return {
-            "error": "packet_path_collision",
-            "detail": (
-                f"{sealed_path} exists but no matching pass_id in the index - "
-                f"likely a hand-placed file or a sanitized-pass_id name clash."
-            ),
+            "error": "state_lock_timeout",
+            "detail": str(exc),
+            "lock_target": str(_index),
+            "owner_pid": exc.owner_pid,
+            "owner_host": exc.owner_host,
+            "owner_claimed_at_epoch": exc.owner_claimed_at_epoch,
         }
-
-    # --- Step 8: atomic write of the sealed packet ---
-    sealed_yaml = yaml.safe_dump(packet, sort_keys=False)
-    tmp_packet = sealed_path.with_suffix(".yaml.tmp")
-    tmp_packet.write_text(sealed_yaml, encoding="utf-8")
-    os.replace(str(tmp_packet), str(sealed_path))
-
-    # --- Step 9: atomic update of index.yaml ---
-    sealed_at = _now_utc()
-    # _repo already resolved in Step 6.
-    new_entry = {
-        "id": pass_id,
-        "path": str(sealed_path.relative_to(_repo)).replace("\\", "/"),
-        "sealed_at": sealed_at,
-        "packet_sha256": packet_sha256,
-        "iteration_id": iteration_id,
-        "reviewer_id": reviewer_id,
-    }
-    passes_list.append(new_entry)
-    index_data["passes"] = passes_list
-    index_data["last_updated_utc"] = sealed_at
-
-    index_yaml = yaml.safe_dump(index_data, sort_keys=False)
-    tmp_index = _index.with_suffix(".yaml.tmp")
-    tmp_index.write_text(index_yaml, encoding="utf-8")
-    os.replace(str(tmp_index), str(_index))
 
     # --- Step 10: audit event ---
     # Use review_returned_and_sealed (closest semantic match in CANONICAL_EVENT_TYPES).

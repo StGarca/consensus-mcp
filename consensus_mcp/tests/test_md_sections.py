@@ -16,7 +16,12 @@ from __future__ import annotations
 
 import pytest
 
-from consensus_mcp.tools._md_sections import SectionMap, parse, reconstruct
+from consensus_mcp.tools._md_sections import (
+    DuplicateSectionError,
+    SectionMap,
+    parse,
+    reconstruct,
+)
 
 
 # Realistic sectioned spec: frontmatter + H1 preamble + 3 numbered sections,
@@ -220,7 +225,10 @@ def test_reconstruct_empty_sectionmap_is_empty_string():
 
 
 # ---------------------------------------------------------------------------
-# Duplicate '## N.' heading numbers (malformed input).
+# Duplicate '## N.' heading numbers (malformed input) - structured refusal.
+# M1 (consult iteration-m1-hardening-design-4d7d2469) S3: parse() now raises
+# DuplicateSectionError instead of keyed-by-number last-wins, which broke the
+# byte-identical roundtrip invariant and let set_section corrupt such files.
 # ---------------------------------------------------------------------------
 
 DUP_TEXT = (
@@ -235,29 +243,57 @@ DUP_TEXT = (
 )
 
 
-def test_duplicate_heading_numbers_last_occurrence_wins_in_map():
-    """Documents HEAD behavior: both '## 2.' blocks map to section_2 and the
-    dict keeps the LAST occurrence; the order list records the id twice."""
-    smap = parse(DUP_TEXT)
-    assert smap.get("section_2") == "## 2. Second\nsecond body\n"
-    assert smap._section_order == [
-        "section_1",
-        "section_2",
-        "section_2",
-        "section_3",
-    ]
+def test_duplicate_heading_numbers_raise_structured_error():
+    """M1 S3 flip of the M0 documents-HEAD-behavior test: last-wins keying is
+    gone; parse() refuses with the duplicated ids carried on the exception."""
+    with pytest.raises(DuplicateSectionError) as excinfo:
+        parse(DUP_TEXT)
+    assert excinfo.value.duplicate_section_ids == ["section_2"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PRODUCTION BUG (v2.2.1 audit M0.1a): duplicate '## N.' heading "
-        "numbers break the documented byte-identical roundtrip invariant. "
-        "parse() keys sections by number so the last duplicate overwrites the "
-        "first, and reconstruct() emits the surviving text once per order "
-        "entry - the first duplicate's content is silently replaced by a "
-        "copy of the second."
-    ),
-)
 def test_duplicate_heading_numbers_roundtrip_byte_identical():
-    assert reconstruct(parse(DUP_TEXT)) == DUP_TEXT
+    """Flipped M0 strict-xfail (v2.2.1 audit M0.1a): the corrupting roundtrip
+    (reconstruct dropped the first '## 2.' block and doubled the second) is
+    now UNREACHABLE because parse() refuses duplicate ids outright. The
+    documented byte-identical invariant therefore holds for every text
+    parse() accepts."""
+    with pytest.raises(DuplicateSectionError):
+        parse(DUP_TEXT)
+    # The invariant still holds on the nearest well-formed variant.
+    fixed = DUP_TEXT.replace("## 2. Second\n", "## 4. Second\n")
+    assert reconstruct(parse(fixed)) == fixed
+
+
+def test_duplicate_error_reports_all_duplicated_ids_sorted():
+    text = (
+        "## 2. B1\nb1\n"
+        "## 1. A1\na1\n"
+        "## 2. B2\nb2\n"
+        "## 1. A2\na2\n"
+        "## 2. B3\nb3\n"
+    )
+    with pytest.raises(DuplicateSectionError) as excinfo:
+        parse(text)
+    assert excinfo.value.duplicate_section_ids == ["section_1", "section_2"]
+    # str() names the ids so raw tracebacks are actionable.
+    assert "section_1" in str(excinfo.value)
+    assert "section_2" in str(excinfo.value)
+
+
+def test_duplicate_error_is_a_valueerror():
+    assert issubclass(DuplicateSectionError, ValueError)
+
+
+def test_fenced_duplicate_heading_does_not_trigger_refusal():
+    """A '## N.' line inside a code fence is not a heading, so it cannot
+    collide with a real section of the same number."""
+    text = (
+        "## 1. Real\n"
+        "```\n"
+        "## 1. Fenced fake duplicate\n"
+        "```\n"
+        "## 2. Next\nnext body\n"
+    )
+    smap = parse(text)
+    assert smap.section_ids() == ["section_1", "section_2"]
+    assert reconstruct(smap) == text

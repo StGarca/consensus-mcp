@@ -187,14 +187,23 @@ class HostPeerAdapter(ContributorAdapter):
             raise DispatchError(
                 f"host_peer T6 returned a non-file sealed_path: {archive_path}"
             )
+        # M1 (consult iteration-m1-hardening-design-4d7d2469) S5 follow-through:
+        # exact-match against the recomputed bounded filename (see
+        # ClaudeAdapter for the rationale) - strictly stronger than the legacy
+        # substring check and correct for capped long-iteration names.
+        from consensus_mcp.tools.review_write_and_seal import _bounded_seal_filename
         fname = archive_path.name
-        for token in (iteration_id, reviewer_id):
-            if token and token not in fname:
-                raise DispatchError(
-                    f"host_peer T6 sealed_path filename {fname!r} does not contain "
-                    f"expected token {token!r}; refusing to copy unverified file "
-                    f"into iteration_dir (potential confinement violation)"
-                )
+        expected_fname = _bounded_seal_filename(
+            fname[:10], iteration_id, reviewer_id, pass_id
+        )
+        if fname != expected_fname:
+            raise DispatchError(
+                f"host_peer T6 sealed_path filename {fname!r} does not match the "
+                f"expected sealed name {expected_fname!r} for iteration_id="
+                f"{iteration_id!r} reviewer_id={reviewer_id!r}; refusing to copy "
+                f"unverified file into iteration_dir (potential confinement "
+                f"violation)"
+            )
 
         # Mirror the sealed file into the iteration dir for symmetric on-disk
         # layout (named distinctly from claude-<phase>.yaml so the orchestrator's
