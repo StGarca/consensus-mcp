@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.2.2 - 2026-07-05
+
+**Gate lockout fix: stale session markers now expire and self-clean.**
+
+- A `.consensus/session-active` marker left behind by a crashed or abandoned
+  consult kept the design gate armed INDEFINITELY: every Edit/Write and
+  non-allowlisted Bash in the repo (typical consult scope `**/*`) stayed
+  blocked until the operator discovered
+  `consensus-mcp-seal-iteration close --abandon`. Observed in the field: a
+  5-day-old marker from an abandoned consult locked down an entire home
+  directory across unrelated sessions.
+- `session_active()` now treats a marker older than
+  `CONSENSUS_MCP_SESSION_TTL_HOURS` (default 24) as abandoned: it is
+  best-effort unlinked (self-clean, no residue for the next session) and the
+  probe stays dormant. Fail-STALE: a missing or unparseable
+  `activated_at_utc` also expires - an unprovable activation time must never
+  hold a lock. A live consult that outlives the TTL loses nothing: the next
+  consensus tool invocation rewrites the marker and re-arms.
+- All three hooks (PreToolUse gate, Stop gate, SessionStart injector) inherit
+  the fix through the shared `gate_should_enforce()` predicate.
+- Added 4 TTL regression tests; the v1.32.1 activation-fixture test now writes
+  a live timestamp instead of a hardcoded past one.
+
+**Upgrade:** strongly recommended for all users - without it, any abandoned
+consult permanently locks the repo it ran in until manually cleared.
+
 ## 2.2.1 - 2026-07-01
 
 **Consensus loop-optimization pass: trace-derived harness proposals and
