@@ -271,3 +271,62 @@ def test_gate_should_enforce_legacy_marker_activates(tmp_path, monkeypatch):
     (repo / ".consensus").mkdir(parents=True)
     (repo / ".consensus" / "legacy-always-on").write_text("", encoding="utf-8")
     assert ss.gate_should_enforce(repo) is True
+
+
+# ----- session TTL (operator-lockout fix, 2026-07-05) ---------------
+# A marker left behind by a crashed/abandoned consult must NEVER keep the
+# gate armed indefinitely: markers older than the TTL are treated as
+# abandoned, best-effort self-cleaned, and the probe stays dormant.
+
+def _write_marker_with_age(repo, age_hours):
+    import datetime
+    ts = (datetime.datetime.now(datetime.timezone.utc)
+          - datetime.timedelta(hours=age_hours))
+    marker = repo / ".consensus" / "session-active"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(yaml.safe_dump({
+        "schema_version": 1, "iteration_id": "iter-test", "scope_glob": "*",
+        "activated_by": "t", "activation_source": "test_fixture",
+        "activated_at_utc": ts.isoformat(),
+    }), encoding="utf-8")
+    return marker
+
+
+def test_session_active_expired_marker_is_dormant_and_self_cleans(tmp_path, monkeypatch):
+    monkeypatch.delenv(ss.SESSION_TTL_ENV_VAR, raising=False)
+    repo = _repo(tmp_path)
+    marker = _write_marker_with_age(repo, age_hours=120)  # 5 days >> 24h default
+    assert ss.session_active(repo) is False
+    assert not marker.exists()  # self-cleaned: no residue for the next session
+
+
+def test_session_active_fresh_marker_survives_ttl(tmp_path, monkeypatch):
+    monkeypatch.delenv(ss.SESSION_TTL_ENV_VAR, raising=False)
+    repo = _repo(tmp_path)
+    marker = _write_marker_with_age(repo, age_hours=1)
+    assert ss.session_active(repo) is True
+    assert marker.exists()  # a live consult is untouched
+
+
+def test_session_active_ttl_env_override(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _write_marker_with_age(repo, age_hours=2)
+    monkeypatch.setenv(ss.SESSION_TTL_ENV_VAR, "1")
+    assert ss.session_active(repo) is False  # 2h old > 1h TTL
+    _write_marker_with_age(repo, age_hours=2)
+    monkeypatch.setenv(ss.SESSION_TTL_ENV_VAR, "48")
+    assert ss.session_active(repo) is True   # 2h old < 48h TTL
+
+
+def test_session_active_missing_timestamp_expires(tmp_path, monkeypatch):
+    # Fail-STALE: an unprovable activation time must not hold a lock.
+    monkeypatch.delenv(ss.SESSION_TTL_ENV_VAR, raising=False)
+    repo = _repo(tmp_path)
+    marker = repo / ".consensus" / "session-active"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(yaml.safe_dump({
+        "schema_version": 1, "iteration_id": "iter-test", "scope_glob": "*",
+        "activated_by": "t", "activation_source": "test_fixture",
+    }), encoding="utf-8")
+    assert ss.session_active(repo) is False
+    assert not marker.exists()

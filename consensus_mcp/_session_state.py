@@ -175,19 +175,53 @@ def legacy_mode_active(repo_root: Path) -> bool:
     return _legacy_marker_path(repo_root).exists()
 
 
+SESSION_TTL_ENV_VAR = "CONSENSUS_MCP_SESSION_TTL_HOURS"
+SESSION_TTL_DEFAULT_HOURS = 24.0
+
+
+def _marker_is_expired(data: dict) -> bool:
+    """True iff the marker's `activated_at_utc` is missing, unparseable, or
+    older than the session TTL (default 24h, override via
+    CONSENSUS_MCP_SESSION_TTL_HOURS). Fail-STALE: an unprovable activation
+    time must not hold a lock - a wrongly-expired marker costs one consensus
+    tool re-invocation (which rewrites the marker), while a wrongly-honored
+    one locks the repo indefinitely (the operator lockout this TTL exists to
+    prevent: a crashed/forgotten consult must never outlive its session)."""
+    ts = data.get("activated_at_utc")
+    if not isinstance(ts, str):
+        return True
+    try:
+        activated = datetime.datetime.fromisoformat(ts)
+    except ValueError:
+        return True
+    if activated.tzinfo is None:
+        activated = activated.replace(tzinfo=datetime.timezone.utc)
+    try:
+        ttl_hours = float(os.environ.get(SESSION_TTL_ENV_VAR, "") or SESSION_TTL_DEFAULT_HOURS)
+    except ValueError:
+        ttl_hours = SESSION_TTL_DEFAULT_HOURS
+    age = datetime.datetime.now(datetime.timezone.utc) - activated
+    return age.total_seconds() > ttl_hours * 3600
+
+
 def session_active(repo_root: Path) -> bool:
     """Authoritative dormant<->active probe used by the gate.
 
     Returns True iff:
       (a) Legacy mode opt-in is active (env var or marker file), OR
-      (b) The session marker exists, parses, AND its iteration_id
+      (b) The session marker exists, parses, is YOUNGER than the session
+          TTL (default 24h - see _marker_is_expired), AND its iteration_id
           resolves to a real (UNSEALED) iteration directory in
           `consensus-state/active/<iter-id>/`.
 
     A session marker pointing at an iteration dir that doesn't
     exist is treated as DORMANT (the marker is effectively garbage
-    and ignored - R4 risk mitigation). Operator can clear stale
-    markers via `consensus-mcp-seal-iteration close --abandon`.
+    and ignored - R4 risk mitigation). An EXPIRED marker is
+    additionally SELF-CLEANED (best-effort unlink) so an abandoned
+    consult leaves no residue - the gate must never stay armed after
+    the session that armed it is gone (operator hard rule 2026-07-05).
+    Operator can still clear markers explicitly via
+    `consensus-mcp-seal-iteration close --abandon`.
 
     Fail-safe to False (= dormant) on any error.
     """
@@ -197,6 +231,9 @@ def session_active(repo_root: Path) -> bool:
             return True
         data = read_session_marker(repo_root)
         if data is None:
+            return False
+        if _marker_is_expired(data):
+            clear_session_marker(repo_root)
             return False
         iter_id = data["iteration_id"]
         iter_dir = repo_root / "consensus-state" / "active" / iter_id
