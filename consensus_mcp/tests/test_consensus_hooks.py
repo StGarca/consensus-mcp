@@ -698,6 +698,7 @@ def test_v1321_enforces_when_session_marker_active(tmp_path):
     marker pointing at a real unsealed iteration activates the gate.
     Without a sealed design-approved marker, in-repo Edit is denied
     (same as the pre-v1.32.1 contract for active sessions)."""
+    import datetime
     import yaml
     iter_id = "iter-v1321-test"
     (tmp_path / "consensus-state" / "active" / iter_id).mkdir(parents=True)
@@ -708,7 +709,10 @@ def test_v1321_enforces_when_session_marker_active(tmp_path):
             "iteration_id": iter_id,
             "scope_glob": "src/**",
             "activated_by": "test",
-            "activated_at_utc": "2026-05-26T20:00:00Z",
+            # LIVE session: must be inside the session TTL (a stale
+            # timestamp now correctly expires and stays dormant).
+            "activated_at_utc": datetime.datetime.now(
+                datetime.timezone.utc).isoformat(),
             "activation_source": "test_fixture",
         }),
         encoding="utf-8",
