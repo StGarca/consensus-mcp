@@ -192,7 +192,7 @@ class ProfileAdapter(ContributorAdapter):
                 input=popen_input,
                 capture_output=True,
                 text=True,
-                timeout=timeout_seconds,
+                timeout=None if timeout_seconds <= 0 else timeout_seconds,
                 cwd=cwd,
                 env=env,
             )
@@ -272,7 +272,7 @@ class ProfileAdapter(ContributorAdapter):
             or f"{self.name}-{iteration_id}-{packet.phase}-1"
         )
         pass_id = packet.pass_id or f"{reviewer_id}-pass1"
-        timeout_seconds = packet.timeout_seconds or self._timeout_seconds
+        timeout_seconds = packet.timeout_seconds
 
         # The CLI's working directory = the PROJECT ROOT (where it loads project
         # context like AGENTS.md / CLAUDE.md). Iteration dirs live at

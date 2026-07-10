@@ -64,7 +64,7 @@ def test_kimi_provenance_model_is_not_gemini():
     """
     profiles = cp.load_builtin_profiles()
     assert profiles["kimi"]["model"] != "gemini-2.5-pro"
-    assert profiles["kimi"]["model"] == "K2.7 Code High Speed"
+    assert profiles["kimi"]["model"] == "kimi (CLI-configured default)"
 
 
 def test_kimi_transport_is_stdin_with_null_prompt_flag():

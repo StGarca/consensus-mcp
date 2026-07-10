@@ -11,7 +11,7 @@
 #   runs on gemini CLI >=0.43 (see reference_gemini_trust_workspace).
 name: gemini
 kind: cli_reviewer
-model: "Gemini 3.1 Pro (High)"
+model: "Gemini 3.5 Flash (Medium)"
 detect:
   command: agy
 invoke:

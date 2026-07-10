@@ -116,6 +116,17 @@ def test_grok_adapter_passes_model_when_configured(monkeypatch, tmp_path):
     assert cap[cap.index("--model") + 1] == "grok-4-fast"
 
 
+def test_grok_adapter_passes_effort_when_configured(monkeypatch, tmp_path):
+    cap = []
+    monkeypatch.setattr("consensus_mcp._dispatch_grok.main", _fake_main(cap, tmp_path))
+    from consensus_mcp.contributors.grok import GrokAdapter
+    GrokAdapter(adapter_config={
+        "model": "grok-4.5", "effort": "max",
+    }).dispatch(_packet(PHASE_REVIEW, tmp_path))
+    assert cap[cap.index("--model") + 1] == "grok-4.5"
+    assert cap[cap.index("--effort") + 1] == "max"
+
+
 def test_grok_adapter_packet_options_override_adapter_config(monkeypatch, tmp_path):
     """packet.adapter_options.model wins over adapter_config.model (codex-rev-003 pattern)."""
     cap = []

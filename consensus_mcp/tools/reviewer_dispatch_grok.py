@@ -56,7 +56,12 @@ SCHEMA = {
             },
             "model": {
                 "type": ["string", "null"],
-                "description": "Grok model identifier; default per helper.",
+                "description": "Grok model identifier; defaults to grok-4.5.",
+            },
+            "effort": {
+                "type": ["string", "null"],
+                "enum": ["low", "medium", "high", "xhigh", "max", None],
+                "description": "Grok effort level; defaults to medium.",
             },
             "timeout_seconds": {
                 "type": ["integer", "null"],
@@ -137,6 +142,7 @@ def _build_argv(
     reviewer_id: str | None,
     pass_id: str | None,
     model: str | None,
+    effort: str | None,
     timeout_seconds: int | None,
     review_target_path: str | None,
     smoke: bool | None,
@@ -153,6 +159,8 @@ def _build_argv(
         argv += ["--pass-id", pass_id]
     if model is not None:
         argv += ["--model", model]
+    if effort is not None:
+        argv += ["--effort", effort]
     if timeout_seconds is not None:
         argv += ["--timeout-seconds", str(timeout_seconds)]
     if review_target_path is not None:
@@ -171,6 +179,7 @@ def handle(
     reviewer_id: str | None = None,
     pass_id: str | None = None,
     model: str | None = None,
+    effort: str | None = None,
     timeout_seconds: int | None = None,
     review_target_path: str | None = None,
     smoke: bool | None = None,
@@ -184,6 +193,7 @@ def handle(
         reviewer_id=reviewer_id,
         pass_id=pass_id,
         model=model,
+        effort=effort,
         timeout_seconds=timeout_seconds,
         review_target_path=review_target_path,
         smoke=smoke,

@@ -10,7 +10,8 @@
 #   npm package: @openai/codex   ;   auth: `codex login` (token/ChatGPT auth)
 name: codex
 kind: cli_reviewer
-model: "codex (codex-cli)"
+model: "gpt-5.6-sol"
+effort: low
 detect:
   command: codex
 invoke:

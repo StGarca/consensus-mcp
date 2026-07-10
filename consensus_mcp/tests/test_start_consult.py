@@ -27,6 +27,7 @@ def test_start_consult_scaffolds_and_arms_gate(tmp_path):
     gp = yaml.safe_load((iter_dir / "goal_packet.yaml").read_text())
     assert gp["pilot_id"] == res["iteration"]
     assert gp["allowed_files"] == ["consensus_mcp/x.py"]
+    assert gp["forbidden_files"] == []
     assert res["gate_armed"] is True
     assert ss.session_active(tmp_path) is True            # gate armed at start
     assert "consensus-mcp-approve" in res["next_steps"]["3_approve_to_unblock_edits"]

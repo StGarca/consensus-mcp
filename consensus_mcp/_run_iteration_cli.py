@@ -45,6 +45,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host-peer-review-yaml", default=None,
                    help="path to a host_peer review YAML")
     p.add_argument("--repo-root", default=None, help="repo root override")
+    p.add_argument("--rigor-tier", choices=["quick", "standard", "deep"], required=True,
+                   help="operator-declared rigor tier; use deep for hard problems")
+    p.add_argument("--touches-governance-surface", action="store_true",
+                   help="raise and lock the effective tier to deep")
+    p.add_argument("--security-or-irreversible", action="store_true",
+                   help="raise and lock the effective tier to deep")
     p.add_argument("--outcome", default=None,
                    help="where to write the outcome JSON (default: <iteration-dir>/run-outcome.json)")
     return p
@@ -70,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
         claude_proposal_yaml=claude_yaml,
         host_peer_review_yaml=host_peer_yaml,
         repo_root=args.repo_root,
+        rigor_tier=args.rigor_tier,
+        touches_governance_surface=args.touches_governance_surface,
+        security_or_irreversible=args.security_or_irreversible,
     )
 
     payload = {
@@ -77,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         "goal_packet": args.goal_packet,
         "target": args.target,
         "config": args.config,
+        "rigor_tier": args.rigor_tier,
         "result": result,
     }
     outcome_path = Path(args.outcome) if args.outcome else Path(args.iteration_dir) / "run-outcome.json"

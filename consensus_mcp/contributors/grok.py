@@ -54,6 +54,12 @@ class GrokAdapter(ContributorAdapter):
         model = merged_options.get("model")
         if model:
             argv += ["--model", model]
+        effort = merged_options.get("effort")
+        if effort:
+            argv += ["--effort", effort]
+        stall = merged_options.get("stall_silence_seconds")
+        if stall is not None:
+            argv += ["--stall-silence-seconds", str(stall)]
 
         from consensus_mcp import _dispatch_grok
 

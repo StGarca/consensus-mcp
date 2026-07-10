@@ -466,7 +466,7 @@ def _make_factory(stdout_lines, returncode, captured_cmd, captured_env, captured
     return factory
 
 
-def test_invoke_kimi_builds_expected_argv():
+def test_invoke_kimi_builds_expected_argv(monkeypatch):
     """New Kimi Code CLI uses prompt mode: `kimi -p <prompt> --output-format text`.
 
     The binary lives at ~/.kimi-code/bin/kimi (resolved by the dispatcher when
@@ -477,6 +477,7 @@ def test_invoke_kimi_builds_expected_argv():
     captured_cmd: list = []
     captured_env: list = []
     captured_procs: list = []
+    monkeypatch.setattr(_dispatch_kimi, "_is_kimi_code_cli", lambda _path: True)
     factory = _make_factory([review_line], 0, captured_cmd, captured_env, captured_procs)
     out = _dispatch_kimi._invoke_kimi(
         prompt="REVIEW PROMPT BODY",
@@ -499,7 +500,7 @@ def test_invoke_kimi_builds_expected_argv():
     assert captured_procs[0].stdin.written == b""
 
 
-def test_invoke_kimi_large_prompt_fails_closed_for_kimi_code_cli():
+def test_invoke_kimi_large_prompt_fails_closed_for_kimi_code_cli(monkeypatch):
     """New Kimi Code CLI has no documented stdin/prompt-file transport.
 
     A prompt over the safe inline argv ceiling must fail before subprocess rather
@@ -508,6 +509,7 @@ def test_invoke_kimi_large_prompt_fails_closed_for_kimi_code_cli():
     big_prompt = "X" * (200 * 1024)
     captured_cmd: list = []
     captured_env: list = []
+    monkeypatch.setattr(_dispatch_kimi, "_is_kimi_code_cli", lambda _path: True)
     factory = _make_factory([b"OK"], 0, captured_cmd, captured_env)
     with pytest.raises(_dispatch_kimi.KimiInvocationError, match="inline argv size"):
         _dispatch_kimi._invoke_kimi(

@@ -402,6 +402,10 @@ def test_invoke_codex_subprocess_called(monkeypatch, tmp_path):
     assert cmd0_basename in ("codex", "codex.cmd", "codex.exe", "codex.bat", "codex.ps1"), \
         f"cmd[0]={captured['cmd'][0]!r}; basename {cmd0_basename!r} should be a codex variant"
     assert captured["cmd"][1] == "exec"
+    assert captured["cmd"][2:6] == [
+        "--model", "gpt-5.6-sol",
+        "-c", 'model_reasoning_effort="low"',
+    ]
     assert "--skip-git-repo-check" in captured["cmd"]
     assert "--cd" in captured["cmd"]
     assert str(tmp_path) in captured["cmd"]

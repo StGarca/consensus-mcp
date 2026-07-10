@@ -13,16 +13,130 @@ Tiers are presets over the routing knobs: QUICK / STANDARD / DEEP.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 QUICK, STANDARD, DEEP = "quick", "standard", "deep"
 _ORDER = {QUICK: 0, STANDARD: 1, DEEP: 2}
 _TIERS = (QUICK, STANDARD, DEEP)
 
 # Per-tier preset over the routing knobs (converged Q2/Q3).
 _PRESET = {
-    QUICK:    {"workflow": "B", "panel_size": 1, "path": "B"},
-    STANDARD: {"workflow": "A", "panel_size": 3, "path": "B"},
-    DEEP:     {"workflow": "A", "panel_size": 4, "path": "A"},
+    QUICK: {
+        "workflow": "A", "panel_policy": "all-enabled",
+        "minimum_independent_reviewers": 2, "path": "B", "compute_preset": QUICK,
+    },
+    STANDARD: {
+        "workflow": "A", "panel_policy": "all-enabled",
+        "minimum_independent_reviewers": 2, "path": "B", "compute_preset": STANDARD,
+    },
+    DEEP: {
+        "workflow": "A", "panel_policy": "all-enabled",
+        "minimum_independent_reviewers": 2, "path": "A", "compute_preset": DEEP,
+    },
 }
+
+# The hard-problem tier keeps every provider on its newest suitable model and
+# spends additional compute through provider-native effort controls. Kimi's
+# current CLI exposes thinking as a boolean, so effort is provenance metadata
+# and thinking=True is the executable control.
+_MODEL_PRESETS = {
+    QUICK: {
+        "codex": {"model": "gpt-5.6-sol", "effort": "low"},
+        "claude": {"model": "claude-fable-5", "effort": "low"},
+        "gemini": {"model": "Gemini 3.5 Flash (Low)"},
+        "grok": {"model": "grok-4.5", "effort": "low"},
+        "kimi": {"effort": "low", "thinking": False},
+    },
+    STANDARD: {
+        "codex": {"model": "gpt-5.6-sol", "effort": "medium"},
+        "claude": {"model": "claude-fable-5", "effort": "medium"},
+        "gemini": {"model": "Gemini 3.5 Flash (Medium)"},
+        "grok": {"model": "grok-4.5", "effort": "medium"},
+        "kimi": {"effort": "medium", "thinking": True},
+    },
+    DEEP: {
+        "codex": {"model": "gpt-5.6-sol", "effort": "xhigh"},
+        "claude": {"model": "claude-fable-5", "effort": "max"},
+        "gemini": {"model": "Gemini 3.5 Flash (High)"},
+        "grok": {"model": "grok-4.5", "effort": "max"},
+        "kimi": {"effort": "high", "thinking": True},
+    },
+}
+
+_TIMEOUT_PRESETS = {
+    QUICK: {
+        "iteration_timeout_seconds": 300,
+        "stall_silence_seconds": 120,
+        "pre_first_byte_silence_seconds": 300,
+    },
+    STANDARD: {
+        "iteration_timeout_seconds": 1800,
+        "stall_silence_seconds": 300,
+        "pre_first_byte_silence_seconds": 900,
+    },
+    DEEP: {
+        "iteration_timeout_seconds": 0,
+        "stall_silence_seconds": 0,
+        "pre_first_byte_silence_seconds": 0,
+    },
+}
+
+
+def model_preset(tier: str) -> dict:
+    """Return an isolated provider-settings mapping for ``tier``."""
+    if tier not in _PRESET:
+        raise ValueError(f"unknown tier {tier!r}")
+    return {
+        contributor: dict(settings)
+        for contributor, settings in _MODEL_PRESETS.get(tier, {}).items()
+    }
+
+
+def apply_tier_config(config: dict, decision: dict) -> dict:
+    """Apply an ``effective_tier`` decision to an isolated config copy."""
+    tier = decision.get("tier")
+    if tier not in _PRESET:
+        raise ValueError(f"invalid effective tier decision: {tier!r}")
+
+    resolved = deepcopy(config)
+    contributors = resolved.setdefault("contributors", {})
+    enabled = contributors.get("enabled") or []
+    required_panel = _PRESET[tier]["minimum_independent_reviewers"]
+    from consensus_mcp._contributor_profiles import (
+        independent_count,
+        load_builtin_profiles,
+        merge_profiles,
+    )
+    profiles = merge_profiles(
+        load_builtin_profiles(), contributors.get("profiles") or {},
+    )
+    actual_panel = independent_count(enabled, profiles)
+    if actual_panel < required_panel:
+        raise ValueError(
+            f"tier {tier!r} requires at least {required_panel} independent reviewers; "
+            f"got {actual_panel}"
+        )
+
+    adapters = contributors.setdefault("adapters", {})
+    for contributor, settings in decision.get("model_settings", {}).items():
+        if contributor in enabled:
+            adapters[contributor] = {
+                **(adapters.get(contributor) or {}),
+                **settings,
+            }
+
+    timeout_settings = decision["timeout_settings"]
+    resolved.setdefault("defaults", {}).update(timeout_settings)
+    for contributor in enabled:
+        adapter = adapters.setdefault(contributor, {})
+        adapter["stall_silence_seconds"] = timeout_settings["stall_silence_seconds"]
+        adapter["pre_first_byte_silence_seconds"] = timeout_settings[
+            "pre_first_byte_silence_seconds"
+        ]
+
+    workflow = resolved.setdefault("workflow", {})
+    workflow["max_convergence_rounds"] = _EXPECTED_ROUNDS[tier]
+    return resolved
 
 
 def governance_floor(*, touches_governance_surface: bool,
@@ -45,9 +159,9 @@ def effective_tier(declared_tier: str | None, *,
     inference, no silent default - the caller must escalate / require a declaration).
     The monotone governance floor may only RAISE the declared tier, never lower it.
 
-    Returns {tier, workflow, panel_size, path, locked, source}. ``locked`` is True iff a
-    governance/security surface is present (the operator cannot downgrade below the
-    floor)."""
+    All tiers use every enabled independent reviewer, with a minimum of two.
+    ``locked`` is True iff a governance/security surface is present (the operator
+    cannot downgrade below the floor)."""
     if declared_tier not in _TIERS:
         raise ValueError(
             f"rigor tier must be operator-DECLARED as one of {list(_TIERS)}; got "
@@ -62,7 +176,14 @@ def effective_tier(declared_tier: str | None, *,
         tier = floor  # monotone: floor can only raise
     source = ("operator-declared" if floor is None
               else f"operator-declared {declared_tier}; governance safety floor locks >= {floor} (effective {tier})")
-    return {"tier": tier, **_PRESET[tier], "locked": locked, "source": source}
+    return {
+        "tier": tier,
+        **_PRESET[tier],
+        "model_settings": model_preset(tier),
+        "timeout_settings": dict(_TIMEOUT_PRESETS[tier]),
+        "locked": locked,
+        "source": source,
+    }
 
 
 def suggest_tier(*, intent_class: str, files_touched: int,
@@ -93,23 +214,30 @@ _EXPECTED_ROUNDS = {QUICK: 1, STANDARD: 1, DEEP: 2}
 _TOKEN_BAND = {QUICK: "low", STANDARD: "medium", DEEP: "high"}
 
 
-def estimate_cost(tier: str, *, median_dispatch_seconds: float) -> dict:
+def estimate_cost(
+    tier: str,
+    *,
+    independent_reviewers: int,
+    median_dispatch_seconds: float,
+) -> dict:
     """Pre-commit cost estimate for a tier, surfaced BEFORE any dispatch (converged Q3
     "show the estimate first"). Uses the observed median dispatch wall-clock (from
     telemetry) - a BAND, not a false-precision token promise.
 
-    n_dispatches = panel_size x expected_rounds; est_wall_clock_s = median x
+    n_dispatches = actual independent reviewers x expected_rounds; est_wall_clock_s = median x
     expected_rounds (round-1 peers run in parallel, so wall-clock scales with ROUNDS, not
     panel size)."""
     if tier not in _PRESET:
         raise ValueError(f"unknown tier {tier!r}")
     if median_dispatch_seconds < 0:
         raise ValueError("median_dispatch_seconds must be non-negative")
+    if independent_reviewers < 2:
+        raise ValueError("consensus requires at least 2 independent reviewers")
     rounds = _EXPECTED_ROUNDS[tier]
-    panel = _PRESET[tier]["panel_size"]
     return {
         "tier": tier,
-        "n_dispatches": panel * rounds,
+        "panel_size": independent_reviewers,
+        "n_dispatches": independent_reviewers * rounds,
         "expected_rounds": rounds,
         "est_wall_clock_s": round(median_dispatch_seconds * rounds, 1),
         "token_band": _TOKEN_BAND[tier],

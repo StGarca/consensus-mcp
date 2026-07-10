@@ -44,7 +44,7 @@ already crisp.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.2.2
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.3.0
 consensus-init --install-claude-code
 ```
 
@@ -84,6 +84,41 @@ Panel size: any count works as long as there are at least two AIs. The only
 thing size changes is the default agreement rule (2 AIs: both must agree;
 3+: majority) -- overridable per project.
 
+### Rigor tiers
+
+Choose how much work each review should do without dropping any configured
+provider. Every tier dispatches all enabled independent AIs (minimum two):
+
+- **Quick** -- newest suitable models at their fastest effort, one round.
+- **Standard** -- the same current model generation at normal effort, one round.
+- **Deep** -- strongest practical effort and two convergence rounds for hard
+  architectural, security, or irreversible decisions. Deep has no automatic
+  wall-clock or silence timeout; it runs until completion, provider failure, or
+  explicit operator abort. Quick and Standard remain time-bounded.
+
+The tier can be declared through the MCP `consensus.run_iteration` tool or the
+CLI:
+
+In an AI-hosted session, no switch is needed. Plain language is the primary
+interface: *"let's get a quick consensus"*, *"get a standard consensus on
+this"*, or *"we are going nowhere -- get a deep consensus"* are explicit tier
+declarations. The host selects the named tier and starts the consensus workflow
+automatically. CLI and MCP fields exist for scripts and direct integrations.
+
+```bash
+consensus-mcp-run-iteration --rigor-tier deep \
+  --iteration-dir consensus-state/active/my-review \
+  --goal-packet consensus-state/active/my-review/goal_packet.yaml \
+  --target path/to/review-packet.yaml
+```
+
+Built-in current-generation defaults include GPT 5.6 Sol, Claude Fable 5,
+Gemini 3.5 Flash, and Grok 4.5. Kimi deliberately uses each user's authenticated
+CLI default; users with access to K2.7 Code High Speed or another paid model can
+pin it locally without imposing that entitlement on other installations.
+Provider-specific model and effort settings are recorded in sealed review
+provenance.
+
 ---
 
 ## Maturity
@@ -91,7 +126,7 @@ thing size changes is the default agreement rule (2 AIs: both must agree;
 Both modes are stable and in daily use. In **134 review iterations on its own
 code**, the panel logged **548 findings -- 156 of them blocking or critical** --
 each addressed before the change merged (fixed, or dismissed with the evidence
-that disproved it). **2,309 tests green** on Linux + Windows / Python 3.11+,
+that disproved it). **2,326 tests green** on Linux + Windows / Python 3.11+,
 ASCII-only tree, every reviewer pluggable by config, no Claude required. This
 project reviews itself through its own cross-AI cycle.
 
@@ -109,6 +144,7 @@ project reviews itself through its own cross-AI cycle.
 - At least two AI CLIs on your PATH. Built-in support for:
   [`codex`](https://github.com/openai/codex),
   [`gemini-cli`](https://github.com/google-gemini/gemini-cli),
+  [`grok-cli`](https://docs.x.ai/grok-cli),
   [`kimi-cli`](https://github.com/MoonshotAI/kimi-cli),
   and Claude (when running inside Claude Code) -- all optional.
 
