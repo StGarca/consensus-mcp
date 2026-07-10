@@ -673,9 +673,9 @@ def _assemble_grok_stream(raw: str) -> str:
     terminal stop reason because Grok CLI can finish with ``EndTurn`` after
     placing its structured answer entirely in thought events.
 
-    Raises an invocation-class error when a streaming run has no recoverable
-    answer. ``GrokStreamCancelledError`` is retained for ``Cancelled`` so the
-    proposal-mode compact retry remains available.
+    A terminal ``Cancelled`` is authoritative unless a JSON object can be
+    recovered from the assembled text or thought payloads. Planning prose is
+    not a completed answer and routes proposal mode to its compact retry.
 
     Backward-compat: if NO line is a streaming event carrying a ``type``
     key (e.g. an already-plain blob), the raw string is returned unchanged
@@ -724,25 +724,47 @@ def _assemble_grok_stream(raw: str) -> str:
             break
     if not saw_event:
         return raw
+
+    def recover_object(payload: str, channel: str) -> tuple[str | None, str]:
+        if not payload:
+            return None, f"no string {channel} payload was emitted"
+        try:
+            candidate = _extract_json_from_text(payload)
+            parsed_candidate = json.loads(candidate)
+        except (ValueError, json.JSONDecodeError) as exc:
+            return None, f"{channel} payload had no valid JSON object ({exc})"
+        if not isinstance(parsed_candidate, dict):
+            return None, (
+                f"{channel} payload JSON root was "
+                f"{type(parsed_candidate).__name__}, not object"
+            )
+        return candidate, "recovered JSON object"
+
+    answer = "".join(text_parts)
+    thought_text = "".join(thought_parts)
+    if stop_reason == "Cancelled":
+        text_candidate, text_detail = recover_object(answer, "text")
+        if text_candidate is not None:
+            return text_candidate
+        thought_candidate, thought_detail = recover_object(thought_text, "thought")
+        if thought_candidate is not None:
+            return thought_candidate
+        raise GrokStreamCancelledError(
+            "grok self-cancelled before emitting a complete JSON object; "
+            f"text_events={len(text_parts)}; text_bytes={len(answer.encode('utf-8'))}; "
+            f"thought_events={thought_event_count}; "
+            f"thought_bytes={len(thought_text.encode('utf-8'))}; "
+            f"text_recovery={text_detail}; thought_recovery={thought_detail}. "
+            "Re-dispatch with a shorter, single-focus prompt."
+        )
+
     if not saw_text:
         # Grok can emit the schema-shaped JSON in `thought` chunks and then
         # terminate without a `text` event. Do not seal arbitrary thought
         # prose; downstream schema validation receives only a JSON object.
-        thought_text = "".join(thought_parts)
-        recovery_detail = "no string thought payload was emitted"
-        if thought_text:
-            try:
-                candidate = _extract_json_from_text(thought_text)
-                parsed_candidate = json.loads(candidate)
-            except (ValueError, json.JSONDecodeError) as exc:
-                recovery_detail = f"thought payload had no valid JSON object ({exc})"
-            else:
-                if isinstance(parsed_candidate, dict):
-                    return candidate
-                recovery_detail = (
-                    "thought payload JSON root was "
-                    f"{type(parsed_candidate).__name__}, not object"
-                )
+        candidate, recovery_detail = recover_object(thought_text, "thought")
+        if candidate is not None:
+            return candidate
 
         thought_bytes = len(thought_text.encode("utf-8"))
         message = (
@@ -752,11 +774,8 @@ def _assemble_grok_stream(raw: str) -> str:
             f"{recovery_detail}. Re-dispatch with --debug and a shorter, "
             "single-focus prompt."
         )
-        if stop_reason == "Cancelled":
-            raise GrokStreamCancelledError(message)
         raise GrokEmptyOutputError(message)
 
-    answer = "".join(text_parts)
     if not answer.strip():
         raise GrokEmptyOutputError(
             "grok streaming output emitted string text events but their "
