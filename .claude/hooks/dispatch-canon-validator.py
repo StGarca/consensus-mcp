@@ -70,7 +70,7 @@ def check_mcp_dispatch_wrapper(tool_name: str) -> int | None:
             "dispatch-invocation-canon.md. MCP wrappers run inside the MCP "
             "server process and are invisible to the operator's "
             "background-process surface. Use the shell binary "
-            "/home/user/.local/share/pipx/venvs/consensus-mcp/bin/"
+            ".local/share/pipx/venvs/consensus-mcp/bin/"
             f"consensus-mcp-dispatch-{tool_name.split('_')[-1]} via Bash with "
             "run_in_background=true."
         )
@@ -282,7 +282,7 @@ def self_test() -> int:
             {
                 "tool_name": "Bash",
                 "tool_input": {
-                    "command": "grok -p hi --output-format plain --cwd /home/user/projects/example-app",
+                    "command": "grok -p hi --output-format plain --cwd /path/to/project",
                     "run_in_background": True,
                 },
             },

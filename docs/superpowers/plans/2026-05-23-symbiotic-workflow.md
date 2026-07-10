@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-23-symbiotic-workflow-design.md` (authoritative).
 
-**Test runner:** `VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
+**Test runner:** `VPY=python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
 
 **Key verified facts:**
 - `phase_to_mode` (`consensus_mcp/contributors/_phase_mode.py`) maps `PROPOSE->"proposal"`, `REVIEW->"review"`, `CONVERGE->"review"`. kimi's `--mode` accepts `{review, proposal}` (same as codex) - so `phase_to_mode` never emits a kimi-invalid mode.

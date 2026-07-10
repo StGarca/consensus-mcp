@@ -1499,7 +1499,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Preflight guard (Loop 4 harness-rec-002): refuse dispatch from a
     # non-git directory or the user's home directory. 7 _SnapshotIndexError
-    # failures occurred from running against /home/user (non-git).
+    # failures occurred from running against a non-git directory.
     _home = Path.home().resolve()
     _resolved = repo_root.resolve()
     if _resolved == _home:

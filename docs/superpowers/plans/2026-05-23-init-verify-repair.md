@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-23-init-verify-repair-design.md` (read it; the 6-component table + exit taxonomy + contract are authoritative).
 
-**Test runner:** `VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
+**Test runner:** `VPY=python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
 
 **Reuse map (exact, in `consensus_mcp/_init_wizard.py`):**
 - `_detect_repo_root()` L62 - `_resolve_config_path(args, repo_root)` L843 - `_resolve_claude_home()` L116 - `_resolve_mcp_json_path(repo_root)` L659

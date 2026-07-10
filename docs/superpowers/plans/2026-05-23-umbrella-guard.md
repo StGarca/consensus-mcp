@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-23-umbrella-guard-design.md` (authoritative).
 
-**Test runner:** `VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
+**Test runner:** `VPY=python` -> `$VPY -m pytest ...` from repo root. **Do NOT edit `build/lib/`.**
 
 **Verified facts:** exit codes 0-7 are all used (0 ok/1 abort/2 missing/3 invalid/4 already-configured/5 skip/6 incomplete-install/7 repair-incomplete) -> use **8**. `cmd_init` resolves `repo_root = _detect_repo_root()` (L1891) and `config_path` (L1892), then early-returns for `--check`/`--print-defaults`/`--install/uninstall-claude-code`/`--repair`, then `--force`>`--reconfigure` normalization, then the existing-config gate. The umbrella guard goes after the early-return cluster, before the existing-config gate.
 

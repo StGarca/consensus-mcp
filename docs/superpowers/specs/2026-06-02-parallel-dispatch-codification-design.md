@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-02
 **Status:** Draft -> pending consensus consult ratification (anchored) -> implementation (TDD)
-**Author:** Claude (Opus 4.8) with operator (project-contributor)
+**Author:** Claude (Opus 4.8) with project operator
 **Consult framing:** ANCHORED. Operator contribution (Findings A/B below) added first
 and integrated; panel reviews this whole package.
 **Scope of this consult:** (1) parallel dispatch rewrite, (2) codified uniform consult
@@ -117,7 +117,7 @@ findings on that run - the payload was sound; these are clean hardening candidat
 ### Finding A - grok "binary not found" from a stale server PATH snapshot
 
 Symptom: `grok binary not found: grok` even though `grok.exe` exists at
-`C:\Users\project-contributor\.grok\bin\grok.exe` and is on PATH (current process + user
+`C:\Users\example\.grok\bin\grok.exe` and is on PATH (current process + user
 registry).
 
 - The dispatcher resolves grok by bare name via `shutil.which("grok")`
@@ -129,7 +129,7 @@ registry).
   that env predated `~/.grok/bin` becoming visible, so `which` returned None. Fresh
   diagnostic shells see it; the server didn't.
 - **Operator-proposed fix (deterministic):** pin the absolute path in config -
-  `contributors.adapters.grok.command: C:\Users\project-contributor\.grok\bin\grok.exe`.
+  `contributors.adapters.grok.command: C:\Users\example\.grok\bin\grok.exe`.
   `_resolve_grok_bin` returns a drive-prefixed path verbatim (`:170`), bypassing
   PATH. Or fully restart Claude Code so the server re-inherits PATH.
 - **Hardening question for the panel:** should the dispatcher re-resolve binaries

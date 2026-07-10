@@ -6,7 +6,7 @@
 
 **Architecture:** Synthesis is a host judgment act; the autonomous engine has no host in the loop, so it must not fake it. (1) An operator-declared goal_packet flag `convergence.requires_synthesis`. (2) A guard in `_run_workflow_4` that raises `WorkflowError` (-> `outcome.error`) when the flag is set. (3) A max-rounds hint for the undeclared case. (4) Two thin engine methods for Path A: `evaluate_plan_convergence` (delegates to `_evaluate_convergence`) and `seal_plan_iteration` (on converge, writes `iteration-outcome.yaml` with a sealed `closing_state` and returns the host's plan path - never overwriting it).
 
-**Tech Stack:** Python 3.13, pytest (pipx venv: `~/.local/share/pipx/venvs/consensus-mcp/bin/python -m pytest`), PyYAML.
+**Tech Stack:** Python 3.13, pytest, PyYAML.
 
 **Spec:** `docs/superpowers/specs/2026-05-24-v1306-synthesis-step-design.md`
 

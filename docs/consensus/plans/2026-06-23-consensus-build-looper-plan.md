@@ -60,7 +60,7 @@ cp "$SRC/schemas/loop.resolved.v1.schema.json"  "$DST/schemas/loop.resolved.v1.s
 
 - [ ] **Step 2: Record the pinned upstream commit**
 
-Run: `git -C /tmp/claude-1000/-home-steve-projects-consensus-mcp/d68f1be9-1556-40b3-823a-be5cd8dd8fba/scratchpad/looper rev-parse HEAD` (or note "shallow clone; pin by clone date 2026-06-23" if the clone was `--depth 1`). Use the value in `VENDORED.md`.
+Run the looper checkout's `git rev-parse HEAD` (or note "shallow clone; pin by clone date 2026-06-23" if the clone was `--depth 1`). Use the value in `VENDORED.md`.
 
 - [ ] **Step 3: Write `NOTICE`**
 

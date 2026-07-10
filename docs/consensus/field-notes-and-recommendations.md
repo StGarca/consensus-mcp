@@ -6,7 +6,7 @@ which exercise paths Claude-hosted runs in this repo never hit. Newest first.
 
 ---
 
-## 2026-06-04 - Codex-hosted consult in a consuming project (`external-project`)
+## 2026-06-04 - Codex-hosted consult in a consuming project
 
 A non-Claude AI (Codex) hosted a real 5-contributor propose-converge consult in a
 consuming project. The run itself was genuine: 5/5 responsive, converged

@@ -980,7 +980,7 @@ would have caught pre-invocation.
 
 **Fix Windows hook commands - Claude Code runs hooks via Git Bash, not cmd.exe.**
 A v1.30.6 user installing on Windows hit `/usr/bin/bash: line 1:
-C:Usersproject-contributorpipxvenvsconsensus-mcpScriptspython.exe: command not found` on
+C:Users<user>pipxvenvsconsensus-mcpScriptspython.exe: command not found` on
 every Stop hook fire. Diagnosis: the v1.26 `os.name == "nt"` branch in
 `_build_consensus_hook_command` emitted `subprocess.list2cmdline` output
 (`C:\Users\...\python.exe ...`), which is valid for cmd/PowerShell but
@@ -1155,7 +1155,7 @@ dirs can't be excluded had two gaps this closes.
   relying on the now-real before/after snapshot to DETECT and REJECT any mutation. Safe
   precisely because that snapshot is a genuine control; if even the snapshot can't be built,
   it fails loud first.
-- **Multi-round-seal regression test (the external-project dogfood).** Locks the v1.30.2
+- **Multi-round-seal regression test (external-project dogfood).** Locks the v1.30.2
   Bug A fix end-to-end at the seal boundary: round-keyed reviewer_ids -> distinct pass_ids ->
   every convergence round seals, with a non-vacuous negative control proving the original
   `index_collision` symptom returns if round-keying ever regresses.
@@ -1163,7 +1163,7 @@ dirs can't be excluded had two gaps this closes.
 ## 1.30.2 - 2026-05-24
 
 **Hot-patch: three bugs that blocked a Workflow A consult from a consuming project**
-(found by the external-project emotion-engine consult; codex Workflow B reviewed).
+(found by an external-project consult; codex Workflow B reviewed).
 
 ### Fixed
 - **Bug A - multi-round consults couldn't seal.** Convergence `reviewer_id` was

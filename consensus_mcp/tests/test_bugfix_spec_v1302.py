@@ -1,4 +1,4 @@
-"""v1.30.2 - guards for the 3 bugs the external-project consult exposed.
+"""v1.30.2 - guards for bugs an external-project consult exposed.
 
 Spec: external-project/consensus-state/CONSENSUS-MCP-BUGFIX-SPEC-2026-05-24.md
 A: convergence reviewer_id not round-keyed -> T6 index_collision on round >=2.

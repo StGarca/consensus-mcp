@@ -10,7 +10,7 @@
 
 **Test runner (this repo):** the only interpreter with `consensus_mcp` + deps is the pipx venv:
 ```
-VPY=/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python
+VPY=python
 ```
 Run all init tests with: `$VPY -m pytest consensus_mcp/tests/ -k init -q`
 

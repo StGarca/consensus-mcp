@@ -170,7 +170,7 @@ def test_hook_command_plain_path_unchanged():
 
 @pytest.mark.parametrize("path_str,case_id", [
     # The literal failing shape from the v1.30.6 user report.
-    (r"C:\Users\project-contributor\pipx\venvs\consensus-mcp\Scripts\hook.py", "windows-backslash"),
+    (r"C:\Users\example\pipx\venvs\consensus-mcp\Scripts\hook.py", "windows-backslash"),
     # Spaces - Windows "Program Files" and the user's home with spaces.
     (r"C:\Program Files\python\hook.py", "windows-spaces"),
     # POSIX path with embedded single quote.

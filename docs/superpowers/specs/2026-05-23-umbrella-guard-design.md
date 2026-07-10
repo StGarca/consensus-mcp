@@ -9,9 +9,8 @@
 
 ## Problem (the incident)
 
-`consensus-init --from-claude-code` run from `/home/user/projects` - a
-workspace **umbrella** folder (not a git repo, containing `consensus-mcp` +
-`external-project`) - bootstrapped the umbrella: wrote `.consensus/config.yaml`
+`consensus-init --from-claude-code` run from a projects directory - a
+workspace **umbrella** folder (not a git repo, containing multiple projects) - bootstrapped the umbrella: wrote `.consensus/config.yaml`
 (`project.name: projects`), `.mcp.json`, `.claude/agents/`, and seeded
 `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` at the umbrella. Since `CLAUDE.md` is read
 hierarchically by Claude Code, those consensus instructions now blanket every

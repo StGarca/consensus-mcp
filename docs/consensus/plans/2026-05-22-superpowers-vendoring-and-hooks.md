@@ -6,7 +6,7 @@
 
 **Architecture:** Two independent tracks meeting at a *marker contract*. Track A copies+adapts 10 skills into `consensus_mcp/claude_extensions/skills/consensus-<name>/` and installs them via the existing `_install_claude_extensions` path. Track B ships `hooks.json` (SessionStart/UserPromptSubmit/PreToolUse/Stop) reusing the existing `consensus_mcp/_delivery_readiness.py` token system + `contrib/delivery_gate_pretooluse.py` block pattern. The contract: vendored `brainstorming` writes `.consensus/design-approved`; vendored `verification-before-completion` mints a delivery token; the PreToolUse/Stop hooks validate them.
 
-**Tech Stack:** Python 3 (run via the pipx venv interpreter `/home/user/.local/share/pipx/venvs/consensus-mcp/bin/python`), pytest, Claude Code plugin hooks (JSON), markdown SKILL.md files. Distribution: git tags + pipx + `consensus-init --install-claude-code` (NO PyPI, NO new channel).
+**Tech Stack:** Python 3 (run via the project interpreter), pytest, Claude Code plugin hooks (JSON), markdown SKILL.md files. Distribution: git tags + pipx + `consensus-init --install-claude-code` (NO PyPI, NO new channel).
 
 **Provenance:** Superpowers v5.1.0, MIT (Jesse Vincent / github.com/obra/superpowers), pinned commit `f2cbfbe...`. Source skills at `~/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/<name>/SKILL.md`.
 

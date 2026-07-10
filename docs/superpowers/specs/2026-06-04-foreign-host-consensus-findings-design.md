@@ -3,7 +3,7 @@
 Date: 2026-06-04
 Branch: `fix/dispatch-log-payload-cap`
 Origin: Review of a Codex-hosted consult in a consuming project
-(`external-project`), report `wiki/audiobook-project/reports/codex-host-consensus-findings-2026-06-04.md`.
+(a consuming project), report `wiki/project/reports/codex-host-consensus-findings-2026-06-04.md`.
 
 ## Context
 
