@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.3.1 - 2026-07-09
+
+**Grok 4.5 streaming zero-answer recovery.**
+
+- Fixed Grok CLI streams that place a structured answer entirely in ordered
+  `thought` events and finish with `EndTurn` or another stop reason without a
+  `text` event. The adapter recovers only a syntactically valid JSON object;
+  arbitrary reasoning text, arrays, scalars, and malformed JSON remain errors,
+  and existing proposal/review schema validation still applies.
+- Replaced misleading JSON `line 1 column 1` failures with actionable
+  invocation diagnostics when Grok exits successfully with truly empty stdout,
+  emits thought-only output without a recoverable object, or emits only empty
+  text chunks. Diagnostics distinguish subprocess output from post-stream
+  assembly and include bounded stderr context where available.
+- Preserved the compact proposal retry for unrecoverable `Cancelled` streams
+  and retained one automatic JSON-only retry for other zero-answer runs, with a
+  hard two-attempt ceiling. Added regression coverage across `EndTurn`,
+  `Cancelled`, unknown, and missing stop reasons.
+
 ## 2.3.0 - 2026-07-09
 
 **Frontier-model rigor tiers and provider-count-independent consensus.**
