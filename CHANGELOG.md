@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.3.2 - 2026-07-09
+
+**Grok `Cancelled` streams with planning-text preambles.**
+
+- Fixed Grok proposal streams that emit reasoning tokens and prose planning
+  text, then terminate with `stopReason: "Cancelled"` before emitting their
+  required JSON object. Text-event presence no longer misclassifies an
+  incomplete cancelled run as a completed answer.
+- `Cancelled` streams now return only a JSON dictionary recovered from the
+  normal text channel or, secondarily, ordered thought payloads. When neither
+  channel contains one, the dispatcher raises `GrokStreamCancelledError` and
+  proposal mode uses its existing single compact cancellation retry instead of
+  appending a parse retry to the original prompt.
+- Added captured-shape regression coverage without re-running Grok. The full
+  suite now contains 2,340 passing tests.
+
 ## 2.3.1 - 2026-07-09
 
 **Grok 4.5 streaming zero-answer recovery.**

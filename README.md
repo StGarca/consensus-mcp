@@ -44,7 +44,7 @@ already crisp.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.3.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.3.2
 consensus-init --install-claude-code
 ```
 
@@ -126,7 +126,7 @@ provenance.
 Both modes are stable and in daily use. In **134 review iterations on its own
 code**, the panel logged **548 findings -- 156 of them blocking or critical** --
 each addressed before the change merged (fixed, or dismissed with the evidence
-that disproved it). **2,338 tests green** on Linux + Windows / Python 3.11+,
+that disproved it). **2,340 tests green** on Linux + Windows / Python 3.11+,
 ASCII-only tree, every reviewer pluggable by config, no Claude required. This
 project reviews itself through its own cross-AI cycle.
 

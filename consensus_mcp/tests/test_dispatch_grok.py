@@ -518,18 +518,39 @@ def test_assemble_stream_empty_stdout_is_invocation_error():
         _dispatch_grok._assemble_grok_stream("\n  \t")
 
 
-def test_assemble_stream_cancel_after_text_returns_text():
-    """A Cancelled stopReason AFTER some text was emitted is NOT the error
-    case - only cancel-BEFORE-any-text raises. We keep what grok produced."""
+def test_assemble_stream_cancel_after_planning_text_raises_cancelled():
     raw = _stream(
-        {"type": "text", "data": "partial answer"},
+        {"type": "thought", "data": "I should inspect the evidence"},
+        {"type": "text", "data": "I will now emit schema-valid JSON only."},
         {"type": "end", "stopReason": "Cancelled"},
     )
-    assert _dispatch_grok._assemble_grok_stream(raw) == "partial answer"
+    with pytest.raises(_dispatch_grok.GrokStreamCancelledError, match="text_events=1"):
+        _dispatch_grok._assemble_grok_stream(raw)
+
+
+def test_assemble_stream_cancelled_text_json_returns_object():
+    raw = _stream(
+        {"type": "text", "data": 'completed: {"selected_target":"x"}'},
+        {"type": "end", "stopReason": "Cancelled"},
+    )
+    assert json.loads(_dispatch_grok._assemble_grok_stream(raw)) == {
+        "selected_target": "x"
+    }
+
+
+def test_assemble_stream_cancelled_prose_text_falls_back_to_thought_json():
+    raw = _stream(
+        {"type": "thought", "data": '{"selected_target":"thought-answer"}'},
+        {"type": "text", "data": "I was about to emit the final answer."},
+        {"type": "end", "stopReason": "Cancelled"},
+    )
+    assert json.loads(_dispatch_grok._assemble_grok_stream(raw)) == {
+        "selected_target": "thought-answer"
+    }
 
 
 def test_proposal_cancel_retries_with_compact_prompt(monkeypatch, tmp_path):
-    """Grok proposal dispatch recovers from zero-text self-cancel once."""
+    """Planning text followed by Cancelled uses compact retry, not parse retry."""
     calls = []
     proposal = {
         "selected_target": "fix grok retry",
@@ -549,7 +570,11 @@ def test_proposal_cancel_retries_with_compact_prompt(monkeypatch, tmp_path):
     def fake_invoke(**kwargs):
         calls.append(kwargs)
         if len(calls) == 1:
-            raise _dispatch_grok.GrokStreamCancelledError("cancelled before text")
+            return _dispatch_grok._assemble_grok_stream(_stream(
+                {"type": "thought", "data": "reasoning"},
+                {"type": "text", "data": "I will now emit schema-valid JSON only."},
+                {"type": "end", "stopReason": "Cancelled"},
+            )), tmp_path / "unreachable.txt"
         prompt_path = tmp_path / "retry-prompt.txt"
         prompt_path.write_text(kwargs["prompt"], encoding="utf-8")
         return json.dumps(proposal), prompt_path
