@@ -237,11 +237,25 @@ def test_gate_should_enforce_dormant_by_default(tmp_path, monkeypatch):
     assert ss.gate_should_enforce(repo) is False
 
 
-def test_gate_should_enforce_active_with_live_session_marker(tmp_path, monkeypatch):
+def test_gate_ignores_live_session_marker_in_on_demand_project(tmp_path, monkeypatch):
     _clean_gate_env(monkeypatch)
     repo = _repo(tmp_path)  # creates consensus-state/active/iter-test
     ss.write_session_marker(repo, iteration_id="iter-test", scope_glob="*",
                             activated_by="t", activation_source="test_fixture")
+    assert ss.session_active(repo) is True
+    assert ss.gate_should_enforce(repo) is False
+
+
+def test_gate_should_enforce_explicit_continuous_project(tmp_path, monkeypatch):
+    _clean_gate_env(monkeypatch)
+    repo = tmp_path / "repo"
+    config = repo / ".consensus" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        "schema_version: 1\ngovernance:\n  mode: continuous\n",
+        encoding="utf-8",
+    )
+    assert ss.governance_mode(repo) == "continuous"
     assert ss.gate_should_enforce(repo) is True
 
 

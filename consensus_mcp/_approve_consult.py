@@ -56,7 +56,12 @@ from consensus_mcp._dispatch_base import (
     _resolve_repo_root,
     validate_explicit_repo_root,
 )
-from consensus_mcp._session_state import write_session_marker
+from consensus_mcp._session_state import (
+    clear_session_marker,
+    continuous_governance_enabled,
+    governance_mode,
+    write_session_marker,
+)
 
 # The canonical sealed state a converged Workflow-A consult closes on. Must be in
 # SEALED_CLOSING_STATES (resolve_consensus_ref refuses anything else).
@@ -340,7 +345,11 @@ def approve_consult(
     repo_root: str | os.PathLike | None = None,
     closing_state: str = _DEFAULT_CLOSING_STATE,
 ) -> dict:
-    """Validate + seal + mint a design-approval marker for a converged consult.
+    """Validate and seal a converged consult.
+
+    Default on-demand mode returns the sealed result without enforcement
+    markers. Explicit continuous mode additionally mints design approval and
+    arms the governed edit/delivery lifecycle.
 
     `scope_glob` accepts a single glob (str) or a LIST of globs (G3 multi-root).
     Each glob is confined to the goal_packet's allowed_files INDEPENDENTLY, so a
@@ -508,6 +517,38 @@ def approve_consult(
     # + next_steps), the list for multi-glob.
     scope_display = globs[0] if len(globs) == 1 else globs
     sha = compute_artifact_hash(plan)
+    mode = governance_mode(rr)
+    if not continuous_governance_enabled(rr):
+        clear_session_marker(rr)
+        stale_marker = _marker_path(rr)
+        marker_cleared = True
+        if stale_marker.exists():
+            try:
+                stale_marker.unlink()
+            except OSError:
+                marker_cleared = False
+        return {
+            "ok": True,
+            "iteration": iter_dir.name,
+            "non_claude_reviewers": n,
+            "converged_plan_sha256": sha,
+            "scope_glob": globs[0] if len(globs) == 1 else None,
+            "scope_globs": globs,
+            "governance_mode": mode,
+            "gate_armed": False,
+            "marker_path": None,
+            "marker_cleared": marker_cleared,
+            "sealed_outcome_path": str(outcome_path),
+            "next_steps": {
+                "1_return_results": (
+                    "Return the sealed consensus result to the user. The "
+                    "on-demand consult is complete."),
+                "2_no_enforcement": (
+                    "No edit gate or delivery token is required. Consensus "
+                    "remains off until the user explicitly requests it again."),
+            },
+        }
+
     try:
         marker = mint_design_approval(
             rr,
@@ -564,6 +605,7 @@ def approve_consult(
         "scope_globs": globs,
         "marker_path": str(_marker_path(rr)),
         "revalidated": reason,
+        "governance_mode": mode,
         "gate_armed": True,
         # gemini finding: arming has a matching DISARM, and the lifecycle is only
         # complete when the gate returns to dormant. Surface the exact close

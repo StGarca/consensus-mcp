@@ -7,15 +7,18 @@ from consensus_mcp import _start_consult as sc
 from consensus_mcp import _session_state as ss
 
 
-def _init_project(repo_root):
+def _init_project(repo_root, governance_mode="on-demand"):
     """Make repo_root a valid consuming-project root (.consensus/config.yaml) so
     the now-validated explicit --repo-root resolver accepts it (codex finding)."""
     cfg = repo_root / ".consensus" / "config.yaml"
     cfg.parent.mkdir(parents=True, exist_ok=True)
-    cfg.write_text(yaml.safe_dump({"schema_version": 1}), encoding="utf-8")
+    cfg.write_text(yaml.safe_dump({
+        "schema_version": 1,
+        "governance": {"mode": governance_mode},
+    }), encoding="utf-8")
 
 
-def test_start_consult_scaffolds_and_arms_gate(tmp_path):
+def test_start_consult_on_demand_scaffolds_without_gate(tmp_path):
     _init_project(tmp_path)
     res = sc.start_consult("Should we parallelize dispatch?",
                            scope_glob="consensus_mcp/x.py",
@@ -28,11 +31,24 @@ def test_start_consult_scaffolds_and_arms_gate(tmp_path):
     assert gp["pilot_id"] == res["iteration"]
     assert gp["allowed_files"] == ["consensus_mcp/x.py"]
     assert gp["forbidden_files"] == []
+    assert res["governance_mode"] == "on-demand"
+    assert res["gate_armed"] is False
+    assert not (tmp_path / ".consensus" / "session-active").exists()
+    assert "consensus-mcp-approve" in res["next_steps"]["3_approve_to_seal_results"]
+    assert "no edit gate" in res["next_steps"]["4_return_results"].lower()
+
+
+def test_start_consult_continuous_arms_gate(tmp_path):
+    _init_project(tmp_path, "continuous")
+    res = sc.start_consult(
+        "Governed change", scope_glob="src/**",
+        reviewers=["codex", "gemini"], repo_root=tmp_path,
+    )
+    assert res["ok"] is True, res
+    assert res["governance_mode"] == "continuous"
     assert res["gate_armed"] is True
-    assert ss.session_active(tmp_path) is True            # gate armed at start
-    assert "consensus-mcp-approve" in res["next_steps"]["3_approve_to_unblock_edits"]
-    # gemini finding: the terminal DISARM step is surfaced too.
-    assert "consensus-mcp-seal-iteration close" in res["next_steps"]["4_disarm_when_done"]
+    assert ss.session_active(tmp_path) is True
+    assert "3_approve_to_unblock_edits" in res["next_steps"]
 
 
 def test_start_consult_multi_scope_sets_allowed_files_list(tmp_path):
@@ -47,7 +63,7 @@ def test_start_consult_multi_scope_sets_allowed_files_list(tmp_path):
     gp = yaml.safe_load((iter_dir / "goal_packet.yaml").read_text())
     assert gp["allowed_files"] == ["consensus_mcp/**", "docs/**", "pyproject.toml"]
     # the printed approve command repeats --scope-glob for each root.
-    approve = res["next_steps"]["3_approve_to_unblock_edits"]
+    approve = res["next_steps"]["3_approve_to_seal_results"]
     assert approve.count("--scope-glob") == 3
 
 
@@ -90,7 +106,7 @@ def test_start_consult_clears_stale_design_approved(tmp_path):
     """kimi-rev-004: a fresh (unapproved) consult must clear any prior
     design-approved marker so it cannot authorize an OLD scope for the new
     iteration (marker poisoning)."""
-    _init_project(tmp_path)
+    _init_project(tmp_path, "continuous")
     stale = tmp_path / ".consensus" / "design-approved"
     stale.write_text("stale prior approval\n", encoding="utf-8")
     res = sc.start_consult("q", scope_glob="x.py", reviewers=["codex"], repo_root=tmp_path)
@@ -122,7 +138,7 @@ def test_start_consult_fails_closed_when_stale_marker_unclearable(tmp_path, monk
     """grok-rev-002: if a stale design-approved marker cannot be removed, start
     must FAIL CLOSED (not silently pass) so a poisoned prior-scope marker can't
     authorize edits under the new, unapproved consult."""
-    _init_project(tmp_path)
+    _init_project(tmp_path, "continuous")
     stale = tmp_path / ".consensus" / "design-approved"
     stale.write_text("stale\n", encoding="utf-8")
 

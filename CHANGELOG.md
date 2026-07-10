@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.4.0 - 2026-07-10
+
+**Consensus governance is explicitly per-project and opt-in.**
+
+- Added `governance.mode: on-demand|continuous`. Fresh projects and existing
+  configs without the field resolve to `on-demand`; missing, unreadable, or
+  invalid configuration always fails open rather than becoming consent to
+  enforcement.
+- In default on-demand mode, AIs must not invoke consensus without an explicit
+  user request. A requested consult scaffolds, dispatches, seals, and returns
+  results without creating edit gates, design-approval markers, or delivery
+  token obligations. Approval clears obsolete enforcement markers and leaves
+  consensus off until requested again.
+- Continuous proactive guidance and edit/delivery enforcement now require an
+  explicit per-project `governance.mode: continuous` setting. The consensus-mcp
+  repository declares this mode for its own dogfooding workflow.
+- Global Claude Code hooks are silent and fail open outside continuous projects,
+  including uninitialized projects, field-less legacy configs, malformed
+  configs, and projects containing stale session markers.
+- Managed `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and `GROK.md` blocks are now
+  mode-specific. The on-demand block explicitly forbids unsolicited consensus
+  invocation; init/repair refreshes stale managed wording.
+- Added `consensus-init --governance-mode on-demand|continuous` and regression
+  coverage across configuration, initialization, consult approval, markers,
+  and every hook surface.
+- Full validation: 2,353 tests passed and 10 skipped.
+
 ## 2.3.2 - 2026-07-09
 
 **Grok `Cancelled` streams with planning-text preambles.**

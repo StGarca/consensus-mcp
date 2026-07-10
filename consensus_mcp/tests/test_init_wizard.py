@@ -1198,3 +1198,26 @@ def test_prompt_architect_roles_scripted(monkeypatch):
     assert base["roles"] == {
         "architect": "claude", "builder": "codex", "reviewer": "codex"
     }
+def test_fresh_init_defaults_to_on_demand_governance(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "codex,gemini",
+        "--no-mcp-json", "--no-agents", "--no-instructions",
+    ])
+    assert rc == 0
+    loaded = cfg.load(tmp_path / ".consensus" / "config.yaml")
+    assert loaded["governance"]["mode"] == "on-demand"
+
+
+def test_init_accepts_explicit_continuous_governance(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rc = wiz.main([
+        "--non-interactive", "--accept-defaults",
+        "--contributors", "codex,gemini",
+        "--governance-mode", "continuous",
+        "--no-mcp-json", "--no-agents", "--no-instructions",
+    ])
+    assert rc == 0
+    loaded = cfg.load(tmp_path / ".consensus" / "config.yaml")
+    assert loaded["governance"]["mode"] == "continuous"

@@ -477,7 +477,18 @@ def main(argv=None) -> int:
 
     repo_root = _repo_root(event)
 
-    # PROTECTED-INSTALL tamper guard (ALWAYS-ON - fires BEFORE the opt-in check).
+    # Global installation is capability, not per-project consent. Every
+    # enforcement path, including protection of the installed hook surface,
+    # is dormant unless this project explicitly selected continuous governance.
+    from consensus_mcp._session_state import gate_should_enforce, emit_migration_warning_once
+    try:
+        emit_migration_warning_once(repo_root)
+    except Exception:
+        pass
+    if not gate_should_enforce(repo_root):
+        return 0
+
+    # PROTECTED-INSTALL tamper guard for continuous-governance projects.
     # consult iteration-gate-scope-design-2026-05-24 (codex+gemini+kimi): this hook is
     # GLOBAL, so an agent in ANY project - even one that never opted in - could write the
     # enforcement surface (~/.claude/settings.json or ~/.claude/hooks/consensus_*.py) and
@@ -513,18 +524,6 @@ def main(argv=None) -> int:
     #
     # PROTECTED-install paths are checked BEFORE this branch - that
     # enforcement floor stays unconditional regardless of activation.
-    from consensus_mcp._session_state import gate_should_enforce, emit_migration_warning_once
-    try:
-        emit_migration_warning_once(repo_root)
-    except Exception:
-        pass  # warning emission must NEVER block the gate
-    # Shared activation predicate (v1.33 gate-consistency fix) - the SAME
-    # gate_should_enforce() the Stop gate and SessionStart injector now use, so
-    # the three hooks cannot drift. GATE_DISABLE is already handled above (full
-    # operator escape hatch); this honors FORCE_OPTED_IN + session_active.
-    if not gate_should_enforce(repo_root):
-        return 0
-
     if tool in EDIT_TOOLS:
         file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         if not file_path:

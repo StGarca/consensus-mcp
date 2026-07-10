@@ -13,6 +13,39 @@ import yaml
 from consensus_mcp import config as cfg
 
 
+def test_governance_defaults_to_on_demand():
+    assert cfg.default_config()["governance"]["mode"] == cfg.GOVERNANCE_ON_DEMAND
+
+
+def test_fieldless_config_normalizes_to_on_demand():
+    normalized = cfg.normalize({"schema_version": 1})
+    assert normalized["governance"]["mode"] == cfg.GOVERNANCE_ON_DEMAND
+
+
+def test_invalid_governance_mode_is_rejected():
+    config = cfg.default_config()
+    config["governance"]["mode"] = "surprise-lockdown"
+    with pytest.raises(cfg.ConfigValidationError, match="governance.mode"):
+        cfg.validate(config)
+
+
+def test_governance_mode_resolution_fails_open(tmp_path):
+    assert cfg.resolve_governance_mode(tmp_path) == cfg.GOVERNANCE_ON_DEMAND
+    path = tmp_path / ".consensus" / "config.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text("not: [valid", encoding="utf-8")
+    assert cfg.resolve_governance_mode(tmp_path) == cfg.GOVERNANCE_ON_DEMAND
+
+
+def test_governance_mode_resolution_accepts_explicit_continuous(tmp_path):
+    config = cfg.default_config()
+    config["governance"]["mode"] = cfg.GOVERNANCE_CONTINUOUS
+    path = tmp_path / ".consensus" / "config.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    assert cfg.resolve_governance_mode(tmp_path) == cfg.GOVERNANCE_CONTINUOUS
+
+
 # ---------- defaults ----------
 
 def test_default_config_validates():
