@@ -27,7 +27,7 @@ USAGE
       [--mode {review,proposal}] \\
       [--schema <path>]                    # proposal-mode only \\
       [--gemini-bin <path>]                    # default: agy \\
-      [--model Gemini 3.1 Pro (High)] \\
+      [--model Gemini 3.5 Flash (Medium)] \\
       [--timeout-seconds 600] \\
       [--review-target <path>] \\
       [--smoke]
@@ -105,7 +105,7 @@ _BLOCKING_SEVERITIES = {"blocking", "critical"}
 
 # Default Antigravity/Gemini CLI binary and model. Operator can override via flags/config.
 _DEFAULT_GEMINI_BIN = "agy"
-_DEFAULT_GEMINI_MODEL = "Gemini 3.1 Pro (High)"
+_DEFAULT_GEMINI_MODEL = "Gemini 3.5 Flash (Medium)"
 
 
 class GeminiInvocationError(RuntimeError):
@@ -437,7 +437,7 @@ def _invoke_gemini(
             silence_age = now - start_ts
             silence_trigger_threshold = float(timeout_seconds)
 
-        if silence_age >= silence_trigger_threshold:
+        if silence_trigger_threshold > 0 and silence_age >= silence_trigger_threshold:
             _terminate_process_tree(proc)
             if can_log:
                 _log_dispatch(log_path, {
@@ -463,7 +463,7 @@ def _invoke_gemini(
                 })
             last_heartbeat = now
 
-        if now - start_ts >= timeout_seconds + stall_silence_seconds:
+        if timeout_seconds > 0 and now - start_ts >= timeout_seconds + max(stall_silence_seconds, 0):
             _terminate_process_tree(proc)
             if can_log:
                 _log_dispatch(log_path, {
@@ -761,6 +761,7 @@ def _invoke_gemini_with_retry(
     model: str,
     timeout_seconds: int,
     repo_root: Path,
+    stall_silence_seconds: float = 180.0,
     goal_packet: dict | None = None,
     log_path=None,
     anchors=None,
@@ -782,6 +783,7 @@ def _invoke_gemini_with_retry(
         model=model,
         timeout_seconds=timeout_seconds,
         repo_root=repo_root,
+        stall_silence_seconds=stall_silence_seconds,
         log_path=log_path,
         anchors=anchors,
     )
@@ -813,6 +815,7 @@ def _invoke_gemini_with_retry(
             model=model,
             timeout_seconds=timeout_seconds,
             repo_root=repo_root,
+            stall_silence_seconds=stall_silence_seconds,
             log_path=log_path,
             anchors=anchors,
         )
@@ -848,6 +851,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--gemini-bin", default=_DEFAULT_GEMINI_BIN)
     p.add_argument("--model", default=_DEFAULT_GEMINI_MODEL)
     p.add_argument("--timeout-seconds", type=int, default=600)
+    p.add_argument("--stall-silence-seconds", type=float, default=180.0,
+                   help="Seconds without output before abort; 0 disables the watchdog.")
     p.add_argument("--review-target", default=None)
     p.add_argument("--smoke", action="store_true",
                    help="Smoke mode: gated by CONSENSUS_MCP_RUN_REAL_GEMINI_SMOKE=1 env var")
@@ -1037,6 +1042,7 @@ def main(argv: list[str] | None = None) -> int:
             model=ns.model,
             timeout_seconds=ns.timeout_seconds,
             repo_root=repo_root,
+            stall_silence_seconds=ns.stall_silence_seconds,
             goal_packet=goal_packet,
             log_path=log_path,
             anchors={

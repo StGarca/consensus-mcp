@@ -355,6 +355,39 @@ def test_gemini_adapter_packet_options_override_config(tmp_path):
     assert "Gemini 3.1 Pro (High)" not in captured_argv
 
 
+def test_codex_adapter_forwards_model_and_effort(tmp_path):
+    iter_dir = tmp_path / "iter"
+    iter_dir.mkdir()
+    (iter_dir / "goal_packet.yaml").write_text("pilot: x\n", encoding="utf-8")
+    sealed = iter_dir / "codex-review.yaml"
+    sealed.write_text(yaml.safe_dump({"iteration_id": "iter", "findings": []}), encoding="utf-8")
+
+    captured_argv = []
+
+    def fake_main(argv):
+        captured_argv.extend(argv)
+        import json
+        print(json.dumps({"ok": True, "pass_id": "p1", "sealed_path": str(sealed),
+                          "archive_sealed_path": None, "packet_sha256": "deadbeef"}))
+        return 0
+
+    packet = DispatchPacket(
+        phase=PHASE_REVIEW, contributor="codex",
+        iteration_dir=iter_dir, goal_packet_path=iter_dir / "goal_packet.yaml",
+        review_target_path=None, reviewer_id=None, pass_id=None,
+        timeout_seconds=60, adapter_options=None,
+    )
+    adapter = CodexAdapter(adapter_config={
+        "model": "gpt-5.6-sol",
+        "effort": "low",
+    })
+    with patch("consensus_mcp._dispatch_codex.main", side_effect=fake_main):
+        adapter.dispatch(packet)
+
+    assert captured_argv[captured_argv.index("--model") + 1] == "gpt-5.6-sol"
+    assert captured_argv[captured_argv.index("--effort") + 1] == "low"
+
+
 def test_codex_adapter_raises_on_missing_sealed_path(tmp_path):
     """codex-rev-002 round-1 fix: missing sealed_path becomes DispatchError."""
     iter_dir = tmp_path / "iter"

@@ -59,6 +59,22 @@ class CodexAdapter(ContributorAdapter):
         if packet.review_target_path is not None:
             argv += ["--review-target", str(packet.review_target_path)]
 
+        merged_options = {}
+        merged_options.update(self.adapter_config or {})
+        merged_options.update(packet.adapter_options or {})
+        command = merged_options.get("command") or merged_options.get("codex_bin")
+        if command:
+            argv += ["--codex-bin", command]
+        model = merged_options.get("model")
+        if model:
+            argv += ["--model", model]
+        effort = merged_options.get("effort")
+        if effort:
+            argv += ["--effort", effort]
+        stall = merged_options.get("stall_silence_seconds")
+        if stall is not None:
+            argv += ["--stall-silence-seconds", str(stall)]
+
         from consensus_mcp import _dispatch_codex
 
         rc = 0

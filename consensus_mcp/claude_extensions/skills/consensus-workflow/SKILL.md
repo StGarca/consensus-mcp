@@ -58,6 +58,15 @@ candidate. Stop and route to a consult.
 
 ## Tier routing - cost-proportional rigor (operative)
 
+### Plain-language declarations
+
+The conversational interface is primary. When the operator says "quick
+consensus", "standard consensus", or "deep consensus" (including ordinary
+sentences such as "we are going nowhere - get a deep consensus"), that is the
+required explicit declaration. Route to the named tier and start the workflow;
+do not ask them to restate it as a CLI flag or MCP field. Flags and structured
+fields are automation interfaces, not prerequisites for AI-hosted use.
+
 **Match rigor to risk; don't apply the heavy path uniformly. The rigor tier is
 OPERATOR-DECLARED - never inferred** (heuristics are the shared-prior trap; the
 engine's `_goal_risk_class` already refuses to infer risk). At consult launch:
@@ -65,14 +74,14 @@ engine's `_goal_risk_class` already refuses to infer risk). At consult launch:
 1. **Operator DECLARES the tier** (`quick` / `standard` / `deep`) in the
    goal_packet. `consensus_mcp/_tier_router.effective_tier(declared_tier,
    touches_governance_surface=, security_or_irreversible=)` is the AUTHORITATIVE
-   router -> tier + preset (workflow A/B, panel size, path A/B). A missing/invalid
+   router -> tier + preset (workflow A/B, all-enabled panel policy, path A/B). A missing/invalid
    declaration RAISES - escalate, never default silently.
 2. **Optional, NON-BINDING suggestion:** `_tier_router.suggest_tier(...)` returns
    an advisory object (`advisory: True`, `suggested_tier`, reason) to help the
    operator decide. The engine NEVER routes on it. A picker surfacing it must NOT
    pre-fill / pre-select / default-on-timeout to it - the operator declares
    explicitly; log declared-vs-suggested so rubber-stamp rate is auditable.
-3. `_tier_router.estimate_cost(tier, median_dispatch_seconds=<from telemetry>)`
+3. `_tier_router.estimate_cost(tier, independent_reviewers=<enabled independent count>, median_dispatch_seconds=<from telemetry>)`
    -> n_dispatches + est wall-clock + token band. **Show this estimate before any
    dispatch.**
 4. **Sole automatic move - the MONOTONE governance safety floor:** a change

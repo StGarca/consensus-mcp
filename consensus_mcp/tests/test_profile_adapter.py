@@ -253,7 +253,7 @@ def test_stdin_transport_seal_provenance_accurate(tmp_path, monkeypatch):
     adapter.dispatch(_make_packet(tmp_path, "kimi"))
 
     prov = seal.packets[0]["dispatch_provenance"]
-    assert prov["model"] == "K2.7 Code High Speed"
+    assert prov["model"] == "kimi (CLI-configured default)"
     assert prov["adapter"] == "profile"
     assert prov["contributor"] == "kimi"
     assert prov["bin"] == "kimi"

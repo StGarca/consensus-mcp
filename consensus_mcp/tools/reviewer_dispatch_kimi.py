@@ -57,7 +57,7 @@ SCHEMA = {
             },
             "model": {
                 "type": ["string", "null"],
-                "description": "Kimi model passed via --model; default K2.7 Code High Speed.",
+                "description": "Optional Kimi model override; defaults to the user's configured CLI model.",
             },
             "timeout_seconds": {
                 "type": ["integer", "null"],

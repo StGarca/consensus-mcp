@@ -9,7 +9,7 @@ v1.14.0; the schema and parser enforce this. Patch authoring parity is
 deferred to iter-0013 capability metadata.
 
 The MCP surface exposes `--model` (gemini's CLI flag for model selection)
-because operators may reasonably want to pick between Gemini 3.1 Pro (High) (default)
+because operators may reasonably want to pick between Gemini 3.5 Flash (Medium) (default)
 and lighter/cheaper variants per dispatch.
 """
 from __future__ import annotations
@@ -62,7 +62,7 @@ SCHEMA = {
             },
             "model": {
                 "type": ["string", "null"],
-                "description": "Gemini model identifier; defaults to Gemini 3.1 Pro (High).",
+                "description": "Gemini model identifier; defaults to Gemini 3.5 Flash (Medium).",
             },
             "smoke": {
                 "type": ["boolean", "null"],

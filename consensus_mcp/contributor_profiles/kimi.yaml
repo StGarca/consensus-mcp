@@ -13,7 +13,8 @@
 #   stdin transport (NOT -p), --quiet --thinking, -w sets workdir for project ctx.
 name: kimi
 kind: cli_reviewer
-model: "K2.7 Code High Speed"
+model: "kimi (CLI-configured default)"
+effort: medium
 detect:
   command: kimi
 invoke:

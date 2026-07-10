@@ -48,7 +48,7 @@ class KimiAdapter(ContributorAdapter):
             argv += ["--review-target", str(packet.review_target_path)]
 
         # Merge precedence: adapter_config < packet.adapter_options, matching
-        # Gemini/Grok adapters. Lets project config pin kimi + K2.7 Code High Speed.
+        # Gemini/Grok adapters. Project config may optionally pin a Kimi model.
         merged_options = {}
         merged_options.update(self.adapter_config or {})
         merged_options.update(packet.adapter_options or {})
@@ -58,6 +58,11 @@ class KimiAdapter(ContributorAdapter):
         model = merged_options.get("model")
         if model:
             argv += ["--model", model]
+        if "thinking" in merged_options:
+            argv += ["--thinking" if merged_options["thinking"] else "--no-thinking"]
+        stall = merged_options.get("stall_silence_seconds")
+        if stall is not None:
+            argv += ["--stall-silence-seconds", str(stall)]
 
         from consensus_mcp import _dispatch_kimi
 

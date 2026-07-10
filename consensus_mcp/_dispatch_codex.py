@@ -103,6 +103,16 @@ def _codex_subprocess_env() -> dict:
     return scrub_env_keys(os.environ.copy(), CODEX_SCRUBBED_ENV_KEYS)
 
 
+def _effective_stall_silence(default: float = 180.0) -> float:
+    value = os.environ.get("CONSENSUS_MCP_STALL_SILENCE_SECONDS")
+    if value:
+        try:
+            return float(value)
+        except ValueError:
+            pass
+    return default
+
+
 def _validate_patch_proposal(
     finding_index: int,
     finding_id: str,
@@ -145,6 +155,8 @@ _REQUIRED_FINDING_FIELDS = ("id", "severity", "summary", "citation", "risk", "re
 _ALLOWED_FINDING_KEYS = set(_REQUIRED_FINDING_FIELDS) | {"patch_proposal", "patch_not_proposed_reason"}
 _ALLOWED_TOP_LEVEL_KEYS = {"findings", "goal_satisfied", "blocking_objections", "goal_satisfied_rationale"}
 _BLOCKING_SEVERITIES = {"blocking", "critical"}
+_DEFAULT_CODEX_MODEL = "gpt-5.6-sol"
+_DEFAULT_CODEX_EFFORT = "low"
 
 # iter-0010: patch_proposal validation constants moved to _dispatch_base.py
 # and re-imported above (per iter-0010 codex-rev-001 blocking finding).
@@ -302,6 +314,8 @@ def _invoke_codex(
     timeout_seconds: int,
     repo_root: Path,
     schema_path: Path,
+    model: str = _DEFAULT_CODEX_MODEL,
+    effort: str = _DEFAULT_CODEX_EFFORT,
     log_path=None,
     anchors=None,
     heartbeat_interval: float = 30.0,
@@ -357,19 +371,14 @@ def _invoke_codex(
     # silence threshold so operators with large prompts / slow models can
     # extend without code change. Codex cold-start on 50KB+ prompts often
     # exceeds the 180s default.
-    env_silence = os.environ.get("CONSENSUS_MCP_STALL_SILENCE_SECONDS")
-    if env_silence:
-        try:
-            stall_silence_seconds = float(env_silence)
-        except ValueError:
-            pass  # keep default
-
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
         out_file = tmp.name
     try:
         cmd = [
             _resolve_codex_bin(codex_bin),
             "exec",
+            "--model", model,
+            "-c", f'model_reasoning_effort="{effort}"',
             "--skip-git-repo-check",
             "--cd", str(repo_root),
             "--sandbox", "read-only",
@@ -516,7 +525,7 @@ def _invoke_codex(
                 # Pre-first-line silence: same threshold as post-first-line.
                 silence_trigger_threshold = stall_silence_seconds
 
-            if silence_age >= silence_trigger_threshold:
+            if silence_trigger_threshold > 0 and silence_age >= silence_trigger_threshold:
                 _terminate_process_tree(proc)
                 if can_log:
                     _log_dispatch(log_path, {
@@ -547,7 +556,7 @@ def _invoke_codex(
             # terminate per operator preference; heartbeat-silence is the only
             # auto-killer. But we cannot wait forever - raise after wall_time
             # + grace if codex is somehow streaming-but-runaway).
-            if now - start_ts >= timeout_seconds + stall_silence_seconds:
+            if timeout_seconds > 0 and now - start_ts >= timeout_seconds + max(stall_silence_seconds, 0):
                 # Hard ceiling reached. Tree-terminate to avoid zombie + raise.
                 _terminate_process_tree(proc)
                 if can_log:
@@ -930,7 +939,13 @@ def main(argv: list[str] | None = None) -> int:
                          "+ schema for design-consult / workflow #4 proposal tasks. "
                          "--prompt-template and --schema overrides take precedence over --mode."))
     p.add_argument("--codex-bin", default="codex")
+    p.add_argument("--model", default=_DEFAULT_CODEX_MODEL)
+    p.add_argument("--effort", default=_DEFAULT_CODEX_EFFORT,
+                   choices=["low", "medium", "high", "xhigh"])
     p.add_argument("--timeout-seconds", type=int, default=600)
+    p.add_argument("--stall-silence-seconds", type=float,
+                   default=_effective_stall_silence(),
+                   help="Seconds without output before abort; 0 disables the watchdog.")
     p.add_argument("--review-target", default=None,
                    help="Optional path to a file containing the review input "
                         "(diff, patch, etc.); helper computes sha256 and "
@@ -1056,6 +1071,8 @@ def main(argv: list[str] | None = None) -> int:
         "smoke": ns.smoke,
         "timeout_seconds": ns.timeout_seconds,
         "codex_bin": ns.codex_bin,
+        "model": ns.model,
+        "effort": ns.effort,
         "schema_path": str(schema_path),
         # v1.10.5: visibility TUI / stall watchdog read this to display what
         # the current dispatch is reviewing. Hash isn't available yet (file
@@ -1108,6 +1125,8 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=ns.timeout_seconds,
             extra_fields={
                 "codex_version": codex_version,
+                "model": ns.model,
+                "effort": ns.effort,
                 "prompt_sha256": prompt_sha,
                 "output_sha256": output_sha,
                 "schema_sha256": schema_sha,
@@ -1173,6 +1192,9 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=ns.timeout_seconds,
             repo_root=repo_root,
             schema_path=schema_path,
+            model=ns.model,
+            effort=ns.effort,
+            stall_silence_seconds=ns.stall_silence_seconds,
             # iter-0037: pass log_path + anchors so streaming events + heartbeats
             # + abort-signal-file polling fire. Tests that don't supply these
             # operate in legacy mode (subprocess.run-compat, no streaming events).
@@ -1213,6 +1235,8 @@ def main(argv: list[str] | None = None) -> int:
         # top; hash was computed at line ~1340 after reading review_target.)
         provenance = {
             "codex_version": codex_version,
+            "model": ns.model,
+            "effort": ns.effort,
             "prompt_sha256": prompt_sha,
             "output_sha256": output_sha,
             "schema_sha256": schema_sha,
@@ -1243,6 +1267,8 @@ def main(argv: list[str] | None = None) -> int:
         "reviewer_id": reviewer_id,
         "pass_id": pass_id,
         "codex_version": codex_version,
+        "model": ns.model,
+        "effort": ns.effort,
         "timeout_seconds": ns.timeout_seconds,
         "exit_code": 0,
         "prompt_sha256": prompt_sha,
@@ -1267,4 +1293,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

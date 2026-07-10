@@ -6,6 +6,7 @@
 # Therefore detect / invoke / install / auth are intentionally absent.
 name: claude
 kind: host
-model: "claude (host orchestrator)"
+model: "claude-fable-5"
+effort: low
 instructions:
   filename: CLAUDE.md

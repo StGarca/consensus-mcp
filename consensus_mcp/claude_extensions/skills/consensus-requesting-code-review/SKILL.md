@@ -36,10 +36,10 @@ Prepare the git-range diff for the reviewers. The diff `BASE_SHA..HEAD_SHA` plus
 
 **2. Invoke consensus Workflow B - dispatch cross-family reviewers:**
 
-> **Invoke consensus Workflow B: dispatch cross-family reviewers (`reviewer_dispatch_codex`, and gemini/kimi per panel size); the sealed cross-family audit IS the review, not a single-Claude pass.**
+> **Invoke consensus Workflow B: dispatch every enabled cross-family reviewer; the sealed cross-family audit IS the review, not a single-Claude pass.**
 
 - Always dispatch `reviewer_dispatch_codex` (the cross-family anchor).
-- Add `reviewer_dispatch_gemini` and the kimi reviewer per the configured panel size (see consensus-workflow for panel sizing).
+- Dispatch every enabled reviewer (minimum two independent providers; see consensus-workflow).
 - Each reviewer receives: a brief description of what you built, the plan/requirements it should satisfy, and the `BASE_SHA..HEAD_SHA` diff. They do NOT receive your session history.
 - The reviewers' findings are sealed (post-seal) into the consensus review record. That sealed cross-family audit is the review of record.
 
@@ -66,7 +66,7 @@ You: Let me request a consensus Workflow B cross-family review before proceeding
 BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
 HEAD_SHA=$(git rev-parse HEAD)
 
-[Invoke Workflow B: reviewer_dispatch_codex (+ gemini/kimi per panel size)]
+[Invoke Workflow B with every enabled independent reviewer]
   DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
   PLAN_OR_REQUIREMENTS: Task 2 from docs/consensus/plans/deployment-plan.md
   BASE_SHA: a7981ec

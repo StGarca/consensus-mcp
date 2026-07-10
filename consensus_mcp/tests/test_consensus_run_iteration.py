@@ -12,6 +12,24 @@ from consensus_mcp import config as cfg
 from consensus_mcp.tools import consensus_run_iteration as tool
 
 
+_tool_module = tool
+
+
+class _ToolProxy:
+    SCHEMA = _tool_module.SCHEMA
+
+    def __getattr__(self, name):
+        return getattr(_tool_module, name)
+
+    @staticmethod
+    def handle(**kwargs):
+        kwargs.setdefault("rigor_tier", "standard")
+        return _tool_module.handle(**kwargs)
+
+
+tool = _ToolProxy()
+
+
 def _make_iter_dir(tmp_path: Path) -> tuple[Path, Path, Path]:
     iter_dir = tmp_path / "iteration-test"
     iter_dir.mkdir()
@@ -141,6 +159,45 @@ def test_run_iteration_block_vote_fails_convergence(tmp_path, monkeypatch):
 
 
 # ---------- error paths ----------
+
+def test_deep_tier_requires_orchestrator_path_when_claude_is_enabled(tmp_path):
+    _write_config(
+        tmp_path,
+        contributors=["claude", "codex", "gemini", "grok"],
+    )
+    iter_dir, goal, target = _make_iter_dir(tmp_path)
+    claude_yaml = yaml.safe_dump({
+        "findings": [], "goal_satisfied": True, "blocking_objections": [],
+    })
+    result = tool.handle(
+        iteration_dir=str(iter_dir),
+        goal_packet_path=str(goal),
+        target_path=str(target),
+        claude_proposal_yaml=claude_yaml,
+        repo_root=str(tmp_path),
+        rigor_tier="deep",
+    )
+    assert result["ok"] is False
+    assert result["error_type"] == "OrchestratorPathRequiredError"
+    assert result["model_settings"]["grok"] == {
+        "model": "grok-4.5", "effort": "max",
+    }
+
+
+def test_schema_exposes_operator_declared_rigor_tier():
+    prop = tool.SCHEMA["input_schema"]["properties"]["rigor_tier"]
+    assert prop["enum"] == ["quick", "standard", "deep"]
+    assert "rigor_tier" in tool.SCHEMA["input_schema"]["required"]
+
+
+def test_handle_rejects_missing_rigor_tier():
+    result = _tool_module.handle(
+        iteration_dir="unused",
+        goal_packet_path="unused",
+        target_path="unused",
+    )
+    assert result["error_type"] == "MissingRigorTierError"
+
 
 def test_run_iteration_missing_config_uses_legacy(tmp_path, monkeypatch):
     """No .consensus/config.yaml -> falls back to legacy-mode synthesis.

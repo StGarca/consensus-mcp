@@ -20,6 +20,22 @@ def test_default_config_validates():
     cfg.validate(cfg.default_config())
 
 
+def test_default_reviewer_models_and_effort():
+    adapters = cfg.default_config()["contributors"]["adapters"]
+    assert (adapters["codex"]["model"], adapters["codex"]["effort"]) == (
+        "gpt-5.6-sol", "low",
+    )
+    assert (adapters["claude"]["model"], adapters["claude"]["effort"]) == (
+        "claude-fable-5", "low",
+    )
+    assert "model" not in adapters["kimi"]
+    assert adapters["kimi"]["effort"] == "medium"
+    assert adapters["gemini"]["model"] == "Gemini 3.5 Flash (Medium)"
+    assert (adapters["grok"]["model"], adapters["grok"]["effort"]) == (
+        "grok-4.5", "medium",
+    )
+
+
 def test_default_workflow_is_propose_converge():
     """Per converged-plan: default mode is propose-converge when >=2 contributors."""
     assert cfg.default_config()["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE

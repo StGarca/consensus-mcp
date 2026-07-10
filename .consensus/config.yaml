@@ -16,32 +16,36 @@ contributors:
   adapters:
     claude:
       role: orchestrator
+      model: claude-fable-5
+      effort: low
       can_propose: true
       can_review: true
       can_converge: true
     codex:
       command: codex
-      model: gpt-5.5
+      model: gpt-5.6-sol
+      effort: low
       sandbox_mode: read-only
       can_propose: true
       can_review: true
       can_converge: true
     gemini:
       command: agy
-      model: Gemini 3.1 Pro (High)
+      model: Gemini 3.5 Flash (Medium)
       approval_mode: plan
       can_propose: true
       can_review: true
       can_converge: true
     grok:
       command: grok
-      model: Grok Build
+      model: grok-4.5
+      effort: medium
       can_propose: true
       can_review: true
       can_converge: true
     kimi:
       command: kimi
-      model: K2.7 Code High Speed
+      effort: medium
       can_propose: true
       can_review: true
       can_converge: true

@@ -255,6 +255,9 @@ class WorkflowEngine:
         engine dispatches them sequentially within this synchronous loop,
         but they're independent of each other)."""
         enabled = self.config["contributors"]["enabled"]
+        timeout_seconds = self.config.get("defaults", {}).get(
+            "iteration_timeout_seconds", 600,
+        )
         # Dispatch all non-claude contributors with review packets IN PARALLEL
         # (consult-ratified). claude is the orchestrator/author, not a reviewer
         # here. Results come back in non_claude order; the outcome mutation +
@@ -264,7 +267,8 @@ class WorkflowEngine:
         results = _dispatch_phase_parallel(
             non_claude,
             lambda c: self.adapters[c].review(
-                iteration_dir, goal_packet_path, target_path
+                iteration_dir, goal_packet_path, target_path,
+                timeout_seconds=timeout_seconds,
             ),
             max_workers=_max_dispatch_workers(),
         )
@@ -322,6 +326,9 @@ class WorkflowEngine:
             )
         enabled = self.config["contributors"]["enabled"]
         max_rounds = self.config["workflow"]["max_convergence_rounds"]
+        timeout_seconds = self.config.get("defaults", {}).get(
+            "iteration_timeout_seconds", 600,
+        )
 
         # Phase 1: blind proposals dispatched IN PARALLEL (consult-ratified).
         # Contributors don't see each other's outputs (input is just the problem
@@ -331,7 +338,8 @@ class WorkflowEngine:
         prop_results = _dispatch_phase_parallel(
             enabled,
             lambda c: self.adapters[c].propose(
-                iteration_dir, goal_packet_path, problem_statement_path
+                iteration_dir, goal_packet_path, problem_statement_path,
+                timeout_seconds=timeout_seconds,
             ),
             max_workers=_max_dispatch_workers(),
         )
@@ -368,6 +376,7 @@ class WorkflowEngine:
                 lambda c: self.adapters[c].converge(
                     iteration_dir, goal_packet_path,
                     convergence_packet_path, round_number=round_n,
+                    timeout_seconds=timeout_seconds,
                 ),
                 max_workers=_max_dispatch_workers(),
             )
@@ -421,11 +430,17 @@ class WorkflowEngine:
         consumes the outcome and makes the final call externally.
         """
         enabled = self.config["contributors"]["enabled"]
+        timeout_seconds = self.config.get("defaults", {}).get(
+            "iteration_timeout_seconds", 600,
+        )
         artifacts: list[SealedArtifact] = []
         for c in enabled:
             adapter = self.adapters[c]
             try:
-                art = adapter.review(iteration_dir, goal_packet_path, target_path)
+                art = adapter.review(
+                    iteration_dir, goal_packet_path, target_path,
+                    timeout_seconds=timeout_seconds,
+                )
             except DispatchError as exc:
                 self._record_timed_out(c, exc, outcome)
                 continue

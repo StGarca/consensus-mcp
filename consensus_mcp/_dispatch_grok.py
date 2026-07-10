@@ -113,17 +113,14 @@ _ALLOWED_FINDING_KEYS = set(_REQUIRED_FINDING_FIELDS) | {"patch_proposal", "patc
 _ALLOWED_TOP_LEVEL_KEYS = {"findings", "goal_satisfied", "blocking_objections", "goal_satisfied_rationale"}
 _BLOCKING_SEVERITIES = {"blocking", "critical"}
 
-# Default Grok model for this consensus workflow. `grok models` displays
-# this as "Grok Build" and exposes the CLI id as `grok-build`; dispatch
-# preserves the display label in config/provenance and normalizes for argv.
-_DEFAULT_GROK_MODEL: str | None = "Grok Build"
-_GROK_MODEL_ID_BY_DISPLAY = {"Grok Build": "grok-build"}
+# Verified with `grok models` on grok CLI 0.2.60.
+_DEFAULT_GROK_MODEL: str | None = "grok-4.5"
+_DEFAULT_GROK_EFFORT = "medium"
+_GROK_MODEL_ALIASES = {"Grok Build": "grok-4.5"}
 
 
 def _resolve_grok_model(model: str | None) -> str | None:
-    if model is None:
-        return None
-    return _GROK_MODEL_ID_BY_DISPLAY.get(model, model)
+    return _GROK_MODEL_ALIASES.get(model, model)
 
 # Independence flag set passed on every invocation. Codified to the
 # operator-verified 2026-05-27 working shape (iter-0045 panel: codex
@@ -290,6 +287,7 @@ def _build_grok_cmd(
     model: str | None,
     run_cwd: str = "/tmp",
     prompt_file: "Path | None" = None,
+    effort: str | None = _DEFAULT_GROK_EFFORT,
 ) -> list[str]:
     """Construct the grok CLI command list for a dispatch.
 
@@ -344,6 +342,8 @@ def _build_grok_cmd(
     cmd.extend(["--cwd", run_cwd])
     if model:
         cmd.extend(["--model", _resolve_grok_model(model)])
+    if effort:
+        cmd.extend(["--effort", effort])
     return cmd
 
 
@@ -355,6 +355,7 @@ def _invoke_grok(
     iter_dir: Path,
     pass_id: str,
     repo_root: Path,
+    effort: str | None = _DEFAULT_GROK_EFFORT,
     log_path=None,
     anchors=None,
     heartbeat_interval: float = 30.0,
@@ -383,6 +384,7 @@ def _invoke_grok(
             prompt=prompt,
             grok_bin=grok_bin,
             model=model,
+            effort=effort,
             timeout_seconds=timeout_seconds,
             iter_dir=iter_dir,
             pass_id=pass_id,
@@ -410,6 +412,7 @@ def _invoke_grok_in_cwd(
     iter_dir: Path,
     pass_id: str,
     repo_root: Path,
+    effort: str | None = _DEFAULT_GROK_EFFORT,
     log_path=None,
     anchors=None,
     heartbeat_interval: float = 30.0,
@@ -449,8 +452,10 @@ def _invoke_grok_in_cwd(
     # (prompt_sha256 in dispatch_log + dispatch_provenance), but grok
     # itself receives the prompt inline via `-p` (iter-0045 shape).
     prompt_path = _write_per_pass_prompt(prompt, iter_dir, pass_id)
-    cmd = _build_grok_cmd(grok_bin, prompt, model, run_cwd=grok_run_cwd,
-                          prompt_file=prompt_path)
+    cmd = _build_grok_cmd(
+        grok_bin, prompt, model, run_cwd=grok_run_cwd,
+        prompt_file=prompt_path, effort=effort,
+    )
 
     if sys.platform == "win32":
         popen_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -558,7 +563,7 @@ def _invoke_grok_in_cwd(
             silence_age = now - start_ts
             silence_trigger_threshold = float(timeout_seconds)
 
-        if silence_age >= silence_trigger_threshold:
+        if silence_trigger_threshold > 0 and silence_age >= silence_trigger_threshold:
             _terminate_process_tree(proc)
             if can_log:
                 _log_dispatch(log_path, {
@@ -584,7 +589,7 @@ def _invoke_grok_in_cwd(
                 })
             last_heartbeat = now
 
-        if now - start_ts >= timeout_seconds + stall_silence_seconds:
+        if timeout_seconds > 0 and now - start_ts >= timeout_seconds + max(stall_silence_seconds, 0):
             _terminate_process_tree(proc)
             if can_log:
                 _log_dispatch(log_path, {
@@ -697,7 +702,7 @@ def _assemble_grok_stream(raw: str) -> str:
     if not saw_event:
         return raw
     if stop_reason == "Cancelled" and not saw_text:
-        # Grok Build sometimes emits the schema-shaped JSON in `thought`
+        # Grok can emit the schema-shaped JSON in `thought`
         # chunks and then terminates with stopReason=Cancelled, leaving zero
         # `text` chunks. Do not seal raw thought prose; only recover a
         # syntactically valid JSON object substring. If no JSON object is
@@ -750,7 +755,7 @@ def _build_grok_cancel_retry_prompt(
 ) -> str:
     """Build a short single-focus proposal prompt after Grok self-cancels.
 
-    The full proposal template is intentionally rich, but Grok Build can
+    The full proposal template is intentionally rich, but Grok can
     self-cancel with zero text on large/open-ended prompts.  The recovery path
     keeps the same goal and review target, strips nonessential mandates, and
     asks for the exact proposal JSON only.  Keep this under the smallest inline
@@ -780,7 +785,7 @@ def _build_grok_cancel_retry_prompt(
         max(4 * 1024, _GROK_INLINE_PROMPT_MAX_BYTES - 8 * 1024),
     )
     target_excerpt = _truncate_middle(review_target_text or "(not provided)", target_budget)
-    prompt = f"""You are Grok Build acting as one independent contributor in a consensus-mcp design consult.
+    prompt = f"""You are Grok 4.5 acting as one independent contributor in a consensus-mcp design consult.
 Your previous full proposal prompt self-cancelled before producing text. Retry with this shorter single-focus prompt.
 
 Task: produce ONE design proposal. This is not a code review.
@@ -1032,6 +1037,8 @@ def _invoke_grok_with_retry(
     iter_dir: Path,
     pass_id: str,
     repo_root: Path,
+    effort: str | None = _DEFAULT_GROK_EFFORT,
+    stall_silence_seconds: float = 180.0,
     goal_packet: dict | None = None,
     log_path=None,
     anchors=None,
@@ -1052,6 +1059,8 @@ def _invoke_grok_with_retry(
             prompt=prompt,
             grok_bin=grok_bin,
             model=model,
+            effort=effort,
+            stall_silence_seconds=stall_silence_seconds,
             timeout_seconds=timeout_seconds,
             iter_dir=iter_dir,
             pass_id=pass_id,
@@ -1074,6 +1083,8 @@ def _invoke_grok_with_retry(
             prompt=cancel_retry_prompt,
             grok_bin=grok_bin,
             model=model,
+            effort=effort,
+            stall_silence_seconds=stall_silence_seconds,
             timeout_seconds=timeout_seconds,
             iter_dir=iter_dir,
             pass_id=retry_pass_id,
@@ -1107,6 +1118,8 @@ def _invoke_grok_with_retry(
             prompt=retry_prompt,
             grok_bin=grok_bin,
             model=model,
+            effort=effort,
+            stall_silence_seconds=stall_silence_seconds,
             timeout_seconds=timeout_seconds,
             iter_dir=iter_dir,
             pass_id=retry_pass_id,
@@ -1142,9 +1155,12 @@ def main(argv: list[str] | None = None) -> int:
                          "dispatch_templates/grok_proposal_schema.json."))
     p.add_argument("--grok-bin", default="grok")
     p.add_argument("--model", default=_DEFAULT_GROK_MODEL,
-                   help=("Grok model; default 'Grok Build' (normalized to CLI id "
-                         "grok-build when invoking grok)."))
+                   help="Grok model; defaults to grok-4.5.")
+    p.add_argument("--effort", default=_DEFAULT_GROK_EFFORT,
+                   choices=["low", "medium", "high", "xhigh", "max"])
     p.add_argument("--timeout-seconds", type=int, default=600)
+    p.add_argument("--stall-silence-seconds", type=float, default=180.0,
+                   help="Seconds without output before abort; 0 disables the watchdog.")
     p.add_argument("--review-target", default=None)
     p.add_argument("--smoke", action="store_true",
                    help="Smoke mode: gated by CONSENSUS_MCP_RUN_REAL_GROK_SMOKE=1 env var")
@@ -1237,6 +1253,7 @@ def main(argv: list[str] | None = None) -> int:
         "timeout_seconds": ns.timeout_seconds,
         "grok_bin": ns.grok_bin,
         "model": ns.model,
+        "effort": ns.effort,
         "review_target_path": review_target_path_str,
         "adapter": "grok",
         "disabled_tools": list(_GROK_DISABLED_TOOLS),
@@ -1265,6 +1282,7 @@ def main(argv: list[str] | None = None) -> int:
                 "disabled_tools": list(_GROK_DISABLED_TOOLS),
                 "grok_version": grok_version,
                 "model": ns.model,
+                "effort": ns.effort,
                 "prompt_sha256": prompt_sha,
                 "output_sha256": output_sha,
                 "goal_packet_sha256": goal_packet_sha,
@@ -1327,6 +1345,8 @@ def main(argv: list[str] | None = None) -> int:
             prompt=prompt,
             grok_bin=ns.grok_bin,
             model=ns.model,
+            effort=ns.effort,
+            stall_silence_seconds=ns.stall_silence_seconds,
             timeout_seconds=ns.timeout_seconds,
             iter_dir=iter_dir,
             pass_id=pass_id,
@@ -1362,6 +1382,7 @@ def main(argv: list[str] | None = None) -> int:
         provenance = {
             "grok_version": grok_version,
             "model": ns.model,
+            "effort": ns.effort,
             "prompt_sha256": prompt_sha,
             "output_sha256": output_sha,
             "goal_packet_sha256": goal_packet_sha,
@@ -1407,6 +1428,7 @@ def main(argv: list[str] | None = None) -> int:
         "pass_id": pass_id,
         "grok_version": grok_version,
         "model": ns.model,
+        "effort": ns.effort,
         "timeout_seconds": ns.timeout_seconds,
         "exit_code": 0,
         "prompt_sha256": prompt_sha,

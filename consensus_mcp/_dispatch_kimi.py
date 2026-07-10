@@ -140,7 +140,7 @@ _DEFAULT_TIMEOUT_SECONDS = 1800
 _KIMI_RETRYABLE_EXIT = 75
 
 _DEFAULT_KIMI_BIN = "kimi"
-_DEFAULT_KIMI_MODEL = "K2.7 Code High Speed"
+_DEFAULT_KIMI_MODEL: str | None = None
 _KIMI_MODEL_ID_BY_DISPLAY = {"K2.7 Code High Speed": "kimi-code/kimi-for-coding"}
 _KIMI_CODE_INLINE_PROMPT_MAX_BYTES = (28 * 1024) if sys.platform == "win32" else (96 * 1024)
 
@@ -840,6 +840,7 @@ def _invoke_kimi(
     timeout_seconds: int,
     repo_root: Path,
     model: str | None = None,
+    thinking: bool = True,
     log_path=None,
     anchors=None,
     heartbeat_interval: float = 30.0,
@@ -884,8 +885,6 @@ def _invoke_kimi(
         popen_factory = subprocess.Popen
     can_log = log_path is not None and anchors is not None
 
-    stall_silence_seconds = _effective_stall_silence(stall_silence_seconds)
-
     resolved_kimi_bin = _resolve_kimi_bin(kimi_bin)
     use_kimi_code = _is_kimi_code_cli(resolved_kimi_bin)
     if use_kimi_code:
@@ -907,7 +906,7 @@ def _invoke_kimi(
         cmd = [
             resolved_kimi_bin,
             "--quiet",
-            "--thinking",
+            "--thinking" if thinking else "--no-thinking",
         ]
         if model:
             cmd += ["--model", _resolve_kimi_model(model)]
@@ -1043,7 +1042,7 @@ def _invoke_kimi(
             silence_age = now - start_ts
             silence_trigger_threshold = float(timeout_seconds) + stall_silence_seconds
 
-        if silence_age >= silence_trigger_threshold:
+        if silence_trigger_threshold > 0 and silence_age >= silence_trigger_threshold:
             _terminate_process_tree(proc)
             if can_log:
                 _log_dispatch(log_path, {
@@ -1069,7 +1068,7 @@ def _invoke_kimi(
                 })
             last_heartbeat = now
 
-        if now - start_ts >= timeout_seconds + stall_silence_seconds:
+        if timeout_seconds > 0 and now - start_ts >= timeout_seconds + max(stall_silence_seconds, 0):
             _terminate_process_tree(proc)
             if can_log:
                 _log_dispatch(log_path, {
@@ -1353,6 +1352,8 @@ def _invoke_kimi_with_retry(
     timeout_seconds: int,
     repo_root: Path,
     model: str | None = None,
+    thinking: bool = True,
+    stall_silence_seconds: float = _DEFAULT_STALL_SILENCE_SECONDS,
     log_path=None,
     anchors=None,
     mode: str = "review",
@@ -1375,6 +1376,8 @@ def _invoke_kimi_with_retry(
             timeout_seconds=timeout_seconds,
             repo_root=repo_root,
             model=model,
+            thinking=thinking,
+            stall_silence_seconds=stall_silence_seconds,
             log_path=log_path,
             anchors=anchors,
         )
@@ -1475,9 +1478,13 @@ def main(argv: list[str] | None = None) -> int:
                          "(shared proposal schema)."))
     p.add_argument("--kimi-bin", default=_DEFAULT_KIMI_BIN)
     p.add_argument("--model", default=_DEFAULT_KIMI_MODEL,
-                   help=("Kimi model; default 'K2.7 Code High Speed' "
-                        "(normalized to configured CLI key kimi-code/kimi-for-coding)."))
+                   help="Kimi model override; defaults to the user's configured CLI model.")
+    p.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=True,
+                   help="Enable or disable Kimi thinking when supported.")
     p.add_argument("--timeout-seconds", type=int, default=_DEFAULT_TIMEOUT_SECONDS)
+    p.add_argument("--stall-silence-seconds", type=float,
+                   default=_effective_stall_silence(),
+                   help="Seconds without output before abort; 0 disables the watchdog.")
     p.add_argument("--review-target", default=None)
     p.add_argument("--smoke", action="store_true",
                    help="Smoke mode: gated by CONSENSUS_MCP_RUN_REAL_KIMI_SMOKE=1 env var")
@@ -1703,6 +1710,8 @@ def main(argv: list[str] | None = None) -> int:
                 timeout_seconds=ns.timeout_seconds,
                 repo_root=effective_workdir,
                 model=ns.model,
+                thinking=ns.thinking,
+                stall_silence_seconds=ns.stall_silence_seconds,
                 log_path=log_path,
                 anchors={
                     "iteration_id": iteration_id,

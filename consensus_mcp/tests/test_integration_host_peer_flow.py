@@ -326,6 +326,7 @@ def test_e2e_host_peer_activation_seals_gate_eligible_false(tmp_path, monkeypatc
         target_path=str(target),
         host_peer_review_yaml=hp_yaml,
         repo_root=str(tmp_path),
+        rigor_tier="standard",
     )
     assert result["ok"] is True, result.get("error")
 
@@ -370,6 +371,7 @@ def test_e2e_host_peer_soft_skip_when_no_review_yaml(tmp_path, monkeypatch):
         target_path=str(target),
         # host_peer_review_yaml deliberately omitted.
         repo_root=str(tmp_path),
+        rigor_tier="standard",
     )
     assert result["ok"] is True, result.get("error")
     # Soft-skip note names the profile; no host-peer artifact was sealed.

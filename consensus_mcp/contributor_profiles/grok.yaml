@@ -26,7 +26,8 @@
 #   ~/.grok/auth.json (mode 600).
 name: grok
 kind: cli_reviewer
-model: "Grok Build"  # normalized to CLI id grok-build when invoking grok
+model: "grok-4.5"
+effort: medium
 detect:
   command: grok
 invoke:

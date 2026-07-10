@@ -1,5 +1,47 @@
 # Changelog
 
+## 2.3.0 - 2026-07-09
+
+**Frontier-model rigor tiers and provider-count-independent consensus.**
+
+- Added executable `quick`, `standard`, and `deep` rigor tiers. Tiers control
+  model effort and convergence depth, not panel membership: every tier uses
+  all enabled independent providers with a minimum of two.
+- Added the hard-problem `deep` preset with two convergence rounds and current
+  provider settings: GPT 5.6 Sol (`xhigh`), Claude Fable 5 (`max`), Gemini 3.5
+  Flash (`High`), Grok 4.5 (`max`), and the user's authenticated Kimi default
+  with thinking enabled.
+- Added `--rigor-tier` to `consensus-mcp-run-iteration` and `rigor_tier` to the
+  `consensus.run_iteration` MCP tool. Deep runs containing Claude fail closed
+  unless the orchestrator-driven Path A can genuinely reconverge Claude
+  between rounds.
+- Added natural-language tier routing for AI-hosted sessions. Phrases such as
+  "quick consensus", "standard consensus", and "deep consensus" are explicit
+  operator declarations and start the matching tier without requiring users
+  to know CLI switches.
+- Replaced fixed 1/3/4-member tier panels with an `all-enabled` policy. Two-AI
+  projects use both providers; eight-AI projects use all eight. Supplementary
+  same-family reviewers never satisfy the two-independent-provider minimum.
+- Updated default reviewer models to GPT 5.6 Sol, Claude Fable 5, Gemini 3.5
+  Flash, and Grok 4.5. Kimi remains unpinned and uses each user's authenticated
+  CLI default. Codex and Grok now receive explicit effort
+  flags, and their resolved model/effort settings are recorded in dispatch
+  logs and sealed provenance.
+- Added tier-owned timeout policy: Quick and Standard use bounded wall/silence
+  budgets, while Deep uses zero as the explicit "disabled" timeout value and
+  terminates only on completion, provider failure, or operator abort.
+- Removed the scaffold's automatic `consensus-state/` forbidden directory.
+  Projects now start with no forbidden paths unless the operator explicitly
+  declares them.
+- Cost estimates now take the actual enabled independent-reviewer count, so
+  dispatch estimates scale correctly for any panel size.
+- Added regression coverage for tier resolution, model/effort forwarding,
+  provider override precedence, two- and eight-provider panels, supplemental
+  reviewer exclusion, CLI/MCP tier exposure, and deep Path A enforcement.
+
+**Upgrade:** recommended for users who want current provider models or a
+first-class fast/standard/deep consensus choice.
+
 ## 2.2.2 - 2026-07-05
 
 **Gate lockout fix: stale session markers now expire and self-clean.**

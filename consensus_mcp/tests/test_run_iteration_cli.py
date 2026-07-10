@@ -36,6 +36,7 @@ def test_cli_invokes_handle_writes_default_outcome_and_prints(monkeypatch, tmp_p
         "--goal-packet", str(goal),
         "--target", str(target),
         "--repo-root", str(tmp_path),
+        "--rigor-tier", "deep",
     ])
 
     assert rc == 0
@@ -44,12 +45,14 @@ def test_cli_invokes_handle_writes_default_outcome_and_prints(monkeypatch, tmp_p
     assert captured["goal_packet_path"] == str(goal)
     assert captured["target_path"] == str(target)
     assert captured["repo_root"] == str(tmp_path)
+    assert captured["rigor_tier"] == "deep"
     # default outcome file written into the iteration dir
     outcome_file = iter_dir / "run-outcome.json"
     assert outcome_file.exists()
     data = json.loads(outcome_file.read_text(encoding="utf-8"))
     assert data["result"]["ok"] is True
     assert data["result"]["workflow_mode"] == "propose-converge"
+    assert data["rigor_tier"] == "deep"
     # structured outcome also printed to stdout (no-extra-file path)
     assert "propose-converge" in capsys.readouterr().out
 
@@ -71,6 +74,7 @@ def test_cli_nonzero_exit_when_handle_not_ok(monkeypatch, tmp_path):
         "--iteration-dir", str(iter_dir),
         "--goal-packet", str(goal),
         "--target", str(target),
+        "--rigor-tier", "standard",
     ])
     assert rc == 1
 
@@ -99,6 +103,7 @@ def test_cli_reads_proposal_and_host_peer_files(monkeypatch, tmp_path):
         "--target", str(target),
         "--claude-proposal", str(prop),
         "--host-peer-review-yaml", str(hp),
+        "--rigor-tier", "standard",
     ])
     assert captured["claude_proposal_yaml"] == "selected_target: foo\n"
     assert captured["host_peer_review_yaml"] == "goal_satisfied: true\n"

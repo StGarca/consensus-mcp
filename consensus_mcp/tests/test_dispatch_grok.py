@@ -104,6 +104,13 @@ def test_build_grok_cmd_includes_model_when_set():
     assert cmd[cmd.index("--model") + 1] == "grok-4-fast"
 
 
+def test_build_grok_cmd_includes_effort():
+    cmd = _dispatch_grok._build_grok_cmd(
+        "grok", "p", model="grok-4.5", effort="max",
+    )
+    assert cmd[cmd.index("--effort") + 1] == "max"
+
+
 def test_build_grok_cmd_omits_model_when_none():
     """Per converged plan D3: --model is optional; let grok roll forward without
     dispatcher releases when operator doesn't pin a model."""

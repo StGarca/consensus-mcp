@@ -35,6 +35,7 @@ import yaml
 from consensus_mcp import config as cfg
 from consensus_mcp import _engine_factory as factory
 from consensus_mcp import _contributor_profiles as profiles
+from consensus_mcp import _tier_router
 from consensus_mcp.contributors.base import DispatchPacket
 
 
@@ -113,8 +114,25 @@ SCHEMA = {
                     "env var or current working directory."
                 ),
             },
+            "rigor_tier": {
+                "type": "string",
+                "enum": ["quick", "standard", "deep"],
+                "description": (
+                    "Operator-declared rigor tier. Deep applies the hard-problem "
+                    "model/effort preset and two-round workflow to every enabled "
+                    "independent reviewer (minimum two)."
+                ),
+            },
+            "touches_governance_surface": {
+                "type": ["boolean", "null"],
+                "description": "Declare governance/config/hook/gate/dispatcher/engine scope; raises and locks the effective tier to deep.",
+            },
+            "security_or_irreversible": {
+                "type": ["boolean", "null"],
+                "description": "Declare security-sensitive or irreversible scope; raises and locks the effective tier to deep.",
+            },
         },
-        "required": ["iteration_dir", "goal_packet_path", "target_path"],
+        "required": ["iteration_dir", "goal_packet_path", "target_path", "rigor_tier"],
         "additionalProperties": False,
     },
     "output_schema": {
@@ -134,6 +152,10 @@ SCHEMA = {
             "supplementary_skipped": {"type": "array"},
             "error": {"type": ["string", "null"]},
             "error_type": {"type": ["string", "null"]},
+            "rigor_tier": {"type": ["string", "null"]},
+            "compute_preset": {"type": ["string", "null"]},
+            "model_settings": {"type": "object"},
+            "timeout_settings": {"type": "object"},
         },
     },
 }
@@ -318,10 +340,24 @@ def handle(
     claude_proposal_yaml: str | None = None,
     host_peer_review_yaml: str | None = None,
     repo_root: str | None = None,
+    rigor_tier: str | None = None,
+    touches_governance_surface: bool = False,
+    security_or_irreversible: bool = False,
 ) -> dict:
     """Run one iteration end-to-end. Returns structured outcome dict."""
     supplementary_skipped: list[str] = []
+    tier_decision: dict | None = None
     try:
+        if rigor_tier is None:
+            return {
+                "ok": False,
+                "error": (
+                    "rigor_tier must be explicitly declared as quick, standard, "
+                    "or deep; conversational hosts should map the operator's "
+                    "plain-language declaration to this field"
+                ),
+                "error_type": "MissingRigorTierError",
+            }
         rr = _resolve_repo_root(repo_root)
         iter_dir = _resolve_path(iteration_dir, rr)
         gp_path = _resolve_path(goal_packet_path, rr)
@@ -332,6 +368,14 @@ def handle(
         )
 
         loaded_config = _load_config(cfg_path, rr)
+        tier_decision = _tier_router.effective_tier(
+            rigor_tier,
+            touches_governance_surface=touches_governance_surface,
+            security_or_irreversible=security_or_irreversible,
+        )
+        loaded_config = _tier_router.apply_tier_config(
+            loaded_config, tier_decision,
+        )
 
         # codex pass-3 rev-001: when claude is enabled AND the workflow mode
         # dispatches ClaudeAdapter (propose-converge, advisory), the operator
@@ -357,6 +401,25 @@ def handle(
                     f"will raise DispatchError on first invocation."
                 ),
                 "error_type": "MissingClaudeProposalError",
+            }
+
+        if (
+            tier_decision is not None
+            and tier_decision["path"] == "A"
+            and "claude" in enabled
+        ):
+            return {
+                "ok": False,
+                "error": (
+                    "deep tier with an enabled Claude contributor requires the "
+                    "orchestrator-driven Path A so Claude can genuinely reconverge "
+                    "between rounds; consensus.run_iteration uses a static callback"
+                ),
+                "error_type": "OrchestratorPathRequiredError",
+                "rigor_tier": tier_decision["tier"],
+                "compute_preset": tier_decision["compute_preset"],
+                "model_settings": tier_decision["model_settings"],
+                "timeout_settings": tier_decision["timeout_settings"],
             }
 
         claude_callback = _build_claude_callback(claude_proposal_yaml)
@@ -427,6 +490,10 @@ def handle(
         "supplementary_skipped": supplementary_skipped,
         "error": outcome.error,
         "error_type": None,
+        "rigor_tier": tier_decision["tier"] if tier_decision else None,
+        "compute_preset": tier_decision["compute_preset"] if tier_decision else None,
+        "model_settings": tier_decision["model_settings"] if tier_decision else {},
+        "timeout_settings": tier_decision["timeout_settings"] if tier_decision else {},
     }
 
 

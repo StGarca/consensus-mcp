@@ -199,13 +199,16 @@ def default_config() -> dict:
             "adapters": {
                 "claude": {
                     "role": "orchestrator",
+                    "model": "claude-fable-5",
+                    "effort": "low",
                     "can_propose": True,
                     "can_review": True,
                     "can_converge": True,
                 },
                 "codex": {
                     "command": "codex",
-                    "model": "gpt-5.5",
+                    "model": "gpt-5.6-sol",
+                    "effort": "low",
                     "sandbox_mode": "read-only",
                     "can_propose": True,
                     "can_review": True,
@@ -213,7 +216,7 @@ def default_config() -> dict:
                 },
                 "gemini": {
                     "command": "agy",
-                    "model": "Gemini 3.1 Pro (High)",
+                    "model": "Gemini 3.5 Flash (Medium)",
                     "approval_mode": "plan",
                     "can_propose": True,
                     "can_review": True,
@@ -221,14 +224,15 @@ def default_config() -> dict:
                 },
                 "grok": {
                     "command": "grok",
-                    "model": "Grok Build",
+                    "model": "grok-4.5",
+                    "effort": "medium",
                     "can_propose": True,
                     "can_review": True,
                     "can_converge": True,
                 },
                 "kimi": {
                     "command": "kimi",
-                    "model": "K2.7 Code High Speed",
+                    "effort": "medium",
                     "can_propose": True,
                     "can_review": True,
                     "can_converge": True,
@@ -763,13 +767,16 @@ def synthesize_legacy_config(repo_root: Path) -> dict:
             "adapters": {
                 "claude": {
                     "role": "orchestrator",
+                    "model": "claude-fable-5",
+                    "effort": "low",
                     "can_propose": True,
                     "can_review": True,
                     "can_converge": False,
                 },
                 "codex": {
                     "command": "codex",
-                    "model": "gpt-5.5",
+                    "model": "gpt-5.6-sol",
+                    "effort": "low",
                     "sandbox_mode": "read-only",
                     "can_propose": False,
                     "can_review": True,
