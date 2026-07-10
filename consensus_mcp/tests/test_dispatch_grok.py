@@ -413,6 +413,23 @@ def _stream(*events):
     return "\n".join(json.dumps(e) for e in events)
 
 
+def _valid_proposal():
+    return {
+        "selected_target": "fix grok retry",
+        "rationale_vs_alternatives": "One bounded retry preserves the panel member without hiding persistent empty output.",
+        "deliverable_scope": {
+            "next_iteration_id": "iteration-grok-empty-retry",
+            "files_in_scope": ["consensus_mcp/_dispatch_grok.py"],
+            "files_out_of_scope": [],
+            "key_design_decisions": ["retry empty output once"],
+            "acceptance_gates": ["two-call ceiling is tested"],
+        },
+        "risks": [],
+        "estimated_complexity": "small",
+        "structural_abstention": False,
+    }
+
+
 def test_assemble_stream_concatenates_text_events_and_ignores_thoughts():
     raw = _stream(
         {"type": "thought", "data": "let me reason about this"},
@@ -457,6 +474,48 @@ def test_assemble_stream_cancel_with_json_in_thought_recovers_json():
     )
     out = _dispatch_grok._assemble_grok_stream(raw)
     assert json.loads(out) == {"selected_target": "x", "structural_abstention": False}
+
+
+@pytest.mark.parametrize("stop_reason", ["EndTurn", "Cancelled", "Unknown", None])
+def test_assemble_stream_recovers_thought_json_without_text_for_any_stop_reason(stop_reason):
+    events = [
+        {"type": "thought", "data": "draft... "},
+        {"type": "thought", "data": '{"selected_target":"x"}'},
+    ]
+    if stop_reason is not None:
+        events.append({"type": "end", "stopReason": stop_reason})
+
+    assert json.loads(_dispatch_grok._assemble_grok_stream(_stream(*events))) == {
+        "selected_target": "x"
+    }
+
+
+@pytest.mark.parametrize(
+    ("thought", "detail"),
+    [
+        ("reasoning only", "no valid JSON object"),
+        ('{"broken":', "no valid JSON object"),
+        ('["not", "an", "object"]', "list, not object"),
+        ('"not an object"', "str, not object"),
+    ],
+)
+def test_assemble_stream_refuses_unusable_thought_only_answers(thought, detail):
+    raw = _stream(
+        {"type": "thought", "data": thought},
+        {"type": "end", "stopReason": "EndTurn"},
+    )
+    with pytest.raises(_dispatch_grok.GrokInvocationError) as exc_info:
+        _dispatch_grok._assemble_grok_stream(raw)
+
+    message = str(exc_info.value)
+    assert "stopReason='EndTurn'" in message
+    assert "thought_events=1" in message
+    assert detail in message
+
+
+def test_assemble_stream_empty_stdout_is_invocation_error():
+    with pytest.raises(_dispatch_grok.GrokEmptyOutputError, match="empty stdout"):
+        _dispatch_grok._assemble_grok_stream("\n  \t")
 
 
 def test_assemble_stream_cancel_after_text_returns_text():
@@ -538,6 +597,93 @@ def test_review_cancel_without_retry_prompt_still_fails(monkeypatch, tmp_path):
             repo_root=tmp_path,
             mode="review",
         )
+
+
+def test_empty_output_retries_once_then_succeeds(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise _dispatch_grok.GrokEmptyOutputError("initial empty stdout")
+        prompt_path = tmp_path / "empty-retry-prompt.txt"
+        prompt_path.write_text(kwargs["prompt"], encoding="utf-8")
+        return json.dumps(_valid_proposal()), prompt_path
+
+    monkeypatch.setattr(_dispatch_grok, "_invoke_grok", fake_invoke)
+    log_path = tmp_path / "dispatch-log.jsonl"
+    raw, parsed, _ = _dispatch_grok._invoke_grok_with_retry(
+        prompt="proposal prompt",
+        grok_bin="grok",
+        model="grok-4.5",
+        timeout_seconds=30,
+        iter_dir=tmp_path,
+        pass_id="grok-pass1",
+        repo_root=tmp_path,
+        log_path=log_path,
+        anchors={"iteration_id": "iter", "reviewer_id": "grok", "pass_id": "grok-pass1"},
+        mode="proposal",
+    )
+
+    assert len(calls) == 2
+    assert calls[1]["pass_id"] == "grok-pass1-empty-retry"
+    assert "ONLY valid JSON" in calls[1]["prompt"]
+    assert parsed["selected_target"] == "fix grok retry"
+    assert json.loads(raw)["structural_abstention"] is False
+    events = [json.loads(line) for line in log_path.read_text().splitlines()]
+    assert any(e["event"] == "dispatch_retry_for_grok_empty_output" for e in events)
+
+
+def test_empty_output_twice_stops_after_two_attempts(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        raise _dispatch_grok.GrokEmptyOutputError(f"empty attempt {len(calls)}")
+
+    monkeypatch.setattr(_dispatch_grok, "_invoke_grok", fake_invoke)
+    with pytest.raises(_dispatch_grok.GrokEmptyOutputError) as exc_info:
+        _dispatch_grok._invoke_grok_with_retry(
+            prompt="proposal prompt",
+            grok_bin="grok",
+            model="grok-4.5",
+            timeout_seconds=30,
+            iter_dir=tmp_path,
+            pass_id="grok-pass1",
+            repo_root=tmp_path,
+            mode="proposal",
+        )
+
+    assert len(calls) == 2
+    assert "empty attempt 1" in str(exc_info.value)
+    assert "empty attempt 2" in str(exc_info.value)
+
+
+def test_empty_retry_parse_failure_does_not_dispatch_third_attempt(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise _dispatch_grok.GrokEmptyOutputError("initial empty stdout")
+        prompt_path = tmp_path / "malformed-retry-prompt.txt"
+        prompt_path.write_text(kwargs["prompt"], encoding="utf-8")
+        return "not json", prompt_path
+
+    monkeypatch.setattr(_dispatch_grok, "_invoke_grok", fake_invoke)
+    with pytest.raises(_dispatch_grok.GrokOutputParseError):
+        _dispatch_grok._invoke_grok_with_retry(
+            prompt="proposal prompt",
+            grok_bin="grok",
+            model="grok-4.5",
+            timeout_seconds=30,
+            iter_dir=tmp_path,
+            pass_id="grok-pass1",
+            repo_root=tmp_path,
+            mode="proposal",
+        )
+
+    assert len(calls) == 2
 
 
 def test_assemble_stream_skips_malformed_and_typeless_lines():

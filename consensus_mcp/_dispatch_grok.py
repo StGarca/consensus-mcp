@@ -174,6 +174,10 @@ class GrokInvocationError(RuntimeError):
     """Raised when the grok CLI exits non-zero, times out, or is not found."""
 
 
+class GrokEmptyOutputError(GrokInvocationError):
+    """Raised when Grok exits successfully but produces no usable answer."""
+
+
 class GrokStreamCancelledError(GrokInvocationError):
     """grok self-cancelled (stopReason == 'Cancelled') before emitting any
     text event - the agentic self-cancel on open-ended prompts. A subclass
@@ -631,9 +635,16 @@ def _invoke_grok_in_cwd(
             f"grok exit={proc.returncode}; stderr_tail={stderr_tail!r}{stdout_hint}"
         )
 
-    return _assemble_grok_stream(
-        stdout_bytes.decode("utf-8", errors="replace")
-    ), prompt_path
+    stdout_str = stdout_bytes.decode("utf-8", errors="replace")
+    if not stdout_str.strip():
+        stderr_tail = stderr_bytes.decode("utf-8", errors="replace").strip()[-4000:]
+        raise GrokEmptyOutputError(
+            "grok exit=0 but emitted empty stdout; "
+            f"stderr_tail={stderr_tail!r}. Retry with --debug and inspect the "
+            "Grok CLI debug log."
+        )
+
+    return _assemble_grok_stream(stdout_str), prompt_path
 
 
 # _JSON_FENCE_RE + _extract_json_from_text moved to _dispatch_base.py (this
@@ -657,17 +668,28 @@ def _assemble_grok_stream(raw: str) -> str:
     events without a ``type`` are skipped - never fatal. A ``text`` event
     missing ``data`` falls back to a ``text`` key before being ignored.
 
-    Raises ``GrokStreamCancelledError`` when the stream ends with
-    ``stopReason == "Cancelled"`` having produced ZERO text (the agentic
-    self-cancel) - surfaced as an invocation failure, not a silent empty
-    answer.
+    When no string text event is present, recovers only a syntactically valid
+    JSON object from the ordered thought payloads. This is independent of the
+    terminal stop reason because Grok CLI can finish with ``EndTurn`` after
+    placing its structured answer entirely in thought events.
+
+    Raises an invocation-class error when a streaming run has no recoverable
+    answer. ``GrokStreamCancelledError`` is retained for ``Cancelled`` so the
+    proposal-mode compact retry remains available.
 
     Backward-compat: if NO line is a streaming event carrying a ``type``
     key (e.g. an already-plain blob), the raw string is returned unchanged
     so the downstream extractor still runs.
     """
+    if not raw.strip():
+        raise GrokEmptyOutputError(
+            "grok exited successfully but emitted empty stdout; retry the "
+            "dispatch with --debug and inspect the Grok CLI stderr/debug log"
+        )
+
     text_parts: list[str] = []
     thought_parts: list[str] = []
+    thought_event_count = 0
     saw_event = False
     saw_text = False
     stop_reason: str | None = None
@@ -684,6 +706,7 @@ def _assemble_grok_stream(raw: str) -> str:
         saw_event = True
         etype = evt.get("type")
         if etype == "thought":
+            thought_event_count += 1
             payload = evt.get("data")
             if payload is None:
                 payload = evt.get("text")
@@ -701,29 +724,46 @@ def _assemble_grok_stream(raw: str) -> str:
             break
     if not saw_event:
         return raw
-    if stop_reason == "Cancelled" and not saw_text:
-        # Grok can emit the schema-shaped JSON in `thought`
-        # chunks and then terminates with stopReason=Cancelled, leaving zero
-        # `text` chunks. Do not seal raw thought prose; only recover a
-        # syntactically valid JSON object substring. If no JSON object is
-        # present, keep the invocation-failure behavior so proposal mode can
-        # retry with the compact prompt.
+    if not saw_text:
+        # Grok can emit the schema-shaped JSON in `thought` chunks and then
+        # terminate without a `text` event. Do not seal arbitrary thought
+        # prose; downstream schema validation receives only a JSON object.
         thought_text = "".join(thought_parts)
-        candidate = _extract_json_from_text(thought_text)
-        if candidate != thought_text or candidate.strip().startswith("{"):
+        recovery_detail = "no string thought payload was emitted"
+        if thought_text:
             try:
+                candidate = _extract_json_from_text(thought_text)
                 parsed_candidate = json.loads(candidate)
-            except Exception:
-                parsed_candidate = None
-            if isinstance(parsed_candidate, dict):
-                return candidate
-        raise GrokStreamCancelledError(
-            "grok self-cancelled (stopReason=Cancelled) with zero text "
-            "events - no answer produced (agentic self-cancel; see "
-            "docs/grok-dispatch-streaming-watchdog-fix.md). Re-dispatch "
-            "with a shorter, single-focus prompt."
+            except (ValueError, json.JSONDecodeError) as exc:
+                recovery_detail = f"thought payload had no valid JSON object ({exc})"
+            else:
+                if isinstance(parsed_candidate, dict):
+                    return candidate
+                recovery_detail = (
+                    "thought payload JSON root was "
+                    f"{type(parsed_candidate).__name__}, not object"
+                )
+
+        thought_bytes = len(thought_text.encode("utf-8"))
+        message = (
+            "grok streaming output contained no string text events and no "
+            f"recoverable answer; stopReason={stop_reason!r}; "
+            f"thought_events={thought_event_count}; thought_bytes={thought_bytes}; "
+            f"{recovery_detail}. Re-dispatch with --debug and a shorter, "
+            "single-focus prompt."
         )
-    return "".join(text_parts)
+        if stop_reason == "Cancelled":
+            raise GrokStreamCancelledError(message)
+        raise GrokEmptyOutputError(message)
+
+    answer = "".join(text_parts)
+    if not answer.strip():
+        raise GrokEmptyOutputError(
+            "grok streaming output emitted string text events but their "
+            f"assembled answer was empty; stopReason={stop_reason!r}; "
+            f"text_events={len(text_parts)}. Re-dispatch with --debug."
+        )
+    return answer
 
 
 def _truncate_middle(text: str, max_bytes: int) -> str:
@@ -1029,6 +1069,17 @@ def _parse_grok_proposal_output(text: str, schema_path: Path | None = None) -> d
     return parsed
 
 
+def _build_grok_json_retry_prompt(prompt: str, error: Exception) -> str:
+    return (
+        prompt
+        + "\n\n# Retry - your previous response produced no valid JSON answer\n\n"
+        + f"Output error: {error}\n\n"
+        + "Re-emit ONLY valid JSON conforming to the schema in the prompt above. "
+        + "No prose, no markdown fences, no commentary - JSON only, starting with `{` "
+        + "and ending with `}`."
+    )
+
+
 def _invoke_grok_with_retry(
     prompt: str,
     grok_bin: str,
@@ -1050,10 +1101,13 @@ def _invoke_grok_with_retry(
 
     Proposal mode has one extra recovery: if Grok self-cancels before emitting
     any text, retry once with a compact single-focus prompt so required Grok
-    reviewers are not silently dropped from the consult.
+    reviewers are not silently dropped from the consult. A zero-answer run also
+    receives one JSON-only retry, sharing the same two-attempt ceiling as parse
+    recovery.
 
     Returns (raw_output, parsed_dict, prompt_path).
     """
+    empty_retry_used = False
     try:
         raw, prompt_path = _invoke_grok(
             prompt=prompt,
@@ -1092,6 +1146,36 @@ def _invoke_grok_with_retry(
             log_path=log_path,
             anchors=anchors,
         )
+    except GrokEmptyOutputError as first_empty:
+        empty_retry_used = True
+        if log_path is not None and anchors is not None:
+            _log_dispatch(log_path, {
+                "event": "dispatch_retry_for_grok_empty_output",
+                **anchors,
+                "first_error": str(first_empty)[:1000],
+            })
+        retry_prompt = _build_grok_json_retry_prompt(prompt, first_empty)
+        retry_pass_id = f"{pass_id}-empty-retry"
+        try:
+            raw, prompt_path = _invoke_grok(
+                prompt=retry_prompt,
+                grok_bin=grok_bin,
+                model=model,
+                effort=effort,
+                stall_silence_seconds=stall_silence_seconds,
+                timeout_seconds=timeout_seconds,
+                iter_dir=iter_dir,
+                pass_id=retry_pass_id,
+                repo_root=repo_root,
+                log_path=log_path,
+                anchors=anchors,
+            )
+        except GrokEmptyOutputError as retry_empty:
+            raise GrokEmptyOutputError(
+                "grok produced no usable answer on both attempts; "
+                f"initial={str(first_empty)[:2000]!r}; "
+                f"retry={str(retry_empty)[:2000]!r}"
+            ) from retry_empty
     try:
         if mode == "proposal":
             parsed = _parse_grok_proposal_output(raw, schema_path=proposal_schema_path)
@@ -1099,20 +1183,15 @@ def _invoke_grok_with_retry(
             parsed = _parse_grok_output(raw, goal_packet=goal_packet)
         return raw, parsed, prompt_path
     except GrokOutputParseError as first_err:
+        if empty_retry_used:
+            raise
         if log_path is not None and anchors is not None:
             _log_dispatch(log_path, {
                 "event": "dispatch_retry_for_parse_fail",
                 **anchors,
                 "first_parse_error": str(first_err)[:1000],
             })
-        retry_prompt = (
-            prompt
-            + "\n\n# Retry - your previous response failed JSON validation\n\n"
-            + f"Parse error: {first_err}\n\n"
-            + "Re-emit ONLY valid JSON conforming to the schema in the prompt above. "
-            + "No prose, no markdown fences, no commentary - JSON only, starting with `{` "
-            + "and ending with `}`."
-        )
+        retry_prompt = _build_grok_json_retry_prompt(prompt, first_err)
         retry_pass_id = f"{pass_id}-retry"
         raw_retry, prompt_path_retry = _invoke_grok(
             prompt=retry_prompt,
