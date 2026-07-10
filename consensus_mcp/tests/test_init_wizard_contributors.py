@@ -22,6 +22,7 @@ import argparse
 import builtins
 
 import pytest
+import yaml
 
 from consensus_mcp import _init_wizard as wiz
 from consensus_mcp import config as cfg
@@ -247,6 +248,18 @@ def test_provision_creates_per_ai_files_with_dedupe(tmp_path):
     assert agents.count(_SENTINEL_END) == 1
     # managed block carries the vendored guidelines.
     assert "Behavioral guidelines to reduce common LLM coding mistakes" in agents
+    assert "consensus-mcp is available on demand" in agents
+    assert "Do NOT invoke consensus-mcp unless the user explicitly requests" in agents
+
+
+def test_provision_continuous_instructions_require_explicit_mode(tmp_path):
+    profiles = wiz._load_merged_profiles(None)
+    wiz._provision_instruction_files(
+        ["codex"], profiles, tmp_path, governance_mode="continuous",
+    )
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "continuous governance is active" in text
+    assert "explicitly opts into continuous" in text
 
 
 def test_provision_is_idempotent(tmp_path):
@@ -293,6 +306,29 @@ def test_provision_refreshes_block_without_duplicating_user_content(tmp_path):
     assert "# Header" in text
     assert "# Footer kept by user" in text
     assert "Behavioral guidelines to reduce common LLM coding mistakes" in text
+
+
+def test_repair_refreshes_legacy_active_wording_to_on_demand(tmp_path):
+    config = wiz.cfg.default_config()
+    config.pop("governance")  # field-less existing project migrates on demand
+    config["contributors"]["enabled"] = ["codex", "gemini"]
+    consensus_dir = tmp_path / ".consensus"
+    consensus_dir.mkdir()
+    (consensus_dir / "config.yaml").write_text(
+        yaml.safe_dump(config), encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(
+        f"{_SENTINEL_BEGIN}\n## consensus-mcp is active in this project\n"
+        f"old always-on guidance\n{_SENTINEL_END}\n",
+        encoding="utf-8",
+    )
+
+    component, _ = wiz._repair_check_instructions(tmp_path, dry_run=False)
+
+    assert component.state == "repaired"
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "consensus-mcp is available on demand" in text
+    assert "Do NOT invoke consensus-mcp unless the user explicitly requests" in text
+    assert "old always-on guidance" not in text
 
 
 def test_no_instructions_flag_skips_provisioning(tmp_path, monkeypatch):

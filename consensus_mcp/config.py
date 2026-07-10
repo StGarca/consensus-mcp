@@ -141,6 +141,10 @@ TIMEOUT_BLOCKING = "treat-as-blocking"
 TIMEOUT_SHRINK = "shrink-quorum"
 VALID_TIMEOUT_POLICY = {TIMEOUT_NO_VOTE, TIMEOUT_BLOCKING, TIMEOUT_SHRINK}
 
+GOVERNANCE_ON_DEMAND = "on-demand"
+GOVERNANCE_CONTINUOUS = "continuous"
+VALID_GOVERNANCE_MODES = {GOVERNANCE_ON_DEMAND, GOVERNANCE_CONTINUOUS}
+
 # === Allowed contributor identities (v1 closed enum per converged plan SO-5) ===
 # kimi added 2026-05-22: it is a real default contributor; excluding it from the
 # allow-list (a) made `validate()` reject any project that configures kimi and
@@ -187,6 +191,9 @@ def default_config() -> dict:
         "project": {
             "name": None,
             "config_created_at_utc": None,
+        },
+        "governance": {
+            "mode": GOVERNANCE_ON_DEMAND,
         },
         "workflow": {
             "mode": WORKFLOW_PROPOSE_CONVERGE,
@@ -441,6 +448,16 @@ def validate(config: dict) -> None:
     if sv != SCHEMA_VERSION:
         raise ConfigValidationError(
             f"schema_version must be {SCHEMA_VERSION}, got {sv!r}"
+        )
+
+    governance = config.get("governance", {})
+    if not isinstance(governance, dict):
+        raise ConfigValidationError("'governance' must be a mapping")
+    governance_mode = governance.get("mode")
+    if governance_mode not in VALID_GOVERNANCE_MODES:
+        raise ConfigValidationError(
+            f"governance.mode={governance_mode!r} not in "
+            f"{sorted(VALID_GOVERNANCE_MODES)}"
         )
 
     # === workflow ===
@@ -720,6 +737,22 @@ def load(path: Path) -> dict:
     normalized = normalize(raw)
     validate(normalized)
     return normalized
+
+
+def resolve_governance_mode(repo_root: Path) -> str:
+    """Resolve project governance without ever turning failure into consent.
+
+    Hooks call this path, so missing, unreadable, malformed, or field-less
+    configuration must resolve to the non-enforcing on-demand mode.
+    """
+    path = Path(repo_root) / ".consensus" / "config.yaml"
+    if not path.is_file():
+        return GOVERNANCE_ON_DEMAND
+    try:
+        loaded = load(path)
+    except (OSError, ConfigValidationError):
+        return GOVERNANCE_ON_DEMAND
+    return loaded.get("governance", {}).get("mode", GOVERNANCE_ON_DEMAND)
 
 
 def effective_config_sha256(config: dict) -> str:

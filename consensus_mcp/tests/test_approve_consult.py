@@ -6,20 +6,24 @@ import yaml
 from consensus_mcp import _approve_consult as ac
 
 
-def _init_project(repo_root):
+def _init_project(repo_root, governance_mode="continuous"):
     """Make `repo_root` a valid consuming-project root: write .consensus/config.yaml
     (what `consensus init` writes), so the now-validated explicit --repo-root
     resolver accepts it (codex finding)."""
     cfg = repo_root / ".consensus" / "config.yaml"
     cfg.parent.mkdir(parents=True, exist_ok=True)
-    cfg.write_text(yaml.safe_dump({"schema_version": 1}), encoding="utf-8")
+    cfg.write_text(yaml.safe_dump({
+        "schema_version": 1,
+        "governance": {"mode": governance_mode},
+    }), encoding="utf-8")
 
 
 def _make_consult(repo_root, name="iter-test", families=("codex", "gemini"),
-                  with_plan=True, allowed_files=("src/**",), with_goal_packet=True):
+                  with_plan=True, allowed_files=("src/**",), with_goal_packet=True,
+                  governance_mode="continuous"):
     """Build a synthetic post-consult iteration: sealed reviews + converged-plan +
     a goal_packet (carrying the authorized allowed_files the scope gate checks)."""
-    _init_project(repo_root)
+    _init_project(repo_root, governance_mode)
     iter_dir = repo_root / "consensus-state" / "active" / name
     iter_dir.mkdir(parents=True)
     for fam in families:
@@ -56,6 +60,29 @@ def test_approve_happy_path_mints_and_revalidates(tmp_path):
     )
     assert outcome["closing_state"] in ac.SEALED_CLOSING_STATES
     assert outcome["panel"] == ["claude", "codex", "gemini"]
+
+
+def test_approve_on_demand_seals_results_without_enforcement(tmp_path):
+    _make_consult(tmp_path, governance_mode="on-demand")
+    stale_session = tmp_path / ".consensus" / "session-active"
+    stale_design = tmp_path / ".consensus" / "design-approved"
+    stale_session.write_text("stale", encoding="utf-8")
+    stale_design.write_text("stale", encoding="utf-8")
+
+    res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=tmp_path)
+
+    assert res["ok"] is True, res
+    assert res["governance_mode"] == "on-demand"
+    assert res["gate_armed"] is False
+    assert res["marker_path"] is None
+    assert not stale_session.exists()
+    assert not stale_design.exists()
+    outcome = yaml.safe_load(
+        (tmp_path / "consensus-state" / "active" / "iter-test"
+         / "iteration-outcome.yaml").read_text()
+    )
+    assert outcome["closing_state"] in ac.SEALED_CLOSING_STATES
+    assert "No edit gate" in res["next_steps"]["2_no_enforcement"]
 
 
 def test_approve_insufficient_reviewers_actionable_error(tmp_path):
@@ -347,17 +374,16 @@ def test_approve_honors_env_repo_root_finding7(tmp_path, monkeypatch):
 
 
 def test_approve_arms_the_gate(tmp_path):
-    """P0.1 (consult-verified #1 blocker): a successful approve must ARM the gate
-    by writing the session-active marker, not just mint the design marker -
-    otherwise the gate stays dormant and edits are silently allowed after
-    'approval'. Hypothesis-independent: assert the gate's OWN predicate."""
+    """Continuous mode preserves approval and session marker artifacts."""
     from consensus_mcp import _session_state as ss
     _make_consult(tmp_path)
-    assert ss.session_active(tmp_path) is False          # dormant before approve
+    marker = tmp_path / ".consensus" / "session-active"
+    assert ss.gate_should_enforce(tmp_path) is True
+    assert not marker.exists()
     res = ac.approve_consult("iter-test", scope_glob="src/**", repo_root=tmp_path)
     assert res["ok"] is True, res
     assert res.get("gate_armed") is True
-    assert ss.session_active(tmp_path) is True            # gate now armed
+    assert marker.exists()
 
 
 def test_review_family_handles_hash_and_digit_suffixes():

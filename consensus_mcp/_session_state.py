@@ -1,9 +1,9 @@
 """Per-invocation gate activation state.
 
-Converged consult iteration-v133-gate-scope-shift-2026-05-26 (5-AI
-unanimous): the gate is DORMANT by default; ACTIVATES when an AI
-explicitly invokes a consensus tool; DEACTIVATES on delivery-token
-completion or explicit close.
+Consensus is available on demand by default. Global installation, project
+initialization, and one-shot consult markers never imply consent to edit or
+delivery gating. Continuous enforcement requires explicit per-project
+``governance.mode: continuous`` (legacy marker/env opt-ins remain compatible).
 
 This module owns the SESSION-STATE marker file
 (`.consensus/session-active`). It is INTENTIONALLY thin:
@@ -57,6 +57,7 @@ from pathlib import Path
 import yaml
 
 from consensus_mcp._atomic_io import atomic_write_text
+from consensus_mcp import config as cfg
 
 
 SCHEMA_VERSION = 1
@@ -175,6 +176,21 @@ def legacy_mode_active(repo_root: Path) -> bool:
     return _legacy_marker_path(repo_root).exists()
 
 
+def governance_mode(repo_root: Path) -> str:
+    """Return the effective project governance mode, fail-open to on-demand."""
+    try:
+        if legacy_mode_active(repo_root):
+            return cfg.GOVERNANCE_CONTINUOUS
+        return cfg.resolve_governance_mode(Path(repo_root))
+    except Exception:
+        return cfg.GOVERNANCE_ON_DEMAND
+
+
+def continuous_governance_enabled(repo_root: Path) -> bool:
+    """True only after explicit per-project continuous-governance consent."""
+    return governance_mode(repo_root) == cfg.GOVERNANCE_CONTINUOUS
+
+
 SESSION_TTL_ENV_VAR = "CONSENSUS_MCP_SESSION_TTL_HOURS"
 SESSION_TTL_DEFAULT_HOURS = 24.0
 
@@ -208,7 +224,7 @@ def session_active(repo_root: Path) -> bool:
     """Authoritative dormant<->active probe used by the gate.
 
     Returns True iff:
-      (a) Legacy mode opt-in is active (env var or marker file), OR
+      (a) Continuous governance is explicitly configured, OR
       (b) The session marker exists, parses, is YOUNGER than the session
           TTL (default 24h - see _marker_is_expired), AND its iteration_id
           resolves to a real (UNSEALED) iteration directory in
@@ -227,7 +243,7 @@ def session_active(repo_root: Path) -> bool:
     """
     try:
         repo_root = Path(repo_root)
-        if legacy_mode_active(repo_root):
+        if continuous_governance_enabled(repo_root):
             return True
         data = read_session_marker(repo_root)
         if data is None:
@@ -258,8 +274,11 @@ def gate_should_enforce(repo_root: Path) -> bool:
       - CONSENSUS_MCP_GATE_DISABLE set -> False (operator escape hatch; the
         human trust-root can never be deadlocked by any hook, ever).
       - CONSENSUS_MCP_FORCE_OPTED_IN set -> True (test / automation override).
-      - else -> session_active(repo_root) (legacy opt-in OR a live session
-        marker pointing at a real unsealed iteration).
+      - else -> explicit continuous_governance_enabled(repo_root).
+
+    A live one-shot session marker is deliberately insufficient. This prevents
+    a requested advisory consult, stale artifact, or automatic tool call from
+    converting an on-demand project into a locked project.
 
     Fail-safe to False (= dormant) on any error, via session_active.
     """
@@ -267,7 +286,7 @@ def gate_should_enforce(repo_root: Path) -> bool:
         return False
     if os.environ.get("CONSENSUS_MCP_FORCE_OPTED_IN"):
         return True
-    return session_active(repo_root)
+    return continuous_governance_enabled(repo_root)
 
 
 def emit_migration_warning_once(repo_root: Path) -> bool:

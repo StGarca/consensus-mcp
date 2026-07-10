@@ -1348,10 +1348,30 @@ def _run_verification_pass(enabled: list[str], profiles: dict) -> int:
 # P1.2: a cold AI reading CLAUDE.md must learn how consensus OPERATES here, not
 # just generic coding guidelines. This short preamble is the guaranteed-seen
 # pointer; the detailed runbook is single-sourced in the consensus-workflow skill.
-_CONSENSUS_OPERATING_PREAMBLE = """\
-## consensus-mcp is active in this project
+_ON_DEMAND_OPERATING_PREAMBLE = """\
+## consensus-mcp is available on demand
 
-This project uses consensus-mcp: design decisions are approved by a CROSS-AI
+Do NOT invoke consensus-mcp unless the user explicitly requests a consensus
+consult in this project. Ordinary design, implementation, review, and editing
+do not require consensus approval. Global installation and this instruction
+block provide the capability only; they are not consent to continuous guidance.
+
+When explicitly requested, run the consult, return the sealed result, and stop.
+On-demand consults create no edit gate or delivery-token obligation. Continuous
+governance is enabled only when `.consensus/config.yaml` explicitly contains
+`governance.mode: continuous`.
+
+The full operating procedure lives in the `consensus-workflow` skill.
+
+---
+
+"""
+
+_CONTINUOUS_OPERATING_PREAMBLE = """\
+## consensus-mcp continuous governance is active in this project
+
+This project explicitly opts into continuous consensus governance. Design
+decisions are approved by a CROSS-AI
 consult (a panel of different AIs reviewing independently), not by one model's
 say-so. As the host AI:
 
@@ -1373,11 +1393,18 @@ say-so. As the host AI:
 """
 
 
-def _vendored_instructions_text() -> str:
+def _vendored_instructions_text(
+    governance_mode: str = cfg.GOVERNANCE_ON_DEMAND,
+) -> str:
     """Return the consensus operating preamble (P1.2) + the vendored Karpathy
     guidelines (contributor_instructions/base.md)."""
     base = Path(__file__).resolve().parent / "contributor_instructions" / "base.md"
-    return _CONSENSUS_OPERATING_PREAMBLE + base.read_text(encoding="utf-8")
+    preamble = (
+        _CONTINUOUS_OPERATING_PREAMBLE
+        if governance_mode == cfg.GOVERNANCE_CONTINUOUS
+        else _ON_DEMAND_OPERATING_PREAMBLE
+    )
+    return preamble + base.read_text(encoding="utf-8")
 
 
 def _upsert_managed_block(existing: str, block_body: str) -> str:
@@ -1409,6 +1436,7 @@ def _upsert_managed_block(existing: str, block_body: str) -> str:
 
 def _provision_instruction_files(
     selection: list[str], profiles: dict, repo_root: Path,
+    governance_mode: str = cfg.GOVERNANCE_ON_DEMAND,
 ) -> list[Path]:
     """Seed/refresh per-AI instruction files for the selected contributors.
 
@@ -1418,7 +1446,7 @@ def _provision_instruction_files(
 
     Returns the list of written file paths (deduped).
     """
-    block_body = _vendored_instructions_text()
+    block_body = _vendored_instructions_text(governance_mode)
     targets: list[str] = []
     for name in selection:
         profile = profiles.get(name)
@@ -1533,6 +1561,8 @@ def _apply_cli_overrides(args, base: dict) -> None:
         base["patches"]["authoring"] = args.patch_authoring
     if args.timeout_policy is not None:
         base["workflow"]["timeout_policy"] = args.timeout_policy
+    if getattr(args, "governance_mode", None) is not None:
+        base["governance"]["mode"] = args.governance_mode
 
 
 def _which_flags_set(args) -> set[str]:
@@ -1540,7 +1570,7 @@ def _which_flags_set(args) -> set[str]:
     keys = (
         "contributors", "workflow", "convergence", "independence",
         "finding_disposition", "snapshot_trigger", "snapshot_every_iterations",
-        "patch_authoring", "timeout_policy",
+        "patch_authoring", "timeout_policy", "governance_mode",
     )
     return {k for k in keys if getattr(args, k, None) is not None}
 
@@ -2076,9 +2106,10 @@ def _enabled_contributors_and_profiles(loaded: dict) -> tuple[list[str], dict]:
 
 
 def _instruction_files_missing_block(
-    enabled: list[str], profiles: dict, repo_root: Path
+    enabled: list[str], profiles: dict, repo_root: Path,
+    governance_mode: str = cfg.GOVERNANCE_ON_DEMAND,
 ) -> list[Path]:
-    """Return instruction-file Paths that are absent or lack the managed-block marker."""
+    """Return instruction files that are absent or have stale mode guidance."""
     targets: list[str] = []
     for name in enabled:
         profile = profiles.get(name)
@@ -2094,7 +2125,13 @@ def _instruction_files_missing_block(
             missing.append(path)
         else:
             text = path.read_text(encoding="utf-8")
-            if INSTRUCTION_BEGIN_MARKER not in text:
+            expected_heading = (
+                "consensus-mcp continuous governance is active"
+                if governance_mode == cfg.GOVERNANCE_CONTINUOUS
+                else "consensus-mcp is available on demand"
+            )
+            if (INSTRUCTION_BEGIN_MARKER not in text
+                    or expected_heading not in text):
                 missing.append(path)
     return missing
 
@@ -2105,11 +2142,13 @@ def _repair_check_instructions(repo_root: Path, *, dry_run: bool) -> tuple[Repai
     config_path = repo_root / ".consensus" / "config.yaml"
     loaded = cfg.load(config_path)
     enabled, profiles = _enabled_contributors_and_profiles(loaded)
-    needs = _instruction_files_missing_block(enabled, profiles, repo_root)
+    mode = (loaded.get("governance") or {}).get(
+        "mode", cfg.GOVERNANCE_ON_DEMAND)
+    needs = _instruction_files_missing_block(enabled, profiles, repo_root, mode)
     if not needs:
         return (RepairComponent("instructions", "ok"), f"{REPAIR_OK} instruction files")
     if not dry_run:
-        _provision_instruction_files(enabled, profiles, repo_root)
+        _provision_instruction_files(enabled, profiles, repo_root, mode)
     return (RepairComponent("instructions", "repaired"),
             f"{REPAIR_FIXED} instruction files ({', '.join(str(p) for p in needs)})")
 
@@ -2565,7 +2604,11 @@ def cmd_init(args) -> int:
             if ans.startswith("y"):
                 _run_verification_pass(enabled, merged_profiles)
         if not args.no_instructions:
-            for path in _provision_instruction_files(enabled, merged_profiles, repo_root):
+            mode = (new_config.get("governance") or {}).get(
+                "mode", cfg.GOVERNANCE_ON_DEMAND)
+            for path in _provision_instruction_files(
+                enabled, merged_profiles, repo_root, mode
+            ):
                 print(f"seeded instruction file {path}")
         else:
             print("instruction-file seeding skipped (--no-instructions)")
@@ -2846,6 +2889,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout-policy", default=None,
                         choices=list(cfg.VALID_TIMEOUT_POLICY),
                         help="contributor timeout policy")
+    parser.add_argument(
+        "--governance-mode",
+        default=None,
+        choices=sorted(cfg.VALID_GOVERNANCE_MODES),
+        help=("per-project governance: on-demand (default; explicit user calls "
+              "only, no edit/delivery gates) or continuous (proactive guidance "
+              "and enforced approval/delivery lifecycle)"),
+    )
 
     args = parser.parse_args(argv)
     return cmd_init(args)

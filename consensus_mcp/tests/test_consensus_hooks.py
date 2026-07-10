@@ -693,11 +693,22 @@ def test_v1321_dormant_when_only_dot_consensus_present(tmp_path):
     assert cp.returncode == 0, cp.stderr
 
 
-def test_v1321_enforces_when_session_marker_active(tmp_path):
-    """v1.32.1: the NEW activation predicate. A valid session-state
-    marker pointing at a real unsealed iteration activates the gate.
-    Without a sealed design-approved marker, in-repo Edit is denied
-    (same as the pre-v1.32.1 contract for active sessions)."""
+def test_malformed_config_and_stale_marker_fail_open(tmp_path):
+    """Broken historical state can never be interpreted as governance consent."""
+    (tmp_path / ".consensus").mkdir()
+    (tmp_path / ".consensus" / "config.yaml").write_text(
+        "governance: [malformed", encoding="utf-8")
+    (tmp_path / ".consensus" / "session-active").write_text(
+        "iteration_id: old-run\n", encoding="utf-8")
+    ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"},
+          "cwd": str(tmp_path)}
+    cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present",
+                   opted_in=False)
+    assert cp.returncode == 0, cp.stderr
+
+
+def test_on_demand_ignores_session_marker(tmp_path):
+    """A marker cannot silently opt an on-demand project into enforcement."""
     import datetime
     import yaml
     iter_id = "iter-v1321-test"
@@ -719,10 +730,7 @@ def test_v1321_enforces_when_session_marker_active(tmp_path):
     )
     ev = {"tool_name": "Edit", "tool_input": {"file_path": "src/x.py"}, "cwd": str(tmp_path)}
     cp = _run_hook(PRETOOLUSE, ev, repo_root=tmp_path, runtime="present", opted_in=False)
-    # No design-approved marker -> still denied. The session marker
-    # only flips the gate to ACTIVE; the verify_design_approval check
-    # is what blocks unauthorized writes.
-    assert cp.returncode == 2, cp.stderr
+    assert cp.returncode == 0, cp.stderr
 
 
 def test_v1321_legacy_always_on_env_restores_per_project_gating(tmp_path, monkeypatch):
@@ -930,20 +938,19 @@ def test_gatescope_settings_json_denied_opted_in(tmp_path, monkeypatch):
     assert cp.returncode == 2, cp.stderr
 
 
-def test_gatescope_settings_json_denied_NON_opted_in(tmp_path, monkeypatch):
-    # ALWAYS-ON: the tamper guard fires BEFORE the opt-in early-return (the threat is global).
+def test_gatescope_settings_json_allowed_without_continuous_opt_in(tmp_path, monkeypatch):
     repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
     cp = _run_hook(PRETOOLUSE, _edit_ev(claude / "settings.json", repo_root),
                    repo_root=repo_root, runtime="present", opted_in=False)
-    assert cp.returncode == 2, cp.stderr
+    assert cp.returncode == 0, cp.stderr
 
 
-def test_gatescope_consensus_hook_denied(tmp_path, monkeypatch):
+def test_gatescope_consensus_hook_allowed_without_continuous_opt_in(tmp_path, monkeypatch):
     repo_root, claude = _gate_scope_env(tmp_path, monkeypatch)
     cp = _run_hook(PRETOOLUSE,
                    _edit_ev(claude / "hooks" / "consensus_pretooluse_gate.py", repo_root),
                    repo_root=repo_root, runtime="present", opted_in=False)
-    assert cp.returncode == 2, cp.stderr
+    assert cp.returncode == 0, cp.stderr
 
 
 def test_gatescope_symlink_escape_to_settings_denied(tmp_path, monkeypatch):
@@ -1058,9 +1065,14 @@ def test_gatescope_bash_redirect_to_settings_still_denied(tmp_path, monkeypatch)
 # --------------------------------------------------------------------------- #
 
 def _activate_session(repo_root, ref="iteration-live"):
-    """Write a REAL live session marker (not the env override) pointing at an
-    unsealed iteration dir, so gate_should_enforce(repo_root) is True."""
+    """Explicitly opt into continuous governance for hook integration tests."""
     from consensus_mcp._session_state import write_session_marker
+    config = repo_root / ".consensus" / "config.yaml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(
+        "schema_version: 1\ngovernance:\n  mode: continuous\n",
+        encoding="utf-8",
+    )
     _make_sealed_iteration(repo_root, ref, closing_state="in_progress")
     write_session_marker(repo_root, iteration_id=ref, scope_glob="src/**",
                          activated_by="test", activation_source="test_fixture")
@@ -1076,8 +1088,7 @@ def test_stop_dormant_no_directive(tmp_path):
     assert "STOP" not in cp.stdout, cp.stdout
 
 
-def test_stop_active_via_session_marker_emits(tmp_path):
-    # A real live session marker activates the gate WITHOUT the env override.
+def test_stop_active_via_continuous_mode_emits(tmp_path):
     _git_repo_with_modified_source(tmp_path, "src/app.py")
     _activate_session(tmp_path)
     ev = {"hook_event_name": "Stop", "cwd": str(tmp_path)}
@@ -1097,7 +1108,7 @@ def test_sessionstart_dormant_silent(tmp_path):
     assert cp.stdout.strip() == "", cp.stdout
 
 
-def test_sessionstart_active_via_session_marker_injects(tmp_path):
+def test_sessionstart_active_via_continuous_mode_injects(tmp_path):
     _activate_session(tmp_path)
     ev = {"hook_event_name": "SessionStart", "source": "startup",
           "cwd": str(tmp_path)}

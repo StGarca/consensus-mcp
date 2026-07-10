@@ -7,7 +7,8 @@ does the scaffolding deterministically:
   - creates consensus-state/active/<iteration>/
   - writes a schema-valid goal_packet.yaml + a review-packet.yaml embedding the
     question (the thing reviewers read)
-  - ARMS the gate (writes the session marker), so edits stay blocked until approval
+  - in explicit continuous mode, arms the edit gate until approval
+  - in default on-demand mode, creates no enforcement markers or edit blocks
   - returns the EXACT next commands: how to fan out the reviewers (own shell, auto
     pass_id) and how to approve.
 
@@ -31,7 +32,11 @@ from consensus_mcp._dispatch_base import (
     _resolve_repo_root,
     validate_explicit_repo_root,
 )
-from consensus_mcp._session_state import write_session_marker
+from consensus_mcp._session_state import (
+    continuous_governance_enabled,
+    governance_mode,
+    write_session_marker,
+)
 
 
 def _slugify(text: str) -> str:
@@ -95,6 +100,9 @@ def start_consult(question: str, scope_glob, reviewers=None,
     except Exception as exc:
         return {"ok": False, "error_type": "repo_root_unresolved", "error": str(exc)}
 
+    mode = governance_mode(rr)
+    continuous = continuous_governance_enabled(rr)
+
     # Stale-marker hygiene (kimi-rev-004) - done BEFORE creating any iteration
     # state (codex-rev-001: a later failure must not leave a half-created
     # iteration dir behind). A brand-new consult is UNAPPROVED, so any pre-existing
@@ -103,7 +111,7 @@ def start_consult(question: str, scope_glob, reviewers=None,
     # design-approved still authorizes an OLD scope (marker poisoning). grok-rev-002:
     # FAIL CLOSED if it cannot be removed, rather than scaffolding a poisoned state.
     stale_marker = _design_marker_path(rr)
-    if stale_marker.exists():
+    if continuous and stale_marker.exists():
         try:
             stale_marker.unlink()
         except OSError as exc:
@@ -173,14 +181,14 @@ def start_consult(question: str, scope_glob, reviewers=None,
     (iter_dir / "review-packet.yaml").write_text(
         yaml.safe_dump(review_packet, sort_keys=False), encoding="utf-8")
 
-    # ARM the gate: edits stay blocked until consensus-mcp-approve runs.
-    try:
-        write_session_marker(rr, iteration_id=iter_id, scope_glob=globs,
-                             activated_by="consensus-mcp-start-consult",
-                             activation_source="console_script")
-    except Exception as exc:
-        return {"ok": False, "error_type": "gate_arm_failed", "error": str(exc),
-                "iteration": iter_id}
+    if continuous:
+        try:
+            write_session_marker(rr, iteration_id=iter_id, scope_glob=globs,
+                                 activated_by="consensus-mcp-start-consult",
+                                 activation_source="console_script")
+        except Exception as exc:
+            return {"ok": False, "error_type": "gate_arm_failed", "error": str(exc),
+                    "iteration": iter_id}
 
     gp = f"consensus-state/active/{iter_id}/goal_packet.yaml"
     rp = f"consensus-state/active/{iter_id}/review-packet.yaml"
@@ -190,37 +198,47 @@ def start_consult(question: str, scope_glob, reviewers=None,
          f"--review-target {rp} --timeout-seconds 600   # own shell; omit --pass-id")
         for r in reviewers
     ]
+    next_steps = {
+        "1_dispatch_each_reviewer_in_its_OWN_shell": dispatch_cmds,
+        "2_synthesize": (
+            f"Read the sealed *-review.yaml in {iter_dir} (or via "
+            f"consensus.get_iteration_outcome), then author "
+            f"consensus-state/active/{iter_id}/converged-plan.yaml (weighted-synthesis)."),
+    }
+    approve_cmd = (
+        f"consensus-mcp-approve --iteration {iter_id} "
+        + " ".join(f"--scope-glob {g!r}" for g in globs)
+    )
+    if continuous:
+        next_steps["3_approve_to_unblock_edits"] = approve_cmd
+        next_steps["4_disarm_when_done"] = (
+            "consensus-mcp-seal-iteration close --iteration-dir "
+            f"consensus-state/active/{iter_id}   # after edits + delivery "
+            "tokens: clears the gate markers")
+    else:
+        next_steps["3_approve_to_seal_results"] = approve_cmd
+        next_steps["4_return_results"] = (
+            "Return the sealed consensus result to the user. On-demand mode "
+            "creates no edit gate or delivery-token obligation and is now done."
+        )
+
     return {
         "ok": True,
         "iteration": iter_id,
         "iteration_dir": str(iter_dir),
         "goal_packet": str(iter_dir / "goal_packet.yaml"),
-        "gate_armed": True,
-        "next_steps": {
-            "1_dispatch_each_reviewer_in_its_OWN_shell": dispatch_cmds,
-            "2_synthesize": (
-                f"Read the sealed *-review.yaml in {iter_dir} (or via "
-                f"consensus.get_iteration_outcome), then author "
-                f"consensus-state/active/{iter_id}/converged-plan.yaml (weighted-synthesis)."),
-            "3_approve_to_unblock_edits": (
-                f"consensus-mcp-approve --iteration {iter_id} "
-                + " ".join(f"--scope-glob {g!r}" for g in globs)),
-            "4_disarm_when_done": (
-                "consensus-mcp-seal-iteration close --iteration-dir "
-                f"consensus-state/active/{iter_id}   # after edits + delivery "
-                "tokens: clears the gate markers, returns it to dormant. The gate "
-                "is armed NOW, so finish with this even if you abandon the consult "
-                "(add --abandon to force-clear)."),
-        },
+        "governance_mode": mode,
+        "gate_armed": continuous,
+        "next_steps": next_steps,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="consensus-mcp-start-consult",
-        description=("Scaffold a new consensus consult: create the iteration dir + a "
-                     "valid goal_packet, arm the gate, and print the exact next "
-                     "commands. The one-call cold-start entrypoint."))
+        description=("Scaffold a new consensus consult and print the exact next "
+                     "commands. Default on-demand mode creates no edit gate; "
+                     "continuous mode preserves governed approval."))
     p.add_argument("--question", required=True, help="the design question / what to review")
     p.add_argument("--scope-glob", required=True, action="append", dest="scope_glob",
                    help="files the eventual approval will cover (e.g. 'consensus_mcp/_x.py'). "

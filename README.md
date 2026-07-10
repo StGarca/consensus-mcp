@@ -44,7 +44,7 @@ already crisp.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.3.2
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.4.0
 consensus-init --install-claude-code
 ```
 
@@ -66,6 +66,38 @@ also seeds shared reviewer "house rules" into each AI's instructions file so
 every model plays by the same guidelines.
 
 Claude is optional -- you can run Codex + Gemini + Kimi with no Claude at all.
+
+### Governance is opt-in
+
+Installing consensus-mcp does **not** activate it in every project. New and
+existing projects default to `governance.mode: on-demand`:
+
+- AIs must not invoke consensus unless the user explicitly asks for it.
+- A requested consult runs once, returns its sealed result, and stops.
+- On-demand consults create no edit gate, design-approval block, or delivery
+  token requirement.
+- A stale marker or malformed/missing config always fails open and cannot lock
+  ordinary project work.
+
+Projects that intentionally want consensus guidance throughout development can
+opt in explicitly:
+
+```yaml
+# .consensus/config.yaml
+governance:
+  mode: continuous
+```
+
+Or reconfigure from the terminal:
+
+```bash
+consensus-init --reconfigure --non-interactive --governance-mode continuous
+```
+
+Only `continuous` mode enables proactive AI guidance and the enforced
+design-approval/delivery lifecycle. Reconfigure or repair an older initialized
+project to refresh its managed AI instruction block with the new mode-specific
+wording.
 
 **See your track record:** `consensus results` prints a project scorecard --
 findings by severity, how each was resolved, and convergence rate across runs.
@@ -126,7 +158,7 @@ provenance.
 Both modes are stable and in daily use. In **134 review iterations on its own
 code**, the panel logged **548 findings -- 156 of them blocking or critical** --
 each addressed before the change merged (fixed, or dismissed with the evidence
-that disproved it). **2,340 tests green** on Linux + Windows / Python 3.11+,
+that disproved it). **2,353 tests green** on Linux + Windows / Python 3.11+,
 ASCII-only tree, every reviewer pluggable by config, no Claude required. This
 project reviews itself through its own cross-AI cycle.
 
