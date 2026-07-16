@@ -134,10 +134,12 @@ def _read_report_findings(report_path: Path) -> tuple[list[dict], str | None]:
     clean run. Returning an empty findings list on such a failure would let a
     corrupt report masquerade as "no findings" and pass a dry-run that should
     have surfaced the problem, so parse/shape errors are propagated to the caller.
-    A missing report keeps the prior no-error behavior.
+    A MISSING report is the same failure mode: the validator was invoked with
+    --out and exited 0/1, so an artifact that never appeared cannot be trusted
+    as a clean run (deep-audit codex follow-up, iter eb8af083).
     """
     if not report_path.exists():
-        return [], None
+        return [], f"{report_path.name} missing: validator exited 0/1 but wrote no report"
     try:
         import yaml
         data = yaml.safe_load(report_path.read_text(encoding="utf-8"))
