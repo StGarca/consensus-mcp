@@ -20,11 +20,12 @@ shape unchanged.
 """
 from __future__ import annotations
 
-import contextlib
-import io
-import json
-
 from consensus_mcp import _dispatch_grok
+from consensus_mcp.tools._reviewer_dispatch_common import (
+    OUTPUT_SCHEMA,
+    resolve_mode as _resolve_mode,
+    run_dispatch,
+)
 
 
 SCHEMA = {
@@ -108,32 +109,8 @@ SCHEMA = {
         "required": ["goal_packet_path", "iteration_dir"],
         "additionalProperties": False,
     },
-    "output_schema": {
-        "type": "object",
-        "properties": {
-            "ok": {"type": "boolean"},
-            "pass_id": {"type": ["string", "null"]},
-            "packet_sha256": {"type": ["string", "null"]},
-            "sealed_path": {"type": ["string", "null"]},
-            "archive_sealed_path": {"type": ["string", "null"]},
-            "audit_event_id": {"type": ["string", "null"]},
-            "error": {"type": ["string", "null"]},
-            "error_type": {"type": ["string", "null"]},
-            "raw_stdout_sample": {"type": ["string", "null"]},
-        },
-        "required": ["ok"],
-    },
+    "output_schema": OUTPUT_SCHEMA,
 }
-
-
-def _resolve_mode(phase: str | None, mode: str | None) -> str | None:
-    """Resolve effective --mode argv value (mirrors codex/gemini)."""
-    if mode is not None:
-        return mode
-    if phase is not None:
-        from consensus_mcp.contributors._phase_mode import phase_to_mode
-        return phase_to_mode(phase)
-    return None
 
 
 def _build_argv(
@@ -200,37 +177,7 @@ def handle(
         phase=phase,
         mode=mode,
     )
-    buf = io.StringIO()
-    rc: int = 0
-    with contextlib.redirect_stdout(buf):
-        try:
-            rc = _dispatch_grok.main(argv) or 0
-        except SystemExit as exc:
-            return {
-                "ok": False,
-                "error_type": "ArgparseSystemExit",
-                "error": f"argparse rejected input: {exc.code!r}",
-            }
-        except Exception as exc:
-            return {
-                "ok": False,
-                "error_type": type(exc).__name__,
-                "error": str(exc),
-            }
-    output = buf.getvalue().strip()
-    try:
-        parsed = json.loads(output)
-    except json.JSONDecodeError as exc:
-        return {
-            "ok": False,
-            "error_type": "WrapperJsonDecodeError",
-            "error": str(exc),
-            "raw_stdout_sample": output[:200],
-        }
-    if rc != 0 and isinstance(parsed, dict) and parsed.get("ok") is not False:
-        parsed["ok"] = False
-        parsed["wrapper_forced_ok_false_due_to_nonzero_rc"] = True
-    return parsed
+    return run_dispatch(_dispatch_grok, argv)
 
 
 def register(registry) -> None:
