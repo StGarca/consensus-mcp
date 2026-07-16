@@ -226,6 +226,17 @@ def test_adapter_ok_false_raises_dispatcherror(name, monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("name", REVIEWERS)
+def test_adapter_nonzero_rc_with_ok_true_raises_dispatcherror(
+        name, monkeypatch, tmp_path):
+    """codex-rev-001 (post-review): rc != 0 must fail closed even when stdout
+    claims ok=true - pins the rc side of the `rc != 0 or not ok` disjunction,
+    which the ok=False case above cannot distinguish from."""
+    monkeypatch.setattr(DISPATCH_MAIN[name], _fake_main([], tmp_path, ok=True, rc=3))
+    with pytest.raises(DispatchError, match="dispatch failed"):
+        _adapter(name)().dispatch(_packet(name, tmp_path))
+
+
+@pytest.mark.parametrize("name", REVIEWERS)
 def test_adapter_missing_sealed_path_raises_dispatcherror(
         name, monkeypatch, tmp_path):
     monkeypatch.setattr(
