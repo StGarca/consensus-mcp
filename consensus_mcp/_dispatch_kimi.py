@@ -647,7 +647,11 @@ def _effective_stall_silence(default: float = _DEFAULT_STALL_SILENCE_SECONDS) ->
         try:
             return float(env_silence)
         except ValueError:
-            pass
+            print(
+                f"warning: ignoring invalid CONSENSUS_MCP_STALL_SILENCE_SECONDS="
+                f"{env_silence!r} (not a number); using default {default}s",
+                file=sys.stderr,
+            )
     return default
 
 
