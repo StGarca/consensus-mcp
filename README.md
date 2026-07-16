@@ -44,7 +44,7 @@ already crisp.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.4.2
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.4.3
 consensus-init --install-claude-code
 ```
 

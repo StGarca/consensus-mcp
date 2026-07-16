@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.3 - 2026-07-16
+
+**Hot-patch: correct the Kimi K3 CLI model id.**
+
+- v2.4.2 mapped `Kimi K3 -> kimi-k3`, but the kimi CLI registers the model
+  as provider-prefixed `kimi-code/k3` and rejects a bare `kimi-k3` with
+  "LLM not set" (found by a live confirmation dispatch). The display map now
+  resolves both `Kimi K3` and `kimi-k3` to `kimi-code/k3`; operator configs
+  may keep `model: kimi-k3`.
+
 ## 2.4.2 - 2026-07-16
 
 **Kimi K3 model update (operator-waived mechanical change, no consult).**

@@ -141,7 +141,11 @@ _KIMI_RETRYABLE_EXIT = 75
 
 _DEFAULT_KIMI_BIN = "kimi"
 _DEFAULT_KIMI_MODEL: str | None = None
-_KIMI_MODEL_ID_BY_DISPLAY = {"Kimi K3": "kimi-k3"}
+# The kimi CLI registers K3 as provider-prefixed "kimi-code/k3" and rejects a
+# bare "kimi-k3" with "LLM not set" (verified against kimi CLI config.toml +
+# live probe 2026-07-16). Map both the display name and the operator-facing
+# short name onto the real CLI id.
+_KIMI_MODEL_ID_BY_DISPLAY = {"Kimi K3": "kimi-code/k3", "kimi-k3": "kimi-code/k3"}
 _KIMI_CODE_INLINE_PROMPT_MAX_BYTES = (28 * 1024) if sys.platform == "win32" else (96 * 1024)
 
 
