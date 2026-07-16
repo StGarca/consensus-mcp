@@ -141,7 +141,7 @@ _KIMI_RETRYABLE_EXIT = 75
 
 _DEFAULT_KIMI_BIN = "kimi"
 _DEFAULT_KIMI_MODEL: str | None = None
-_KIMI_MODEL_ID_BY_DISPLAY = {"K2.7 Code High Speed": "kimi-code/kimi-for-coding"}
+_KIMI_MODEL_ID_BY_DISPLAY = {"Kimi K3": "kimi-k3"}
 _KIMI_CODE_INLINE_PROMPT_MAX_BYTES = (28 * 1024) if sys.platform == "win32" else (96 * 1024)
 
 

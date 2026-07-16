@@ -47,6 +47,7 @@ contributors:
       can_converge: true
     kimi:
       command: kimi
+      model: kimi-k3
       effort: medium
       can_propose: true
       can_review: true

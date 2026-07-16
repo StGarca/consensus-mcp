@@ -44,7 +44,7 @@ already crisp.
 **One time, per machine:**
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.4.1
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.4.2
 consensus-init --install-claude-code
 ```
 
@@ -146,7 +146,7 @@ consensus-mcp-run-iteration --rigor-tier deep \
 
 Built-in current-generation defaults include GPT 5.6 Sol, Claude Fable 5,
 Gemini 3.5 Flash, and Grok 4.5. Kimi deliberately uses each user's authenticated
-CLI default; users with access to K2.7 Code High Speed or another paid model can
+CLI default; users with access to Kimi K3 (`kimi-k3`) or another paid model can
 pin it locally without imposing that entitlement on other installations.
 Provider-specific model and effort settings are recorded in sealed review
 provenance.

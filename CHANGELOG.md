@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.4.2 - 2026-07-16
+
+**Kimi K3 model update (operator-waived mechanical change, no consult).**
+
+- The kimi seat moves from Kimi K2.7 to Kimi K3 (model name `kimi-k3`):
+  `_dispatch_kimi`'s display-name map retires
+  `K2.7 Code High Speed -> kimi-code/kimi-for-coding` in favor of
+  `Kimi K3 -> kimi-k3`; the README pin-it-locally example now names Kimi K3.
+- This repo's panel config (`.consensus/config.yaml`) pins `model: kimi-k3`
+  on the kimi adapter, bringing it in line with the other pinned seats.
+
 ## 2.4.1 - 2026-07-16
 
 **Dispatch reliability fixes + dedup refactor, landed through a sealed
