@@ -1052,6 +1052,35 @@ def test_check_stop_rules_normal_path_still_works(tmp_path):
     assert result["state"] == "needs_implementation"
 
 
+def test_check_stop_rules_unparseable_output_returns_breadcrumb(tmp_path, monkeypatch):
+    """Parse-failure sibling of the exception test above: if cmd_check_stop_rules
+    runs but emits output that is not JSON, the previous code silently returned []
+    - hiding any stop rule that fired. It must instead surface the same
+    check_stop_rules_failed breadcrumb (with the raw output) rather than swallow."""
+    iter_dir = _make_iter_dir(tmp_path)
+    pkt = _write_valid_goal_packet(tmp_path)
+
+    def emit_garbage(*args, **kwargs):
+        print("this is not json <<<")
+
+    monkeypatch.setattr(_self_drive, "cmd_check_stop_rules", emit_garbage)
+
+    result = loop_run_goal.handle(
+        goal_packet_path=str(pkt),
+        iteration_dir=str(iter_dir),
+    )
+    fired_rules = [r.get("rule") for r in result["stop_rules_fired"] if isinstance(r, dict)]
+    assert "check_stop_rules_failed" in fired_rules
+    detail_blob = next(
+        r.get("detail", "")
+        for r in result["stop_rules_fired"]
+        if isinstance(r, dict) and r.get("rule") == "check_stop_rules_failed"
+    )
+    assert "this is not json <<<" in detail_blob
+    # Breadcrumb only: it must NOT trip blocked_stop_rule_fired by itself.
+    assert result["state"] == "needs_implementation"
+
+
 def test_corrected_resubmit_does_NOT_advance_to_ready_to_close(tmp_path):
     """A corrected_resubmit verification verdict blocks the close path
     (must route through codex_re_reviewing_after_claude_correction first

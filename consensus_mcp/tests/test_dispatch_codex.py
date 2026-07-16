@@ -2287,3 +2287,18 @@ def test_codex_reader_threads_use_shared_marker_helper():
     # one primitive in _dispatch_base, wired into every adapter's readers).
     from consensus_mcp import _dispatch_base
     assert _dispatch_codex.record_reader_error is _dispatch_base.record_reader_error
+
+
+def test_stall_silence_env_valid_override(monkeypatch):
+    monkeypatch.setenv("CONSENSUS_MCP_STALL_SILENCE_SECONDS", "12")
+    assert _dispatch_codex._effective_stall_silence(180.0) == 12.0
+
+
+def test_stall_silence_env_invalid_warns_and_keeps_default(monkeypatch, capsys):
+    # A typo'd override must not silently vanish: keep the default AND warn so
+    # the operator can see their setting was ignored.
+    monkeypatch.setenv("CONSENSUS_MCP_STALL_SILENCE_SECONDS", "not-a-number")
+    assert _dispatch_codex._effective_stall_silence(180.0) == 180.0
+    err = capsys.readouterr().err
+    assert "CONSENSUS_MCP_STALL_SILENCE_SECONDS" in err
+    assert "not-a-number" in err

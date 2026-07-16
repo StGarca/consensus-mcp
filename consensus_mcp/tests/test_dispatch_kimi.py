@@ -634,9 +634,13 @@ def test_invoke_kimi_honors_stall_silence_env(monkeypatch):
     assert _dispatch_kimi._effective_stall_silence(240.0) == 12.0
 
 
-def test_invoke_kimi_stall_silence_env_invalid_keeps_default(monkeypatch):
+def test_invoke_kimi_stall_silence_env_invalid_keeps_default(monkeypatch, capsys):
     monkeypatch.setenv("CONSENSUS_MCP_STALL_SILENCE_SECONDS", "not-a-number")
     assert _dispatch_kimi._effective_stall_silence(240.0) == 240.0
+    # A typo'd override must not silently vanish: warn so the operator sees it.
+    err = capsys.readouterr().err
+    assert "CONSENSUS_MCP_STALL_SILENCE_SECONDS" in err
+    assert "not-a-number" in err
 
 
 # ---------- _invoke_kimi_with_retry ----------

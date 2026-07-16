@@ -126,21 +126,31 @@ def _apply_patch(text: str, old_string: str, new_string: str, file_label: str) -
     return text.replace(old_string, new_string, 1), None
 
 
-def _read_report_findings(report_path: Path) -> list[dict]:
-    """Parse a validator YAML report; return its findings list (empty on error)."""
+def _read_report_findings(report_path: Path) -> tuple[list[dict], str | None]:
+    """Parse a validator YAML report; return (findings, error_or_None).
+
+    The validator already exited 0/1 (it ran) by the time we read its report,
+    so an unreadable or malformed artifact is an infrastructure failure - not a
+    clean run. Returning an empty findings list on such a failure would let a
+    corrupt report masquerade as "no findings" and pass a dry-run that should
+    have surfaced the problem, so parse/shape errors are propagated to the caller.
+    A missing report keeps the prior no-error behavior.
+    """
     if not report_path.exists():
-        return []
+        return [], None
     try:
         import yaml
         data = yaml.safe_load(report_path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    except Exception as exc:
+        return [], f"{report_path.name} unreadable: {type(exc).__name__}: {exc}"
+    if data is None:
+        return [], None
     if not isinstance(data, dict):
-        return []
+        return [], f"{report_path.name} is not a YAML mapping"
     findings = data.get("findings", [])
     if not isinstance(findings, list):
-        return []
-    return [f for f in findings if isinstance(f, dict)]
+        return [], f"{report_path.name} has a non-list 'findings' field"
+    return [f for f in findings if isinstance(f, dict)], None
 
 
 def _run_validator(name: str, extra_args: list[str], out_path: Path) -> tuple[list[dict], str | None]:
@@ -164,7 +174,10 @@ def _run_validator(name: str, extra_args: list[str], out_path: Path) -> tuple[li
     if result.returncode not in (0, 1):
         stderr_snippet = result.stderr.strip()[:300]
         return [], f"validator {name} exited {result.returncode}: {stderr_snippet}"
-    return _read_report_findings(out_path), None
+    findings, report_err = _read_report_findings(out_path)
+    if report_err is not None:
+        return [], f"validator {name} report unreadable: {report_err}"
+    return findings, None
 
 
 _DRY_RUN_ISOLATION_CAVEATS: list[str] = [

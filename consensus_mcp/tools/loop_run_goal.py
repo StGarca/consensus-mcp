@@ -199,8 +199,15 @@ def _check_stop_rules(goal_packet_path: str, iteration_dir: str) -> list[dict]:
     try:
         parsed = json.loads(output)
         return parsed.get("stop_rules_fired", []) or []
-    except Exception:
-        return []
+    except Exception as exc:
+        # Parse-failure sibling of the exception handler above: the helper ran
+        # but emitted output we cannot decode. Silently returning [] would hide
+        # a real stop rule that fired, so surface the same check_stop_rules_failed
+        # breadcrumb (a breadcrumb_rule, so it does not trip blocked_stop_rule_fired).
+        return [{
+            "rule": "check_stop_rules_failed",
+            "detail": f"could not parse cmd_check_stop_rules output as JSON: {exc}; raw={output!r}",
+        }]
 
 
 def _detect_state_from_files(iter_dir: Path, stop_rules_fired: list[dict]) -> str:
