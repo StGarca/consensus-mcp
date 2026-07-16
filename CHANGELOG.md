@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.4.1 - 2026-07-16
+
+**Dispatch reliability fixes + dedup refactor, landed through a sealed
+3-AI deep-audit consult (codex/gemini/grok, iter eb8af083).**
+
+- Silently-swallowed errors now propagate (PR #3, external contribution):
+  a stop-rules JSON parse failure surfaces a `check_stop_rules_failed`
+  breadcrumb instead of vanishing; a corrupt/malformed validator report
+  fails the dry-run instead of passing as "no findings"; an invalid
+  `CONSENSUS_MCP_STALL_SILENCE_SECONDS` warns on stderr instead of being
+  silently ignored.
+- Fail-closed hardening on top of PR #3 (panel follow-up): a validator
+  that exits 0/1 without writing its `--out` report is now an
+  infrastructure error, not a clean run; end-to-end regression test
+  covers both accepted exit codes.
+- Reviewer-dispatch dedup refactor (PR #4, external contribution): the
+  four contributor adapters collapse onto `SubprocessContributorAdapter`
+  and the four `reviewer.dispatch_*` MCP wrappers onto
+  `_reviewer_dispatch_common` (-681 lines of duplicated control flow,
+  behavior preserved).
+- New parity/characterization matrix (`test_dispatch_parity.py`, 58
+  tests) pins the dispatch contract - adapter argv snapshots, option
+  precedence, round-keyed ids, DispatchError paths, wrapper structured
+  errors, rc-vs-ok reconciliation, phase-vs-mode precedence - and was
+  verified green on BOTH the pre-refactor and refactored trees as the
+  merge gate for the refactor.
+- Full validation: 2,361 tests passed and 10 skipped; CI green on every
+  merged tip (CodeQL + pytest matrix, ubuntu/windows, py3.11/3.12).
+
 ## 2.4.0 - 2026-07-10
 
 **Consensus governance is explicitly per-project and opt-in.**
