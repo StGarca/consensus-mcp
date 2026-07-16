@@ -27,11 +27,12 @@ Flag-exposure decision (claude-iter0009-001, resolved 2026-05-10):
 """
 from __future__ import annotations
 
-import contextlib
-import io
-import json
-
 from consensus_mcp import _dispatch_codex
+from consensus_mcp.tools._reviewer_dispatch_common import (
+    OUTPUT_SCHEMA,
+    resolve_mode as _resolve_mode,
+    run_dispatch,
+)
 
 
 SCHEMA = {
@@ -108,39 +109,8 @@ SCHEMA = {
         "required": ["goal_packet_path", "iteration_dir"],
         "additionalProperties": False,
     },
-    "output_schema": {
-        "type": "object",
-        "properties": {
-            "ok": {"type": "boolean"},
-            "pass_id": {"type": ["string", "null"]},
-            "packet_sha256": {"type": ["string", "null"]},
-            "sealed_path": {"type": ["string", "null"]},
-            "archive_sealed_path": {"type": ["string", "null"]},
-            "audit_event_id": {"type": ["string", "null"]},
-            "error": {"type": ["string", "null"]},
-            "error_type": {"type": ["string", "null"]},
-            "raw_stdout_sample": {"type": ["string", "null"]},
-        },
-        "required": ["ok"],
-    },
+    "output_schema": OUTPUT_SCHEMA,
 }
-
-
-def _resolve_mode(phase: str | None, mode: str | None) -> str | None:
-    """iter-0044: resolve the effective --mode argv value.
-
-    Precedence (per iter-0043 converged plan q2 weighted-synthesis):
-      1. explicit `mode` wins (escape hatch for dispatcher-level control)
-      2. otherwise translate `phase` via _phase_mode.phase_to_mode
-      3. otherwise return None (caller omits --mode; dispatcher's own
-         default of "review" applies, preserving pre-iter-0044 behavior)
-    """
-    if mode is not None:
-        return mode
-    if phase is not None:
-        from consensus_mcp.contributors._phase_mode import phase_to_mode
-        return phase_to_mode(phase)
-    return None
 
 
 def _build_argv(
@@ -210,58 +180,7 @@ def handle(
         phase=phase,
         mode=mode,
     )
-    buf = io.StringIO()
-    # iter-0012 F3: wrap the helper main() call itself in try/except so any
-    # exception raised during pre-checks (yaml.YAMLError, ImportError,
-    # RuntimeError, FileNotFoundError, etc.) becomes a structured error dict
-    # for direct MCP callers instead of leaking as a JSON-RPC error.
-    # loop.run_goal contains exceptions via its own try/except, but direct
-    # tool callers got raw tracebacks before this fix.
-    #
-    # iter-0028 F3 (codex-rev-001): capture the helper's return code. The
-    # prior wrapper discarded main()'s rc entirely and trusted stdout JSON's
-    # `ok` field. A non-zero rc with `ok=True` in stdout would have been
-    # reported as success. Defense-in-depth: when rc != 0 and stdout JSON
-    # claims ok=True (or omits ok), force ok=False and stamp a marker key.
-    rc: int = 0
-    with contextlib.redirect_stdout(buf):
-        try:
-            rc = _dispatch_codex.main(argv) or 0
-        except SystemExit as exc:
-            # iter-0011 codex-rev-001 cross-fix: argparse raises SystemExit
-            # (BaseException, not Exception) on bad input. Without an explicit
-            # catch, malformed input from an MCP caller could kill the stdio
-            # MCP server. Convert to a structured failure response. (Same fix
-            # applied to reviewer_dispatch_gemini.py simultaneously.)
-            return {
-                "ok": False,
-                "error_type": "ArgparseSystemExit",
-                "error": f"argparse rejected input: {exc.code!r}",
-            }
-        except Exception as exc:
-            return {
-                "ok": False,
-                "error_type": type(exc).__name__,
-                "error": str(exc),
-            }
-    output = buf.getvalue().strip()
-    try:
-        parsed = json.loads(output)
-    except json.JSONDecodeError as exc:
-        return {
-            "ok": False,
-            "error_type": "WrapperJsonDecodeError",
-            "error": str(exc),
-            "raw_stdout_sample": output[:200],
-        }
-    # iter-0028 F3: rc-vs-stdout reconciliation. Only force when rc indicates
-    # failure AND the parsed payload is not already declaring ok=False. The
-    # marker key is only added on the forcing path; honest-failure passthrough
-    # (rc != 0 AND parsed["ok"] is False) leaves the dict untouched.
-    if rc != 0 and isinstance(parsed, dict) and parsed.get("ok") is not False:
-        parsed["ok"] = False
-        parsed["wrapper_forced_ok_false_due_to_nonzero_rc"] = True
-    return parsed
+    return run_dispatch(_dispatch_codex, argv)
 
 
 def register(registry) -> None:
