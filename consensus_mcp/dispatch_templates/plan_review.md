@@ -14,3 +14,5 @@ objection that remains open. Failed seats do not count against the plan.
 The host may change the plan to accept an objection, but may never overrule a
 reviewer objection by itself. The user decides unresolved holdouts. Do not
 implement changes. Review the exact converged_plan_sha256 in this packet.
+
+Reading the repository: you may read any repository file to check your answer, using the read-only means your harness provides, including read-only shell commands (for example `cat`, `type`, `Get-Content`, `ls`, `rg`, `git show`, `git log`, `git diff`). Do not modify files, run tests, install packages, or execute project code. If a read is refused or unavailable, name the file and the reason in your answer instead of guessing its contents.

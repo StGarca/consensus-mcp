@@ -10,3 +10,5 @@ and prefix its summary with [unfaithful] or [unrelated_change]. Any other tag
 counts as unfaithful. A finding requires the host to ask the user for a decision;
 the host cannot dismiss it. Do not implement changes. Review the exact plan
 and dispositions hashes in this packet.
+
+Reading the repository: you may read any repository file to check your answer, using the read-only means your harness provides, including read-only shell commands (for example `cat`, `type`, `Get-Content`, `ls`, `rg`, `git show`, `git log`, `git diff`). Do not modify files, run tests, install packages, or execute project code. If a read is refused or unavailable, name the file and the reason in your answer instead of guessing its contents.

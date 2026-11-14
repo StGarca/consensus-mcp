@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.5 - 2026-11-14
+
+Two reviewer-input fixes from the same outside DriverLogs consult.
+
+- **Reviewers are told they may read the repository** (DriverLogs FU-06). The ideas-pass (proposal), plan-pass and confirmation templates never said so, and the proposal templates called the packet "embedded for your reference", so a reviewer reported it could only review the excerpt. Every reviewer template now states that read-only shell commands (`cat`, `Get-Content`, `rg`, `git show` and similar) are reading tools, still forbids writes, tests, installs and running project code, and asks the reviewer to name any file it could not read instead of guessing. The consult skill now tells hosts never to forbid all commands in the goal.
+- **Review packets say which bytes were reviewed** (DriverLogs FU-11). Packets are built from the working tree, but a reviewer cited `head_sha` as the identity of what it reviewed. Packets now carry `reviewed_bytes: working_tree`, `worktree_dirty` (scoped files differ from `head_sha`, untracked files included) and a plain note telling reviewers to cite paths and lines, not the commit.
+
 ## 2.5.4 - 2026-11-14
 
 - **Reviews that repeat `iteration_id` / `reviewer_id` are no longer rejected.** A real Gemini plan review was discarded with "unexpected top-level keys: ['iteration_id', 'reviewer_id']" because it echoed the two identity fields the sealed envelope already records from the dispatcher. The Codex, Gemini, Grok and Kimi parsers now drop those two keys when they hold plain values; the echoed values never override the envelope, and every other unknown top-level key is still rejected. Checked against that real answer: 2.5.3 rejects it, 2.5.4 parses it.

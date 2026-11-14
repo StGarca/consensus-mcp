@@ -78,7 +78,10 @@ differentials. Therefore:
 
 {desired_end_state}
 
-# Context (read-only - embedded for your reference)
+# Context (embedded excerpt)
+
+Reading the repository: you may read any repository file to check your answer, using the read-only means your harness provides, including read-only shell commands (for example `cat`, `type`, `Get-Content`, `ls`, `rg`, `git show`, `git log`, `git diff`). Do not modify files, run tests, install packages, or execute project code. If a read is refused or unavailable, name the file and the reason in your answer instead of guessing its contents.
+
 
 {diff_packet_block}
 

@@ -19,6 +19,7 @@ The packet below is the canonical review surface. Review the unified diff and
 carried open items. `omitted` explicitly identifies context excluded by budget.
 You may use read-only tools to open changed files and `related_files` for context.
 Do not modify files or execute project code. Report required missing context.
+Read-only shell commands (for example `cat`, `type`, `Get-Content`, `ls`, `rg`, `git show`, `git log`, `git diff`) count as read-only tools.
 
 {diff_packet_block}
 

@@ -213,6 +213,16 @@ per-session steps.
 
 1. **Author the goal_packet + review-packet.** Finalize them BEFORE dispatching
    (mid-flight rewrites waste dispatches).
+   - **Let reviewers read.** Never forbid "all commands" or "all shell use" in the
+     goal: for several harnesses (Codex, OpenCode) a read-only command such as
+     `cat` or `rg` IS the file-reading tool, and a reviewer told not to run any
+     command reviews only the embedded excerpt (DriverLogs FU-06). Forbid writes,
+     tests, installs, project-code execution and model/provider calls instead; the
+     dispatch templates already allow read-only commands.
+   - **Name the reviewed bytes.** The packet is built from the working tree and
+     records `reviewed_bytes: working_tree` and `worktree_dirty`. If you review an
+     isolated snapshot, identify it by its manifest/file hashes, never by a
+     baseline commit that does not contain those bytes (DriverLogs FU-11).
 2. **Fan out to ALL enabled reviewers AT ONCE - in parallel.** Make the packet,
    send it to every reviewer concurrently, wait for all to seal. **Do NOT** run a
    "validate the plumbing with a single reviewer first, then parallelize the rest"

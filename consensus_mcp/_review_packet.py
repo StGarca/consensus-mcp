@@ -88,12 +88,25 @@ def build(
         base = _git(repo, "rev-parse", "--verify", f"{prior_head}^{{commit}}").decode().strip()
     else:
         base = _git(repo, "merge-base", base_ref, head).decode().strip() if base_ref else head
+    # Diffs and file bodies below are read from the working tree, so they
+    # include uncommitted edits. head_sha names the last commit only; a
+    # reviewer once cited it as the identity of the bytes it reviewed
+    # (DriverLogs FU-11). State the source explicitly in the packet itself.
+    worktree_dirty = bool(_git(repo, "status", "--porcelain", "--untracked-files=normal", "--", *paths).strip())
     packet = {
         "base_sha": base, "head_sha": head, "budget_applied": limits,
         "packet_mode": packet_mode, "unified_diff": "", "full_files": {},
         "scoped_files": {},
         "binary_files": [], "related_files": [], "related_excerpts": [],
         "open_items": [], "omitted": [],
+        "reviewed_bytes": "working_tree",
+        "worktree_dirty": worktree_dirty,
+        "provenance_note": (
+            "Diffs and file contents come from the working tree. head_sha is the last commit; "
+            + ("the scoped files have uncommitted changes, so head_sha does NOT identify the reviewed bytes. "
+               if worktree_dirty else "the scoped files match it. ")
+            + "Cite file paths and line numbers as what you reviewed, not head_sha."
+        ),
     }
 
     def omit(path, section, reason):
