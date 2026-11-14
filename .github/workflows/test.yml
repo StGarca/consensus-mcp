@@ -1,0 +1,58 @@
+name: tests
+
+on:
+  push:
+    # main is the latest-released state; v* are the active release/dev
+    # branches where all development lands (pre-v1.15.4 the trigger was
+    # main-only, so CI was dormant from v1.13.0->v1.15.3 while every
+    # release happened on a v* branch - fixed in v1.15.4).
+    branches: [main, 'v*']
+  pull_request:
+    branches: [main, 'v*']
+
+# Least-privilege GITHUB_TOKEN (CodeQL actions/missing-workflow-permissions):
+# this workflow only checks out the repo and runs tests - it never writes via
+# the token (no releases/comments/pushes/uploads), so read-only contents is
+# the minimal sufficient scope.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # Must match pyproject `requires-python`. v1.18.0 raised the floor to
+        # >=3.11, so `pip install -e .` (and its deps) refuses py3.10 - testing
+        # 3.10 here only fails at install. Keep this list == the supported range.
+        python: ["3.11", "3.12"]
+    env:
+      # Skip codex-cli-dependent tests; CI does not install the real codex binary.
+      CONSENSUS_MCP_SKIP_CODEX_CLI_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-timeout
+
+      - name: Run pytest
+        # --timeout converts a hung test (e.g. a real-subprocess test
+        # with no codex/gemini on the runner) into a NAMED failure with
+        # a traceback, instead of GitHub SIGTERM-killing the whole job
+        # (the historical ubuntu "exit code 143" mystery). pytest-timeout
+        # uses the signal method on POSIX and thread on Windows.
+        run: python -m pytest consensus_mcp/tests/ -q --timeout=120
+
+      - name: Run validator self-tests
+        run: python consensus_mcp/validators/run_validator_tests.py

@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "id": "codex-rev-001",
+      "severity": "medium",
+      "summary": "Test finding for fixture",
+      "citation": "consensus_mcp/_dispatch_codex.py:42",
+      "risk": "None; this is a test fixture",
+      "recommendation": "No action required"
+    }
+  ],
+  "goal_satisfied": false,
+  "goal_satisfied_rationale": "Test fixture; not a real review",
+  "blocking_objections": []
+}

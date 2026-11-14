@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {"type": "string"},
+    "pushback": {"type": ["string", "null"]},
+    "notes": {"type": "string"}
+  },
+  "required": ["summary", "pushback", "notes"],
+  "additionalProperties": false
+}

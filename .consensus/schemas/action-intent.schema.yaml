@@ -1,0 +1,127 @@
+# Action-Intent Schema
+#
+# Per codex external review 2026-05-27, suggestion 2 ("Define a structured
+# action-intent schema before implementation"). This schema is the contract
+# every Claude action must satisfy before the universal action gate
+# (.claude/hooks/universal-action-gate.py) allows the action to proceed.
+#
+# Each gated action emits an intent record at the deterministic path
+# documented in field_descriptions.intent_path. The universal gate reads the
+# record, validates against this schema, evaluates the four CLAUDE.md golden
+# rules, and either allows (rc=0) or blocks (rc=2, stderr) the action.
+#
+# Codex's directive: "Do not implement the validator until this schema is
+# pinned." This file IS the pinning.
+
+schema_version: 1
+
+required_fields:
+  - action_id
+  - tool_name
+  - target
+  - stated_assumption
+  - minimality_rationale
+  - scope_rationale
+  - success_criterion
+  - golden_rule_1_think_before_coding
+  - golden_rule_2_simplicity_first
+  - golden_rule_3_surgical_changes
+  - golden_rule_4_goal_driven_execution
+  - created_at_utc
+
+field_descriptions:
+  action_id: |
+    Unique identifier for this action attempt. Format:
+    intent-<utc-iso8601>-<sha256(tool_name+target_first_64_chars):8-char-prefix>.
+    Used to correlate the intent record with the audit log entry.
+  tool_name: |
+    The Claude Code tool being invoked (e.g., Edit, Write, MultiEdit,
+    NotebookEdit, Bash, Read, Glob, Grep, Agent, etc.). MUST match the
+    actual tool_name in the PreToolUse payload.
+  target: |
+    Single-line description of what the action targets. For Edit/Write:
+    the absolute file path. For Bash: the command line (truncated to 500
+    chars). For Read/Glob/Grep: the path or pattern. For Agent: the
+    subagent_type. Empty string allowed only for tool_name=ExitPlanMode
+    or similar contentless tools.
+  stated_assumption: |
+    Per CLAUDE.md golden rule 1 (Think Before Coding): the assumption
+    Claude is operating under that this action presumes. If uncertain,
+    Claude MUST ask the operator before producing this record. Empty
+    string is NOT valid; "no assumption" must be stated explicitly with
+    rationale.
+  minimality_rationale: |
+    Per CLAUDE.md golden rule 2 (Simplicity First): why this action is
+    the minimum required to advance the task. Identify what was NOT done
+    that could have been done speculatively. Empty string is NOT valid.
+  scope_rationale: |
+    Per CLAUDE.md golden rule 3 (Surgical Changes): how the action stays
+    within the user-requested scope. Identify what adjacent code/files
+    were NOT touched. Empty string is NOT valid.
+  success_criterion: |
+    Per CLAUDE.md golden rule 4 (Goal-Driven Execution): the verifiable
+    condition that confirms the action achieved its intent. Must be a
+    concrete check (e.g., "self-test exits 0", "file contents include
+    string X", "operator confirms via reply"). Empty string is NOT valid.
+  golden_rule_1_think_before_coding: |
+    Enum: PASS | NOT_APPLICABLE | OPERATOR_OVERRIDE. PASS requires
+    stated_assumption to be non-empty and Claude to confirm it has
+    surfaced any ambiguity to the operator if uncertain. NOT_APPLICABLE
+    only for actions with no design surface (e.g., Read of a known file).
+    OPERATOR_OVERRIDE requires an explicit operator authorization
+    captured in operator_override_evidence (optional field).
+  golden_rule_2_simplicity_first: |
+    Enum: PASS | NOT_APPLICABLE | OPERATOR_OVERRIDE. PASS requires
+    minimality_rationale non-empty AND no speculative scope added.
+  golden_rule_3_surgical_changes: |
+    Enum: PASS | NOT_APPLICABLE | OPERATOR_OVERRIDE. PASS requires
+    scope_rationale non-empty AND no out-of-scope edits.
+  golden_rule_4_goal_driven_execution: |
+    Enum: PASS | NOT_APPLICABLE | OPERATOR_OVERRIDE. PASS requires
+    success_criterion non-empty AND verifiable.
+  created_at_utc: |
+    UTC ISO-8601 timestamp of intent record creation. **INFORMATIONAL ONLY**
+    as of 2026-05-27. Originally a 60s freshness gate; removed per operator
+    directive: "within 60 seconds is arbitrary and pointless. Remove it."
+    The intent record is reasoning-capture and audit trail, not a security
+    token with an expiry. The field is retained because audit log entries
+    reference it for chronology, but the gate no longer rejects on age.
+  operator_override_evidence: |
+    OPTIONAL. Required only when ANY golden_rule_* field is set to
+    OPERATOR_OVERRIDE. One-line citation of the operator's explicit
+    authorization (e.g., "operator said 'just do it' at 2026-05-27T16:00Z").
+
+constraints:
+  - all enum fields restricted to {PASS, NOT_APPLICABLE, OPERATOR_OVERRIDE}
+  - if any golden_rule_* is OPERATOR_OVERRIDE, operator_override_evidence MUST be non-empty
+  - created_at_utc is INFORMATIONAL (the 60s freshness gate was removed 2026-05-27 per operator directive; intent records do not expire)
+  - action_id MUST follow the format pattern in field_descriptions.action_id
+  - target MAY be empty only for contentless tools (ExitPlanMode, etc.); list those tools in the validator's CONTENTLESS_TOOLS allowlist
+  - when multiple intent records match (same tool_name + target), the validator picks the most-recent by file mtime
+
+intent_path: |
+  Deterministic path where Claude writes the intent record before invoking
+  the tool: ./tmp/action-intent-<action_id>.yaml. The universal gate reads
+  this path; absence is a block reason.
+
+audit_log_format:
+  path: ./tmp/action-audit-log.jsonl
+  format: append-only JSON Lines (one JSON object per line)
+  per_entry_fields:
+    - action_id (matches intent record)
+    - tool_name
+    - target_first_120_chars
+    - gate_decision (PASS | BLOCK)
+    - gate_reason (string; populated on BLOCK)
+    - golden_rule_results (object with the 4 enum results)
+    - intent_record_sha256 (for tamper detection)
+    - logged_at_utc
+
+cross_references:
+  universal_gate_validator: .claude/hooks/universal-action-gate.py
+  dispatch_canon_validator: .claude/hooks/dispatch-canon-validator.py
+  pre_write_rule_consultation: .claude/hooks/pre-write-rule-consultation.py
+  golden_rules_source: per-project CLAUDE.md (sections defining the 4 golden rules)
+  prior_proof_schema: .consensus/schemas/tool-defect-proof.schema.yaml (the narrow A+D defect-edit subcomponent; codex suggestion 7 says keep this as a subcomponent of the broader system)
+  origin_iteration: consensus-state/active/iteration-claude-screwup-prevention-meta-2026-05-27
+  authored_per: consensus-state/active/iteration-claude-screwup-prevention-meta-2026-05-27/codex-external-review-suggestions.md

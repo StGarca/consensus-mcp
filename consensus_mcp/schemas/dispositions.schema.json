@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Host dispositions of sealed review ideas",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "dispositions"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "reviewer", "summary", "blocking", "disposition", "evidence"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "reviewer": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "minLength": 1},
+          "summary": {"type": "string", "minLength": 1},
+          "blocking": {"type": "boolean"},
+          "disposition": {"enum": ["pending", "accepted", "rejected", "deferred"]},
+          "evidence": {"type": "string"}
+        }
+      }
+    }
+  }
+}

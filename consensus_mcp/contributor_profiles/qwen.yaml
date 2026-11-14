@@ -1,0 +1,21 @@
+# Qwen reviewer seat over an OpenAI-compatible endpoint (Alibaba Cloud
+# compatible mode). Joins the panel only when CONSENSUS_MCP_QWEN_BASE_URL is set.
+# sensitive_data_allowed: false -> the consult asks whether the project holds
+# sensitive data (unless the project config declares it) and leaves this seat
+# out of any run where the answer is yes.
+name: qwen
+kind: openai_compatible
+packet: diff
+model: qwen4-max-preview
+fallback_models: []
+default_enabled: true
+sensitive_data_allowed: false
+base_url_env: CONSENSUS_MCP_QWEN_BASE_URL
+api_key_env: CONSENSUS_MCP_QWEN_API_KEY
+max_concurrency: 2
+timeout_seconds: 1800
+max_tokens: 16384
+output:
+  schema_enforced: true
+sealed_filename: qwen-review.yaml
+id_prefix: qwen-rev

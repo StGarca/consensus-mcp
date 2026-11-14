@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex review packet (auto-dispatch)",
+  "type": "object",
+  "required": ["findings", "goal_satisfied", "goal_satisfied_rationale", "blocking_objections"],
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "summary", "citation", "risk", "recommendation", "patch_proposal", "patch_not_proposed_reason"],
+        "additionalProperties": false,
+        "properties": {
+          "id":             {"type": "string", "pattern": "^codex-rev-\\d+$"},
+          "severity":       {"type": "string", "enum": ["low", "medium", "high", "blocking", "critical"]},
+          "summary":        {"type": "string", "minLength": 1},
+          "citation":       {"type": "string"},
+          "risk":           {"type": "string"},
+          "recommendation": {"type": "string"},
+          "patch_not_proposed_reason": {"type": ["string", "null"]},
+          "patch_proposal": {
+            "type": ["object", "null"],
+            "required": ["patch_id", "applies_to_findings", "base_sha", "unified_diff", "files_touched", "expected_tests"],
+            "additionalProperties": false,
+            "properties": {
+              "patch_id":             {"type": "string", "pattern": "^codex-rev-\\d+-patch$"},
+              "applies_to_findings":  {"type": "array", "items": {"type": "string", "pattern": "^codex-rev-\\d+$"}},
+              "base_sha":             {"type": "string"},
+              "unified_diff":         {"type": "string"},
+              "files_touched":        {"type": "array", "items": {"type": "string"}},
+              "expected_tests":       {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "goal_satisfied":            {"type": "boolean"},
+    "goal_satisfied_rationale":  {"type": "string"},
+    "blocking_objections":       {"type": "array", "items": {"type": "string"}}
+  }
+}

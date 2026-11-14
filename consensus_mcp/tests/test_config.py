@@ -1,0 +1,812 @@
+"""Unit tests for consensus_mcp.config - .consensus/config.yaml schema/validator.
+
+Per iter-0016a goal: pin the schema constants, default behavior, alias
+resolution, and every validation rule from converged-plan.yaml Section B.
+"""
+from __future__ import annotations
+
+from copy import deepcopy
+
+import pytest
+import yaml
+
+from consensus_mcp import config as cfg
+
+
+def test_governance_defaults_to_on_demand():
+    assert cfg.default_config()["governance"]["mode"] == cfg.GOVERNANCE_ON_DEMAND
+
+
+def test_fieldless_config_normalizes_to_on_demand():
+    normalized = cfg.normalize({"schema_version": 1})
+    assert normalized["governance"]["mode"] == cfg.GOVERNANCE_ON_DEMAND
+
+
+def test_invalid_governance_mode_is_rejected():
+    config = cfg.default_config()
+    config["governance"]["mode"] = "surprise-lockdown"
+    with pytest.raises(cfg.ConfigValidationError, match="governance.mode"):
+        cfg.validate(config)
+
+
+def test_governance_mode_resolution_fails_open(tmp_path):
+    assert cfg.resolve_governance_mode(tmp_path) == cfg.GOVERNANCE_ON_DEMAND
+    path = tmp_path / ".consensus" / "config.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text("not: [valid", encoding="utf-8")
+    assert cfg.resolve_governance_mode(tmp_path) == cfg.GOVERNANCE_ON_DEMAND
+
+
+def test_governance_mode_resolution_accepts_explicit_continuous(tmp_path):
+    config = cfg.default_config()
+    config["governance"]["mode"] = cfg.GOVERNANCE_CONTINUOUS
+    path = tmp_path / ".consensus" / "config.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    assert cfg.resolve_governance_mode(tmp_path) == cfg.GOVERNANCE_CONTINUOUS
+
+
+# ---------- defaults ----------
+
+def test_default_config_validates():
+    """Default config must pass its own validator (sanity)."""
+    cfg.validate(cfg.default_config())
+
+
+def test_normalize_silently_ignores_inert_legacy_keys():
+    import warnings
+
+    legacy = {
+        "project": {"config_created_at_utc": "unused"},
+        "snapshots": {"branch": "unused", "retention": "unused"},
+        "artifacts": {"root": "unused", "seal_outputs": False},
+        "contributors": {"adapters": {
+            name: {"can_propose": False, "can_review": False, "can_converge": False}
+            for name in ("claude", "codex", "gemini", "grok", "kimi")
+        }},
+    }
+    legacy["contributors"]["adapters"]["codex"]["sandbox_mode"] = "unused"
+    original = deepcopy(legacy)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        normalized = cfg.normalize(legacy)
+        cfg.validate(normalized)
+    assert not caught
+    assert normalized == cfg.default_config()
+    assert legacy == original
+
+
+def test_default_reviewer_models_and_effort():
+    from consensus_mcp._contributor_profiles import load_builtin_profiles
+
+    profiles = load_builtin_profiles()
+    adapters = cfg.default_config()["contributors"]["adapters"]
+    for name, adapter in adapters.items():
+        assert adapter["model"] == profiles[name]["model"]
+    assert adapters["codex"]["effort"] == "low"
+    assert adapters["claude"]["effort"] == "low"
+    assert adapters["kimi"]["effort"] == "medium"
+    assert adapters["grok"]["effort"] == "medium"
+
+
+def test_default_workflow_is_propose_converge():
+    """Per converged-plan: default mode is propose-converge when >=2 contributors."""
+    assert cfg.default_config()["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_default_independence_is_blind_first():
+    assert cfg.default_config()["workflow"]["independence"] == cfg.INDEPENDENCE_BLIND
+
+
+def test_default_convergence_host_decides():
+    assert cfg.default_config()["convergence"]["rule"] == cfg.CONVERGE_HOST_DECIDES
+
+
+def test_default_disposition_weighted_synthesis():
+    """iter-three-gaps: workflow #4 default is weighted-synthesis (per doctrine).
+    all-or-nothing remains valid as explicit opt-in.
+    """
+    assert cfg.default_config()["convergence"]["finding_disposition"] == cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+
+
+@pytest.mark.parametrize("mode", sorted(cfg.VALID_WORKFLOWS))
+def test_host_decides_and_weighted_synthesis_validate_in_every_mode(mode):
+    config = cfg.default_config()
+    config["workflow"]["mode"] = mode
+    config["contributors"]["enabled"] = ["claude", "codex", "gemini"]
+    if mode == cfg.WORKFLOW_ARCHITECT_BUILD:
+        config["roles"] = {"architect": "claude", "builder": "codex", "reviewer": "gemini"}
+    assert config["convergence"]["rule"] == cfg.CONVERGE_HOST_DECIDES
+    assert config["convergence"]["finding_disposition"] == cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+    cfg.validate(config)
+
+
+@pytest.mark.parametrize("rule", [
+    cfg.CONVERGE_UNANIMOUS, cfg.CONVERGE_STRICT_MAJ,
+    cfg.CONVERGE_INCL_MAJ, cfg.CONVERGE_ADVISORY,
+])
+def test_explicit_legacy_convergence_and_disposition_remain_valid(rule):
+    config = cfg.default_config()
+    config["workflow"]["mode"] = (
+        cfg.WORKFLOW_ADVISORY if rule == cfg.CONVERGE_ADVISORY
+        else cfg.WORKFLOW_POST_REVIEW
+    )
+    config["convergence"].update(
+        rule=rule, finding_disposition=cfg.DISPOSITION_ALL_OR_NOTHING,
+    )
+    cfg.validate(config)
+    assert cfg.normalize(config)["convergence"] == config["convergence"]
+
+
+def test_validate_propose_converge_accepts_weighted_synthesis():
+    """Workflow #4 + weighted-synthesis disposition validates."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    config["convergence"]["finding_disposition"] = cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+    cfg.validate(config)  # must not raise
+
+
+def test_validate_propose_converge_accepts_all_or_nothing():
+    """Workflow #4 + all-or-nothing disposition still validates (backward compat)."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    config["convergence"]["finding_disposition"] = cfg.DISPOSITION_ALL_OR_NOTHING
+    cfg.validate(config)  # must not raise
+
+
+def test_validate_propose_converge_rejects_per_finding():
+    """Workflow #4 rejects per-finding disposition (post-review semantics only)."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    config["convergence"]["finding_disposition"] = cfg.DISPOSITION_PER_FINDING
+    with pytest.raises(cfg.ConfigValidationError, match="per-finding is post-review semantics"):
+        cfg.validate(config)
+
+
+# ---------- iter-workflow-abc-introduce: Workflow A/B/C aliases ----------
+
+def test_alias_A_resolves_to_propose_converge():
+    """Letter alias A -> propose-converge (Workflow A)."""
+    assert cfg.WORKFLOW_ALIASES["A"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+    assert cfg.WORKFLOW_ALIASES["a"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_alias_B_resolves_to_post_review():
+    """Letter alias B -> post-review (Workflow B)."""
+    assert cfg.WORKFLOW_ALIASES["B"] == cfg.WORKFLOW_POST_REVIEW
+    assert cfg.WORKFLOW_ALIASES["b"] == cfg.WORKFLOW_POST_REVIEW
+
+
+def test_alias_C_resolves_to_autonomous_execute():
+    """Letter alias C -> autonomous-execute (Workflow C)."""
+    assert cfg.WORKFLOW_ALIASES["C"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+    assert cfg.WORKFLOW_ALIASES["c"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+
+
+def test_workflow_autonomous_execute_constant_exists():
+    """Workflow C semantic string defined."""
+    assert cfg.WORKFLOW_AUTONOMOUS_EXECUTE == "autonomous-execute"
+    assert cfg.WORKFLOW_AUTONOMOUS_EXECUTE in cfg.VALID_WORKFLOWS
+
+
+def test_normalize_resolves_letter_alias_A():
+    """normalize() converts 'A' to canonical semantic string."""
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "A"
+    out = cfg.normalize(config)
+    assert out["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_normalize_resolves_letter_alias_C():
+    """normalize() converts 'C' to canonical autonomous-execute."""
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "C"
+    out = cfg.normalize(config)
+    assert out["workflow"]["mode"] == cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+
+
+def test_normalize_numeric_alias_emits_deprecation_warning():
+    """Numeric aliases (3, 4) still resolve but emit DeprecationWarning."""
+    import warnings
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "4"
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        out = cfg.normalize(config)
+        assert out["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(deprecation_warnings) >= 1
+        assert "numeric alias" in str(deprecation_warnings[0].message)
+
+
+def test_normalize_letter_alias_no_deprecation_warning():
+    """Letter aliases (A, B, C) do NOT emit DeprecationWarning."""
+    import warnings
+    config = cfg.default_config()
+    config["workflow"]["mode"] = "A"
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        cfg.normalize(config)
+        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(deprecation_warnings) == 0
+
+
+def test_validate_autonomous_execute_requires_3_contributors():
+    """Workflow C requires exactly 3 independent contributors (autonomous safety floor).
+    v1.20.1: message updated to say 'independent' - host_peer no longer counts."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+    config["contributors"]["enabled"] = ["claude", "codex"]  # only 2 independent
+    with pytest.raises(cfg.ConfigValidationError, match="requires exactly 3 independent"):
+        cfg.validate(config)
+
+
+def test_validate_autonomous_execute_accepts_3_contributors():
+    """Workflow C with 3 contributors validates."""
+    config = cfg.default_config()
+    config["project"]["name"] = "test"
+    config["workflow"]["mode"] = cfg.WORKFLOW_AUTONOMOUS_EXECUTE
+    # Pin to exactly 3 independents - the autonomous-execute rule requires N==3.
+    # (default_config() now returns 4 via dynamic profile lookup; override here
+    # so this test targets the validation rule, not the default count.)
+    config["contributors"]["enabled"] = ["claude", "codex", "gemini"]
+    cfg.validate(config)  # must not raise
+
+
+def test_default_timeout_policy_no_vote():
+    assert cfg.default_config()["workflow"]["timeout_policy"] == cfg.TIMEOUT_NO_VOTE
+
+
+def test_default_snapshot_on_close():
+    assert cfg.default_config()["snapshots"]["trigger"] == cfg.SNAPSHOT_ON_CLOSE
+
+
+def test_default_patch_authoring_claude_only():
+    assert cfg.default_config()["patches"]["authoring"] == cfg.PATCH_CLAUDE_ONLY
+
+
+def test_default_contributors_use_owner_panel_order(monkeypatch):
+    monkeypatch.delenv("CONSENSUS_MCP_DEEPSEEK_BASE_URL", raising=False)
+    assert cfg.default_config()["contributors"]["enabled"] == [
+        "claude", "codex", "kimi", "grok", "gemini"
+    ]
+
+
+def test_default_contributors_include_deepseek_only_with_endpoint(monkeypatch):
+    monkeypatch.setenv("CONSENSUS_MCP_DEEPSEEK_BASE_URL", "http://localhost:8000")
+    assert cfg.default_config()["contributors"]["enabled"] == [
+        "claude", "codex", "kimi", "grok", "gemini", "deepseek"
+    ]
+
+
+# ---------- normalize / aliases ----------
+
+def test_normalize_numeric_workflow_alias_3():
+    c = {"workflow": {"mode": 3}}
+    n = cfg.normalize(c)
+    assert n["workflow"]["mode"] == cfg.WORKFLOW_POST_REVIEW
+
+
+def test_normalize_numeric_workflow_alias_4():
+    c = {"workflow": {"mode": 4}}
+    n = cfg.normalize(c)
+    assert n["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_normalize_string_alias_3():
+    c = {"workflow": {"mode": "3"}}
+    n = cfg.normalize(c)
+    assert n["workflow"]["mode"] == cfg.WORKFLOW_POST_REVIEW
+
+
+def test_normalize_semantic_string_passes_through():
+    c = {"workflow": {"mode": cfg.WORKFLOW_ADVISORY}}
+    n = cfg.normalize(c)
+    assert n["workflow"]["mode"] == cfg.WORKFLOW_ADVISORY
+
+
+def test_normalize_fills_missing_keys_from_defaults():
+    """Sparse config should be filled in by defaults."""
+    sparse = {"schema_version": 1, "workflow": {"mode": cfg.WORKFLOW_POST_REVIEW}}
+    n = cfg.normalize(sparse)
+    assert n["convergence"]["rule"] == cfg.CONVERGE_HOST_DECIDES  # from defaults
+    assert n["convergence"]["finding_disposition"] == cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+    assert "contributors" in n
+    assert "adapters" in n["contributors"]
+
+
+def test_normalize_rejects_non_dict_root():
+    with pytest.raises(cfg.ConfigValidationError, match="mapping"):
+        cfg.normalize([])
+    with pytest.raises(cfg.ConfigValidationError, match="mapping"):
+        cfg.normalize(None)
+
+
+# ---------- validation: schema_version ----------
+
+def test_validate_rejects_missing_schema_version():
+    c = cfg.default_config()
+    del c["schema_version"]
+    with pytest.raises(cfg.ConfigValidationError, match="schema_version"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_wrong_schema_version():
+    c = cfg.default_config()
+    c["schema_version"] = 99
+    with pytest.raises(cfg.ConfigValidationError, match="schema_version"):
+        cfg.validate(c)
+
+
+# ---------- validation: workflow ----------
+
+def test_validate_rejects_unknown_workflow_mode():
+    c = cfg.default_config()
+    c["workflow"]["mode"] = "wrong"
+    with pytest.raises(cfg.ConfigValidationError, match="workflow.mode"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_unknown_independence():
+    c = cfg.default_config()
+    c["workflow"]["independence"] = "wrong"
+    with pytest.raises(cfg.ConfigValidationError, match="workflow.independence"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_unknown_timeout_policy():
+    c = cfg.default_config()
+    c["workflow"]["timeout_policy"] = "wrong"
+    with pytest.raises(cfg.ConfigValidationError, match="timeout_policy"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_zero_max_rounds():
+    c = cfg.default_config()
+    c["workflow"]["max_convergence_rounds"] = 0
+    with pytest.raises(cfg.ConfigValidationError, match="max_convergence_rounds"):
+        cfg.validate(c)
+
+
+# ---------- validation: contributors ----------
+
+def test_validate_rejects_empty_contributors():
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = []
+    with pytest.raises(cfg.ConfigValidationError, match="non-empty"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_duplicate_contributors():
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "codex", "codex"]
+    with pytest.raises(cfg.ConfigValidationError, match="unique"):
+        cfg.validate(c)
+
+
+def test_validate_accepts_arbitrary_contributor_name_open_set():
+    """OPEN contributor set (2026-05-22): validation is STRUCTURAL - it does NOT
+    reject names outside a closed enum (that closed enum was the "2-or-20-or-200
+    AIs" blocker). Constructibility is enforced at BUILD time by engine_factory."""
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "aider"]
+    c["contributors"]["adapters"] = {"claude": {}, "aider": {}}
+    cfg.validate(c)  # must NOT raise - 'aider' is a structurally-valid name
+
+
+def test_engine_factory_gates_unregistered_contributor():
+    """Constructibility lives in engine_factory (the only layer that knows the
+    open adapter registry), fail-closed with a register hint; registering ANY
+    name then builds - the min-2 / max-N, any-AI promise."""
+    from consensus_mcp import _engine_factory as ef
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "aider"]
+    with pytest.raises(ef.EngineFactoryError, match="register_contributor"):
+        ef.build_adapters(c)
+    from consensus_mcp.contributors.base import FakeAlwaysApprove
+    class AiderAdapter(FakeAlwaysApprove):
+        name = "aider"
+    ef.register_contributor("aider", AiderAdapter)
+    try:
+        adapters = ef.build_adapters(c, claude_artifact_callback=lambda p: {
+            "findings": [], "goal_satisfied": True, "blocking_objections": []})
+        assert set(adapters) == {"claude", "aider"}
+    finally:
+        ef.unregister_contributor("aider")
+
+
+def test_validate_rejects_whitespace_only_contributor_name():
+    """1.17 review (kimi-004): structural validation must reject whitespace-only
+    names, not just empty strings."""
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "   "]
+    c["contributors"]["adapters"] = {"claude": {}, "   ": {}}
+    with pytest.raises(cfg.ConfigValidationError, match="non-whitespace"):
+        cfg.validate(c)
+
+
+def test_validate_allows_no_claude():
+    """v1.18.0: claude is OPTIONAL (open-contributor model - any AI / min-2). A
+    panel with no claude validates; the host still orchestrates the loop."""
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["codex", "gemini"]
+    cfg.validate(c)  # no raise
+
+
+def test_validate_allows_missing_adapter():
+    """v1.18.0: a contributors.adapters entry is OPTIONAL - constructibility is
+    the engine_factory's fail-closed job (config.validate is structural only). A
+    built-in contributor with no adapters entry validates."""
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "codex", "gemini"]
+    del c["contributors"]["adapters"]["gemini"]
+    cfg.validate(c)  # no raise
+
+
+def test_validate_allows_profile_backed_contributor():
+    """v1.18.0: a profile-backed contributor (built-in profile, e.g. kimi) with no
+    adapters entry validates; engine_factory builds it via ProfileAdapter."""
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = ["claude", "codex", "kimi"]
+    cfg.validate(c)  # no raise
+
+
+# ---------- validation: convergence ----------
+
+def test_validate_rejects_unknown_convergence_rule():
+    c = cfg.default_config()
+    c["convergence"]["rule"] = "wrong"
+    with pytest.raises(cfg.ConfigValidationError, match="convergence.rule"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_unknown_finding_disposition():
+    c = cfg.default_config()
+    c["convergence"]["finding_disposition"] = "wrong"
+    with pytest.raises(cfg.ConfigValidationError, match="finding_disposition"):
+        cfg.validate(c)
+
+
+# ---------- cross-validation rules ----------
+
+def test_validate_propose_converge_requires_two_contributors():
+    """Workflow #4 with only claude is invalid."""
+    c = cfg.default_config()
+    c["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    c["contributors"]["enabled"] = ["claude"]
+    with pytest.raises(cfg.ConfigValidationError, match="propose-converge requires at least 2"):
+        cfg.validate(c)
+
+
+def test_validate_propose_converge_forces_all_or_nothing():
+    """D5 majority resolution: per-finding restricted to post-review + advisory."""
+    c = cfg.default_config()
+    c["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    c["convergence"]["finding_disposition"] = cfg.DISPOSITION_PER_FINDING
+    with pytest.raises(cfg.ConfigValidationError, match="all-or-nothing"):
+        cfg.validate(c)
+
+
+def test_validate_per_finding_allowed_in_post_review():
+    """per-finding is legal in workflow #3."""
+    c = cfg.default_config()
+    c["workflow"]["mode"] = cfg.WORKFLOW_POST_REVIEW
+    c["workflow"]["independence"] = cfg.INDEPENDENCE_VISIBLE
+    c["convergence"]["finding_disposition"] = cfg.DISPOSITION_PER_FINDING
+    cfg.validate(c)  # should not raise
+
+
+def test_validate_advisory_mode_rejects_voting_rule():
+    c = cfg.default_config()
+    c["workflow"]["mode"] = cfg.WORKFLOW_ADVISORY
+    c["convergence"]["rule"] = cfg.CONVERGE_STRICT_MAJ
+    with pytest.raises(cfg.ConfigValidationError, match="advisory.*requires"):
+        cfg.validate(c)
+
+
+def test_validate_advisory_rule_requires_advisory_mode():
+    c = cfg.default_config()
+    c["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    c["convergence"]["rule"] = cfg.CONVERGE_ADVISORY
+    with pytest.raises(cfg.ConfigValidationError, match="advisory.*valid only"):
+        cfg.validate(c)
+
+
+def test_validate_strict_majority_with_one_contributor_invalid():
+    c = cfg.default_config()
+    c["workflow"]["mode"] = cfg.WORKFLOW_POST_REVIEW
+    c["workflow"]["independence"] = cfg.INDEPENDENCE_VISIBLE
+    c["contributors"]["enabled"] = ["claude"]
+    c["convergence"]["rule"] = cfg.CONVERGE_STRICT_MAJ
+    with pytest.raises(cfg.ConfigValidationError, match="strict-majority is invalid with only 1"):
+        cfg.validate(c)
+
+
+def test_validate_sequential_requires_two_contributors():
+    c = cfg.default_config()
+    c["workflow"]["mode"] = cfg.WORKFLOW_POST_REVIEW
+    c["workflow"]["independence"] = cfg.INDEPENDENCE_SEQUENTIAL
+    c["contributors"]["enabled"] = ["claude"]
+    c["convergence"]["rule"] = cfg.CONVERGE_UNANIMOUS
+    with pytest.raises(cfg.ConfigValidationError, match="sequential requires at least 2"):
+        cfg.validate(c)
+
+
+# ---------- patches ----------
+
+def test_validate_rejects_unknown_patch_authoring():
+    c = cfg.default_config()
+    c["patches"]["authoring"] = "wrong"
+    with pytest.raises(cfg.ConfigValidationError, match="patches.authoring"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_negative_max_patch_lines():
+    c = cfg.default_config()
+    c["patches"]["max_patch_lines"] = -1
+    with pytest.raises(cfg.ConfigValidationError, match="max_patch_lines"):
+        cfg.validate(c)
+
+
+# ---------- snapshots ----------
+
+def test_validate_rejects_unknown_snapshot_trigger():
+    c = cfg.default_config()
+    c["snapshots"]["trigger"] = "wrong"
+    with pytest.raises(cfg.ConfigValidationError, match="snapshots.trigger"):
+        cfg.validate(c)
+
+
+def test_validate_periodic_requires_period():
+    c = cfg.default_config()
+    c["snapshots"]["trigger"] = cfg.SNAPSHOT_PERIODIC
+    # both periodic fields null
+    with pytest.raises(cfg.ConfigValidationError, match="periodic requires"):
+        cfg.validate(c)
+
+
+def test_validate_periodic_accepts_every_iterations():
+    c = cfg.default_config()
+    c["snapshots"]["trigger"] = cfg.SNAPSHOT_PERIODIC
+    c["snapshots"]["periodic"]["every_iterations"] = 5
+    cfg.validate(c)  # should not raise
+
+
+def test_validate_periodic_accepts_every_minutes():
+    c = cfg.default_config()
+    c["snapshots"]["trigger"] = cfg.SNAPSHOT_PERIODIC
+    c["snapshots"]["periodic"]["every_minutes"] = 30
+    cfg.validate(c)  # should not raise (v1 will WARN at load time, not raise here)
+
+
+def test_validate_non_periodic_requires_null_periods():
+    c = cfg.default_config()
+    c["snapshots"]["trigger"] = cfg.SNAPSHOT_ON_CLOSE
+    c["snapshots"]["periodic"]["every_iterations"] = 5
+    with pytest.raises(cfg.ConfigValidationError, match="periodic.every_iterations.*null"):
+        cfg.validate(c)
+
+
+def test_validate_rejects_zero_every_iterations():
+    c = cfg.default_config()
+    c["snapshots"]["trigger"] = cfg.SNAPSHOT_PERIODIC
+    c["snapshots"]["periodic"]["every_iterations"] = 0
+    with pytest.raises(cfg.ConfigValidationError, match="every_iterations"):
+        cfg.validate(c)
+
+
+# ---------- load + file IO ----------
+
+def test_load_round_trip(tmp_path):
+    """Write default config to disk, load it back, verify."""
+    p = tmp_path / "config.yaml"
+    p.write_text(yaml.safe_dump(cfg.default_config()), encoding="utf-8")
+    loaded = cfg.load(p)
+    assert loaded["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_load_alias_resolved_at_load(tmp_path):
+    """Numeric aliases in YAML resolve to semantic names on load."""
+    p = tmp_path / "config.yaml"
+    p.write_text("schema_version: 1\nworkflow:\n  mode: 4\n", encoding="utf-8")
+    loaded = cfg.load(p)
+    assert loaded["workflow"]["mode"] == cfg.WORKFLOW_PROPOSE_CONVERGE
+
+
+def test_load_sparse_yaml_fills_defaults(tmp_path):
+    p = tmp_path / "config.yaml"
+    p.write_text("schema_version: 1\n", encoding="utf-8")
+    loaded = cfg.load(p)
+    # Should have all default keys populated.
+    assert loaded["convergence"]["rule"] == cfg.CONVERGE_HOST_DECIDES
+    assert loaded["convergence"]["finding_disposition"] == cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+    assert loaded["contributors"]["enabled"] == ["claude", "codex", "kimi", "grok", "gemini"]
+
+
+def test_load_invalid_raises(tmp_path):
+    p = tmp_path / "config.yaml"
+    p.write_text("schema_version: 1\nworkflow:\n  mode: wrong\n", encoding="utf-8")
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.load(p)
+
+
+def test_load_malformed_yaml_raises_config_validation_error(tmp_path):
+    """codex-rev-001 fix: malformed YAML is wrapped in ConfigValidationError per module contract."""
+    p = tmp_path / "config.yaml"
+    p.write_text("schema_version: [\n", encoding="utf-8")
+    with pytest.raises(cfg.ConfigValidationError, match="malformed YAML"):
+        cfg.load(p)
+
+
+# ---------- v1.20.1: independent floor + orphan host_peer rejection ----------
+
+def _base_config(enabled):
+    c = cfg.default_config()
+    c["contributors"]["enabled"] = list(enabled)
+    c["workflow"]["mode"] = cfg.WORKFLOW_PROPOSE_CONVERGE
+    c["convergence"]["rule"] = cfg.CONVERGE_UNANIMOUS
+    return c
+
+
+def test_host_peer_does_not_satisfy_floor():
+    """A host_peer (same-model supplemental) must NOT count toward the >=2
+    independent floor; only claude + claude-swe-reviewer -> 1 independent -> rejected."""
+    with pytest.raises(cfg.ConfigValidationError, match="2 independent|at least 2"):
+        cfg.validate(_base_config(["claude", "claude-swe-reviewer"]))
+
+
+def test_independent_pair_plus_host_peer_is_valid():
+    """claude + codex (2 independents) + claude-swe-reviewer (supplemental) is valid."""
+    cfg.validate(_base_config(["claude", "codex", "claude-swe-reviewer"]))
+
+
+def test_orphan_host_peer_rejected():
+    """claude-swe-reviewer without its host (claude) must be rejected as orphan."""
+    with pytest.raises(cfg.ConfigValidationError, match="orphan|requires its host|host"):
+        cfg.validate(_base_config(["codex", "gemini", "claude-swe-reviewer"]))
+
+
+def test_unknown_open_contributor_counts_independent():
+    """Unknown contributor names count as independent (open-contributor model)."""
+    cfg.validate(_base_config(["claude", "my-custom-ai"]))
+
+
+# ---------- effective_config_sha256 ----------
+
+def test_sha256_deterministic():
+    """Same config -> same sha."""
+    c1 = cfg.default_config()
+    c2 = cfg.default_config()
+    assert cfg.effective_config_sha256(c1) == cfg.effective_config_sha256(c2)
+
+
+def test_sha256_changes_on_modification():
+    c1 = cfg.default_config()
+    c2 = deepcopy(c1)
+    c2["workflow"]["mode"] = cfg.WORKFLOW_POST_REVIEW
+    c2["workflow"]["independence"] = cfg.INDEPENDENCE_VISIBLE
+    c2["contributors"]["enabled"] = ["claude", "codex"]
+    c2["convergence"]["rule"] = cfg.CONVERGE_UNANIMOUS
+    assert cfg.effective_config_sha256(c1) != cfg.effective_config_sha256(c2)
+
+
+# ---------- legacy mode helpers ----------
+
+def test_is_legacy_mode_repo_true_when_config_absent(tmp_path):
+    assert cfg.is_legacy_mode_repo(tmp_path) is True
+
+
+def test_is_legacy_mode_repo_false_when_config_present(tmp_path):
+    (tmp_path / ".consensus").mkdir()
+    (tmp_path / ".consensus" / "config.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    assert cfg.is_legacy_mode_repo(tmp_path) is False
+
+
+def test_synthesize_legacy_config_has_sentinel(tmp_path):
+    legacy = cfg.synthesize_legacy_config(tmp_path)
+    assert legacy["schema_version"] == 0  # sentinel
+    assert legacy.get("_legacy_mode_synthesis") is True
+
+
+def test_synthesize_legacy_config_workflow_post_review(tmp_path):
+    """Per converged-plan Section D: legacy mode emulates workflow #3."""
+    legacy = cfg.synthesize_legacy_config(tmp_path)
+    assert legacy["workflow"]["mode"] == cfg.WORKFLOW_POST_REVIEW
+    assert legacy["contributors"]["enabled"] == ["claude", "codex"]
+    assert legacy["snapshots"]["trigger"] == cfg.SNAPSHOT_MANUAL  # legacy didn't auto-snapshot
+    assert legacy["patches"]["authoring"] == cfg.PATCH_CLAUDE_ONLY
+    assert legacy["convergence"]["rule"] == cfg.CONVERGE_HOST_DECIDES
+    assert legacy["convergence"]["finding_disposition"] == cfg.DISPOSITION_WEIGHTED_SYNTHESIS
+
+
+def test_synthesize_legacy_config_validate_rejected_because_v0_sentinel(tmp_path):
+    """Legacy synthesis is schema_version=0; validate() rejects it (engine uses separate path)."""
+    legacy = cfg.synthesize_legacy_config(tmp_path)
+    with pytest.raises(cfg.ConfigValidationError, match="schema_version"):
+        cfg.validate(legacy)
+
+
+# ---------- contributors.profiles validation (v1.18.0) ----------
+
+def _config_with_profiles(profiles: dict) -> dict:
+    """A valid default config with contributors.profiles set to `profiles`."""
+    c = cfg.default_config()
+    c["contributors"]["profiles"] = profiles
+    return c
+
+
+def test_validate_accepts_absent_profiles():
+    """contributors.profiles is optional; default config (no profiles) validates."""
+    cfg.validate(cfg.default_config())
+
+
+def test_validate_accepts_empty_profiles():
+    cfg.validate(_config_with_profiles({}))
+
+
+def test_validate_accepts_valid_cli_reviewer_profile():
+    good = {
+        "grok": {
+            "name": "grok",
+            "kind": "cli_reviewer",
+            "model": "test-model",
+            "detect": {"command": "grok"},
+            "invoke": {"transport": "flag", "prompt_flag": "-p"},
+            "output": {"schema_enforced": False},
+        }
+    }
+    cfg.validate(_config_with_profiles(good))
+
+
+def test_validate_rejects_profiles_not_a_mapping():
+    c = cfg.default_config()
+    c["contributors"]["profiles"] = ["not", "a", "dict"]
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(c)
+
+
+def test_validate_rejects_bad_profile_kind():
+    bad = {"x": {"name": "x", "kind": "wizard"}}
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(_config_with_profiles(bad))
+
+
+def test_validate_rejects_flag_transport_without_prompt_flag():
+    bad = {
+        "x": {
+            "name": "x",
+            "kind": "cli_reviewer",
+            "detect": {"command": "x"},
+            "invoke": {"transport": "flag", "prompt_flag": None},
+            "output": {"schema_enforced": False},
+        }
+    }
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(_config_with_profiles(bad))
+
+
+def test_validate_rejects_bad_install_os_key():
+    bad = {
+        "x": {
+            "name": "x",
+            "kind": "cli_reviewer",
+            "detect": {"command": "x"},
+            "invoke": {"transport": "stdin", "prompt_flag": None},
+            "output": {"schema_enforced": False},
+            "install": {"solaris": "pkg install x"},
+        }
+    }
+    with pytest.raises(cfg.ConfigValidationError):
+        cfg.validate(_config_with_profiles(bad))
+
+
+def test_default_config_enabled_is_dynamic_independents_in_order(monkeypatch):
+    monkeypatch.delenv("CONSENSUS_MCP_DEEPSEEK_BASE_URL", raising=False)
+    enabled = cfg.default_config()["contributors"]["enabled"]
+    assert "claude-swe-reviewer" not in enabled       # host_peer excluded
+    assert "kimi" in enabled                           # dynamic includes kimi
+    assert enabled == ["claude", "codex", "kimi", "grok", "gemini"]

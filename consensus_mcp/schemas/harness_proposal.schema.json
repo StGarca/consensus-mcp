@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "consensus-mcp harness improvement proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "generated_at_utc",
+    "state_root",
+    "safety_policy",
+    "allowed_files",
+    "evidence",
+    "recommendations",
+    "next_steps"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "harness_improvement_proposal"},
+    "generated_at_utc": {"type": "string", "minLength": 1},
+    "state_root": {"type": "string", "minLength": 1},
+    "safety_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_only", "no_source_mutation", "requires_human_approval", "requires_consensus_review_before_edits", "note"],
+      "properties": {
+        "proposal_only": {"const": true},
+        "no_source_mutation": {"const": true},
+        "requires_human_approval": {"const": true},
+        "requires_consensus_review_before_edits": {"const": true},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
+    "allowed_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "line", "summary"],
+        "properties": {
+          "source": {"type": "string", "minLength": 1},
+          "line": {"type": "integer", "minimum": 1},
+          "summary": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "summary", "rationale", "candidate_files"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^harness-rec-[0-9]{3}$"},
+          "summary": {"type": "string", "minLength": 1},
+          "rationale": {"type": "string", "minLength": 1},
+          "candidate_files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "next_steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

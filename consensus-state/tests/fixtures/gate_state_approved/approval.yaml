@@ -1,0 +1,11 @@
+schema_version: 2
+iteration_id: gate-fixture-approved
+approved_by: fixture-operator
+approved_utc: '2026-05-08T00:00:00Z'
+approved_target_sha256: abababababababababababababababababababababababababababababababab
+approved_consensus_sha256: a80ab93c6be2898c3f6ee654d3f8906a198fe9ec636156ca9920240b6def7c4b
+approved_verification_sha256: 8c792dc979c432b169b0531230d7312b2b289d279630d3dbec3aa91b1e9dd87b
+production_scope:
+  type: render
+  target: fixture/path.txt
+signature_or_operator_nonce: fixture-nonce-do-not-trust

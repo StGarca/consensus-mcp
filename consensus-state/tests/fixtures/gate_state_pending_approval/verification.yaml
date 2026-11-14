@@ -1,0 +1,7 @@
+schema_version: 1
+iteration_id: gate-fixture-pending-approval
+passed: true
+scope_check:
+  passed: true
+  touched_files: ["fixture/path.txt"]
+  out_of_scope_files: []

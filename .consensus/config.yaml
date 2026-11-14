@@ -1,0 +1,59 @@
+schema_version: 1
+project:
+  name: consensus-mcp
+governance:
+  mode: continuous
+workflow:
+  mode: propose-converge
+  independence: blind-first-reveal
+  max_convergence_rounds: 3
+  timeout_policy: treat-as-no-vote
+contributors:
+  enabled:
+  - claude
+  - codex
+  - gemini
+  - kimi
+  - grok
+  adapters:
+    claude:
+      role: orchestrator
+      model: claude-fable-5-2
+      effort: low
+    codex:
+      command: codex
+      model: gpt-6-astra
+      effort: low
+    gemini:
+      command: agy
+      model: gemini-4-argon-high
+    grok:
+      command: grok
+      model: grok-4.7
+      effort: medium
+    kimi:
+      command: kimi
+      model: kimi-code/k3.1-pro
+      effort: medium
+convergence:
+  # The host decides through dispositions and plan passes.
+  rule: host-decides
+  finding_disposition: weighted-synthesis
+  converged_plan_enforcement: graduated
+patches:
+  authoring: claude-only
+  max_patch_lines: 600
+snapshots:
+  trigger: on-iteration-close
+  periodic:
+    every_iterations: null
+    every_minutes: null
+defaults:
+  iteration_timeout_seconds: 600
+  stall_silence_seconds: 180
+  pre_first_byte_silence_seconds: 600
+architect_loop:
+  max_cycles: 8
+  verification: ''
+  lane_branch_prefix: arch-lane/
+  max_wall_clock_minutes: 0

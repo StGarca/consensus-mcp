@@ -1,0 +1,22 @@
+schema_version: 1
+iteration_id: iteration-known-bad
+created_utc: "2026-05-08T00:00:05Z"
+consensus_state: blocked
+production_state: not_ready
+review_consensus: false
+implementation_ready: false
+production_ready: false
+production_allowed: false
+canonical_findings: []
+accepted_changes: []
+rejected_changes: []
+deferred_decisions: []
+unresolved_disagreements: []
+implementation_scope:
+  allowed_files: []
+  forbidden_files:
+    - "production outputs"
+  allowed_actions: []
+  forbidden_actions:
+    - "render production audio"
+checks_required: []

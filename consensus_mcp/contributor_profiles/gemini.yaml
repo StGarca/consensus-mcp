@@ -1,0 +1,53 @@
+# Built-in contributor profile: gemini (Google Antigravity / agy CLI).
+#
+# METADATA-ONLY in v1.18.0: gemini is dispatched by the EXISTING GeminiAdapter via
+# B-routing. This profile supplies the wizard list, detect+guide install/auth, the
+# trust-workspace env var, and the model/provenance label; it is NOT consumed by
+# ProfileAdapter. Full metadata is authored for the wizard + forward-compat.
+#
+# install/auth strings VERIFIED 2026-05-22 (do NOT invent):
+#   Google Antigravity CLI; auth: run `agy` -> OAuth / Antigravity login flow.
+#   env GEMINI_CLI_TRUST_WORKSPACE=true is REQUIRED for headless empty-output
+#   runs on gemini CLI >=0.43 (see reference_gemini_trust_workspace).
+name: gemini
+kind: cli_reviewer
+packet: diff
+model: "gemini-4-argon-high"
+fallback_models: []
+default_enabled: true
+detect:
+  command: agy
+invoke:
+  # METADATA-ONLY: gemini is dispatched by GeminiAdapter, not ProfileAdapter.
+  # transport=flag with prompt_flag=-p reflects the real Antigravity CLI invocation
+  # (agy -p "<prompt>") and validates clean.
+  transport: flag
+  base_args: []
+  prompt_flag: "-p"
+  workdir_flag: null
+  model_flag: "--model"
+env:
+  GEMINI_CLI_TRUST_WORKSPACE: "true"
+output:
+  strip_patterns: []
+  schema_enforced: false   # gemini does not enforce the review JSON natively
+sealed_filename: gemini-review.yaml
+id_prefix: gemini-rev
+install:
+  windows: "Install Google Antigravity CLI (agy) from Google Antigravity distribution"
+  linux: "Install Google Antigravity CLI (agy) from Google Antigravity distribution"
+auth:
+  command: "agy"
+  env_vars: []
+  note: "OAuth / Antigravity login on first run"
+instructions:
+  filename: GEMINI.md
+timeout_seconds: 1800
+# agy permissions: plan mode refuses file writes, so prompts can be
+# auto-approved safely and the reviewer can read the repo. skip_permissions is
+# only applied in plan mode. Override per project in .consensus/config.yaml
+# (contributors.profiles.gemini.* for consensus-mcp-consult, or
+# contributors.adapters.gemini.* for run_iteration), or per run with
+# --approval-mode / --no-skip-permissions.
+approval_mode: plan
+skip_permissions: true

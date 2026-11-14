@@ -1,0 +1,17 @@
+schema_version: 1
+iteration_id: iteration_known_good
+objective: "Phase 0 fixture: minimal valid iteration directory."
+mode: observational
+gate_state:
+  implementation_ready: false
+  production_ready: false
+  production_state: not_ready
+  production_allowed: false
+decision_ledger_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+claude_md_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+karpathy_principle_summary: |
+  Think Before Coding. Simplicity First. Surgical Changes. Goal-Driven Execution.
+changed_sections: []
+open_blockers: []
+check_results_if_any: []
+requested_output_schema: review-v9

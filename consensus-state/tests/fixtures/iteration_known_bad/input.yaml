@@ -1,0 +1,9 @@
+schema_version: 1
+iteration_id: iteration-known-bad
+mode: observational
+objective: "Phase 0 fixture: seeded with errors for validator self-test."
+inputs:
+  changed_sections: []
+  open_blockers: []
+  prior_pass_findings: []
+operator_notes: "Seeded with errors per validate_iteration.py spec."

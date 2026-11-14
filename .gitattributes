@@ -1,0 +1,12 @@
+# Normalize line endings to LF in the repository and on checkout.
+# This repo is developed on Linux/WSL; a Windows-side editor had rewritten the
+# working tree to CRLF, producing 151 phantom "modified" files with no content
+# change. Declaring LF policy makes git treat those as clean and prevents recurrence.
+* text=auto eol=lf
+
+# Never touch binary artifacts.
+*.bundle binary
+*.png binary
+*.jpg binary
+*.gz binary
+*.zip binary

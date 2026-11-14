@@ -1,0 +1,17 @@
+name: opencode-deepseek
+kind: cli_reviewer
+packet: full
+model: DeepSeek-V4.1-Flash-1017
+fallback_models: []
+default_enabled: false
+adapter: opencode
+detect:
+  command: opencode
+invoke:
+  transport: stdin
+  prompt_flag: null
+output:
+  schema_enforced: false
+timeout_seconds: 1800
+sealed_filename: opencode-deepseek-review.yaml
+id_prefix: opencode-deepseek-rev

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Host responses and user decisions on sealed plan objections",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "objections"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "send_back_after_pass": {"type": "integer", "minimum": 0},
+    "send_back_objection_id": {"type": "string", "minLength": 1},
+    "objections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "pass", "reviewer", "model", "kind", "summary", "response", "host_response", "evidence", "user_decision", "decided_by"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "pass": {"type": "integer", "minimum": 1},
+          "reviewer": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["wrong_rejection", "wrong_deferral", "wrong_acceptance", "conflict", "gap", "other", "unfaithful", "unrelated_change"]},
+          "summary": {"type": "string", "minLength": 1},
+          "response": {"enum": ["pending", "accepted", "rebutted"]},
+          "host_response": {"type": "string"},
+          "evidence": {"type": "string"},
+          "user_decision": {"enum": [null, "yay", "nay", "send_back"]},
+          "decided_by": {"enum": [null, "user"]}
+        }
+      }
+    }
+  }
+}

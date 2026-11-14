@@ -1,0 +1,11 @@
+schema_version: 1
+iteration_id: gate-fixture-approved
+production_clearances:
+  codex: approved
+  claude: approved
+unresolved_disagreements: []
+implementation_scope:
+  allowed_files: ["fixture/path.txt"]
+  forbidden_files: []
+  allowed_actions: ["fixture_action"]
+  forbidden_actions: []

@@ -1,0 +1,50 @@
+# Built-in contributor profile: kimi (Moonshot Kimi CLI).
+#
+# kimi IS consumed by ProfileAdapter - the ONLY built-in routed through the new
+# generic adapter in v1.18.0 (codex/gemini/claude keep their existing classes).
+# This profile is therefore the live invocation contract, not just metadata.
+#
+# Provenance regression fix: the parent project's kimi monkeypatch wrapper
+# mislabeled model='gemini-2.5-pro'. ProfileAdapter seals model from THIS field,
+# so the label below must be accurate (see converged-plan provenance gate).
+#
+# install/auth strings VERIFIED 2026-05-22 (do NOT invent):
+#   pipx package: kimi ; auth: `kimi login` (OAuth/subscription, interactive).
+#   stdin transport (NOT -p), --quiet --thinking, -w sets workdir for project ctx.
+name: kimi
+kind: cli_reviewer
+packet: diff
+model: "kimi-code/k3.1-pro"
+fallback_models: []
+default_enabled: true
+# Never reviews sensitive data: the consult asks (or reads the project's
+# sensitive_data setting) and leaves this seat out when the answer is yes.
+sensitive_data_allowed: false
+effort: medium
+detect:
+  command: kimi
+invoke:
+  transport: stdin         # kimi reads the prompt from stdin (NOT a -p flag)
+  base_args:
+    - "--quiet"
+    - "--thinking"
+  prompt_flag: null        # stdin transport -> no prompt flag
+  workdir_flag: "-w"       # sets cwd so the CLI loads project context
+  model_flag: "--model"
+env: {}
+output:
+  strip_patterns:
+    - "\\n*To resume this session:\\s*kimi -r \\S+\\s*$"
+  schema_enforced: false   # kimi does not enforce the review JSON natively
+sealed_filename: kimi-review.yaml
+id_prefix: kimi-rev
+install:
+  windows: "pipx install kimi"
+  linux: "pipx install kimi"
+auth:
+  command: "kimi login"
+  env_vars: []
+  note: "OAuth/subscription login (interactive)"
+instructions:
+  filename: AGENTS.md       # codex AND kimi both read AGENTS.md -> dedupe to one file
+timeout_seconds: 1800

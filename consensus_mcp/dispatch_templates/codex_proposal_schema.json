@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex proposal packet (workflow #4 propose-converge)",
+  "type": "object",
+  "required": [
+    "selected_target",
+    "rationale_vs_alternatives",
+    "deliverable_scope",
+    "risks",
+    "estimated_complexity",
+    "structural_abstention"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "selected_target": {
+      "type": ["string", "null"],
+      "description": "The candidate picked, or null when structural_abstention is true."
+    },
+    "rationale_vs_alternatives": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Concrete value-delta argument explaining why this target was selected over the others. When abstaining, explains why."
+    },
+    "deliverable_scope": {
+      "type": ["object", "null"],
+      "description": "Sketch of the next iteration's scope. May be null only when structural_abstention is true.",
+      "required": [
+        "next_iteration_id",
+        "files_in_scope",
+        "files_out_of_scope",
+        "key_design_decisions",
+        "acceptance_gates"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "next_iteration_id": {"type": "string", "minLength": 1},
+        "files_in_scope": {"type": "array", "items": {"type": "string"}},
+        "files_out_of_scope": {"type": "array", "items": {"type": "string"}},
+        "key_design_decisions": {"type": "array", "items": {"type": "string"}},
+        "acceptance_gates": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "estimated_complexity": {
+      "type": "string",
+      "enum": ["small", "medium", "large"]
+    },
+    "structural_abstention": {
+      "type": "boolean",
+      "description": "Set true when the contributor genuinely cannot engage with the question. Prevents false-positive convergence by silent failure."
+    }
+  }
+}

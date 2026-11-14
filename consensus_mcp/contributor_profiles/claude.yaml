@@ -1,0 +1,16 @@
+# Built-in contributor profile: claude (the host orchestrator).
+#
+# kind=host preserves the in-process orchestrator callback. A standalone CLI
+# reviewer is also available when the engine has no host callback.
+name: claude
+kind: host
+packet: diff
+model: "claude-fable-5-2"
+fallback_models: ['claude-opus-5-5']
+default_enabled: true
+effort: low
+instructions:
+  filename: CLAUDE.md
+detect:
+  command: claude
+timeout_seconds: 1800

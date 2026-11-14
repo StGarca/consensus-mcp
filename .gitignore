@@ -1,0 +1,81 @@
+# Local plugin state (context-mode KV store)
+data/
+
+# CodeGraph semantic index (local, per-machine; rebuilt via `codegraph init -i`)
+.codegraph/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
+pip-wheel-metadata/
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Editor / OS cruft
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Runtime state (not source)
+consensus-state/active/iteration-*/
+consensus-state/state/*.jsonl
+consensus-state/state/*.yaml
+consensus-state/archive/review-passes/*.yaml
+
+# Hook tooling logs
+.remember/
+
+# CLI state + local secrets (never commit)
+.codex/
+
+# Delivery artifacts (git bundles are built on demand, not source)
+*.bundle
+
+# Operator-controlled gate-stack local state (per-project pointers; not source).
+# These are minted/touched by the hook stack and the consensus-mcp runtime;
+# they reference absolute paths on the operator's machine and per-iteration
+# scope refs that are not portable across clones.
+.consensus/design-approved
+.consensus/.migration-warned
+.delivery-readiness/
+
+# Operator debriefs land at the repo root as part of the consult-prep flow;
+# they describe sessions in consuming projects and don't belong in this repo's
+# source history. Real release notes live in CHANGELOG.md.
+/debrief-*.md
+/debrief-*.txt
+
+# >>> consensus-mcp managed <<<
+.consensus/tmp/
+.consensus/cache/
+.consensus/logs/
+# <<< consensus-mcp managed >>>
+
+# Panel lock/marker files (consult runtime, never commit)
+consensus-state/**/*.lock
+consensus-state/**/.review.lock
+.consensus/session-active

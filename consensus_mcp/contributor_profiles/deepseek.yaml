@@ -1,0 +1,15 @@
+name: deepseek
+kind: openai_compatible
+packet: diff
+model: DeepSeek-V4.1-Flash-1017
+fallback_models: []
+default_enabled: true
+base_url_env: CONSENSUS_MCP_DEEPSEEK_BASE_URL
+reasoning_effort: low
+max_concurrency: 4
+timeout_seconds: 1800
+max_tokens: 32000
+output:
+  schema_enforced: false
+sealed_filename: deepseek-review.yaml
+id_prefix: deepseek-rev

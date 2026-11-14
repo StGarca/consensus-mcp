@@ -1,0 +1,7 @@
+schema_version: 1
+iteration_id: iteration-fixture-bad
+# Intentionally malformed: missing objective, mode, gate_state,
+# decision_ledger_hash, claude_md_hash, karpathy_principle_summary,
+# changed_sections, open_blockers, check_results_if_any,
+# requested_output_schema, packet_sha256.
+note: "deliberately incomplete packet for validate-mode self-test"

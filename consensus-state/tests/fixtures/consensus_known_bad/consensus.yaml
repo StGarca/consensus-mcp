@@ -1,0 +1,111 @@
+schema_version: 1
+# iteration_id intentionally missing -> MISSING_REQUIRED_KEY
+created_utc: "2026-05-08T00:00:00Z"
+consensus_state: somethingelse   # INVALID_ENUM_VALUE
+production_state: approved        # PRODUCTION_STATE_INCOHERENT (production_allowed=false below)
+review_consensus: false
+implementation_ready: true        # IMPLEMENTATION_SCOPE_INCOHERENT (allowed_files empty)
+production_ready: false
+production_allowed: false
+canonical_findings:
+  # blocking + unresolved but consensus_state != blocked -> BLOCKING_FINDING_NOT_REFLECTED_IN_CONSENSUS_STATE
+  - canonical_id: finding-001
+    source_findings:
+      - "codex:codex-001"
+    merge_method: exact
+    severity: blocking
+    status: unresolved
+    required_change: "do the thing"
+
+  # independent corroboration + high severity but rejected -> SEVERITY_GATE_VIOLATION
+  - canonical_id: finding-002
+    source_findings:
+      - "codex:codex-002"
+      - "claude:claude-002"
+    merge_method: exact
+    severity: high
+    status: rejected
+    required_change: "audit log path"
+    corroborated_by:
+      - reviewer: codex
+        finding_id: codex-rev-009
+        corroboration_strength: independent
+
+  # CANONICAL_KEY_COLLISION pair (same file/section/claim_class/required_change as finding-004)
+  - canonical_id: finding-003
+    source_findings:
+      - "codex:codex-003"
+    merge_method: exact
+    severity: medium
+    status: accepted
+    required_change: "duplicate text body"
+    file: "specA.md"
+    section: section_1
+    claim_class: correctness
+
+  - canonical_id: finding-004
+    source_findings:
+      - "codex:codex-004"
+    merge_method: exact
+    severity: medium
+    status: accepted
+    required_change: "duplicate text body"
+    file: "specA.md"
+    section: section_1
+    claim_class: correctness
+
+  # CANONICAL_FINDING_NO_SOURCES
+  - canonical_id: finding-005
+    source_findings: []
+    merge_method: exact
+    severity: low
+    status: accepted
+    required_change: "no sources"
+
+  # CORROBORATED_BY_MALFORMED (entry missing corroboration_strength)
+  - canonical_id: finding-006
+    source_findings:
+      - "codex:codex-006"
+    merge_method: exact
+    severity: medium
+    status: accepted
+    required_change: "malformed corroboration entry"
+    corroborated_by:
+      - reviewer: codex
+        finding_id: codex-rev-010
+        # corroboration_strength missing
+
+accepted_changes:
+  # ACCEPTED_CHANGE_DANGLING_SOURCE (references finding-999 not present)
+  - id: accepted-001
+    source_findings:
+      - finding-999
+    edit:
+      file: "x.md"
+      old_string: "old"
+      new_string: "new"
+
+  # ACCEPTED_CHANGE_MISSING_EDIT_FIELDS (no new_string)
+  - id: accepted-002
+    source_findings:
+      - finding-001
+    edit:
+      file: "y.md"
+      old_string: "old"
+
+rejected_changes: []
+deferred_decisions: []
+unresolved_disagreements: []
+implementation_scope:
+  allowed_files: []   # IMPLEMENTATION_SCOPE_INCOHERENT (implementation_ready=true above)
+  forbidden_files:
+    - "production outputs"
+  allowed_actions:
+    - "edit docs"
+  forbidden_actions:
+    - "render production audio"
+checks_required:
+  - id: git-diff-check
+    check_id: git.diff_check
+    args:
+      paths: []

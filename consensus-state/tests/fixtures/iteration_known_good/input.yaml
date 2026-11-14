@@ -1,0 +1,9 @@
+schema_version: 1
+iteration_id: iteration_known_good
+mode: observational
+objective: "Phase 0 fixture: minimal valid iteration directory for validator self-test."
+inputs:
+  changed_sections: []
+  open_blockers: []
+  prior_pass_findings: []
+operator_notes: "All-zeros canonical fixture. Real hashes recomputed by fixture build helper."
