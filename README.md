@@ -106,7 +106,7 @@ is needed. Claude is optional.
 ## Quick start
 
 ```bash
-pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.5.0
+pipx install git+https://github.com/StGarca/consensus-mcp.git@v2.5.1
 consensus-init --install-claude-code
 ```
 

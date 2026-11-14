@@ -21,6 +21,9 @@ def _argv(monkeypatch, tmp_path, binary="C:/tools/agy.exe", **kwargs):
 
     def fake_run_process(argv, **kw):
         seen["argv"] = argv
+        seen["stdin"] = kw.get("prompt")
+        if "--input-format" in argv:
+            return '{"event":"result","result":{"status":"SUCCESS","response":"{}"}}\n'
         return "{}"
 
     monkeypatch.setattr(gem, "run_process", fake_run_process)
@@ -187,3 +190,41 @@ def test_non_agy_binary_skips_the_roster(monkeypatch, tmp_path):
     gem._provider_invoke(prompt="x", model="Gemini 4 Argon (High)", repo_root=tmp_path,
                          schema_path=None, ns=ns, log_path=None, anchors=None)
     assert seen["model"] == "Gemini 4 Argon (High)"
+
+
+# --- full task delivery (found live: agy -p ignores plain piped stdin) ------
+
+def test_agy_stream_response_returns_the_final_result_text():
+    raw = ('{"event":"init"}\n{"event":"step_update","x":1}\n'
+           '{"event":"result","result":{"status":"SUCCESS","response":"{\\"a\\": 1}"}}\n')
+    assert gem._agy_stream_response(raw) == '{"a": 1}'
+
+
+@pytest.mark.parametrize("raw,kind", [
+    ('{"event":"result","result":{"status":"ERROR","response":"","error":"stream input message is missing the event field"}}', "crash"),
+    ('{"event":"result","result":{"status":"ERROR","response":"","error":"You have exhausted your quota"}}', "quota"),
+    ('{"event":"result","result":{"status":"SUCCESS","response":"   "}}', "parse"),
+    ('plain text, no events', "parse"),
+])
+def test_agy_failures_are_seat_failures_not_reviews(raw, kind):
+    with pytest.raises(gem.GeminiInvocationError) as err:
+        gem._agy_stream_response(raw)
+    assert err.value.failure_class == kind
+
+
+def test_agy_receives_the_whole_prompt_on_stdin(monkeypatch, tmp_path):
+    import json as _json
+    seen = {}
+    monkeypatch.setattr(gem, "_resolve_gemini_bin", lambda _b: "C:/tools/agy.exe")
+
+    def fake_run_process(argv, **kw):
+        seen.update(argv=argv, prompt=kw.get("prompt"))
+        return '{"event":"result","result":{"status":"SUCCESS","response":"ok"}}\n'
+
+    monkeypatch.setattr(gem, "run_process", fake_run_process)
+    big = "TASK HEADER\n" + ("filler line\n" * 6000) + "LAST LINE MARKER"
+    assert gem._invoke_gemini(prompt=big, gemini_bin="agy", model="gemini-4-argon-high",
+                              timeout_seconds=600, repo_root=tmp_path) == "ok"
+    assert all(len(a) < 1000 for a in seen["argv"])  # nothing large on the command line
+    content = _json.loads(seen["prompt"])["message"]["content"]
+    assert content.startswith("TASK HEADER") and "LAST LINE MARKER" in content

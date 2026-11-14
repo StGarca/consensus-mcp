@@ -21,7 +21,28 @@ Guarantees:
 from __future__ import annotations
 
 import os
+import sys
+import time
 from pathlib import Path
+
+# Windows refuses a rename onto a file another handle has open for a moment
+# (antivirus scanning a fresh write, an indexer, a concurrent reader): WinError 5
+# from os.replace. Retry briefly; a persistent failure still raises.
+_REPLACE_RETRY_DELAYS = (0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.8)
+
+
+def _replace(tmp, path, *, _sleep=None, _platform=None):
+    sleep = _sleep or time.sleep
+    if (_platform or sys.platform) != "win32":
+        os.replace(tmp, path)
+        return
+    for delay in _REPLACE_RETRY_DELAYS:
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            sleep(delay)
+    os.replace(tmp, path)
 
 
 def atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -40,7 +61,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp, path)
+        _replace(tmp, path)
     except BaseException:
         try:
             os.unlink(tmp)

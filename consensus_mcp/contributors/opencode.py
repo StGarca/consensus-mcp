@@ -4,10 +4,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 
 from consensus_mcp._dispatch_openai_compat import parse_json_output, prepare_template, profile_from_argv
 from consensus_mcp.contributors._subprocess_adapter import SubprocessContributorAdapter
+
+
+def _resolve_opencode_bin(binary: str) -> str:
+    """Resolve the way a shell would: Windows CreateProcess does not apply
+    PATHEXT, so a bare `opencode` cannot start npm's `opencode.cmd` launcher."""
+    return shutil.which(binary) or binary
 
 
 def _invoke_opencode(*, prompt, model, repo_root, schema_path, ns, log_path, anchors):
@@ -15,14 +22,27 @@ def _invoke_opencode(*, prompt, model, repo_root, schema_path, ns, log_path, anc
     cwd = repo_root.resolve()
     model_arg = model if "/" in model else f"dgx/{model}"
     env = dict(os.environ, PWD=str(cwd))
-    return run_process([ns.opencode_bin, "run", "-m", model_arg, prompt], cwd=cwd,
+    # The prompt goes over stdin: on the command line a real review packet
+    # exceeds Windows' 32k-character limit (WinError 206). The read-only
+    # `plan` agent reviews without editing files.
+    argv = [_resolve_opencode_bin(ns.opencode_bin), "run", "--agent", "plan", "-m", model_arg]
+    # The agent reads files silently and prints mostly at the end (live: 7.5
+    # minutes between its first sentence and the JSON), so a silence watchdog
+    # kills healthy reviews; the seat timeout bounds the run instead.
+    stall = int(max(float(ns.stall_silence_seconds or 0), float(ns.timeout_seconds or 0)))
+    return run_process(argv, prompt=prompt, cwd=cwd,
                        env=env, timeout_seconds=ns.timeout_seconds,
-                       stall_silence_seconds=ns.stall_silence_seconds,
+                       stall_silence_seconds=stall,
                        log_path=log_path, anchors=anchors)
 
 
 def _parse(raw, goal_packet, review_packet, repo_root, ns, schema_path):
-    return parse_json_output(raw, schema_path, None if ns.schema else ns.profile_data)
+    # opencode is an agent: it may narrate ("I'll ground this...") and fence
+    # the JSON, as DeepSeek did live. Recover the object like the other agent
+    # seats; schema validation below is unchanged.
+    from consensus_mcp._dispatch_base import _extract_json_from_text
+    return parse_json_output(_extract_json_from_text(raw), schema_path,
+                             None if ns.schema else ns.profile_data)
 
 
 def _configure_parser(parser):

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.5.1 - 2026-11-13
+
+Seat fixes found by the first real outside consult (a private project, run on Windows).
+
+- **Gemini (agy) now receives the review task.** `agy -p` never passes plain piped input to the model, so every Gemini seat got only the one-line "now respond" instruction; earlier reviews sealed only when the model reconstructed the task from repository files, and a snapshot without that context failed. The whole task now goes over agy's supported stdin channel (`--input-format stream-json`), the reply is read from the final result event, and an agy error is reported as a seat failure with its real class.
+- **OpenCode seat (DeepSeek on the DGX) works on Windows.** The prompt goes over stdin instead of the command line (a real packet exceeded Windows' 32k-character limit, WinError 206); a bare `opencode` resolves like a shell would, so npm's `.cmd` launcher starts (WinError 2); it runs opencode's read-only `plan` agent; JSON is recovered from the agent's narration; and the silence watchdog no longer kills a healthy agent that reads files quietly for minutes (the seat timeout bounds it).
+- **Clearer error** when a project profile override replaces a built-in seat without its `kind`/`adapter`.
+- Tests now assert what each seat actually delivers to the model, not just its command-line flags.
+
 ## 2.5.0 - 2026-11-13
 
 Modernization release. Every reviewer seat was verified against the real

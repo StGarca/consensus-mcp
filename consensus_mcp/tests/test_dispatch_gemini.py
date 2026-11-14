@@ -557,7 +557,10 @@ def test_invoke_antigravity_uses_agy_flags(monkeypatch, tmp_path):
             captured["cmd"] = cmd
             captured["kwargs"] = kwargs
             self.stdin = _BytesPipe()
-            self.stdout = _BytesPipe([b'{"findings": [], "goal_satisfied": true, "goal_satisfied_rationale": "ok", "blocking_objections": []}\n'])
+            captured["proc"] = self
+            review = '{"findings": [], "goal_satisfied": true, "goal_satisfied_rationale": "ok", "blocking_objections": []}'
+            result = {"event": "result", "result": {"status": "SUCCESS", "response": review}}
+            self.stdout = _BytesPipe([b'{"event":"init"}\n', json.dumps(result).encode() + b"\n"])
             self.stderr = _BytesPipe([])
             self.returncode = 0
         def poll(self):
@@ -581,3 +584,12 @@ def test_invoke_antigravity_uses_agy_flags(monkeypatch, tmp_path):
     assert "-m" not in cmd
     assert "--approval-mode" not in cmd
     assert "--skip-trust" not in cmd
+    # agy -p drops plain piped stdin, so the whole task must arrive as one
+    # stream-json user message on stdin, never only the short instruction.
+    assert cmd[cmd.index("--input-format") + 1] == "stream-json"
+    assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+    assert "body" not in cmd
+    message = json.loads(captured["proc"].stdin.written.decode("utf-8"))
+    assert message["event"] == "user" and message["message"]["role"] == "user"
+    assert message["message"]["content"].startswith("body\n\n")
+    assert "Output ONLY the JSON" in message["message"]["content"]

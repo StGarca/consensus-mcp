@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from consensus_mcp._dispatch_runner import (
     ProviderSpec,
+    classify_failure,
     main_for_provider,
     run_process,
     subprocess_env,
@@ -157,6 +158,40 @@ def _resolve_agy_model(binary, model, roster_fn=None):
         f"{', '.join(sorted(roster))}", 'crash')
 
 
+def _agy_stream_message(prompt: str, instruction: str) -> str:
+    """agy -p has no plain stdin input: piped text never reaches the model
+    (verified with agy 1.5.8 transcripts). Its documented stdin channel is
+    --input-format stream-json, one NDJSON user message per turn."""
+    content = f'{prompt}\n\n{instruction}' if prompt else instruction
+    return json.dumps({'event': 'user', 'message': {'role': 'user', 'content': content}},
+                      ensure_ascii=False) + '\n'
+
+
+def _agy_stream_response(raw: str) -> str:
+    """The reviewer's text from agy's stream-json output (final result event)."""
+    result = None
+    for line in (raw or '').splitlines():
+        line = line.strip()
+        if not line.startswith('{'):
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get('event') == 'result' and isinstance(event.get('result'), dict):
+            result = event['result']
+    if result is None:
+        raise GeminiInvocationError(f'agy returned no stream-json result event; first 300 chars: {(raw or "")[:300]!r}', 'parse')
+    if result.get('status') != 'SUCCESS':
+        error = str(result.get('error') or result.get('finished_reason') or 'unknown error')
+        kind = classify_failure(RuntimeError(error))  # from agy's own error text
+        raise GeminiInvocationError(f'agy run failed (status={result.get("status")}): {error}', kind)
+    response = result.get('response')
+    if not isinstance(response, str) or not response.strip():
+        raise GeminiInvocationError('agy returned an empty response', 'parse')
+    return response
+
+
 def _invoke_gemini(
     prompt,
     gemini_bin,
@@ -187,7 +222,11 @@ def _invoke_gemini(
             raise GeminiInvocationError(f'gemini approval_mode {mode!r} is not one of {sorted(_AGY_MODES)}; '
                                          'fix contributors.profiles.gemini.approval_mode (or contributors.adapters.gemini.approval_mode) '
                                          'in .consensus/config.yaml', 'crash')
-        argv = [binary, '-p', instruction, '--model', model, '--sandbox', '--mode', mode]
+        # The whole task travels over stdin as one stream-json message (no
+        # command-line length limit); -p only switches agy to print mode.
+        argv = [binary, '-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json',
+                '--model', model, '--sandbox', '--mode', mode]
+        stdin_text = _agy_stream_message(prompt, instruction)
         if skip_permissions and mode == 'plan':
             argv.append('--dangerously-skip-permissions')
         argv += ['--print-timeout', f'{max(1, int(timeout_seconds))}s']
@@ -196,10 +235,11 @@ def _invoke_gemini(
         stall_silence_seconds = max(float(stall_silence_seconds), float(timeout_seconds))
     else:
         argv = [binary, '-p', instruction, '-m', model, '--approval-mode', 'plan', '--skip-trust']
+        stdin_text = prompt
     try:
-        return run_process(
+        raw = run_process(
             argv,
-            prompt=prompt,
+            prompt=stdin_text,
             cwd=repo_root,
             env=_gemini_subprocess_env(),
             timeout_seconds=timeout_seconds,
@@ -213,6 +253,9 @@ def _invoke_gemini(
         )
     except DispatchError as exc:
         raise GeminiInvocationError(str(exc), exc.failure_class) from exc
+    if Path(binary).name.lower() in {'agy', 'agy.exe'}:
+        return _agy_stream_response(raw)
+    return raw
 
 def _parse_gemini_output(text: str, goal_packet: dict | None=None) -> dict:
     candidate = _extract_json_from_text(text)

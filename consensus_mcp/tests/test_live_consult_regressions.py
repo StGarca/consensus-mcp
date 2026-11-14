@@ -49,6 +49,8 @@ def test_agy_silence_watchdog_waits_for_full_timeout(monkeypatch, tmp_path, bina
 
     def fake_run_process(argv, **kwargs):
         seen.update(kwargs)
+        if "--input-format" in argv:  # agy speaks stream-json
+            return '{"event":"result","result":{"status":"SUCCESS","response":"{}"}}\n'
         return "{}"
 
     monkeypatch.setattr(_dispatch_gemini, "run_process", fake_run_process)

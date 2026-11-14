@@ -119,7 +119,16 @@ def _command(seat, profile, iteration_dir, pass_id, timeout_seconds):
     elif seat in {"claude", "codex", "kimi", "grok", "gemini"}:
         module = f"consensus_mcp._dispatch_{seat}"
     else:
-        raise ValueError(f"no dispatcher entrypoint for seat: {seat}")
+        from consensus_mcp._contributor_profiles import load_builtin_profiles
+        builtin = load_builtin_profiles().get(seat)
+        hint = ""
+        if isinstance(builtin, dict):
+            lost = sorted(k for k in ("kind", "adapter") if k in builtin and k not in profile)
+            if lost:
+                hint = (f"; contributors.profiles.{seat} replaces the built-in profile entirely "
+                        f"and is missing {', '.join(lost)} - copy the full built-in profile and edit it")
+        raise ValueError(f"no dispatcher entrypoint for seat: {seat} "
+                         "(needs kind: openai_compatible, adapter: opencode, or a built-in CLI seat name)" + hint)
     target = iteration_dir / "review-packet.yaml"
     packet = yaml.safe_load(target.read_text(encoding="utf-8")) if target.is_file() else None
     mode = "review" if isinstance(packet, dict) and packet.get("pass_kind") in {"plan", "confirm"} else "proposal"
