@@ -497,7 +497,8 @@ def test_interrupt_kills_all_started_processes_and_propagates(project, dispatche
     with pytest.raises(KeyboardInterrupt):
         run(project, seats=["claude", "codex"])
     assert time.monotonic() - started < 5
-    assert len(dispatchers[2]) == 2 and all(proc.poll() is not None for proc in dispatchers[2])
+    states = [(proc.pid, proc.poll()) for proc in dispatchers[2]]
+    assert len(states) == 2 and all(code is not None for _, code in states), states
 
 
 @pytest.mark.parametrize("timeout,deadline,maximum", [(100, 900, 70), (600, 50, 25)])

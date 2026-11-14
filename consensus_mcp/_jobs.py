@@ -146,9 +146,14 @@ def _kill_tree(proc: subprocess.Popen) -> None:
     else:
         # Dispatchers create their own sessions. Walk parentage as well as
         # killing the worker group, so those descendants are also cancelled.
-        table = subprocess.check_output(["ps", "-eo", "pid=,ppid="], text=True, timeout=2)
-        pairs = [tuple(map(int, line.split())) for line in table.splitlines()]
+        # If the process listing fails (slow or missing `ps`), still kill the
+        # worker and its group below instead of leaving them running.
         descendants = [proc.pid]
+        try:
+            table = subprocess.check_output(["ps", "-eo", "pid=,ppid="], text=True, timeout=2)
+            pairs = [tuple(map(int, line.split())) for line in table.splitlines()]
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pairs = []
         for parent in descendants:
             descendants.extend(pid for pid, ppid in pairs if ppid == parent)
         for pid in reversed(descendants):
