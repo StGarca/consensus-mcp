@@ -486,9 +486,11 @@ def main_for_provider(spec, argv=None):
     parser.add_argument("--timeout-seconds", type=int, default=spec.timeout_seconds)
     default_stall = spec.stall_silence_seconds
     override = os.environ.get("CONSENSUS_MCP_STALL_SILENCE_SECONDS")
+    stall_explicit = False
     if override:
         try:
             default_stall = float(override)
+            stall_explicit = True
         except ValueError:
             print(f"warning: ignoring invalid CONSENSUS_MCP_STALL_SILENCE_SECONDS={override!r}; using default {default_stall}s", file=sys.stderr)
     parser.add_argument("--stall-silence-seconds", type=float, default=default_stall)
@@ -498,6 +500,11 @@ def main_for_provider(spec, argv=None):
     if spec.configure_parser:
         spec.configure_parser(parser)
     ns = parser.parse_args(argv)
+    given = sys.argv[1:] if argv is None else list(argv)
+    # Seats whose CLI is quiet for long stretches bound silence by the seat
+    # timeout unless the operator explicitly set a silence limit.
+    ns.stall_silence_explicit = stall_explicit or any(
+        str(a) == "--stall-silence-seconds" or str(a).startswith("--stall-silence-seconds=") for a in given)
     log_path, anchors, provenance = None, {}, {}
     try:
         repo = helper("_resolve_repo_root")()

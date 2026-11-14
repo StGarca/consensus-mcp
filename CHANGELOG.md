@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.5.2 - 2026-11-14
+
+More seat fixes from the same real outside consult, each checked against the model's own record.
+
+- **Codex no longer killed after 180 s of quiet thinking.** `codex exec` can work silently for minutes; the default silence watchdog ended a healthy review 3.5 minutes into a 29.5-minute seat timeout. Unless a silence limit is set explicitly (`CONSENSUS_MCP_STALL_SILENCE_SECONDS` or `--stall-silence-seconds`), the seat timeout now bounds the run, as for agy, Claude and OpenCode.
+- **Gemini answers written as YAML are read.** Gemini sometimes ignores the JSON instruction and answers in fenced YAML; a valid YAML mapping is now parsed, including values that start with a backtick (invalid YAML that models produce often, quoted without changing their text). Schema and invariant checks are unchanged, so an answer in the wrong shape is still rejected, now with the real reason.
+- **A refused agy tool call is named.** When agy refuses a tool call it needed (for example with `skip_permissions: false`) and ends without an answer, the failure now quotes agy's refusal from its transcript and the setting to change, instead of "agy returned an empty response".
+- A consult-panel test that failed once in CI with only `assert (False)` now prints the panel result.
+
 ## 2.5.1 - 2026-11-13
 
 Seat fixes found by the first real outside consult (a private project, run on Windows).

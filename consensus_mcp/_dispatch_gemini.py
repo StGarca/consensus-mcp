@@ -188,8 +188,57 @@ def _agy_stream_response(raw: str) -> str:
         raise GeminiInvocationError(f'agy run failed (status={result.get("status")}): {error}', kind)
     response = result.get('response')
     if not isinstance(response, str) or not response.strip():
-        raise GeminiInvocationError('agy returned an empty response', 'parse')
+        message = _agy_empty_response_message(result.get('conversation_id'))
+        # A refused tool call would be refused again, so it is not retried;
+        # a plain empty answer keeps the retryable parse class.
+        raise GeminiInvocationError(message, 'crash' if 'agy refused a tool call' in message else 'parse')
     return response
+
+
+_AGY_BRAIN = Path.home() / '.gemini' / 'antigravity-cli' / 'brain'
+
+
+def _agy_step_errors(conversation_id, brain_dir=None) -> list:
+    """Error text agy recorded for failed steps of one conversation, read from
+    its own transcript (rows with status ERROR, e.g. "Encountered error in step
+    execution: permission check failed for command ...")."""
+    if not conversation_id or not re.fullmatch(r'[0-9A-Za-z-]+', str(conversation_id)):
+        return []
+    path = Path(brain_dir or _AGY_BRAIN) / str(conversation_id) / '.system_generated' / 'logs' / 'transcript_full.jsonl'
+    errors = []
+    try:
+        lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+    except OSError:
+        return []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or row.get('status') != 'ERROR':
+            continue
+        text = str(row.get('error') or row.get('content') or '')
+        marker = 'Encountered error in step execution:'
+        if marker in text:
+            text = text.split(marker, 1)[1]
+        first = next((ln.strip() for ln in text.splitlines() if ln.strip()), '')
+        if first:
+            errors.append(first[:300])
+    return errors
+
+
+def _agy_empty_response_message(conversation_id, brain_dir=None) -> str:
+    errors = _agy_step_errors(conversation_id, brain_dir)
+    where = (f'; transcript: {Path(brain_dir or _AGY_BRAIN) / str(conversation_id)}'
+             if conversation_id else '')
+    if not errors:
+        return 'agy ended without an answer (empty response)' + where
+    message = (f'agy ended without an answer after {len(errors)} failed tool step(s); '
+               f'last: {errors[-1]}')
+    if any('permission check failed' in e for e in errors):
+        message += ('. agy refused a tool call it needed: set contributors.adapters.gemini.skip_permissions: '
+                    'true (plan mode stays read-only), or allow the command in agy settings')
+    return message + where
 
 
 def _invoke_gemini(
@@ -257,12 +306,54 @@ def _invoke_gemini(
         return _agy_stream_response(raw)
     return raw
 
-def _parse_gemini_output(text: str, goal_packet: dict | None=None) -> dict:
+_YAML_FENCE_RE = re.compile(r'```(?:ya?ml)\s*\n(.*?)```', re.DOTALL | re.IGNORECASE)
+
+
+_BACKTICK_VALUE_RE = re.compile(r'^(\s*(?:-\s+|[A-Za-z_][\w-]*:\s+|-\s+[A-Za-z_][\w-]*:\s+))(`.*)$')
+
+
+def _quote_backtick_scalars(source: str) -> str:
+    """Single-quote YAML values that begin with a backtick, preserving their text."""
+    out = []
+    for line in source.splitlines():
+        m = _BACKTICK_VALUE_RE.match(line)
+        if m:
+            value = m.group(2).rstrip()
+            line = m.group(1) + "'" + value.replace("'", "''") + "'"
+        out.append(line)
+    return "\n".join(out)
+
+
+def _load_review_object(text: str, label: str):
+    """Parse a reviewer answer: JSON first; if that fails, YAML. Gemini
+    sometimes answers in YAML despite the JSON instruction (live: a complete
+    12,154-character plan review, fenced as ```yaml, was discarded). Schema
+    and invariant checks run unchanged on the parsed object."""
     candidate = _extract_json_from_text(text)
     try:
-        parsed = json.loads(candidate)
-    except json.JSONDecodeError as exc:
-        raise GeminiOutputParseError(f'gemini output is not valid JSON: {exc}; first 500 chars of raw: {text[:500]!r}') from exc
+        return json.loads(candidate)
+    except json.JSONDecodeError as json_exc:
+        fenced = _YAML_FENCE_RE.search(text or '')
+        source = fenced.group(1) if fenced else (text or '').strip()
+        import yaml
+        try:
+            loaded = yaml.safe_load(source)
+        except Exception:
+            # Models often start a plain YAML value with a backtick (invalid
+            # YAML); quote only those single-line values, then re-parse.
+            try:
+                loaded = yaml.safe_load(_quote_backtick_scalars(source))
+            except Exception:
+                loaded = None
+        if isinstance(loaded, dict):
+            # Normalize YAML scalars (dates etc.) to JSON types for the schema.
+            return json.loads(json.dumps(loaded, default=str))
+        raise GeminiOutputParseError(f'{label} is not valid JSON (or a YAML mapping): {json_exc}; '
+                                     f'first 500 chars of raw: {(text or "")[:500]!r}') from json_exc
+
+
+def _parse_gemini_output(text: str, goal_packet: dict | None=None) -> dict:
+    parsed = _load_review_object(text, 'gemini output')
     if not isinstance(parsed, dict):
         raise GeminiOutputParseError(f'gemini output JSON root must be an object, got {type(parsed).__name__}')
     unknown_top = set(parsed.keys()) - _ALLOWED_TOP_LEVEL_KEYS
@@ -330,14 +421,7 @@ def _parse_gemini_output(text: str, goal_packet: dict | None=None) -> dict:
 _GEMINI_PROPOSAL_SCHEMA_PATH = Path(__file__).parent / 'dispatch_templates' / 'gemini_proposal_schema.json'
 
 def _parse_gemini_proposal_output(text: str, schema_path: Path | None=None) -> dict:
-    try:
-        cleaned = _extract_json_from_text(text)
-    except ValueError as exc:
-        raise GeminiOutputParseError(f'gemini proposal output: could not extract JSON: {exc}') from exc
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise GeminiOutputParseError(f'gemini proposal output is not valid JSON: {exc}') from exc
+    parsed = _load_review_object(text, 'gemini proposal output')
     if not isinstance(parsed, dict):
         raise GeminiOutputParseError(f'gemini proposal output root must be a JSON object; got {type(parsed).__name__}')
     effective_schema_path = schema_path or _GEMINI_PROPOSAL_SCHEMA_PATH

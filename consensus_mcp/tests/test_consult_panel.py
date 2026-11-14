@@ -448,7 +448,9 @@ def test_confirm_sensitive_answer_applies_to_original_panel(project, dispatchers
     for seat in ("codex", "kimi", "gemini"):
         options[seat] = {"packet": {"findings": [], "goal_satisfied": True}}
     result = run(project, pass_kind="confirm", sensitive_data=answer)
-    assert result["ok"] and launches == expected
+    # Print the panel result on failure: CI once failed here with only "assert (False)".
+    assert result["ok"], result
+    assert launches == expected, (launches, result)
     assert result["sensitive_data"] == answer
     assert result["excluded_seats"] == (["kimi"] if answer == "yes" else [])
 

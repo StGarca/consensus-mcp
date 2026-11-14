@@ -345,6 +345,16 @@ def _parse_codex_proposal_output(text: str, schema_path: Path | None=None) -> di
             raise CodexOutputParseError('deliverable_scope is required when structural_abstention is false')
     return parsed
 
+def _codex_stall_silence(ns) -> float:
+    """codex exec can think silently for minutes (live: Astra killed at 180 s
+    of a 1770 s seat timeout), so unless the operator set a silence limit
+    explicitly, the seat timeout bounds the run instead of the 180 s default."""
+    stall = float(ns.stall_silence_seconds or 0)
+    if getattr(ns, 'stall_silence_explicit', False):
+        return stall
+    return max(stall, float(ns.timeout_seconds or 0))
+
+
 def _provider_invoke(*, prompt, model, repo_root, schema_path, ns, log_path, anchors):
     return _invoke_codex(
         prompt,
@@ -356,7 +366,7 @@ def _provider_invoke(*, prompt, model, repo_root, schema_path, ns, log_path, anc
         ns.effort,
         log_path=log_path,
         anchors=anchors,
-        stall_silence_seconds=ns.stall_silence_seconds,
+        stall_silence_seconds=_codex_stall_silence(ns),
     )
 
 def _provider_parse(raw, *, goal_packet, review_packet, repo_root, ns, schema_path):
