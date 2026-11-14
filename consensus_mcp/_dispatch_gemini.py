@@ -1,5 +1,6 @@
 """Gemini provider quirks over the shared dispatch runner."""
 from __future__ import annotations
+from consensus_mcp._dispatch_base import drop_echoed_envelope_keys
 import json
 import os
 import re
@@ -356,6 +357,7 @@ def _parse_gemini_output(text: str, goal_packet: dict | None=None) -> dict:
     parsed = _load_review_object(text, 'gemini output')
     if not isinstance(parsed, dict):
         raise GeminiOutputParseError(f'gemini output JSON root must be an object, got {type(parsed).__name__}')
+    drop_echoed_envelope_keys(parsed)
     unknown_top = set(parsed.keys()) - _ALLOWED_TOP_LEVEL_KEYS
     if unknown_top:
         raise GeminiOutputParseError(f'gemini output JSON has unexpected top-level keys: {sorted(unknown_top)}')

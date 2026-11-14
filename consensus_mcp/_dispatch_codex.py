@@ -1,5 +1,6 @@
 """Codex provider quirks over the shared dispatch runner."""
 from __future__ import annotations
+from consensus_mcp._dispatch_base import drop_echoed_envelope_keys
 import json
 import os
 import re
@@ -227,6 +228,7 @@ def _parse_codex_output(
         raise CodexOutputParseError(f'codex output is not valid JSON: {exc}') from exc
     if not isinstance(parsed, dict):
         raise CodexOutputParseError(f'codex output JSON root must be an object, got {type(parsed).__name__}')
+    drop_echoed_envelope_keys(parsed)
     unknown_top = set(parsed.keys()) - _ALLOWED_TOP_LEVEL_KEYS
     if unknown_top:
         raise CodexOutputParseError(f'codex output JSON has unexpected top-level keys: {sorted(unknown_top)}')

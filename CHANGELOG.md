@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.4 - 2026-11-14
+
+- **Reviews that repeat `iteration_id` / `reviewer_id` are no longer rejected.** A real Gemini plan review was discarded with "unexpected top-level keys: ['iteration_id', 'reviewer_id']" because it echoed the two identity fields the sealed envelope already records from the dispatcher. The Codex, Gemini, Grok and Kimi parsers now drop those two keys when they hold plain values; the echoed values never override the envelope, and every other unknown top-level key is still rejected. Checked against that real answer: 2.5.3 rejects it, 2.5.4 parses it.
+
 ## 2.5.3 - 2026-11-14
 
 - **Interrupted consults always kill their reviewer processes on Linux/macOS.** Process-tree cleanup listed children with `ps` under a 2-second limit; if that listing failed or timed out, the error skipped every kill and the reviewer kept running. The worker and its process group are now killed even when the listing fails; the 2-second bounds are unchanged. Found when 2.5.2's CI saw one reviewer still running after an interrupt (cause on that runner not confirmed); the interrupt test now prints each process state if it fails.

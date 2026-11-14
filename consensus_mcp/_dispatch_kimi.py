@@ -1,5 +1,6 @@
 """Kimi provider quirks over the shared dispatch runner."""
 from __future__ import annotations
+from consensus_mcp._dispatch_base import drop_echoed_envelope_keys
 import argparse
 import json
 import os
@@ -268,6 +269,7 @@ def _parse_kimi_output(text: str) -> dict:
         raise KimiOutputParseError(f'kimi output is not valid JSON: {exc}; first 500 chars of raw: {text[:500]!r}') from exc
     if not isinstance(parsed, dict):
         raise KimiOutputParseError(f'kimi output JSON root must be an object, got {type(parsed).__name__}')
+    drop_echoed_envelope_keys(parsed)
     unknown_top = set(parsed.keys()) - _ALLOWED_TOP_LEVEL_KEYS
     if unknown_top:
         raise KimiOutputParseError(f'kimi output JSON has unexpected top-level keys: {sorted(unknown_top)}')

@@ -1425,3 +1425,21 @@ def _extract_json_from_text(text: str) -> str:
     if first_brace != -1 and last_brace > first_brace:
         return text[first_brace:last_brace + 1]
     return text
+
+
+# Identity fields the sealed review envelope already records from the
+# dispatcher (never from the model). Reviewers sometimes echo them back at the
+# top level of their answer (DriverLogs FU-28: a Gemini plan review was rejected
+# for `iteration_id` / `reviewer_id`). Drop only these two, and only when they
+# hold plain values; every other unknown top-level key is still rejected, and
+# the echoed values can never override the envelope.
+ECHOED_ENVELOPE_KEYS = ('iteration_id', 'reviewer_id')
+
+
+def drop_echoed_envelope_keys(parsed):
+    """Remove echoed envelope identity keys holding scalar values (in place)."""
+    if isinstance(parsed, dict):
+        for key in ECHOED_ENVELOPE_KEYS:
+            if key in parsed and (parsed[key] is None or isinstance(parsed[key], (str, int, float, bool))):
+                del parsed[key]
+    return parsed
