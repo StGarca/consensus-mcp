@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.6 - 2026-11-14
+
+- **A sealed review is no longer marked failed when reviewers seal at the same moment on Windows.** Each seat appends to `archive/review-passes/index.yaml` by replacing the file while holding `index.lock`, but the panel read the index without that lock. On Windows, opening a file while another process replaces it fails with "Access is denied", so the seat was recorded as failed although its review was sealed; a later plan or confirmation pass then refused with "sealed archive review omitted or marked failed in summary". The panel and the plan-pass checks now read the index under the writers' lock. Found through intermittent Windows-only GitHub CI failures in three different consult tests; the refusal message now names the seat and its recorded status.
+- Consult-panel tests print the panel result whenever a run is not ok, so a CI-only failure shows its cause.
+
 ## 2.5.5 - 2026-11-14
 
 Two reviewer-input fixes from the same outside DriverLogs consult.

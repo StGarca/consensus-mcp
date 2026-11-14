@@ -173,6 +173,22 @@ def _json_result(stdout):
     return {}
 
 
+def read_review_index(archive):
+    """Read archive/index.yaml under the writers' lock (archive/index.lock).
+
+    Seats seal concurrently and each writer replaces index.yaml while holding
+    that lock. On Windows, opening the file while another process replaces it
+    fails with "Access is denied"; an unlocked read then marked a sealed seat
+    failed, and the plan-pass check refused the whole pass. Waiting for the
+    lock is cheap: writers hold it only for one small read-modify-write.
+    """
+    from consensus_mcp.tools.review_write_and_seal import _file_lock
+
+    archive = Path(archive)
+    with _file_lock(archive / "index.lock"):
+        return yaml.safe_load((archive / "index.yaml").read_text(encoding="utf-8")) or {}
+
+
 def _sealed_packet(result, pass_id, rr, iteration, seat):
     from consensus_mcp.tools.review_write_and_seal import _canonical_yaml_sha256
 
@@ -204,7 +220,7 @@ def _sealed_packet(result, pass_id, rr, iteration, seat):
         mirrored = yaml.safe_load(mirror.read_text(encoding="utf-8"))
         if not isinstance(mirrored, dict) or mirrored.pop("packet_sha256", None) != digest or _canonical_yaml_sha256(mirrored) != digest:
             raise ValueError("mirror packet hash mismatch")
-        index = yaml.safe_load((archive / "index.yaml").read_text(encoding="utf-8"))
+        index = read_review_index(archive)
         if not any(entry.get("id") == pass_id and entry.get("iteration_id") == iteration
                    and entry.get("reviewer_id") == seat and entry.get("packet_sha256") == digest
                    and contained(entry.get("path"), archive) == path

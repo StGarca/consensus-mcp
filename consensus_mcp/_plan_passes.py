@@ -110,7 +110,8 @@ def _rounds(iter_dir: Path) -> list[tuple[int, Path, dict]]:
                   if str(r.get("iteration", "")).startswith(prefix) and int(r.get("sealed_count") or 0) > 0}
     index_path = _state_root(iter_dir.parents[2]) / "archive" / "review-passes" / "index.yaml"
     if index_path.exists():
-        evidenced |= {str(r.get("iteration_id")) for r in _read(index_path).get("passes", [])
+        from consensus_mcp._consult_panel import read_review_index
+        evidenced |= {str(r.get("iteration_id")) for r in read_review_index(index_path.parent).get("passes", [])
                       if str(r.get("iteration_id", "")).startswith(prefix)}
     for name in sorted(evidenced):
         if name[len(prefix):].isdigit() and not (iter_dir.parent / name / "consult-summary.yaml").is_file():
@@ -226,7 +227,7 @@ def _check_canonical_child(iter_dir: Path, child: Path, packet: dict) -> None:
 
 def _reviews(child: Path, summary: dict):
     """Recheck both archive and mirror, not merely the mutable summary status."""
-    from consensus_mcp._consult_panel import _sealed_packet
+    from consensus_mcp._consult_panel import _sealed_packet, read_review_index
 
     rr = child.parents[2]
     archive = Path(os.environ.get("CONSENSUS_MCP_STATE_ROOT") or rr / "consensus-state") / "archive" / "review-passes"
@@ -235,9 +236,15 @@ def _reviews(child: Path, summary: dict):
         represented = {(r.get("pass_id"), r.get("seat"), r.get("packet_sha256"))
                        for r in summary.get("seats", []) if r.get("status") == "sealed"}
         archived = {(r.get("id"), r.get("reviewer_id"), r.get("packet_sha256"))
-                    for r in _read(index_path).get("passes", []) if r.get("iteration_id") == child.name}
+                    for r in read_review_index(archive).get("passes", []) if r.get("iteration_id") == child.name}
         if not archived <= represented:
-            raise ValueError(f"{child.name}: sealed archive review omitted or marked failed in summary")
+            rows = {r.get("seat"): r for r in summary.get("seats", [])}
+            detail = "; ".join(
+                f"{seat} pass {pass_id}: summary "
+                + (f"status={rows[seat].get('status')} failure_class={rows[seat].get('failure_class')} "
+                   f"error={(rows[seat].get('error') or '')[:200]!r}" if seat in rows else "has no row")
+                for pass_id, seat, _ in sorted(archived - represented, key=str))
+            raise ValueError(f"{child.name}: sealed archive review omitted or marked failed in summary ({detail})")
     for row in summary.get("seats", []):
         if row.get("status") != "sealed":
             continue
