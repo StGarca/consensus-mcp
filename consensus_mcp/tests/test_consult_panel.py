@@ -113,7 +113,10 @@ def run(project, **kwargs):
     # Tests written before the sensitive-data gate keep their behaviour by
     # answering "no"; the gate itself is covered in test_consult_sensitivity.py.
     kwargs.setdefault("sensitive_data", "no")
-    return cp.consult_panel("iteration-test", repo_root=project, **kwargs)
+    result = cp.consult_panel("iteration-test", repo_root=project, **kwargs)
+    if not result.get("ok"):
+        print("PANEL NOT OK:", _panel_detail(result))  # shown by pytest only if the test fails
+    return result
 
 
 def configure(project, config):

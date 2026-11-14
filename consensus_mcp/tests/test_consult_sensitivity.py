@@ -13,11 +13,14 @@ import yaml
 from consensus_mcp import _consult_panel as cp
 from consensus_mcp import _start_consult as sc
 from consensus_mcp._contributor_profiles import load_builtin_profiles
-from consensus_mcp.tests.test_consult_panel import configure, dispatchers, project  # noqa: F401
+from consensus_mcp.tests.test_consult_panel import _panel_detail, configure, dispatchers, project  # noqa: F401
 
 
 def consult(project, **kwargs):
-    return cp.consult_panel("iteration-test", repo_root=project, **kwargs)
+    result = cp.consult_panel("iteration-test", repo_root=project, **kwargs)
+    if not result.get("ok"):
+        print("PANEL NOT OK:", _panel_detail(result))  # shown by pytest only if the test fails
+    return result
 
 
 def summary(project):
