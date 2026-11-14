@@ -255,6 +255,9 @@ def test_stdio_responsive_progress_and_live_restart(fake, tmp_path):
         assert time.monotonic() - start < 1
         job_id = initial["job_id"]
         wait_for(ready.exists)
+        # The supervisor records "running" just after launching the worker, so
+        # a status read can briefly still see "queued" (CI, Windows py3.12).
+        wait_for(lambda: client.tool("consensus.job_status", {"job_id": job_id}, timeout=1)["status"] == "running")
         start = time.monotonic()
         tools = client.call("tools/list", timeout=1)["tools"]
         assert {"consensus.job_start", "consensus.job_status", "consensus.job_result",
