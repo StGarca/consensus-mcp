@@ -101,6 +101,14 @@ print(json.dumps(result))
     return options, launches, processes
 
 
+def _panel_detail(result):
+    """Failure message for panel assertions: CI-only failures were opaque (`assert (False)`)."""
+    keys = ("status", "error", "tier", "pass_kind", "sealed_count", "failed_count")
+    seats = [(s.get("seat"), s.get("status"), s.get("failure_class"), (s.get("error") or "")[:300])
+             for s in result.get("seats") or []]
+    return {**{k: result.get(k) for k in keys}, "seats": seats}
+
+
 def run(project, **kwargs):
     # Tests written before the sensitive-data gate keep their behaviour by
     # answering "no"; the gate itself is covered in test_consult_sensitivity.py.
@@ -117,7 +125,7 @@ def test_concurrent_processes_deepseek_first_and_kimi_not_serialized(project, di
     seats = ["claude", "kimi", "deepseek", "codex"]
     options.update({seat: {"delay": .5} for seat in seats})
     result = run(project, seats=seats)
-    assert result["ok"] is True
+    assert result["ok"] is True, _panel_detail(result)
     assert launches == ["deepseek", "claude", "kimi", "codex"]
     assert result["sealed_count"] == 4 and result["failed_count"] == 0
     packets = [yaml.safe_load(Path(row["review_path"]).read_text()) for row in result["seats"]]
@@ -129,7 +137,7 @@ def test_failure_isolated_and_summary_records_fallback_tokens_and_schema(project
     options, _, _ = dispatchers
     options["codex"] = {"failure": "quota"}
     result = run(project, seats=["codex", "claude"])
-    assert result["ok"] is True and result["status"] == "success"
+    assert result["ok"] is True and result["status"] == "success", _panel_detail(result)
     assert result["sealed_count"] == result["failed_count"] == 1
     failed, sealed = result["seats"]
     assert failed["status"] == "failed" and failed["failure_class"] == "quota"
@@ -150,7 +158,7 @@ def test_zero_valid_current_reviews_is_no_reviews(project, dispatchers, mode):
     options, _, _ = dispatchers
     options["codex"] = {mode: "auth" if mode == "failure" else True}
     result = run(project, seats=["codex"])
-    assert result["ok"] is False and result["status"] == "no_reviews"
+    assert result["ok"] is False and result["status"] == "no_reviews", _panel_detail(result)
     assert result["sealed_count"] == 0 and result["failed_count"] == 1
     assert "no_reviews" in result["error"]
     assert Path(result["summary_path"]).is_file()
@@ -163,7 +171,7 @@ def test_timeout_and_total_deadline_reap_children_without_cancelling_success(pro
     started = time.monotonic()
     result = run(project, seats=["codex", "claude"], **{limit: 1.2})
     assert time.monotonic() - started < 3
-    assert result["ok"] is True and result["sealed_count"] == 1
+    assert result["ok"] is True and result["sealed_count"] == 1, _panel_detail(result)
     assert result["seats"][0]["failure_class"] == "timeout"
     assert "deadline" in result["seats"][0]["error"] if limit == "deadline_seconds" else "seat timeout" in result["seats"][0]["error"]
     assert all(proc.poll() is not None for proc in processes)
@@ -208,7 +216,7 @@ def test_quick_default_has_two_seats_and_rejects_bad_configuration(project, disp
     configure(project, {"consult": {"quick_seats": ["codex"]}})
     launches.clear()
     result = run(project, tier="quick")
-    assert result["ok"] is False and "exactly two" in result["error"]
+    assert result["ok"] is False and "exactly two" in result["error"], _panel_detail(result)
     assert launches == []
     for seats in (["codex"], ["codex", "codex"], ["codex", "kimi", "claude"]):
         assert run(project, tier="quick", seats=seats)["ok"] is False
@@ -226,7 +234,7 @@ def test_spawn_failure_is_isolated_and_requested_adapter_model_retained(project,
 
     monkeypatch.setattr(cp.subprocess, "Popen", launch)
     result = run(project, seats=["codex", "claude"])
-    assert result["ok"] is True and result["sealed_count"] == 1
+    assert result["ok"] is True and result["sealed_count"] == 1, _panel_detail(result)
     assert result["seats"][0]["model_requested"] == "adapter-model"
     assert result["seats"][0]["failure_class"] == "crash"
 
@@ -246,7 +254,7 @@ def test_cleanup_failure_is_isolated_with_conflicting_ambient_roots(project, dis
 
     monkeypatch.setattr(_jobs, "_kill_tree", cleanup)
     result = run(project, seats=["codex", "claude"], timeout_seconds=1.2)
-    assert result["ok"] is True and result["sealed_count"] == result["failed_count"] == 1
+    assert result["ok"] is True and result["sealed_count"] == result["failed_count"] == 1, _panel_detail(result)
     assert result["seats"][0]["cleanup_error"] == "fake cleanup failure"
     assert result["seats"][0]["failure_class"] == "timeout"
     assert result["seats"][0]["error"] == "seat timeout exceeded"
@@ -297,7 +305,7 @@ def test_cli_exit_code_and_seat_parsing(monkeypatch, capsys):
 def test_invalid_inputs_start_nothing(project, dispatchers, kwargs):
     _, launches, _ = dispatchers
     result = cp.consult_panel(**{"iteration": "iteration-test", "repo_root": project, **kwargs})
-    assert result["ok"] is False and result["status"] == "no_reviews"
+    assert result["ok"] is False and result["status"] == "no_reviews", _panel_detail(result)
     assert launches == []
 
 
@@ -359,7 +367,8 @@ def test_plan_child_reuses_parent_panel_and_preserves_ideas_summary(project, dis
     from consensus_mcp import _dispatch_base as base
 
     options, launches, _ = dispatchers
-    assert run(project, tier="deep", seats=["codex", "kimi", "gemini"])["ok"]
+    _r = run(project, tier="deep", seats=["codex", "kimi", "gemini"])
+    assert _r["ok"], _panel_detail(_r)
     parent = project / "consensus-state" / "active" / "iteration-test"
     original_summary = (parent / "consult-summary.yaml").read_bytes()
     plan = "steps:\n- Preserve the owner's exact plan.\n"
@@ -371,7 +380,7 @@ def test_plan_child_reuses_parent_panel_and_preserves_ideas_summary(project, dis
     for seat in ("kimi", "gemini"):
         options[seat] = {"packet": {"findings": [], "goal_satisfied": True}}
     result = run(project, pass_kind="plan", tier="quick")
-    assert result["ok"] is True and result["tier"] == "deep"
+    assert result["ok"] is True and result["tier"] == "deep", _panel_detail(result)
     assert launches == ["codex", "kimi", "gemini"]
     assert result["sealed_count"] == 2 and result["failed_count"] == 1
     assert result["seats"][0]["status"] == "failed"
@@ -419,7 +428,7 @@ def test_confirm_child_uses_same_seats_and_seals_with_confirm_kind(project, disp
     refused = run(project, pass_kind="confirm", seats=["codex", "gemini"])
     assert not refused["ok"] and "same seats" in refused["error"] and launches == []
     result = run(project, pass_kind="confirm", tier="deep")
-    assert result["ok"] and result["tier"] == "standard"
+    assert result["ok"] and result["tier"] == "standard", _panel_detail(result)
     assert result["pass_kind"] == "confirm" and result["parent_iteration"] == parent.name
     assert launches == ["codex", "kimi", "gemini"]
     child = parent.parent / "iteration-test-plan-2"
@@ -509,7 +518,8 @@ def test_child_watchdog_has_margin_and_remaining_deadline(project, dispatchers, 
         budgets.append(int(argv[argv.index("--timeout-seconds") + 1]))
         return original(argv, **kwargs)
     monkeypatch.setattr(cp.subprocess, "Popen", launch)
-    assert run(project, seats=["claude", "codex"], timeout_seconds=timeout, deadline_seconds=deadline)["ok"]
+    _r = run(project, seats=["claude", "codex"], timeout_seconds=timeout, deadline_seconds=deadline)
+    assert _r["ok"], _panel_detail(_r)
     assert all(0 < value <= maximum for value in budgets)
 
 
