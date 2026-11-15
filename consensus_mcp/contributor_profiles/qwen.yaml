@@ -14,7 +14,7 @@ base_url_env: CONSENSUS_MCP_QWEN_BASE_URL
 api_key_env: CONSENSUS_MCP_QWEN_API_KEY
 max_concurrency: 2
 timeout_seconds: 1800
-max_tokens: 16384
+max_tokens: 65536
 output:
   schema_enforced: true
 sealed_filename: qwen-review.yaml

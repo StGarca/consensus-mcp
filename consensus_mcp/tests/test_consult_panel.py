@@ -46,6 +46,15 @@ time.sleep(options.get("delay", .01))
 if options.get("failure"):
     print(json.dumps({"ok": False, "error": "fake failure", "failure_class": options["failure"]}))
     sys.exit(1)
+if options.get("network"):
+    flag = directory / (seat + ".network-attempts")
+    attempts = int(flag.read_text()) if flag.exists() else 0
+    flag.write_text(str(attempts + 1))
+    if options["network"] == "always" or attempts == 0:
+        # The exact shape OpenCode reported live: explicit crash class, reset in the text.
+        print(json.dumps({"ok": False, "failure_class": "crash", "error": "exit=1; stderr_tail='Error: Transport: "
+                          "ECONNRESET: The socket connection was closed unexpectedly.'; stdout_tail=''"}))
+        sys.exit(1)
 if options.get("empty"):
     print("not a dispatcher result")
     sys.exit(0)

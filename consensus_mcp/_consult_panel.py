@@ -410,6 +410,55 @@ def consult_panel(iteration, seats=None, tier="standard", repo_root=None,
                           sensitivity)
 
 
+# A dropped connection is the one failure worth one automatic retry: it says
+# nothing about the review, and losing a seat to a one-second blip (a live
+# OpenCode->DGX ECONNRESET after 19 s) costs the whole pass that reviewer.
+_NETWORK_MARKERS = ("econnreset", "econnrefused", "econnaborted", "connection reset",
+                    "connection refused", "connection aborted", "socket hang up",
+                    "remote end closed", "remotedisconnected", "network is unreachable",
+                    "eai_again", "getaddrinfo")
+_NETWORK_RETRY_MIN_SECONDS = 60
+
+
+def _is_network_failure(row):
+    if row.get("status") == "sealed" or row.get("failure_class") not in ("crash", None):
+        return False
+    text = " ".join(str(row.get(key) or "") for key in ("error", "error_tail")).lower()
+    return any(marker in text for marker in _NETWORK_MARKERS)
+
+
+def _sealed_in_index(rr, pass_id):
+    archive = Path(os.environ.get("CONSENSUS_MCP_STATE_ROOT") or rr / "consensus-state") / "archive" / "review-passes"
+    if not (archive / "index.yaml").exists():
+        return False
+    return any(isinstance(entry, dict) and entry.get("id") == pass_id
+               for entry in read_review_index(archive).get("passes", []))
+
+
+def _seat_worker(launch, proc, row, seat_start, deadline, timeout_seconds, pass_id, rr, iteration):
+    _finish(proc, row, seat_start, deadline, timeout_seconds, pass_id, rr, iteration)
+    if not _is_network_failure(row):
+        return row
+    row["failure_class"] = "network"
+    remaining = min(seat_start + timeout_seconds, deadline) - time.monotonic()
+    if remaining < _NETWORK_RETRY_MIN_SECONDS or _sealed_in_index(rr, pass_id):
+        return row
+    first = {key: row.get(key) for key in ("pass_id", "error", "wall_seconds")}
+    retry_id = uuid4().hex
+    for key in ("error", "error_tail", "cleanup_error"):
+        row.pop(key, None)
+    row.update(status="failed", failure_class="crash", pass_id=retry_id, network_retry_of=first)
+    try:
+        proc = launch(retry_id, remaining)
+    except Exception as exc:
+        row.update(error=f"network retry could not start: {exc}")
+        return row
+    _finish(proc, row, seat_start, deadline, timeout_seconds, retry_id, rr, iteration)
+    if _is_network_failure(row):
+        row["failure_class"] = "network"
+    return row
+
+
 def _run_panel(rr, directory, iteration, tier, prepared, started, timeout_seconds, deadline_seconds,
                sensitivity=None, pass_kind=None):
     sensitivity = sensitivity or {"sensitive_data": None, "sensitivity_source": None, "excluded_seats": []}
@@ -433,19 +482,26 @@ def _run_panel(rr, directory, iteration, tier, prepared, started, timeout_second
                 if budget <= 1:
                     row.update(failure_class="timeout", error="insufficient time for dispatcher watchdog")
                     continue
-                child_timeout = max(1, math.floor(budget - min(30, budget / 2)))
-                command = _command(seat, profile, directory, pass_id, child_timeout)
-                options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
-                           if os.name == "nt" else {"start_new_session": True})
-                proc = subprocess.Popen(command, cwd=str(rr),
-                                        env={**os.environ, "CONSENSUS_MCP_REPO_ROOT": str(rr), "CONSENSUS_MCP_PROJECT_ROOT": str(rr),
-                                             "CONSENSUS_MCP_SENSITIVE_DATA": sensitivity["sensitive_data"] or ""}, stdin=subprocess.DEVNULL,
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        text=True, encoding="utf-8", errors="replace", **options)
-                processes.append((proc, row, None))
-                future = executor.submit(_finish, proc, row, seat_start, deadline,
+                def launch(attempt_pass_id, attempt_budget, seat=seat, profile=profile, row=row):
+                    child_timeout = max(1, math.floor(attempt_budget - min(30, attempt_budget / 2)))
+                    command = _command(seat, profile, directory, attempt_pass_id, child_timeout)
+                    options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+                               if os.name == "nt" else {"start_new_session": True})
+                    child = subprocess.Popen(command, cwd=str(rr),
+                                             env={**os.environ, "CONSENSUS_MCP_REPO_ROOT": str(rr), "CONSENSUS_MCP_PROJECT_ROOT": str(rr),
+                                                  "CONSENSUS_MCP_SENSITIVE_DATA": sensitivity["sensitive_data"] or ""}, stdin=subprocess.DEVNULL,
+                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                             text=True, encoding="utf-8", errors="replace", **options)
+                    # Each entry is its own list, so a retry appended from a worker
+                    # thread can never be confused with another seat's entry.
+                    processes.append([child, row, None])
+                    return child
+
+                proc = launch(pass_id, budget)
+                entry = processes[[item[0] for item in processes].index(proc)]
+                future = executor.submit(_seat_worker, launch, proc, row, seat_start, deadline,
                                          timeout_seconds, pass_id, rr, iteration)
-                processes[-1] = (proc, row, future)
+                entry[2] = future
                 pending.append(future)
             except Exception as exc:
                 row.update(error=str(exc), wall_seconds=round(time.monotonic() - seat_start, 6))

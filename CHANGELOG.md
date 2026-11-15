@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.7 - 2026-11-14
+
+Two seat failures found by a live eight-reviewer consult on the published 2.5.6 (fresh install from the tag).
+
+- **A dropped connection no longer costs a reviewer the whole pass.** The OpenCode seat on the local DGX failed after 19 s with `Transport: ECONNRESET` while the DGX was serving normally (three direct probes right after all succeeded); the panel recorded a crash and never retried. A seat whose failure text is a connection reset, refusal or abort is now marked `network` and relaunched once with a fresh pass id, if at least 60 s of its time remain and nothing was sealed for the first attempt. The first attempt is kept in the summary as `network_retry_of`. Every other failure is still not retried.
+- **Qwen gets room to finish a review.** `qwen4-max-preview` spends part of its output on reasoning and hit the seat's 16,384-token cap mid-review. The API accepts up to 131,072; the built-in profile now allows 65,536.
+
 ## 2.5.6 - 2026-11-14
 
 - **A sealed review is no longer marked failed when reviewers seal at the same moment on Windows.** Each seat appends to `archive/review-passes/index.yaml` by replacing the file while holding `index.lock`, but the panel read the index without that lock. On Windows, opening a file while another process replaces it fails with "Access is denied", so the seat was recorded as failed although its review was sealed; a later plan or confirmation pass then refused with "sealed archive review omitted or marked failed in summary". The panel and the plan-pass checks now read the index under the writers' lock. Found through intermittent Windows-only GitHub CI failures in three different consult tests; the refusal message now names the seat and its recorded status.
